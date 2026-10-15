@@ -1,14 +1,14 @@
 // Settings › Rule sets: published sets, where each runs, and its state.
-import { useResource } from "../../api/client";
-import type { RuleSet, RuleSetAssignments } from "../../api/types";
-import { nav, useTopPanel } from "../../app/nav";
-import { useSession } from "../../app/session";
-import { ruleSetRows, runsOn } from "../../panels/ruleAssignment";
-import { DataTable } from "../../ui/DataTable";
-import { Icon } from "../../ui/Icon";
-import { ViewHeader } from "../../ui/ViewHeader";
-import { Ago, Empty, ErrorBox, Loading } from "../../ui/bits";
-import { within } from "../../ui/format";
+import { useResource } from "../../../api/client";
+import type { RuleSet, RuleSetAssignments } from "../../../api/types";
+import { nav, useTopPanel } from "../../../app/nav";
+import { useSession } from "../../../app/session";
+import { ruleSetRows, runsOn } from "../../../panels/ruleAssignment";
+import { DataTable } from "../../../ui/DataTable";
+import { Icon } from "../../../ui/Icon";
+import { ViewHeader } from "../../../ui/ViewHeader";
+import { Ago, Empty, ErrorBox, Loading } from "../../../ui/bits";
+import { within } from "../../../ui/format";
 
 export function RuleSets() {
   const { can } = useSession();

@@ -2,13 +2,13 @@
 // Turning a level on asks first, repeating its risk text; turning it off does not.
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { ApiError, apiMessage, invalidate, request, useResource } from "../../api/client";
-import type { AssistantInternet, AssistantInternetTest, AssistantStatus } from "../../api/types";
-import { ErrorBox, Loading } from "../../ui/bits";
-import { Icon } from "../../ui/Icon";
-import { Switch } from "../../ui/Switch";
-import { toast } from "../../ui/toast";
-import { ViewHeader } from "../../ui/ViewHeader";
+import { ApiError, apiMessage, invalidate, request, useResource } from "../../../api/client";
+import type { AssistantInternet, AssistantInternetTest, AssistantStatus } from "../../../api/types";
+import { ErrorBox, Loading } from "../../../ui/bits";
+import { Icon } from "../../../ui/Icon";
+import { Switch } from "../../../ui/Switch";
+import { toast } from "../../../ui/toast";
+import { ViewHeader } from "../../../ui/ViewHeader";
 import { toDomains, validSearxngUrl } from "./assistantRules";
 
 const PATH = "/api/v1/assistant-internet";

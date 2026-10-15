@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CoverageRule, Tactic } from "../api/types";
+import type { CoverageRule, Tactic } from "../../api/types";
 import { columns, selectRules } from "./coverage";
 
 const tactics: Tactic[] = [

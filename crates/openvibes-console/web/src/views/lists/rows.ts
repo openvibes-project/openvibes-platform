@@ -2,11 +2,11 @@
 // dashboard List tile both use it, so a tile always matches its view.
 import { useMemo } from "react";
 
-import { type ApiError, useAllPages, useResource } from "../api/client";
-import type { Agent, AuditEvent, FindingGroup, Vulnerability, VulnerabilityPage } from "../api/types";
-import type { PanelRef } from "../app/location";
-import { auditSince, capitalise, severityOrder } from "../ui/format";
-import { matches } from "../ui/table";
+import { type ApiError, useAllPages, useResource } from "../../api/client";
+import type { Agent, AuditEvent, FindingGroup, Vulnerability, VulnerabilityPage } from "../../api/types";
+import type { PanelRef } from "../../app/location";
+import { auditSince, capitalise, severityOrder } from "../../ui/format";
+import { matches } from "../../ui/table";
 
 export const LIST_VIEWS = ["/compliance", "/vulnerabilities", "/agents", "/audit"] as const;
 export type ListView = (typeof LIST_VIEWS)[number];

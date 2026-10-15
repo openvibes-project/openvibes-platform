@@ -1,12 +1,12 @@
 // Settings › Service accounts: API identities and their tokens.
-import { useResource } from "../../api/client";
-import type { ServiceAccount } from "../../api/types";
-import { nav, useTopPanel } from "../../app/nav";
-import { useSession } from "../../app/session";
-import { DataTable } from "../../ui/DataTable";
-import { Icon } from "../../ui/Icon";
-import { ViewHeader } from "../../ui/ViewHeader";
-import { Empty, ErrorBox, Loading } from "../../ui/bits";
+import { useResource } from "../../../api/client";
+import type { ServiceAccount } from "../../../api/types";
+import { nav, useTopPanel } from "../../../app/nav";
+import { useSession } from "../../../app/session";
+import { DataTable } from "../../../ui/DataTable";
+import { Icon } from "../../../ui/Icon";
+import { ViewHeader } from "../../../ui/ViewHeader";
+import { Empty, ErrorBox, Loading } from "../../../ui/bits";
 
 export function ServiceAccounts() {
   const { can } = useSession();

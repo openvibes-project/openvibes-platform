@@ -1,14 +1,14 @@
 import { useMemo } from "react";
 
-import { useAllPages, useResource } from "../api/client";
-import type { AboutUpdate, Agent, AgentSummary } from "../api/types";
-import { nav, useLocation } from "../app/nav";
-import { Ago, Empty, ErrorBox, Loading, SAVED_HEARTBEAT_HINT, StatusBadge } from "../ui/bits";
-import { DataTable } from "../ui/DataTable";
-import { date } from "../ui/format";
-import { agentVersionNote, alarmsOff, selectAgents } from "./rows";
-import { ViewHeader } from "../ui/ViewHeader";
-import { filterChips } from "./filters";
+import { useAllPages, useResource } from "../../api/client";
+import type { AboutUpdate, Agent, AgentSummary } from "../../api/types";
+import { nav, useLocation } from "../../app/nav";
+import { Ago, Empty, ErrorBox, Loading, SAVED_HEARTBEAT_HINT, StatusBadge } from "../../ui/bits";
+import { DataTable } from "../../ui/DataTable";
+import { date } from "../../ui/format";
+import { agentVersionNote, alarmsOff, selectAgents } from "../lists/rows";
+import { ViewHeader } from "../../ui/ViewHeader";
+import { filterChips } from "../lists/filters";
 
 export function Agents() {
   const { params, panels } = useLocation();

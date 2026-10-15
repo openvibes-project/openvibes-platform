@@ -11,7 +11,7 @@ import { date, triageLabel } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { PanelHeader } from "../ui/panel";
 import { toast } from "../ui/toast";
-import { QuietMenu } from "../views/Alarms";
+import { QuietMenu } from "../views/investigate/Alarms";
 import { AddToCase } from "./AddToCase";
 import { BulkBar } from "./BulkBar";
 import { useCaseBadges } from "./CaseBadge";

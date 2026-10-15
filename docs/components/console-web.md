@@ -217,7 +217,7 @@ used.
 
 ### Filter catalogue
 
-`views/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
+`views/lists/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
 Hosts, Audit log): each filter is a flag (one fixed value) or a choice (a
 list of values), and each parameter holds one value. The list views build
 their chip bars from it and the List widget editor offers the same filters,
@@ -296,7 +296,7 @@ an existing agent's `agent.toml`.
   (the same cells grouped into the seven phases), Findings, Alarms, Include
   drafts. A cell or tactic filters the list; "N rules are not mapped"
   lists the unmapped. The matrix scrolls sideways inside its own box on
-  narrow screens. Logic in `views/coverage.ts` (tested).
+  narrow screens. Logic in `views/operate/coverage.ts` (tested).
 - Rule panels show a rule's ATT&CK pairs as chips that open Coverage
   filtered to them; the site-rule editor adds pairs with a searchable
   picker (one option per technique and tactic).
@@ -378,7 +378,7 @@ triage on alarms and findings stays as it is.
   **Last test** shows when the host last raised the harmless test alarm
   and test finding (`openvibes-test alarm|finding`, from `last_test` on
   the host detail), with both commands; test alarms and findings carry a
-  Test badge in the lists (`views/testRules.ts`).
+  Test badge in the lists (`views/lists/testRules.ts`).
   **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why", "To
   fix: …", and, when there is one, the command in a wrapped code block with
   a copy button; an off host also shows
@@ -413,8 +413,13 @@ triage on alarms and findings stays as it is.
   permissions, shortcut) and object kind (panel). A new module is one entry
   in each.
 - **Where code lives** (`web/src`):
-  - `views/`: one file per page (`Findings.tsx`, `Audit.tsx`, …);
-    `views/settings/`: `Settings.tsx` and one file per tab.
+  - `views/`: one file per page, in a folder per menu group:
+    `investigate/` (Alarms, Compliance, Vulnerabilities, Hosts, Software,
+    Ports and Services, Cases), `operate/` (Alarm suppressions, Site rules,
+    Coverage), `admin/` (`Audit.tsx`, and `settings/`: `Settings.tsx` plus
+    one file per tab) and `help/` (About). `views/lists/` holds what the
+    lists share: filter catalogues (`filters.ts`), row selection and
+    sorting (`rows.ts`) and the test-trigger rules (`testRules.ts`).
   - `panels/`: one file per object kind, named `<Kind>Panel.tsx`, holding
     that kind's panel and its "new" form (`UserPanel.tsx` has `UserPanel`
     and `NewUser`).
@@ -425,9 +430,9 @@ triage on alarms and findings stays as it is.
   - An `export` means another file imports it; a helper used by one file
     stays unexported.
 - **Adding things:**
-  - A page: its file in `views/`, one entry in `registry.tsx` (with its
+  - A page: its file in its menu group's folder under `views/`, one entry in `registry.tsx` (with its
     `access`), its path in `frontend-contract.json`.
-  - A Settings tab: its file in `views/settings/` and one line in the
+  - A Settings tab: its file in `views/admin/settings/` and one line in the
     `tabs` list of `Settings.tsx`, with its `access`. The Settings menu
     entry opens to any tab's access by itself.
   - A permission: the server side only (`api.rs` `Permission`, `rbac.rs`

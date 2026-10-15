@@ -3,14 +3,14 @@
 // per tactic (or per kill-chain phase), and the rules below it.
 import { useMemo } from "react";
 
-import { useResource } from "../api/client";
-import type { AttackCoverage, CoverageRule } from "../api/types";
+import { useResource } from "../../api/client";
+import type { AttackCoverage, CoverageRule } from "../../api/types";
 import type { Column } from "./coverage";
-import { nav, useLocation } from "../app/nav";
-import { Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
-import { DataTable } from "../ui/DataTable";
-import { severityOrder } from "../ui/format";
-import { ViewHeader } from "../ui/ViewHeader";
+import { nav, useLocation } from "../../app/nav";
+import { Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
+import { DataTable } from "../../ui/DataTable";
+import { severityOrder } from "../../ui/format";
+import { ViewHeader } from "../../ui/ViewHeader";
 import { columns, selectRules } from "./coverage";
 
 function openRule(rule: CoverageRule) {

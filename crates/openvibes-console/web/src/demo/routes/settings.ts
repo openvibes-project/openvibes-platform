@@ -1,5 +1,5 @@
 // Settings: the audit log and its retention, and the assistant's internet access.
-import { validDomain, validSearxngUrl } from "../../views/settings/assistantRules";
+import { validDomain, validSearxngUrl } from "../../views/admin/settings/assistantRules";
 import type { DemoContext } from "../context";
 import { json, page, problem } from "../http";
 

@@ -49,7 +49,7 @@ and mirror this module's validation. The widgets are in `widgets.tsx`,
 is `DashboardsView.tsx`. See [console-web.md](console-web.md#dashboards) for
 behaviour. The widget editors are in `settings.tsx`: they use the console's
 Select, Segmented and Switch (`web/src/ui`) and the shared filter catalogue
-(`web/src/views/filters.ts`). A new widget is placed at the first free spot
+(`web/src/views/lists/filters.ts`). A new widget is placed at the first free spot
 in the grid (`addWidget` in `layout.ts`). An editor shows a stored value it
 does not know (a list, a rule, a number of days, an attention kind) as a
 selected extra and saves it back unchanged. The List editor offers only the

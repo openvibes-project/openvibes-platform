@@ -8,7 +8,7 @@ import { count } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { CountError, Unavailable } from "./CountError";
 import { LineChart } from "../ui/LineChart";
-import { useListRows } from "../views/rows";
+import { useListRows } from "../views/lists/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
 import { useHistory } from "./history";

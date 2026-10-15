@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { invalidate, request, useAllPages, useResource } from "../api/client";
 import type { CaseDetail, CaseSummary, ItemCases } from "../api/types";
 import { useSession } from "../app/session";
-import { CaseStatusBadge } from "../views/Cases";
+import { CaseStatusBadge } from "../views/investigate/Cases";
 import { ErrorBox, Loading, ObjectLink } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { toast } from "../ui/toast";

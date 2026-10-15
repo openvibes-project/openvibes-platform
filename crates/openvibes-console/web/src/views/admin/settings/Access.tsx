@@ -1,15 +1,15 @@
 // Settings › Access: users, their roles and the asset groups that scope them.
 import { useMemo } from "react";
 
-import { useResource } from "../../api/client";
-import type { AccessInventory } from "../../api/types";
-import { nav, useLocation, useTopPanel } from "../../app/nav";
-import { useSession } from "../../app/session";
-import { DataTable } from "../../ui/DataTable";
-import { Icon } from "../../ui/Icon";
-import { ViewHeader } from "../../ui/ViewHeader";
-import { Empty, ErrorBox, Loading } from "../../ui/bits";
-import { matches } from "../../ui/table";
+import { useResource } from "../../../api/client";
+import type { AccessInventory } from "../../../api/types";
+import { nav, useLocation, useTopPanel } from "../../../app/nav";
+import { useSession } from "../../../app/session";
+import { DataTable } from "../../../ui/DataTable";
+import { Icon } from "../../../ui/Icon";
+import { ViewHeader } from "../../../ui/ViewHeader";
+import { Empty, ErrorBox, Loading } from "../../../ui/bits";
+import { matches } from "../../../ui/table";
 
 export function Access() {
   const { params } = useLocation();

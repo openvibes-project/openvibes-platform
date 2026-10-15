@@ -3,12 +3,12 @@
 // they load whole and filter in the browser.
 import { useMemo } from "react";
 
-import { useResource } from "../api/client";
-import type { PortRow, UnitRow } from "../api/types";
-import { nav, useLocation } from "../app/nav";
-import { Empty, ErrorBox, Loading } from "../ui/bits";
-import { DataTable } from "../ui/DataTable";
-import { ViewHeader } from "../ui/ViewHeader";
+import { useResource } from "../../api/client";
+import type { PortRow, UnitRow } from "../../api/types";
+import { nav, useLocation } from "../../app/nav";
+import { Empty, ErrorBox, Loading } from "../../ui/bits";
+import { DataTable } from "../../ui/DataTable";
+import { ViewHeader } from "../../ui/ViewHeader";
 
 const NOT_YET = "Agents report open ports and running services about an hour after they start.";
 

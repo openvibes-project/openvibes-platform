@@ -1,24 +1,23 @@
-// Threat alarms (P14): process starts that matched a rule, newest first,
-// and the suppressions that quiet them.
+// Threat alarms (P14): process starts that matched a rule, newest first.
 import { useMemo, useState } from "react";
 
-import { invalidate, request, useAllPages, useResource } from "../api/client";
-import type { AlarmDetail, AlarmPage, AlarmSummary, AlarmSuppression } from "../api/types";
-import { nav, useLocation } from "../app/nav";
-import { useSession } from "../app/session";
-import { Ago, Empty, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../ui/bits";
-import { BulkBar } from "../panels/BulkBar";
-import { CaseBadge, useCaseBadges } from "../panels/CaseBadge";
-import { highest } from "../panels/bulk";
-import { DataTable } from "../ui/DataTable";
-import { filterKey, useSelection } from "../ui/selection";
-import { severityOrder } from "../ui/format";
-import { Confirm } from "../ui/panel";
-import { matches } from "../ui/table";
-import { Select } from "../ui/Select";
-import { toast } from "../ui/toast";
-import { ViewHeader } from "../ui/ViewHeader";
-import { isTest } from "./testRules";
+import { invalidate, request, useAllPages, useResource } from "../../api/client";
+import type { AlarmDetail, AlarmPage, AlarmSummary } from "../../api/types";
+import { nav, useLocation } from "../../app/nav";
+import { useSession } from "../../app/session";
+import { BulkBar } from "../../panels/BulkBar";
+import { CaseBadge, useCaseBadges } from "../../panels/CaseBadge";
+import { highest } from "../../panels/bulk";
+import { DataTable } from "../../ui/DataTable";
+import { Select } from "../../ui/Select";
+import { ViewHeader } from "../../ui/ViewHeader";
+import { Ago, Empty, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../../ui/bits";
+import { severityOrder } from "../../ui/format";
+import { Confirm } from "../../ui/panel";
+import { filterKey, useSelection } from "../../ui/selection";
+import { matches } from "../../ui/table";
+import { toast } from "../../ui/toast";
+import { isTest } from "../lists/testRules";
 
 /** Alarms fetched per "Load more" (the API's page size). */
 const PAGE = 100;
@@ -151,36 +150,6 @@ export function Alarms() {
         newCase={() => { const c = chosen(); return { title: `${c.length} alarms: ${c[0]?.message ?? ""}`, severity: highest(c.map((a) => a.severity)) }; }} />
       {loaded.length >= max && (
         <div className="view-pad"><button type="button" className="button" onClick={() => setMax((m) => m + PAGE)}>Load {PAGE} more</button></div>
-      )}
-    </div>
-  );
-}
-
-export function AlarmSuppressions() {
-  const { can } = useSession();
-  const list = useResource<{ items: AlarmSuppression[] }>("/api/v1/alarm-suppressions");
-  const items = list.data?.items ?? [];
-  const what = (s: AlarmSuppression) => s.scope === "host" ? `on ${s.agent_id ?? "?"}` : s.scope === "program" ? `${s.exe ?? "?"}, any host` : `${s.exe ?? "?"} with one command line, any host`;
-  return (
-    <div className="view">
-      <ViewHeader title="Alarm suppressions" count={items.length} total={items.length} refresh="/api/v1/alarm-suppressions" />
-      {list.error ? <div className="view-pad"><ErrorBox error={list.error} /></div> : list.loading && !list.data ? <Loading /> : items.length === 0 ? (
-        <Empty icon="alarm" title="No suppressions">Quiet a noisy alarm from its panel or the alarm list; new matches are then closed as false positives.</Empty>
-      ) : (
-        <DataTable label="Alarm suppressions" rows={items} rowKey={(s) => s.id} defaultSort={{ key: "created", direction: "desc" }}
-          onOpen={(s) => nav.view("/alarms", { q: s.rule_id, state: "all", suppressed: "true" })}
-          columns={[
-            { key: "rule", header: "Rule", sort: (s) => s.rule_id, render: (s) => <div className="cell-two"><span className="mono">{s.rule_id}</span><span className="subtle">{what(s)}</span></div> },
-            { key: "note", header: "Why", hideBelow: 560, render: (s) => <span className="truncate">{s.note}</span> },
-            { key: "created", header: "By", width: "180px", hideBelow: 760, sort: (s) => s.created_at, render: (s) => <span className="subtle">{s.created_by}, <Ago value={s.created_at} /></span> },
-            { key: "remove", header: "Remove", width: "120px", render: (s) => can("alarms.suppress", s.scope !== "host") && (
-              <Confirm danger label={`Remove? Matching alarms raise again from now on.`} onConfirm={async () => {
-                await request("DELETE", `/api/v1/alarm-suppressions/${encodeURIComponent(s.id)}`);
-                invalidate("/api/v1/alarm");
-                toast("Suppression removed");
-              }}>Remove</Confirm>
-            ) },
-          ]} />
       )}
     </div>
   );

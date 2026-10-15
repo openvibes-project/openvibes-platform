@@ -2,20 +2,20 @@
 // fix is what someone acts on; the panel lists the hosts.
 import { useMemo } from "react";
 
-import { useResource } from "../api/client";
-import type { VulnerabilityPage } from "../api/types";
-import { nav, useLocation } from "../app/nav";
-import { ConfidenceBar, Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
-import { BulkBar } from "../panels/BulkBar";
-import { CaseBadge, useCaseBadges } from "../panels/CaseBadge";
-import { highest } from "../panels/bulk";
-import { DataTable } from "../ui/DataTable";
-import { filterKey, useSelection } from "../ui/selection";
-import { pct, severityOrder } from "../ui/format";
-import { Icon } from "../ui/Icon";
-import { ViewHeader } from "../ui/ViewHeader";
-import { type AdvisoryRow, groupByAdvisory, selectAdvisories, vulnerabilityQuery } from "./rows";
-import { filterChips } from "./filters";
+import { useResource } from "../../api/client";
+import type { VulnerabilityPage } from "../../api/types";
+import { nav, useLocation } from "../../app/nav";
+import { ConfidenceBar, Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
+import { BulkBar } from "../../panels/BulkBar";
+import { CaseBadge, useCaseBadges } from "../../panels/CaseBadge";
+import { highest } from "../../panels/bulk";
+import { DataTable } from "../../ui/DataTable";
+import { filterKey, useSelection } from "../../ui/selection";
+import { pct, severityOrder } from "../../ui/format";
+import { Icon } from "../../ui/Icon";
+import { ViewHeader } from "../../ui/ViewHeader";
+import { type AdvisoryRow, groupByAdvisory, selectAdvisories, vulnerabilityQuery } from "../lists/rows";
+import { filterChips } from "../lists/filters";
 
 export function Vulnerabilities() {
   const { params, panels } = useLocation();

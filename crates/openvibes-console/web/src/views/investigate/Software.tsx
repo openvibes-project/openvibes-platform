@@ -3,14 +3,14 @@
 // row opens the package.
 import { useMemo, useState } from "react";
 
-import { useAllPages } from "../api/client";
-import type { Software as SoftwareRow } from "../api/types";
-import { nav, useLocation } from "../app/nav";
-import { Icon } from "../ui/Icon";
-import { Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
-import { DataTable } from "../ui/DataTable";
-import { severityOrder } from "../ui/format";
-import { ViewHeader } from "../ui/ViewHeader";
+import { useAllPages } from "../../api/client";
+import type { Software as SoftwareRow } from "../../api/types";
+import { nav, useLocation } from "../../app/nav";
+import { Icon } from "../../ui/Icon";
+import { Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
+import { DataTable } from "../../ui/DataTable";
+import { severityOrder } from "../../ui/format";
+import { ViewHeader } from "../../ui/ViewHeader";
 
 /** Rows fetched per "Load more" (the API's page size). */
 const PAGE = 100;

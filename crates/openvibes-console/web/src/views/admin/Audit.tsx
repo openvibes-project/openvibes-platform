@@ -1,15 +1,15 @@
 // The audit log: who did what, kept for the retention period.
-import { isDemo, useAllPages, useResource } from "../api/client";
-import type { AuditEvent, AuditRetention } from "../api/types";
-import { nav, useLocation, useTopPanel } from "../app/nav";
-import { useSession } from "../app/session";
-import { DataTable } from "../ui/DataTable";
-import { Icon } from "../ui/Icon";
-import { ViewHeader } from "../ui/ViewHeader";
-import { Ago, Empty, ErrorBox, Loading } from "../ui/bits";
-import { auditSince } from "../ui/format";
-import { filterChips } from "./filters";
-import { selectAudit } from "./rows";
+import { isDemo, useAllPages, useResource } from "../../api/client";
+import type { AuditEvent, AuditRetention } from "../../api/types";
+import { nav, useLocation, useTopPanel } from "../../app/nav";
+import { useSession } from "../../app/session";
+import { DataTable } from "../../ui/DataTable";
+import { Icon } from "../../ui/Icon";
+import { ViewHeader } from "../../ui/ViewHeader";
+import { Ago, Empty, ErrorBox, Loading } from "../../ui/bits";
+import { auditSince } from "../../ui/format";
+import { filterChips } from "../lists/filters";
+import { selectAudit } from "../lists/rows";
 
 /** The demo has no server to export from: build the same columns in the browser. */
 function downloadCsv(events: readonly AuditEvent[]) {

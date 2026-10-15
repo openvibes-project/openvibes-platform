@@ -2,16 +2,16 @@
 // investigating cases by default; a row opens the case in the inspector.
 import { useMemo } from "react";
 
-import { useAllPages } from "../api/client";
-import type { CaseSummary } from "../api/types";
-import { nav, useLocation } from "../app/nav";
-import { useSession } from "../app/session";
-import { caseNumber, caseQuery, selectCases, severities, statusBadge } from "../panels/cases";
-import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
-import { DataTable } from "../ui/DataTable";
-import { severityOrder } from "../ui/format";
-import { Icon } from "../ui/Icon";
-import { ViewHeader } from "../ui/ViewHeader";
+import { useAllPages } from "../../api/client";
+import type { CaseSummary } from "../../api/types";
+import { nav, useLocation } from "../../app/nav";
+import { useSession } from "../../app/session";
+import { caseNumber, caseQuery, selectCases, severities, statusBadge } from "../../panels/cases";
+import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
+import { DataTable } from "../../ui/DataTable";
+import { severityOrder } from "../../ui/format";
+import { Icon } from "../../ui/Icon";
+import { ViewHeader } from "../../ui/ViewHeader";
 
 export function CaseStatusBadge({ status, resolution }: { status: string; resolution?: string | null | undefined }) {
   const badge = statusBadge(status, resolution);

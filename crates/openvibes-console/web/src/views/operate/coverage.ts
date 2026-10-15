@@ -1,6 +1,6 @@
 // Coverage page logic (spec 2026-10-09-attack-coverage-design.md §4): the
 // matrix columns and the filtered rule list, from GET /api/v1/rules/coverage.
-import type { AttackPair, CoverageRule, Tactic } from "../api/types";
+import type { AttackPair, CoverageRule, Tactic } from "../../api/types";
 
 export type Cell = { technique: string; name: string; rules: number; sub: boolean };
 export type Column = { key: string; title: string; tactics: string[]; rules: number; cells: Cell[] };

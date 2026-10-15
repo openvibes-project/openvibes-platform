@@ -1,15 +1,15 @@
 // Settings › Enrollment: adding hosts, and the enrollment tokens they use.
-import { isDemo, useResource } from "../../api/client";
-import type { AgentCommand, EnrollmentToken } from "../../api/types";
-import { nav, useLocation, useTopPanel } from "../../app/nav";
-import { useSession } from "../../app/session";
-import { tokenState, tokenUsable } from "../../panels/tokens";
-import { DataTable } from "../../ui/DataTable";
-import { Icon } from "../../ui/Icon";
-import { ViewHeader } from "../../ui/ViewHeader";
-import { Ago, Empty, ErrorBox, Loading } from "../../ui/bits";
-import { matches } from "../../ui/table";
-import { toast } from "../../ui/toast";
+import { isDemo, useResource } from "../../../api/client";
+import type { AgentCommand, EnrollmentToken } from "../../../api/types";
+import { nav, useLocation, useTopPanel } from "../../../app/nav";
+import { useSession } from "../../../app/session";
+import { tokenState, tokenUsable } from "../../../panels/tokens";
+import { DataTable } from "../../../ui/DataTable";
+import { Icon } from "../../../ui/Icon";
+import { ViewHeader } from "../../../ui/ViewHeader";
+import { Ago, Empty, ErrorBox, Loading } from "../../../ui/bits";
+import { matches } from "../../../ui/table";
+import { toast } from "../../../ui/toast";
 
 /** The demo has no platform to build the install package from. */
 function downloadDemoPackage() {

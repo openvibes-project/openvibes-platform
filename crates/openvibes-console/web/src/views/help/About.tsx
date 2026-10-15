@@ -1,11 +1,11 @@
 import { Fragment, useState, type ReactNode } from "react";
 
-import { useResource } from "../api/client";
-import type { About as AboutInfo, AboutUpdate } from "../api/types";
-import { ago, date, count, plural } from "../ui/format";
-import { ErrorBox, Loading } from "../ui/bits";
-import { Icon, type IconName } from "../ui/Icon";
-import { ViewHeader } from "../ui/ViewHeader";
+import { useResource } from "../../api/client";
+import type { About as AboutInfo, AboutUpdate } from "../../api/types";
+import { ago, date, count, plural } from "../../ui/format";
+import { ErrorBox, Loading } from "../../ui/bits";
+import { Icon, type IconName } from "../../ui/Icon";
+import { ViewHeader } from "../../ui/ViewHeader";
 
 /** One sentence for the newer-version check; it never reads as an error. */
 function UpdateLine({ update }: { update: AboutUpdate | undefined }) {

@@ -1,7 +1,7 @@
 // Reading widget configs written by any console version: every value is
 // checked and falls back to a default, so an old or new config never
 // breaks a dashboard.
-import { LIST_VIEWS, type ListView } from "../views/rows";
+import { LIST_VIEWS, type ListView } from "../views/lists/rows";
 import type { Widget } from "./layout";
 
 type Config = Widget["config"] | Record<string, unknown>;

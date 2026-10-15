@@ -42,9 +42,9 @@ describe("filters", () => {
     expect(setFilter("/compliance", "", "state", "all")).toBe("state=all");
   });
   it.each([
-    ["/compliance", "Findings"], ["/vulnerabilities", "Vulnerabilities"], ["/agents", "Agents"], ["/audit", "Audit"],
+    ["/compliance", "investigate/Findings"], ["/vulnerabilities", "investigate/Vulnerabilities"], ["/agents", "investigate/Agents"], ["/audit", "admin/Audit"],
   ] as const)("%s view builds its chips from the catalogue", (view, file) => {
     expect(LIST_FILTERS[view].length).toBeGreaterThan(0);
-    expect(readFileSync(new URL(`./${file}.tsx`, import.meta.url), "utf8")).toContain(`"${view}"`);
+    expect(readFileSync(new URL(`../${file}.tsx`, import.meta.url), "utf8")).toContain(`"${view}"`);
   });
 });

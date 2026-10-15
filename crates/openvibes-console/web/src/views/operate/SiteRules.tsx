@@ -2,15 +2,15 @@
 // operator writes here. Saved rules are drafts; publishing is a later step.
 import { type ReactNode, useState } from "react";
 
-import { apiMessage, invalidate, request, useResource } from "../api/client";
-import type { DraftChanges, PublishedDrafts, RuleDraft, SiteFleet } from "../api/types";
-import { nav, useTopPanel } from "../app/nav";
-import { useSession } from "../app/session";
-import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
-import { DataTable } from "../ui/DataTable";
-import { Icon } from "../ui/Icon";
-import { toast } from "../ui/toast";
-import { ViewHeader } from "../ui/ViewHeader";
+import { apiMessage, invalidate, request, useResource } from "../../api/client";
+import type { DraftChanges, PublishedDrafts, RuleDraft, SiteFleet } from "../../api/types";
+import { nav, useTopPanel } from "../../app/nav";
+import { useSession } from "../../app/session";
+import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
+import { DataTable } from "../../ui/DataTable";
+import { Icon } from "../../ui/Icon";
+import { toast } from "../../ui/toast";
+import { ViewHeader } from "../../ui/ViewHeader";
 
 const SITE_SETS = [
   { id: "site", title: "Compliance rules", what: "Checked on every scan; a match is a compliance finding." },
