@@ -412,6 +412,31 @@ triage on alarms and findings stays as it is.
 - **`app/registry.tsx`:** declares every view (path, icon, group, required
   permissions, shortcut) and object kind (panel). A new module is one entry
   in each.
+- **Where code lives** (`web/src`):
+  - `views/`: one file per page (`Findings.tsx`, `Audit.tsx`, …);
+    `views/settings/`: `Settings.tsx` and one file per tab.
+  - `panels/`: one file per object kind, named `<Kind>Panel.tsx`, holding
+    that kind's panel and its "new" form (`UserPanel.tsx` has `UserPanel`
+    and `NewUser`).
+  - Logic without React sits beside its component in a lowercase `.ts`
+    file with a unit test (`ruleAssignment.ts` next to `WhereItRuns.tsx`).
+  - `app/`: session, navigation and the registry; `ui/`: shared controls;
+    `dashboards/`: the dashboards feature; `demo/`: the in-browser API.
+  - An `export` means another file imports it; a helper used by one file
+    stays unexported.
+- **Adding things:**
+  - A page: its file in `views/`, one entry in `registry.tsx` (with its
+    `access`), its path in `frontend-contract.json`.
+  - A Settings tab: its file in `views/settings/` and one line in the
+    `tabs` list of `Settings.tsx`, with its `access`. The Settings menu
+    entry opens to any tab's access by itself.
+  - A permission: the server side only (`api.rs` `Permission`, `rbac.rs`
+    `ALL_PERMISSIONS` and the role table, a migration for the database's
+    role tables, and the route's check). Then regenerate the API client
+    (`npm run generate:api`) and `web/src/api/roles.json`
+    (`cargo run -p openvibes-console --bin export_openapi -- --roles >
+    crates/openvibes-console/web/src/api/roles.json`); tests fail while
+    either is stale.
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
   after mutations, and the `useResource`/`useAllPages` hooks. Live requests
@@ -420,7 +445,9 @@ triage on alarms and findings stays as it is.
   build`, embedded in the RPM) is always live, and the demo code is left out
   of its bundle.
 - **`demo/server.ts`:** (preview and dev builds only) an in-browser implementation of the endpoints v2 uses,
-  over deterministic synthetic data (`demo/data.ts`). It follows the wire
+  over deterministic synthetic data (`demo/data.ts`). `demo/context.ts`
+  holds the state every area shares; each area's routes are in
+  `demo/routes/` (hosts, findings, alarms, rules, cases, …). It follows the wire
   types and the permission model, with personas viewer, analyst, operator,
   scoped operator and admin. Tested. Its compliance findings use only the
   rules OpenVIBES ships (openvibes-rules `baseline/rules.json`: ids,

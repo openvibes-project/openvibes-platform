@@ -18,7 +18,7 @@ import { matches } from "../ui/table";
 import { Select } from "../ui/Select";
 import { toast } from "../ui/toast";
 import { ViewHeader } from "../ui/ViewHeader";
-import { isTest } from "./tests";
+import { isTest } from "./testRules";
 
 /** Alarms fetched per "Load more" (the API's page size). */
 const PAGE = 100;

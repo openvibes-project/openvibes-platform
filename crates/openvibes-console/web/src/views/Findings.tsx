@@ -14,7 +14,7 @@ import { severityOrder } from "../ui/format";
 import { activeCount, selectFindings } from "./rows";
 import { ViewHeader } from "../ui/ViewHeader";
 import { filterChips } from "./filters";
-import { isTest } from "./tests";
+import { isTest } from "./testRules";
 
 export function Findings() {
   const { params, panels } = useLocation();
