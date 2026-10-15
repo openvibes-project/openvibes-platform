@@ -2122,8 +2122,15 @@ export interface components {
         AssignableGroupView: {
             /** @description The group. */
             asset_group_id: string;
+            /**
+             * Format: int64
+             * @description Linux hosts it matches.
+             */
+            hosts: number;
             /** @description Its name. */
             name: string;
+            /** @description Its selectors, `key=value`. */
+            selectors: string[];
         };
         /** @description The assistant's internet-lookup setting. */
         AssistantInternet: {
@@ -3245,6 +3252,13 @@ export interface components {
         HostRuleSetAssignmentView: {
             /** @description Whether the host runs it. */
             enabled: boolean;
+            /**
+             * @description The group that decided it (the first by name when several agree);
+             *     null when the default did.
+             */
+            group?: string | null;
+            /** @description False until a live bundle is published ("waits until published"). */
+            published: boolean;
             /** @description Rule set id. */
             rule_set_id: string;
             /** @description `default` or `group`. */
@@ -3252,6 +3266,17 @@ export interface components {
         };
         /** @description Every assignable set's state on one host. */
         HostRuleSetAssignmentsView: {
+            /**
+             * @description The hardening collector's outcome in the host's latest health report:
+             *     `ok`, or an error code such as `not_found` (the root-facts helper's
+             *     file is stale or malformed); null without one.
+             */
+            hardening_facts?: string | null;
+            /**
+             * @description RFC 3339 time of the last stored report whose hardening outcome was
+             *     `ok`; null when none was since enrollment.
+             */
+            hardening_facts_ok_at?: string | null;
             /** @description The sets, by id. */
             items: components["schemas"]["HostRuleSetAssignmentView"][];
         };
@@ -3637,6 +3662,17 @@ export interface components {
             default_enabled: boolean;
             /** @description Overrides, by group name. */
             groups: components["schemas"]["RuleSetGroupOverrideView"][];
+            /**
+             * Format: int64
+             * @description Linux hosts that do not.
+             */
+            hosts_off: number;
+            /**
+             * Format: int64
+             * @description Linux hosts that run it now (an active agent that reported
+             *     os-release).
+             */
+            hosts_on: number;
             /** @description False until a live bundle is published ("not available yet"). */
             published: boolean;
             /** @description Rule set id. */
@@ -9146,7 +9182,7 @@ export interface operations {
                     "application/json": components["schemas"]["AttackCoverage"];
                 };
             };
-            /** @description Global rules.read needed */
+            /** @description Global rules.read or rules.upload needed */
             403: {
                 headers: {
                     [name: string]: unknown;

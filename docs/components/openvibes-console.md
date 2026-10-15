@@ -325,7 +325,7 @@ stay in the low thousands.
 Draft site rules (`rule_drafts.rs`; need `rules.write`, global scope; the
 `site` findings set and the `site-alarms` alarm set only, else 404):
 
-- `GET /api/v1/rules/coverage` (global `rules.read`): MITRE ATT&CK
+- `GET /api/v1/rules/coverage` (global `rules.read` or `rules.upload`): MITRE ATT&CK
   coverage (protocol P18, spec `2026-10-09-attack-coverage-design.md`):
   tactics in matrix order with their derived kill-chain phase, and every
   rule of each live set's current bundle (verified with the set's trusted
@@ -333,7 +333,7 @@ Draft site rules (`rule_drafts.rs`; need `rules.write`, global scope; the
   pairs resolved against the bundled release. The test-trigger rules are
   left out; a set whose bundle does not verify is named in
   `unverified_sets`.
-- `GET /api/v1/attack` (global `rules.read`): the bundled ATT&CK release
+- `GET /api/v1/attack` (global `rules.read` or `rules.upload`): the bundled ATT&CK release
   (`data/attack-enterprise.json`, built by `scripts/attack-data.py` from
   MITRE's STIX at a pinned version; 19.2 today) for the editor's picker.
 - `GET /api/v1/rule-drafts/{set}`: the set's drafts, by rule id. Drafts

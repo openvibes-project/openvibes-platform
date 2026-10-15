@@ -62,12 +62,19 @@ schema 49. Grants: `openvibes-ingest` may read
 writes triage history).
 
 **Store (`platform_store::rule_assignment`).** `overview` (sets, overrides,
-whether a live bundle is published, every group), `set_default` and
-`set_group` (`None` removes an override). A change writes one audit row
+whether a live bundle is published, Linux hosts on and off per set, every
+group with its `key=value` selectors and Linux host count; a Linux host is an
+active agent, stale included, revoked and imported not, whose inventory
+reported os-release), `for_agent` (per set: state, the group that decided it,
+the first by name when several agree, and whether the set is published),
+`set_default` and `set_group` (`None` removes an override). A change writes one audit row
 `rules.assignment.change` (actor: the console user's id, shown by display
 name; `rule_set_id`, `asset_group_id`,
 `asset_group_name`, `old`, `new`; `null` for "default" or "no override");
-setting the current value writes nothing.
+setting the current value writes nothing. `overview` counts with one CTE
+(`FLEET`). `HOST_STATE` returns the host's on and off group ids, so
+distribution never reads group names. `hardening_facts(agent)` reads the
+outcome from `agents.health` and `agents.hardening_facts_ok_at` (schema 50).
 
 `assigned(agent, set)` (distribution) and `for_agent(scope, agent)` (the
 console's host view, `None` outside the caller's scope) share one SQL
@@ -90,16 +97,32 @@ All answers carry `Cache-Control: no-store`; errors are
 | `GET /api/v1/agents/{agent_id}/rule-set-assignments` | `agents.read` (scoped) | none | `HostRuleSetAssignmentsView` |
 
 Shapes: `RuleSetAssignmentsView { items: [RuleSetAssignmentView],
-asset_groups: [{asset_group_id, name}] }`; `RuleSetAssignmentView
-{ rule_set_id, default_enabled, published, groups: [{asset_group_id, name,
-enabled}] }`; `HostRuleSetAssignmentsView { items: [{rule_set_id, enabled,
-source: "default"|"group"}] }`. Errors: 400 `invalid_request` (bad body),
+asset_groups: [{asset_group_id, name, selectors: ["key=value"], hosts}] }`;
+`RuleSetAssignmentView { rule_set_id, default_enabled, published, hosts_on,
+hosts_off, groups: [{asset_group_id, name, enabled}] }`;
+`HostRuleSetAssignmentsView { items: [{rule_set_id, enabled, source:
+"default"|"group", group, published}], hardening_facts,
+hardening_facts_ok_at }`. Host counts are
+**Linux hosts**: active agents (stale included; revoked and imported not)
+whose inventory reported os-release (`os_id`); `hosts` is how many a group
+matches, `hosts_on`/`hosts_off` how many run the set or not. `group` names
+the group that decided the host's state (the first by name when several
+agree; `null` for the default). `hardening_facts` is the hardening
+collector's outcome in the host's latest health report (`ok`, `not_found`
+when the root-facts helper's file is stale or malformed, `invalid_data`),
+`null` without one; the agent reports nothing when the helper's file is
+missing. `hardening_facts_ok_at` is when a stored report last had it `ok`
+(schema 50, set by ingest), `null` when none did since enrollment. `group`
+is returned to every caller who may see the host, also when the group is
+outside their scope (user, 2026-10-15). Errors: 400 `invalid_request` (bad body),
 403 `permission_denied`, 404 `rule_set_not_assignable`,
 `asset_group_not_found`, `agent_not_found`, 503.
 
 Reading needs `rules.read` (admin) or `rules.upload` (operator, admin),
 changing `rules.upload`, all global; an analyst or viewer holds neither and
-gets 403. The list carries every asset group, so an operator (without
+gets 403. The same either-permission check (`rules_reader`) guards `GET
+/api/v1/rule-sets`, its bundle history, `GET /api/v1/rules/coverage` and
+`GET /api/v1/attack` (user, 2026-10-15). The list carries every asset group, so an operator (without
 `rules.read` or `rbac.read`) can add an override; operators therefore see
 every group's name. Writes are absolute values (no `If-Match`):
 a repeated write changes nothing and is not audited. The audit row's actor
@@ -128,3 +151,49 @@ console API (needs the same database).
 (and pins the assignable sets to the protocol vector
 `vectors/project-rule-sets.json`); `cargo test -p openvibes-ingest --test
 assignment` covers the heartbeat path.
+
+## Console screens
+
+Approved 2026-10-15 (`../specs/rule-set-assignment-ui/approved.md`).
+Settings › Rule sets shows the tab to holders of `rules.read` or
+`rules.upload` (global). The list merges published sets with the assignable
+ones, so L2 is listed before it is published ("—", **Not published**), and
+its **Runs on** column reads the default (Linux, or Off) and how many groups
+differ (`panels/ruleAssignment.ts`). Operators (`rules.upload` only) see
+the same list and panels as admins, and the Coverage menu entry (user,
+2026-10-15). A set's panel adds **Where it runs** (`panels/WhereItRuns.tsx`):
+the default switch, "Runs on N Linux hosts · off on M" once published, the
+group overrides (Group, Matches, Hosts, Runs: a switch and ×), "+ Add
+group" (an inline row: a group not listed yet, On | Off with the opposite of
+the default preselected, Add or Cancel; Esc cancels), and the explanation.
+Switches show the server's state: a change waits for the answer, a failure
+shows its error in a toast and leaves the switch as it was (a failed Add
+keeps the row and its choice), and the list and host views are refetched
+either way. Until that refetch lands the controls are `aria-disabled`, not
+disabled, so focus stays on the control used, and presses are not sent
+again; after Add or ×, focus moves to "+ Add group". Without `rules.upload` the switches
+are disabled and Add and × are hidden. The Source row's check count comes
+from `GET /api/v1/rules/coverage`.
+Toasts: "<set> is now on/off by default", "<set> is now on/off for
+<group>", "<group> follows the default again"; errors show the API's title
+("Asset group not found" when the group was deleted meanwhile). "+ Add
+group" is disabled with "No asset groups yet: create one under Settings ›
+Access." or "Every asset group is listed.".
+`npm test -- src/panels/WhereItRuns.test.tsx src/app/registry.test.tsx`
+covers the markup and the menu access; `e2e/demo/where-it-runs-focus.spec.ts`
+the focus, single-send and failed-Add behaviour; clicks and toasts are in the e2e.
+
+The host panel's Details (`panels/HostHardening.tsx`, Linux hosts only) add
+a **Hardening** row after Threat alarms: per assignable set "L1 on" or
+"off", the deciding group in brackets, "waits until published" for an on
+set not published yet, and "pending" while the agent's latest report
+disagrees with the platform's decision. No switch time is stored, so an
+agent too old to know the project sets shows "pending" for L1 until it is
+updated (controller ruling, 2026-10-15). A hardening collector outcome other
+than `ok` adds the warning **Hardening facts unavailable** with its cause:
+"has not reported for N days" (N from `hardening_facts_ok_at`, at least 1),
+"has not reported since enrollment" when no report was ever `ok`, or "sent
+invalid hardening facts" for `invalid_data`. In the Rule sets section, a set
+the agent reports `not_assigned` shows **Not assigned** and "off for
+<group>", or "off by default" when the default switched it off. Operators
+with `rules.read` or `rules.upload` see the "behind" badge there.

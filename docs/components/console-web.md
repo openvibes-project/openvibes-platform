@@ -33,10 +33,13 @@ Show everything, without page changes for details:
   - vulnerabilities by advisory, with CVEs, EPSS and KEV;
   - agents, with tags and revocation;
   - enrollment tokens;
-  - rule sets, with signed-bundle preview and publish;
+  - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
   - access: roles, bindings and asset groups;
   - service accounts, with tokens issued once;
   - audit log, with ranges, CSV export and retention.
+- **Host hardening** (`panels/HostHardening.tsx`): the host panel's Hardening
+  row, "Hardening facts unavailable" warning and "Not assigned" badge; see
+  `rule-set-assignment.md`.
 - **Triage** (triage v2, `panels/triage.ts`, `panels/bulk.ts`,
   `panels/BulkBar.tsx`): four states (open, mitigated, accepted risk, false
   positive), any to any other; every close needs a note, accepted risk an
@@ -287,7 +290,7 @@ an existing agent's `agent.toml`.
   working directory, pid), rule and versions, first/last seen, count, in
   the detail template (Process, Evidence, History tabs); the summary has
   the triage actions and Quiet… with the same scopes.
-- **Coverage** (`/coverage`, `g t`, global `rules.read`): an ATT&CK
+- **Coverage** (`/coverage`, `g t`, global `rules.read` or `rules.upload`): an ATT&CK
   matrix (tactics as columns, covered techniques with rule counts; empty
   tactics stay as visible gaps) above the rule list. Chips: Kill chain
   (the same cells grouped into the seven phases), Findings, Alarms, Include

@@ -307,7 +307,8 @@ pub async fn authenticate(
 /// Records a heartbeat: `agents` is written at most once per 5 minutes per agent unless
 /// the hostname or the capabilities (protocol P7: the enabled collectors)
 /// changed. A present hostname replaces the stored one; an
-/// absent one keeps it. Returns whether a write happened.
+/// absent one keeps it. A report whose hardening outcome is `ok` also sets
+/// `hardening_facts_ok_at`. Returns whether a write happened.
 pub async fn heartbeat(
     client: &Client,
     agent_id: &str,
@@ -328,7 +329,10 @@ pub async fn heartbeat(
                  hostname = COALESCE($6, hostname),
                  health_previous = CASE WHEN $7::jsonb IS NULL THEN health_previous ELSE health END,
                  health = COALESCE($7::jsonb, health),
-                 health_at = CASE WHEN $7::jsonb IS NULL THEN health_at ELSE $2 END
+                 health_at = CASE WHEN $7::jsonb IS NULL THEN health_at ELSE $2 END,
+                 hardening_facts_ok_at = CASE
+                     WHEN $7::jsonb -> 'last_scan' -> 'collectors' ->> 'hardening' = 'ok' THEN $2
+                     ELSE hardening_facts_ok_at END
              WHERE agent_id = $1
                AND (last_seen_at IS NULL OR last_seen_at < $5
                     OR hostname IS DISTINCT FROM COALESCE($6, hostname)

@@ -130,8 +130,10 @@ updating the agent.
 
 ## 6. The console
 
-The screens go through full-screen mockups in the companion, key by key,
-before the plan's console task.
+The screens were designed as full-screen mockups and approved by the user
+on 2026-10-15. Every detail is in `rule-set-assignment-ui/approved.md`
+(generator: `rule-set-assignment-ui/gen.py`), and that file binds where it
+is more specific than the bullets below.
 
 - **Settings › Rule sets:** for each assignable set, its default and the
   groups that override it, each with an on/off switch. An unpublished set

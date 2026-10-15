@@ -85,6 +85,16 @@ fn done(change: Change) -> rule_assignment::Assignment {
     }
 }
 
+fn by_default(rule_set_id: &str, enabled: bool) -> HostAssignment {
+    HostAssignment {
+        rule_set_id: rule_set_id.into(),
+        enabled,
+        source: Source::Default,
+        group: None,
+        published: false,
+    }
+}
+
 #[tokio::test]
 async fn the_defaults_are_l1_on_and_l2_off() {
     let (db, admin) = setup().await;
@@ -377,21 +387,7 @@ async fn a_host_in_no_group_gets_the_default() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        host,
-        [
-            HostAssignment {
-                rule_set_id: L1.into(),
-                enabled: true,
-                source: Source::Default
-            },
-            HostAssignment {
-                rule_set_id: L2.into(),
-                enabled: false,
-                source: Source::Default
-            },
-        ]
-    );
+    assert_eq!(host, [by_default(L1, true), by_default(L2, false),]);
     drop((console, dist, admin));
     db.drop().await;
 }

@@ -358,3 +358,44 @@ async fn triage_v2_retires_investigating() {
     drop(client);
     db.drop().await;
 }
+
+/// Schema 50 backfills `hardening_facts_ok_at` from `health_at` for reports
+/// whose hardening outcome was `ok`, and leaves the others empty.
+#[tokio::test]
+async fn schema_fifty_backfills_hardening_facts_ok_at() {
+    let db = TestDb::create().await;
+    let mut client = at_version(&db, 49).await;
+    let ok_id = "agent.00000000-0000-0000-0000-0000000000a1";
+    let bad_id = "agent.00000000-0000-0000-0000-0000000000a2";
+    for (id, outcome) in [(ok_id, "ok"), (bad_id, "not_found")] {
+        client
+            .execute(
+                "INSERT INTO agents (agent_id, status, enrolled_at, health, health_at)
+                 VALUES ($1, 'active', now(), $2, now() - interval '3 hours')",
+                &[
+                    &id,
+                    &serde_json::json!({"last_scan": {"collectors": {"hardening": outcome}}}),
+                ],
+            )
+            .await
+            .unwrap();
+    }
+    platform_store::migrate(&mut client).await.unwrap();
+    let rows = client
+        .query(
+            "SELECT agent_id, hardening_facts_ok_at = health_at, hardening_facts_ok_at IS NULL
+             FROM agents ORDER BY agent_id",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        rows[0].get::<_, Option<bool>>(1),
+        Some(true),
+        "ok: health_at"
+    );
+    assert!(rows[1].get::<_, bool>(2), "not_found: NULL");
+    drop(client);
+    db.drop().await;
+}

@@ -8,6 +8,7 @@ import type {
   Severity, TriageCounts, Vulnerability,
 } from "../api/types";
 import { caseSeverityOf, createCaseStore, seedCases } from "./cases";
+import { createAssignmentStore } from "./assignments";
 import { createDashboardStore } from "./dashboards";
 import { demoAttack, demoMappings, pairView } from "./attack";
 import { buildDemoData } from "./data";
@@ -64,6 +65,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       ? { kind: "asset_groups", asset_group_ids: ["grp-prod"] }
       : { kind: "global" },
   }));
+  // Rule sets, their switches, history and coverage: rules.read or rules.upload, globally (the real API's rule).
+  const readsRules = () => capabilities.some((c) => (c.permission === "rules.read" || c.permission === "rules.upload") && c.scope.kind === "global");
   const actor = { admin: "admin", analyst: "sam", operator: "ola", scoped_operator: "ola", viewer: "vic" }[persona];
 
   const visible = (agentId: string) =>
@@ -751,8 +754,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     audit("enrollment_token.revoke", id, "enrollment_token");
     return json(token);
   });
-  route("GET", "/api/v1/rule-sets", "rules.read", () => json({ items: data.ruleSets }));
-  route("GET", "/api/v1/rule-sets/{id}/bundles", "rules.read", ({ id = "" }) => json({ items: data.bundles.get(id) ?? [] }));
+  route("GET", "/api/v1/rule-sets", null, () => (readsRules() ? json({ items: data.ruleSets }) : problem(403, "permission_denied", "Access is not available")));
+  route("GET", "/api/v1/rule-sets/{id}/bundles", null, ({ id = "" }) => (readsRules() ? json({ items: data.bundles.get(id) ?? [] }) : problem(403, "permission_denied", "Access is not available")));
   const previews = new Map<string, string>();
   const envelopeOf = (body: Record<string, unknown>) => ({
     set: String(body.rule_set_id ?? ""), version: Number(body.rule_set_version), key: String(body.issuer_key_id ?? ""), expires: Number(body.expires_at_unix_ms),
@@ -831,8 +834,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     audit("rule_draft.saved", `${set}/${id} v${next.version}`, "rule_draft");
     return json(next);
   });
-  route("GET", "/api/v1/attack", "rules.read", () => json(demoAttack));
-  route("GET", "/api/v1/rules/coverage", "rules.read", () => json({
+  route("GET", "/api/v1/attack", null, () => (readsRules() ? json(demoAttack) : problem(403, "permission_denied", "Access is not available")));
+  route("GET", "/api/v1/rules/coverage", null, () => !readsRules() ? problem(403, "permission_denied", "Access is not available") : json({
     attack_version: demoAttack.version, notice: demoAttack.notice, tactics: demoAttack.tactics, unverified_sets: [],
     rules: [
       ...data.rules.map((r) => ({ rule_set_id: r.ruleSetId, rule_id: r.ruleId, title: r.message.split(" listens")[0] ?? r.ruleId, kind: "snapshot", severity: r.severity, draft: false, attack: (demoMappings[r.ruleId] ?? []).map(pairView) })),
@@ -967,6 +970,15 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     if (result.etag) headers.etag = result.etag;
     return new Response(JSON.stringify(result.body), { status: result.status, headers });
   };
+  const assignments = createAssignmentStore(data, (setId) => audit("rules.assignment.change", setId, "rule_set"), browserPersistence("openvibes.v2.demo.rule-assignment"));
+  route("GET", "/api/v1/rule-set-assignments", null, () => (readsRules() ? json(assignments.list()) : problem(403, "permission_denied", "Access is not available")));
+  route("PUT", "/api/v1/rule-set-assignments/{set}", "rules.upload", ({ set = "" }, _, body) => send(assignments.setDefault(set, body)));
+  route("PUT", "/api/v1/rule-set-assignments/{set}/groups/{group}", "rules.upload", ({ set = "", group = "" }, _, body) => send(assignments.setGroup(set, group, body)));
+  route("DELETE", "/api/v1/rule-set-assignments/{set}/groups/{group}", "rules.upload", ({ set = "", group = "" }) => send(assignments.clearGroup(set, group)));
+  route("GET", "/api/v1/agents/{id}/rule-set-assignments", "agents.read", ({ id = "" }) => {
+    const agent = agentById(id);
+    return agent ? json(assignments.host(agent)) : problem(404, "agent_not_found", "Agent not found");
+  });
   const me = `u-${actor}`;
   route("GET", "/api/v1/dashboards", null, () => send(dashboards.list(me)));
   route("POST", "/api/v1/dashboards", null, (_, __, body) => send(dashboards.create(me, body)));

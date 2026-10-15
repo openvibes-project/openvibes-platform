@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::OnceLock};
 use axum::{
     Json,
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::{IntoResponse, Response},
 };
 use openvibes_core::{AttackRef, Identifier, ResourceLimits, Rule, RuleKind, SignedRuleEnvelope};
@@ -17,11 +17,7 @@ use platform_store::rule_drafts::{SITE, SITE_ALARMS};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{
-    Permission, ProblemDetails,
-    problem::problem_response,
-    router::{AuthHttpState, authenticated_permission, no_store, unavailable_auth},
-};
+use crate::router::{AuthHttpState, no_store, unavailable_auth};
 
 use platform_store::rules::is_test_rule;
 
@@ -282,14 +278,7 @@ async fn global_rules_read(
     state: &AuthHttpState,
     headers: &HeaderMap,
 ) -> Result<platform_store::Client, Response> {
-    let (scope, _) = authenticated_permission(state, headers, Permission::RulesRead, false).await?;
-    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
-        return Err(problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Access is not available",
-        )));
-    }
+    crate::rule_assignment::rules_reader(state, headers).await?;
     state.pool.get().await.map_err(|_| unavailable_auth())
 }
 
@@ -314,7 +303,7 @@ pub(crate) async fn attack_catalog(
 
 #[utoipa::path(get, path = "/api/v1/rules/coverage", tag = "rules",
     responses((status = 200, description = "Which ATT&CK tactics and techniques the rules cover", body = crate::coverage::AttackCoverage),
-        (status = 403, description = "Global rules.read needed", body = crate::ProblemDetails, content_type = "application/problem+json")))]
+        (status = 403, description = "Global rules.read or rules.upload needed", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn rule_coverage(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,

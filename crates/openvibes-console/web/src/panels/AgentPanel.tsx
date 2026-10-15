@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
-import type { Agent, AlarmSummary, Certificate, LastTest, Finding, HostPackage, RuleSet, Tag, TagPreview, VulnerabilityPage } from "../api/types";
+import type { Agent, AlarmSummary, Certificate, LastTest, Finding, HostPackage, HostRuleSetAssignments, RuleSet, Tag, TagPreview, VulnerabilityPage } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
@@ -12,7 +12,9 @@ import { packageId } from "../views/Software";
 import { AddToCase } from "./AddToCase";
 import { vulnerabilityRef } from "./cases";
 import { HostExport } from "./HostExport";
+import { HardeningRows, NotAssigned, hostAssignmentsPath } from "./HostHardening";
 import { HostServicesTab } from "./HostServices";
+import { readsRules } from "./ruleAssignment";
 import { Icon } from "../ui/Icon";
 import { Confirm, PanelHeader, Section, Tabs } from "../ui/panel";
 import { toast } from "../ui/toast";
@@ -182,6 +184,7 @@ export function AgentPanel({ id }: { id: string }) {
                 {data.revoked_at && <><dt>Revoked</dt><dd>{date(data.revoked_at)}</dd></>}
                 <dt>Capabilities</dt><dd className="row row--wrap">{data.capabilities.length ? data.capabilities.map((c) => <span key={c} className="tag">{c}</span>) : "—"}</dd>
                 {data.alarms && <><dt>Threat alarms</dt><dd><ThreatAlarms alarms={data.alarms} /></dd></>}
+                {data.status !== "imported" && <HardeningRows agent={data} />}
               </dl>
             </Section>
             {data.status !== "imported" && <LastTestSection test={data.last_test} />}
@@ -209,7 +212,9 @@ export function AgentPanel({ id }: { id: string }) {
 /** What an agent holds of each rule set, against what the platform has published. */
 function HostRuleSets({ agent }: { agent: Agent }) {
   const { can } = useSession();
-  const published = useResource<{ items: RuleSet[] }>(can("rules.read") ? "/api/v1/rule-sets" : null);
+  const published = useResource<{ items: RuleSet[] }>(readsRules(can) ? "/api/v1/rule-sets" : null);
+  const host = useResource<HostRuleSetAssignments>(hostAssignmentsPath(agent));
+  const decided = new Map((host.data?.items ?? []).map((item) => [item.rule_set_id, item]));
   const current = new Map((published.data?.items ?? []).map((set) => [set.rule_set_id, set.current_version ?? null]));
   const sets = agent.rule_sets;
   return (
@@ -225,10 +230,15 @@ function HostRuleSets({ agent }: { agent: Agent }) {
               <li key={set.id} className="list__row list__row--static">
                 <span className="mono">{set.id}</span>
                 <span className="grow" />
-                {set.version == null ? <span className="badge badge--warn badge--plain">no bundle yet</span> : <span className="mono subtle nowrap">v{set.version}</span>}
-                {behind && <span className="badge badge--warn badge--plain" title={`Published: v${latest}`}>behind v{latest}</span>}
-                {set.refused && <span className="badge badge--critical badge--plain" title="The agent refused the last bundle it was given">refused: {set.refused.replaceAll("_", " ")}</span>}
-                {set.expires_at_ms != null && <span className="subtle nowrap">expires {date(new Date(set.expires_at_ms).toISOString())}</span>}
+                {set.state === "not_assigned" ? (() => {
+                  const d = decided.get(set.id);
+                  return <NotAssigned text={!d || d.enabled ? null : d.group ? `off for ${d.group}` : "off by default"} />;
+                })() : <>
+                  {set.version == null ? <span className="badge badge--warn badge--plain">no bundle yet</span> : <span className="mono subtle nowrap">v{set.version}</span>}
+                  {behind && <span className="badge badge--warn badge--plain" title={`Published: v${latest}`}>behind v{latest}</span>}
+                  {set.refused && <span className="badge badge--critical badge--plain" title="The agent refused the last bundle it was given">refused: {set.refused.replaceAll("_", " ")}</span>}
+                  {set.expires_at_ms != null && <span className="subtle nowrap">expires {date(new Date(set.expires_at_ms).toISOString())}</span>}
+                </>}
               </li>
             );
           })}

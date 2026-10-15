@@ -4,6 +4,7 @@
 //! (`rules.assignment.change`) with the old and new value.
 
 use crate::{Client, StoreError};
+use chrono::{DateTime, Utc};
 
 /// One asset group's override for a set.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -25,6 +26,10 @@ pub struct Assignment {
     pub default_enabled: bool,
     /// A live (not retired) bundle is published, so agents can get it.
     pub published: bool,
+    /// Linux hosts that run it now.
+    pub hosts_on: i64,
+    /// Linux hosts that do not.
+    pub hosts_off: i64,
     /// Overrides, by group name.
     pub groups: Vec<GroupOverride>,
 }
@@ -36,6 +41,10 @@ pub struct GroupName {
     pub asset_group_id: String,
     /// Its name.
     pub name: String,
+    /// Its selectors, `key=value`, sorted.
+    pub selectors: Vec<String>,
+    /// Linux hosts it matches.
+    pub hosts: i64,
 }
 
 /// Every assignable set, and every asset group.
@@ -57,6 +66,25 @@ pub enum Change {
     /// No such asset group.
     UnknownGroup,
 }
+
+/// Linux hosts and their group memberships, as a CTE prefix for the
+/// console's counts. A Linux host is an active agent (stale included;
+/// revoked and imported not) whose inventory reported os-release (`os_id`).
+/// A host is a member of a group with selectors whose every tag it carries,
+/// as for access.
+// ponytail: agents x groups per overview call; precompute if a fleet of many thousand hosts makes the panel slow.
+const FLEET: &str = "
+    WITH linux AS (SELECT agent_id FROM agents WHERE status = 'active' AND os_id IS NOT NULL),
+    member AS (
+        SELECT l.agent_id, g.asset_group_id FROM linux l CROSS JOIN console_asset_groups g
+        WHERE EXISTS (SELECT 1 FROM console_asset_group_selectors s
+                      WHERE s.asset_group_id = g.asset_group_id)
+          AND NOT EXISTS (
+              SELECT 1 FROM console_asset_group_selectors r
+              WHERE r.asset_group_id = g.asset_group_id
+                AND NOT EXISTS (SELECT 1 FROM console_agent_tags t
+                                WHERE t.agent_id = l.agent_id AND t.tag_key = r.tag_key
+                                  AND t.tag_value = r.tag_value)))";
 
 /// Every assignable set with its overrides, and every asset group.
 pub async fn overview(client: &Client) -> Result<Overview, StoreError> {
@@ -83,11 +111,45 @@ pub async fn overview(client: &Client) -> Result<Overview, StoreError> {
             &[],
         )
         .await?;
+    let counts = client
+        .query(
+            &format!(
+                "{FLEET}
+                 SELECT a.rule_set_id,
+                        count(*) FILTER (WHERE COALESCE(o.on_any, a.default_enabled)),
+                        count(*) FILTER (WHERE NOT COALESCE(o.on_any, a.default_enabled))
+                 FROM rule_set_assignment a CROSS JOIN linux l
+                 LEFT JOIN LATERAL (
+                     SELECT bool_or(x.enabled) AS on_any FROM rule_set_group_assignment x
+                     JOIN member m ON m.asset_group_id = x.asset_group_id AND m.agent_id = l.agent_id
+                     WHERE x.rule_set_id = a.rule_set_id) o ON true
+                 GROUP BY a.rule_set_id"
+            ),
+            &[],
+        )
+        .await?;
+    let group_hosts = client
+        .query(
+            &format!("{FLEET} SELECT asset_group_id::text, count(*) FROM member GROUP BY 1"),
+            &[],
+        )
+        .await?;
+    let selectors = client
+        .query(
+            "SELECT asset_group_id::text, tag_key || '=' || tag_value
+             FROM console_asset_group_selectors ORDER BY 2",
+            &[],
+        )
+        .await?;
     Ok(Overview {
         sets: sets
             .iter()
             .map(|row| {
                 let rule_set_id: String = row.get(0);
+                let (hosts_on, hosts_off) = counts
+                    .iter()
+                    .find(|c| c.get::<_, &str>(0) == rule_set_id)
+                    .map_or((0, 0), |c| (c.get(1), c.get(2)));
                 Assignment {
                     groups: overrides
                         .iter()
@@ -101,14 +163,28 @@ pub async fn overview(client: &Client) -> Result<Overview, StoreError> {
                     rule_set_id,
                     default_enabled: row.get(1),
                     published: row.get(2),
+                    hosts_on,
+                    hosts_off,
                 }
             })
             .collect(),
         groups: groups
             .iter()
-            .map(|row| GroupName {
-                asset_group_id: row.get(0),
-                name: row.get(1),
+            .map(|row| {
+                let asset_group_id: String = row.get(0);
+                GroupName {
+                    selectors: selectors
+                        .iter()
+                        .filter(|s| s.get::<_, &str>(0) == asset_group_id)
+                        .map(|s| s.get(1))
+                        .collect(),
+                    hosts: group_hosts
+                        .iter()
+                        .find(|h| h.get::<_, &str>(0) == asset_group_id)
+                        .map_or(0, |h| h.get(1)),
+                    asset_group_id,
+                    name: row.get(1),
+                }
             })
             .collect(),
     })
@@ -287,16 +363,24 @@ pub struct HostAssignment {
     pub enabled: bool,
     /// Default or a group.
     pub source: Source,
+    /// The group that decided it (the first by name when several agree);
+    /// `None` when the default did.
+    pub group: Option<String>,
+    /// A live bundle is published, so the agent can get it.
+    pub published: bool,
 }
 
-/// Per assignable set for agent `$1`: (set, enabled, decided by a group).
+/// Per assignable set for agent `$1`: (set, enabled, decided by a group, ids of
+/// the host's groups saying on, saying off).
 /// `bool_or` over the overrides of the host's groups is true when any says
 /// on, false when all say off, NULL when none applies (then the default). A
 /// group matches when it has selectors and the host carries every one, as
 /// for access (`console_read::agent_visibility`).
 const HOST_STATE: &str = "
     SELECT a.rule_set_id, COALESCE(bool_or(o.enabled), a.default_enabled),
-           bool_or(o.enabled) IS NOT NULL
+           bool_or(o.enabled) IS NOT NULL,
+           array_agg(o.asset_group_id::text) FILTER (WHERE o.enabled),
+           array_agg(o.asset_group_id::text) FILTER (WHERE NOT o.enabled)
     FROM rule_set_assignment a
     LEFT JOIN rule_set_group_assignment o ON o.rule_set_id = a.rule_set_id
      AND EXISTS (SELECT 1 FROM console_asset_group_selectors s
@@ -315,7 +399,7 @@ pub async fn assigned(client: &Client, agent_id: &str, set: &str) -> Result<bool
     let row = client
         .query_opt(
             &format!(
-                "SELECT enabled FROM ({HOST_STATE}) AS h (rule_set_id, enabled, from_group)
+                "SELECT enabled FROM ({HOST_STATE}) AS h (rule_set_id, enabled, from_group, on_groups, off_groups)
                  WHERE rule_set_id = $2"
             ),
             &[&agent_id, &set],
@@ -344,7 +428,16 @@ pub async fn for_agent(
     }
     let rows = client
         .query(
-            &format!("{HOST_STATE} ORDER BY a.rule_set_id"),
+            &format!(
+                "SELECT h.rule_set_id, h.enabled, h.from_group,
+                        (SELECT min(g.name) FROM console_asset_groups g
+                         WHERE g.asset_group_id::text = ANY(
+                             CASE WHEN h.enabled THEN h.on_groups ELSE h.off_groups END)),
+                        EXISTS (SELECT 1 FROM rule_bundles b JOIN rule_sets s USING (rule_set_id)
+                                WHERE b.rule_set_id = h.rule_set_id AND s.retired_at IS NULL)
+                 FROM ({HOST_STATE}) AS h (rule_set_id, enabled, from_group, on_groups, off_groups)
+                 ORDER BY h.rule_set_id"
+            ),
             &[&agent_id],
         )
         .await?;
@@ -358,7 +451,30 @@ pub async fn for_agent(
                 } else {
                     Source::Default
                 },
+                group: row.get(3),
+                published: row.get(4),
             })
             .collect(),
     ))
+}
+
+/// The hardening collector's outcome (the root-facts helper, P19) in
+/// `agent_id`'s latest stored health report (`ok`; `not_found`: the
+/// helper's file is stale or malformed; `invalid_data`: its facts failed
+/// validation; `None`: no report, or no helper file at all, which the agent
+/// does not report), and when a stored report last had it `ok` (`None`:
+/// never since enrollment, or since schema 50). Callers check visibility
+/// first (`for_agent`); an unknown agent gives `(None, None)`.
+pub async fn hardening_facts(
+    client: &Client,
+    agent_id: &str,
+) -> Result<(Option<String>, Option<DateTime<Utc>>), StoreError> {
+    Ok(client
+        .query_opt(
+            "SELECT health -> 'last_scan' -> 'collectors' ->> 'hardening', hardening_facts_ok_at
+             FROM agents WHERE agent_id = $1",
+            &[&agent_id],
+        )
+        .await?
+        .map_or((None, None), |row| (row.get(0), row.get(1))))
 }

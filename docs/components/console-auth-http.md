@@ -51,7 +51,7 @@ permission-checked read models, enrollment-token management, and audit routes.
   refuses bearer-authenticated mutations; those require a browser session and
   CSRF checks.
 - `/api/v1/rule-sets` and per-set bundle history are global `rules.read`
-  reads. Admin is the only built-in role granted `rules.read` by default;
+  or `rules.upload` reads (user, 2026-10-15). Admin is the only built-in role granted `rules.read` by default;
   custom roles may receive it explicitly. Rule upload preview verifies the
   Ed25519 signature, envelope digest,
   expiry, parser limits, and currently trusted issuer against read-only public

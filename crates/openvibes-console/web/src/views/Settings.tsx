@@ -8,16 +8,18 @@ import { Access, ServiceAccounts, Enrollment, RuleSets } from "./Admin";
 import { AssistantSettings } from "./AssistantSettings";
 import { useSession } from "../app/session";
 import { nav, useLocation } from "../app/nav";
+import { readsRules } from "../panels/ruleAssignment";
 
 export function Settings() {
     const { can } = useSession()
     const { params } = useLocation();
+    const rulesTab = readsRules(can);
 
     const tabs = [
         { id: "access", label: "Access", allowed: can("rbac.read", true) },
         { id: "service-accounts", label: "Service accounts", allowed: can("service_accounts.read", true) },
         { id: "enrollment", label: "Enrollment", allowed: can("tokens.read", true) },
-        { id: "rule-sets", label: "Rule sets", allowed: can("rules.read", true) },
+        { id: "rule-sets", label: "Rule sets", allowed: rulesTab },
         { id: "assistant-settings", label: "Assistant", allowed: can("assistant.admin", true) },
     ].filter((tab) => tab.allowed);
 
@@ -42,7 +44,7 @@ export function Settings() {
                 if (active === "enrollment" && can("tokens.read", true)) {
                     return <Enrollment />;
                 }
-                if (active === "rule-sets" && can("rules.read", true)) {
+                if (active === "rule-sets" && rulesTab) {
                     return <RuleSets />;
                 }
                 if (active === "assistant-settings" && can("assistant.admin", true)) {

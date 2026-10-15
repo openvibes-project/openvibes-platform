@@ -218,6 +218,15 @@ const AGENT: &str = "agent.00000000-0000-4000-8000-000000000001";
 const ALICE: &str = "11111111-1111-4111-8111-111111111111";
 const LIST: &str = "/api/v1/rule-set-assignments";
 const L1: &str = "/api/v1/rule-set-assignments/hardening-linux-l1";
+/// Rule reads that `rules.upload` grants as well as `rules.read` (user,
+/// 2026-10-15), with the operator's answer: no rule set named `baseline`
+/// exists here, so its history is 404 `rule_set_not_found` (past the check).
+const RULE_READS: [(&str, StatusCode); 4] = [
+    ("/api/v1/rule-sets", StatusCode::OK),
+    ("/api/v1/rule-sets/baseline/bundles", StatusCode::NOT_FOUND),
+    ("/api/v1/rules/coverage", StatusCode::OK),
+    ("/api/v1/attack", StatusCode::OK),
+];
 
 async fn setup() -> (TestDb, axum::Router) {
     let db = TestDb::create().await;
@@ -249,7 +258,10 @@ async fn setup() -> (TestDb, axum::Router) {
     .await;
     client
         .batch_execute(&format!(
-            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ('{AGENT}', 'active', now());
+            "INSERT INTO agents (agent_id, status, enrolled_at, os_id, health)
+                 VALUES ('{AGENT}', 'active', now(), 'fedora',
+                         '{{\"last_scan\": {{\"collectors\": {{\"hardening\": \"not_found\"}}}}}}');
+             UPDATE agents SET hardening_facts_ok_at = now() - interval '3 days' WHERE agent_id = '{AGENT}';
              INSERT INTO console_agent_tags VALUES ('{AGENT}', 'env', 'web', now(), 'test');
              INSERT INTO console_asset_groups VALUES ('{WEB}', 'web', now(), 'test');
              INSERT INTO console_asset_group_selectors VALUES ('{WEB}', 'env', 'web', now());"
@@ -275,6 +287,10 @@ async fn rule_readers_and_publishers_see_the_switches_and_only_publishers_change
         StatusCode::FORBIDDEN,
         "an analyst has no rules.upload"
     );
+    for (path, _) in RULE_READS {
+        let (status, ..) = call(&router, "GET", path, &cookie, &csrf, None, None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "analyst {path}");
+    }
 
     // An operator reads through rules.upload, so it can add overrides.
     let (cookie, csrf) = login(&router, "carol").await;
@@ -284,12 +300,21 @@ async fn rule_readers_and_publishers_see_the_switches_and_only_publishers_change
         body,
         serde_json::json!({
             "items": [
-                {"rule_set_id": "hardening-linux-l1", "default_enabled": true, "published": false, "groups": []},
-                {"rule_set_id": "hardening-linux-l2", "default_enabled": false, "published": false, "groups": []}
+                {"rule_set_id": "hardening-linux-l1", "default_enabled": true, "published": false,
+                 "hosts_on": 1, "hosts_off": 0, "groups": []},
+                {"rule_set_id": "hardening-linux-l2", "default_enabled": false, "published": false,
+                 "hosts_on": 0, "hosts_off": 1, "groups": []}
             ],
-            "asset_groups": [{"asset_group_id": WEB, "name": "web"}]
+            "asset_groups": [{"asset_group_id": WEB, "name": "web", "selectors": ["env=web"], "hosts": 1}]
         })
     );
+    for (path, expected) in RULE_READS {
+        let (status, body, _) = call(&router, "GET", path, &cookie, &csrf, None, None).await;
+        assert_eq!(status, expected, "operator {path}: {body}");
+        if status == StatusCode::NOT_FOUND {
+            assert_eq!(body["code"], "rule_set_not_found", "operator {path}");
+        }
+    }
 
     let (cookie, csrf) = login(&router, "alice").await;
     let (status, ..) = call(&router, "GET", LIST, &cookie, &csrf, None, None).await;
@@ -366,8 +391,11 @@ async fn group_overrides_and_the_host_view() {
     assert_eq!(
         body["items"][0],
         serde_json::json!(
-        {"rule_set_id": "hardening-linux-l1", "enabled": true, "source": "default"})
+        {"rule_set_id": "hardening-linux-l1", "enabled": true, "source": "default",
+         "group": null, "published": false})
     );
+    assert_eq!(body["hardening_facts"], "not_found");
+    assert!(body["hardening_facts_ok_at"].is_string(), "{body}");
     let (status, body, _) = call(
         &router,
         "PUT",
@@ -387,7 +415,8 @@ async fn group_overrides_and_the_host_view() {
     assert_eq!(
         body["items"][0],
         serde_json::json!(
-        {"rule_set_id": "hardening-linux-l1", "enabled": false, "source": "group"})
+        {"rule_set_id": "hardening-linux-l1", "enabled": false, "source": "group",
+         "group": "web", "published": false})
     );
     for _ in 0..2 {
         let (status, body, _) = call(&router, "DELETE", &group, &cookie, &csrf, None, None).await;

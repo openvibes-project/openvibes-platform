@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
 import { tokenState, tokenUsable } from "./tokens";
-import type { AccessInventory, AuditEvent, CreatedToken, EnrollmentToken, RuleBundle, RuleSet, ServiceAccount, ServiceToken } from "../api/types";
+import type { AccessInventory, AttackCoverage, AuditEvent, CreatedToken, EnrollmentToken, RuleBundle, RuleSet, RuleSetAssignments, ServiceAccount, ServiceToken } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
@@ -16,46 +16,63 @@ import { Select } from "../ui/Select";
 import { Segmented } from "../ui/Segmented";
 import { toast } from "../ui/toast";
 import { IssueServiceToken, NewServiceAccount } from "./AdminPanels";
+import { readsRules, sourceDetail } from "./ruleAssignment";
+import { WhereItRuns } from "./WhereItRuns";
 
 export function RuleSetPanel({ id }: { id: string }) {
-  const sets = useResource<{ items: RuleSet[] }>("/api/v1/rule-sets");
-  const bundles = useResource<{ items: RuleBundle[] }>(`/api/v1/rule-sets/${encodeURIComponent(id)}/bundles`);
+  const { can } = useSession();
+  const reads = readsRules(can);
+  const sets = useResource<{ items: RuleSet[] }>(reads ? "/api/v1/rule-sets" : null);
   const set = sets.data?.items.find((item) => item.rule_set_id === id);
-  if (sets.error) return <div className="panel-body"><ErrorBox error={sets.error} /></div>;
-  if (!set) return sets.loading ? <Loading /> : <div className="panel-body"><Empty title="Rule set not found" /></div>;
+  const bundles = useResource<{ items: RuleBundle[] }>(set ? `/api/v1/rule-sets/${encodeURIComponent(id)}/bundles` : null);
+  const assignments = useResource<RuleSetAssignments>(reads ? "/api/v1/rule-set-assignments" : null);
+  const assignment = assignments.data?.items.find((item) => item.rule_set_id === id);
+  const coverage = useResource<AttackCoverage>(reads && assignment?.published ? "/api/v1/rules/coverage" : null);
+  const checks = coverage.data ? coverage.data.rules.filter((r) => r.rule_set_id === id && !r.draft).length : null;
+  const error = sets.error ?? assignments.error;
+  if (error) return <div className="panel-body"><ErrorBox error={error} /></div>;
+  if (!set && !assignment) return sets.loading || assignments.loading ? <Loading /> : <div className="panel-body"><Empty title="Rule set not found" /></div>;
   return (
     <>
-      <PanelHeader icon="rules" kind="Rule set" title={set.rule_set_id}
+      <PanelHeader icon="rules" kind="Rule set" title={id}
         badges={<>
-          <span className="badge badge--accent badge--plain">version {set.current_version ?? "—"}</span>
-          {set.retired && <span className="badge badge--plain">Retired</span>}
-          {set.current_signer_removed && <span className="badge badge--bad">Signer key removed</span>}
+          {assignment && !assignment.published ? <span className="badge badge--plain">Not published</span>
+            : set && <span className="badge badge--accent badge--plain">version {set.current_version ?? "—"}</span>}
+          {set?.retired && <span className="badge badge--plain">Retired</span>}
+          {set?.current_signer_removed && <span className="badge badge--bad">Signer key removed</span>}
         </>} />
       <div className="panel-body stack">
         <dl className="kv">
-          <dt>Signed by</dt><dd className="mono">{set.current_issuer_key_id ?? "—"}</dd>
-          <dt>Expires</dt><dd>{set.current_expires_at_ms ? <><Ago value={set.current_expires_at_ms} /> · {date(set.current_expires_at_ms)}</> : "—"}</dd>
-          <dt>Trusted keys</dt><dd className="num">{set.trusted_keys}</dd>
+          {set && <>
+            <dt>Signed by</dt><dd className="mono">{set.current_issuer_key_id ?? "—"}</dd>
+            <dt>Expires</dt><dd>{set.current_expires_at_ms ? <><Ago value={set.current_expires_at_ms} /> · {date(set.current_expires_at_ms)}</> : "—"}</dd>
+          </>}
+          {assignment
+            ? <><dt>Source</dt><dd>OpenVIBES rules package <span className="subtle">{sourceDetail(id, checks)}</span></dd></>
+            : set && <><dt>Trusted keys</dt><dd className="num">{set.trusted_keys}</dd></>}
         </dl>
-        <p className="subtle">Bundles are signed offline; publish a new version with <code>openvibes-admin rules publish</code> or the API. Agents fetch it on their next contact.</p>
+        {!assignment && <p className="subtle">Bundles are signed offline; publish a new version with <code>openvibes-admin rules publish</code> or the API. Agents fetch it on their next contact.</p>}
+        {assignment && <WhereItRuns assignment={assignment} groups={assignments.data?.asset_groups ?? []} canChange={can("rules.upload", true)} />}
       </div>
-      <Section title="Published versions" flush>
-        {!bundles.data ? <Loading rows={3} /> : (
-          <table className="table table--compact">
-            <thead><tr><th>Version</th><th>Published</th><th>By</th><th className="num">Size</th></tr></thead>
-            <tbody>
-              {bundles.data.items.map((bundle) => (
-                <tr key={bundle.version}>
-                  <td className="num">{bundle.version}{bundle.version === set.current_version && <span className="badge badge--ok" style={{ marginLeft: 8 }}>Current</span>}</td>
-                  <td title={when(bundle.published_at)}><Ago value={bundle.published_at} /></td>
-                  <td>{bundle.published_by}</td>
-                  <td className="num subtle">{(bundle.bytes / 1024).toFixed(1)} KiB</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Section>
+      {set && (
+        <Section title="Published versions" flush>
+          {!bundles.data ? <Loading rows={3} /> : (
+            <table className="table table--compact">
+              <thead><tr><th>Version</th><th>Published</th><th>By</th><th className="num">Size</th></tr></thead>
+              <tbody>
+                {bundles.data.items.map((bundle) => (
+                  <tr key={bundle.version}>
+                    <td className="num">{bundle.version}{bundle.version === set.current_version && <span className="badge badge--ok" style={{ marginLeft: 8 }}>Current</span>}</td>
+                    <td title={when(bundle.published_at)}><Ago value={bundle.published_at} /></td>
+                    <td>{bundle.published_by}</td>
+                    <td className="num subtle">{(bundle.bytes / 1024).toFixed(1)} KiB</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Section>
+      )}
     </>
   );
 }

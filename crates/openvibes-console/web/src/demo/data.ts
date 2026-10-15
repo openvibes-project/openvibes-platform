@@ -53,6 +53,8 @@ const RULES: readonly DemoRule[] = [
 ];
 
 const ROLES = ["web", "api", "db", "cache", "mail", "vpn", "build", "files", "k8s-node", "ws", "nas", "backup", "proxy", "dns"] as const;
+/** os-release IDs for demo hosts, so Linux host counts and the Hardening line show. */
+const OS = [["fedora", "44"], ["debian", "13"], ["ubuntu", "24.04"], ["rhel", "10.1"]] as const;
 
 type Pkg = { name: string; installed: string; fixed: string | null };
 type DemoAdvisory = {
@@ -102,10 +104,15 @@ export function buildDemoData(now = Date.now()) {
       revoked_at: status === "revoked" ? iso(now - 11 * DAY) : null,
       scanner_version: status === "imported" ? null : pick(["0.4.2", "0.4.2", "0.4.2", "0.4.1", "0.3.9"]),
       capabilities: status === "imported" ? [] : ["findings", "heartbeat", "inventory"],
+      ...(status === "imported" ? {} : { os_id: (OS[n % OS.length] as readonly [string, string])[0], os_version: (OS[n % OS.length] as readonly [string, string])[1] }),
       // Deterministic (no random() call, so the rest of the fleet is unchanged): every 7th host is a version behind.
       rule_sets: status === "imported" ? [] : [
         { id: "baseline", version: n % 7 === 0 ? 1 : 2, expires_at_ms: now + 700 * DAY },
         ...(n % 2 === 0 ? [{ id: "baseline-alarms", version: 1, expires_at_ms: now + 700 * DAY }] : []),
+        // Hardening L1 (rule-set assignment): Production has it off, so its hosts report
+        // not_assigned; agent-00040 has not caught up with the default yet ("pending").
+        ...(n % 3 === 0 ? [{ id: "hardening-linux-l1", version: null, expires_at_ms: null, state: "not_assigned" }]
+          : n === 40 ? [] : [{ id: "hardening-linux-l1", version: 4, expires_at_ms: now + 330 * DAY }]),
       ],
       rule_sets_at: status === "imported" ? null : iso(lastSeen),
       // Deterministic, like rule_sets: most on eBPF, every 9th on audit, every 23rd off by a fault, every 29th not enabled.
@@ -275,6 +282,8 @@ export function buildDemoData(now = Date.now()) {
     current_version: 14 - index * 4, current_issuer_key_id: index === 0 ? "ops-2026" : "ops-2025",
     current_expires_at_ms: now + (30 + index * 20) * DAY,
   }));
+  // The project's hardening L1, from the rules package; L2 is not published yet.
+  ruleSets.push({ rule_set_id: "hardening-linux-l1", retired: false, trusted_keys: 1, current_signer_removed: false, current_version: 4, current_issuer_key_id: "openvibes-1", current_expires_at_ms: now + 330 * DAY });
   const bundles = new Map<string, RuleBundle[]>(ruleSets.map((set) => [set.rule_set_id, Array.from({ length: 4 }, (_, index) => ({
     version: (set.current_version ?? 1) - index,
     bytes: 18_000 + index * 911,

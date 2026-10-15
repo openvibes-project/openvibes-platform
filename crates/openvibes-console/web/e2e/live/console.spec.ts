@@ -309,3 +309,52 @@ test("a new user signs in with a one-time password and must set their own first 
   await expect(secondTab.locator(".view")).toBeVisible();
   await context.close();
 });
+
+test("rule-set switches: a group is added, a failed change keeps the switch and says why, an analyst sees none", async ({ page, browser }, info) => {
+  await signIn(page, "alex");
+  await page.goto("/settings?tab=access");
+  await page.getByRole("button", { name: "New group" }).click();
+  const group = `Lab ${info.project.name}`;
+  await page.getByLabel("Name").fill(group);
+  await page.getByLabel("Selectors (one key=value per line)").fill("env=lab");
+  await page.getByRole("button", { name: "Create group" }).click();
+  await expect(page.locator(".group-card", { hasText: group })).toBeVisible();
+
+  await page.goto("/settings?tab=rule-sets");
+  const l2 = page.getByRole("table", { name: "Rule sets" }).locator("tbody tr").filter({ hasText: "hardening-linux-l2" });
+  await expect(l2).toContainText("Not published");
+  await l2.click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("button", { name: "+ Add group" }).click();
+  await inspector.getByRole("combobox", { name: "Group" }).click();
+  await page.getByRole("option", { name: group }).click();
+  await inspector.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.locator(".toast").last()).toContainText(`hardening-linux-l2 is now on for ${group}`);
+
+  // A failed change: the switch keeps its state and the error shows.
+  const setPath = "**/api/v1/rule-set-assignments/hardening-linux-l2";
+  await page.route(setPath, (route) => route.request().method() === "PUT"
+    ? route.fulfill({ status: 503, contentType: "application/problem+json", body: JSON.stringify({ status: 503, code: "unavailable", title: "Update unavailable" }) })
+    : route.continue());
+  const byDefault = inspector.getByRole("switch", { name: "On for Linux hosts by default" });
+  await byDefault.click();
+  await expect(page.locator(".toast--bad").last()).toContainText("Update unavailable");
+  await expect(byDefault).toHaveAttribute("aria-checked", "false");
+  await page.unroute(setPath);
+
+  // A group deleted elsewhere (no console route deletes one): the change answers 404.
+  const groupPath = "**/api/v1/rule-set-assignments/hardening-linux-l2/groups/*";
+  await page.route(groupPath, (route) => route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ status: 404, code: "asset_group_not_found", title: "Asset group not found" }) }));
+  const labSwitch = inspector.getByRole("switch", { name: `Runs for ${group}` });
+  await labSwitch.click();
+  await expect(page.locator(".toast--bad").last()).toContainText("Asset group not found");
+  await expect(labSwitch).toHaveAttribute("aria-checked", "true");
+  await page.unroute(groupPath);
+
+  // An analyst holds neither rules.read nor rules.upload (a second user, as in the dashboards test).
+  const sam = await browser.newPage();
+  await signIn(sam, "sam");
+  await sam.goto("/settings");
+  await expect(sam.getByRole("tab", { name: "Rule sets" })).toHaveCount(0);
+  await sam.close();
+});
