@@ -23,6 +23,6 @@ Shared building blocks used by views, panels and dashboards. They know nothing a
 | `trend.tsx` | A small bar chart of hosts reporting per day. |
 | `toast.tsx` | Short messages that appear and fade. |
 | `format.ts` | Formatting for times, counts and plurals. |
-| `csv.ts` | Safe CSV cells and the download, shared by every export. |
+| `csv.ts` | Safe CSV cells and the download for the CSV exports. |
 
 More: [docs/components/console-web.md](../../../../../docs/components/console-web.md)

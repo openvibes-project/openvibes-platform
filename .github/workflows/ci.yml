@@ -135,6 +135,9 @@ jobs:
       - name: No old account names
         run: bash scripts/check-names.sh
 
+      - name: Folder READMEs match their folders
+        run: bash scripts/check-folder-readmes.sh
+
       - name: Clippy
         env:
           CARGO_NET_OFFLINE: "true"
@@ -273,6 +276,10 @@ jobs:
       - name: No old account names
         if: needs.rust.result == 'skipped'
         run: bash scripts/check-names.sh
+
+      - name: Folder READMEs match their folders
+        if: needs.rust.result == 'skipped'
+        run: bash scripts/check-folder-readmes.sh
 
   fedora:
     name: RPMs (fedora:44)

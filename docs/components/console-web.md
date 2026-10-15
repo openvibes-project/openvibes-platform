@@ -431,6 +431,9 @@ triage on alarms and findings stays as it is.
     `dashboards/`: the dashboards feature; `demo/`: the in-browser API.
   - An `export` means another file imports it; a helper used by one file
     stays unexported.
+  - Every folder has a `README.md`: what the folder is for and one line per
+    file. `scripts/check-folder-readmes.sh` (local gate and CI) fails when a
+    file is added, renamed or removed without its line.
 - **Adding things:**
   - A page: its file in its menu group's folder under `views/`, one entry in `registry.tsx` (with its
     `access`), its path in `frontend-contract.json`.
