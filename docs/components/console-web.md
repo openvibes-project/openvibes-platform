@@ -378,7 +378,7 @@ triage on alarms and findings stays as it is.
   **Last test** shows when the host last raised the harmless test alarm
   and test finding (`openvibes-test alarm|finding`, from `last_test` on
   the host detail), with both commands; test alarms and findings carry a
-  Test badge in the lists (`views/tests.ts`).
+  Test badge in the lists (`views/testRules.ts`).
   **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why", "To
   fix: …", and, when there is one, the command in a wrapped code block with
   a copy button; an off host also shows

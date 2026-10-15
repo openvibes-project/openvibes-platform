@@ -17,8 +17,9 @@ import { editor, useEditor } from "./editor";
 import { Grid } from "./Grid";
 import type { Layout } from "./layout";
 import { upgradeLayout } from "./legacy";
+import { roles } from "../app/roles";
 
-const ROLES = ["viewer", "analyst", "operator", "admin"] as const;
+const ROLES = roles.map(([id]) => id);
 
 export function DashboardsView() {
   const { view } = useLocation();

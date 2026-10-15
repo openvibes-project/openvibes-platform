@@ -44,7 +44,7 @@ Where things live:
 | An inspector panel | `src/panels/` |
 | A view | `src/views/` |
 | Dashboards and widgets | `src/dashboards/` |
-| Demo data | `src/demo/data.ts`, `src/demo/server.ts` |
+| Demo data | `src/demo/data.ts`, the in-browser API in `src/demo/server.ts` and `src/demo/routes/` |
 
 A quick first change: add an entry to `registry.tsx` next to "Software" and
 it appears in the rail on save. [`components/console-web.md`](components/console-web.md)

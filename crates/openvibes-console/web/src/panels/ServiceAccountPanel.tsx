@@ -66,7 +66,7 @@ function ExistingServiceAccount({ id }: { id: string }) {
   );
 }
 
-export function NewServiceAccount() {
+function NewServiceAccount() {
   const [name, setName] = useState("");
   const [role, setRole] = useState("viewer");
   const [error, setError] = useState<string>();
@@ -121,7 +121,7 @@ function useIdempotency() {
 
 const TOKEN_LIFETIMES = [{ value: "24", label: "1 day" }, { value: "168", label: "7 days" }, { value: "720", label: "30 days" }, { value: "2160", label: "90 days" }, { value: "8760", label: "1 year" }];
 
-export function IssueServiceToken({ accountId }: { accountId: string }) {
+function IssueServiceToken({ accountId }: { accountId: string }) {
   const [label, setLabel] = useState("");
   const [hours, setHours] = useState(720);
   const [secret, setSecret] = useState<Secret>();
