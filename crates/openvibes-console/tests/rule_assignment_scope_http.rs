@@ -213,7 +213,6 @@ async fn call(
     )
 }
 
-
 const WEB: &str = "55555555-5555-4555-8555-555555555555";
 const LIST: &str = "/api/v1/rule-set-assignments";
 const L1: &str = "/api/v1/rule-set-assignments/hardening-linux-l1";
