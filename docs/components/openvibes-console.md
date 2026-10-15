@@ -187,7 +187,7 @@ link host/advisory views, preserve opaque cursors, disable triage for readers,
 and send mutations with the session CSRF token. The demo server supplies
 synthetic API models for these routes.
 
-### Installed software (assets v1, `src/software.rs`)
+### Installed software (assets v1, `src/hosts/software.rs`)
 
 All three need `agents.read` and are scoped like the agents. A scoped
 caller's counts include only hosts in the scope, and a host or package no
@@ -237,7 +237,7 @@ vulnerabilities: a software page takes ~235 ms, the `fixable` filter
 ~365 ms, a 100-host scope 78 ms, and one host's packages 6 ms
 (`platform-store` test `measure_the_fleet_aggregate_on_1000_hosts`).
 
-### Open ports and running services (P15, `src/ports.rs`)
+### Open ports and running services (P15, `src/hosts/ports.rs`)
 
 Assets v2, from each agent's `HostServices` report (stored by ingest in
 `host_listeners` and `host_services`, replaced per report). Reads need
@@ -273,7 +273,7 @@ hosts out.
 The fleet lists are not paged: distinct ports and units across a fleet
 stay in the low thousands.
 
-### Live agent presence (`src/presence.rs`)
+### Live agent presence (`src/hosts/presence.rs`)
 
 - `GET /api/v1/agents/events` (`agents.read`): a `text/event-stream`. It sends
   `event: presence` when the fleet's online set changed (a host came online or
@@ -388,6 +388,35 @@ Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; need `rules.write
   Before the first publish a host that lists a set counts as current.
 
 A draft reaches an agent only once published this way.
+
+## Where code lives
+
+Server code is `crates/openvibes-console/src`, one folder per area:
+
+- `http/`: routers, route table, middleware, serving the web app, error answers, the OpenAPI document.
+- `access/`: sign-in, session, permission checks, roles, users, service accounts, role bindings, asset groups, host tags.
+- `audit/`: the audit event list, CSV export, retention.
+- `hosts/`: agents, enrollment, install package, software, ports, presence, the site rule-set fleet.
+- `compliance/`: findings, finding groups, history, triage, bulk triage.
+- `vulnerabilities/`: summary, prioritised list, advisory detail.
+- `alarms/`: alarms, suppressions, detection evidence.
+- `cases/`: cases.
+- `rules/`: rule sets, bundles, draft rules, publishing, rule tests, ATT&CK coverage.
+- `assistant/`: chat endpoints, runtime, lookups, internet lookups switch.
+- `dashboards/`: dashboards and the count history.
+- `seeded/`: fixed demo data for the loopback development listener.
+- `server/`: listeners, TLS, trusted proxy, readiness, shutdown.
+- `about.rs`, `config.rs`, `lib.rs`, `main.rs`, and `bin/` (`export_openapi`).
+
+Each area's `mod.rs` exposes `routes()`; `http/routes.rs` merges them. Every
+folder has a `README.md` listing its files, checked by
+`scripts/check-folder-readmes.sh`.
+
+To add an endpoint: write the handler in its area's file, add the route to
+that area's `routes()`, put its types in the area's `*_types.rs` or
+`types.rs`, add `#[utoipa::path]` and list it in `http/openapi.rs`, then
+regenerate `docs/api/console-v1.openapi.json` (`export_openapi`) and the web
+client (`npm --prefix crates/openvibes-console/web run generate:api`).
 
 ## Interfaces
 

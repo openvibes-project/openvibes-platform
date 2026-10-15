@@ -1,6 +1,6 @@
 # Console RBAC resolver
 
-`crates/openvibes-console/src/rbac.rs` defines the built-in Viewer, Analyst,
+`crates/openvibes-console/src/access/rbac.rs` defines the built-in Viewer, Analyst,
 Operator, and Admin role permissions and resolves a set of role bindings into
 the `EffectiveCapability` DTOs returned by the session API. Agent and finding
 permissions can be scoped to one or more asset groups. Scoped bindings ignore
