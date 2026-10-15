@@ -7,14 +7,72 @@ use crate::{EffectiveCapability, Permission, PermissionScope};
 /// First-release built-in console roles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BuiltInRole {
-    /// Read agents, findings, and rules.
+    /// Read hosts, compliance, vulnerabilities and alarms.
     Viewer,
-    /// Viewer access plus finding triage.
+    /// Viewer access plus triage, cases and the assistant.
     Analyst,
     /// Viewer access plus agent revocation, token management, and rule upload.
     Operator,
     /// Every web-console permission, except CLI-only CA operations.
     Admin,
+}
+
+impl BuiltInRole {
+    /// Every built-in role, least to most access.
+    pub const ALL: [Self; 4] = [Self::Viewer, Self::Analyst, Self::Operator, Self::Admin];
+
+    /// The role's id in bindings and the API, e.g. `viewer`.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Viewer => "viewer",
+            Self::Analyst => "analyst",
+            Self::Operator => "operator",
+            Self::Admin => "admin",
+        }
+    }
+
+    /// The role's name as people read it, e.g. `Viewer`.
+    #[must_use]
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Viewer => "Viewer",
+            Self::Analyst => "Analyst",
+            Self::Operator => "Operator",
+            Self::Admin => "Admin",
+        }
+    }
+
+    /// The built-in role with this id, if any.
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|role| role.id() == id)
+    }
+}
+
+/// The built-in roles as the access inventory lists them: id, name and
+/// permissions. The web console's demo reads the same list from
+/// `web/src/api/roles.json`, which a test keeps equal to this.
+#[must_use]
+pub fn builtin_roles() -> serde_json::Value {
+    BuiltInRole::ALL
+        .into_iter()
+        .map(|role| {
+            let permissions = resolve_capabilities(&[RoleBinding::global(role)])
+                .into_iter()
+                .map(|capability| serde_json::to_value(capability.permission).expect("permissions serialize"))
+                .collect::<Vec<_>>();
+            serde_json::json!({
+                "role_id": role.id(), "display_name": role.display_name(), "builtin": true, "permissions": permissions
+            })
+        })
+        .collect()
+}
+
+/// [`builtin_roles`] as the pretty-printed JSON of `web/src/api/roles.json`.
+#[must_use]
+pub fn builtin_roles_json() -> String {
+    serde_json::to_string_pretty(&builtin_roles()).expect("roles serialize")
 }
 
 /// A role assignment together with its global or asset-group binding scope.

@@ -921,27 +921,7 @@ async fn access_inventory(headers: HeaderMap) -> Response {
     if let Some(response) = read_error(mode) {
         return response;
     }
-    let role = |role_id: &str, name: &str, builtin_role: BuiltInRole| {
-        let permissions = resolve_capabilities(&[RoleBinding::global(builtin_role)])
-            .into_iter()
-            .map(|capability| {
-                serde_json::to_value(capability.permission)
-                    .expect("permissions serialize")
-                    .as_str()
-                    .expect("permissions serialize as strings")
-                    .to_owned()
-            })
-            .collect::<Vec<_>>();
-        serde_json::json!({
-            "role_id": role_id, "display_name": name, "builtin": true, "permissions": permissions
-        })
-    };
-    let roles = vec![
-        role("viewer", "Viewer", BuiltInRole::Viewer),
-        role("analyst", "Analyst", BuiltInRole::Analyst),
-        role("operator", "Operator", BuiltInRole::Operator),
-        role("admin", "Admin", BuiltInRole::Admin),
-    ];
+    let roles = crate::builtin_roles();
     let bindings = if matches!(persona, Persona::Admin) {
         vec![serde_json::json!({
             "binding_id": "seeded-admin-binding", "user_id": "seeded-admin", "username": "admin",

@@ -2028,10 +2028,7 @@ pub(crate) async fn create_authenticated_service_account(
     if name.is_empty()
         || name.chars().count() > 128
         || name.chars().any(char::is_control)
-        || !matches!(
-            request.role_id.as_str(),
-            "viewer" | "analyst" | "operator" | "admin"
-        )
+        || crate::BuiltInRole::from_id(&request.role_id).is_none()
     {
         return problem_response(ProblemDetails::new(
             StatusCode::BAD_REQUEST,
@@ -2930,7 +2927,7 @@ async fn authenticated_session(
     };
     let mut resolved = Vec::with_capacity(bindings.len());
     for binding in bindings {
-        let Some(role) = built_in_role(&binding.role_id) else {
+        let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) else {
             continue;
         };
         let binding = match binding.asset_group_id {
@@ -6185,7 +6182,7 @@ pub(crate) async fn authenticated_permission(
                 .ok_or_else(authentication_required)?;
             let mut resolved = Vec::with_capacity(token.bindings.len());
             for binding in token.bindings {
-                let Some(role) = built_in_role(&binding.role_id) else {
+                let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) else {
                     continue;
                 };
                 let resolved_binding = match binding.asset_group_id {
@@ -6357,7 +6354,7 @@ async fn session_capabilities(
         .map_err(|_| unavailable_auth())?;
     let mut resolved = Vec::with_capacity(bindings.len());
     for binding in bindings {
-        let Some(role) = built_in_role(&binding.role_id) else {
+        let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) else {
             continue;
         };
         let resolved_binding = match binding.asset_group_id {
@@ -6893,16 +6890,6 @@ fn auth_unavailable() -> Response {
         "authentication_unavailable",
         "Authentication is temporarily unavailable",
     ))
-}
-
-fn built_in_role(role_id: &str) -> Option<crate::BuiltInRole> {
-    match role_id {
-        "viewer" => Some(crate::BuiltInRole::Viewer),
-        "analyst" => Some(crate::BuiltInRole::Analyst),
-        "operator" => Some(crate::BuiltInRole::Operator),
-        "admin" => Some(crate::BuiltInRole::Admin),
-        _ => None,
-    }
 }
 
 async fn api_method_not_allowed() -> Response {

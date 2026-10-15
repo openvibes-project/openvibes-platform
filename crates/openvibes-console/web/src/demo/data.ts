@@ -1,5 +1,6 @@
 // Deterministic synthetic data for the in-browser demo. Everything here is
 // invented; host names use the reserved example.test domain.
+import builtinRoles from "../api/roles.json";
 import type {
   AccessInventory, Agent, AuditEvent, Certificate, Cve, EnrollmentToken, Finding as FindingView,
   RuleBundle, RuleSet, ServiceAccount, ServiceToken, Severity, Tag, Triage, Vulnerability,
@@ -244,12 +245,7 @@ export function buildDemoData(now = Date.now()) {
     ["u-vic", "vic", "Vic Viewer"], ["u-lab", "lab-ops", "Lab operator"],
   ] as const;
   const access: AccessInventory = {
-    roles: [
-      { role_id: "viewer", display_name: "Viewer", builtin: true, permissions: ["agents.read", "compliance.read", "vulnerabilities.read", "alarms.read"] },
-      { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "compliance.read", "cases.read", "cases.manage", "vulnerabilities.read", "compliance.triage", "vulnerabilities.triage", "assistant.use", "alarms.read", "alarms.triage", "alarms.suppress"] },
-      { role_id: "operator", display_name: "Operator", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "tokens.read", "tokens.create", "tokens.revoke", "rules.upload", "rules.write", "alarms.read"] },
-      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "compliance.triage", "vulnerabilities.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "rules.write", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "assistant.admin", "dashboards.share", "alarms.read", "alarms.triage", "alarms.suppress", "cases.read", "cases.manage"] },
-    ],
+    roles: builtinRoles,
     users: people.map(([user_id, username, display_name]) => ({ user_id, username, display_name })),
     asset_groups: [
       { asset_group_id: "grp-prod", name: "Production", selectors: ["env=prod"] },

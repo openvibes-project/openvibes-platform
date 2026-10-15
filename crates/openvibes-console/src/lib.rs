@@ -82,7 +82,7 @@ pub use config::{AgentInstallConfig, ConsoleConfig, ConsoleTransportMode, load_c
 pub use error::ConsoleError;
 pub use openapi::{document as console_openapi, json as openapi_json};
 pub use problem::{FieldError, ProblemDetails};
-pub use rbac::{BuiltInRole, RoleBinding, RoleBindingError, resolve_capabilities};
+pub use rbac::{BuiltInRole, RoleBinding, RoleBindingError, builtin_roles, builtin_roles_json, resolve_capabilities};
 pub use router::{
     Readiness, authenticated_router, authenticated_router_for_hosts,
     authenticated_router_with_agent_install, authenticated_router_with_fetch,

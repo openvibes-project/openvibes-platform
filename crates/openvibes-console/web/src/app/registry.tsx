@@ -4,7 +4,8 @@
 // assistant citations for free.
 import type { ReactNode } from "react";
 
-import type { Permission } from "../api/types";
+import type { Access } from "./session";
+import { RULE_READERS } from "../panels/ruleAssignment";
 import { panelTitle } from "./titles";
 import { DashboardsView } from "../dashboards/DashboardsView";
 import { WidgetGalleryPanel, WidgetSettingsPanel } from "../dashboards/panels";
@@ -27,7 +28,7 @@ import { PortPanel, UnitPanel, splitPortId } from "../panels/PortPanel";
 import { FindingPanel, splitFindingId } from "../panels/FindingPanel";
 import type { IconName } from "../ui/Icon";
 import { Cases } from "../views/Cases";
-import { Settings } from "../views/settings/Settings";
+import { Settings, settingsAccess } from "../views/settings/Settings";
 import { Coverage } from "../views/Coverage";
 import { SiteRules } from "../views/SiteRules";
 import { About } from "../views/About";
@@ -51,7 +52,7 @@ type ViewDef = {
   icon: IconName;
   group: "Investigate" | "Operate" | "Admin" | "Help";
   /** Any of these opens the view; `global` requires an unscoped grant. Empty: any signed-in user. */
-  access: readonly { permission: Permission; global?: boolean }[];
+  access: readonly Access[];
   keys: string;
   render: () => ReactNode;
 };
@@ -68,8 +69,8 @@ export const views: readonly ViewDef[] = [
   { path: "/cases", label: "Cases", icon: "cases", group: "Investigate", keys: "g c", access: [{ permission: "cases.read" }], render: () => <Cases /> },
   { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
   { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "rules.write", global: true }], render: () => <SiteRules /> },
-  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: [{ permission: "rules.read", global: true }, { permission: "rules.upload", global: true }], render: () => <Coverage /> },
-  { path: "/settings", label: "Settings", icon: "settings", group: "Admin", keys: "g h", access: [{ permission: "rbac.read", global: true }, { permission: "service_accounts.read", global: true }, { permission: "assistant.admin", global: true }, { permission: "tokens.read" , global: true }, { permission: "rules.read" , global: true }, { permission: "rules.upload", global: true }], render: () => <Settings /> },
+  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: RULE_READERS, render: () => <Coverage /> },
+  { path: "/settings", label: "Settings", icon: "settings", group: "Admin", keys: "g h", access: settingsAccess, render: () => <Settings /> },
   { path: "/audit", label: "Audit log", icon: "audit", group: "Admin", keys: "g l", access: [{ permission: "audit.read", global: true }], render: () => <Audit /> },
   { path: "/about", label: "About", icon: "help", group: "Help", keys: "g i", access: [], render: () => <About /> },
 ];

@@ -127,10 +127,7 @@ pub(crate) async fn create_user(
         !display_name.is_empty()
             && display_name.chars().count() <= 160
             && !display_name.chars().any(char::is_control),
-        matches!(
-            request.role_id.as_str(),
-            "viewer" | "analyst" | "operator" | "admin"
-        ),
+        crate::BuiltInRole::from_id(&request.role_id).is_some(),
     ) else {
         return bad_request(
             "invalid_user",

@@ -2,6 +2,7 @@
 // for the GitHub Pages preview, `?demo=1` and tests. It follows the wire
 // contracts (types from the OpenAPI client) and the permission model, and
 // keeps mutations in memory for the life of the page.
+import { RULE_READERS } from "../panels/ruleAssignment";
 import { validDomain, validSearxngUrl } from "../views/settings/assistantRules";
 import type {
   Agent, AssistantInternetSource, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission, RuleDraft,
@@ -65,7 +66,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       : { kind: "global" },
   }));
   // Rule sets, their switches, history and coverage: rules.read or rules.upload, globally (the real API's rule).
-  const readsRules = () => capabilities.some((c) => (c.permission === "rules.read" || c.permission === "rules.upload") && c.scope.kind === "global");
+  const readsRules = () => RULE_READERS.some((r) => capabilities.some((c) => c.permission === r.permission && (!r.global || c.scope.kind === "global")));
   const actor = { admin: "admin", analyst: "sam", operator: "ola", scoped_operator: "ola", viewer: "vic" }[persona];
 
   const visible = (agentId: string) =>
