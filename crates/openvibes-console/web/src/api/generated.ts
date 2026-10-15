@@ -4290,6 +4290,11 @@ export interface components {
         };
         /** @description Result of the newer-version check. */
         UpdateResponse: {
+            /**
+             * @description Latest published agent release, without a leading `v`; agents older
+             *     than it are behind.
+             */
+            latest_agent_version?: string | null;
             /** @description Latest published release, without a leading `v`. */
             latest_version?: string | null;
             /** @description Page of the latest release. */

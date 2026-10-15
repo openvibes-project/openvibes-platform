@@ -14158,6 +14158,13 @@
           "state"
         ],
         "properties": {
+          "latest_agent_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest published agent release, without a leading `v`; agents older\nthan it are behind."
+          },
           "latest_version": {
             "type": [
               "string",

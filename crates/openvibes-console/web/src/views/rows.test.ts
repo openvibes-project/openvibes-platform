@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activeCount, alarmsOff, olderThan, selectAgents, selectAudit, selectFindings, severityBadge } from "./rows";
+import { activeCount, agentVersionNote, alarmsOff, olderThan, selectAgents, selectAudit, selectFindings, severityBadge } from "./rows";
 
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
@@ -58,6 +58,14 @@ describe("agent versions", () => {
   });
   it("an agent claiming a far newer version flags nothing (board #54)", () => {
     expect(olderThan("999.0.0", "0.1.2")).toBe(false);
+  });
+  it("an agent is judged against the latest agent release, not the platform's version", () => {
+    // Platform 0.2.9 and agent 0.2.7 can both be the latest of their kind.
+    expect(agentVersionNote("0.2.7", "0.2.7")).toEqual({ older: false, title: "The latest agent release (0.2.7)" });
+    expect(agentVersionNote("0.2.6", "0.2.7")).toEqual({ older: true, title: "Older than the latest agent release (0.2.7)" });
+  });
+  it("with the latest agent release unknown, no agent is marked", () => {
+    expect(agentVersionNote("0.2.6", null)).toEqual({ older: false, title: "The latest agent release is not known: the update check is off or offline" });
   });
 });
 
