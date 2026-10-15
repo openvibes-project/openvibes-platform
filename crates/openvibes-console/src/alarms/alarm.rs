@@ -92,7 +92,7 @@ pub struct AlarmTriageView {
 pub struct AlarmDetailView {
     /// Original evaluation evidence; absent for legacy observations.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<crate::detection::DetectionView>)]
+    #[schema(value_type = Option<crate::alarms::DetectionView>)]
     pub detection: Option<serde_json::Value>,
     /// The list fields.
     #[serde(flatten)]

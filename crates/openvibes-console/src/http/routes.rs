@@ -75,9 +75,12 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         .route("/v1/compliance/latest", get(authenticated_latest_findings))
         .route(
             "/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}/rule/{finding_id}",
-            get(crate::detection::finding_rule),
+            get(crate::alarms::detection::finding_rule),
         )
-        .route("/v1/alarms/{id}/rule", get(crate::detection::alarm_rule))
+        .route(
+            "/v1/alarms/{id}/rule",
+            get(crate::alarms::detection::alarm_rule),
+        )
         .route(
             "/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}",
             get(authenticated_latest_finding),
@@ -236,45 +239,57 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         .route("/v1/services/{unit}", get(crate::hosts::ports::get_unit))
         .route(
             "/v1/cases",
-            get(crate::cases::list_cases).post(crate::cases::create_case),
+            get(crate::cases::list::list_cases).post(crate::cases::list::create_case),
         )
-        .route("/v1/cases/for-item", get(crate::cases::cases_for_item))
-        .route("/v1/cases/assignees", get(crate::cases::list_assignees))
-        .route("/v1/cases/active-items", get(crate::cases::active_items))
+        .route(
+            "/v1/cases/for-item",
+            get(crate::cases::items::cases_for_item),
+        )
+        .route(
+            "/v1/cases/assignees",
+            get(crate::cases::lookups::list_assignees),
+        )
+        .route(
+            "/v1/cases/active-items",
+            get(crate::cases::lookups::active_items),
+        )
         .route(
             "/v1/cases/{case_id}",
-            get(crate::cases::get_case).put(crate::cases::update_case),
+            get(crate::cases::list::get_case).put(crate::cases::list::update_case),
         )
         .route(
             "/v1/cases/{case_id}/notes",
-            axum::routing::post(crate::cases::add_note),
+            axum::routing::post(crate::cases::items::add_note),
         )
         .route(
             "/v1/cases/{case_id}/items",
-            axum::routing::post(crate::cases::add_item),
+            axum::routing::post(crate::cases::items::add_item),
         )
         .route(
             "/v1/cases/{case_id}/items/{item_id}",
-            axum::routing::delete(crate::cases::remove_item),
+            axum::routing::delete(crate::cases::items::remove_item),
         )
         .route(
             "/v1/cases/{case_id}/items/{item_id}/outcome",
-            axum::routing::put(crate::cases::set_item_outcome),
+            axum::routing::put(crate::cases::items::set_item_outcome),
         )
-        .route("/v1/alarms", get(crate::alarms::list_alarms))
-        .route("/v1/alarms/{alarm_id}", get(crate::alarms::get_alarm))
+        .route("/v1/alarms", get(crate::alarms::alarm::list_alarms))
+        .route(
+            "/v1/alarms/{alarm_id}",
+            get(crate::alarms::alarm::get_alarm),
+        )
         .route(
             "/v1/alarms/{alarm_id}/triage",
-            axum::routing::put(crate::alarms::update_alarm_triage),
+            axum::routing::put(crate::alarms::alarm::update_alarm_triage),
         )
         .route(
             "/v1/alarm-suppressions",
-            get(crate::alarm_suppressions::list_suppressions)
-                .post(crate::alarm_suppressions::create_suppression),
+            get(crate::alarms::suppressions::list_suppressions)
+                .post(crate::alarms::suppressions::create_suppression),
         )
         .route(
             "/v1/alarm-suppressions/{suppression_id}",
-            axum::routing::delete(crate::alarm_suppressions::remove_suppression),
+            axum::routing::delete(crate::alarms::suppressions::remove_suppression),
         )
         .route(
             "/v1/triage-history",

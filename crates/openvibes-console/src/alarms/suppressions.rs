@@ -105,7 +105,7 @@ fn answer(change: Change, done: StatusCode) -> Response {
 }
 
 #[utoipa::path(get, path = "/api/v1/alarm-suppressions", tag = "alarms",
-    responses((status = 200, description = "Active suppressions the caller may see", body = crate::alarm_suppressions::AlarmSuppressionList)))]
+    responses((status = 200, description = "Active suppressions the caller may see", body = crate::alarms::AlarmSuppressionList)))]
 pub(crate) async fn list_suppressions(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -128,8 +128,8 @@ pub(crate) async fn list_suppressions(
 }
 
 #[utoipa::path(post, path = "/api/v1/alarm-suppressions", tag = "alarms",
-    request_body = crate::alarm_suppressions::CreateAlarmSuppressionRequest,
-    responses((status = 201, description = "Created; applies to alarms stored from now on", body = crate::alarm_suppressions::AlarmSuppressionView),
+    request_body = crate::alarms::CreateAlarmSuppressionRequest,
+    responses((status = 201, description = "Created; applies to alarms stored from now on", body = crate::alarms::AlarmSuppressionView),
         (status = 400, description = "Invalid scope or note", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied, or program/command without global scope", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 404, description = "Alarm absent or outside the caller's scope", body = crate::ProblemDetails, content_type = "application/problem+json")))]
@@ -169,7 +169,7 @@ pub(crate) async fn create_suppression(
 }
 
 #[utoipa::path(delete, path = "/api/v1/alarm-suppressions/{suppression_id}", tag = "alarms", params(("suppression_id" = String, Path)),
-    responses((status = 200, description = "Removed (kept as history)", body = crate::alarm_suppressions::AlarmSuppressionView),
+    responses((status = 200, description = "Removed (kept as history)", body = crate::alarms::AlarmSuppressionView),
         (status = 404, description = "Absent, already removed, or outside the caller's scope", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn remove_suppression(
     State(state): State<AuthHttpState>,

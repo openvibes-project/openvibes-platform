@@ -282,7 +282,7 @@ stay in the low thousands.
   `online_fingerprint` every 5 s, only while a stream is open. Not in the
   OpenAPI snapshot (it is not JSON).
 
-### Threat alarms (P14, `src/alarms.rs`)
+### Threat alarms (P14, `src/alarms/`)
 
 - `GET /api/v1/alarms` (`alarms.read`): newest `last_seen` first, scoped
   to the caller's agents; filters `agent_id`, `rule_id`, `severity`,

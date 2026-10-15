@@ -11,7 +11,6 @@
 
 mod about;
 mod access;
-mod alarm_suppressions;
 mod alarms;
 mod api;
 mod assistant;
@@ -22,7 +21,6 @@ mod compliance;
 mod config;
 mod coverage;
 mod dashboards;
-mod detection;
 mod fetch_client;
 mod hosts;
 mod http;
