@@ -10,6 +10,7 @@ Who may do what in the console: sign-in and the session, the checks every area's
 | `auth_tests.rs` | Tests for those primitives. |
 | `auth_first.rs` | Authenticates every `/api` request before its handler runs. |
 | `rbac.rs` | Built-in roles, permissions and asset-scope resolution. |
+| `permission.rs` | `Permission`, the stable permission identifiers, and `PermissionScope`. |
 | `users.rs` | Console users and setting one's own password. |
 | `session.rs` | The browser session read. |
 | `login.rs` | Sign-in: the pre-login challenge, login and logout. |

@@ -11,11 +11,11 @@ use serde::Deserialize;
 use super::certificates::certificate_view;
 use crate::{
     access::guard::{authenticated_agent_scope, authenticated_permission, unavailable_auth},
+    http::validate::valid_agent_id,
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
     },
-    router::valid_agent_id,
 };
 
 #[derive(Deserialize)]

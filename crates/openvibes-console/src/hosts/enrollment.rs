@@ -14,7 +14,7 @@ use crate::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
     },
-    router::{no_store, valid_uuid},
+    http::{headers::no_store, validate::valid_uuid},
 };
 
 /// Lists bounded, secret-free enrollment-token metadata.

@@ -1,3 +1,6 @@
+//! Response and request headers several areas share: the no-store cache
+//! header, and parsing a version out of `If-Match`.
+
 use axum::{
     http::{HeaderMap, HeaderValue, header},
     response::Response,
@@ -8,21 +11,6 @@ pub(crate) fn no_store(mut response: Response) -> Response {
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
-}
-
-pub(crate) fn valid_uuid(value: &str) -> bool {
-    value.len() == 36
-        && value.bytes().enumerate().all(|(index, byte)| {
-            if matches!(index, 8 | 13 | 18 | 23) {
-                byte == b'-'
-            } else {
-                byte.is_ascii_hexdigit()
-            }
-        })
-}
-
-pub(crate) fn valid_agent_id(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control)
 }
 
 pub(crate) fn parse_if_match_version(headers: &HeaderMap) -> Result<Option<i64>, ()> {

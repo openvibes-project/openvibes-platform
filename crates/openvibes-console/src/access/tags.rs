@@ -8,7 +8,7 @@ use axum::{
 use chrono::Utc;
 
 use super::asset_groups::validated_agent_tags;
-use crate::router::valid_agent_id;
+use crate::http::validate::valid_agent_id;
 use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
     http::{

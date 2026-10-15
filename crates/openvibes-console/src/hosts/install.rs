@@ -9,11 +9,11 @@ use zeroize::Zeroizing;
 
 use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
+    http::headers::no_store,
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
     },
-    router::no_store,
 };
 
 /// What the platform serves for rule set `set`: its trust line, only when a

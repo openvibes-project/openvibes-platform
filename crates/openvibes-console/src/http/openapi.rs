@@ -11,7 +11,7 @@ use crate::{
         LoginRequest, LoginResponse, PreauthResponse, SaveAssetGroupRequest, SessionPrincipal,
         SessionResponse,
     },
-    api::{CursorPagination, Permission, PermissionScope},
+    access::{Permission, PermissionScope},
     assistant::{AssistantInternet, AssistantInternetTest, UpdateAssistantInternetRequest},
     audit::{AuditEventPage, AuditEventView, AuditRetentionPolicy, UpdateAuditRetentionRequest},
     compliance::{
@@ -23,6 +23,7 @@ use crate::{
         AgentSummary, AgentView, CertificatePage, CertificateView, CreateEnrollmentTokenRequest,
         CreatedEnrollmentToken, EnrollmentTokenPage, EnrollmentTokenView, RevokeAgentRequest,
     },
+    http::pagination::CursorPagination,
     http::problem::{FieldError, ProblemDetails},
     vulnerabilities::{
         CveDetailView, VulnerabilityAdvisoryDetail, VulnerabilityPage, VulnerabilitySeverity,

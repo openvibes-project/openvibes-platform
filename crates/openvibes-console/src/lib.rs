@@ -12,7 +12,6 @@
 mod about;
 mod access;
 mod alarms;
-mod api;
 mod assistant;
 mod audit;
 mod cases;
@@ -22,7 +21,6 @@ mod dashboards;
 mod fetch_client;
 mod hosts;
 mod http;
-mod router;
 mod rules;
 #[cfg(feature = "dev-seed")]
 mod seeded;
@@ -45,13 +43,9 @@ pub use access::{
     AgentTagPreviewResponse, ApplyAgentTagsRequest, AssetGroupSelectorInput, AuthenticationLevel,
     AuthenticationMethod, ChangePasswordRequest, CreateAccessBindingRequest,
     CreateServiceAccountRequest, CreateServiceTokenRequest, CreateUserRequest, CreatedServiceToken,
-    CreatedUser, EffectiveCapability, LoginRequest, LoginResponse, PreauthResponse,
-    SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
-    ServiceTokenView, SessionPrincipal, SessionResponse,
-};
-pub use api::{
-    CursorPage, CursorPagination, DEFAULT_PAGE_SIZE, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE,
-    PaginationError, Permission, PermissionScope,
+    CreatedUser, EffectiveCapability, LoginRequest, LoginResponse, Permission, PermissionScope,
+    PreauthResponse, SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView,
+    ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse,
 };
 pub use assistant::{AssistantInternet, AssistantInternetTest, UpdateAssistantInternetRequest};
 pub use audit::{
@@ -74,6 +68,10 @@ pub use hosts::{
 };
 pub use http::error::ConsoleError;
 pub use http::openapi::{document as console_openapi, json as openapi_json};
+pub use http::pagination::{
+    CursorPage, CursorPagination, DEFAULT_PAGE_SIZE, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE,
+    PaginationError,
+};
 pub use http::problem::{FieldError, ProblemDetails};
 pub use http::{
     Readiness, authenticated_router, authenticated_router_for_hosts,

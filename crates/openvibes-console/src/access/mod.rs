@@ -16,6 +16,7 @@ mod grant_types;
 pub(crate) mod guard;
 pub(crate) mod inventory;
 pub(crate) mod login;
+mod permission;
 pub(crate) mod rbac;
 pub(crate) mod service_accounts;
 pub(crate) mod service_tokens;
@@ -33,6 +34,7 @@ pub use grant_types::{
     CreatedServiceToken, SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView,
     ServiceTokenPage, ServiceTokenView,
 };
+pub use permission::{Permission, PermissionScope};
 pub use session_types::{
     AuthenticationLevel, AuthenticationMethod, ChangePasswordRequest, CreateUserRequest,
     CreatedUser, EffectiveCapability, LoginRequest, LoginResponse, PreauthResponse,

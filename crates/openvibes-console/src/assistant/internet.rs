@@ -15,8 +15,8 @@ use crate::{
     UpdateAssistantInternetRequest,
     access::guard::{authenticated_permission, unavailable_auth},
     http::AuthHttpState,
+    http::headers::parse_if_match_version,
     http::problem::problem_response,
-    router::parse_if_match_version,
 };
 
 /// The level in force (0 off, 1 pages, 2 pages and search). Any error reads

@@ -8,7 +8,7 @@ use axum::{
 use chrono::Utc;
 use platform_store::console_auth;
 
-use crate::router::no_store;
+use crate::http::headers::no_store;
 use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
     http::{

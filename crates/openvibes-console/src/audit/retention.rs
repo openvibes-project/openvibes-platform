@@ -9,11 +9,11 @@ use chrono::{SecondsFormat, Utc};
 
 use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
+    http::headers::parse_if_match_version,
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
     },
-    router::parse_if_match_version,
 };
 
 #[utoipa::path(

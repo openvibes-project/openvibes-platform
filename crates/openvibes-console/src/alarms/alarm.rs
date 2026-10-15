@@ -22,8 +22,8 @@ use crate::{
     Permission, ProblemDetails,
     access::guard::{authenticated_permission, unavailable_auth},
     http::AuthHttpState,
+    http::headers::parse_if_match_version,
     http::problem::problem_response,
-    router::parse_if_match_version,
 };
 
 /// One alarm in the list.

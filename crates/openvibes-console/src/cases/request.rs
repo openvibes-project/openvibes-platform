@@ -3,7 +3,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use platform_store::console_cases::{self as store, CaseSummary};
 
-use crate::{ProblemDetails, router::parse_if_match_version};
+use crate::{ProblemDetails, http::headers::parse_if_match_version};
 
 pub(super) fn encode_cursor(case: &CaseSummary) -> String {
     URL_SAFE_NO_PAD.encode(format!(

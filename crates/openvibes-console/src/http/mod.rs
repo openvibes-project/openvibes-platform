@@ -8,11 +8,14 @@ pub(crate) mod error;
 mod frontend;
 #[cfg(feature = "embedded-ui")]
 mod frontend_contract;
+pub(crate) mod headers;
 pub(crate) mod middleware;
 pub(crate) mod openapi;
+pub(crate) mod pagination;
 pub(crate) mod problem;
 mod router;
 mod routes;
+pub(crate) mod validate;
 
 pub(crate) use router::{AuthHttpState, authenticated_router_with_assistant};
 pub use router::{

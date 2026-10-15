@@ -165,7 +165,7 @@ pub(crate) async fn update_vulnerability_triage(
             Err(response) => return response,
         };
     // An untriaged vulnerability is version 0, as findings are.
-    let expected = match crate::router::parse_if_match_zero_version(&headers) {
+    let expected = match crate::http::headers::parse_if_match_zero_version(&headers) {
         Ok(Some(version)) => version,
         Ok(None) => {
             return problem_response(ProblemDetails::new(

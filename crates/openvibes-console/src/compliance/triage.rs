@@ -9,11 +9,11 @@ use chrono::Utc;
 
 use crate::{
     access::guard::{authenticated_agent_scope, authenticated_permission, unavailable_auth},
+    http::headers::parse_if_match_zero_version,
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
     },
-    router::parse_if_match_zero_version,
 };
 
 pub(super) fn triage_view(

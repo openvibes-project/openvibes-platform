@@ -8,8 +8,6 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `main.rs` | The `openvibes-console` binary: reads `console.toml` and runs the server. |
 | `server.rs` | The listeners: TLS, trusted peers, and serving the routers. |
 | `config.rs` | `console.toml`: listeners, transport, origin and agent install settings. |
-| `router.rs` | Helpers several areas share: no-store responses, id checks, If-Match parsing. |
-| `api.rs` | Permissions and cursor pagination types. |
 | `about.rs` | The About page: versions and the newer-release check. |
 | `about_tests.rs` | Tests for the About page and the newer-version check. |
 | `fetch_client.rs` | The assistant's internet lookups through `openvibes-fetch`. |

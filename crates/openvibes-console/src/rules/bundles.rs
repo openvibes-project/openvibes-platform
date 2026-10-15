@@ -7,11 +7,11 @@ use axum::{
 use super::envelope::{digest_hex, verify_console_rule_envelope};
 use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
+    http::headers::no_store,
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
     },
-    router::no_store,
 };
 
 /// Lists rule sets and safe current-version metadata.

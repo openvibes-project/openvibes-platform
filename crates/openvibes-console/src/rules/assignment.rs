@@ -19,8 +19,8 @@ use crate::{
     Permission, ProblemDetails,
     access::guard::{authenticated_permission, unavailable_auth},
     http::AuthHttpState,
+    http::headers::no_store,
     http::problem::problem_response,
-    router::no_store,
 };
 
 /// One asset group's override.

@@ -15,8 +15,8 @@ use crate::{
     ShareDashboardRequest,
     access::guard::{session_user, unavailable_auth},
     http::AuthHttpState,
+    http::headers::parse_if_match_version,
     http::problem::problem_response,
-    router::parse_if_match_version,
 };
 
 #[utoipa::path(get, path = "/api/v1/dashboards", tag = "dashboards",
