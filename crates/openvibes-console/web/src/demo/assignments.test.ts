@@ -56,4 +56,24 @@ describe("demo rule-set assignment", () => {
     }
     expect((await createDemoServer({ persona: "viewer" }).handle("PUT", "/api/v1/rule-set-assignments/hardening-linux-l1", { default_enabled: false })).status).toBe(403);
   });
+
+  it("with several groups on a host, on wins and the first on group by name decides", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const add = async (name: string) => {
+      await new Promise((r) => setTimeout(r, 3)); // group ids come from the clock
+      return ((await (await server.handle("POST", "/api/v1/access-control/asset-groups", { name, selectors: [{ key: "env", value: "prod" }] })).json()) as { asset_group_id: string }).asset_group_id;
+    };
+    const zeta = await add("Zeta");
+    const alpha = await add("Alpha");
+    const l1 = "/api/v1/rule-set-assignments/hardening-linux-l1/groups/";
+    const host = async () => (await get<HostRuleSetAssignments>(server, "/api/v1/agents/agent-00003/rule-set-assignments")).items[0];
+    await server.handle("PUT", l1 + zeta, { enabled: false });
+    expect(await host()).toMatchObject({ enabled: false, source: "group", group: "Production" });
+    await server.handle("PUT", l1 + zeta, { enabled: true });
+    expect(await host()).toMatchObject({ enabled: true, group: "Zeta" });
+    const before = (await get<RuleSetAssignments>(server, "/api/v1/rule-set-assignments")).items[0]?.hosts_on ?? 0;
+    expect(before).toBeGreaterThan(0);
+    await server.handle("PUT", l1 + alpha, { enabled: true });
+    expect(await host()).toMatchObject({ enabled: true, group: "Alpha" });
+  });
 });

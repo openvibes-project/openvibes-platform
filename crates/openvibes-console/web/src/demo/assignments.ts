@@ -24,6 +24,7 @@ export function createAssignmentStore(data: DemoData, audit: (setId: string) => 
   const ids = () => Object.keys(state.defaults).sort();
   // A deleted group's overrides are gone, as the database's cascade does.
   const groups = () => data.access.asset_groups;
+  // Stale hosts count: in the real DB stale is derived from last-seen, so their status stays active.
   const linux = () => data.agents.filter((a) => a.status !== "revoked" && a.status !== "imported" && a.os_id);
   const member = (agent: Agent, selectors: readonly string[]) =>
     selectors.length > 0 && selectors.every((s) => (data.tags.get(agent.id) ?? []).some((t) => `${t.key}=${t.value}` === s));
