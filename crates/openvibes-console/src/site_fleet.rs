@@ -209,6 +209,7 @@ mod tests {
                     version: *version,
                     expires_at_ms: None,
                     refused: refused.map(str::to_owned),
+                    state: None,
                 })
                 .collect(),
         }

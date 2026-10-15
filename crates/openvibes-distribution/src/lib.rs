@@ -73,10 +73,12 @@ impl FromRef<AppState> for Pool {
 
 /// `POST /v1/rule-bundle`: the set's current envelope, byte for byte, when
 /// the agent's version is older; 204 when it is current; 404 when the set
-/// is unknown, retired, or has nothing published. Authentication runs
-/// first, so an unauthenticated client never learns how bodies are parsed.
+/// is unknown, retired, or has nothing published; 410 (P20, no body) when
+/// it is an assignable set switched off on this agent's host. Authentication
+/// runs first, so an unauthenticated client never learns how bodies are
+/// parsed.
 async fn rule_bundle(
-    AuthenticatedAgent(_): AuthenticatedAgent,
+    AuthenticatedAgent(agent_id): AuthenticatedAgent,
     State(state): State<AppState>,
     body: Bytes,
 ) -> Result<Response, ApiError> {
@@ -84,16 +86,23 @@ async fn rule_bundle(
     let current = request
         .current_version
         .map(|version| i64::try_from(version).unwrap_or(i64::MAX));
+    let set = request.rule_set_id.as_str();
     let client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
-    Ok(
-        match platform_store::rules::serve(&client, request.rule_set_id.as_str(), current).await? {
-            Served::Unknown => ApiError::NotFound.into_response(),
-            Served::UpToDate => StatusCode::NO_CONTENT.into_response(),
-            Served::Envelope(bytes) => {
-                ([(header::CONTENT_TYPE, "application/json")], bytes).into_response()
-            }
-        },
-    )
+    let served = platform_store::rules::serve(&client, set, current).await?;
+    // 404 first: an unknown, retired or unpublished set never reads as
+    // "not assigned".
+    if !matches!(served, Served::Unknown)
+        && !platform_store::rule_assignment::assigned(&client, &agent_id, set).await?
+    {
+        return Ok(StatusCode::GONE.into_response());
+    }
+    Ok(match served {
+        Served::Unknown => ApiError::NotFound.into_response(),
+        Served::UpToDate => StatusCode::NO_CONTENT.into_response(),
+        Served::Envelope(bytes) => {
+            ([(header::CONTENT_TYPE, "application/json")], bytes).into_response()
+        }
+    })
 }
 
 /// Binds `listen` and `health_listen`, then [`run`]s until `shutdown`.

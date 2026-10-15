@@ -349,13 +349,7 @@ pub async fn heartbeat(
     // Every heartbeat refreshes the live presence row (an unlogged table),
     // so "online" follows the agent within a heartbeat instead of lagging by
     // the throttle above.
-    client
-        .execute(
-            "INSERT INTO agent_presence (agent_id, seen_at) VALUES ($1, $2)
-             ON CONFLICT (agent_id) DO UPDATE SET seen_at = GREATEST(agent_presence.seen_at, $2)",
-            &[&agent_id, &now],
-        )
-        .await?;
+    crate::status::presence(client, agent_id, now).await?;
     Ok(changed == 1)
 }
 

@@ -9,14 +9,25 @@ use chrono::{Duration, Utc};
 use openvibes_core::{
     ALARM_BATCH_BYTES, AlarmBatch, DeliveryAcknowledgement, Finding, FindingBatch, FindingChanges,
     HOST_SERVICES_BYTES, Heartbeat, HostServices, Identifier, InventoryChanges, InventoryReport,
-    ListenerProtocol, Owners, RejectedFinding, ResourceLimits, SchemaVersion, Validate, hex,
-    services_digest,
+    ListenerProtocol, Owners, RejectedFinding, ResourceLimits, RuleSetState, SchemaVersion,
+    Validate, hex, services_digest,
 };
 use platform_store::{alarms, finding_changes, host_services, ingest, inventory, wire};
 
 use platform_agent_server::{ApiError, AuthenticatedAgent, parse};
 
 use crate::server::AppState;
+
+/// The rule sets the agent reports as not assigned to its host (P20).
+fn not_assigned_sets(heartbeat: &Heartbeat) -> Vec<String> {
+    heartbeat
+        .health
+        .iter()
+        .flat_map(|health| &health.rule_sets)
+        .filter(|set| set.state == Some(RuleSetState::NotAssigned))
+        .map(|set| set.id.as_str().to_owned())
+        .collect()
+}
 
 /// `POST /v1/heartbeat`: records liveness for the authenticated agent.
 pub(crate) async fn heartbeat(
@@ -46,6 +57,21 @@ pub(crate) async fn heartbeat(
         .transpose()?;
     let now = Utc::now();
     let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
+    // P20: a set the platform switched off for this host ends its open
+    // matches and notes why, once, when the agent first says it stopped
+    // running it: before the report is stored, which the check compares with.
+    // On an error the report is not stored, so the agent's next heartbeat
+    // finds the transition again; the host still counts as seen, and the
+    // error is the answer (503) as for the heartbeat's other writes.
+    // ponytail: every P20 heartbeat reporting a not_assigned set runs one extra locked transaction (a no-op after the transition).
+    let not_assigned = not_assigned_sets(&heartbeat);
+    if !not_assigned.is_empty()
+        && let Err(error) =
+            finding_changes::end_unassigned(&mut client, &agent_id, &not_assigned, now).await
+    {
+        platform_store::presence(&client, &agent_id, now).await?;
+        return Err(error.into());
+    }
     ingest::heartbeat(
         &client,
         &agent_id,

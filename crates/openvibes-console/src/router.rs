@@ -624,6 +624,23 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             get(authenticated_rule_bundles),
         )
         .route(
+            "/v1/rule-set-assignments",
+            get(crate::rule_assignment::list_assignments),
+        )
+        .route(
+            "/v1/rule-set-assignments/{rule_set_id}",
+            axum::routing::put(crate::rule_assignment::set_default),
+        )
+        .route(
+            "/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}",
+            axum::routing::put(crate::rule_assignment::set_group)
+                .delete(crate::rule_assignment::clear_group),
+        )
+        .route(
+            "/v1/agents/{agent_id}/rule-set-assignments",
+            get(crate::rule_assignment::host_assignments),
+        )
+        .route(
             "/v1/rule-bundles/preview",
             axum::routing::post(preview_authenticated_rule_bundle),
         )
@@ -3697,6 +3714,7 @@ fn agent_view(agent: platform_store::console_read::Agent) -> crate::AgentView {
                 version: set.version,
                 expires_at_ms: set.expires_at_ms,
                 refused: set.refused,
+                state: set.state,
             })
             .collect(),
         rule_sets_at: agent

@@ -77,3 +77,25 @@ pub async fn status(client: &Client, now: DateTime<Utc>) -> Result<Status, Store
         database_bytes,
     })
 }
+
+/// Records that `agent_id` was seen at `now` in the live presence row
+/// (never moves it backwards). [`crate::ingest::heartbeat`] does this
+/// too.
+///
+/// # Errors
+///
+/// A database error.
+pub async fn presence(
+    client: &Client,
+    agent_id: &str,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
+    client
+        .execute(
+            "INSERT INTO agent_presence (agent_id, seen_at) VALUES ($1, $2)
+             ON CONFLICT (agent_id) DO UPDATE SET seen_at = GREATEST(agent_presence.seen_at, $2)",
+            &[&agent_id, &now],
+        )
+        .await?;
+    Ok(())
+}

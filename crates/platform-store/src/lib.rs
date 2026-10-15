@@ -58,6 +58,8 @@ pub mod ingest;
 pub mod inventory;
 mod maintenance;
 mod migrate;
+/// Rule-set assignment: defaults, group overrides, per-host state.
+pub mod rule_assignment;
 /// Draft rules for the site's own rule sets.
 pub mod rule_drafts;
 /// Rule sets, trust keys, and published bundles.
@@ -85,7 +87,7 @@ pub use maintenance::{
 pub use migrate::{
     NEEDS_BACKUP, SCHEMA_VERSION, migrate, migrate_additive, needs_backup_after, schema_version,
 };
-pub use status::{OFFLINE_AFTER_MINUTES, Status, status};
+pub use status::{OFFLINE_AFTER_MINUTES, Status, presence, status};
 
 /// Fixed failure categories; no SQL, parameters, or connection strings are
 /// ever included.

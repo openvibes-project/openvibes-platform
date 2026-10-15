@@ -24,6 +24,7 @@ body (`schema_version`, `rule_set_id`, optional `current_version` ≥ 1).
 | `current_version` absent or below the current version | 200, `application/json`, the envelope exactly as published |
 | `current_version` at or above the current version | 204, no body |
 | Unknown or retired rule set, or nothing published yet | 404 |
+| An assignable set (`hardening-linux-l1`, `-l2`) switched off on this agent's host (P20; [rule-set-assignment.md](rule-set-assignment.md)); checked after the 404 cases, also when the agent is current | 410, no body |
 | Malformed, invalid, or oversized (> 1 MiB) body | 400 |
 | No, unknown, or expired certificate | 401 (authentication runs before the body is parsed) |
 | Revoked agent | 403 `identity_revoked` |
@@ -31,8 +32,9 @@ body (`schema_version`, `rule_set_id`, optional `current_version` ≥ 1).
 | Certificate from another CA | TLS handshake failure |
 
 Every request is one primary-key query ([platform-store.md](platform-store.md),
-`rules::serve`); the envelope bytes are read only for a 200. There is no
-cache, and the service writes nothing, so replicas can sit behind an L4
+`rules::serve`), plus one indexed assignment lookup for a set that is
+served (`rule_assignment::assigned`); the envelope bytes are read only for
+a 200. There is no cache, and the service writes nothing, so replicas can sit behind an L4
 load balancer.
 
 ## Configuration
@@ -53,12 +55,17 @@ database_pool_size = 16         # default, 1 to 1024
 Unknown keys, relative paths, a non-loopback `health_listen`, or
 out-of-range values stop startup with "invalid distribution configuration".
 The database role `openvibes-distribution` may only read `agents`,
-`certificates`, `rule_sets`, `rule_bundles`, and `schema_version`.
+`certificates`, `rule_sets`, `rule_bundles`, `schema_version`, the
+rule-set assignment tables, and the tag and selector columns that decide
+group membership ([rule-set-assignment.md](rule-set-assignment.md)).
 
 ## Failure behaviour
 
 - Database down: requests get 503, `/ready` 503, `/health` stays 200; it
   recovers by itself when the database returns.
+- Switching a set off answers 410 from the next request; the agent stops
+  using its stored bundle and keeps its rollback floor (P20). Switching it
+  on serves it again.
 - Retiring a set answers 404 from the next request; agents keep evaluating
   the bundle they already accepted while it is valid.
 - Logs are one line per request: `endpoint` (`/v1/rule-bundle` or
@@ -70,6 +77,9 @@ The database role `openvibes-distribution` may only read `agents`,
 `eval "$(scripts/test-db.sh)"; cargo test -p openvibes-distribution`:
 - `bundle.rs`: 200 with exact bytes and content type, 204 (current and
   newer versions), 404 (unknown, no bundle, retired), 400 cases;
+- `assignment.rs`: 410 when off (also when current), on wins across groups,
+  group deletion falls back, unpublished or retired stays 404, other sets
+  unchanged;
 - `auth.rs`: revoked 403, unknown and expired 401, no certificate 401 even
   with a malformed body, foreign CA handshake failure;
 - `limits.rs`: oversized body, database outage and readiness, in-flight

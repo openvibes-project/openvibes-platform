@@ -162,6 +162,8 @@ pub struct AgentRuleSet {
     pub expires_at_ms: Option<i64>,
     /// Why the last provisioned bundle was refused, if it was.
     pub refused: Option<String>,
+    /// The agent's state for the set (P20: `not_assigned`), if it sent one.
+    pub state: Option<String>,
 }
 
 /// Cursor for agent order: last seen descending/nulls last, then id ascending.
@@ -1371,6 +1373,10 @@ fn agent_rule_sets(value: &serde_json::Value) -> Vec<AgentRuleSet> {
                     .and_then(serde_json::Value::as_i64),
                 refused: set
                     .get("refused")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+                state: set
+                    .get("state")
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_owned),
             })

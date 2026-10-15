@@ -920,6 +920,66 @@
         }
       }
     },
+    "/api/v1/agents/{agent_id}/rule-set-assignments": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "operationId": "host_assignments",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Each assignable set's state on the host",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRuleSetAssignmentsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agents/{agent_id}/services": {
       "get": {
         "tags": [
@@ -5850,6 +5910,344 @@
         }
       }
     },
+    "/api/v1/rule-set-assignments": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "list_assignments",
+        "responses": {
+          "200": {
+            "description": "Assignable rule sets and asset groups",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleSetAssignmentsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Neither rules.read nor rules.upload, globally",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-set-assignments/{rule_set_id}": {
+      "put": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "set_default",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match configured origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Session synchronizer token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRuleSetDefaultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The set after the change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleSetAssignmentView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, CSRF, or permission check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an assignable set",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Update unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}": {
+      "put": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "set_group",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asset_group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match configured origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Session synchronizer token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRuleSetGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The set after the change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleSetAssignmentView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, CSRF, or permission check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an assignable set, or no such group",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Update unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "clear_group",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asset_group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match configured origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Session synchronizer token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The set without that override (also when it had none)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleSetAssignmentView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, CSRF, or permission check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an assignable set, or no such group",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Update unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/rule-sets": {
       "get": {
         "tags": [
@@ -7796,6 +8194,13 @@
             ],
             "description": "Why the agent refused the last bundle it was given, when it did."
           },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The agent's state for the set: `not_assigned` when the platform\nswitched it off for this host (P20); absent otherwise."
+          },
           "version": {
             "type": [
               "integer",
@@ -8470,6 +8875,24 @@
           }
         },
         "additionalProperties": false
+      },
+      "AssignableGroupView": {
+        "type": "object",
+        "description": "An asset group an override can name.",
+        "required": [
+          "asset_group_id",
+          "name"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": "string",
+            "description": "The group."
+          },
+          "name": {
+            "type": "string",
+            "description": "Its name."
+          }
+        }
       },
       "AssistantInternet": {
         "type": "object",
@@ -11253,6 +11676,45 @@
           }
         }
       },
+      "HostRuleSetAssignmentView": {
+        "type": "object",
+        "description": "One assignable set's state on a host, as the platform decides it.",
+        "required": [
+          "rule_set_id",
+          "enabled",
+          "source"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the host runs it."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set id."
+          },
+          "source": {
+            "type": "string",
+            "description": "`default` or `group`."
+          }
+        }
+      },
+      "HostRuleSetAssignmentsView": {
+        "type": "object",
+        "description": "Every assignable set's state on one host.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostRuleSetAssignmentView"
+            },
+            "description": "The sets, by id."
+          }
+        }
+      },
       "HostServicesView": {
         "type": "object",
         "description": "One host's open ports and running services.",
@@ -12150,6 +12612,84 @@
           }
         }
       },
+      "RuleSetAssignmentView": {
+        "type": "object",
+        "description": "One assignable rule set.",
+        "required": [
+          "rule_set_id",
+          "default_enabled",
+          "published",
+          "groups"
+        ],
+        "properties": {
+          "default_enabled": {
+            "type": "boolean",
+            "description": "On or off for hosts no override covers."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleSetGroupOverrideView"
+            },
+            "description": "Overrides, by group name."
+          },
+          "published": {
+            "type": "boolean",
+            "description": "False until a live bundle is published (\"not available yet\")."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set id."
+          }
+        }
+      },
+      "RuleSetAssignmentsView": {
+        "type": "object",
+        "description": "Every assignable set, and the groups an override can name.",
+        "required": [
+          "items",
+          "asset_groups"
+        ],
+        "properties": {
+          "asset_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssignableGroupView"
+            },
+            "description": "Every asset group, by name."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleSetAssignmentView"
+            },
+            "description": "The sets."
+          }
+        }
+      },
+      "RuleSetGroupOverrideView": {
+        "type": "object",
+        "description": "One asset group's override.",
+        "required": [
+          "asset_group_id",
+          "name",
+          "enabled"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": "string",
+            "description": "The group."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "On or off for its hosts."
+          },
+          "name": {
+            "type": "string",
+            "description": "Its name."
+          }
+        }
+      },
       "RuleSetPage": {
         "type": "object",
         "description": "Published rule-set inventory.",
@@ -12576,6 +13116,34 @@
               "null"
             ],
             "description": "`resolved` (only when the evidence is gone), `false_positive` or\n`accepted_risk`; absent or `null` clears it."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetRuleSetDefaultRequest": {
+        "type": "object",
+        "description": "A set's new default.",
+        "required": [
+          "default_enabled"
+        ],
+        "properties": {
+          "default_enabled": {
+            "type": "boolean",
+            "description": "On or off for hosts no override covers."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetRuleSetGroupRequest": {
+        "type": "object",
+        "description": "A group's override.",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "On or off for the group's hosts."
           }
         },
         "additionalProperties": false

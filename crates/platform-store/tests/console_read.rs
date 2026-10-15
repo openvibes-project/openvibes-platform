@@ -156,7 +156,8 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
         .execute(
             "UPDATE agents SET health_at = $2,
                 health = '{\"rule_sets\":[{\"id\":\"baseline\",\"version\":2,\"expires_at_unix_ms\":1853910427825},
-                    {\"id\":\"site\",\"refused\":\"signature\"}]}'::jsonb
+                    {\"id\":\"site\",\"refused\":\"signature\"},
+                    {\"id\":\"hardening-linux-l2\",\"state\":\"not_assigned\"}]}'::jsonb
              WHERE agent_id = $1",
             &[&RECENT, &inventory_at],
         )
@@ -174,12 +175,21 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
                 version: Some(2),
                 expires_at_ms: Some(1_853_910_427_825),
                 refused: None,
+                state: None,
             },
             platform_store::console_read::AgentRuleSet {
                 id: "site".to_owned(),
                 version: None,
                 expires_at_ms: None,
                 refused: Some("signature".to_owned()),
+                state: None,
+            },
+            platform_store::console_read::AgentRuleSet {
+                id: "hardening-linux-l2".to_owned(),
+                version: None,
+                expires_at_ms: None,
+                refused: None,
+                state: Some("not_assigned".to_owned()),
             },
         ]
     );

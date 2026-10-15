@@ -193,9 +193,10 @@ pub async fn apply(
     for ((set, rule), at, approximate) in &ends {
         transaction
             .execute(
-                "UPDATE current_findings SET ended_at = $4, end_approximate = $5
+                "UPDATE current_findings SET ended_at = $4, end_approximate = $5,
+                     end_recorded_at = $6
                  WHERE agent_id = $1 AND rule_set_id = $2 AND rule_id = $3",
-                &[&agent_id, set, rule, at, approximate],
+                &[&agent_id, set, rule, at, approximate, &now],
             )
             .await?;
     }
@@ -210,7 +211,7 @@ pub async fn apply(
 }
 
 /// Sets a P13 match's row to `row`'s content, open (`ended_at` `None`) or
-/// ended, and current as of `now`.
+/// ended (its end recorded at `now`), and current as of `now`.
 async fn mark(
     transaction: &tokio_postgres::Transaction<'_>,
     agent_id: &str,
@@ -223,6 +224,7 @@ async fn mark(
     transaction
         .execute(
             "UPDATE current_findings SET source = 'changes', ended_at = $4,
+                 end_recorded_at = CASE WHEN $4::timestamptz IS NULL THEN NULL ELSE $16::timestamptz END,
                  end_approximate = $5, last_finding_id = $6, rule_version = $7,
                  severity = $8, confidence = $9, message = $10, evidence = $11,
                  scan_id = $12, last_observed_at = $13, last_observed_day = $14, detection = $15
@@ -243,6 +245,7 @@ async fn mark(
                 &seen,
                 &seen.date_naive(),
                 &row.detection,
+                &now,
             ],
         )
         .await?;
@@ -316,4 +319,83 @@ pub async fn heartbeat(
     }
     transaction.commit().await?;
     Ok(false)
+}
+
+/// History note when a match ends because its set is off for the host
+/// (spec 2026-10-14 §5).
+pub const NOT_ASSIGNED_NOTE: &str = "rule set no longer assigned to this host";
+
+/// The agent reported `sets` as `not_assigned` (P20). Call it before
+/// `ingest::heartbeat` stores the report: it acts only on the transition,
+/// an assignable set (`rule_set_assignment`) the stored report did not
+/// already list as `not_assigned`. For such a set, under the agent's row
+/// lock and in one transaction, this host's still-open matches end (as when
+/// the host stops matching), and every match of the set whose end was
+/// recorded since the stored report (`end_recorded_at >= health_at`, both
+/// the platform's clock, so the agent's clock never matters; none stored:
+/// only those ended here), whoever ended it, gets one triage-history entry by `system` with
+/// [`NOT_ASSIGNED_NOTE`], its state unchanged (from = to). The agent
+/// usually ends them itself through P13 in the scan that got the 410, just
+/// before this report (lab check, task 9). Matches that ended earlier get
+/// no note; a match never gets the note twice. Triage is never touched; no
+/// audit row, as for any match end. Returns how many notes were written; a
+/// repeated report writes nothing.
+///
+/// # Errors
+///
+/// A database error.
+pub async fn end_unassigned(
+    client: &mut Client,
+    agent_id: &str,
+    sets: &[String],
+    now: DateTime<Utc>,
+) -> Result<u64, StoreError> {
+    let transaction = client.transaction().await?;
+    let Some(row) = transaction
+        .query_opt(
+            "SELECT COALESCE(a.health_at, $3),
+                 ARRAY(SELECT s FROM unnest($2::text[]) s
+                       WHERE s IN (SELECT rule_set_id FROM rule_set_assignment)
+                         AND NOT EXISTS (
+                             SELECT 1 FROM jsonb_array_elements(
+                                 COALESCE(a.health->'rule_sets', '[]')) r
+                             WHERE r->>'id' = s AND r->>'state' = 'not_assigned'))
+             FROM agents a WHERE a.agent_id = $1 FOR UPDATE",
+            &[&agent_id, &sets, &now],
+        )
+        .await?
+    else {
+        return Ok(0);
+    };
+    let (since, switched): (DateTime<Utc>, Vec<String>) = (row.get(0), row.get(1));
+    if switched.is_empty() {
+        return Ok(0);
+    }
+    transaction
+        .execute(
+            "UPDATE current_findings SET ended_at = $3, end_recorded_at = $3,
+                 end_approximate = true
+             WHERE agent_id = $1 AND rule_set_id = ANY($2) AND ended_at IS NULL",
+            &[&agent_id, &switched, &now],
+        )
+        .await?;
+    let noted = transaction
+        .execute(
+            "INSERT INTO console_finding_triage_history (agent_id, rule_set_id, rule_id,
+                 from_state, to_state, note, changed_at, changed_by, rule_version)
+             SELECT c.agent_id, c.rule_set_id, c.rule_id, COALESCE(t.state, 'open'),
+                 COALESCE(t.state, 'open'), $5, $3, 'system', c.rule_version
+             FROM current_findings c
+             LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
+             WHERE c.agent_id = $1 AND c.rule_set_id = ANY($2) AND c.end_recorded_at >= $4
+               AND NOT EXISTS (
+                   SELECT 1 FROM console_finding_triage_history h
+                   WHERE (h.agent_id, h.rule_set_id, h.rule_id)
+                         = (c.agent_id, c.rule_set_id, c.rule_id)
+                     AND h.note = $5 AND h.changed_at >= c.end_recorded_at)",
+            &[&agent_id, &switched, &now, &since, &NOT_ASSIGNED_NOTE],
+        )
+        .await?;
+    transaction.commit().await?;
+    Ok(noted)
 }

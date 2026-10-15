@@ -89,6 +89,19 @@ The usual request limits apply. Test: `tests/ca.rs`.
   throttled write, and the report before it is kept to compare totals; a
   heartbeat without one keeps the stored report. An invalid `health`
   makes the heartbeat invalid (400).
+  When the report first marks an assignable rule set `state: not_assigned`
+  (P20; the stored report did not), before storing it ingest ends this
+  host's still-open matches of that set, and every match of the set whose
+  end was recorded since the stored report, on the platform's clock
+  (usually by the agent's own P13 change in the same scan), gets one triage-history entry by `system` with the note
+  "rule set no longer assigned to this host" (state unchanged). Triage is
+  not touched; no audit row, as for any match end. Repeated reports write
+  nothing. The stored `match_sha256` is unchanged by the platform's end, so
+  if the heartbeat arrives before the agent's own P13 end, the agent's next
+  delta gets one `findings_resync` (expected, harmless); `source='scan'` rows
+  (scan-path agents; P20 agents use P13) are ended too. If that fails, the
+  host is still recorded as seen, the answer is 503 and the report is not stored, so the next heartbeat retries it
+  ([rule-set-assignment.md](rule-set-assignment.md)).
   204.
 - `POST /v1/inventory` (authenticated, protocol P8): `InventoryReport`; its
   `agent_id` must be the authenticated agent's (else 400); at most 50,000
