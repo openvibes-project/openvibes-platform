@@ -11,7 +11,7 @@ export type RuleSetRow = { rule_set_id: string; set: RuleSet | undefined; assign
 
 /** Published sets and assignable ones: an assignable set is listed before it is published. */
 export function ruleSetRows(sets: readonly RuleSet[], assignments: readonly RuleSetAssignment[]): RuleSetRow[] {
-  const ids = [...new Set([...sets.map((s) => s.rule_set_id), ...assignments.map((a) => a.rule_set_id)])].sort();
+  const ids = [...new Set([...sets.map((s) => s.rule_set_id), ...assignments.map((a) => a.rule_set_id)])].sort((a, b) => a.localeCompare(b));
   return ids.map((id) => ({ rule_set_id: id, set: sets.find((s) => s.rule_set_id === id), assignment: assignments.find((a) => a.rule_set_id === id) }));
 }
 

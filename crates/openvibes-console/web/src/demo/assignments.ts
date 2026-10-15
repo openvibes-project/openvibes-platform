@@ -21,7 +21,7 @@ export function createAssignmentStore(data: DemoData, audit: (setId: string) => 
   const loaded = persistence?.load() as Saved | null | undefined;
   const state: Saved = loaded?.defaults && loaded.overrides ? loaded : structuredClone(SEED);
   const save = () => persistence?.save(state);
-  const ids = () => Object.keys(state.defaults).sort();
+  const ids = () => Object.keys(state.defaults).sort((a, b) => a.localeCompare(b));
   // A deleted group's overrides are gone, as the database's cascade does.
   const groups = () => data.access.asset_groups;
   // Stale hosts count: in the real DB stale is derived from last-seen, so their status stays active.

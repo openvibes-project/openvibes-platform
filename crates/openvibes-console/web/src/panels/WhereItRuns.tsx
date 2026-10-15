@@ -3,7 +3,6 @@
 // groups that override it, and the inline row that adds one. The switches show
 // the server's state: a failed change leaves them as they were.
 import { useEffect, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
 
 import { ApiError, invalidate, load, request } from "../api/client";
 import type { AssignableGroup, RuleSetAssignment } from "../api/types";
@@ -47,12 +46,24 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
     const add = addButton.current;
     (add && !add.disabled ? add : root.current?.querySelector<HTMLElement>('[role="switch"]'))?.focus();
   }, [refocus]);
+  // Esc cancels the add row, and does not close the panel.
+  const isAdding = adding !== null;
+  useEffect(() => {
+    const el = root.current;
+    if (!el || !isAdding) return;
+    const onKey = (event: KeyboardEvent) => {
+      // An open group list closes itself first (Select handles that Esc).
+      if (event.key === "Escape" && !(event.target as Element).closest('[role="listbox"], [aria-expanded="true"]')) { event.stopPropagation(); setAdding(null); setRefocus((n) => n + 1); }
+    };
+    el.addEventListener("keydown", onKey);
+    return () => el.removeEventListener("keydown", onKey);
+  }, [isAdding]);
 
   const change = (method: "PUT" | "DELETE", path: string, body: unknown, done: string, after?: () => void) => {
     if (sending.current) return;
     sending.current = true;
     setBusy(true);
-    request(method, path, body)
+    void request(method, path, body)
       .then(() => { toast(done); return true; }, (error: unknown) => {
         toast(!(error instanceof ApiError) ? "The change failed" : error.code === "asset_group_not_found" ? "Asset group not found" : error.message, true);
         return false;
@@ -84,13 +95,11 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
     if (!adding) return;
     setGroup(adding.group, byId.get(adding.group)?.name ?? adding.group, adding.on, () => { setAdding(null); setRefocus((n) => n + 1); });
   };
-  // Esc cancels the add row, and does not close the panel.
-  const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); cancel(); } };
   const chosen = adding ? byId.get(adding.group) : undefined;
 
   return (
     <Section title="Where it runs">
-      <div ref={root} className="stack" onKeyDown={adding ? onKey : undefined}>
+      <div ref={root} className="stack">
         {!assignment.published && (
           <div style={NOTE_BOX}><b>Not available yet.</b> <span className="subtle">{`This platform has no ${shortName(id)} set yet: it comes with a later rules package. Switches you set now are kept and apply when it is published.`}</span></div>
         )}
