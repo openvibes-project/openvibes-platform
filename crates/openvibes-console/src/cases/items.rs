@@ -7,7 +7,13 @@ use axum::{
 use chrono::Utc;
 use platform_store::console_cases::{self as store, OutcomeChange};
 
-use super::{support::*, types::*, views::*};
+use super::answers::{answer, bad_request, refused};
+use super::permissions::{manager, reader};
+use super::request::blank_is_absent;
+use super::types::{
+    AddCaseNoteRequest, CaseItemRef, ForItemParams, ItemCasesView, SetCaseItemOutcomeRequest,
+};
+use super::views::{event_view, item_case_view, item_view};
 use crate::{ProblemDetails, access::guard::unavailable_auth, http::AuthHttpState};
 
 #[utoipa::path(post, path = "/api/v1/cases/{case_id}/notes", tag = "cases", params(("case_id" = String, Path)), request_body = crate::cases::AddCaseNoteRequest,

@@ -1,23 +1,15 @@
 use axum::{
     Json,
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{DateTime, Utc};
-use platform_store::{
-    console_cases::{self as store, CaseDetail, CaseSummary, Refusal},
-    console_read::AgentScope,
-};
+use platform_store::console_cases::{CaseDetail, Refusal};
 use serde::Serialize;
 
-use crate::{
-    FieldError, Permission, PermissionScope, ProblemDetails, access::guard::session_user,
-    http::AuthHttpState, http::problem::problem_response, router::parse_if_match_version,
-};
+use crate::{FieldError, ProblemDetails, http::problem::problem_response};
 
-use super::views::*;
-/// A JSON answer that is never cached; `version` adds the ETag.
+use super::views::detail_view;
+
 pub(super) fn answer(status: StatusCode, version: Option<u64>, body: impl Serialize) -> Response {
     let mut response = (status, Json(body)).into_response();
     response
@@ -157,140 +149,9 @@ pub(super) fn refused(refusal: Refusal) -> Response {
     }
 }
 
-/// A signed-in browser user holding `permissions`: their scope for the
-/// first, and their id. Bearer tokens are refused. For changes, CSRF and
-/// origin are checked first; the scope is that of the first permission.
-pub(crate) async fn authorize(
-    state: &AuthHttpState,
-    headers: &HeaderMap,
-    permissions: &[Permission],
-    csrf_required: bool,
-) -> Result<(AgentScope, String), Response> {
-    let user = session_user(state, headers, csrf_required).await?;
-    let mut scope = None;
-    for permission in permissions {
-        let Some(capability) = user
-            .capabilities
-            .iter()
-            .find(|capability| capability.permission == *permission)
-        else {
-            return Err(permission_denied());
-        };
-        scope.get_or_insert_with(|| match &capability.scope {
-            PermissionScope::Global => AgentScope::Global,
-            PermissionScope::AssetGroups { asset_group_ids } => {
-                AgentScope::AssetGroups(asset_group_ids.clone())
-            }
-        });
-    }
-    scope
-        .map(|scope| (scope, user.user_id.to_ascii_lowercase()))
-        .ok_or_else(permission_denied)
-}
-
-/// Reading: `cases.read`.
-pub(super) async fn reader(
-    state: &AuthHttpState,
-    headers: &HeaderMap,
-) -> Result<(AgentScope, String), Response> {
-    authorize(state, headers, &[Permission::CasesRead], false).await
-}
-
-/// Changing: `cases.manage` (with `cases.read`, which the built-in roles
-/// grant together); items are checked against its scope.
-pub(super) async fn manager(
-    state: &AuthHttpState,
-    headers: &HeaderMap,
-) -> Result<(AgentScope, String), Response> {
-    authorize(
-        state,
-        headers,
-        &[Permission::CasesManage, Permission::CasesRead],
-        true,
-    )
-    .await
-}
-
-pub(super) fn encode_cursor(case: &CaseSummary) -> String {
-    URL_SAFE_NO_PAD.encode(format!(
-        "{}.{}",
-        case.updated_at.timestamp_micros(),
-        case.case_id
-    ))
-}
-
-pub(super) fn decode_cursor(text: &str) -> Option<store::CaseCursor> {
-    let bytes = URL_SAFE_NO_PAD.decode(text).ok()?;
-    let (micros, id) = std::str::from_utf8(&bytes).ok()?.split_once('.')?;
-    Some((
-        DateTime::from_timestamp_micros(micros.parse().ok()?)?,
-        id.to_owned(),
-    ))
-}
-
-/// A title without the spaces around it; the store checks the rest.
-pub(super) fn title(raw: &str) -> &str {
-    raw.trim()
-}
-
-/// A resolution or outcome note without the spaces around it; a blank one
-/// is as good as none.
-pub(super) fn blank_is_absent(note: Option<&str>) -> Option<&str> {
-    note.map(str::trim).filter(|note| !note.is_empty())
-}
-
-/// An RFC 3339 time, if it is one.
-pub(super) fn parse_time(text: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(text)
-        .ok()
-        .map(|at| at.with_timezone(&Utc))
-}
-
-/// The answer to a change that states no usable `If-Match`, or its version.
-pub(super) fn precondition(headers: &HeaderMap) -> Result<i64, ProblemDetails> {
-    match parse_if_match_version(headers) {
-        Ok(Some(version)) => Ok(version),
-        Ok(None) => Err(ProblemDetails::new(
-            StatusCode::PRECONDITION_REQUIRED,
-            "precondition_required",
-            "If-Match is required",
-        )),
-        Err(()) => Err(ProblemDetails::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_precondition",
-            "If-Match must contain one quoted version",
-        )),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
-
-    use super::{decode_cursor, invalid_message};
-
-    #[test]
-    fn a_cursor_round_trips_and_garbage_is_refused() {
-        use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-        let at = Utc.with_ymd_and_hms(2026, 10, 4, 12, 0, 0).unwrap();
-        let text = URL_SAFE_NO_PAD.encode(format!(
-            "{}.{}",
-            at.timestamp_micros(),
-            "11111111-1111-4111-8111-111111111111"
-        ));
-        assert_eq!(
-            decode_cursor(&text),
-            Some((at, "11111111-1111-4111-8111-111111111111".to_owned()))
-        );
-        for bad in [
-            "",
-            "!!",
-            &URL_SAFE_NO_PAD.encode("no-dot"),
-            &URL_SAFE_NO_PAD.encode("x.y"),
-        ] {
-            assert_eq!(decode_cursor(bad), None, "{bad:?}");
-        }
-    }
+    use super::invalid_message;
 
     #[test]
     fn every_validation_code_the_store_emits_has_a_message() {

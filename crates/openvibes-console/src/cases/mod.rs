@@ -4,14 +4,16 @@
 //! agents, and a case the caller cannot see reads as absent. Browser
 //! sessions only: a bearer token is refused, as for dashboards.
 
+mod answers;
 pub(crate) mod items;
 pub(crate) mod list;
 pub(crate) mod lookups;
-mod support;
+mod permissions;
+mod request;
 mod types;
 mod views;
 
-pub(crate) use support::authorize;
+pub(crate) use permissions::authorize;
 
 pub use types::{
     ActiveCaseItem, ActiveCaseItemsView, AddCaseNoteRequest, CaseAssigneesView, CaseDetailView,

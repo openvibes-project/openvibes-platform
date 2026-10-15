@@ -5,7 +5,10 @@ use axum::{
 };
 use platform_store::console_cases::{self as store};
 
-use super::{support::*, types::*, views::*};
+use super::answers::{answer, bad_request};
+use super::permissions::{authorize, reader};
+use super::types::{ActiveCaseItem, ActiveCaseItemsView, ActiveItemsParams, CaseAssigneesView};
+use super::views::user_view;
 use crate::{Permission, ProblemDetails, access::guard::unavailable_auth, http::AuthHttpState};
 
 #[utoipa::path(get, path = "/api/v1/cases/active-items", tag = "cases", params(ActiveItemsParams),
