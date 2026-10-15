@@ -11,7 +11,6 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `about.rs` | The About page: versions and the newer-release check. |
 | `about_tests.rs` | Tests for the About page and the newer-version check. |
 | `fetch_client.rs` | The assistant's internet lookups through `openvibes-fetch`. |
-| `seeded.rs` | Fixed demo data for the loopback development listener (`dev-seed`). |
 | `access/` | Who may do what: sign-in, roles, users, service accounts, role bindings, asset groups, host tags. |
 | `alarms/` | Alarms: list, detail and triage, suppressions, detection evidence. |
 | `assistant/` | The assistant: chat endpoints, runtime, lookups, internet switch. |
@@ -23,6 +22,7 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `hosts/` | Hosts: agents, certificates, enrollment tokens, install package, software, ports, presence, fleet. |
 | `http/` | Router assembly, route table, middleware, web app files, problems, OpenAPI. |
 | `rules/` | Rule sets and bundles, assignment, draft rules, rule tests, ATT&CK coverage. |
+| `seeded/` | Fixed demo data for the loopback development listener (`dev-seed`). |
 | `vulnerabilities/` | Vulnerability summary, list and advisory detail. |
 
 More: [docs/components/openvibes-console.md](../../../docs/components/openvibes-console.md)
