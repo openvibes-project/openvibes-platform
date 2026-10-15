@@ -1,3 +1,5 @@
+//! The JSON answers and refusals the case handlers share.
+
 use axum::{
     Json,
     http::{HeaderValue, StatusCode, header},

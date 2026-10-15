@@ -1,3 +1,5 @@
+//! The JSON answers, ETags and refusals the dashboard handlers share.
+
 use axum::{
     Json,
     http::{HeaderValue, StatusCode, header},

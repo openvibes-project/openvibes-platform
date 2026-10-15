@@ -1,6 +1,6 @@
 // The widget types a dashboard can hold. Adding one: an entry here, its
 // type in layout.ts's WIDGET_TYPES, and the same name in the server's
-// allow-list (openvibes-console/src/dashboards.rs).
+// allow-list (openvibes-console/src/dashboards/layout.rs).
 import type { ReactNode } from "react";
 
 import type { IconName } from "../ui/Icon";
