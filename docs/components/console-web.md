@@ -37,6 +37,9 @@ Show everything, without page changes for details:
   - access: roles, bindings and asset groups;
   - service accounts, with tokens issued once;
   - audit log, with ranges, CSV export and retention.
+- **Host hardening** (`panels/HostHardening.tsx`): the host panel's Hardening
+  row, "Hardening facts unavailable" warning and "Not assigned" badge; see
+  `rule-set-assignment.md`.
 - **Triage** (triage v2, `panels/triage.ts`, `panels/bulk.ts`,
   `panels/BulkBar.tsx`): four states (open, mitigated, accepted risk, false
   positive), any to any other; every close needs a note, accepted risk an

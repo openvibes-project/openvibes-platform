@@ -182,3 +182,18 @@ Access." or "Every asset group is listed.".
 `npm test -- src/panels/WhereItRuns.test.tsx src/app/registry.test.tsx`
 covers the markup and the menu access; `e2e/demo/where-it-runs-focus.spec.ts`
 the focus, single-send and failed-Add behaviour; clicks and toasts are in the e2e.
+
+The host panel's Details (`panels/HostHardening.tsx`, Linux hosts only) add
+a **Hardening** row after Threat alarms: per assignable set "L1 on" or
+"off", the deciding group in brackets, "waits until published" for an on
+set not published yet, and "pending" while the agent's latest report
+disagrees with the platform's decision. No switch time is stored, so an
+agent too old to know the project sets shows "pending" for L1 until it is
+updated (controller ruling, 2026-10-15). A hardening collector outcome other
+than `ok` adds the warning **Hardening facts unavailable** with its cause:
+"has not reported for N days" (N from `hardening_facts_ok_at`, at least 1),
+"has not reported since enrollment" when no report was ever `ok`, or "sent
+invalid hardening facts" for `invalid_data`. In the Rule sets section, a set
+the agent reports `not_assigned` shows **Not assigned** and "off for
+<group>", or "off by default" when the default switched it off. Operators
+with `rules.read` or `rules.upload` see the "behind" badge there.
