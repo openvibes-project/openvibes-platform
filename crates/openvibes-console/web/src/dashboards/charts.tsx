@@ -1,3 +1,4 @@
+// Dashboard tiles over time (trend and graph), and the free-text note tile.
 import { useMemo } from "react";
 
 import { useAllPages } from "../api/client";

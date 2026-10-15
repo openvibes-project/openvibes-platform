@@ -2,13 +2,16 @@
 // The operate and admin lists: enrollment tokens, rule sets, access,
 // service accounts and the audit log. Same table + panel pattern as the rest
 
-import { ViewHeader } from "../ui/ViewHeader";
-import { Tabs } from "../ui/panel";
-import { Access, ServiceAccounts, Enrollment, RuleSets } from "./Admin";
+import { ViewHeader } from "../../ui/ViewHeader";
+import { Tabs } from "../../ui/panel";
+import { Access } from "./Access";
+import { Enrollment } from "./Enrollment";
+import { RuleSets } from "./RuleSets";
+import { ServiceAccounts } from "./ServiceAccounts";
 import { AssistantSettings } from "./AssistantSettings";
-import { useSession } from "../app/session";
-import { nav, useLocation } from "../app/nav";
-import { readsRules } from "../panels/ruleAssignment";
+import { useSession } from "../../app/session";
+import { nav, useLocation } from "../../app/nav";
+import { readsRules } from "../../panels/ruleAssignment";
 
 export function Settings() {
     const { can } = useSession()

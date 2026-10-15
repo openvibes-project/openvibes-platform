@@ -6,6 +6,11 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 
 import type { Persona } from "../demo/personas";
 
+/** What to tell the user about a failed request: the server's message, else `fallback`. */
+export function apiMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback;
+}
+
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, title: string, readonly fieldErrors?: { field: string; code: string; message: string }[], readonly caseNumber?: number) {
     super(title);

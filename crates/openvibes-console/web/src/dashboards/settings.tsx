@@ -18,7 +18,7 @@ import { ATTENTION_KINDS } from "./attention";
 import { noteLines } from "./config";
 import { GRAPH_MAX_LINES, METRIC_GROUPS, TREND_DAYS } from "./metrics";
 import { BREAKDOWN_SOURCES } from "./tiles";
-import { GRAPH_DAYS } from "./tiles2";
+import { GRAPH_DAYS } from "./charts";
 import type { SettingsProps } from "./widgets";
 
 // The label text names the control exactly (a wrapping label alone would

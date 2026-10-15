@@ -77,6 +77,12 @@ export const nav = {
   },
 };
 
+/** The panel on top of the stack: the one a list highlights as open. */
+export function useTopPanel() {
+  const { panels } = useLocation();
+  return panels[panels.length - 1];
+}
+
 export function useLocation(): AppLocation {
   return useSyncExternalStore((listener) => {
     listeners.add(listener);

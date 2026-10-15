@@ -2,20 +2,15 @@
 // operator writes here. Saved rules are drafts; publishing is a later step.
 import { type ReactNode, useState } from "react";
 
-import { ApiError, invalidate, request, useResource } from "../api/client";
+import { apiMessage, invalidate, request, useResource } from "../api/client";
 import type { DraftChanges, PublishedDrafts, RuleDraft, SiteFleet } from "../api/types";
-import { nav, useLocation } from "../app/nav";
+import { nav, useTopPanel } from "../app/nav";
 import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { Icon } from "../ui/Icon";
 import { toast } from "../ui/toast";
 import { ViewHeader } from "../ui/ViewHeader";
-
-function useTop() {
-  const { panels } = useLocation();
-  return panels[panels.length - 1];
-}
 
 const SITE_SETS = [
   { id: "site", title: "Compliance rules", what: "Checked on every scan; a match is a compliance finding." },
@@ -24,7 +19,7 @@ const SITE_SETS = [
 
 function SetTable({ set, intro }: { set: (typeof SITE_SETS)[number]; intro: ReactNode }) {
   const drafts = useResource<{ items: RuleDraft[] }>(`/api/v1/rule-drafts/${set.id}`);
-  const top = useTop();
+  const top = useTopPanel();
   const rows = drafts.data?.items ?? [];
   return (
     <section className="view-section">
@@ -70,7 +65,7 @@ function Publish({ set }: { set: (typeof SITE_SETS)[number] }) {
         invalidate("/api/v1/rule-sets");
         toast(`${set.title} published as version ${done.version}`);
       })
-      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : "Could not publish"))
+      .catch((e: unknown) => setError(apiMessage(e, "Could not publish")))
       .finally(() => setBusy(false));
   };
   const list = (label: string, ids: string[]) => ids.length > 0 && <li><strong>{label}:</strong> <span className="mono">{ids.join(", ")}</span></li>;

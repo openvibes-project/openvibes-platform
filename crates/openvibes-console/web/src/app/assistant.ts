@@ -2,7 +2,7 @@
 // The conversation lives for the page; the dock's open state per viewer.
 import { useSyncExternalStore } from "react";
 
-import { ApiError, request } from "../api/client";
+import { apiMessage, request } from "../api/client";
 import type { AssistantInternetSource, AssistantReply, AssistantSegment } from "../api/types";
 import type { PanelRef } from "./location";
 
@@ -58,7 +58,7 @@ export const assistant = {
       turn.segments = reply.segments;
       turn.internet = reply.internet;
     } catch (error) {
-      turn.error = error instanceof ApiError ? error.message : "The assistant is unavailable";
+      turn.error = apiMessage(error, "The assistant is unavailable");
     }
     set({ turns: [...state.turns], busy: false });
   },

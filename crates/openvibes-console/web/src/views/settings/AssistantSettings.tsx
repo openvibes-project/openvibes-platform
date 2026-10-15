@@ -2,16 +2,15 @@
 // Turning a level on asks first, repeating its risk text; turning it off does not.
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { ApiError, invalidate, request, useResource } from "../api/client";
-import type { AssistantInternet, AssistantInternetTest, AssistantStatus } from "../api/types";
-import { ErrorBox, Loading } from "../ui/bits";
-import { Icon } from "../ui/Icon";
-import { Switch } from "../ui/Switch";
-import { toast } from "../ui/toast";
-import { ViewHeader } from "../ui/ViewHeader";
+import { ApiError, apiMessage, invalidate, request, useResource } from "../../api/client";
+import type { AssistantInternet, AssistantInternetTest, AssistantStatus } from "../../api/types";
+import { ErrorBox, Loading } from "../../ui/bits";
+import { Icon } from "../../ui/Icon";
+import { Switch } from "../../ui/Switch";
+import { toast } from "../../ui/toast";
+import { ViewHeader } from "../../ui/ViewHeader";
 import { toDomains, validSearxngUrl } from "./assistantRules";
 
-const message = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback);
 const PATH = "/api/v1/assistant-internet";
 const LEVEL1_RISK = "Sends public IDs only (like CVE-2026-1234) to api.osv.dev and bodhi.fedoraproject.org. No host data leaves your network.";
 const LEVEL2_RISK = "The query goes to your SearXNG and the engines behind it; code refuses any query naming a host, agent ID, IP address, user name or internal domain; website snippets reach the assistant as data and may be wrong or hostile; every answer shows what was searched.";
@@ -65,7 +64,7 @@ export function AssistantSettings() {
     setError(undefined);
     return request("PUT", PATH, change, { "if-match": `"${current.version}"` })
       .then(() => { setAsking(undefined); setDomains(change.internal_domains.join("\n")); invalidate(PATH); toast(done); },
-        (e: unknown) => { setError(message(e, "Could not change the setting")); if (e instanceof ApiError && e.status === 412) invalidate(PATH); })
+        (e: unknown) => { setError(apiMessage(e, "Could not change the setting")); if (e instanceof ApiError && e.status === 412) invalidate(PATH); })
       .finally(() => setBusy(false));
   };
   const base = { searxng_url: current.searxng_url ?? null, internal_domains: toDomains(domainText) };
@@ -73,7 +72,7 @@ export function AssistantSettings() {
     setTesting(true);
     setTested(undefined);
     request<AssistantInternetTest>("POST", `${PATH}/test`)
-      .then(setTested, (e: unknown) => setTested({ ok: false, detail: message(e, "Could not run the test") }))
+      .then(setTested, (e: unknown) => setTested({ ok: false, detail: apiMessage(e, "Could not run the test") }))
       .finally(() => setTesting(false));
   };
   const close = () => { setAsking(undefined); setError(undefined); };

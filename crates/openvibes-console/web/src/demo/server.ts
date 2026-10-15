@@ -2,7 +2,7 @@
 // for the GitHub Pages preview, `?demo=1` and tests. It follows the wire
 // contracts (types from the OpenAPI client) and the permission model, and
 // keeps mutations in memory for the life of the page.
-import { validDomain, validSearxngUrl } from "../views/assistantRules";
+import { validDomain, validSearxngUrl } from "../views/settings/assistantRules";
 import type {
   Agent, AssistantInternetSource, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission, RuleDraft,
   Severity, TriageCounts, Vulnerability,
