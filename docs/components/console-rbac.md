@@ -14,7 +14,9 @@ dashboards with a role (schema 26).
 `rules.write` (Operator, Admin; global; schema 41) lets a user check, save and
 delete draft rules in the site's own rule sets; publishing stays with
 `rules.upload`. `rules.read` stays Admin-only, so listing drafts needs
-`rules.write` too.
+`rules.write` too; but `rules.upload` also reads the rule-set list, bundle
+history, coverage and the ATT&CK catalog (user, 2026-10-15), so operators
+see what they publish and switch.
 `cases.read` (Analyst, Admin; schema 34) and `cases.manage` (Analyst, Admin;
 schema 35) are agent-scoped too: a scoped binding grants them for its asset
 groups, and cases show only the items those groups cover (see

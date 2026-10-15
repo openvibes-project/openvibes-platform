@@ -2463,19 +2463,10 @@ pub(crate) async fn authenticated_rule_sets(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
 ) -> Response {
-    let (scope, actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::RulesRead, false).await
-        {
-            Ok(value) => value,
-            Err(response) => return response,
-        };
-    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
-        return problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Access is not available",
-        ));
-    }
+    let actor = match crate::rule_assignment::rules_reader(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
     let client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),
@@ -2523,19 +2514,10 @@ pub(crate) async fn authenticated_rule_bundles(
     Path(rule_set_id): Path<String>,
 ) -> Response {
     use chrono::SecondsFormat;
-    let (scope, actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::RulesRead, false).await
-        {
-            Ok(value) => value,
-            Err(response) => return response,
-        };
-    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
-        return problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Access is not available",
-        ));
-    }
+    let actor = match crate::rule_assignment::rules_reader(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
     let client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),

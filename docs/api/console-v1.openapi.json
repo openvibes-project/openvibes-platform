@@ -6328,7 +6328,7 @@
             }
           },
           "403": {
-            "description": "Global rules.read needed",
+            "description": "Global rules.read or rules.upload needed",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8881,16 +8881,30 @@
         "description": "An asset group an override can name.",
         "required": [
           "asset_group_id",
-          "name"
+          "name",
+          "selectors",
+          "hosts"
         ],
         "properties": {
           "asset_group_id": {
             "type": "string",
             "description": "The group."
           },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Linux hosts it matches."
+          },
           "name": {
             "type": "string",
             "description": "Its name."
+          },
+          "selectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Its selectors, `key=value`."
           }
         }
       },
@@ -11682,12 +11696,24 @@
         "required": [
           "rule_set_id",
           "enabled",
-          "source"
+          "source",
+          "published"
         ],
         "properties": {
           "enabled": {
             "type": "boolean",
             "description": "Whether the host runs it."
+          },
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The group that decided it (the first by name when several agree);\nnull when the default did."
+          },
+          "published": {
+            "type": "boolean",
+            "description": "False until a live bundle is published (\"waits until published\")."
           },
           "rule_set_id": {
             "type": "string",
@@ -11706,6 +11732,20 @@
           "items"
         ],
         "properties": {
+          "hardening_facts": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The hardening collector's outcome in the host's latest health report:\n`ok`, or an error code such as `not_found` (the root-facts helper's\nfile is stale or malformed); null without one."
+          },
+          "hardening_facts_ok_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 time of the last stored report whose hardening outcome was\n`ok`; null when none was since enrollment."
+          },
           "items": {
             "type": "array",
             "items": {
@@ -12619,6 +12659,8 @@
           "rule_set_id",
           "default_enabled",
           "published",
+          "hosts_on",
+          "hosts_off",
           "groups"
         ],
         "properties": {
@@ -12632,6 +12674,16 @@
               "$ref": "#/components/schemas/RuleSetGroupOverrideView"
             },
             "description": "Overrides, by group name."
+          },
+          "hosts_off": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Linux hosts that do not."
+          },
+          "hosts_on": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Linux hosts that run it now (an active agent that reported\nos-release)."
           },
           "published": {
             "type": "boolean",

@@ -1,8 +1,9 @@
 //! `/api/v1/rule-set-assignments`: the per-group switches of the project's
 //! assignable rule sets (spec 2026-10-14). Reading needs `rules.read` or
 //! `rules.upload` (operators hold only the latter and must see the groups
-//! to add an override), changing needs `rules.upload`, all global; one
-//! host's state needs `agents.read` within the caller's scope.
+//! to add an override), as do the rule-set list, bundle history, coverage
+//! and ATT&CK catalog (`rules_reader`); changing needs `rules.upload`, all
+//! global; one host's state needs `agents.read` within the caller's scope.
 
 use axum::{
     Json,
@@ -40,6 +41,11 @@ pub struct RuleSetAssignmentView {
     pub default_enabled: bool,
     /// False until a live bundle is published ("not available yet").
     pub published: bool,
+    /// Linux hosts that run it now (an active agent that reported
+    /// os-release).
+    pub hosts_on: i64,
+    /// Linux hosts that do not.
+    pub hosts_off: i64,
     /// Overrides, by group name.
     pub groups: Vec<RuleSetGroupOverrideView>,
 }
@@ -51,6 +57,10 @@ pub struct AssignableGroupView {
     pub asset_group_id: String,
     /// Its name.
     pub name: String,
+    /// Its selectors, `key=value`.
+    pub selectors: Vec<String>,
+    /// Linux hosts it matches.
+    pub hosts: i64,
 }
 
 /// Every assignable set, and the groups an override can name.
@@ -87,6 +97,11 @@ pub struct HostRuleSetAssignmentView {
     pub enabled: bool,
     /// `default` or `group`.
     pub source: String,
+    /// The group that decided it (the first by name when several agree);
+    /// null when the default did.
+    pub group: Option<String>,
+    /// False until a live bundle is published ("waits until published").
+    pub published: bool,
 }
 
 /// Every assignable set's state on one host.
@@ -94,6 +109,13 @@ pub struct HostRuleSetAssignmentView {
 pub struct HostRuleSetAssignmentsView {
     /// The sets, by id.
     pub items: Vec<HostRuleSetAssignmentView>,
+    /// The hardening collector's outcome in the host's latest health report:
+    /// `ok`, or an error code such as `not_found` (the root-facts helper's
+    /// file is stale or malformed); null without one.
+    pub hardening_facts: Option<String>,
+    /// RFC 3339 time of the last stored report whose hardening outcome was
+    /// `ok`; null when none was since enrollment.
+    pub hardening_facts_ok_at: Option<String>,
 }
 
 fn forbidden() -> Response {
@@ -109,6 +131,8 @@ fn view(assignment: store::Assignment) -> RuleSetAssignmentView {
         rule_set_id: assignment.rule_set_id,
         default_enabled: assignment.default_enabled,
         published: assignment.published,
+        hosts_on: assignment.hosts_on,
+        hosts_off: assignment.hosts_off,
         groups: assignment
             .groups
             .into_iter()
@@ -130,11 +154,17 @@ async fn writer(state: &AuthHttpState, headers: &HeaderMap) -> Result<String, Re
     }
 }
 
-/// Passes callers holding `rules.read` or `rules.upload` globally.
-async fn reader(state: &AuthHttpState, headers: &HeaderMap) -> Result<(), Response> {
+/// The caller's user id when they hold `rules.read` or `rules.upload`
+/// globally: reading the switches, and (user, 2026-10-15) the rule-set list,
+/// bundle history, coverage and the ATT&CK catalog, so operators see what
+/// they publish and switch.
+pub(crate) async fn rules_reader(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+) -> Result<String, Response> {
     for permission in [Permission::RulesRead, Permission::RulesUpload] {
         match authenticated_permission(state, headers, permission, false).await {
-            Ok((AgentScope::Global, _)) => return Ok(()),
+            Ok((AgentScope::Global, actor)) => return Ok(actor),
             Ok(_) => {}
             Err(response) if response.status() == StatusCode::FORBIDDEN => {}
             Err(response) => return Err(response),
@@ -176,7 +206,7 @@ pub(crate) async fn list_assignments(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(response) = reader(&state, &headers).await {
+    if let Err(response) = rules_reader(&state, &headers).await {
         return response;
     }
     let Ok(client) = state.pool.get().await else {
@@ -192,6 +222,8 @@ pub(crate) async fn list_assignments(
                     .map(|g| AssignableGroupView {
                         asset_group_id: g.asset_group_id,
                         name: g.name,
+                        selectors: g.selectors,
+                        hosts: g.hosts,
                     })
                     .collect(),
             })
@@ -318,28 +350,39 @@ pub(crate) async fn host_assignments(
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    match store::for_agent(&client, &scope, &agent_id).await {
-        Ok(Some(sets)) => no_store(
-            Json(HostRuleSetAssignmentsView {
-                items: sets
-                    .into_iter()
-                    .map(|set| HostRuleSetAssignmentView {
-                        rule_set_id: set.rule_set_id,
-                        enabled: set.enabled,
-                        source: match set.source {
-                            store::Source::Default => "default",
-                            store::Source::Group => "group",
-                        }
-                        .to_owned(),
-                    })
-                    .collect(),
-            })
-            .into_response(),
-        ),
-        Ok(None) => problem_response(ProblemDetails::not_found(
-            "agent_not_found",
-            "Agent not found",
-        )),
-        Err(_) => unavailable_auth(),
-    }
+    let sets = match store::for_agent(&client, &scope, &agent_id).await {
+        Ok(Some(sets)) => sets,
+        Ok(None) => {
+            return problem_response(ProblemDetails::not_found(
+                "agent_not_found",
+                "Agent not found",
+            ));
+        }
+        Err(_) => return unavailable_auth(),
+    };
+    let Ok((hardening_facts, ok_at)) = store::hardening_facts(&client, &agent_id).await else {
+        return unavailable_auth();
+    };
+    no_store(
+        Json(HostRuleSetAssignmentsView {
+            items: sets
+                .into_iter()
+                .map(|set| HostRuleSetAssignmentView {
+                    rule_set_id: set.rule_set_id,
+                    enabled: set.enabled,
+                    source: match set.source {
+                        store::Source::Default => "default",
+                        store::Source::Group => "group",
+                    }
+                    .to_owned(),
+                    group: set.group,
+                    published: set.published,
+                })
+                .collect(),
+            hardening_facts,
+            hardening_facts_ok_at: ok_at
+                .map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+        })
+        .into_response(),
+    )
 }

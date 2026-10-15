@@ -71,7 +71,10 @@ the first by name when several agree, and whether the set is published),
 `rules.assignment.change` (actor: the console user's id, shown by display
 name; `rule_set_id`, `asset_group_id`,
 `asset_group_name`, `old`, `new`; `null` for "default" or "no override");
-setting the current value writes nothing.
+setting the current value writes nothing. `overview` counts with one CTE
+(`FLEET`). `HOST_STATE` returns the host's on and off group ids, so
+distribution never reads group names. `hardening_facts(agent)` reads the
+outcome from `agents.health` and `agents.hardening_facts_ok_at` (schema 50).
 
 `assigned(agent, set)` (distribution) and `for_agent(scope, agent)` (the
 console's host view, `None` outside the caller's scope) share one SQL
@@ -94,16 +97,32 @@ All answers carry `Cache-Control: no-store`; errors are
 | `GET /api/v1/agents/{agent_id}/rule-set-assignments` | `agents.read` (scoped) | none | `HostRuleSetAssignmentsView` |
 
 Shapes: `RuleSetAssignmentsView { items: [RuleSetAssignmentView],
-asset_groups: [{asset_group_id, name}] }`; `RuleSetAssignmentView
-{ rule_set_id, default_enabled, published, groups: [{asset_group_id, name,
-enabled}] }`; `HostRuleSetAssignmentsView { items: [{rule_set_id, enabled,
-source: "default"|"group"}] }`. Errors: 400 `invalid_request` (bad body),
+asset_groups: [{asset_group_id, name, selectors: ["key=value"], hosts}] }`;
+`RuleSetAssignmentView { rule_set_id, default_enabled, published, hosts_on,
+hosts_off, groups: [{asset_group_id, name, enabled}] }`;
+`HostRuleSetAssignmentsView { items: [{rule_set_id, enabled, source:
+"default"|"group", group, published}], hardening_facts,
+hardening_facts_ok_at }`. Host counts are
+**Linux hosts**: active agents (stale included; revoked and imported not)
+whose inventory reported os-release (`os_id`); `hosts` is how many a group
+matches, `hosts_on`/`hosts_off` how many run the set or not. `group` names
+the group that decided the host's state (the first by name when several
+agree; `null` for the default). `hardening_facts` is the hardening
+collector's outcome in the host's latest health report (`ok`, `not_found`
+when the root-facts helper's file is stale or malformed, `invalid_data`),
+`null` without one; the agent reports nothing when the helper's file is
+missing. `hardening_facts_ok_at` is when a stored report last had it `ok`
+(schema 50, set by ingest), `null` when none did since enrollment. `group`
+is returned to every caller who may see the host, also when the group is
+outside their scope (user, 2026-10-15). Errors: 400 `invalid_request` (bad body),
 403 `permission_denied`, 404 `rule_set_not_assignable`,
 `asset_group_not_found`, `agent_not_found`, 503.
 
 Reading needs `rules.read` (admin) or `rules.upload` (operator, admin),
 changing `rules.upload`, all global; an analyst or viewer holds neither and
-gets 403. The list carries every asset group, so an operator (without
+gets 403. The same either-permission check (`rules_reader`) guards `GET
+/api/v1/rule-sets`, its bundle history, `GET /api/v1/rules/coverage` and
+`GET /api/v1/attack` (user, 2026-10-15). The list carries every asset group, so an operator (without
 `rules.read` or `rbac.read`) can add an override; operators therefore see
 every group's name. Writes are absolute values (no `If-Match`):
 a repeated write changes nothing and is not audited. The audit row's actor
