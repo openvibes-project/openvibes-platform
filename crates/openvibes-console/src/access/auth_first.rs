@@ -16,10 +16,10 @@ use chrono::Utc;
 use platform_store::console_auth;
 
 use crate::{
+    access::auth::{PresentedCredentials, presented_credentials, session_digest},
     access::guard::{
         authentication_required, checked_session, password_change_required, unavailable_auth,
     },
-    auth::{PresentedCredentials, presented_credentials, session_digest},
     http::AuthHttpState,
 };
 

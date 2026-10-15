@@ -17,7 +17,7 @@ use super::{
     middleware::{authenticated_host_only, loopback_host_only, with_request_limits},
     routes::{api_router, auth_not_found, authenticated_api_router, authenticated_auth_router},
 };
-use crate::{config::valid_public_origin, router::dummy_password_phc};
+use crate::{access::login::dummy_password_phc, config::valid_public_origin};
 
 /// Process-readiness state shared with the loopback-only health router.
 #[derive(Clone, Debug, Default)]
@@ -192,7 +192,7 @@ pub(crate) fn authenticated_router_with_assistant(
             authenticated_api_router()
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
-                    crate::auth_first::authenticate_first,
+                    crate::access::auth_first::authenticate_first,
                 ))
                 .with_state(state.clone()),
         )

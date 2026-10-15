@@ -13,16 +13,17 @@ use platform_store::{console_auth, console_read::AgentScope};
 use ring::rand::{SecureRandom, SystemRandom};
 
 use crate::{
-    access::guard::{
-        authenticated_permission, authentication_required, checked_session, unavailable_auth,
-    },
-    auth::{
+    access::auth::{
         NormalizedPassword, PresentedCredentials, hash_password, presented_credentials,
         verify_password,
     },
+    access::guard::{
+        authenticated_permission, authentication_required, checked_session, unavailable_auth,
+    },
+    access::login::bounded_user_agent,
+    access::throttle::{ACCOUNT_FAILURE_LIMIT, account_throttle_bucket},
     http::AuthHttpState,
     http::problem::{ProblemDetails, problem_response},
-    router::{ACCOUNT_FAILURE_LIMIT, account_throttle_bucket, bounded_user_agent},
 };
 
 /// Letters and digits that cannot be mistaken for one another when read
@@ -393,7 +394,7 @@ mod tests {
         assert_eq!(a.len(), 23, "{a}");
         assert!(a.split('-').all(|group| group.len() == 5));
         assert!(!a.chars().any(|c| "0o1liI".contains(c)), "{a}");
-        assert!(crate::auth::NormalizedPassword::new(&a).is_ok());
+        assert!(crate::access::auth::NormalizedPassword::new(&a).is_ok());
     }
 
     #[test]

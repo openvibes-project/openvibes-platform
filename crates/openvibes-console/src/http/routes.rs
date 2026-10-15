@@ -6,6 +6,10 @@ use super::{
     AuthHttpState,
     problem::{ProblemDetails, problem_response},
 };
+use crate::access::{
+    asset_groups::*, bindings::*, inventory::*, login::*, service_accounts::*, service_tokens::*,
+    session::*, tags::*,
+};
 use crate::router::*;
 
 pub(super) fn api_router() -> Router {
@@ -20,7 +24,7 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         .route("/v1/session", get(authenticated_session))
         .route(
             "/v1/session/password",
-            axum::routing::post(crate::users::change_password),
+            axum::routing::post(crate::access::users::change_password),
         )
         .route("/v1/assistant/status", get(authenticated_assistant_status))
         .route(
@@ -177,7 +181,7 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route(
             "/v1/access-control/users",
-            axum::routing::post(crate::users::create_user),
+            axum::routing::post(crate::access::users::create_user),
         )
         .route(
             "/v1/access-control/bindings/{binding_id}",

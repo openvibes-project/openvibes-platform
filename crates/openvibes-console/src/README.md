@@ -17,8 +17,6 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `alarm_suppressions.rs` | Alarm suppressions: list, create, remove. |
 | `assistant.rs` | The assistant: its runtime and the lookups it may run. |
 | `assistant_internet.rs` | The administrator's switch for the assistant's internet lookups. |
-| `auth.rs` | Session, password and CSRF primitives. |
-| `auth_first.rs` | Authenticates every `/api` request before its handler runs. |
 | `bulk.rs` | Bulk triage of alarms, findings or vulnerabilities. |
 | `cases.rs` | Cases: one investigation's record. |
 | `coverage.rs` | MITRE ATT&CK coverage of the published rules. |
@@ -28,7 +26,6 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `metrics.rs` | Count history per day for the overview. |
 | `ports.rs` | Open ports and running services, per host and fleet-wide. |
 | `presence.rs` | Live agent presence as a server-sent event stream. |
-| `rbac.rs` | Built-in roles, permissions and asset-scope resolution. |
 | `rule_assignment.rs` | Which asset groups run each assignable rule set. |
 | `rule_drafts.rs` | Draft rules for the site's own rule sets. |
 | `rule_test.rs` | Tests a rule against one host's facts. |
@@ -36,8 +33,7 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `site_fleet.rs` | Which hosts run the site's own rule sets, and how current they are. |
 | `software.rs` | Installed software, per host and fleet-wide. |
 | `triage_detail.rs` | Triage in the detail view and the History tab. |
-| `users.rs` | Console users and setting one's own password. |
-| `access/` | Who may do what; `guard.rs` holds the checks every area runs. |
+| `access/` | Who may do what: sign-in, roles, users, service accounts, role bindings, asset groups, host tags. |
 | `assistant/` | The assistant's tests against a database and a fake fetch socket. |
 | `bin/` | Tools built with the crate. |
 | `http/` | Router assembly, route table, middleware, web app files, problems, OpenAPI. |

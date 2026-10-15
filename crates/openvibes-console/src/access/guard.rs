@@ -32,7 +32,7 @@ pub(crate) async fn authenticated_permission(
     permission: crate::Permission,
     csrf_required: bool,
 ) -> Result<(platform_store::console_read::AgentScope, String), Response> {
-    use crate::auth::{PresentedCredentials, presented_credentials, session_digest};
+    use crate::access::auth::{PresentedCredentials, presented_credentials, session_digest};
     use platform_store::console_read::AgentScope;
 
     let now = Utc::now();
@@ -123,7 +123,7 @@ pub(crate) async fn session_user(
     headers: &HeaderMap,
     csrf_required: bool,
 ) -> Result<SessionUser, Response> {
-    use crate::auth::{PresentedCredentials, presented_credentials};
+    use crate::access::auth::{PresentedCredentials, presented_credentials};
     match presented_credentials(headers) {
         Ok(PresentedCredentials::Session(secret)) => {
             session_capabilities(state, headers, secret.expose_secret(), csrf_required).await
@@ -146,7 +146,7 @@ pub(crate) async fn checked_session(
     secret: &str,
     csrf_required: bool,
 ) -> Result<(console_auth::Session, [u8; 32]), Response> {
-    use crate::auth::{session_csrf, session_digest};
+    use crate::access::auth::{session_csrf, session_digest};
     let now = Utc::now();
     let digest = session_digest(secret);
     let csrf = session_csrf(secret).0;
