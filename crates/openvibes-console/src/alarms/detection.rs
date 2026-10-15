@@ -87,7 +87,7 @@ pub struct HistoricalRuleView {
     /// Program prefilter, if present.
     pub programs: Option<Vec<String>>,
     /// MITRE ATT&CK pairs (P18); empty when the rule has none.
-    pub attack: Vec<crate::coverage::AttackPairView>,
+    pub attack: Vec<crate::rules::coverage::AttackPairView>,
 }
 fn rule_view(rule: Rule) -> HistoricalRuleView {
     HistoricalRuleView {
@@ -107,7 +107,7 @@ fn rule_view(rule: Rule) -> HistoricalRuleView {
             "process_event"
         }
         .into(),
-        attack: crate::coverage::pair_views(rule.attack.as_deref()),
+        attack: crate::rules::coverage::pair_views(rule.attack.as_deref()),
         programs: rule.programs,
     }
 }

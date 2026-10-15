@@ -14,21 +14,16 @@ mod access;
 mod alarms;
 mod api;
 mod assistant;
-mod assistant_internet;
 mod audit;
 mod cases;
 mod compliance;
 mod config;
-mod coverage;
 mod dashboards;
 mod fetch_client;
 mod hosts;
 mod http;
-mod metrics;
 mod router;
-mod rule_assignment;
-mod rule_drafts;
-mod rule_test;
+mod rules;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;
@@ -55,12 +50,10 @@ pub use access::{
     ServiceTokenView, SessionPrincipal, SessionResponse,
 };
 pub use api::{
-    AssistantInternet, AssistantInternetTest, CursorPage, CursorPagination, DEFAULT_PAGE_SIZE,
-    DashboardPage, DashboardView, HomeDashboard, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError,
-    Permission, PermissionScope, RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage,
-    RuleSetView, SaveDashboardRequest, ShareDashboardRequest, SignedRuleEnvelopeRequest,
-    UpdateAssistantInternetRequest,
+    CursorPage, CursorPagination, DEFAULT_PAGE_SIZE, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE,
+    PaginationError, Permission, PermissionScope,
 };
+pub use assistant::{AssistantInternet, AssistantInternetTest, UpdateAssistantInternetRequest};
 pub use audit::{
     AuditEventPage, AuditEventView, AuditRetentionPolicy, UpdateAuditRetentionRequest,
 };
@@ -71,6 +64,9 @@ pub use compliance::{
     FindingTriageCounts, FindingTriageView, FindingView, Severity, UpdateFindingTriageRequest,
 };
 pub use config::{AgentInstallConfig, ConsoleConfig, ConsoleTransportMode, load_config};
+pub use dashboards::{
+    DashboardPage, DashboardView, HomeDashboard, SaveDashboardRequest, ShareDashboardRequest,
+};
 pub use hosts::{
     AgentAlarmsView, AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus,
     AgentSummary, AgentView, CertificatePage, CertificateView, CreateEnrollmentTokenRequest,
@@ -83,6 +79,10 @@ pub use http::{
     Readiness, authenticated_router, authenticated_router_for_hosts,
     authenticated_router_with_agent_install, authenticated_router_with_fetch,
     authenticated_router_with_signer, development_router, health_router, public_router,
+};
+pub use rules::{
+    RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage, RuleSetView,
+    SignedRuleEnvelopeRequest,
 };
 pub use server::{TrustedPeer, run, serve};
 pub use vulnerabilities::{

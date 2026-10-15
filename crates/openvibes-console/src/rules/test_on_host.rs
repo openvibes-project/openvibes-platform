@@ -36,8 +36,10 @@ use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
     http::AuthHttpState,
     http::problem::problem_response,
-    rule_drafts::{RuleDraftInput, rule_json},
 };
+
+use super::draft_check::rule_json;
+use super::draft_types::RuleDraftInput;
 
 /// The host and rule to test.
 #[derive(Deserialize, ToSchema)]
@@ -239,8 +241,8 @@ fn run(
 
 #[utoipa::path(post, path = "/api/v1/rule-drafts/{rule_set_id}/{rule_id}/test", tag = "rules",
     params(("rule_set_id" = String, Path), ("rule_id" = String, Path)),
-    request_body = crate::rule_test::RuleTestInput,
-    responses((status = 200, description = "The rule's result on the host", body = crate::rule_test::RuleTestResult),
+    request_body = crate::rules::test_on_host::RuleTestInput,
+    responses((status = 200, description = "The rule's result on the host", body = crate::rules::test_on_host::RuleTestResult),
         (status = 404, description = "Not a site rule set, or no such host", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 422, description = "The rule does not pass the agent's checks, or is an alarm rule", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn test_rule(
@@ -281,7 +283,7 @@ pub(crate) async fn test_rule(
             "Alarm rules run on process starts, which the platform doesn't hold; test them on a host",
         ));
     }
-    if !crate::rule_drafts::check(&rule_set_id, &rule_id, &request.rule, &Default::default())
+    if !super::draft_check::check(&rule_set_id, &rule_id, &request.rule, &Default::default())
         .is_empty()
     {
         return problem_response(ProblemDetails::new(

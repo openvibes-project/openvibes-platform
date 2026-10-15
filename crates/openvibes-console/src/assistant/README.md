@@ -1,9 +1,16 @@
 # src/assistant
 
-The assistant's tests that need a database or a fake fetch socket; the assistant itself is `../assistant.rs` for now.
+The assistant: the chat endpoints, its runtime and the lookups it may run within the asker's permissions, and the administrator's switch for internet lookups.
 
 | File | What it does |
 |---|---|
+| `mod.rs` | The module list and the names other areas use. |
+| `chat.rs` | The status and message endpoints. |
+| `runtime.rs` | The runtime: backend probe, request capacity per user, and the leased chat backend. |
+| `lookups.rs` | Runs each lookup offered to the model within the user's console permissions. |
+| `types.rs` | Request and response types of the chat endpoints. |
+| `internet.rs` | The administrator's switch for internet lookups: read, update, test connection. |
+| `internet_types.rs` | Request and response types of the internet setting. |
 | `internet_tests.rs` | Internet lookups with a fake fetch socket: permissions, off switch, audit row, hourly limit, dead socket. |
 | `lookup_tests.rs` | Every lookup offered to the model, against PostgreSQL, within the user's permissions and scopes. |
 

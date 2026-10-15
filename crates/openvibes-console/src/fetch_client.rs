@@ -139,7 +139,7 @@ impl Internet {
             ),
             _ => return Err(LookupError::Unknown),
         };
-        let level = crate::assistant_internet::current_level(pool).await;
+        let level = crate::assistant::internet::current_level(pool).await;
         if level == 0 || (kind == "search" && level < 2) {
             return Ok(note(NOTE_OFF));
         }

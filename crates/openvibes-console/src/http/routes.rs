@@ -10,10 +10,11 @@ use crate::access::{
     asset_groups::*, bindings::*, inventory::*, login::*, service_accounts::*, service_tokens::*,
     session::*, tags::*,
 };
+use crate::assistant::chat::*;
 use crate::audit::{events::*, export::*, retention::*};
 use crate::compliance::{group_triage::*, groups::*, history::*, latest::*, triage::*};
 use crate::hosts::{agents::*, certificates::*, enrollment::*, install::*};
-use crate::router::*;
+use crate::rules::bundles::*;
 use crate::vulnerabilities::{advisory::*, list::*, summary::*};
 
 pub(super) fn api_router() -> Router {
@@ -109,12 +110,12 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route(
             "/v1/assistant-internet",
-            get(crate::assistant_internet::get_assistant_internet)
-                .put(crate::assistant_internet::update_assistant_internet),
+            get(crate::assistant::internet::get_assistant_internet)
+                .put(crate::assistant::internet::update_assistant_internet),
         )
         .route(
             "/v1/assistant-internet/test",
-            axum::routing::post(crate::assistant_internet::test_assistant_internet),
+            axum::routing::post(crate::assistant::internet::test_assistant_internet),
         )
         .route("/v1/audit-events", get(authenticated_audit_events))
         .route("/v1/audit-export.csv", get(authenticated_audit_export))
@@ -154,20 +155,20 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route(
             "/v1/rule-set-assignments",
-            get(crate::rule_assignment::list_assignments),
+            get(crate::rules::assignment::list_assignments),
         )
         .route(
             "/v1/rule-set-assignments/{rule_set_id}",
-            axum::routing::put(crate::rule_assignment::set_default),
+            axum::routing::put(crate::rules::assignment::set_default),
         )
         .route(
             "/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}",
-            axum::routing::put(crate::rule_assignment::set_group)
-                .delete(crate::rule_assignment::clear_group),
+            axum::routing::put(crate::rules::assignment::set_group)
+                .delete(crate::rules::assignment::clear_group),
         )
         .route(
             "/v1/agents/{agent_id}/rule-set-assignments",
-            get(crate::rule_assignment::host_assignments),
+            get(crate::rules::assignment::host_assignments),
         )
         .route(
             "/v1/rule-bundles/preview",
@@ -199,28 +200,35 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route(
             "/v1/dashboards",
-            get(crate::dashboards::list_dashboards).post(crate::dashboards::create_dashboard),
+            get(crate::dashboards::dashboard::list_dashboards)
+                .post(crate::dashboards::dashboard::create_dashboard),
         )
         .route(
             "/v1/dashboards/{dashboard_id}",
-            get(crate::dashboards::get_dashboard)
-                .put(crate::dashboards::update_dashboard)
-                .delete(crate::dashboards::delete_dashboard),
+            get(crate::dashboards::dashboard::get_dashboard)
+                .put(crate::dashboards::dashboard::update_dashboard)
+                .delete(crate::dashboards::dashboard::delete_dashboard),
         )
         .route(
             "/v1/dashboards/{dashboard_id}/sharing",
-            axum::routing::put(crate::dashboards::share_dashboard),
+            axum::routing::put(crate::dashboards::dashboard::share_dashboard),
         )
         .route(
             "/v1/me/home",
-            get(crate::dashboards::get_home).put(crate::dashboards::set_home),
+            get(crate::dashboards::home::get_home).put(crate::dashboards::home::set_home),
         )
         .route(
             "/v1/agents/{agent_id}/packages",
             get(crate::hosts::software::list_host_packages),
         )
-        .route("/v1/metrics/history", get(crate::metrics::history))
-        .route("/v1/metrics/top-hosts", get(crate::metrics::top_hosts))
+        .route(
+            "/v1/metrics/history",
+            get(crate::dashboards::metrics::history),
+        )
+        .route(
+            "/v1/metrics/top-hosts",
+            get(crate::dashboards::metrics::top_hosts),
+        )
         .route("/v1/software", get(crate::hosts::software::list_software))
         .route(
             "/v1/software/{manager}/{name}",
@@ -311,28 +319,31 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/vulnerabilities/advisories/{advisory_id}/hosts/{agent_id}/triage",
             axum::routing::put(crate::compliance::triage_detail::update_vulnerability_triage),
         )
-        .route("/v1/rules/coverage", get(crate::coverage::rule_coverage))
-        .route("/v1/attack", get(crate::coverage::attack_catalog))
+        .route(
+            "/v1/rules/coverage",
+            get(crate::rules::coverage::rule_coverage),
+        )
+        .route("/v1/attack", get(crate::rules::coverage::attack_catalog))
         .route(
             "/v1/rule-drafts/{rule_set_id}",
-            get(crate::rule_drafts::list_drafts),
+            get(crate::rules::drafts::list_drafts),
         )
         .route(
             "/v1/rule-drafts/{rule_set_id}/{rule_id}",
-            axum::routing::put(crate::rule_drafts::save_draft)
-                .delete(crate::rule_drafts::delete_draft),
+            axum::routing::put(crate::rules::drafts::save_draft)
+                .delete(crate::rules::drafts::delete_draft),
         )
         .route(
             "/v1/rule-drafts/{rule_set_id}/changes",
-            get(crate::rule_drafts::draft_changes),
+            get(crate::rules::draft_publish::draft_changes),
         )
         .route(
             "/v1/rule-drafts/{rule_set_id}/publish",
-            axum::routing::post(crate::rule_drafts::publish_drafts),
+            axum::routing::post(crate::rules::draft_publish::publish_drafts),
         )
         .route(
             "/v1/rule-drafts/{rule_set_id}/{rule_id}/check",
-            axum::routing::post(crate::rule_drafts::check_draft),
+            axum::routing::post(crate::rules::drafts::check_draft),
         )
         .route(
             "/v1/site-rules/fleet",
@@ -340,7 +351,7 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route(
             "/v1/rule-drafts/{rule_set_id}/{rule_id}/test",
-            axum::routing::post(crate::rule_test::test_rule),
+            axum::routing::post(crate::rules::test_on_host::test_rule),
         )
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)

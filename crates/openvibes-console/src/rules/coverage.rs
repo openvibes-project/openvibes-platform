@@ -38,8 +38,9 @@ struct CatalogTactic {
 fn catalog() -> &'static (Catalog, HashMap<String, usize>) {
     static CATALOG: OnceLock<(Catalog, HashMap<String, usize>)> = OnceLock::new();
     CATALOG.get_or_init(|| {
-        let catalog: Catalog = serde_json::from_str(include_str!("../data/attack-enterprise.json"))
-            .expect("the bundled ATT&CK data file parses");
+        let catalog: Catalog =
+            serde_json::from_str(include_str!("../../data/attack-enterprise.json"))
+                .expect("the bundled ATT&CK data file parses");
         let index = catalog
             .techniques
             .iter()
@@ -278,12 +279,12 @@ async fn global_rules_read(
     state: &AuthHttpState,
     headers: &HeaderMap,
 ) -> Result<platform_store::Client, Response> {
-    crate::rule_assignment::rules_reader(state, headers).await?;
+    super::assignment::rules_reader(state, headers).await?;
     state.pool.get().await.map_err(|_| unavailable_auth())
 }
 
 #[utoipa::path(get, path = "/api/v1/attack", tag = "rules",
-    responses((status = 200, description = "The bundled MITRE ATT&CK release", body = crate::coverage::AttackCatalog)))]
+    responses((status = 200, description = "The bundled MITRE ATT&CK release", body = crate::rules::coverage::AttackCatalog)))]
 pub(crate) async fn attack_catalog(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -302,7 +303,7 @@ pub(crate) async fn attack_catalog(
 }
 
 #[utoipa::path(get, path = "/api/v1/rules/coverage", tag = "rules",
-    responses((status = 200, description = "Which ATT&CK tactics and techniques the rules cover", body = crate::coverage::AttackCoverage),
+    responses((status = 200, description = "Which ATT&CK tactics and techniques the rules cover", body = crate::rules::coverage::AttackCoverage),
         (status = 403, description = "Global rules.read or rules.upload needed", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn rule_coverage(
     State(state): State<AuthHttpState>,

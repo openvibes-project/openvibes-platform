@@ -324,7 +324,7 @@ stay in the low thousands.
   (`alarm.suppression.created` / `.removed`).
 - Alarms are not offered to the assistant in P14.
 
-Draft site rules (`rule_drafts.rs`; need `rules.write`, global scope; the
+Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; need `rules.write`, global scope; the
 `site` findings set and the `site-alarms` alarm set only, else 404):
 
 - `GET /api/v1/rules/coverage` (global `rules.read` or `rules.upload`): MITRE ATT&CK

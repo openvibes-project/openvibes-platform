@@ -160,7 +160,7 @@ async fn writer(state: &AuthHttpState, headers: &HeaderMap) -> Result<String, Re
 /// globally: reading the switches, and (user, 2026-10-15) the rule-set list,
 /// bundle history, coverage and the ATT&CK catalog, so operators see what
 /// they publish and switch.
-pub(crate) async fn rules_reader(
+pub(super) async fn rules_reader(
     state: &AuthHttpState,
     headers: &HeaderMap,
 ) -> Result<String, Response> {
