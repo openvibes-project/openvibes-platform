@@ -393,3 +393,29 @@ pub async fn grants(client: &Client, principal: Principal<'_>) -> Result<Vec<Gra
         })
         .collect())
 }
+
+/// Who may be assigned a triaged item (alarm, finding, vulnerability): an
+/// enabled user by username holding `permission` (the area's `*.triage`)
+/// through an active role that reaches some host, or an Administrator.
+/// Returns (user id, username).
+pub(crate) async fn assignee(
+    tx: &tokio_postgres::Transaction<'_>,
+    username: &str,
+    permission: &str,
+) -> Result<Option<(String, String)>, StoreError> {
+    Ok(tx
+        .query_opt(
+            "SELECT u.user_id::text, u.username FROM console_users u
+             WHERE u.username = $1 AND u.enabled AND EXISTS (
+                SELECT 1 FROM console_role_bindings b JOIN console_roles r USING (role_id)
+                WHERE b.user_id = u.user_id AND b.revoked_at IS NULL
+                  AND (r.role_id = 'admin' OR (
+                    EXISTS (SELECT 1 FROM console_role_permissions rp
+                            WHERE rp.role_id = r.role_id AND rp.permission_id = $2)
+                    AND (r.all_hosts OR EXISTS (SELECT 1 FROM console_role_groups g
+                                                WHERE g.role_id = r.role_id)))))",
+            &[&username, &permission],
+        )
+        .await?
+        .map(|row| (row.get(0), row.get(1))))
+}

@@ -7,7 +7,8 @@ use chrono::{DateTime, Utc};
 use crate::{
     Client, StoreError,
     console_read::{AgentScope, agent_visibility},
-    console_triage::{assignee, fields_valid, transition_allowed},
+    console_roles::assignee,
+    console_triage::{fields_valid, transition_allowed},
 };
 
 /// One alarm in the list.

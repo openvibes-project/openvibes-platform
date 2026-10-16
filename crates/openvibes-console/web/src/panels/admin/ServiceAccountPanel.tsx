@@ -68,9 +68,8 @@ function ExistingServiceAccount({ id }: { id: string }) {
 function NewServiceAccount() {
   const [name, setName] = useState("");
   const roles = useResource<AccessInventory>("/api/v1/access-control").data?.roles ?? [];
-  const [picked, setRole] = useState<string>();
-  // The first role that is not the Administrator, until one is picked.
-  const role = picked ?? (roles.find((r) => !r.builtin) ?? roles[0])?.role_id ?? "";
+  // No default role: least privilege is a deliberate choice.
+  const [role, setRole] = useState("");
   const [error, setError] = useState<string>();
   return (
     <>
@@ -83,9 +82,9 @@ function NewServiceAccount() {
             (e: unknown) => setError(apiMessage(e, "Could not create the account")));
       }}>
         <label className="field">Name<input className="input" required maxLength={128} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. SIEM export" /></label>
-        <SelectField label="Role"><Select label="Role" value={role} onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.display_name }))} /></SelectField>
+        <SelectField label="Role"><Select label="Role" value={role} placeholder="Choose a role…" onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.display_name }))} /></SelectField>
         {error && <p className="confirm__error" role="alert">{error}</p>}
-        <div><button className="button button--primary" type="submit"><Icon name="plus" size={15} /> Create account</button></div>
+        <div><button className="button button--primary" type="submit" disabled={!role}><Icon name="plus" size={15} /> Create account</button></div>
       </form>
     </>
   );

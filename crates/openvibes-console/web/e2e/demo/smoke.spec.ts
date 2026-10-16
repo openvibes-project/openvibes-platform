@@ -94,6 +94,9 @@ test("a service account is created and issues a token shown once", async ({ page
   await page.goto("/settings?tab=service-accounts");
   await page.getByRole("button", { name: "New account" }).click();
   await page.getByLabel("Name").fill("Backup job");
+  await expect(page.getByRole("button", { name: "Create account" })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Role" }).click();
+  await page.getByRole("option", { name: "Viewer" }).click();
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.locator(".panel-header__title")).toContainText("Backup job");
   await page.getByLabel("Token label").fill("nightly");
@@ -105,6 +108,9 @@ test("revoking a service token asks first (board #85)", async ({ page }) => {
   await page.goto("/settings?tab=service-accounts");
   await page.getByRole("button", { name: "New account" }).click();
   await page.getByLabel("Name").fill("Report job");
+  await expect(page.getByRole("button", { name: "Create account" })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Role" }).click();
+  await page.getByRole("option", { name: "Viewer" }).click();
   await page.getByRole("button", { name: "Create account" }).click();
   await page.getByLabel("Token label").fill("weekly");
   await page.getByRole("button", { name: "Issue" }).click();
@@ -156,6 +162,9 @@ test("an administrator creates a user and sees the one-time password once (board
   await page.getByRole("button", { name: "New user" }).click();
   await page.getByLabel("Username").fill("jdoe");
   await page.getByLabel("Display name").fill("Jane Doe");
+  await expect(page.getByRole("button", { name: "Create user" })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Role" }).click();
+  await page.getByRole("option", { name: "Viewer" }).click();
   await page.getByRole("button", { name: "Create user" }).click();
   await expect(page.locator(".secret")).toContainText("demo1-pass2-word3-onlyx");
   await expect(page.getByText("It is shown only once")).toBeVisible();

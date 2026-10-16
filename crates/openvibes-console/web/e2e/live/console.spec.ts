@@ -355,8 +355,12 @@ test("rule-set switches: a group is added, a failed change keeps the switch and 
   // The Analyst template reads rule sets but holds no switch (a second user, as in the dashboards test).
   const sam = await browser.newPage();
   await signIn(sam, "sam");
-  await sam.goto("/settings?tab=rule-sets&open=rule-set%3Ahardening-linux-l2");
+  // Nothing is published here and sam cannot see where sets run (the
+  // unpublished L2 row comes from there): the list is empty, not refused.
+  await sam.goto("/settings?tab=rule-sets");
   await expect(sam.getByRole("tab", { name: "Rule sets" })).toBeVisible();
+  await expect(sam.getByRole("heading", { name: "No rule sets" })).toBeVisible();
+  await expect(sam.getByText("Access is not available")).toHaveCount(0);
   await expect(sam.getByRole("switch")).toHaveCount(0);
   await sam.close();
 });

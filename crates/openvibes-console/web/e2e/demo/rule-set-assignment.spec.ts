@@ -86,6 +86,8 @@ test("a viewer reads the rule list without its switches, an operator reads the r
   await page.getByRole("menuitemradio", { name: "viewer" }).click();
   await expect(page.getByRole("link", { name: "Coverage" })).toBeVisible();
   await page.goto("/settings?tab=rule-sets&open=rule-set%3Ahardening-linux-l1");
+  await expect(row(page, "hardening-linux-l1")).toBeVisible();
+  await expect(page.getByRole("table", { name: "Rule sets" }).getByRole("columnheader", { name: "Runs on" })).toHaveCount(0);
   await expect(page.locator(".inspector").getByText("Published versions")).toBeVisible();
   await expect(page.locator(".inspector").getByRole("switch", { name: "On for Linux hosts by default" })).toHaveCount(0);
   await page.getByRole("button", { name: "Account" }).click();

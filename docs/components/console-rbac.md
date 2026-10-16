@@ -21,9 +21,14 @@ host groups, or none).
   globally, whatever its stored rows say.
 - Creating a user or a service account checks the role id in the database;
   an unknown one is 400 `unknown_role`.
-- The triage assignee check (alarms, findings, vulnerabilities) accepts an
-  enabled user holding the area's `*.triage` permission through an active
-  role, or an Administrator.
+- The triage assignee check (alarms, findings, vulnerabilities;
+  `console_roles::assignee`) accepts an enabled user holding the area's
+  `*.triage` permission through an active role that reaches some host
+  (all hosts or a group), or an Administrator.
+- The web role pickers (new user, new service account, granting a role)
+  have no default: the submit stays disabled until a role is chosen.
+- Settings › Rule sets fetches where sets run only with
+  `rules.assignment.read`; without it the list has no "Runs on" column.
 - `cases.assign` is checked held-or-not, whatever its reach: the case is
   already limited by the scope of `cases.write`. (Case visibility by items'
   hosts, spec §6, comes in a later step.)

@@ -15,7 +15,7 @@ import { toast } from "../../ui/toast";
 export function UserPanel({ id }: { id: string }) {
   const { can } = useSession();
   const inventory = useResource<AccessInventory>("/api/v1/access-control");
-  const [picked, setRole] = useState<string>();
+  const [role, setRole] = useState("");
   const [group, setGroup] = useState("");
   if (inventory.error) return <div className="panel-body"><ErrorBox error={inventory.error} /></div>;
   const data = inventory.data;
@@ -23,7 +23,6 @@ export function UserPanel({ id }: { id: string }) {
   if (!data || !user) return inventory.loading ? <Loading /> : <div className="panel-body"><Empty title="User not found" /></div>;
   const bindings = data.bindings.filter((binding) => binding.user_id === id);
   const manage = can("access.grant", true);
-  const role = picked ?? (data.roles.find((r) => !r.builtin) ?? data.roles[0])?.role_id ?? "";
   const effective = [...new Set(bindings.flatMap((binding) => data.roles.find((r) => r.role_id === binding.role_id)?.permissions ?? []))].sort((a, b) => a.localeCompare(b));
   return (
     <>
@@ -50,10 +49,10 @@ export function UserPanel({ id }: { id: string }) {
               request("POST", "/api/v1/access-control/bindings", { user_id: id, role_id: role, asset_group_id: group || null })
                 .then(() => { invalidate("/api/v1/access-control"); toast("Role granted"); }, (e: unknown) => toast(apiMessage(e, "Failed"), true));
             }}>
-              <Select label="Role" value={role} onChange={setRole} options={data.roles.map((r) => ({ value: r.role_id, label: r.display_name }))} />
+              <Select label="Role" value={role} placeholder="Choose a role…" onChange={setRole} options={data.roles.map((r) => ({ value: r.role_id, label: r.display_name }))} />
               <div className="grow"><Select label="Scope" value={group} onChange={setGroup}
                 options={[{ value: "", label: "Everywhere" }, ...data.asset_groups.map((g) => ({ value: g.asset_group_id, label: g.name }))]} /></div>
-              <button className="button button--small" type="submit"><Icon name="plus" size={14} /> Grant</button>
+              <button className="button button--small" type="submit" disabled={!role}><Icon name="plus" size={14} /> Grant</button>
             </form>
           )}
         </Section>
@@ -72,8 +71,8 @@ export function NewUser() {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const roles = useResource<AccessInventory>("/api/v1/access-control").data?.roles ?? [];
-  const [picked, setRole] = useState<string>();
-  const role = picked ?? (roles.find((r) => !r.builtin) ?? roles[0])?.role_id ?? "";
+  // No default role: least privilege is a deliberate choice.
+  const [role, setRole] = useState("");
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<CreatedUser>();
@@ -106,9 +105,9 @@ export function NewUser() {
       }}>
         <label className="field">Username<input className="input mono" required maxLength={64} pattern="[A-Za-z0-9._@+\-]+" autoComplete="off" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. jdoe" /></label>
         <label className="field">Display name<input className="input" required maxLength={160} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="e.g. Jane Doe" /></label>
-        <SelectField label="Role"><Select label="Role" value={role} onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.display_name }))} /></SelectField>
+        <SelectField label="Role"><Select label="Role" value={role} placeholder="Choose a role…" onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.display_name }))} /></SelectField>
         {error && <p className="confirm__error" role="alert">{error}</p>}
-        <div><button className="button button--primary" type="submit" disabled={busy}><Icon name="plus" size={15} /> {busy ? "Creating…" : "Create user"}</button></div>
+        <div><button className="button button--primary" type="submit" disabled={busy || !role}><Icon name="plus" size={15} /> {busy ? "Creating…" : "Create user"}</button></div>
       </form>
     </>
   );
