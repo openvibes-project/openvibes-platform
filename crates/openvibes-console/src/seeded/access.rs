@@ -13,7 +13,7 @@ use super::{
 use crate::Permission;
 
 pub(super) async fn access_inventory(headers: HeaderMap) -> Response {
-    let (persona, mode) = match context(&headers, Permission::RbacRead) {
+    let (persona, mode) = match context(&headers, Permission::AccessRead) {
         Ok(context) => context,
         Err(response) => return *response,
     };

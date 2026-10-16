@@ -53,7 +53,7 @@ pub(crate) async fn authenticated_agent_summary(
     use platform_store::console_read::agent_summary_in_scope;
 
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::AgentsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::HostsRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };
@@ -108,7 +108,7 @@ pub(crate) async fn authenticated_agents(
     };
 
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::AgentsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::HostsRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };
@@ -231,7 +231,7 @@ pub(crate) async fn authenticated_agent_detail(
     use platform_store::console_read::{PageLimit, agent_in_scope, certificates_in_scope};
 
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::AgentsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::HostsRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };
@@ -375,13 +375,17 @@ pub(crate) async fn revoke_authenticated_agent(
             "Provide a non-empty reason up to 500 characters",
         ));
     }
-    let (scope, actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::AgentsRevoke, true)
-            .await
-        {
-            Ok(value) => value,
-            Err(response) => return response,
-        };
+    let (scope, actor) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::HostsRevoke,
+        true,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
     let mut client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),

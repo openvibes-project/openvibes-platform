@@ -93,7 +93,7 @@ pub(crate) async fn draft_changes(
     Path(rule_set_id): Path<String>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::RulesWrite, false).await {
+        match authenticated_permission(&state, &headers, Permission::SiteRulesRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -221,12 +221,18 @@ pub(crate) async fn publish_drafts(
     payload: Result<Json<PublishDraftsRequest>, JsonRejection>,
 ) -> Response {
     // Writing drafts and publishing are separate permissions: publishing
-    // needs `rules.upload`, and the signer checks it again itself.
-    let (scope, actor) =
-        match authenticated_permission(&state, &headers, Permission::RulesUpload, true).await {
-            Ok(context) => context,
-            Err(response) => return response,
-        };
+    // needs `site_rules.publish`, and the signer checks it again itself.
+    let (scope, actor) = match authenticated_permission(
+        &state,
+        &headers,
+        Permission::SiteRulesPublish,
+        true,
+    )
+    .await
+    {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
     if !matches!(scope, platform_store::console_read::AgentScope::Global) {
         return global_only();
     }

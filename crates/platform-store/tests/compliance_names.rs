@@ -28,7 +28,8 @@ async fn migration_43_renames_permissions_dashboards_and_case_items() {
 
     let perms: Vec<String> = client
         .query(
-            "SELECT permission_id FROM console_role_permissions WHERE role_id = 'custom'",
+            "SELECT permission_id FROM console_role_permissions WHERE role_id = 'custom'
+             ORDER BY permission_id",
             &[],
         )
         .await
@@ -36,7 +37,8 @@ async fn migration_43_renames_permissions_dashboards_and_case_items() {
         .iter()
         .map(|r| r.get(0))
         .collect();
-    assert_eq!(perms, ["compliance.read"]);
+    // Migration 51 later adds the export of what a role reads.
+    assert_eq!(perms, ["compliance.export", "compliance.read"]);
     let old: i64 = client
         .query_one(
             "SELECT count(*) FROM console_permissions WHERE permission_id LIKE 'findings.%'",

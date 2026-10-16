@@ -45,12 +45,17 @@ pub(crate) async fn create_authenticated_access_binding(
     {
         return invalid_access_binding();
     }
-    let (scope, user_id) =
-        match authenticated_permission(&state, &headers, crate::Permission::RbacManage, true).await
-        {
-            Ok(context) => context,
-            Err(response) => return response,
-        };
+    let (scope, user_id) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::AccessGrant,
+        true,
+    )
+    .await
+    {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
     if !matches!(scope, AgentScope::Global) {
         return problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,
@@ -117,12 +122,17 @@ pub(crate) async fn revoke_authenticated_access_binding(
     if !valid_uuid(&binding_id) {
         return invalid_access_binding();
     }
-    let (scope, user_id) =
-        match authenticated_permission(&state, &headers, crate::Permission::RbacManage, true).await
-        {
-            Ok(context) => context,
-            Err(response) => return response,
-        };
+    let (scope, user_id) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::AccessGrant,
+        true,
+    )
+    .await
+    {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
     if !matches!(scope, AgentScope::Global) {
         return problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,

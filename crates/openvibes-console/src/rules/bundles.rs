@@ -20,10 +20,12 @@ pub(crate) async fn authenticated_rule_sets(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
 ) -> Response {
-    let actor = match super::assignment::rules_reader(&state, &headers).await {
-        Ok(actor) => actor,
-        Err(response) => return response,
-    };
+    let actor =
+        match super::assignment::rules_reader(&state, &headers, crate::Permission::RulesRead).await
+        {
+            Ok(actor) => actor,
+            Err(response) => return response,
+        };
     let client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),
@@ -71,10 +73,12 @@ pub(crate) async fn authenticated_rule_bundles(
     Path(rule_set_id): Path<String>,
 ) -> Response {
     use chrono::SecondsFormat;
-    let actor = match super::assignment::rules_reader(&state, &headers).await {
-        Ok(actor) => actor,
-        Err(response) => return response,
-    };
+    let actor =
+        match super::assignment::rules_reader(&state, &headers, crate::Permission::RulesRead).await
+        {
+            Ok(actor) => actor,
+            Err(response) => return response,
+        };
     let client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),
@@ -136,7 +140,7 @@ pub(crate) async fn preview_authenticated_rule_bundle(
     body: axum::body::Bytes,
 ) -> Response {
     let (scope, actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::RulesUpload, false)
+        match authenticated_permission(&state, &headers, crate::Permission::RulesPublish, false)
             .await
         {
             Ok(value) => value,
@@ -215,17 +219,13 @@ pub(crate) async fn publish_authenticated_rule_bundle(
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
-    let (scope, actor) = match authenticated_permission(
-        &state,
-        &headers,
-        crate::Permission::RulesUpload,
-        true,
-    )
-    .await
-    {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
+    let (scope, actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::RulesPublish, true)
+            .await
+        {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
     if !matches!(scope, platform_store::console_read::AgentScope::Global) {
         return problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,

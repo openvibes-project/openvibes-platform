@@ -33,7 +33,7 @@ describe("Where it runs", () => {
     expect(out).not.toContain("Runs on");
     expect(out).not.toContain("Group overrides");
   });
-  it("without rules.upload the switches are read-only and nothing can be added or removed", () => {
+  it("without rules.assignment.write the switches are read-only and nothing can be added or removed", () => {
     const out = html(l1, [prod, lab], false);
     expect(out.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(2);
     expect(out).not.toContain("+ Add group");

@@ -95,7 +95,7 @@ fn random_uuid() -> Option<String> {
     responses(
         (status = 201, description = "User created; the one-time password is shown only here", body = crate::CreatedUser),
         (status = 400, description = "Invalid username, display name or role", body = ProblemDetails),
-        (status = 403, description = "Needs rbac.manage with a global binding", body = ProblemDetails),
+        (status = 403, description = "Needs access.users with a global binding", body = ProblemDetails),
         (status = 409, description = "The username is taken", body = ProblemDetails),
     ))]
 pub(crate) async fn create_user(
@@ -106,12 +106,17 @@ pub(crate) async fn create_user(
     // Authentication, CSRF and permission first: nothing about the body is
     // answered to a caller who may not make the request (no validation
     // oracle; a forced-change session gets 403, not 400).
-    let (scope, actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::RbacManage, true).await
-        {
-            Ok(value) => value,
-            Err(response) => return response,
-        };
+    let (scope, actor) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::AccessUsers,
+        true,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
     // Users get global roles; only a global administrator makes them.
     if !matches!(scope, AgentScope::Global) {
         return problem_response(ProblemDetails::new(

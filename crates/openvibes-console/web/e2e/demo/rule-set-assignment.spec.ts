@@ -91,7 +91,7 @@ test("a viewer has no Rule sets tab, an operator reads the rule list and changes
   await page.getByRole("menuitemradio", { name: "operator", exact: true }).click();
   await expect(page.getByRole("link", { name: "Coverage" })).toBeVisible();
   await page.goto("/settings?tab=rule-sets&open=rule-set%3Ahardening-linux-l1");
-  // rules.upload reads the list, history and versions like an admin (user, 2026-10-15).
+  // rules.publish holders read the list, history and versions like an admin (user, 2026-10-15).
   await expect(row(page, "baseline")).toBeVisible();
   await expect(row(page, "hardening-linux-l1")).toContainText("openvibes-1");
   await expect(page.locator(".inspector").getByText("Published versions")).toBeVisible();

@@ -90,7 +90,7 @@ export function AgentPanel({ id }: { id: string }) {
           <button type="button" className="button" onClick={() => nav.open({ kind: "compare", id: data.id })}><Icon name="layers" size={14} /> Compare</button>
           <HostExport agent={data} />
           <AddToCase kind="host" id={data.id} label={name} />
-          {can("agents.revoke") && data.status !== "revoked" && data.status !== "imported" && (
+          {can("hosts.revoke") && data.status !== "revoked" && data.status !== "imported" && (
           <Confirm danger label={`Revoke ${name}? Its certificate stops working at once; the host must enroll again.`} reason="Reason (kept in the audit log)"
             onConfirm={async (reason) => {
               await request("POST", `/api/v1/agents/${encodeURIComponent(id)}/revoke`, { reason });
@@ -189,7 +189,7 @@ export function AgentPanel({ id }: { id: string }) {
             </Section>
             {data.status !== "imported" && <LastTestSection test={data.last_test} />}
             {data.status !== "imported" && <HostRuleSets agent={data} />}
-            {can("asset_groups.manage", true) && <TagEditor id={id} />}
+            {can("host_groups.manage", true) && <TagEditor id={id} />}
             <Section title="Certificates">
               <ul className="list list--plain">
                 {data.certificates.map((certificate, index) => (

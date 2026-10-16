@@ -57,13 +57,13 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
   const { can, session } = useSession();
   const [choice, setChoice] = useState<Choice | null>(null);
   const [busy, setBusy] = useState(false);
-  const people = useResource<{ items: CaseUser[] }>(can("cases.manage") ? "/api/v1/cases/assignees" : null).data?.items;
+  const people = useResource<{ items: CaseUser[] }>(can("cases.assign") ? "/api/v1/cases/assignees" : null).data?.items;
   if (count === 0 || !can(triagePermission[kind])) return null;
 
   const menu = [...STATE_ITEMS, ...(kind === "alarms" && !inline && can("alarms.suppress", true) && !without.includes("suppress") ? [SUPPRESS_ITEM] : [])];
   const me = session?.principal?.username;
   // The current assignee is listed even when the people list lacks them
-  // (no cases.manage, or no longer assignable), so it shows with initials.
+  // (no cases.assign, or no longer assignable), so it shows with initials.
   const known = people ?? [];
   const listed = assignee && assignee !== me && !known.some((p) => p.username === assignee)
     ? [...known, { user_id: assignee, username: assignee, display_name: assignee }] : known;
@@ -104,7 +104,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
       <Select button search label={inline && assignee !== undefined ? "Assignee" : `Assign ${noun}`} placeholder="Assign"
         value={assignee === undefined ? "" : assignee ?? NOBODY} onChange={assign} disabled={busy}
         options={assignOptions} unknownLabel={(v) => v} />
-      {can("cases.manage") && !without.includes("case") && (
+      {can("cases.write") && !without.includes("case") && (
         <button type="button" className={inline ? "button push" : "button"} disabled={busy} onClick={() => setChoice({ action: "case", label: "Add to case" })}>
           <Icon name="cases" size={15} />Add to case
         </button>

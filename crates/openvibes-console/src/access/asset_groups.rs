@@ -104,17 +104,13 @@ async fn save_authenticated_asset_group(
             "Provide a name and 1 to 32 unique exact selectors within the documented lengths",
         ));
     };
-    let (scope, actor) = match authenticated_permission(
-        &state,
-        &headers,
-        crate::Permission::AssetGroupsManage,
-        true,
-    )
-    .await
-    {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
+    let (scope, actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::HostGroupsManage, true)
+            .await
+        {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
     if !matches!(scope, AgentScope::Global) {
         return problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,

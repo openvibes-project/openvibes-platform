@@ -61,7 +61,7 @@ impl Persona {
     }
 
     fn permits(self, permission: Permission, mode: SeedMode) -> bool {
-        if matches!(mode, SeedMode::PermissionRemoved) && permission == Permission::AgentsRead {
+        if matches!(mode, SeedMode::PermissionRemoved) && permission == Permission::HostsRead {
             return false;
         }
         resolve_capabilities(&[self.binding()])
@@ -117,10 +117,10 @@ mod tests {
     fn seeded_personas_use_the_approved_builtin_role_permissions() {
         assert!(!Persona::Viewer.permits(Permission::RulesRead, SeedMode::Mixed));
         assert!(!Persona::Analyst.permits(Permission::RulesRead, SeedMode::Mixed));
-        assert!(!Persona::Operator.permits(Permission::RulesRead, SeedMode::Mixed));
+        assert!(Persona::Operator.permits(Permission::RulesRead, SeedMode::Mixed));
         assert!(Persona::Admin.permits(Permission::RulesRead, SeedMode::Mixed));
-        assert!(Persona::Operator.permits(Permission::RulesUpload, SeedMode::Mixed));
-        assert!(Persona::Operator.permits(Permission::TokensCreate, SeedMode::Mixed));
+        assert!(Persona::Operator.permits(Permission::RulesPublish, SeedMode::Mixed));
+        assert!(Persona::Operator.permits(Permission::TokensManage, SeedMode::Mixed));
         assert!(Persona::Viewer.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
         assert!(Persona::Analyst.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
@@ -130,8 +130,8 @@ mod tests {
         assert!(!Persona::Viewer.permits(Permission::AssistantUse, SeedMode::Mixed));
         assert!(!Persona::Operator.permits(Permission::AssistantUse, SeedMode::Mixed));
         assert!(!Persona::Operator.permits(Permission::ComplianceTriage, SeedMode::Mixed));
-        assert!(Persona::ScopedOperator.permits(Permission::AgentsRevoke, SeedMode::Mixed));
-        assert!(!Persona::ScopedOperator.permits(Permission::TokensCreate, SeedMode::Mixed));
+        assert!(Persona::ScopedOperator.permits(Permission::HostsRevoke, SeedMode::Mixed));
+        assert!(!Persona::ScopedOperator.permits(Permission::TokensManage, SeedMode::Mixed));
         assert!(!Persona::ScopedOperator.permits(Permission::ComplianceTriage, SeedMode::Mixed));
         assert!(Persona::Admin.permits(Permission::AuditRetentionManage, SeedMode::Mixed));
     }

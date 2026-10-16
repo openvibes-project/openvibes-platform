@@ -229,7 +229,7 @@ async fn grants_scoped_to_an_asset_group_are_refused_on_every_rule_read_and_writ
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     platform_store::migrate(&mut client).await.unwrap();
-    // operator holds rules.upload, admin holds rules.read; both scoped to WEB.
+    // operator and admin hold rules.assignment.read; both scoped to WEB.
     for (n, name, role) in [(1, "upload", "operator"), (2, "read", "admin")] {
         user(
             &mut client,

@@ -16,12 +16,12 @@ const shows = (session: Session, label: string) =>
   views.find((v) => v.label === label)?.access.some((a) => allows(session, a)) === true;
 
 describe("menu access", () => {
-  it("an operator (rules.upload, no rules.read) sees Coverage and Settings", () => {
-    const operator = global(["agents.read", "rules.upload", "rules.write", "tokens.read"]);
+  it("an operator (rules.publish with its views) sees Coverage and Settings", () => {
+    const operator = global(["hosts.read", "rules.publish", "rules.read", "rules.coverage.read", "site_rules.read", "tokens.read"]);
     expect(shows(operator, "Coverage")).toBe(true);
     expect(shows(operator, "Settings")).toBe(true);
   });
-  it("a viewer without either rules permission does not see Coverage", () => {
-    expect(shows(global(["agents.read"]), "Coverage")).toBe(false);
+  it("a viewer without rules.coverage.read does not see Coverage", () => {
+    expect(shows(global(["hosts.read"]), "Coverage")).toBe(false);
   });
 });

@@ -60,7 +60,8 @@ function AssigneeSelect({ value, onChange, assignees }: { value: string; onChang
 }
 
 export function NewCasePanel() {
-  const assignees = useAssignees(true);
+  const assign = useSession().can("cases.assign");
+  const assignees = useAssignees(assign);
   const [title, setTitle] = useState("");
   const [severity, setSeverity] = useState("");
   const [assignee, setAssignee] = useState("");
@@ -85,7 +86,7 @@ export function NewCasePanel() {
           <Select label="Severity" value={severity} onChange={setSeverity}
             options={[{ value: "", label: "Automatic: the highest item, medium without items" }, ...severities.map((s) => ({ value: s, label: s[0]?.toUpperCase() + s.slice(1) }))]} />
         </SelectField>
-        <div className="field">Assignee<AssigneeSelect value={assignee} onChange={setAssignee} assignees={assignees} /></div>
+        {assign && <div className="field">Assignee<AssigneeSelect value={assignee} onChange={setAssignee} assignees={assignees} /></div>}
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div><button className="button button--primary" type="submit" disabled={busy || title.trim() === ""}><Icon name="plus" size={15} /> {busy ? "Opening…" : "Open case"}</button></div>
       </form>
@@ -100,7 +101,7 @@ export function CasePanel({ id }: { id: string }) {
   useProvideTitle({ kind: "case", id }, c ? caseNumber(c.number) : undefined);
   if (detail.error) return <div className="panel-body"><ErrorBox error={detail.error} /></div>;
   if (!c) return <Loading />;
-  const manage = can("cases.manage");
+  const manage = can("cases.write");
   return (
     <>
       <PanelHeader
@@ -125,7 +126,9 @@ export function CasePanel({ id }: { id: string }) {
 
 /** Title, severity, assignee and status. Remounted on each new version, so the form always starts from what is saved. */
 function Details({ c, manage }: { c: CaseDetail; manage: boolean }) {
-  const assignees = useAssignees(manage);
+  const { can } = useSession();
+  const assign = can("cases.assign");
+  const assignees = useAssignees(assign);
   const [draft, setDraft] = useState<CaseFields>({ title: c.title, severity: c.severity, assignee: c.assignee?.user_id ?? "" });
   const [closing, setClosing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -157,7 +160,7 @@ function Details({ c, manage }: { c: CaseDetail; manage: boolean }) {
               <SelectField label="Severity">
                 <Select label="Severity" value={draft.severity} onChange={(severity) => setDraft({ ...draft, severity })} options={severities.map((s) => ({ value: s, label: s[0]?.toUpperCase() + s.slice(1) }))} />
               </SelectField>
-              <div className="field grow">Assignee<AssigneeSelect value={draft.assignee} onChange={(assignee) => setDraft({ ...draft, assignee })} assignees={assignees} /></div>
+              {assign && <div className="field grow">Assignee<AssigneeSelect value={draft.assignee} onChange={(assignee) => setDraft({ ...draft, assignee })} assignees={assignees} /></div>}
             </div>
             <div className="row row--wrap">
               <button type="submit" className="button button--primary button--small" disabled={!dirty || busy || draft.title.trim() === ""}>{busy ? "Saving…" : "Save changes"}</button>

@@ -56,7 +56,7 @@ export function AdvisoryPanel({ id }: { id: string }) {
       agent_id: host.agent_id, hostname: host.hostname ?? null, triage_state: host.triage_state, assigned_to: host.assigned_to ?? null, seen: host.first_seen_at,
       extra: <>
         <span className={`badge badge--${state.tone} badge--plain`}>{state.label}</span>
-        {can("cases.manage") && triageable && <AddToCase compact kind="vulnerability" id={vulnerabilityRef(host.agent_id, host.advisory_id)} label={`${host.title} on ${host.hostname ?? host.agent_id}`} />}
+        {can("cases.write") && triageable && <AddToCase compact kind="vulnerability" id={vulnerabilityRef(host.agent_id, host.advisory_id)} label={`${host.title} on ${host.hostname ?? host.agent_id}`} />}
       </>,
     };
   });

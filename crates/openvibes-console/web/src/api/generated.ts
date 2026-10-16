@@ -3395,10 +3395,11 @@ export interface components {
             value: number;
         };
         /**
-         * @description Stable console permission identifiers.
+         * @description Stable console permission identifiers, one per action (spec §3). Their
+         *     metadata (area, column, scope, needs) lives in `access/catalogue.rs`.
          * @enum {string}
          */
-        Permission: "agents.read" | "agents.revoke" | "compliance.read" | "vulnerabilities.read" | "compliance.triage" | "vulnerabilities.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "rules.write" | "audit.read" | "audit.export" | "assistant.admin" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
+        Permission: "alarms.read" | "alarms.suppressions.read" | "alarms.triage" | "alarms.suppress" | "alarms.export" | "alarms.suppressions.approve" | "compliance.read" | "compliance.triage" | "compliance.export" | "vulnerabilities.read" | "vulnerabilities.triage" | "vulnerabilities.export" | "hosts.read" | "hosts.label" | "hosts.revoke" | "hosts.export" | "cases.read" | "cases.write" | "cases.assign" | "rules.read" | "rules.assignment.read" | "rules.coverage.read" | "rules.contents.read" | "rules.assignment.write" | "rules.publish" | "site_rules.read" | "site_rules.write" | "site_rules.test" | "site_rules.publish" | "dashboards.share" | "dashboards.publish" | "assistant.use" | "assistant.admin" | "access.read" | "access.users" | "access.roles" | "access.grant" | "host_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "service_accounts.tokens" | "tokens.read" | "tokens.manage" | "tokens.installer" | "audit.read" | "audit.retention.manage" | "audit.export" | "settings.manage";
         /** @description Effective object scope attached to one permission. */
         PermissionScope: {
             /** @enum {string} */
@@ -4797,7 +4798,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Needs rbac.manage with a global binding */
+            /** @description Needs access.users with a global binding */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8908,7 +8909,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Neither rules.read nor rules.upload, globally */
+            /** @description No global rules.assignment.read */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9187,7 +9188,7 @@ export interface operations {
                     "application/json": components["schemas"]["AttackCoverage"];
                 };
             };
-            /** @description Global rules.read or rules.upload needed */
+            /** @description Global rules.coverage.read needed */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9602,7 +9603,7 @@ export interface operations {
                     "application/json": components["schemas"]["SiteFleet"];
                 };
             };
-            /** @description Needs rules.write and global access */
+            /** @description Needs site_rules.read and global access */
             403: {
                 headers: {
                     [name: string]: unknown;

@@ -375,7 +375,7 @@
             }
           },
           "403": {
-            "description": "Needs rbac.manage with a global binding",
+            "description": "Needs access.users with a global binding",
             "content": {
               "application/json": {
                 "schema": {
@@ -5938,7 +5938,7 @@
             }
           },
           "403": {
-            "description": "Neither rules.read nor rules.upload, globally",
+            "description": "No global rules.assignment.read",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6328,7 +6328,7 @@
             }
           },
           "403": {
-            "description": "Global rules.read or rules.upload needed",
+            "description": "Global rules.coverage.read needed",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6846,7 +6846,7 @@
             }
           },
           "403": {
-            "description": "Needs rules.write and global access",
+            "description": "Needs site_rules.read and global access",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12024,36 +12024,56 @@
       },
       "Permission": {
         "type": "string",
-        "description": "Stable console permission identifiers.",
+        "description": "Stable console permission identifiers, one per action (spec §3). Their\nmetadata (area, column, scope, needs) lives in `access/catalogue.rs`.",
         "enum": [
-          "agents.read",
-          "agents.revoke",
-          "compliance.read",
-          "vulnerabilities.read",
-          "compliance.triage",
-          "vulnerabilities.triage",
           "alarms.read",
-          "cases.read",
-          "cases.manage",
+          "alarms.suppressions.read",
           "alarms.triage",
           "alarms.suppress",
-          "tokens.read",
-          "tokens.create",
-          "tokens.revoke",
+          "alarms.export",
+          "alarms.suppressions.approve",
+          "compliance.read",
+          "compliance.triage",
+          "compliance.export",
+          "vulnerabilities.read",
+          "vulnerabilities.triage",
+          "vulnerabilities.export",
+          "hosts.read",
+          "hosts.label",
+          "hosts.revoke",
+          "hosts.export",
+          "cases.read",
+          "cases.write",
+          "cases.assign",
           "rules.read",
-          "rules.upload",
-          "rules.write",
-          "audit.read",
-          "audit.export",
+          "rules.assignment.read",
+          "rules.coverage.read",
+          "rules.contents.read",
+          "rules.assignment.write",
+          "rules.publish",
+          "site_rules.read",
+          "site_rules.write",
+          "site_rules.test",
+          "site_rules.publish",
+          "dashboards.share",
+          "dashboards.publish",
+          "assistant.use",
           "assistant.admin",
-          "audit.retention.manage",
-          "rbac.read",
-          "rbac.manage",
-          "asset_groups.manage",
+          "access.read",
+          "access.users",
+          "access.roles",
+          "access.grant",
+          "host_groups.manage",
           "service_accounts.read",
           "service_accounts.manage",
-          "assistant.use",
-          "dashboards.share"
+          "service_accounts.tokens",
+          "tokens.read",
+          "tokens.manage",
+          "tokens.installer",
+          "audit.read",
+          "audit.retention.manage",
+          "audit.export",
+          "settings.manage"
         ]
       },
       "PermissionScope": {

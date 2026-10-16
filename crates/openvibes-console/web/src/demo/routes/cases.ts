@@ -44,18 +44,18 @@ export function registerCaseRoutes(ctx: DemoContext) {
     return result.status === 200 ? json(page(result.body as unknown[], query)) : send(result);
   };
   route("GET", "/api/v1/cases", "cases.read", (_, query) => listed(query));
-  route("POST", "/api/v1/cases", "cases.manage", (_, __, body) => send(cases.create(body)));
+  route("POST", "/api/v1/cases", "cases.write", (_, __, body) => send(cases.create(body)));
   route("GET", "/api/v1/cases/for-item", "cases.read", (_, query) => send(cases.forItem(query)));
-  route("GET", "/api/v1/cases/assignees", "cases.manage", () => send(cases.assignees()));
+  route("GET", "/api/v1/cases/assignees", "cases.assign", () => send(cases.assignees()));
   route("GET", "/api/v1/cases/active-items", "cases.read", (_, query) => send(cases.activeItems(query)));
   // ponytail: the demo keeps no triage history; record changes here if the
   // demo's History tab should show them.
   route("GET", "/api/v1/triage-history", null, () => json({ items: [] }));
   route("GET", "/api/v1/cases/{id}", "cases.read", ({ id = "" }) => send(cases.get(id)));
-  route("PUT", "/api/v1/cases/{id}", "cases.manage", ({ id = "" }, _, body, headers) => send(cases.update(id, body, headers["if-match"])));
-  route("POST", "/api/v1/cases/{id}/notes", "cases.manage", ({ id = "" }, _, body) => send(cases.addNote(id, body)));
-  route("POST", "/api/v1/cases/{id}/items", "cases.manage", ({ id = "" }, _, body) => send(cases.addItem(id, body)));
-  route("DELETE", "/api/v1/cases/{id}/items/{item}", "cases.manage", ({ id = "", item = "" }) => send(cases.removeItem(id, item)));
-  route("PUT", "/api/v1/cases/{id}/items/{item}/outcome", "cases.manage", ({ id = "", item = "" }, _, body) => send(cases.setOutcome(id, item, body)));
+  route("PUT", "/api/v1/cases/{id}", "cases.write", ({ id = "" }, _, body, headers) => send(cases.update(id, body, headers["if-match"])));
+  route("POST", "/api/v1/cases/{id}/notes", "cases.write", ({ id = "" }, _, body) => send(cases.addNote(id, body)));
+  route("POST", "/api/v1/cases/{id}/items", "cases.write", ({ id = "" }, _, body) => send(cases.addItem(id, body)));
+  route("DELETE", "/api/v1/cases/{id}/items/{item}", "cases.write", ({ id = "", item = "" }) => send(cases.removeItem(id, item)));
+  route("PUT", "/api/v1/cases/{id}/items/{item}/outcome", "cases.write", ({ id = "", item = "" }, _, body) => send(cases.setOutcome(id, item, body)));
   return cases;
 }

@@ -28,12 +28,12 @@ async function freeObjects(server: Server) {
 }
 
 describe("demo cases: permissions and the seed", () => {
-  it("grants cases.manage to the analyst and the admin only, as the server's role table does", async () => {
+  it("grants cases.write to the analyst and the admin only, as the server's role table does", async () => {
     for (const [persona, manage] of [["viewer", false], ["operator", false], ["analyst", true], ["admin", true]] as const) {
       const server = createDemoServer({ persona });
       const session = (await call<{ capabilities: { permission: string }[] }>(server, "GET", "/api/v1/session")).body;
       const permissions = session.capabilities.map((c) => c.permission);
-      expect(permissions.includes("cases.manage"), persona).toBe(manage);
+      expect(permissions.includes("cases.write"), persona).toBe(manage);
       expect(permissions.includes("cases.read"), persona).toBe(persona === "analyst" || persona === "admin");
     }
   });
@@ -410,8 +410,8 @@ describe("demo cases: scope", () => {
 describe("demo cases data", () => {
   it("is built from objects in the demo data", () => {
     const data = buildDemoData(Date.parse("2026-10-04T12:00:00Z"));
-    expect(data.access.roles.find((r) => r.role_id === "analyst")?.permissions).toContain("cases.manage");
-    expect(data.access.roles.find((r) => r.role_id === "admin")?.permissions).toContain("cases.manage");
+    expect(data.access.roles.find((r) => r.role_id === "analyst")?.permissions).toContain("cases.write");
+    expect(data.access.roles.find((r) => r.role_id === "admin")?.permissions).toContain("cases.write");
     expect(data.access.roles.find((r) => r.role_id === "viewer")?.permissions).not.toContain("cases.read");
     // The server's admin holds every permission the other roles do.
     const admin = data.access.roles.find((r) => r.role_id === "admin")?.permissions ?? [];

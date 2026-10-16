@@ -91,14 +91,14 @@ impl PresenceHub {
     }
 }
 
-/// The event stream. Needs `agents.read`; marked background by the web app
+/// The event stream. Needs `hosts.read`; marked background by the web app
 /// so it does not extend the session.
 pub(crate) async fn agent_events(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
 ) -> Response {
     if let Err(response) =
-        authenticated_permission(&state, &headers, crate::Permission::AgentsRead, false).await
+        authenticated_permission(&state, &headers, crate::Permission::HostsRead, false).await
     {
         return response;
     }

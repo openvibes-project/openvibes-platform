@@ -252,7 +252,7 @@ pub(crate) async fn test_rule(
     payload: Result<Json<RuleTestInput>, JsonRejection>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::RulesWrite, true).await {
+        match authenticated_permission(&state, &headers, Permission::SiteRulesTest, true).await {
             Ok(context) => context,
             Err(response) => return response,
         };

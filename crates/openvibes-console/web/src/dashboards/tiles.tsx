@@ -84,7 +84,7 @@ const ALARM_SEVERITIES = ["critical", "high", "medium", "low"] as const;
 export function BreakdownTile({ widget }: WidgetProps) {
   const { can } = useSession();
   const source = str(widget.config, "source", "compliance", BREAKDOWN_SOURCES);
-  const permission = { alarms: "alarms.read", compliance: "compliance.read", agents: "agents.read", vulnerabilities: "vulnerabilities.read" }[source] as Permission;
+  const permission = { alarms: "alarms.read", compliance: "compliance.read", agents: "hosts.read", vulnerabilities: "vulnerabilities.read" }[source] as Permission;
   const allowed = can(permission);
   // The tiles' own numbers: the history API's live value (last point) of each alarm severity and of all.
   const alarmHistory = [...ALARM_SEVERITIES.map((s) => `alarms.active.${s}`), "alarms.active"].map((id) => useHistory(allowed && source === "alarms" ? id : null, 7)); // eslint-disable-line react-hooks/rules-of-hooks
@@ -143,7 +143,7 @@ export function ListTile({ widget }: WidgetProps) {
 
 function ListTileBody({ view, params, limit }: NonNullable<ReturnType<typeof parseListConfig>>) {
   const { can } = useSession();
-  const permission = { "/compliance": "compliance.read", "/vulnerabilities": "vulnerabilities.read", "/agents": "agents.read", "/audit": "audit.read" }[view] as "compliance.read";
+  const permission = { "/compliance": "compliance.read", "/vulnerabilities": "vulnerabilities.read", "/agents": "hosts.read", "/audit": "audit.read" }[view] as "compliance.read";
   // Nothing is requested for a list the viewer's role cannot read.
   const allowed = can(permission, view === "/audit");
   const { rows, total, loading, error } = useListRows(allowed ? view : null, params);

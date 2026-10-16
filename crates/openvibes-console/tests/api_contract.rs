@@ -20,6 +20,20 @@ fn the_web_role_table_matches_the_rust_one() {
     assert_eq!(web.trim_end(), openvibes_console::builtin_roles_json());
 }
 
+/// The web console's permission catalogue and role templates are the Rust
+/// ones. Regenerate with `export_openapi -- --permissions` and `-- --templates`.
+#[test]
+fn the_web_permission_catalogue_matches_the_rust_one() {
+    assert_eq!(
+        include_str!("../web/src/api/permissions.json").trim_end(),
+        openvibes_console::catalogue_json()
+    );
+    assert_eq!(
+        include_str!("../web/src/api/templates.json").trim_end(),
+        openvibes_console::templates_json()
+    );
+}
+
 #[test]
 fn pagination_query_is_closed_and_bounded() {
     let default: CursorPagination = serde_json::from_str("{}").unwrap();
@@ -62,7 +76,7 @@ fn session_and_page_dtos_have_stable_wire_names() {
         authentication_method: AuthenticationMethod::LocalPassword,
         authentication_level: AuthenticationLevel::SingleFactor,
         capabilities: vec![EffectiveCapability {
-            permission: Permission::AgentsRead,
+            permission: Permission::HostsRead,
             scope: PermissionScope::AssetGroups {
                 asset_group_ids: vec!["group-1".to_owned()],
             },
@@ -75,7 +89,7 @@ fn session_and_page_dtos_have_stable_wire_names() {
     let session = serde_json::to_value(session).unwrap();
     assert_eq!(session["authentication_method"], "local_password");
     assert_eq!(session["authentication_level"], "single_factor");
-    assert_eq!(session["capabilities"][0]["permission"], "agents.read");
+    assert_eq!(session["capabilities"][0]["permission"], "hosts.read");
     assert_eq!(session["capabilities"][0]["scope"]["kind"], "asset_groups");
     assert!(session["principal"].get("username").is_none());
 

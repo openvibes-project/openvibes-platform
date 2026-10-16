@@ -5,7 +5,6 @@
 import type { ReactNode } from "react";
 
 import type { Access } from "./session";
-import { RULE_READERS } from "../panels/rules/ruleAssignment";
 import { panelTitle } from "./titles";
 import { DashboardsView } from "../dashboards/DashboardsView";
 import { WidgetGalleryPanel, WidgetSettingsPanel } from "../dashboards/panels";
@@ -63,14 +62,14 @@ export const views: readonly ViewDef[] = [
   { path: "/alarms", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
   { path: "/compliance", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "compliance.read" }], render: () => <Findings /> },
   { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
-  { path: "/agents", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
-  { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "agents.read" }], render: () => <Software /> },
-  { path: "/ports", label: "Ports", icon: "activity", group: "Investigate", phoneMore: true, keys: "g o", access: [{ permission: "agents.read" }], render: () => <Ports /> },
-  { path: "/services", label: "Services", icon: "layers", group: "Investigate", phoneMore: true, keys: "g u", access: [{ permission: "agents.read" }], render: () => <Services /> },
+  { path: "/agents", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "hosts.read" }], render: () => <Agents /> },
+  { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "hosts.read" }], render: () => <Software /> },
+  { path: "/ports", label: "Ports", icon: "activity", group: "Investigate", phoneMore: true, keys: "g o", access: [{ permission: "hosts.read" }], render: () => <Ports /> },
+  { path: "/services", label: "Services", icon: "layers", group: "Investigate", phoneMore: true, keys: "g u", access: [{ permission: "hosts.read" }], render: () => <Services /> },
   { path: "/cases", label: "Cases", icon: "cases", group: "Investigate", keys: "g c", access: [{ permission: "cases.read" }], render: () => <Cases /> },
-  { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
-  { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "rules.write", global: true }], render: () => <SiteRules /> },
-  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: RULE_READERS, render: () => <Coverage /> },
+  { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.suppressions.read" }], render: () => <AlarmSuppressions /> },
+  { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "site_rules.read", global: true }], render: () => <SiteRules /> },
+  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: [{ permission: "rules.coverage.read", global: true }], render: () => <Coverage /> },
   { path: "/settings", label: "Settings", icon: "settings", group: "Admin", keys: "g h", access: settingsAccess, render: () => <Settings /> },
   { path: "/audit", label: "Audit log", icon: "audit", group: "Admin", keys: "g l", access: [{ permission: "audit.read", global: true }], render: () => <Audit /> },
   { path: "/about", label: "About", icon: "help", group: "Help", keys: "g i", access: [], render: () => <About /> },

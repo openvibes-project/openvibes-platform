@@ -22,7 +22,7 @@ export function AssetGroupPanel({ id }: { id: string }) {
   const currentName = name ?? group?.name ?? "";
   const currentSelectors = selectors ?? group?.selectors.join("\n") ?? "";
   const bindings = inventory.data?.bindings.filter((b) => b.asset_group_id === id) ?? [];
-  const manage = can("asset_groups.manage", true);
+  const manage = can("host_groups.manage", true);
   return (
     <>
       <PanelHeader icon="access" kind="Asset group" title={id === "new" ? "New asset group" : group?.name}

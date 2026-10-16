@@ -67,7 +67,7 @@ export function FindingPanel({ id }: { id: string }) {
 
   const all = endpoints.data ?? [];
   const open = all.filter((item) => item.triage_state === "open");
-  const canCase = can("cases.manage");
+  const canCase = can("cases.write");
   const label = (item: GroupEndpoint) => item.hostname ?? item.agent_id;
   const hosts: HostRow[] = all.map((item) => ({
     agent_id: item.agent_id, hostname: item.hostname ?? null, triage_state: item.triage_state, assigned_to: item.assigned_to ?? null, seen: item.last_observed_at,

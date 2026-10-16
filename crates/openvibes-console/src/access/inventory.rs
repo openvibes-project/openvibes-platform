@@ -29,7 +29,7 @@ pub(crate) async fn authenticated_access_inventory(
     let (scope, user_id) = match authenticated_permission(
         &state,
         &headers,
-        crate::Permission::RbacRead,
+        crate::Permission::AccessRead,
         false,
     )
     .await

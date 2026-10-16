@@ -230,7 +230,7 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
     let router = authenticated_router(db.pool.clone(), ORIGIN);
     let admin = sign_in(&router, "alice", ADMIN_PASSWORD).await;
 
-    // Only rbac.manage creates users: an analyst is refused.
+    // Only access.users creates users: an analyst is refused.
     let analyst = sign_in(&router, "carol", ADMIN_PASSWORD).await;
     let new_user =
         serde_json::json!({"username": "Bob", "display_name": "Bob B", "role_id": "analyst"});

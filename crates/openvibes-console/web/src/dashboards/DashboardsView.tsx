@@ -102,7 +102,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
   const { session, can } = useSession();
   const state = useEditor();
   const home = useResource<HomeDashboard>("/api/v1/me/home");
-  const agents = useResource<AgentSummary>(builtin && can("agents.read") ? "/api/v1/agents/summary" : null);
+  const agents = useResource<AgentSummary>(builtin && can("hosts.read") ? "/api/v1/agents/summary" : null);
   const [menu, setMenu] = useState(false);
   const id = builtin ? null : dashboard?.dashboard_id ?? null;
   // Unknown until loaded, so the pin never flickers "pressed" on the built-in.

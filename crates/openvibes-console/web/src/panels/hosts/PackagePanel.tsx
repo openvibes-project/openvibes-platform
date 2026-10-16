@@ -36,7 +36,7 @@ export function PackagePanel({ id }: { id: string }) {
     <>
       <PanelHeader icon="package" kind={`Software · ${manager}`} title={<span className="mono">{name}</span>}
         badges={<><span className="badge badge--plain">{hosts} hosts</span><span className="badge badge--plain">{data.versions.length} {data.versions.length === 1 ? "version" : "versions"}</span></>}
-        actions={can("cases.manage") && <AddToCase kind="software" id={id} label={name} />} />
+        actions={can("cases.write") && <AddToCase kind="software" id={id} label={name} />} />
       <div className="panel-body stack">
         <Section title={`Versions in use (${data.versions.length})`}>
           <ul className="list list--plain" aria-label="Versions in use">

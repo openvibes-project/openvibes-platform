@@ -351,7 +351,7 @@ test("rule-set switches: a group is added, a failed change keeps the switch and 
   await expect(labSwitch).toHaveAttribute("aria-checked", "true");
   await page.unroute(groupPath);
 
-  // An analyst holds neither rules.read nor rules.upload (a second user, as in the dashboards test).
+  // An analyst holds neither rules.read nor rules.publish (a second user, as in the dashboards test).
   const sam = await browser.newPage();
   await signIn(sam, "sam");
   await sam.goto("/settings");

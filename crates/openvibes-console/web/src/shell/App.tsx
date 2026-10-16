@@ -66,7 +66,7 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
   // appear without a reload.
   useLiveAlarms(auth === "ok" && !session?.password_must_change && can("alarms.read"));
   // Likewise for hosts coming online or going offline.
-  useLivePresence(auth === "ok" && !session?.password_must_change && can("agents.read"));
+  useLivePresence(auth === "ok" && !session?.password_must_change && can("hosts.read"));
 
   useEffect(() => {
     let pending = "";

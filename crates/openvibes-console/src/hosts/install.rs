@@ -46,7 +46,7 @@ async fn served_rule_trust(
     })
 }
 
-/// The agent install spec for a global `tokens.create` caller, built into
+/// The agent install spec for a global `tokens.installer` caller, built into
 /// `T` by `build`, the hand-out audited as `action`. The package and the
 /// command both carry the standing token.
 async fn with_install_spec<T>(
@@ -59,7 +59,7 @@ async fn with_install_spec<T>(
 ) -> Result<T, Response> {
     use platform_store::console_read::AgentScope;
     let (scope, actor) =
-        authenticated_permission(state, headers, crate::Permission::TokensCreate, false).await?;
+        authenticated_permission(state, headers, crate::Permission::TokensInstaller, false).await?;
     if !matches!(scope, AgentScope::Global) {
         return Err(problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,

@@ -269,7 +269,7 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
   what it quiets and asks why; confirming closes that alarm as a false
   positive and creates the suppression.
 
-**Site rules** (`/site-rules`, with `rules.write`) lists the site's own
+**Site rules** (`/site-rules`, with `site_rules.read`) lists the site's own
 compliance rules and alarm rules (drafts) with New rule. A rule opens in
 the inspector as a form (id for a new rule, title, severity, confidence,
 for alarms the programs, expression, message). As you type, the server's
@@ -277,7 +277,7 @@ check (the agent's own loader) shows what is wrong beside the field, and
 Save draft stays off until the rule passes. Delete asks first. Rules saved
 here are drafts. Under each table, Publish lists what changed against the
 published set; with the user's password typed again the rule signer signs
-the set and the platform publishes it (needs `rules.upload`). A compliance
+the set and the platform publishes it (needs `site_rules.publish`). A compliance
 rule's panel can also be tested against one host: it runs on the packages
 and listening ports the platform holds and says match, no match or
 unavailable (a rule over anything else, such as running processes, is
@@ -290,7 +290,7 @@ an existing agent's `agent.toml`.
   working directory, pid), rule and versions, first/last seen, count, in
   the detail template (Process, Evidence, History tabs); the summary has
   the triage actions and Quiet… with the same scopes.
-- **Coverage** (`/coverage`, `g t`, global `rules.read` or `rules.upload`): an ATT&CK
+- **Coverage** (`/coverage`, `g t`, global `rules.coverage.read`): an ATT&CK
   matrix (tactics as columns, covered techniques with rule counts; empty
   tactics stay as visible gaps) above the rule list. Chips: Kill chain
   (the same cells grouped into the seven phases), Findings, Alarms, Include
@@ -321,12 +321,12 @@ triage on alarms and findings stays as it is.
   Investigating, Closed, Include closed (the default list shows open and
   investigating), the four severities, Assigned to me and Unassigned. The
   chips and severity go to the API; the text filter (title, `C-104`,
-  assignee) applies to what is loaded. **New case** (with `cases.manage`)
+  assignee) applies to what is loaded. **New case** (with `cases.write`)
   opens a form in the inspector. A row opens the case.
 - **Case panel** (`case`, id is the case's UUID, `case:new` is the form):
   - the header shows number, title, status, severity, assignee and how many
     items are unresolved;
-  - with `cases.manage`, title, severity and assignee (a picker from
+  - with `cases.write`, title, severity and (with `cases.assign`) assignee (a picker from
     `/cases/assignees`, plus Assign to me) save together with the version
     (`If-Match`). Status moves open to investigating and back, and **Close
     case…** asks for the resolution, a note and, for accepted risk, the date
@@ -344,8 +344,8 @@ triage on alarms and findings stays as it is.
     pasted id) work on open cases;
   - **Notes** (plain text) and the **Timeline**, newest first, with who did
     what.
-  - Without `cases.manage` the panel is read-only.
-- **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.manage`): a button on
+  - Without `cases.write` the panel is read-only.
+- **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.write`): a button on
   the alarm panel, on each host row of a finding and of an advisory, on the
   host panel and its vulnerabilities, and on the software panel. Its dialog
   asks `/cases/for-item` first. An alarm, finding or vulnerability that is
@@ -365,8 +365,8 @@ triage on alarms and findings stays as it is.
   It starts with four cases over real demo objects (an SSH and shell
   investigation, an exploited advisory on three hosts, web servers starting
   shells, and a closed one) and keeps cases in `localStorage`
-  (`openvibes.v2.demo.cases`). Analyst and admin hold `cases.read` and
-  `cases.manage`; the viewer and operator have neither.
+  (`openvibes.v2.demo.cases`). Analyst and admin hold `cases.read`,
+  `cases.write` and `cases.assign`; the viewer and operator have neither.
 
 ## Assets v1 (hosts and software)
 

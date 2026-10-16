@@ -79,7 +79,7 @@ export function useAttention(include: readonly string[], limit: number): { items
   const exploited = useResource<VulnerabilityPage>(want("exploited") && vulns ? "/api/v1/vulnerabilities?exploited=true" : null);
   const critical = useResource<VulnerabilityPage>(want("serious") && vulns ? "/api/v1/vulnerabilities?severity=critical&exploited=false" : null);
   const important = useResource<VulnerabilityPage>(want("serious") && vulns ? "/api/v1/vulnerabilities?severity=important&exploited=false" : null);
-  const stale = useAllPages<Agent>(want("stale") && can("agents.read") ? "/api/v1/agents?state=stale" : null);
+  const stale = useAllPages<Agent>(want("stale") && can("hosts.read") ? "/api/v1/agents?state=stale" : null);
   // Newest first by last_seen: repeating medium alarms could push an older
   // critical one off one page, so critical ones are fetched on their own.
   // (Alarms closed by a suppression are hidden unless suppressed=true.)

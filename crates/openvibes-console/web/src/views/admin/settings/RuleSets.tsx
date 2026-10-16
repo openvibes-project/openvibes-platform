@@ -21,7 +21,7 @@ export function RuleSets() {
   return (
     <div className="view">
       <ViewHeader title="Rule sets" count={rows.length} refresh="/api/v1/rule-set"
-        actions={can("rules.upload", true) && (
+        actions={can("rules.publish", true) && (
           <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "rule-bundle", id: "new" }, true)}><Icon name="plus" size={15} /> Publish bundle</button>
         )} />
       {error ? <div className="view-pad"><ErrorBox error={error} /></div> : !loaded ? <Loading /> : rows.length === 0 ? (

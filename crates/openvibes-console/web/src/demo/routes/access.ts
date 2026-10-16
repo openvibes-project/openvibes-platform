@@ -4,8 +4,8 @@ import { json, problem } from "../http";
 
 export function registerAccessRoutes(ctx: DemoContext) {
   const { data, iso, actor, audit, route } = ctx;
-  route("GET", "/api/v1/access-control", "rbac.read", () => json(data.access));
-  route("POST", "/api/v1/access-control/users", "rbac.manage", (_, __, body) => {
+  route("GET", "/api/v1/access-control", "access.read", () => json(data.access));
+  route("POST", "/api/v1/access-control/users", "access.users", (_, __, body) => {
     const username = String(body.username ?? "").toLowerCase();
     const displayName = String(body.display_name ?? "").trim();
     if (!/^[a-z0-9._@+-]{1,64}$/.test(username) || displayName === "") return problem(400, "invalid_user", "Use 1 to 64 letters, digits or ._@+- for the username, and a name");
@@ -16,7 +16,7 @@ export function registerAccessRoutes(ctx: DemoContext) {
     audit("user.created", user.user_id, "user");
     return json({ ...user, role_id: String(body.role_id ?? "viewer"), one_time_password: "demo1-pass2-word3-onlyx" }, 201);
   });
-  route("POST", "/api/v1/access-control/bindings", "rbac.manage", (_, __, body) => {
+  route("POST", "/api/v1/access-control/bindings", "access.grant", (_, __, body) => {
     const user = data.access.users.find((u) => u.user_id === body.user_id);
     if (!user) return problem(422, "invalid_user", "Choose a user");
     const group = data.access.asset_groups.find((g) => g.asset_group_id === body.asset_group_id);
@@ -31,14 +31,14 @@ export function registerAccessRoutes(ctx: DemoContext) {
     if (name === "" || selectors.length === 0 || selectors.some((sel) => /^=|=$/.test(sel))) return undefined;
     return { asset_group_id: id, name, selectors };
   };
-  route("POST", "/api/v1/access-control/asset-groups", "asset_groups.manage", (_, __, body) => {
+  route("POST", "/api/v1/access-control/asset-groups", "host_groups.manage", (_, __, body) => {
     const group = saveGroup(`grp-${Date.now().toString(36)}`, body);
     if (!group) return problem(422, "invalid_asset_group", "Give the group a name and at least one key=value selector");
     data.access.asset_groups.push(group);
     audit("access.asset_group.create", group.asset_group_id, "asset_group");
     return json(group, 201);
   });
-  route("PUT", "/api/v1/access-control/asset-groups/{id}", "asset_groups.manage", ({ id = "" }, _, body) => {
+  route("PUT", "/api/v1/access-control/asset-groups/{id}", "host_groups.manage", ({ id = "" }, _, body) => {
     const index = data.access.asset_groups.findIndex((g) => g.asset_group_id === id);
     const group = saveGroup(id, body);
     if (index < 0) return problem(404, "not_found", "Asset group not found");
@@ -47,7 +47,7 @@ export function registerAccessRoutes(ctx: DemoContext) {
     audit("access.asset_group.update", id, "asset_group");
     return json(group);
   });
-  route("DELETE", "/api/v1/access-control/bindings/{id}", "rbac.manage", ({ id = "" }) => {
+  route("DELETE", "/api/v1/access-control/bindings/{id}", "access.grant", ({ id = "" }) => {
     data.access.bindings = data.access.bindings.filter((b) => b.binding_id !== id);
     audit("access.binding.delete", id, "binding");
     return new Response(null, { status: 204 });
@@ -64,7 +64,7 @@ export function registerAccessRoutes(ctx: DemoContext) {
     return json(account, 201);
   });
   const issued = new Map<string, { token_id: string; expires_at: string }>();
-  route("POST", "/api/v1/service-accounts/{id}/tokens", "service_accounts.manage", ({ id = "" }, _, body, headers) => {
+  route("POST", "/api/v1/service-accounts/{id}/tokens", "service_accounts.tokens", ({ id = "" }, _, body, headers) => {
     const key = headers["idempotency-key"] ?? "";
     if (!/^[\x21-\x7e]{16,128}$/.test(key)) return problem(400, "invalid_idempotency_key", "Provide an Idempotency-Key header between 16 and 128 visible ASCII characters");
     const account = data.serviceAccounts.find((a) => a.service_account_id === id);
@@ -78,7 +78,7 @@ export function registerAccessRoutes(ctx: DemoContext) {
     audit("service_token.create", id, "service_account");
     return json({ token_id: token.token_id, token: `ovst_demo_${crypto.randomUUID().replaceAll("-", "")}`, expires_at: token.expires_at, secret_available: true, replayed: false }, 201);
   });
-  route("POST", "/api/v1/service-accounts/{id}/tokens/{token}/revoke", "service_accounts.manage", ({ id = "", token = "" }) => {
+  route("POST", "/api/v1/service-accounts/{id}/tokens/{token}/revoke", "service_accounts.tokens", ({ id = "", token = "" }) => {
     const found = data.serviceTokens.get(id)?.find((t) => t.token_id === token);
     const account = data.serviceAccounts.find((a) => a.service_account_id === id);
     if (!found || !account) return problem(404, "not_found", "Token not found");

@@ -29,7 +29,10 @@ describe("demo server", () => {
     const server = createDemoServer({ persona: "viewer" });
     const session = await json(await server.handle("GET", "/api/v1/session"));
     const permissions = (session.capabilities as { permission: string }[]).map((c) => c.permission);
-    expect(permissions).toEqual(["agents.read", "compliance.read", "vulnerabilities.read", "alarms.read"]);
+    expect(permissions).toEqual([
+      "alarms.read", "alarms.suppressions.read", "alarms.export", "compliance.read", "compliance.export",
+      "vulnerabilities.read", "vulnerabilities.export", "hosts.read", "hosts.export",
+    ]);
   });
 
   it("refuses what the persona may not do, with problem details", async () => {

@@ -145,7 +145,7 @@ pub(crate) async fn create_authenticated_service_token(
     let (scope, actor) = match authenticated_permission(
         &state,
         &headers,
-        crate::Permission::ServiceAccountsManage,
+        crate::Permission::ServiceAccountsTokens,
         true,
     )
     .await
@@ -253,7 +253,7 @@ pub(crate) async fn revoke_authenticated_service_token(
     let (scope, actor) = match authenticated_permission(
         &state,
         &headers,
-        crate::Permission::ServiceAccountsManage,
+        crate::Permission::ServiceAccountsTokens,
         true,
     )
     .await

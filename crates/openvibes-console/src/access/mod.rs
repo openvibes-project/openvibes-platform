@@ -12,6 +12,7 @@ pub(crate) mod asset_groups;
 pub(crate) mod auth;
 pub(crate) mod auth_first;
 pub(crate) mod bindings;
+pub mod catalogue;
 mod grant_types;
 pub(crate) mod guard;
 pub(crate) mod inventory;
@@ -23,6 +24,7 @@ pub(crate) mod service_tokens;
 pub(crate) mod session;
 mod session_types;
 pub(crate) mod tags;
+pub mod templates;
 pub(crate) mod throttle;
 pub(crate) mod users;
 

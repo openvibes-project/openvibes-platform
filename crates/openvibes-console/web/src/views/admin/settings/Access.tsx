@@ -24,7 +24,7 @@ export function Access() {
   return (
     <div className="view">
       <ViewHeader title="Access" count={rows.length} refresh="/api/v1/access-control" placeholder="Filter people or roles…"
-        actions={can("rbac.manage", true) && <button type="button" className="button button--primary button--small" onClick={() => nav.open({ kind: "user", id: "new" }, true)}><Icon name="plus" size={14} /> New user</button>} />
+        actions={can("access.users", true) && <button type="button" className="button button--primary button--small" onClick={() => nav.open({ kind: "user", id: "new" }, true)}><Icon name="plus" size={14} /> New user</button>} />
       {inventory.error ? <div className="view-pad"><ErrorBox error={inventory.error} /></div> : !data ? <Loading /> : (
         <>
           {rows.length === 0 ? (
@@ -44,7 +44,7 @@ export function Access() {
           <section className="view-pad stack">
             <div className="row row--between">
               <h2 className="section-title">Asset groups</h2>
-              {can("asset_groups.manage", true) && <button type="button" className="button button--small" onClick={() => nav.open({ kind: "asset-group", id: "new" }, true)}><Icon name="plus" size={14} /> New group</button>}
+              {can("host_groups.manage", true) && <button type="button" className="button button--small" onClick={() => nav.open({ kind: "asset-group", id: "new" }, true)}><Icon name="plus" size={14} /> New group</button>}
             </div>
             <div className="group-cards">
               {data.asset_groups.map((group) => (

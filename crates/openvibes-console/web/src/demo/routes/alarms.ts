@@ -51,7 +51,7 @@ export function registerAlarmRoutes(ctx: DemoContext) {
   });
   const globalSuppress = capabilities.some((c) => c.permission === "alarms.suppress" && c.scope.kind === "global");
   const suppressionVisible = (s: (typeof data.alarmSuppressions)[number]) => globalSuppress || (s.scope === "host" && !!s.agent_id && visible(s.agent_id));
-  route("GET", "/api/v1/alarm-suppressions", "alarms.read", () => json({ items: data.alarmSuppressions.filter(suppressionVisible) }));
+  route("GET", "/api/v1/alarm-suppressions", "alarms.suppressions.read", () => json({ items: data.alarmSuppressions.filter(suppressionVisible) }));
   route("POST", "/api/v1/alarm-suppressions", "alarms.suppress", (_, __, body) => {
     const scope = String(body.scope ?? "");
     const note = typeof body.note === "string" ? body.note.trim() : "";

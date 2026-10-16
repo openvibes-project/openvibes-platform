@@ -9,11 +9,11 @@ use platform_store::console_cases::{
     self as store, AssigneeFilter, CaseChange, CaseFilters, NewCase, Refusal,
 };
 
-use super::permissions::{manager, reader};
+use super::permissions::{manager, may_assign, reader};
 use super::request::{
     blank_is_absent, decode_cursor, encode_cursor, parse_time, precondition, title,
 };
-use super::responses::{answer, bad_request, detail_answer, invalid, refused};
+use super::responses::{answer, bad_request, detail_answer, invalid, permission_denied, refused};
 use super::types::{CaseListParams, CasePage, CreateCaseRequest, UpdateCaseRequest};
 use super::views::summary_view;
 use crate::{
@@ -144,6 +144,13 @@ pub(crate) async fn create_case(
         .map(|item| (item.kind.as_str(), item.reference.as_str()))
         .collect();
     let assignee = request.assignee_user_id.map(|id| id.to_ascii_lowercase());
+    if assignee.is_some() {
+        match may_assign(&state, &headers).await {
+            Ok(true) => {}
+            Ok(false) => return permission_denied(),
+            Err(response) => return response,
+        }
+    }
     let new = NewCase {
         title: title(&request.title),
         severity: request.severity.as_deref(),
@@ -243,6 +250,22 @@ pub(crate) async fn update_case(
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
+    // Changing the assignee needs `cases.assign`; the version check in
+    // `update` keeps this comparison current.
+    match may_assign(&state, &headers).await {
+        Ok(true) => {}
+        Ok(false) => match store::get(&client, &scope, &user_id, &id).await {
+            Ok(Some(current))
+                if current.summary.assignee.as_ref().map(|user| &user.user_id)
+                    != assignee.as_ref() =>
+            {
+                return permission_denied();
+            }
+            Ok(_) => {}
+            Err(_) => return unavailable_auth(),
+        },
+        Err(response) => return response,
+    }
     match store::update(&mut client, &scope, &user_id, &id, &change, Utc::now()).await {
         Ok(Ok(saved)) => detail_answer(StatusCode::OK, saved),
         Ok(Err(refusal)) => refused(refusal),

@@ -5,7 +5,7 @@ use serde_json::json;
 /// What the asking user may read, by console permission: the assistant
 /// shows no more than the matching console pages would.
 pub(crate) struct Access {
-    /// `agents.read`, equal to `compliance.read` (the endpoint checks).
+    /// `hosts.read`, equal to `compliance.read` (the endpoint checks).
     pub(crate) agents: console_read::AgentScope,
     /// `vulnerabilities.read`; `None` without it.
     pub(crate) vulnerabilities: Option<console_read::AgentScope>,
@@ -105,7 +105,7 @@ impl LookupRunner for ConsoleReadLookups {
         let forbidden = |area| Err(LookupError::Forbidden(area));
         match lookup {
             // Host services and software read host data, guarded by
-            // agents.read like agent_summary (and the Assets and Software
+            // hosts.read like agent_summary (and the Assets and Software
             // pages), with the agent scope.
             Lookup::SearchFindings { .. }
             | Lookup::FindingEndpoints { .. }

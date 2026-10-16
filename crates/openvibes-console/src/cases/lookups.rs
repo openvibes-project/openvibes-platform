@@ -63,7 +63,7 @@ pub(crate) async fn list_assignees(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(response) = authorize(&state, &headers, &[Permission::CasesManage], false).await {
+    if let Err(response) = authorize(&state, &headers, &[Permission::CasesAssign], false).await {
         return response;
     }
     let Ok(client) = state.pool.get().await else {

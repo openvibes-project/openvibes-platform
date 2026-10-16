@@ -33,11 +33,11 @@ permission-checked read models, enrollment-token management, and audit routes.
   clears the session cookie. Repeating logout remains safe.
 - `GET /api/v1/enrollment-tokens` returns at most 100 newest token metadata
   rows and never returns token hashes or plaintext. `POST` requires
-  `tokens.create`, CSRF, and an `Idempotency-Key`; successful creation returns
+  `tokens.manage`, CSRF, and an `Idempotency-Key`; successful creation returns
   the secret once, while a same-key/same-request retry returns metadata with
   `secret_available=false`. Reusing a key for different settings returns 409.
   `GET /api/v1/enrollment-tokens/{token_id}` returns one secret-free record.
-  `POST /api/v1/enrollment-tokens/{token_id}/revoke` requires `tokens.revoke`
+  `POST /api/v1/enrollment-tokens/{token_id}/revoke` requires `tokens.manage`
   and audits the revocation. These responses are `Cache-Control: no-store`.
 - `/api/v1/service-accounts` lists safe account metadata and creates an account
   with one global built-in role. Per-account token routes list metadata, issue
@@ -51,16 +51,15 @@ permission-checked read models, enrollment-token management, and audit routes.
   refuses bearer-authenticated mutations; those require a browser session and
   CSRF checks.
 - `/api/v1/rule-sets` and per-set bundle history are global `rules.read`
-  or `rules.upload` reads (user, 2026-10-15). Admin is the only built-in role granted `rules.read` by default;
-  custom roles may receive it explicitly. Rule upload preview verifies the
+  reads; the operator and admin roles hold it (since schema 51). Rule upload preview verifies the
   Ed25519 signature, envelope digest,
   expiry, parser limits, and currently trusted issuer against read-only public
   trust keys. Publish repeats verification, binds the confirmation token to
   the exact bytes, and stores the bundle plus its audit row atomically. The
   console never manages private signing keys or trust-key changes.
 - `/api/v1/rule-set-assignments` (the per-group switches of the assignable
-  sets) reads with global `rules.read` or `rules.upload` and changes with
-  `rules.upload` plus CSRF; see [rule-set-assignment.md](rule-set-assignment.md).
+  sets) reads with global `rules.assignment.read` and changes with
+  `rules.assignment.write` plus CSRF; see [rule-set-assignment.md](rule-set-assignment.md).
 - Missing, malformed, expired, revoked, disabled, or stale-generation sessions
   receive the same generic `401` problem. Store failures return a generic `503`.
 - Session responses are `Cache-Control: no-store`. The CSRF token is derived
@@ -81,7 +80,7 @@ in the OpenAPI document, with no session and with a forced-change one.
 
 ### Users and passwords (#85)
 
-- `POST /api/v1/access-control/users` (`rbac.manage`, global binding, CSRF):
+- `POST /api/v1/access-control/users` (`access.users`, global binding, CSRF):
   username (the CLI's rule, stored lowercase), display name and a built-in
   role (a create that loses a race on the same name is 409, not 503). The
   answer (201, `no-store`) carries a generated one-time password
@@ -123,7 +122,7 @@ append their observed client address to a forwarded chain; an invalid final
 address disables only the per-source bucket.
 When auth settings are absent, the executable serves the C0
 fail-closed router. `GET /api/v1/agents/summary` now requires a live human
-session with `agents.read`, resolves role bindings on each request, and passes
+session with `hosts.read`, resolves role bindings on each request, and passes
 the effective global or asset-group scope to its SQL aggregate, paginated
 list, detail, and certificate queries. Agent and certificate cursors are
 bounded and rejected when their filters or scope differ from the current

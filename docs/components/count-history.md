@@ -73,7 +73,7 @@ share one scope).
 | `vulns.no_fix` | open vulnerabilities without a fix | vulnerabilities.read |
 | `vulns.reboot_hosts` | hosts needing a reboot | vulnerabilities.read |
 | `compliance.open.critical` / `.high` / `.medium` / `.low` | current compliance findings by severity | compliance.read |
-| `agents.active` / `.stale` / `.revoked` | hosts by agent status | agents.read |
+| `agents.active` / `.stale` / `.revoked` | hosts by agent status | hosts.read |
 
 ## Failure behaviour
 

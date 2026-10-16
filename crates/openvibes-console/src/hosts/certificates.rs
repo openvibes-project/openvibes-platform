@@ -57,7 +57,7 @@ pub(crate) async fn authenticated_agent_certificates(
     use platform_store::console_read::{CertificateCursor, PageLimit, certificates_in_scope};
 
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::AgentsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::HostsRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };

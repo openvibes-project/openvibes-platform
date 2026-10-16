@@ -260,6 +260,35 @@ async fn database_builtin_permissions_match_the_rust_role_table() {
         }
     }
 
+    // The catalogue's scope is the database's scope_class.
+    let catalogue: Vec<serde_json::Value> =
+        serde_json::from_str(&openvibes_console::catalogue_json()).unwrap();
+    let scopes = client
+        .query(
+            "SELECT permission_id, scope_class FROM console_permissions",
+            &[],
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)))
+        .collect::<BTreeSet<_>>();
+    let expected_scopes = catalogue
+        .iter()
+        .map(|p| {
+            let class = if p["scope"] == "host" {
+                "agent"
+            } else {
+                "global"
+            };
+            (p["id"].as_str().unwrap().to_owned(), class.to_owned())
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        scopes, expected_scopes,
+        "PostgreSQL and Rust permission scopes diverged"
+    );
+
     assert_eq!(
         actual, expected,
         "PostgreSQL and Rust built-in roles diverged"
@@ -420,7 +449,8 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             .unwrap()
             .iter()
             .any(|capability| {
-                capability["permission"] == "rbac.manage" && capability["scope"]["kind"] == "global"
+                capability["permission"] == "access.grant"
+                    && capability["scope"]["kind"] == "global"
             })
     );
     let create_group = router

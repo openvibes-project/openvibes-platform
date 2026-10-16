@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::access::catalogue::{Scope, def, with_needs};
 use crate::{EffectiveCapability, Permission, PermissionScope};
 
 /// First-release built-in console roles.
@@ -126,7 +127,7 @@ impl RoleBinding {
 /// only agent-bound permissions; their control-plane permissions are inert.
 /// A global grant dominates scoped grants for the same permission.
 pub fn resolve_capabilities(bindings: &[RoleBinding]) -> Vec<EffectiveCapability> {
-    ALL_PERMISSIONS
+    Permission::ALL
         .iter()
         .filter_map(|permission| {
             let mut global = false;
@@ -165,92 +166,74 @@ pub fn resolve_capabilities(bindings: &[RoleBinding]) -> Vec<EffectiveCapability
 }
 
 fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
+    role == BuiltInRole::Admin || builtin_permissions(role).contains(&permission)
+}
+
+/// A built-in role's permissions: its pre-catalogue set mapped to the new
+/// identifiers (spec §12 part 1, the same mapping as migration 51), closed
+/// under needs.
+fn builtin_permissions(role: BuiltInRole) -> BTreeSet<Permission> {
     use Permission as P;
-    match role {
-        BuiltInRole::Viewer => matches!(
-            permission,
-            P::AgentsRead | P::ComplianceRead | P::VulnerabilitiesRead | P::AlarmsRead
-        ),
-        BuiltInRole::Analyst => {
-            matches!(
-                permission,
-                P::AgentsRead
-                    | P::ComplianceRead
-                    | P::ComplianceTriage
-                    | P::VulnerabilitiesRead
-                    | P::VulnerabilitiesTriage
-                    | P::AssistantUse
-                    | P::AlarmsRead
-                    | P::AlarmsTriage
-                    | P::AlarmsSuppress
-                    | P::CasesRead
-                    | P::CasesManage
-            )
-        }
-        BuiltInRole::Operator => matches!(
-            permission,
-            P::AgentsRead
-                | P::AgentsRevoke
-                | P::ComplianceRead
-                | P::VulnerabilitiesRead
-                | P::TokensRead
-                | P::TokensCreate
-                | P::TokensRevoke
-                | P::RulesUpload
-                | P::RulesWrite
-                | P::AlarmsRead
-        ),
-        BuiltInRole::Admin => true,
-    }
+    // Viewer before migration 51: agents.read, compliance.read,
+    // vulnerabilities.read, alarms.read; each read gains its export.
+    const VIEWER: &[Permission] = &[
+        P::HostsRead,
+        P::HostsExport,
+        P::ComplianceRead,
+        P::ComplianceExport,
+        P::VulnerabilitiesRead,
+        P::VulnerabilitiesExport,
+        P::AlarmsRead,
+        P::AlarmsSuppressionsRead,
+        P::AlarmsExport,
+    ];
+    let set: BTreeSet<Permission> = match role {
+        BuiltInRole::Viewer => VIEWER.iter().copied().collect(),
+        // Viewer plus compliance.triage, vulnerabilities.triage,
+        // assistant.use, alarms.triage, alarms.suppress, cases.read and
+        // cases.manage.
+        BuiltInRole::Analyst => VIEWER
+            .iter()
+            .copied()
+            .chain([
+                P::ComplianceTriage,
+                P::VulnerabilitiesTriage,
+                P::AssistantUse,
+                P::AlarmsTriage,
+                P::AlarmsSuppress,
+                P::CasesRead,
+                P::CasesWrite,
+                P::CasesAssign,
+            ])
+            .collect(),
+        // Viewer plus agents.revoke, tokens.*, rules.upload and rules.write.
+        BuiltInRole::Operator => VIEWER
+            .iter()
+            .copied()
+            .chain([
+                P::HostsRevoke,
+                P::TokensRead,
+                P::TokensManage,
+                P::TokensInstaller,
+                P::RulesPublish,
+                P::RulesRead,
+                P::RulesAssignmentRead,
+                P::RulesCoverageRead,
+                P::RulesAssignmentWrite,
+                P::SiteRulesRead,
+                P::SiteRulesWrite,
+                P::SiteRulesTest,
+                P::SiteRulesPublish,
+            ])
+            .collect(),
+        BuiltInRole::Admin => Permission::ALL.into_iter().collect(),
+    };
+    with_needs(&set)
 }
 
 fn is_agent_bound(permission: Permission) -> bool {
-    matches!(
-        permission,
-        Permission::AgentsRead
-            | Permission::AgentsRevoke
-            | Permission::ComplianceRead
-            | Permission::VulnerabilitiesRead
-            | Permission::ComplianceTriage
-            | Permission::VulnerabilitiesTriage
-            | Permission::AlarmsRead
-            | Permission::AlarmsTriage
-            | Permission::AlarmsSuppress
-            | Permission::CasesRead
-            | Permission::CasesManage
-    )
+    def(permission).scope == Scope::Host
 }
-
-const ALL_PERMISSIONS: &[Permission] = &[
-    Permission::AgentsRead,
-    Permission::AgentsRevoke,
-    Permission::ComplianceRead,
-    Permission::VulnerabilitiesRead,
-    Permission::ComplianceTriage,
-    Permission::VulnerabilitiesTriage,
-    Permission::AlarmsRead,
-    Permission::AlarmsTriage,
-    Permission::AlarmsSuppress,
-    Permission::TokensRead,
-    Permission::TokensCreate,
-    Permission::TokensRevoke,
-    Permission::RulesRead,
-    Permission::RulesUpload,
-    Permission::RulesWrite,
-    Permission::AuditRead,
-    Permission::AuditExport,
-    Permission::AuditRetentionManage,
-    Permission::RbacRead,
-    Permission::RbacManage,
-    Permission::AssetGroupsManage,
-    Permission::ServiceAccountsRead,
-    Permission::ServiceAccountsManage,
-    Permission::AssistantUse,
-    Permission::AssistantAdmin,
-    Permission::DashboardsShare,
-    Permission::CasesRead,
-    Permission::CasesManage,
-];
 
 #[cfg(test)]
 mod tests {
@@ -273,11 +256,22 @@ mod tests {
         assert_eq!(
             capabilities,
             [
-                (Permission::AgentsRead, vec!["group-a", "group-b"]),
-                (Permission::AgentsRevoke, vec!["group-a", "group-b"]),
-                (Permission::ComplianceRead, vec!["group-a", "group-b"]),
-                (Permission::VulnerabilitiesRead, vec!["group-a", "group-b"]),
                 (Permission::AlarmsRead, vec!["group-a", "group-b"]),
+                (
+                    Permission::AlarmsSuppressionsRead,
+                    vec!["group-a", "group-b"]
+                ),
+                (Permission::AlarmsExport, vec!["group-a", "group-b"]),
+                (Permission::ComplianceRead, vec!["group-a", "group-b"]),
+                (Permission::ComplianceExport, vec!["group-a", "group-b"]),
+                (Permission::VulnerabilitiesRead, vec!["group-a", "group-b"]),
+                (
+                    Permission::VulnerabilitiesExport,
+                    vec!["group-a", "group-b"]
+                ),
+                (Permission::HostsRead, vec!["group-a", "group-b"]),
+                (Permission::HostsRevoke, vec!["group-a", "group-b"]),
+                (Permission::HostsExport, vec!["group-a", "group-b"]),
             ]
             .map(|(permission, asset_group_ids)| crate::EffectiveCapability {
                 permission,
@@ -299,8 +293,9 @@ mod tests {
         }));
         let operator_capabilities =
             resolve_capabilities(&[RoleBinding::global(BuiltInRole::Operator)]);
+        // rules.upload holders gained rules.read with migration 51.
         assert!(
-            !operator_capabilities
+            operator_capabilities
                 .iter()
                 .any(|item| item.permission == Permission::RulesRead)
         );
@@ -311,7 +306,7 @@ mod tests {
         assert_eq!(
             mixed
                 .iter()
-                .find(|item| item.permission == Permission::AgentsRead)
+                .find(|item| item.permission == Permission::HostsRead)
                 .unwrap()
                 .scope,
             PermissionScope::Global
@@ -319,13 +314,13 @@ mod tests {
         assert!(
             !mixed
                 .iter()
-                .any(|item| item.permission == Permission::RbacManage)
+                .any(|item| item.permission == Permission::AccessGrant)
         );
         let global_admin = resolve_capabilities(&[RoleBinding::global(BuiltInRole::Admin)]);
         assert!(
             global_admin
                 .iter()
-                .any(|item| item.permission == Permission::RbacManage)
+                .any(|item| item.permission == Permission::AccessGrant)
         );
         assert!(
             global_admin
@@ -339,7 +334,7 @@ mod tests {
         let manages = |binding: RoleBinding| {
             resolve_capabilities(&[binding])
                 .into_iter()
-                .find(|item| item.permission == Permission::CasesManage)
+                .find(|item| item.permission == Permission::CasesWrite)
                 .map(|item| item.scope)
         };
         for role in [BuiltInRole::Viewer, BuiltInRole::Operator] {

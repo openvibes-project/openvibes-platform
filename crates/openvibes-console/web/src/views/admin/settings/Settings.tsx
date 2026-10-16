@@ -16,7 +16,7 @@ import { ServiceAccounts } from "./ServiceAccounts";
 type Tab = { id: string; label: string; access: readonly Access[]; render: () => ReactNode };
 
 const tabs: readonly Tab[] = [
-  { id: "access", label: "Access", access: [{ permission: "rbac.read", global: true }], render: () => <AccessTab /> },
+  { id: "access", label: "Access", access: [{ permission: "access.read", global: true }], render: () => <AccessTab /> },
   { id: "service-accounts", label: "Service accounts", access: [{ permission: "service_accounts.read", global: true }], render: () => <ServiceAccounts /> },
   { id: "enrollment", label: "Enrollment", access: [{ permission: "tokens.read", global: true }], render: () => <Enrollment /> },
   { id: "rule-sets", label: "Rule sets", access: RULE_READERS, render: () => <RuleSets /> },

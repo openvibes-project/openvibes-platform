@@ -26,9 +26,9 @@ const defs = {
   "compliance.open.high": { label: "Open high compliance findings", permissions: ["compliance.read"], view: ["/compliance", { severity: "high" }] },
   "compliance.open.medium": { label: "Open medium compliance findings", permissions: ["compliance.read"], view: ["/compliance", { severity: "medium" }] },
   "compliance.open.low": { label: "Open low compliance findings", permissions: ["compliance.read"], view: ["/compliance", { severity: "low" }] },
-  "agents.active": { label: "Hosts online", permissions: ["agents.read"], view: ["/agents", { status: "active" }] },
-  "agents.stale": { label: "Stale hosts", permissions: ["agents.read"], view: ["/agents", { status: "stale" }] },
-  "agents.revoked": { label: "Revoked hosts", permissions: ["agents.read"], view: ["/agents", { status: "revoked" }] },
+  "agents.active": { label: "Hosts online", permissions: ["hosts.read"], view: ["/agents", { status: "active" }] },
+  "agents.stale": { label: "Stale hosts", permissions: ["hosts.read"], view: ["/agents", { status: "stale" }] },
+  "agents.revoked": { label: "Revoked hosts", permissions: ["hosts.read"], view: ["/agents", { status: "revoked" }] },
 } satisfies Record<string, Entry>;
 /** Name in graphs and their picker, where "Critical" alone would not say it spans kinds. */
 export const graphLabel = (id: Metric) => id.startsWith("all.") ? `${METRICS[id].label} (all kinds)` : METRICS[id].label;

@@ -218,8 +218,7 @@ const AGENT: &str = "agent.00000000-0000-4000-8000-000000000001";
 const ALICE: &str = "11111111-1111-4111-8111-111111111111";
 const LIST: &str = "/api/v1/rule-set-assignments";
 const L1: &str = "/api/v1/rule-set-assignments/hardening-linux-l1";
-/// Rule reads that `rules.upload` grants as well as `rules.read` (user,
-/// 2026-10-15), with the operator's answer: no rule set named `baseline`
+/// Rule reads operators hold since schema 51 (they held `rules.upload`), with the operator's answer: no rule set named `baseline`
 /// exists here, so its history is 404 `rule_set_not_found` (past the check).
 const RULE_READS: [(&str, StatusCode); 4] = [
     ("/api/v1/rule-sets", StatusCode::OK),
@@ -277,7 +276,7 @@ async fn setup() -> (TestDb, axum::Router) {
 async fn rule_readers_and_publishers_see_the_switches_and_only_publishers_change_them() {
     let (db, router) = setup().await;
     let off = serde_json::json!({"default_enabled": false});
-    // An analyst holds neither rules.read nor rules.upload.
+    // An analyst holds no rule-set view.
     let (cookie, csrf) = login(&router, "bob").await;
     let (status, ..) = call(&router, "GET", LIST, &cookie, &csrf, None, None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -285,14 +284,14 @@ async fn rule_readers_and_publishers_see_the_switches_and_only_publishers_change
     assert_eq!(
         status,
         StatusCode::FORBIDDEN,
-        "an analyst has no rules.upload"
+        "an analyst has no rules.assignment.read"
     );
     for (path, _) in RULE_READS {
         let (status, ..) = call(&router, "GET", path, &cookie, &csrf, None, None).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "analyst {path}");
     }
 
-    // An operator reads through rules.upload, so it can add overrides.
+    // An operator reads the switches, so it can add overrides.
     let (cookie, csrf) = login(&router, "carol").await;
     let (status, body, _) = call(&router, "GET", LIST, &cookie, &csrf, None, None).await;
     assert_eq!(status, StatusCode::OK);
@@ -472,7 +471,7 @@ async fn the_host_view_stays_within_the_callers_asset_groups() {
         ))
         .await
         .unwrap();
-    // bob (analyst) holds agents.read for the web group only.
+    // bob (analyst) holds hosts.read for the web group only.
     let (cookie, csrf) = login(&router, "bob").await;
     let inside = format!("/api/v1/agents/{AGENT}/rule-set-assignments");
     let (status, ..) = call(&router, "GET", &inside, &cookie, &csrf, None, None).await;

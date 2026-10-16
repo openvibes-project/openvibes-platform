@@ -1,0 +1,123 @@
+[
+  {
+    "name": "Viewer",
+    "description": "Sees alarms, findings, vulnerabilities, hosts and dashboards.",
+    "permissions": [
+      "alarms.read",
+      "alarms.suppressions.read",
+      "compliance.read",
+      "vulnerabilities.read",
+      "hosts.read",
+      "cases.read",
+      "rules.read",
+      "rules.coverage.read"
+    ]
+  },
+  {
+    "name": "Analyst",
+    "description": "Viewer, plus triage, cases, suppressing with a reason, and the assistant.",
+    "permissions": [
+      "alarms.read",
+      "alarms.suppressions.read",
+      "compliance.read",
+      "vulnerabilities.read",
+      "hosts.read",
+      "cases.read",
+      "rules.read",
+      "rules.coverage.read",
+      "alarms.triage",
+      "alarms.suppress",
+      "compliance.triage",
+      "vulnerabilities.triage",
+      "cases.write",
+      "assistant.use"
+    ]
+  },
+  {
+    "name": "Operator",
+    "description": "Runs the fleet: enrollment, labels, revoking hosts, publishing rules and where they run.",
+    "permissions": [
+      "alarms.read",
+      "compliance.read",
+      "vulnerabilities.read",
+      "hosts.read",
+      "hosts.label",
+      "hosts.revoke",
+      "tokens.read",
+      "tokens.manage",
+      "tokens.installer",
+      "rules.read",
+      "rules.assignment.read",
+      "rules.coverage.read",
+      "rules.contents.read",
+      "rules.publish",
+      "rules.assignment.write"
+    ]
+  },
+  {
+    "name": "Team lead",
+    "description": "For a role limited to some groups: Analyst, plus approving suppressions, labels, sharing dashboards and giving roles within its share.",
+    "permissions": [
+      "alarms.read",
+      "alarms.suppressions.read",
+      "compliance.read",
+      "vulnerabilities.read",
+      "hosts.read",
+      "cases.read",
+      "rules.read",
+      "rules.coverage.read",
+      "alarms.triage",
+      "alarms.suppress",
+      "compliance.triage",
+      "vulnerabilities.triage",
+      "cases.write",
+      "assistant.use",
+      "alarms.suppressions.approve",
+      "hosts.label",
+      "dashboards.share",
+      "access.read",
+      "access.grant"
+    ]
+  },
+  {
+    "name": "Auditor",
+    "description": "Reads everything, plus the audit log and its export. Changes nothing.",
+    "permissions": [
+      "alarms.read",
+      "alarms.suppressions.read",
+      "alarms.export",
+      "compliance.read",
+      "compliance.export",
+      "vulnerabilities.read",
+      "vulnerabilities.export",
+      "hosts.read",
+      "hosts.export",
+      "cases.read",
+      "rules.read",
+      "rules.assignment.read",
+      "rules.coverage.read",
+      "rules.contents.read",
+      "site_rules.read",
+      "access.read",
+      "service_accounts.read",
+      "tokens.read",
+      "audit.read",
+      "audit.export"
+    ]
+  },
+  {
+    "name": "Rule author",
+    "description": "Site rule drafts, testing on a host, publishing, and coverage.",
+    "permissions": [
+      "hosts.read",
+      "rules.read",
+      "rules.assignment.read",
+      "rules.coverage.read",
+      "rules.contents.read",
+      "site_rules.read",
+      "site_rules.write",
+      "site_rules.test",
+      "site_rules.publish"
+    ]
+  }
+]

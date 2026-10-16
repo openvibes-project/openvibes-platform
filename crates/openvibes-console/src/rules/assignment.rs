@@ -1,9 +1,9 @@
 //! `/api/v1/rule-set-assignments`: the per-group switches of the project's
-//! assignable rule sets (spec 2026-10-14). Reading needs `rules.read` or
-//! `rules.upload` (operators hold only the latter and must see the groups
-//! to add an override), as do the rule-set list, bundle history, coverage
-//! and ATT&CK catalog (`rules_reader`); changing needs `rules.upload`, all
-//! global; one host's state needs `agents.read` within the caller's scope.
+//! assignable rule sets (spec 2026-10-14). Reading needs
+//! `rules.assignment.read`, changing `rules.assignment.write`, both global
+//! (`rules_reader` also serves the rule-set list, bundle history, coverage
+//! and ATT&CK catalog with their own permission); one host's state needs
+//! `hosts.read` within the caller's scope.
 
 use axum::{
     Json,
@@ -149,30 +149,26 @@ fn view(assignment: store::Assignment) -> RuleSetAssignmentView {
 
 /// The caller's user id when they may change switches.
 async fn writer(state: &AuthHttpState, headers: &HeaderMap) -> Result<String, Response> {
-    match authenticated_permission(state, headers, Permission::RulesUpload, true).await {
+    match authenticated_permission(state, headers, Permission::RulesAssignmentWrite, true).await {
         Ok((AgentScope::Global, actor)) => Ok(actor),
         Ok(_) => Err(forbidden()),
         Err(response) => Err(response),
     }
 }
 
-/// The caller's user id when they hold `rules.read` or `rules.upload`
-/// globally: reading the switches, and (user, 2026-10-15) the rule-set list,
-/// bundle history, coverage and the ATT&CK catalog, so operators see what
-/// they publish and switch.
+/// The caller's user id when they hold `permission` globally: one of the
+/// rule-set views (`rules.read`, `rules.assignment.read`,
+/// `rules.coverage.read`), all platform-wide.
 pub(super) async fn rules_reader(
     state: &AuthHttpState,
     headers: &HeaderMap,
+    permission: Permission,
 ) -> Result<String, Response> {
-    for permission in [Permission::RulesRead, Permission::RulesUpload] {
-        match authenticated_permission(state, headers, permission, false).await {
-            Ok((AgentScope::Global, actor)) => return Ok(actor),
-            Ok(_) => {}
-            Err(response) if response.status() == StatusCode::FORBIDDEN => {}
-            Err(response) => return Err(response),
-        }
+    match authenticated_permission(state, headers, permission, false).await {
+        Ok((AgentScope::Global, actor)) => Ok(actor),
+        Ok(_) => Err(forbidden()),
+        Err(response) => Err(response),
     }
-    Err(forbidden())
 }
 
 fn change_response(result: Result<store::Change, platform_store::StoreError>) -> Response {
@@ -202,13 +198,13 @@ fn invalid() -> Response {
     responses(
         (status = 200, description = "Assignable rule sets and asset groups", body = RuleSetAssignmentsView),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
-        (status = 403, description = "Neither rules.read nor rules.upload, globally", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "No global rules.assignment.read", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn list_assignments(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(response) = rules_reader(&state, &headers).await {
+    if let Err(response) = rules_reader(&state, &headers, Permission::RulesAssignmentRead).await {
         return response;
     }
     let Ok(client) = state.pool.get().await else {
@@ -345,7 +341,7 @@ pub(crate) async fn host_assignments(
     Path(agent_id): Path<String>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::HostsRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };

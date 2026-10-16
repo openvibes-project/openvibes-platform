@@ -76,8 +76,8 @@ describe("the host's Hardening line", () => {
 });
 
 describe("who reads the rule sets", () => {
-  it("rules.read or rules.upload, globally", () => {
+  it("rules.read, globally", () => {
     const holding = (...held: string[]) => (p: string, global?: boolean) => global === true && held.includes(p);
-    expect([readsRules(holding("rules.read")), readsRules(holding("rules.upload")), readsRules(holding("agents.read"))]).toEqual([true, true, false]);
+    expect([readsRules(holding("rules.read")), readsRules(holding("rules.publish")), readsRules(holding("hosts.read"))]).toEqual([true, false, false]);
   });
 });

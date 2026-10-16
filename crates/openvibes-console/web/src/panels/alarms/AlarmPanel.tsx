@@ -78,7 +78,7 @@ export function AlarmPanel({ id }: { id: string }) {
   const actions = <>
     <BulkBar inline kind="alarms" noun="alarm" count={1} onClear={() => undefined} items={() => [{ id: a.id }]} without={["case", "suppress"]}
       assignee={a.triage.assigned_to ?? null} newCase={() => ({ title: a.message, severity: a.severity })} />
-    {can("cases.manage") && <span className="push"><AddToCase kind="alarm" id={a.id} label={a.message} inCase={inCase} /></span>}
+    {can("cases.write") && <span className="push"><AddToCase kind="alarm" id={a.id} label={a.message} inCase={inCase} /></span>}
   </>;
 
   return (

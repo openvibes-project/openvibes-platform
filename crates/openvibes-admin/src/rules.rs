@@ -29,7 +29,7 @@ pub enum RulesCommand {
         file: PathBuf,
     },
     /// Have the rule signer sign the site's own rules (asking for USER's
-    /// password; USER needs rules.upload) and publish them (board #107).
+    /// password; USER needs site_rules.publish) and publish them (board #107).
     PublishSite {
         /// Rule set JSON (schema 1).
         rules_file: PathBuf,

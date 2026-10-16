@@ -1,6 +1,5 @@
 // The demo server's shared context: the persona's data, permissions and
 // visibility, the helpers more than one area uses, and the route registrar.
-import { RULE_READERS } from "../panels/rules/ruleAssignment";
 import type { AuditEvent, Capability, FindingGroup, Permission, TriageCounts } from "../api/types";
 import { buildDemoData } from "./data";
 import { problem, severityRank } from "./http";
@@ -12,6 +11,13 @@ type Route = { method: string; pattern: RegExp; keys: string[]; permission: Perm
 
 export type DemoContext = ReturnType<typeof createDemoContext>;
 
+// What the scoped operator persona holds globally: what operators' old
+// tokens.* and rules.upload became (migration 51).
+const PLATFORM_FOR_SCOPED: readonly string[] = [
+  "tokens.read", "tokens.manage", "tokens.installer",
+  "rules.publish", "rules.read", "rules.assignment.read", "rules.coverage.read",
+];
+
 export function createDemoContext({ persona, now }: { persona: Persona; now: number }) {
   const data = buildDemoData(now);
   const iso = (ms = Date.now()) => new Date(ms).toISOString();
@@ -20,12 +26,12 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
   const scoped = persona === "scoped_operator";
   const capabilities: Capability[] = permissions.map((permission) => ({
     permission,
-    scope: scoped && !["tokens.read", "tokens.create", "tokens.revoke", "rules.upload"].includes(permission)
+    scope: scoped && !PLATFORM_FOR_SCOPED.includes(permission)
       ? { kind: "asset_groups", asset_group_ids: ["grp-prod"] }
       : { kind: "global" },
   }));
-  // Rule sets, their switches, history and coverage: rules.read or rules.upload, globally (the real API's rule).
-  const readsRules = () => RULE_READERS.some((r) => capabilities.some((c) => c.permission === r.permission && (!r.global || c.scope.kind === "global")));
+  // Rule sets and history (rules.read), their switches (rules.assignment.read) and coverage (rules.coverage.read), globally (the real API's rule).
+  const readsRules = (permission: Permission = "rules.read") => capabilities.some((c) => c.permission === permission && c.scope.kind === "global");
   const actor = { admin: "admin", analyst: "sam", operator: "ola", scoped_operator: "ola", viewer: "vic" }[persona];
 
   const visible = (agentId: string) =>

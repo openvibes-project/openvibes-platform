@@ -66,8 +66,8 @@ export function factsNote(outcome: string, okAt: string | null | undefined, now 
   return `The agent's root-facts helper has not reported for ${days} ${days === 1 ? "day" : "days"}${FACTS_TAIL}`;
 }
 
-/** Who reads the rule sets, their switches, history and coverage: `rules.read` or `rules.upload`, globally. */
-export const RULE_READERS: readonly Access[] = [{ permission: "rules.read", global: true }, { permission: "rules.upload", global: true }];
+/** Who reads the rule sets and their history: `rules.read`, globally. */
+export const RULE_READERS: readonly Access[] = [{ permission: "rules.read", global: true }];
 
 export const readsRules = (can: (permission: Permission, global?: boolean) => boolean): boolean => grantsAny(can, RULE_READERS);
 

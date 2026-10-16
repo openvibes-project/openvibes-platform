@@ -1,0 +1,453 @@
+[
+  {
+    "id": "alarms.read",
+    "area": "Alarms",
+    "label": "View alarms",
+    "column": "View",
+    "scope": "host",
+    "needs": []
+  },
+  {
+    "id": "alarms.suppressions.read",
+    "area": "Alarms",
+    "label": "View suppressions",
+    "column": "View",
+    "scope": "host",
+    "needs": [
+      "alarms.read"
+    ]
+  },
+  {
+    "id": "alarms.triage",
+    "area": "Alarms",
+    "label": "Triage alarms",
+    "column": "Change",
+    "scope": "host",
+    "needs": [
+      "alarms.read"
+    ]
+  },
+  {
+    "id": "alarms.suppress",
+    "area": "Alarms",
+    "label": "Suppress alarms (with a reason)",
+    "column": "Change",
+    "scope": "host",
+    "needs": [
+      "alarms.read",
+      "alarms.suppressions.read"
+    ]
+  },
+  {
+    "id": "alarms.export",
+    "area": "Alarms",
+    "label": "Export alarms",
+    "column": "Export",
+    "scope": "host",
+    "needs": [
+      "alarms.read"
+    ]
+  },
+  {
+    "id": "alarms.suppressions.approve",
+    "area": "Alarms",
+    "label": "Approve suppressions",
+    "column": "Approve and publish",
+    "scope": "host",
+    "needs": [
+      "alarms.suppressions.read"
+    ]
+  },
+  {
+    "id": "compliance.read",
+    "area": "Compliance",
+    "label": "View findings",
+    "column": "View",
+    "scope": "host",
+    "needs": []
+  },
+  {
+    "id": "compliance.triage",
+    "area": "Compliance",
+    "label": "Triage findings",
+    "column": "Change",
+    "scope": "host",
+    "needs": [
+      "compliance.read"
+    ]
+  },
+  {
+    "id": "compliance.export",
+    "area": "Compliance",
+    "label": "Export findings",
+    "column": "Export",
+    "scope": "host",
+    "needs": [
+      "compliance.read"
+    ]
+  },
+  {
+    "id": "vulnerabilities.read",
+    "area": "Vulnerabilities",
+    "label": "View vulnerabilities",
+    "column": "View",
+    "scope": "host",
+    "needs": []
+  },
+  {
+    "id": "vulnerabilities.triage",
+    "area": "Vulnerabilities",
+    "label": "Triage vulnerabilities",
+    "column": "Change",
+    "scope": "host",
+    "needs": [
+      "vulnerabilities.read"
+    ]
+  },
+  {
+    "id": "vulnerabilities.export",
+    "area": "Vulnerabilities",
+    "label": "Export vulnerabilities",
+    "column": "Export",
+    "scope": "host",
+    "needs": [
+      "vulnerabilities.read"
+    ]
+  },
+  {
+    "id": "hosts.read",
+    "area": "Hosts",
+    "label": "View hosts",
+    "column": "View",
+    "scope": "host",
+    "needs": []
+  },
+  {
+    "id": "hosts.label",
+    "area": "Hosts",
+    "label": "Label hosts",
+    "column": "Change",
+    "scope": "host",
+    "needs": [
+      "hosts.read"
+    ]
+  },
+  {
+    "id": "hosts.revoke",
+    "area": "Hosts",
+    "label": "Revoke a host",
+    "column": "Change",
+    "scope": "host",
+    "needs": [
+      "hosts.read"
+    ]
+  },
+  {
+    "id": "hosts.export",
+    "area": "Hosts",
+    "label": "Export host data",
+    "column": "Export",
+    "scope": "host",
+    "needs": [
+      "hosts.read"
+    ]
+  },
+  {
+    "id": "cases.read",
+    "area": "Cases",
+    "label": "View cases",
+    "column": "View",
+    "scope": "host",
+    "needs": []
+  },
+  {
+    "id": "cases.write",
+    "area": "Cases",
+    "label": "Create and edit cases",
+    "column": "Change",
+    "scope": "host",
+    "needs": [
+      "cases.read"
+    ]
+  },
+  {
+    "id": "cases.assign",
+    "area": "Cases",
+    "label": "Assign cases",
+    "column": "Change",
+    "scope": "host",
+    "needs": [
+      "cases.write"
+    ]
+  },
+  {
+    "id": "rules.read",
+    "area": "Rule sets",
+    "label": "View rule sets and versions",
+    "column": "View",
+    "scope": "platform",
+    "needs": []
+  },
+  {
+    "id": "rules.assignment.read",
+    "area": "Rule sets",
+    "label": "View where sets run",
+    "column": "View",
+    "scope": "platform",
+    "needs": [
+      "rules.read"
+    ]
+  },
+  {
+    "id": "rules.coverage.read",
+    "area": "Rule sets",
+    "label": "View ATT&CK coverage",
+    "column": "View",
+    "scope": "platform",
+    "needs": []
+  },
+  {
+    "id": "rules.contents.read",
+    "area": "Rule sets",
+    "label": "View rule contents",
+    "column": "View",
+    "scope": "platform",
+    "needs": [
+      "rules.read"
+    ]
+  },
+  {
+    "id": "rules.assignment.write",
+    "area": "Rule sets",
+    "label": "Change where sets run",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "rules.assignment.read"
+    ]
+  },
+  {
+    "id": "rules.publish",
+    "area": "Rule sets",
+    "label": "Publish a rule bundle",
+    "column": "Approve and publish",
+    "scope": "platform",
+    "needs": [
+      "rules.read"
+    ]
+  },
+  {
+    "id": "site_rules.read",
+    "area": "Site rules",
+    "label": "View site rule drafts",
+    "column": "View",
+    "scope": "platform",
+    "needs": []
+  },
+  {
+    "id": "site_rules.write",
+    "area": "Site rules",
+    "label": "Edit site rule drafts",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "site_rules.read"
+    ]
+  },
+  {
+    "id": "site_rules.test",
+    "area": "Site rules",
+    "label": "Test a draft on a host",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "site_rules.write",
+      "hosts.read"
+    ]
+  },
+  {
+    "id": "site_rules.publish",
+    "area": "Site rules",
+    "label": "Publish site rules",
+    "column": "Approve and publish",
+    "scope": "platform",
+    "needs": [
+      "site_rules.write"
+    ]
+  },
+  {
+    "id": "dashboards.share",
+    "area": "Dashboards",
+    "label": "Share dashboards with your roles",
+    "column": "Change",
+    "scope": "platform",
+    "needs": []
+  },
+  {
+    "id": "dashboards.publish",
+    "area": "Dashboards",
+    "label": "Publish dashboards to everyone",
+    "column": "Approve and publish",
+    "scope": "platform",
+    "needs": [
+      "dashboards.share"
+    ]
+  },
+  {
+    "id": "assistant.use",
+    "area": "Assistant",
+    "label": "Use the assistant",
+    "column": "View",
+    "scope": "host",
+    "needs": []
+  },
+  {
+    "id": "assistant.admin",
+    "area": "Assistant",
+    "label": "Configure the assistant and internet lookups",
+    "column": "Change",
+    "scope": "platform",
+    "needs": []
+  },
+  {
+    "id": "access.read",
+    "area": "Access",
+    "label": "View people and roles",
+    "column": "View",
+    "scope": "platform",
+    "needs": []
+  },
+  {
+    "id": "access.users",
+    "area": "Access",
+    "label": "Create, edit and disable users",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "access.read"
+    ]
+  },
+  {
+    "id": "access.roles",
+    "area": "Access",
+    "label": "Create and edit roles",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "access.read"
+    ]
+  },
+  {
+    "id": "access.grant",
+    "area": "Access",
+    "label": "Give people roles",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "access.read"
+    ]
+  },
+  {
+    "id": "host_groups.manage",
+    "area": "Access",
+    "label": "Manage host groups",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "access.read",
+      "hosts.read"
+    ]
+  },
+  {
+    "id": "service_accounts.read",
+    "area": "Service accounts",
+    "label": "View service accounts",
+    "column": "View",
+    "scope": "platform",
+    "needs": []
+  },
+  {
+    "id": "service_accounts.manage",
+    "area": "Service accounts",
+    "label": "Create and disable service accounts",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "service_accounts.read"
+    ]
+  },
+  {
+    "id": "service_accounts.tokens",
+    "area": "Service accounts",
+    "label": "Issue and revoke their tokens",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "service_accounts.read"
+    ]
+  },
+  {
+    "id": "tokens.read",
+    "area": "Enrollment",
+    "label": "View enrollment tokens",
+    "column": "View",
+    "scope": "platform",
+    "needs": []
+  },
+  {
+    "id": "tokens.manage",
+    "area": "Enrollment",
+    "label": "Create and revoke tokens",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "tokens.read"
+    ]
+  },
+  {
+    "id": "tokens.installer",
+    "area": "Enrollment",
+    "label": "Download the agent installer",
+    "column": "Export",
+    "scope": "platform",
+    "needs": [
+      "tokens.read"
+    ]
+  },
+  {
+    "id": "audit.read",
+    "area": "Audit log",
+    "label": "View the audit log",
+    "column": "View",
+    "scope": "platform",
+    "needs": []
+  },
+  {
+    "id": "audit.retention.manage",
+    "area": "Audit log",
+    "label": "Change retention",
+    "column": "Change",
+    "scope": "platform",
+    "needs": [
+      "audit.read"
+    ]
+  },
+  {
+    "id": "audit.export",
+    "area": "Audit log",
+    "label": "Export the audit log",
+    "column": "Export",
+    "scope": "platform",
+    "needs": [
+      "audit.read"
+    ]
+  },
+  {
+    "id": "settings.manage",
+    "area": "General",
+    "label": "Change general settings",
+    "column": "Change",
+    "scope": "platform",
+    "needs": []
+  }
+]
