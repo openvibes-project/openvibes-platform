@@ -1,12 +1,13 @@
 // A person's page (/settings/people/{id}; approved screen 7), one page, no
 // tabs: the header, Details and Recent activity on the left, Roles and the
 // Access they add up to on the right.
-import { type MouseEvent, type ReactNode, useState } from "react";
+import { type MouseEvent, type ReactNode, useRef, useState } from "react";
 
 import { request, useResource } from "../../../api/client";
 import type { PersonView } from "../../../api/types";
 import { nav } from "../../../app/nav";
 import { useSession } from "../../../app/session";
+import { auditActionLabel } from "../../../ui/auditActions";
 import { Ago, ErrorBox, Loading } from "../../../ui/bits";
 import { ago, date, plural } from "../../../ui/format";
 import { Icon } from "../../../ui/Icon";
@@ -40,6 +41,9 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
   const self = session?.principal.id === person.user_id;
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
+  // After Escape in Add role, focus goes back to the "Add role" button once it is shown again.
+  const refocusAdd = useRef(false);
+  const closeAdd = (refocus: boolean) => { refocusAdd.current = refocus; setAdding(false); };
   const grant = can("access.grant") && !self;
   const permissions = new Set(person.access.map((a) => a.permission)).size;
   const role = (roleId: string, give: boolean) => {
@@ -56,7 +60,7 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
           <span className="subtle">{plural(person.roles.length, "role")} · {countLabel(permissions)} · {person.last_sign_in_at ? `last signed in ${ago(person.last_sign_in_at)}` : "never signed in"}</span>
         </div>
         <div className="row person-page__actions">
-          {(self || can("access.users")) && <button type="button" className="button" aria-pressed={editing} onClick={() => setEditing(!editing)}>{editing ? "Stop editing" : "Edit details"}</button>}
+          {(self || can("access.users")) && <button type="button" className="button" onClick={() => setEditing(!editing)}>{editing ? "Stop editing" : "Edit details"}</button>}
           <PersonMenu person={person} actions={personActions(person, self, can("access.users"))} onError={onError} />
         </div>
       </header>
@@ -77,7 +81,7 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
             {person.recent.length === 0 ? <p className="subtle person-page__none">Nothing recorded yet.</p> : (
               <ul className="person-page__activity">
                 {person.recent.map((a, i) => (
-                  <li key={i}><span className="mono">{a.action}</span><span className="subtle">{a.target ? `${a.target} · ` : ""}{ago(a.at)}</span></li>
+                  <li key={i}><span>{auditActionLabel(a.action)}</span><span className="subtle">{a.target ? `${a.target} · ` : ""}{ago(a.at)}</span></li>
                 ))}
               </ul>
             )}
@@ -85,9 +89,10 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
         </div>
         <div className="stack person-page__col">
           <Card title={<>Roles <span className="num">{person.roles.length}</span></>}
-            aside={grant && !adding && <button type="button" className="button button--primary button--small" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add role</button>}>
+            aside={grant && !adding && <button type="button" className="button button--primary button--small" onClick={() => setAdding(true)}
+              ref={(el) => { if (el && refocusAdd.current) { refocusAdd.current = false; el.focus(); } }}><Icon name="plus" size={14} /> Add role</button>}>
             <div className="stack person-page__roles">
-              {adding && <AddRoleDialog held={person.roles} onClose={() => setAdding(false)} onAdd={(r) => { setAdding(false); role(r.role_id, true); }} />}
+              {adding && <AddRoleDialog held={person.roles} onClose={closeAdd} onAdd={(r) => { closeAdd(true); role(r.role_id, true); }} />}
               {person.roles.length === 0 && <p className="subtle person-page__none">No roles yet: this person can sign in but sees nothing.</p>}
               {person.roles.map((r) => (
                 <div key={r.role_id} className="person-role">

@@ -2,7 +2,7 @@
 // once), Disable (asks first) and Enable. Hidden on your own page.
 import { useState } from "react";
 
-import { request } from "../../../api/client";
+import { ApiError, request } from "../../../api/client";
 import type { PersonView } from "../../../api/types";
 import { MenuButton } from "../../../ui/Menu";
 import { toast } from "../../../ui/toast";
@@ -25,10 +25,13 @@ export function PersonMenu({ person, actions, onError }: { person: PersonView; a
     try {
       const reply = await request<{ one_time_password?: string } | undefined>("POST", `${userPath(person.user_id)}/${action === "reset" ? "reset-password" : action}`);
       refreshPeople();
-      if (action === "reset") setPassword(reply?.one_time_password ?? "");
+      if (action === "reset") {
+        if (!reply?.one_time_password) throw new Error("The server sent no one-time password. Reset the password again.");
+        setPassword(reply.one_time_password);
+      }
       else { toast(action === "disable" ? "User disabled" : "User enabled"); close(); }
     } catch (e) {
-      onError(refusal(e, "The change failed."));
+      onError(refusal(e, e instanceof Error && !(e instanceof ApiError) ? e.message : "The change failed."));
       close();
     } finally {
       setBusy(false);
