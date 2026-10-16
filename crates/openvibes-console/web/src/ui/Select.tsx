@@ -164,7 +164,7 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
                     className={i === active ? "sel__option sel__option--active" : "sel__option"}
                     onPointerEnter={() => { if (!option.disabled) setActive(i); }} onClick={() => choose(option)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(option); } }}>
-                    <span className="sel__label">{option.icon}<span>{option.label}{option.hint && <span className="subtle sel__hint"> {option.hint}</span>}</span></span>
+                    <span className="sel__label">{option.icon}<span>{option.label}{option.hint && <span className="subtle sel__hint"> {option.hint}</span>}{option.description && <span className="subtle sel__desc">{option.description}</span>}</span></span>
                     {selected && <Icon name="check" size={14} />}
                   </div>
                 );

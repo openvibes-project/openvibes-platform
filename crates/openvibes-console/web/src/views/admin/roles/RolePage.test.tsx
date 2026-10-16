@@ -11,8 +11,10 @@ vi.hoisted(() => {
 
 import type { HostGroup, Role } from "../../../api/types";
 import { SessionContext } from "../../../app/session";
-import { RoleEditor, saveRole } from "./RolePage";
-import { type RoleState, blank, reduce, saveBody } from "./roleState";
+import { ApiError } from "../../../api/client";
+import { RoleBar } from "./RoleBar";
+import { RoleEditor, refusal, saveRole } from "./RolePage";
+import { type RoleState, blank, fromRole, reduce, saveBody } from "./roleState";
 
 const groups: HostGroup[] = [
   { asset_group_id: "g-win", name: "WindowsServers", selectors: ["os=windows"], roles: 1 },
@@ -81,7 +83,8 @@ describe("role page", () => {
     const row = html.slice(html.indexOf("Rule sets"), html.indexOf("Site rules"));
     expect(row).toContain('title="Applies to the whole platform, whatever hosts the role reaches"');
     // Mixed area: the mark sits on the platform chip, not on the area.
-    expect(chip(html, "Configure the assistant and internet lookups")).toBeTruthy();
+    expect(chip(html, "Configure the assistant and internet lookups \\(platform-wide\\)")).toBeTruthy();
+    expect(html).toContain('<span class="sr-only">(platform-wide)</span>');
     const assistant = html.slice(html.indexOf(">Assistant<"), html.indexOf(">Access<"));
     expect(assistant.match(/whatever hosts the role reaches/g)).toHaveLength(1);
   });
@@ -124,6 +127,26 @@ describe("role page", () => {
     expect(url).toBe("/api/v1/roles/r1");
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(init.body as string)).toMatchObject({ version: 3 });
+  });
+
+  it("an existing role sends its version, a new one none", () => {
+    const role: Role = { role_id: "r1", name: "Night shift", description: "", builtin: false, members: 0, version: 7, reach: { kind: "all" }, permissions: ["cases.read"] };
+    expect(saveBody(fromRole(role), role).version).toBe(7);
+    expect("version" in saveBody(blank())).toBe(false);
+  });
+
+  it("the outline legend names only what changed", () => {
+    const html = page(run({ type: "template", name: "Viewer" }));
+    expect(html).toContain("added");
+    expect(html).not.toContain("taken away");
+    expect(html).toContain("compared with your previous choice");
+  });
+
+  it("a refusal shows above the bar, and a stale save says so and reloads", () => {
+    const html = renderToStaticMarkup(<RoleBar name="x" summary="0 permissions · No hosts" error="Name already taken" isNew={false} readOnly={false} busy={false} onCancel={() => {}} onSave={() => {}} onDelete={undefined} />);
+    expect(html).toMatch(/role="alert"[^>]*>.*Name already taken/);
+    expect(refusal(new ApiError(409, "stale_role", "stale"), "x")).toEqual({ message: "Someone else changed this role; your edits were not saved.", reload: true });
+    expect(refusal(new ApiError(409, "role_name_taken", "A role named x exists"), "x")).toEqual({ message: "A role named x exists", reload: false });
   });
 
   it("Administrator is read-only", () => {

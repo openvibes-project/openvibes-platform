@@ -6,7 +6,7 @@ import { type Action, COLUMNS, type RoleState } from "./roleState";
 
 export const PLATFORM_TIP = "Applies to the whole platform, whatever hosts the role reaches";
 
-export const InfoMark = () => <span className="info-mark" title={PLATFORM_TIP}><Icon name="info" size={13} /></span>;
+export const InfoMark = () => <span className="info-mark" title={PLATFORM_TIP}><Icon name="info" size={13} /><span className="sr-only">(platform-wide)</span></span>;
 
 export function PermissionMatrix({ state, dispatch, readOnly }: { state: RoleState; dispatch: (action: Action) => void; readOnly: boolean }) {
   const allOn = (ids: readonly PermissionId[]) => ids.length > 0 && ids.every((id) => state.on.has(id));
@@ -52,7 +52,7 @@ export function PermissionMatrix({ state, dispatch, readOnly }: { state: RoleSta
                         {cell.map((p) => {
                           const needs = p.needs.length ? ` (needs ${p.needs.map(labelOf).join(", ")})` : "";
                           return (
-                            <button key={p.id} type="button" className="chip" aria-pressed={state.on.has(p.id)} aria-label={p.label} data-changed={state.changed.get(p.id)}
+                            <button key={p.id} type="button" className="chip" aria-pressed={state.on.has(p.id)} aria-label={p.scope === "platform" ? `${p.label} (platform-wide)` : p.label} data-changed={state.changed.get(p.id)}
                               disabled={readOnly} title={`${p.label}${needs}`} onClick={() => dispatch({ type: "toggle", permission: p.id })}>
                               {p.scope === "platform" && !areaPlatform && <InfoMark />}{p.label}
                             </button>

@@ -38,8 +38,12 @@ export const settingsAccess: readonly Access[] = tabs.flatMap((tab) => tab.acces
  */
 function subPage(path: string): ReactNode | undefined {
   const role = /^\/settings\/roles\/([^/]+)$/.exec(path)?.[1];
-  if (role) return <RolePage key={role} roleId={decodeURIComponent(role)} />;
-  return undefined;
+  if (!role) return undefined;
+  try {
+    return <RolePage key={role} roleId={decodeURIComponent(role)} />;
+  } catch {
+    return undefined; // a malformed %-escape: "Not found"
+  }
 }
 
 export function Settings() {

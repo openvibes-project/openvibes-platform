@@ -211,8 +211,8 @@
 .role-page__hint, .role-page__foot { margin: 0; }
 .role-page__foot { font-size: 12.5px; }
 .role-page__foot .info-mark { vertical-align: -2px; }
-.role-page__legend { font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
-.role-page__dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 6px; }
+.role-page__legend { font-size: 12.5px; }
+.role-page__dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 2px 0 8px; }
 .role-page__dot--added { box-shadow: 0 0 0 2px var(--ok); }
 .role-page__dot--removed { box-shadow: 0 0 0 2px var(--bad); }
 .role-page__notice { margin: 0; background: var(--accent-soft); color: var(--text); }

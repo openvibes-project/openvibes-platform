@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 
 import { matches } from "./table";
 
-export type SelectOption = { value: string; label: string; disabled?: boolean; hint?: string | undefined; icon?: ReactNode };
+export type SelectOption = { value: string; label: string; disabled?: boolean; hint?: string | undefined; icon?: ReactNode;
+  /** A second, subtle line under the label (what the option is for). */
+  description?: string };
 export type SelectGroup = { group: string; options: SelectOption[] };
 type Section = { group?: string; options: SelectOption[] };
 

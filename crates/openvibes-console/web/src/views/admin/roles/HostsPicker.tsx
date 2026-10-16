@@ -1,5 +1,6 @@
 // Step "Hosts": a search over host groups with "All hosts" first; chosen ones
 // show as chips with ×. All hosts clears the groups; nothing chosen is "No hosts".
+// A search field plus a list of toggle buttons (Tab moves through them), not a combobox.
 import { useState } from "react";
 
 import type { HostGroup } from "../../../api/types";
@@ -34,17 +35,17 @@ export function HostsPicker({ reach, groups, dispatch, readOnly }: { reach: Reac
           <label className="search">
             <Icon name="search" size={15} />
             <span className="sr-only">Search host groups</span>
-            <input className="input" role="combobox" aria-expanded={open} aria-autocomplete="list" placeholder="Search host groups, or choose All hosts" value={query} autoComplete="off"
+            <input className="input" type="search" placeholder="Search host groups, or choose All hosts" value={query} autoComplete="off"
               onFocus={() => setOpen(true)} onChange={(e) => { setQuery(e.target.value); setOpen(true); }} />
           </label>
           {open && (
             <div className="sel__popup hosts-picker__popup">
-              <div className="sel__list" role="listbox" aria-label="Host groups" aria-multiselectable="true">
+              <div className="sel__list" role="group" aria-label="Host groups">
                 {options.length === 0 && <div className="sel__empty subtle">No group matches</div>}
                 {options.map((o) => {
                   const selected = o.id ? isChosen(o.id) : reach.kind === "all";
                   return (
-                    <button key={o.id || "all"} type="button" role="option" aria-selected={selected} className="sel__option hosts-picker__option"
+                    <button key={o.id || "all"} type="button" aria-pressed={selected} className="sel__option hosts-picker__option"
                       onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o.id, o.name)}>
                       <span className="sel__label">{o.name}</span>
                       {selected && <Icon name="check" size={14} />}

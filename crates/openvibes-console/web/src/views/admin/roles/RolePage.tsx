@@ -25,6 +25,11 @@ const toList = () => nav.view("/settings", { tab: "roles" });
 export const saveRole = (roleId: string, body: SaveRole): Promise<Role> =>
   roleId === "new" ? request<Role>("POST", "/api/v1/roles", body) : request<Role>("PATCH", rolePath(roleId), body);
 
+/** What to say when a save or delete is refused, and whether the role must be reloaded (someone else saved first). */
+export function refusal(error: unknown, fallback: string): { message: string; reload: boolean } {
+  return error instanceof ApiError && error.code === "stale_role" ? { message: STALE, reload: true } : { message: apiMessage(error, fallback), reload: false };
+}
+
 /** Everything a save or delete can change elsewhere: the list, groups' role counts, people's roles. */
 const refreshAll = () => { invalidate("/api/v1/roles"); invalidate("/api/v1/host-groups"); invalidate("/api/v1/users"); };
 
@@ -71,8 +76,9 @@ export function RoleEditor({ role, groups, initial, error, onError = () => {} }:
       toast(done);
       toList();
     } catch (e) {
-      if (e instanceof ApiError && e.code === "stale_role" && role) { onError(STALE); invalidate(rolePath(role.role_id)); }
-      else onError(apiMessage(e, fallback));
+      const { message, reload } = refusal(e, fallback);
+      onError(message);
+      if (reload && role) invalidate(rolePath(role.role_id));
     } finally {
       setBusy(false);
     }
@@ -111,7 +117,8 @@ export function RoleEditor({ role, groups, initial, error, onError = () => {} }:
               <Step n={2} title="Start from" />
               <div className="role-page__start">
                 <Select label="Start from" value={state.startFrom} disabled={readOnly} onChange={(name) => dispatch({ type: "template", name })}
-                  options={[{ value: BLANK, label: "Blank: no permissions" }, ...TEMPLATES.map((t) => ({ value: t.name, label: `${t.name} template`, hint: `· ${countLabel(t.permissions.length)}` }))]} />
+                  options={[{ value: BLANK, label: "Blank: no permissions", description: "No permissions; pick them yourself." },
+                    ...TEMPLATES.map((t) => ({ value: t.name, label: `${t.name} template`, hint: `· ${countLabel(t.permissions.length)}`, description: t.description }))]} />
               </div>
               <p className="subtle role-page__hint">{template?.description ?? "Blank: no permissions. Pick a template to fill them in, and switch between templates to compare."}</p>
             </section>
@@ -121,8 +128,9 @@ export function RoleEditor({ role, groups, initial, error, onError = () => {} }:
           <Step n={2 + k} title={<>Permissions <span className="subtle num role-step__count">{count} of {CATALOGUE.length}</span></>}
             aside={state.changed.size > 0 && (
               <span className="subtle role-page__legend">
-                <span className="role-page__dot role-page__dot--added" /> added by {state.startFrom}
-                <span className="role-page__dot role-page__dot--removed" /> taken away, compared with {state.previous}
+                {[...state.changed.values()].includes("added") && <><span className="role-page__dot role-page__dot--added" /> added</>}
+                {[...state.changed.values()].includes("removed") && <><span className="role-page__dot role-page__dot--removed" /> taken away</>}
+                , compared with your previous choice
               </span>
             )} />
           {state.notice && <div className="callout role-page__notice" role="status"><Icon name="info" size={16} /><span>{state.notice}</span></div>}

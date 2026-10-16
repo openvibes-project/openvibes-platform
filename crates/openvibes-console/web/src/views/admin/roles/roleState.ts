@@ -12,8 +12,6 @@ export type RoleState = {
   name: string;
   /** Blank or a template name; only a new role has it. */
   startFrom: string;
-  /** The Start from choice before this one, which the outlines compare with. */
-  previous: string;
   on: Set<PermissionId>;
   /** Chips that differ from the previous Start from choice, until the next change. */
   changed: Map<PermissionId, "added" | "removed">;
@@ -31,11 +29,11 @@ export type Action =
   | { type: "allHosts" }
   | { type: "group"; group: GroupRef };
 
-export const blank = (): RoleState => ({ name: "", startFrom: BLANK, previous: BLANK, on: new Set(), changed: new Map(), notice: "", reach: { kind: "none" } });
+export const blank = (): RoleState => ({ name: "", startFrom: BLANK, on: new Set(), changed: new Map(), notice: "", reach: { kind: "none" } });
 
 export function fromRole(role: Role): RoleState {
   const reach: Reach = role.reach.kind === "groups" ? { kind: "groups", groups: role.reach.groups } : { kind: role.reach.kind };
-  return { name: role.name, startFrom: "", previous: "", on: new Set(role.permissions), changed: new Map(), notice: "", reach };
+  return { name: role.name, startFrom: "", on: new Set(role.permissions), changed: new Map(), notice: "", reach };
 }
 
 const also = (verb: string, ids: PermissionId[]) => (ids.length ? `Also turned ${verb}: ${ids.map(labelOf).join(", ")}.` : "");
@@ -59,7 +57,7 @@ export function reduce(state: RoleState, action: Action): RoleState {
       const on = new Set(TEMPLATES.find((t) => t.name === action.name)?.permissions ?? []);
       const changed = new Map<PermissionId, "added" | "removed">();
       for (const p of CATALOGUE) if (on.has(p.id) !== state.on.has(p.id)) changed.set(p.id, on.has(p.id) ? "added" : "removed");
-      return { ...state, startFrom: action.name, previous: state.startFrom, on, changed, notice: "" };
+      return { ...state, startFrom: action.name, on, changed, notice: "" };
     }
     case "toggle": {
       if (state.on.has(action.permission)) {
