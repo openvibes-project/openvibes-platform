@@ -1,5 +1,5 @@
 // The cases the demo starts with (see cases.ts for the store and its rules).
-import type { CaseKind } from "../panels/cases";
+import type { CaseKind } from "../panels/cases/cases";
 import type { CaseState } from "./cases";
 import type { DemoData } from "./data";
 

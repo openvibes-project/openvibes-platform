@@ -1,6 +1,6 @@
 // Compliance findings: groups by rule, each host's match, history and triage.
 import type { GroupEndpoint, Severity } from "../../api/types";
-import { allowedStates, noteRequired } from "../../panels/triage";
+import { allowedStates, noteRequired } from "../../panels/triage/triage";
 import { demoMappings, pairView } from "../attack";
 import type { DemoContext } from "../context";
 import { json, page, problem } from "../http";

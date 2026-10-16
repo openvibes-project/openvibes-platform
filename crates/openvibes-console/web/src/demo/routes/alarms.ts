@@ -1,4 +1,4 @@
-import { allowedStates, noteRequired } from "../../panels/triage";
+import { allowedStates, noteRequired } from "../../panels/triage/triage";
 import { demoMappings, pairView } from "../attack";
 import type { DemoContext } from "../context";
 import { json, page, problem } from "../http";

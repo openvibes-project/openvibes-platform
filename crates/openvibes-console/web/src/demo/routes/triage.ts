@@ -1,4 +1,4 @@
-import { allowedStates, noteRequired } from "../../panels/triage";
+import { allowedStates, noteRequired } from "../../panels/triage/triage";
 import { caseSeverityOf, type CaseStore } from "../cases";
 import type { DemoContext } from "../context";
 import { json, problem } from "../http";

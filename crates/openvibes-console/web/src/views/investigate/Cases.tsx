@@ -6,7 +6,7 @@ import { useAllPages } from "../../api/client";
 import type { CaseSummary } from "../../api/types";
 import { nav, useLocation } from "../../app/nav";
 import { useSession } from "../../app/session";
-import { caseNumber, caseQuery, selectCases, severities, statusBadge } from "../../panels/cases";
+import { caseNumber, caseQuery, selectCases, severities, statusBadge } from "../../panels/cases/cases";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
 import { DataTable } from "../../ui/DataTable";
 import { severityOrder } from "../../ui/format";

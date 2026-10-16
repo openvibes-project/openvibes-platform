@@ -3,7 +3,7 @@ import { isDemo, useResource } from "../../../api/client";
 import type { AgentCommand, EnrollmentToken } from "../../../api/types";
 import { nav, useLocation, useTopPanel } from "../../../app/nav";
 import { useSession } from "../../../app/session";
-import { tokenState, tokenUsable } from "../../../panels/tokens";
+import { tokenState, tokenUsable } from "../../../panels/admin/tokens";
 import { DataTable } from "../../../ui/DataTable";
 import { Icon } from "../../../ui/Icon";
 import { ViewHeader } from "../../../ui/ViewHeader";

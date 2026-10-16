@@ -5,7 +5,7 @@
 // whether its evidence is gone) comes from the rest of the demo through
 // `CaseWorld`, so alarms, findings and vulnerabilities stay the single truth.
 import type { CaseDetail, CaseEvent, CaseItem, CaseSummary, CaseUser } from "../api/types";
-import { EXCLUSIVE_KINDS, type CaseKind, isCaseKind } from "../panels/cases";
+import { EXCLUSIVE_KINDS, type CaseKind, isCaseKind } from "../panels/cases/cases";
 
 type Result = { status: number; body?: unknown; etag?: string };
 type Body = Record<string, unknown>;
