@@ -2,6 +2,7 @@
 // invented; host names use the reserved example.test domain.
 import catalogue from "../api/permissions.json";
 import templates from "../api/templates.json";
+import { ADMIN_ROLE, type StoredReach } from "./share";
 import type {
   Agent, AuditEvent, Certificate, Cve, EnrollmentToken, Finding as FindingView,
   RuleBundle, RuleSet, ServiceAccount, ServiceToken, Severity, Tag, Triage, Vulnerability,
@@ -167,7 +168,7 @@ export function buildDemoData(now = Date.now()) {
       const state = drawn === "assigned" ? "open" : drawn;
       triage.set(`${agent.id}|${rule.ruleSetId}|${rule.ruleId}`, {
         state, version: 1, rule_version: 3,
-        assigned_to: drawn === "assigned" ? "analyst" : null,
+        assigned_to: drawn === "assigned" ? "sam" : null,
         note: ({ accepted_risk: "Isolated lab network; revisit next quarter.", open: null } as Record<string, string | null>)[state]
           ?? "Handled outside the console.",
         accepted_until: state === "accepted_risk" ? iso(now + 60 * DAY) : null,
@@ -243,33 +244,33 @@ export function buildDemoData(now = Date.now()) {
 
   const people = [
     ["u-admin", "admin", "Alex Admin"], ["u-sam", "sam", "Sam Analyst"], ["u-ola", "ola", "Ola Operator"],
-    ["u-vic", "vic", "Vic Viewer"], ["u-lab", "lab-ops", "Lab operator"],
+    ["u-vic", "vic", "Vic Viewer"], ["u-pia", "pia", "Pia Prodops"], ["u-wen", "wen", "Wen Windows"],
   ] as const;
-  // Kept in the former inventory's shape; routes/access.ts answers the
-  // People and Roles API from it.
+  // The People and Roles API's data (routes/access.ts, routes/roles.ts), in
+  // the store's shape: roles with their reach, and who holds which.
+  const template = (name: string) => templates.find((t) => t.name === name) as { description: string; permissions: string[] };
+  const role = (role_id: string, name: string, from: string, reach: StoredReach) =>
+    ({ role_id, name, description: template(from).description, builtin: false, permissions: [...template(from).permissions], reach, version: 1 });
   const access = {
-    // The Administrator and the personas' roles: the first three templates.
     roles: [
-      { role_id: "admin", display_name: "Administrator", builtin: true, permissions: catalogue.map((p) => p.id) },
-      ...templates.slice(0, 3).map((t) => ({ role_id: t.name.toLowerCase(), display_name: t.name, builtin: false, permissions: t.permissions })),
+      { role_id: ADMIN_ROLE, name: "Administrator", description: "Every permission on all hosts.", builtin: true, permissions: catalogue.map((p) => p.id), reach: { kind: "all" } as StoredReach, version: 1 },
+      role("viewer", "Viewer", "Viewer", { kind: "all" }),
+      role("analyst", "Analyst", "Analyst", { kind: "all" }),
+      role("operator", "Operator", "Operator", { kind: "all" }),
+      role("role-winlead", "Windows lead", "Team lead", { kind: "groups", asset_group_ids: ["grp-win"] }),
+      role("role-opprod", "Operator (Prod)", "Operator", { kind: "groups", asset_group_ids: ["grp-prod"] }),
     ],
-    users: people.map(([user_id, username, display_name]): { user_id: string; username: string; display_name: string; email: string | null } => ({ user_id, username, display_name, email: null })),
+    users: people.map(([user_id, username, display_name], index) => ({
+      user_id: user_id as string, username: username as string, display_name: display_name as string, email: null as string | null, enabled: true, auth_source: "password",
+      last_sign_in_at: iso(now - (index + 1) * 3 * 3_600_000) as string | null, created_at: iso(now - (90 - index * 10) * DAY),
+    })),
     asset_groups: [
       { asset_group_id: "grp-prod", name: "Production", selectors: ["env=prod"] },
       { asset_group_id: "grp-lab", name: "Lab", selectors: ["env=lab"] },
+      { asset_group_id: "grp-win", name: "WindowsServers", selectors: ["os=windows"] },
     ],
-    bindings: [
-      ["b-1", "u-admin", "admin", null], ["b-2", "u-sam", "analyst", null], ["b-3", "u-ola", "operator", "grp-prod"],
-      ["b-4", "u-vic", "viewer", null], ["b-5", "u-lab", "operator", "grp-lab"],
-    ].map(([binding_id, user_id, role_id, group]) => {
-      const person = people.find(([id]) => id === user_id);
-      return {
-        binding_id: binding_id as string, user_id: user_id as string, role_id: role_id as string,
-        username: person?.[1] ?? "", display_name: person?.[2] ?? "",
-        asset_group_id: (group ?? null) as string | null, asset_group_name: group === "grp-prod" ? "Production" : group === "grp-lab" ? "Lab" : null,
-        created_at: iso(now - 40 * DAY), created_by: "admin",
-      };
-    }),
+    bindings: [["u-admin", ADMIN_ROLE], ["u-sam", "analyst"], ["u-ola", "operator"], ["u-vic", "viewer"], ["u-pia", "role-opprod"], ["u-wen", "role-winlead"]]
+      .map(([user_id, role_id]) => ({ user_id: user_id as string, role_id: role_id as string })),
   };
 
   const enrollmentTokens: EnrollmentToken[] = [
@@ -300,7 +301,7 @@ export function buildDemoData(now = Date.now()) {
 
   const serviceAccounts: ServiceAccount[] = [
     { service_account_id: "sa-siem", name: "SIEM export", role_ids: ["viewer"], enabled: true, active_tokens: 1, created_at: iso(now - 60 * DAY) },
-    { service_account_id: "sa-ci", name: "CI rule publisher", role_ids: ["operator"], enabled: true, active_tokens: 2, created_at: iso(now - 30 * DAY) },
+    { service_account_id: "sa-ci", name: "CI rule publisher", role_ids: ["role-opprod"], enabled: true, active_tokens: 2, created_at: iso(now - 30 * DAY) },
     { service_account_id: "sa-old", name: "Old dashboard", role_ids: ["viewer"], enabled: false, active_tokens: 0, created_at: iso(now - 200 * DAY) },
   ];
   const serviceTokens = new Map<string, ServiceToken[]>([
@@ -313,17 +314,17 @@ export function buildDemoData(now = Date.now()) {
   ]);
 
   const actions = [
-    ["user.login", "user", "console", null], ["finding.triage", "finding", "baseline/port.ssh.exposed", "finding"],
+    ["auth.login.succeeded", "user", "console", null], ["finding.triage", "finding", "baseline/port.ssh.exposed", "finding"],
     ["enrollment_token.create", "token", "tok-7f3a", "enrollment_token"], ["agent.revoke", "agent", "agent-00047", "agent"],
-    ["rule_bundle.publish", "rule_set", "site", "rule_set"], ["access.binding.create", "binding", "b-5", "binding"],
-    ["service_token.create", "service_account", "sa-ci", "service_account"], ["user.login", "user", "console", null],
+    ["rule_bundle.publish", "rule_set", "site", "rule_set"], ["rbac.binding.created", "user", "Pia Prodops", "user"],
+    ["service_token.create", "service_account", "sa-ci", "service_account"], ["auth.login.succeeded", "user", "console", null],
   ] as const;
   const audit: AuditEvent[] = Array.from({ length: 140 }, (_, index) => {
     const [action, , target, targetKind] = actions[index % actions.length] as (typeof actions)[number];
     const person = people[index % people.length] as (typeof people)[number];
-    const failed = action === "user.login" && index % 13 === 0;
+    const failed = action === "auth.login.succeeded" && index % 13 === 0;
     return {
-      id: String(140 - index), action, actor: person[1], actor_id: person[0], actor_kind: "user",
+      id: String(140 - index), action: failed ? "auth.login.failed" : action, actor: person[1], actor_id: person[0], actor_kind: "user",
       at: iso(now - index * 47 * MINUTE), authentication_method: "local_password",
       result: failed ? "failure" : "success", reason_code: failed ? "invalid_credentials" : null,
       request_id: `req-${(index * 2654435761 >>> 0).toString(16)}`, target, target_id: target, target_kind: targetKind,
@@ -364,7 +365,7 @@ export function buildDemoData(now = Date.now()) {
           { key: "parent.exe", status: "complete", value: spec.ancestors[0]?.exe ?? "", item_count: null }],
         steps: [{ expression: `event["process.exe"] == ${JSON.stringify(spec.process.exe)} && event["parent.exe"] == ${JSON.stringify(spec.ancestors[0]?.exe ?? "")}`, result: true }],
       },
-      triage: { state: "open", assigned_to: (index === 2 ? "analyst" : null) as string | null, note: null as string | null,
+      triage: { state: "open", assigned_to: (index === 2 ? "sam" : null) as string | null, note: null as string | null,
         accepted_until: null as string | null, version: index === 2 ? 2 : 1, updated_at: null as string | null, updated_by: null as string | null },
     };
   });

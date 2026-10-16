@@ -2,17 +2,20 @@ import { splitRef } from "../../panels/cases/cases";
 import { seedCases } from "../caseSeed";
 import { createCaseStore } from "../cases";
 import type { DemoContext } from "../context";
-import { browserPersistence, json, page } from "../http";
+import { browserPersistence, json, page, problem } from "../http";
 
 export function registerCaseRoutes(ctx: DemoContext) {
-  const { data, actor, me, visible, agentById, alarmList, findings, triageKey, hosts, hostPackages, audit, route, send } = ctx;
+  const { data, actor, me, permissions, rolesOf, visible, agentById, alarmList, findings, triageKey, hosts, hostPackages, audit, route, send } = ctx;
   // Cases: what an item is comes from the objects above, so triaging an
   // alarm or finding here changes what a case may record for it.
   const mitigated = (state: string | undefined) => state === "mitigated";
   const cases = createCaseStore({
     me: { user_id: me, username: actor, display_name: data.access.users.find((u) => u.user_id === me)?.display_name ?? actor },
     people: data.access.users,
-    assignable: data.access.bindings.filter((b) => ["analyst", "admin"].includes(b.role_id)).map((b) => b.user_id),
+    // The server's rule: enabled people holding cases.read through any role (Administrator holds it).
+    get assignable() {
+      return data.access.users.filter((u) => u.enabled && rolesOf(u.user_id).some((r) => r.permissions.includes("cases.read"))).map((u) => u.user_id);
+    },
     canSee: visible,
     hostname: (agentId) => data.agents.find((a) => a.id === agentId)?.hostname ?? null,
     facts: (kind, ref) => {
@@ -44,7 +47,11 @@ export function registerCaseRoutes(ctx: DemoContext) {
     return result.status === 200 ? json(page(result.body as unknown[], query)) : send(result);
   };
   route("GET", "/api/v1/cases", "cases.read", (_, query) => listed(query));
-  route("POST", "/api/v1/cases", "cases.write", (_, __, body) => send(cases.create(body)));
+  // Setting or changing the assignee needs cases.assign too (cases/list.rs).
+  const mayAssign = permissions.includes("cases.assign");
+  const denied = () => problem(403, "permission_denied", "Permission denied");
+  route("POST", "/api/v1/cases", "cases.write", (_, __, body) =>
+    (typeof body.assignee_user_id === "string" && !mayAssign ? denied() : send(cases.create(body))));
   route("GET", "/api/v1/cases/for-item", "cases.read", (_, query) => send(cases.forItem(query)));
   route("GET", "/api/v1/cases/assignees", "cases.assign", () => send(cases.assignees()));
   route("GET", "/api/v1/cases/active-items", "cases.read", (_, query) => send(cases.activeItems(query)));
@@ -52,7 +59,14 @@ export function registerCaseRoutes(ctx: DemoContext) {
   // demo's History tab should show them.
   route("GET", "/api/v1/triage-history", null, () => json({ items: [] }));
   route("GET", "/api/v1/cases/{id}", "cases.read", ({ id = "" }) => send(cases.get(id)));
-  route("PUT", "/api/v1/cases/{id}", "cases.write", ({ id = "" }, _, body, headers) => send(cases.update(id, body, headers["if-match"])));
+  route("PUT", "/api/v1/cases/{id}", "cases.write", ({ id = "" }, _, body, headers) => {
+    // The server reads If-Match first: without a valid one, the store answers 428 or 400.
+    if (!/^"\d+"$/.test(headers["if-match"] ?? "")) return send(cases.update(id, body, headers["if-match"]));
+    const current = cases.get(id);
+    const was = (current.body as { assignee?: { user_id: string } | null } | undefined)?.assignee?.user_id ?? null;
+    const next = typeof body.assignee_user_id === "string" ? body.assignee_user_id.toLowerCase() : null;
+    return !mayAssign && current.status === 200 && was !== next ? denied() : send(cases.update(id, body, headers["if-match"]));
+  });
   route("POST", "/api/v1/cases/{id}/notes", "cases.write", ({ id = "" }, _, body) => send(cases.addNote(id, body)));
   route("POST", "/api/v1/cases/{id}/items", "cases.write", ({ id = "" }, _, body) => send(cases.addItem(id, body)));
   route("DELETE", "/api/v1/cases/{id}/items/{item}", "cases.write", ({ id = "", item = "" }) => send(cases.removeItem(id, item)));

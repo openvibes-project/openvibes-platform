@@ -365,8 +365,10 @@ triage on alarms and findings stays as it is.
   It starts with four cases over real demo objects (an SSH and shell
   investigation, an exploited advisory on three hosts, web servers starting
   shells, and a closed one) and keeps cases in `localStorage`
-  (`openvibes.v2.demo.cases`). Analyst and admin hold `cases.read`,
-  `cases.write` and `cases.assign`; the viewer and operator have neither.
+  (`openvibes.v2.demo.cases`). As on the server, anyone holding
+  `cases.read` can be assigned, and setting or changing an assignee needs
+  `cases.assign` (403 otherwise): Analyst has `cases.write` but not
+  `cases.assign`, Administrator has both, the operators have no cases.
 
 ## Assets v1 (hosts and software)
 
@@ -457,8 +459,8 @@ triage on alarms and findings stays as it is.
     crates/openvibes-console/web/src/api/permissions.json`); tests fail while
     either is stale. Role pickers read the live role list from
     `GET /api/v1/roles` (people: `GET /api/v1/users*`, group cards:
-    `GET /api/v1/host-groups`); the demo builds its roles from
-    `templates.json` (the personas) and `permissions.json` (Administrator).
+    `GET /api/v1/host-groups`); the demo seeds its roles from
+    `templates.json` and `permissions.json` (Administrator).
 - **Roles (`views/admin/settings/Roles.tsx`, `views/admin/roles/`):**
   - **Purpose:** Settings › Roles lists the roles (Administrator first,
     "Protected"; templates are not roles) with where each applies, its
@@ -483,8 +485,9 @@ triage on alarms and findings stays as it is.
     edits. A 409 `stale_role` reloads the role and says "Someone else
     changed this role; your edits were not saved."
   - **How to test:** `roles/RolePage.test.tsx` (reducer, markup and the
-    request bodies, no DOM library); the demo e2e `roles.spec.ts`
-    (Task 10) clicks through it.
+    request bodies, no DOM library); the demo e2e `roles.spec.ts` creates
+    "Night shift" from the Analyst template on WindowsServers (with axe)
+    and hits the case-insensitive name check.
 - **People (`views/admin/settings/People.tsx`, `views/admin/people/`):**
   - **Purpose:** Settings › People lists everyone inside the viewer's
     share: Person, Roles as badges "<role> · <where it applies>", Signs in
@@ -508,8 +511,8 @@ triage on alarms and findings stays as it is.
   - **Config:** none. Add role and Remove need `access.grant` and are
     hidden on your own page (the server refuses changing your own roles).
     Add role and New person offer only roles inside the viewer's share
-    (`fitsShare` in `people/people.ts`, the client copy of
-    `access/share.rs`); the server decides.
+    (`fitsShare`/`outsideShare` in `people/people.ts`, the client copy of
+    `access/share.rs`, which the demo server uses too); the server decides.
   - **Failure behaviour:** a refused change shows above the columns; a 409
     `last_administrator` reads "This is the last Administrator. Give
     someone else the Administrator role first." A person outside the
@@ -519,7 +522,9 @@ triage on alarms and findings stays as it is.
   - **How to test:** `people/PersonPage.test.tsx` and
     `settings/People.test.tsx` (markup, grouping, the PUT with a stubbed
     fetch, the 409 message, no Disable on your own page); the demo e2e
-    creates a person with a one-time password (`smoke.spec.ts`).
+    creates a person with a one-time password (`smoke.spec.ts`), and
+    `people.spec.ts` gives and removes a role on one group ("Only on
+    WindowsServers", with axe) and checks your own page.
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
   after mutations, and the `useResource`/`useAllPages` hooks. Live requests
@@ -532,7 +537,21 @@ triage on alarms and findings stays as it is.
   holds the state every area shares; each area's routes are in
   `demo/routes/` (hosts, findings, alarms, rules, cases, …). It follows the wire
   types and the permission model, with personas viewer, analyst, operator,
-  scoped operator and admin. Tested. Its compliance findings use only the
+  scoped operator and admin. Each persona signs in as a seeded person
+  (Vic, Sam, Ola, Pia, Alex) whose demo roles give its capabilities through
+  `resolveCapabilities` in `demo/share.ts` (the port of `access/rbac.rs`);
+  roles are Administrator, Viewer, Analyst and Operator on all hosts,
+  "Windows lead" (Team lead on WindowsServers, held by Wen) and
+  "Operator (Prod)" (the scoped operator). `routes/roles.ts` and
+  `routes/access.ts` mirror the roles, people and service-account routes
+  with their refusal codes (`stale_role`, `role_name_taken`, `role_in_use`
+  with `holders`, `protected_role`, `missing_needs`, `unknown_group`,
+  `last_administrator`, `use_change_password`, nobody changing or disabling
+  themself) and the share check, so people and accounts outside it are
+  404. Triage assignees follow the server: holders of the area's
+  `*.triage` through a role that reaches some host, or an Administrator;
+  bulk program suppressions are skipped without `alarms.suppress` on all
+  hosts. Tested. Its compliance findings use only the
   rules OpenVIBES ships (openvibes-rules `baseline/rules.json`: ids,
   severities, messages and expressions as they are), so the public demo and
   the website's screenshots never show a check the product lacks; a test

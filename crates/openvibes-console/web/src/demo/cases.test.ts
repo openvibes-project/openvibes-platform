@@ -112,7 +112,8 @@ describe("demo cases: permissions and the seed", () => {
     expect((await call(createDemoServer({ persona: "analyst" }), "GET", "/api/v1/cases/assignees")).status).toBe(403);
     const server = createDemoServer({ persona: "admin" });
     const users = (await call<{ items: { username: string }[] }>(server, "GET", "/api/v1/cases/assignees")).body.items.map((u) => u.username);
-    expect(users.sort()).toEqual(["admin", "sam"]);
+    // Vic (Viewer) and Wen (Windows lead) read cases too; Ola and Pia (operators) do not.
+    expect(users.sort()).toEqual(["admin", "sam", "vic", "wen"]);
   });
 });
 
@@ -142,7 +143,7 @@ describe("demo cases: creating and changing", () => {
     await refused({ title: "   " }, "title", "invalid_title");
     await refused({ title: "x".repeat(121) }, "title", "invalid_title");
     await refused({ title: "ok", severity: "urgent" }, "severity", "invalid_severity");
-    await refused({ title: "ok", assignee_user_id: "u-vic" }, "assignee_user_id", "assignee_unavailable");
+    await refused({ title: "ok", assignee_user_id: "u-ola" }, "assignee_user_id", "assignee_unavailable");
     await refused({ title: "ok", items: [{ kind: "widget", ref: "1" }] }, "kind", "invalid_kind");
     await refused({ title: "ok", items: [{ kind: "alarm", ref: "abc" }] }, "ref", "invalid_ref");
     await refused({ title: "ok", items: Array.from({ length: 51 }, (_, i) => ({ kind: "alarm", ref: String(i + 1) })) }, "items", "too_many_items");
@@ -171,8 +172,17 @@ describe("demo cases: creating and changing", () => {
     expect((await call(server, "GET", "/api/v1/cases/for-item?kind=alarm&ref=x")).status).toBe(422);
   });
 
-  it("replaces fields with If-Match: 428 without it, 412 when stale, a new version otherwise", async () => {
+  it("setting or changing the assignee needs cases.assign (an analyst has cases.write only)", async () => {
     const server = createDemoServer({ persona: "analyst" });
+    expect((await call(server, "POST", "/api/v1/cases", { title: "Mine", severity: "low", assignee_user_id: "u-sam" })).status).toBe(403);
+    const made = (await call<CaseDetail>(server, "POST", "/api/v1/cases", { title: "Mine", severity: "low" })).body;
+    const fields = { title: "Mine", severity: "high", status: "open", assignee_user_id: null };
+    expect((await call(server, "PUT", `/api/v1/cases/${made.case_id}`, { ...fields, assignee_user_id: "u-sam" }, { "If-Match": '"1"' })).status).toBe(403);
+    expect((await call(server, "PUT", `/api/v1/cases/${made.case_id}`, fields, { "If-Match": '"1"' })).status).toBe(200);
+  });
+
+  it("replaces fields with If-Match: 428 without it, 412 when stale, a new version otherwise", async () => {
+    const server = createDemoServer({ persona: "admin" });
     const made = (await call<CaseDetail>(server, "POST", "/api/v1/cases", { title: "Edit me", severity: "low" })).body;
     const fields = { title: "Edited", severity: "high", status: "investigating", assignee_user_id: "u-admin" };
     expect((await call(server, "PUT", `/api/v1/cases/${made.case_id}`, fields)).status).toBe(428);
@@ -189,7 +199,7 @@ describe("demo cases: creating and changing", () => {
     expect(same.body.events).toHaveLength(4);
     const cleared = await call<CaseDetail>(server, "PUT", `/api/v1/cases/${made.case_id}`, { ...fields, assignee_user_id: null }, { "If-Match": '"2"' });
     expect(cleared.body.assignee).toBeNull();
-    expect((await call(server, "PUT", `/api/v1/cases/${made.case_id}`, { ...fields, assignee_user_id: "u-vic" }, { "If-Match": '"3"' })).status).toBe(422);
+    expect((await call(server, "PUT", `/api/v1/cases/${made.case_id}`, { ...fields, assignee_user_id: "u-ola" }, { "If-Match": '"3"' })).status).toBe(422);
     expect((await call(server, "PUT", `/api/v1/cases/${made.case_id}`, { ...fields, status: "paused" }, { "If-Match": '"3"' })).status).toBe(422);
     expect((await call(server, "PUT", `/api/v1/cases/${made.case_id}`, { ...fields, resolution: "mitigated" }, { "If-Match": '"3"' })).body.field_errors).toBeDefined();
   });

@@ -34,7 +34,7 @@ export function registerFindingRoutes(ctx: DemoContext) {
   route("POST", "/api/v1/compliance/groups/{set}/{rule}/triage", "compliance.triage", ({ set = "", rule = "" }, _, body) => {
     const changes = (body.changes ?? []) as { agent_id: string; version: number }[];
     // The server's order: fields, then versions, then the workflow.
-    const invalid = triageProblem(body) ?? (noteRequired.has(String(body.state)) && typeof body.note !== "string"
+    const invalid = triageProblem(body, "compliance.triage") ?? (noteRequired.has(String(body.state)) && typeof body.note !== "string"
       ? problem(400, "invalid_triage", "Triage state, note, expiry, or selection is invalid") : null);
     if (invalid) return invalid;
     for (const change of changes) {
@@ -85,7 +85,7 @@ export function registerFindingRoutes(ctx: DemoContext) {
   route("GET", "/api/v1/compliance/latest/{agent}/{set}/{rule}/triage", "compliance.read", ({ agent = "", set = "", rule = "" }) =>
     json(data.triage.get(triageKey(agent, set, rule)) ?? { state: "open", version: 0, rule_version: 3, note: null, assigned_to: null, accepted_until: null }));
   route("PUT", "/api/v1/compliance/latest/{agent}/{set}/{rule}/triage", "compliance.triage", ({ agent = "", set = "", rule = "" }, _, body) => {
-    const invalid = triageProblem(body);
+    const invalid = triageProblem(body, "compliance.triage");
     if (invalid) return invalid;
     audit("finding.triage", `${set}/${rule}`, "finding");
     return json(setTriage(agent, set, rule, body));

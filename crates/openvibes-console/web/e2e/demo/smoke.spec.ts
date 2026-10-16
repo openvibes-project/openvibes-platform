@@ -31,7 +31,7 @@ test("a finding opens in the inspector, links stack, and Esc goes back", async (
 test("a finding's hosts show their assignee and accepted-risk expiry", async ({ page }) => {
   await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
   const hosts = page.locator(".inspector tbody tr");
-  await expect(hosts.filter({ hasText: "cache-04.prod.example.test" })).toContainText("analyst");
+  await expect(hosts.filter({ hasText: "cache-04.prod.example.test" })).toContainText("sam");
   await expect(hosts.filter({ hasText: "backup-02.lab.example.test" })).toContainText(/until /);
 });
 

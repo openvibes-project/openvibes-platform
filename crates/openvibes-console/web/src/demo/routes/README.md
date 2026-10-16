@@ -4,7 +4,7 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 
 | File | What it does |
 |---|---|
-| `access.ts` | Users, role bindings, asset groups and service accounts. |
+| `access.ts` | People (list, page, create, edit, disable, enable, reset, roles) and service accounts, inside the share. |
 | `alarms.ts` | Threat alarms, their triage and suppressions. |
 | `assets.ts` | Packages, open ports, running services and software across the fleet. |
 | `assistant.ts` | The assistant's answers. |
@@ -13,6 +13,7 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 | `findings.ts` | Compliance findings: groups by rule, host matches, history and triage. |
 | `hosts.ts` | Hosts (agents), their tags and enrolling new ones. |
 | `metrics.ts` | Counts, their history and the ranked-hosts list. |
+| `roles.ts` | The permission catalogue, templates, roles (create, edit, delete) and host groups. |
 | `rules.ts` | Rule sets, bundles, site rule drafts, ATT&CK coverage and per-host rule sets. |
 | `session.ts` | The session, password changes and the About page. |
 | `settings.ts` | The audit log, its retention and the assistant's internet access. |

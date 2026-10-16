@@ -40,20 +40,25 @@ export function accessGroups(access: readonly AccessLine[]): AccessGroup[] {
 const platform = new Set(CATALOGUE.filter((p) => p.scope === "platform").map((p) => p.id));
 
 /**
- * Whether the viewer may hand out this role: every permission held, and a
- * host permission held everywhere or on every group the role reaches. The
- * server's `fits` (access/share.rs) decides; this only hides what it refuses.
+ * The first of `permissions` outside the viewer's share, if any: a share
+ * holds every permission, and a host permission everywhere or on every group
+ * the role reaches. The server's `fits` (access/share.rs); the demo server
+ * (demo/share.ts) decides with it too.
  */
-export function fitsShare(capabilities: readonly Capability[], role: Role): boolean {
-  return role.permissions.every((p) => {
+export function outsideShare(capabilities: readonly Capability[], permissions: readonly string[], reach: Role["reach"]): string | undefined {
+  return permissions.find((p) => {
     const held = capabilities.filter((c) => c.permission === p);
-    if (held.length === 0) return false;
-    if (platform.has(p) || held.some((c) => c.scope.kind === "global")) return true;
-    if (role.reach.kind === "none") return true;
-    if (role.reach.kind === "all") return false;
-    return role.reach.groups.every((g) => held.some((c) => c.scope.kind === "asset_groups" && c.scope.asset_group_ids.includes(g.asset_group_id)));
+    if (held.length === 0) return true;
+    if (platform.has(p as Capability["permission"]) || held.some((c) => c.scope.kind === "global")) return false;
+    if (reach.kind === "none") return false;
+    if (reach.kind === "all") return true;
+    return !reach.groups.every((g) => held.some((c) => c.scope.kind === "asset_groups" && c.scope.asset_group_ids.includes(g.asset_group_id)));
   });
 }
+
+/** Whether the viewer may hand out this role; the server decides, this only hides what it refuses. */
+export const fitsShare = (capabilities: readonly Capability[], role: Role): boolean =>
+  outsideShare(capabilities, role.permissions, role.reach) === undefined;
 
 /** What to say when a change is refused. */
 export const refusal = (error: unknown, fallback: string): string =>

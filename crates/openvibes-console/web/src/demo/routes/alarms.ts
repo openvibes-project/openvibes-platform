@@ -4,7 +4,7 @@ import type { DemoContext } from "../context";
 import { json, page, problem } from "../http";
 
 export function registerAlarmRoutes(ctx: DemoContext) {
-  const { data, iso, actor, capabilities, visible, alarmList, addSuppression, audit, route } = ctx;
+  const { data, iso, actor, capabilities, visible, alarmList, addSuppression, triageProblem, audit, route } = ctx;
   // Threat alarms (P14), with the server's rules: scoped like findings,
   // the findings workflow for triage, program/command suppressions only
   // for a global caller, applied to new alarms only.
@@ -42,6 +42,8 @@ export function registerAlarmRoutes(ctx: DemoContext) {
     if (!allowedStates([alarm.state]).includes(state)) return problem(409, "invalid_transition", "Requested triage transition is not allowed");
     const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
     if (noteRequired.has(state) && !note) return problem(400, "invalid_triage", "Triage state, note, or expiry is invalid");
+    const invalid = triageProblem(body, "alarms.triage");
+    if (invalid) return invalid;
     alarm.state = state;
     alarm.triage = { state, assigned_to: typeof body.assigned_to === "string" ? body.assigned_to : null, note,
       accepted_until: typeof body.accepted_until === "string" ? body.accepted_until : null,
