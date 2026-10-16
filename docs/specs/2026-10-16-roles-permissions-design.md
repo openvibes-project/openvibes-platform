@@ -1,7 +1,7 @@
 # Roles, permissions, host groups and the Hosts pages
 
 Date: 2026-10-16. Design decisions by the user, the same day, in a design
-session with full-screen mockups (`rbac-ui/approved.md`, 20 screens). It
+session with full-screen mockups (`rbac-ui/approved.md`, 34 screens). It
 replaces the four built-in roles of `2026-09-23-console-product-design.md`
 and the tag-selected asset groups of the console identity schema
 (migration 0017). Single sign-on (SAML/OIDC, and "download the claims
@@ -18,6 +18,9 @@ Almost everything in the console can be controlled, per role.
 - Suppressing an alarm can require a second person.
 - The Hosts list and a host's page are reworked so that everything about
   a host is easy to find (added to this spec by the user).
+- The other list pages get the same treatment (also added by the user):
+  filters with counts, richer one-line rows, and full detail pages
+  instead of side panels (§10.3).
 
 **Success:**
 
@@ -84,6 +87,8 @@ Almost everything in the console can be controlled, per role.
     re-encoded on the server (§9).
 17. **The Hosts list gets filters and more columns.** The host side panel
     becomes a full **host page** (§10).
+    - Ports, Services, Software, Vulnerabilities, Compliance, Alarms and
+      Cases follow the same pattern (§10.3).
 18. **Single sign-on users** are locked where the identity provider owns
     the data, and are removed after N days without signing in (setting in
     General, 90 by default).
@@ -542,6 +547,101 @@ panel showed is kept.
   on) are the existing tables, reached from the cards with the host
   filter applied.
 
+### 10.3 The other list pages (screens 19–32)
+
+Ports, Services, Software, Vulnerabilities, Compliance, Alarms and Cases
+follow the Hosts pattern. The approved screens in `rbac-ui/approved.md`
+are the reference for each page's filters, columns and cards.
+
+**One pattern, built once.** The web gets the shared pieces, and each page
+supplies only its data, filters and cards:
+
+- A `FilterBar`: search, and filter chips that show per-value counts. The
+  filters live in the URL. It has Clear all, Save view (per-user saved
+  views, `console_saved_views`, keyed by page) and Columns (remembered per
+  user and page).
+- A list `SummaryLine`.
+- The bulk bar: Set state ▾, Assign ▾, Add to case, plus Suppress… on
+  Alarms.
+- A `DetailPage` in the shared layout:
+  - a header with a facts line and actions;
+  - four tiles;
+  - a left column and a right column of cards;
+  - a hosts table with segment chips;
+  - a Related card.
+
+**Routes.** Every row opens a page instead of a side panel:
+
+- `/ports/{port}`;
+- `/services/{unit}`;
+- `/software/{package}`;
+- `/vulnerabilities/{advisory}`;
+- `/compliance/{rule_id}`;
+- `/alarms/{id}`;
+- `/cases/{id}`.
+
+The side panels and their tabs are removed once their page exists. Today's
+deep links to a panel redirect to the page.
+
+**Server.**
+
+- **List counts:** each list route accepts its page's filters and returns
+  the rows, the total, and the count for every value of every filter (with
+  the other filters applied). These come from the same query, so the
+  numbers always agree.
+- **Detail summaries:** each detail page has one summary route returning
+  everything above the fold (`GET /v1/<kind>/{id}/summary`). The tables
+  stay paged and use the existing list routes, filtered.
+- **Scoping:** all of it is scoped by §6. Counts never include hosts the
+  viewer cannot see.
+
+**New data the pages need:**
+
+- **Distinct command lines per alarm** (screen 30). Today an alarm keeps
+  one sample and a count.
+  - From now on it also keeps each distinct command line (by the
+    agent's `args_sha256` and the masked sample) with its own count and
+    last-seen time: `alarm_commands (alarm_id, args_sha256,
+    sample, count, first_at, last_at)`.
+  - It keeps at most 50 per alarm. After that only the counts of known
+    lines grow, and the page says "50 or more different commands".
+  - Masking of secrets stays as today.
+- **"This week" and "Needs a look":**
+  - "This week" on Ports, Services and Software is computed from the host
+    inventory history that already exists (`host_daily_counts`, and the
+    inventory change tracking of `2026-09-27-inventory-changes-design.md`).
+    No new collection is needed.
+  - "Needs a look" is a fixed list of plain rules in code, for example: a
+    database or remote-admin port exposed; a port or service new this
+    week; a service running as root that is not from a package. Each rule
+    has its own line of text.
+- **Short names for compliance checks:**
+  - Rules get an optional `title` (at most 80 characters), for example
+    "SSH allows root login". This is a rule-format change, made in
+    openvibes-protocol first, and the rules repository adds titles to
+    its sets.
+  - The platform reads titles from the rule bundles it already stores, so
+    agents and the findings protocol do not change.
+  - The list shows the title, and the rule's message moves to the check
+    page ("Why it matters"). A rule without a title shows its ID.
+- **Outcomes on case items:**
+  - Today's three outcomes stay, renamed in the console:
+    - `resolved` → Fixed;
+    - `false_positive` → False positive;
+    - `accepted_risk` → Risk accepted.
+  - Two are added: `confirmed_malicious` (Confirmed malicious) and
+    `expected` (Expected activity).
+  - Every outcome except Fixed still needs a note, as today.
+  - "Close case…" requires every item to have an outcome.
+  - The mockup's list of four is shortened. Risk accepted belongs in it
+    too.
+- **Due dates on advisories** come from the CISA known-exploited list
+  already imported (`cve_enrichment.kev_due`). "Due within 30 days" is a filter on that date.
+
+**Unchanged:** the triage states and their rules, the evidence the agents
+send, and what each permission allows. A page shows a card or action only
+when the viewer holds its permission on those hosts (§6).
+
 ## 11. Dashboards
 
 - **Storage:** `console_dashboards.shared_role_id` becomes a visibility:
@@ -683,6 +783,10 @@ The OpenAPI document, the demo server and `roles.json` follow, as today.
   - the helper's limits, which kill it rather than the server;
   - the served headers.
 - **Console tests:**
+  - the shared `FilterBar` (counts, URL round trip, saved views) and
+    `DetailPage`, once;
+  - per list page: each filter, and opening a detail page;
+  - distinct-command capping at 50;
   - the role page (needs added and removed, templates compared, sticky
     bar);
   - group preview;
@@ -699,7 +803,8 @@ The OpenAPI document, the demo server and `roles.json` follow, as today.
 ## 16. Delivery
 
 This is too much for one plan, so it ships in this order. Each step is its
-own plan and pull request, and each step leaves the console working:
+own plan (step 5 is one plan with a pull request per page), and each
+step leaves the console working:
 
 1. **Permissions and roles:** the catalogue, custom roles, Administrator,
    reach, the share check, the upgrade, and the Roles and People screens
@@ -708,9 +813,13 @@ own plan and pull request, and each step leaves the console working:
    upgrade, and screens 9–10c.
 3. **Settings › General and suppressions with approval:** screens 11, 12
    and 14.
-4. **Hosts list and host page:** screens 16 and 17.
-5. **Dashboard sharing:** screen 18.
-6. **Profile pictures:** screen 7c and the helper.
+4. **Hosts list and host page:** screens 16 and 17, which also build the
+   shared `FilterBar`, `DetailPage`, saved views and list-count support.
+5. **The other list pages** (§10.3), one pull request per page, each with
+   its detail page: Alarms (with distinct commands), Vulnerabilities,
+   Compliance, Cases, then Software, Services and Ports.
+6. **Dashboard sharing:** screen 18.
+7. **Profile pictures:** screen 7c and the helper.
 
 Single sign-on follows as its own spec, using §4.6.
 

@@ -201,3 +201,191 @@ Detail and settings pages share one layout, decided on screen 11:
       owner edits, and others can make a copy.
 
     The header then shows a badge: Only you / Shared with … / Everyone.
+
+## The other list pages (screens 19–32)
+
+Added at the user's request ("some of the other pages to have the same
+design changes"), and approved one page at a time on 2026-10-16. Every
+list page follows the Hosts list (16), and every detail page follows the
+host page (17) and the shared layout.
+
+19. **Ports.**
+    - **Filters:** Exposure, Protocol, Group, Service, Changes (new this
+      week / needs a look).
+    - **Columns:**
+      - Port, with its usual name;
+      - Hosts ("5 of 11");
+      - Exposed on;
+      - Services;
+      - Groups;
+      - This week;
+      - Needs a look (for example "Database reachable from the network",
+        or "New this week, not a usual port").
+20. **A port's page** (22/tcp).
+    - **Tiles:** hosts listening, exposed, local only, this week.
+    - **Left column:**
+      - Details (usual use, services, programs, first seen);
+      - By group, with bars;
+      - Recent changes.
+    - **Right column:**
+      - Hosts, with All / Exposed / Local only. Each row shows where it is
+        bound, the service and program, its exposure and last report.
+      - Related: compliance checks, vulnerabilities and alarms.
+21. **Services.**
+    - **Filters:** Runs as (root or SYSTEM / another user), Listens (on an
+      exposed port / local only / no ports), Group, Package (from a
+      package or not), Changes.
+    - **Columns:**
+      - Service and what it is;
+      - Hosts;
+      - Runs as (amber for root/SYSTEM);
+      - Ports (amber when exposed, linking to the port page);
+      - Programs and package ("not from a package" in amber);
+      - This week;
+      - Needs a look.
+22. **A service's page** (nginx.service).
+    - **Tiles:** hosts, open alarms, vulnerabilities in its package,
+      versions in use.
+    - **Left column:**
+      - Details;
+      - Ports (linked);
+      - By group;
+      - Recent changes.
+    - **Right column:**
+      - Hosts, with version, processes, ports, problems and last report;
+      - Related alarms, vulnerabilities and checks.
+23. **Software.** One line per package.
+    - **Filters:** Vulnerabilities (exploited / critical or high / any /
+      none), Fix (available / no fix yet), Versions (one / several), Group,
+      Type (deb, rpm, Windows), Changes.
+    - **Columns:**
+      - Package, with what it is and its type;
+      - Hosts;
+      - Versions, as a range with a count;
+      - Vulnerabilities: the worst severity, the number of advisories and
+        Exploited, side by side;
+      - Fix ("Update on n hosts" / "No fix yet");
+      - Used by;
+      - This week.
+24. **A package's page** (openssl).
+    - **Tiles:** hosts, vulnerabilities, hosts needing an update, versions.
+    - **Left column:**
+      - Details;
+      - Versions, with bars, the vulnerable ones in red with their CVEs;
+      - Used by (linked services);
+      - Recent changes.
+    - **Right column:**
+      - Vulnerabilities: what each affects, what fixes it, and its hosts;
+      - Hosts, with All / Need an update / Up to date. Each row shows the
+        version, "Update to x" or "Up to date", and what uses it.
+25. **Vulnerabilities.** The nine toggle chips become filters: Severity,
+    State (replaces "Include resolved"), Signals (Known exploited, Due
+    within 30 days, No fix yet, Reboot needed, Lower confidence), Package,
+    Group, Assignee.
+    - **Columns:**
+      - Severity;
+      - Advisory, with Exploited;
+      - Package, with "fixed in x" or "no fix yet";
+      - CVSS;
+      - EPSS;
+      - Hosts ("n open of m", with a progress bar);
+      - Due (the CISA date, amber when close);
+      - Assignee.
+    - **Bulk:** ticking rows shows a bar with Set state ▾, Assign ▾, Add to
+      case and Clear.
+26. **An advisory's page** (CVE-2026-10042).
+    - **Header:** triage actions (Set state ▾, Assign ▾, Add to case, ⋯),
+      with the CISA due date as a banner below it.
+    - **Tiles:** open on, fix available, EPSS, CVSS.
+    - **Left column:**
+      - What to do (the fixed build per distribution, and whether a reboot
+        is needed);
+      - Details (the distribution advisories, confidence, vector);
+      - History.
+    - **Right column:**
+      - Hosts, with All / Open / Mitigated / Resolved. Each row shows the
+        installed version, state, assignee and the covering advisory, with
+        checkboxes for bulk triage.
+      - Related alarms, cases and same-package advisories.
+27. **Compliance.** Each check gets a short name, with its rule ID and rule
+    set under it. The long explanation moves to the check's page.
+    - **Filters:** Severity, State, Rule set, Area (Network exposure, SSH,
+      Accounts, Packages, Kernel…), Group, Assignee.
+    - **Columns:**
+      - Severity;
+      - Check;
+      - Area;
+      - Failing ("2 of 5");
+      - Hosts: a colour bar with words under it ("3 open · 2 mitigated ·
+        6 pass");
+      - Since;
+      - Assignee.
+    - **Bulk:** the bulk bar stays.
+28. **A check's page** (SSH allows root login).
+    - **Tiles:** failing on, passing, first seen, and the last 14 days as
+      bars.
+    - **Left column:**
+      - Why it matters;
+      - How to fix (the exact setting and command);
+      - Details (rule, rule set, applies to, reference);
+      - History.
+    - **Right column:**
+      - Hosts, with All / Failing / Passing. Each row shows its evidence
+        (the exact line and file).
+      - Related port, service and checks in the same area.
+29. **Alarms.**
+    - **Filters:** Severity, State, Suppressed (hidden by default), Host,
+      Group, Technique (ATT&CK), Case, Assignee.
+    - **Columns:**
+      - Severity;
+      - Alarm, with its process chain and technique;
+      - Host, with its OS;
+      - Count;
+      - Last and first seen;
+      - State;
+      - Assignee;
+      - Case.
+    - **Suppress:** the per-row "Quiet…" menu is removed. Suppress… is in
+      the bulk bar and on the alarm's page.
+30. **An alarm's page** ("A web server started a shell" on web-01).
+    - **Header:** Set state ▾, Assign ▾, Suppress…, Ask about this, ⋯.
+    - **Tiles:** starts matched, different commands, first seen,
+      confidence.
+    - **Left column:**
+      - What happened, in plain words, plus what to check;
+      - Details;
+      - History.
+    - **Right column:**
+      - Commands seen: every distinct command line with its count. The
+        usual one has "Suppress this command…" (the screen-12 form); a
+        command seen once is highlighted, with Add to case.
+      - Process chain;
+      - Last 24 hours, as a timeline;
+      - Related alarms on the host, vulnerabilities, and the same rule
+        elsewhere.
+31. **Cases.**
+    - **Filters:** Status (closed hidden by default), Severity, Assignee,
+      Contains (alarms / vulnerabilities / findings), Host, Group, Updated
+      (today / this week / quiet for 7 days or more).
+    - **Columns:**
+      - Case;
+      - Title, with who opened it and the latest note;
+      - Severity;
+      - Status;
+      - Assignee;
+      - Hosts;
+      - Items (the kinds, and "n/m with an outcome" with a bar);
+      - Updated.
+32. **A case's page** (C-104).
+    - **Header:** Edit, Assign ▾, Ask about this, Close case…, ⋯.
+    - **Tiles:** items, need an outcome (it counts down to "ready to
+      close"), hosts, open for.
+    - **Left column:**
+      - Details;
+      - Hosts in this case, with their open problems;
+      - Who can see it.
+    - **Right column:**
+      - Items, with an Outcome per item (Confirmed malicious, Expected
+        activity, False positive, Fixed; the spec adds Risk accepted, which
+        exists today);
+      - Notes and timeline: write a note at the top, newest first.

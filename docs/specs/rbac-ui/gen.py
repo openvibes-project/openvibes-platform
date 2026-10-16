@@ -24,7 +24,7 @@ def load(name):
 
 
 ICONS = json.loads((base_dir / "icons.json").read_text())
-BASES = {n: load(n) for n in ["settings-access", "user-panel", "host-details", "alarm-panel", "suppressions", "dashboards"]}
+BASES = {n: load(n) for n in ["settings-access", "user-panel", "host-details", "alarm-panel", "suppressions", "dashboards", "ports", "services", "software", "vulns", "compliance", "alarms", "cases"]}
 
 # The permission matrix: area -> [(full name, chip label, all-hosts-only, column)].
 # Columns: 0 View, 1 Change, 2 Export, 3 Approve and publish.
@@ -1004,6 +1004,715 @@ screen(
     "18-share-dashboard", "dashboards",
     "<b>18 · Sharing a dashboard.</b> Only me, people with roles you hold, or everyone (needs Publish dashboards). Viewers always see counts from their own access. <b>Try it:</b> pick roles, Save; reopen with Share.",
     SHARE + "liveShare({ open: true, who: 'roles', roles: ['Windows lead'], canPublish: false, saved: 'me', savedRoles: [] });",
+)
+
+PORTSUI = r"""
+// ---- Ports list with filters, and a port's page ----
+const LINUX = HOSTS.filter(h => h.family === 'Linux').map(h => h.name), WIN = HOSTS.filter(h => h.family === 'Windows').map(h => h.name);
+const PORTS = [
+  { port: '22/tcp', name: 'SSH', svc: ['sshd.service'], hosts: LINUX, local: ['db-02'] },
+  { port: '25/tcp', name: 'SMTP', svc: ['postfix.service'], hosts: ['mx-01', 'mx-backup-03'], local: [] },
+  { port: '53/udp', name: 'DNS', svc: ['systemd-resolved.service'], hosts: LINUX, local: LINUX },
+  { port: '80/tcp', name: 'HTTP', svc: ['nginx.service'], hosts: ['web-01'], local: [] },
+  { port: '443/tcp', name: 'HTTPS', svc: ['nginx.service', 'haproxy.service'], hosts: ['web-01', 'mx-01'], local: [] },
+  { port: '5432/tcp', name: 'PostgreSQL', svc: ['postgresql.service'], hosts: ['db-02'], local: [], risk: 'Database reachable from the network' },
+  { port: '8081/tcp', name: '', svc: ['api.service'], hosts: ['web-01'], local: [], fresh: ['web-01'], risk: 'New this week, not a usual port' },
+  { port: '445/tcp', name: 'SMB file sharing', svc: ['LanmanServer'], hosts: ['win-dc-01', 'win-dc-02', 'win-file-07', 'win-file-08', 'win-app-03'], local: [] },
+  { port: '3389/tcp', name: 'Remote Desktop', svc: ['TermService'], hosts: WIN, local: [], fresh: ['win-test-01'] },
+  { port: '5985/tcp', name: 'WinRM', svc: ['WinRM'], hosts: WIN, local: ['win-test-01'] },
+];
+const exposedOn = (x) => x.hosts.filter(n => !x.local.includes(n));
+const PFILTERS = {
+  Exposure: { opts: ['Exposed somewhere', 'Local only'], test: (x, v) => (exposedOn(x).length > 0) === (v === 'Exposed somewhere') },
+  Protocol: { opts: ['TCP', 'UDP'], test: (x, v) => x.port.endsWith('/' + v.toLowerCase()) },
+  Group: { opts: () => HG.map(g => g.name), test: (x, v) => membersOf(HG.find(g => g.name === v)).some(h => x.hosts.includes(h.name)) },
+  Service: { opts: () => [...new Set(PORTS.flatMap(x => x.svc))].sort(), test: (x, v) => x.svc.includes(v) },
+  Changes: { opts: ['New this week', 'Needs a look'], test: (x, v) => v === 'New this week' ? !!x.fresh : !!x.risk },
+};
+function filterBar(F, st, items, placeholder) {
+  const opts = (k) => typeof F[k].opts === 'function' ? F[k].opts() : F[k].opts;
+  const count = (k, v) => items.filter(x => F[k].test(x, v)).length;
+  const fbtn = (k) => { const on = st.filters[k];
+    const menu = st.open === k ? `<div role="menu" style="position:absolute;left:0;top:calc(100% + 6px);z-index:30;min-width:220px;max-height:340px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-2);box-shadow:var(--shadow-2);padding:6px">${opts(k).map(v => `<button type="button" role="menuitemradio" aria-checked="${on === v}" class="menu__item" data-fset="${k}|${v}" style="display:flex;width:100%;justify-content:space-between;text-transform:none;gap:16px"><span>${v}</span><span class="subtle num">${count(k, v)}</span></button>`).join('')}</div>` : '';
+    return `<span style="position:relative">${on ? `<span class="chip" aria-pressed="true" style="gap:4px;padding-right:4px">${k}: ${on}<button type="button" class="icon-button" data-fclear="${k}" aria-label="Clear ${k}" style="width:20px;height:20px;min-width:20px">${ICON_X}</button></span>` : `<button type="button" class="chip" data-fopen="${k}">${k} <span aria-hidden="true">▾</span></button>`}${menu}</span>`; };
+  return `<div class="view-pad row row--wrap" style="gap:8px;padding-bottom:12px"><label class="search" style="width:280px">${ICON_SEARCH}<input class="input" data-q placeholder="${placeholder}" value="${esc(st.q)}"></label>${Object.keys(F).map(fbtn).join('')}${Object.keys(st.filters).length ? '<button type="button" class="button button--ghost button--small" data-fclearall>Clear all</button>' : ''}<span class="grow"></span><button type="button" class="button button--ghost button--small">Save view</button><button type="button" class="button button--ghost button--small">Columns</button></div>`;
+}
+function liveFilters(st, render, onRow) {
+  document.addEventListener('input', (e) => { if (e.target.dataset.q !== undefined) { st.q = e.target.value; render(true); } });
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-fopen],[data-fset],[data-fclear],[data-fclearall]');
+    if (!t && !st.open && onRow && e.target.closest('tr[data-row]')) { onRow(e.target.closest('tr[data-row]').dataset.row); return; }
+    if (!t) { if (st.open) { st.open = null; render(); } return; }
+    if (t.dataset.fopen) st.open = st.open === t.dataset.fopen ? null : t.dataset.fopen;
+    if (t.dataset.fset) { const [k, v] = t.dataset.fset.split('|'); st.filters[k] = v; st.open = null; }
+    if (t.dataset.fclear) delete st.filters[t.dataset.fclear];
+    if (t.dataset.fclearall !== undefined) st.filters = {};
+    render();
+  });
+}
+function portsList(st) {
+  const rows = PORTS.filter(x => Object.entries(st.filters).every(([k, v]) => PFILTERS[k].test(x, v)) && (!st.q || (x.port + ' ' + x.name + ' ' + x.svc.join(' ')).toLowerCase().includes(st.q.toLowerCase())));
+  const groupsFor = (x) => HG.filter(g => g.kind !== 'manual' && membersOf(g).some(h => x.hosts.includes(h.name))).map(g => g.name);
+  const tr = rows.map(x => { const ex = exposedOn(x).length; const gs = groupsFor(x);
+    return `<tr data-row="${x.port}" style="cursor:pointer"><td><div class="cell-two"><span class="mono">${x.port}</span><span class="subtle">${x.name || 'Not a well-known port'}</span></div></td>
+      <td class="num">${x.hosts.length} <span class="subtle">of ${HOSTS.length}</span></td>
+      <td>${ex ? `<span class="badge badge--warn">${ex === x.hosts.length ? 'All ' + ex : ex + ' of ' + x.hosts.length}</span>` : '<span class="subtle">Local only</span>'}</td>
+      <td><span class="mono" style="font-size:12.5px">${x.svc.join(', ')}</span></td>
+      <td><span class="row" style="gap:4px;flex-wrap:nowrap;white-space:nowrap">${gs.slice(0, 2).map(g => `<span class="badge badge--accent badge--plain">${g}</span>`).join('')}${gs.length > 2 ? `<span class="subtle" style="font-size:12px">+${gs.length - 2}</span>` : ''}</span></td>
+      <td>${x.fresh ? `<span class="badge badge--accent">+${x.fresh.length} host this week</span>` : '<span class="subtle">No change</span>'}</td>
+      <td>${x.risk ? `<span class="row" style="gap:6px;color:var(--warn);font-size:12.5px">⚠ ${x.risk}</span>` : ''}</td></tr>`; }).join('');
+  return `<div class="view">
+    <header class="view-pad" style="padding-top:20px;padding-bottom:8px"><h1 style="margin:0">Ports <span class="subtle num" style="font-size:16px;font-weight:500">${rows.length}${rows.length !== PORTS.length ? ' of ' + PORTS.length : ''}</span></h1><span class="subtle">${PORTS.filter(x => exposedOn(x).length).length} exposed on some host · ${PORTS.filter(x => x.fresh).length} with new hosts this week · ${PORTS.filter(x => x.risk).length} need a look · from ${HOSTS.length} hosts' last reports</span></header>
+    ${filterBar(PFILTERS, st, PORTS, 'Search port, name or service…')}
+    <div class="table-wrap" style="margin:0 24px 40px"><table class="table" aria-label="Ports"><thead><tr><th style="width:170px">Port</th><th style="width:90px">Hosts</th><th style="width:110px">Exposed on</th><th>Services</th><th style="width:250px">Groups</th><th style="width:160px">This week</th><th style="width:230px">Needs a look</th></tr></thead><tbody>${tr || '<tr><td colspan="7" class="subtle">No port matches these filters.</td></tr>'}</tbody></table></div></div>`;
+}
+function livePorts(st) {
+  hostsActive('/ports'); $('.topbar__title').textContent = 'Ports';
+  const render = (focus) => { $('.view-area').innerHTML = portsList(st); if (focus) { const i = $('[data-q]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } };
+  render(); liveFilters(st, render, () => { location.href = '20-port.html'; });
+}
+function portPage(x, st) {
+  const card = (title, aside, body, pad = true) => `<section class="card" style="overflow:hidden"><div class="row row--between" style="padding:12px 16px;border-bottom:1px solid var(--line)"><h2 class="section-title" style="margin:0">${title}</h2>${aside || ''}</div><div style="${pad ? 'padding:14px 16px' : ''}">${body}</div></section>`;
+  const kv = (rows) => `<dl class="kv" style="margin:0;row-gap:10px;grid-template-columns:110px minmax(0,1fr)">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  const tile = (label, value, sub, tone) => `<div class="card card__body" style="display:grid;gap:4px"><span class="subtle">${label}</span><span style="font-size:26px;font-weight:650;${tone ? `color:var(--${tone})` : ''}">${value}</span><span class="subtle" style="font-size:12.5px">${sub}</span></div>`;
+  const hs = HOSTS.filter(h => x.hosts.includes(h.name));
+  const shown = hs.filter(h => st.show === 'all' || (st.show === 'exposed') !== x.local.includes(h.name));
+  const bound = (h) => x.local.includes(h.name) ? '127.0.0.1' : '0.0.0.0, ::';
+  const byGroup = HG.filter(g => g.kind !== 'manual').map(g => [g.name, membersOf(g).filter(h => x.hosts.includes(h.name)).length, membersOf(g).length]).filter(r => r[1]);
+  const seg = (id, label, n) => `<button type="button" class="chip" data-show="${id}" aria-pressed="${st.show === id}">${label} <span class="subtle num">${n}</span></button>`;
+  return `<div class="view"><div>
+    <div class="view-pad" style="padding-top:20px"><span class="subtle"><a href="19-ports.html">Ports</a></span></div>
+    <header class="view-pad" style="display:flex;gap:16px;align-items:center;padding-top:8px;padding-bottom:16px">
+      <span style="display:grid;place-items:center;width:56px;height:56px;border-radius:14px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:13px">TCP</span>
+      <div class="stack grow" style="gap:4px"><div class="row" style="gap:10px"><h1 style="margin:0;font-size:24px"><span class="mono" style="font-size:inherit">${x.port}</span></h1><span class="subtle" style="font-size:18px">${x.name}</span></div>
+        <span class="subtle">Listening on ${hs.length} of ${HOSTS.length} hosts · exposed on ${exposedOn(x).length} · ${x.svc.join(', ')} · first seen 23 Jul 2026</span></div>
+      <div class="row" style="gap:8px"><button type="button" class="button">Export</button><button type="button" class="button">Add to case</button><button type="button" class="button">Ask about this</button></div></header>
+    <div class="view-pad" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding-bottom:16px">
+      ${tile('Hosts listening', hs.length, `of ${HOSTS.length} hosts`, '')}${tile('Exposed', exposedOn(x).length, 'reachable from the network', 'warn')}${tile('Local only', x.local.length, 'bound to 127.0.0.1', '')}${tile('This week', '0', 'no host started or stopped', '')}
+    </div>
+    <div class="view-pad" style="display:grid;grid-template-columns:380px minmax(0,1fr);gap:24px;align-items:start;margin-bottom:60px">
+      <div class="stack" style="gap:16px">
+        ${card('Details', '', kv([['Protocol', 'TCP'], ['Usual use', 'SSH: remote shell and file copy'], ['Services', `<span class="mono">${x.svc.join(', ')}</span>`], ['Programs', '<span class="mono">sshd</span>'], ['First seen', '23 Jul 2026 on web-01']]))}
+        ${card('By group', '', `<div class="stack" style="gap:10px">${byGroup.map(([g, n, of]) => `<div class="stack" style="gap:4px"><span class="row row--between"><a href="#">${g}</a><span class="subtle num">${n} of ${of}</span></span><span style="height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden"><span style="display:block;height:100%;width:${Math.round(100 * n / of)}%;background:var(--accent)"></span></span></div>`).join('')}</div>`)}
+        ${card('Recent changes', '<a href="#" style="font-size:12.5px">History</a>', `<ul class="list list--plain" style="margin:0;padding:0">${[['db-02 now listens only locally', '2 days ago'], ['lab-ws-04 stopped reporting', '2 days ago'], ['mx-backup-03 started listening', '3 weeks ago']].map(([a, d]) => `<li style="display:grid;gap:2px;padding:6px 0;border-bottom:1px solid var(--line)"><span>${a}</span><span class="subtle" style="font-size:12.5px">${d}</span></li>`).join('')}</ul>`)}
+      </div>
+      <div class="stack" style="gap:16px">
+        ${card(`Hosts <span class="subtle num" style="text-transform:none;letter-spacing:0;font-weight:500">${hs.length}</span>`, `<span class="row" style="gap:6px">${seg('all', 'All', hs.length)}${seg('exposed', 'Exposed', exposedOn(x).length)}${seg('local', 'Local only', x.local.length)}</span>`,
+          `<div class="table-wrap" style="margin:0;border:0;border-radius:0"><table class="table"><thead><tr><th>Host</th><th style="width:150px">Bound to</th><th style="width:190px">Service · program</th><th style="width:120px">Exposure</th><th style="width:120px">Last report</th></tr></thead><tbody>${shown.map(h => `<tr><td><div class="cell-two"><a href="17-host.html" class="mono">${h.name}</a><span class="subtle">${h.distro} · ${h.ip}</span></div></td><td class="mono">${bound(h)}</td><td><span class="mono" style="font-size:12.5px">sshd.service · sshd</span></td><td>${x.local.includes(h.name) ? '<span class="subtle">Local only</span>' : '<span class="badge badge--warn">Exposed</span>'}</td><td class="${h.online ? '' : 'warn-text'}">${h.seen}</td></tr>`).join('')}</tbody></table></div>`, false)}
+        ${card('Related', '', `<div class="stack" style="gap:10px">
+          <div class="row row--between"><span><b>Compliance:</b> SSH allows root login</span><span class="row" style="gap:8px"><span class="badge badge--critical">Failing on 2 hosts</span><a href="#" style="font-size:12.5px">Show</a></span></div>
+          <div class="row row--between"><span><b>Compliance:</b> SSH password login allowed</span><span class="row" style="gap:8px"><span class="badge badge--high">Failing on 1 host</span><a href="#" style="font-size:12.5px">Show</a></span></div>
+          <div class="row row--between"><span><b>Vulnerabilities:</b> openssh</span><span class="row" style="gap:8px"><span class="badge badge--medium">1 open on 3 hosts</span><a href="#" style="font-size:12.5px">Show</a></span></div>
+          <div class="row row--between"><span><b>Alarms</b> on these hosts mentioning sshd</span><span class="row" style="gap:8px"><span class="subtle">None open</span></span></div></div>`)}
+      </div>
+    </div></div></div>`;
+}
+function livePort(port) {
+  const x = PORTS.find(p => p.port === port); const st = { show: 'all' };
+  hostsActive('/ports'); $('.topbar__title').textContent = 'Ports';
+  const render = () => { $('.view-area').innerHTML = portPage(x, st); };
+  render();
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-show]'); if (t) { st.show = t.dataset.show; render(); } });
+}
+"""
+screen(
+    "19-ports", "ports",
+    "<b>19 · Ports.</b> Search plus filters (Exposure, Protocol, Group, Service, Changes), and more in the table: the port's usual name, how many hosts, where it's exposed, groups, what changed this week, and what needs a look. <b>Try it:</b> filter, then click a port.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + "livePorts({ filters: {}, q: '', open: null });",
+)
+screen(
+    "20-port", "ports",
+    "<b>20 · A port's page.</b> 22/tcp in the shared layout: details, spread by group and recent changes on the left; its hosts (all, exposed, local only) and related findings, vulnerabilities and alarms on the right. <b>Try it:</b> switch Exposed / Local only.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + "livePort('22/tcp');",
+)
+
+SERVICESUI = r"""
+// ---- Services list with filters, and a service's page ----
+const SERVICES = [
+  { unit: 'sshd.service', desc: 'OpenSSH server', hosts: LINUX, user: 'root', programs: ['sshd'], ports: ['22/tcp'], pkg: 'openssh-server' },
+  { unit: 'chronyd.service', desc: 'Time synchronisation', hosts: LINUX, user: 'chrony', programs: ['chronyd'], ports: [], pkg: 'chrony' },
+  { unit: 'systemd-resolved.service', desc: 'Name resolution', hosts: LINUX, user: 'systemd-resolve', programs: ['systemd-resolved'], ports: ['53/udp'], pkg: 'systemd' },
+  { unit: 'postfix.service', desc: 'Mail server', hosts: ['mx-01', 'mx-backup-03'], user: 'root', programs: ['master', 'qmgr', 'pickup'], ports: ['25/tcp'], pkg: 'postfix' },
+  { unit: 'nginx.service', desc: 'Web server', hosts: ['web-01', 'mx-01'], user: 'root, www-data', programs: ['nginx'], ports: ['80/tcp', '443/tcp'], pkg: 'nginx', risk: 'Open alarm: a web server started a shell' },
+  { unit: 'haproxy.service', desc: 'Load balancer', hosts: ['mx-01'], user: 'haproxy', programs: ['haproxy'], ports: ['443/tcp'], pkg: 'haproxy' },
+  { unit: 'postgresql.service', desc: 'PostgreSQL database', hosts: ['db-02'], user: 'postgres', programs: ['postgres'], ports: ['5432/tcp'], pkg: 'postgresql-16', risk: 'Its port is reachable from the network' },
+  { unit: 'api.service', desc: 'No description', hosts: ['web-01'], user: 'root', programs: ['node'], ports: ['8081/tcp'], pkg: '', fresh: ['web-01'], risk: 'New this week, runs as root, not from a package' },
+  { unit: 'TermService', desc: 'Remote Desktop Services', hosts: WIN, user: 'NETWORK SERVICE', programs: ['svchost.exe'], ports: ['3389/tcp'], pkg: 'Windows', fresh: ['win-test-01'] },
+  { unit: 'LanmanServer', desc: 'File and printer sharing', hosts: ['win-dc-01', 'win-dc-02', 'win-file-07', 'win-file-08', 'win-app-03'], user: 'SYSTEM', programs: ['svchost.exe'], ports: ['445/tcp'], pkg: 'Windows' },
+  { unit: 'WinRM', desc: 'Windows Remote Management', hosts: WIN, user: 'NETWORK SERVICE', programs: ['svchost.exe'], ports: ['5985/tcp'], pkg: 'Windows' },
+];
+const portOf = (p) => PORTS.find(x => x.port === p);
+const svcExposed = (x) => x.ports.some(p => exposedOn(portOf(p)).length);
+const SFILTERS = {
+  'Runs as': { opts: ['root or SYSTEM', 'Another user'], test: (x, v) => /root|SYSTEM/.test(x.user) === (v === 'root or SYSTEM') },
+  Listens: { opts: ['On an exposed port', 'Local only', 'No ports'], test: (x, v) => v === 'No ports' ? !x.ports.length : x.ports.length > 0 && svcExposed(x) === (v === 'On an exposed port') },
+  Group: { opts: () => HG.map(g => g.name), test: (x, v) => membersOf(HG.find(g => g.name === v)).some(h => x.hosts.includes(h.name)) },
+  Package: { opts: ['From a package', 'Not from a package'], test: (x, v) => !!x.pkg === (v === 'From a package') },
+  Changes: { opts: ['New this week', 'Needs a look'], test: (x, v) => v === 'New this week' ? !!x.fresh : !!x.risk },
+};
+function servicesList(st) {
+  const rows = SERVICES.filter(x => Object.entries(st.filters).every(([k, v]) => SFILTERS[k].test(x, v)) && (!st.q || (x.unit + ' ' + x.desc + ' ' + x.programs.join(' ')).toLowerCase().includes(st.q.toLowerCase())));
+  const tr = rows.map(x => `<tr data-row="${x.unit}" style="cursor:pointer"><td><div class="cell-two"><span class="mono">${x.unit}</span><span class="subtle">${x.desc}</span></div></td>
+      <td class="num">${x.hosts.length} <span class="subtle">of ${HOSTS.length}</span></td>
+      <td><span class="mono ${/root|SYSTEM/.test(x.user) ? 'warn-text' : ''}" style="font-size:12.5px">${x.user}</span></td>
+      <td><span class="row" style="gap:4px;flex-wrap:nowrap">${x.ports.map(p => `<a href="20-port.html" class="badge ${exposedOn(portOf(p)).length ? 'badge--warn' : 'badge--plain'}" style="text-decoration:none">${p}</a>`).join('') || '<span class="subtle">None</span>'}</span></td>
+      <td><div class="cell-two"><span class="mono" style="font-size:12.5px">${x.programs.join(', ')}</span><span class="subtle">${x.pkg ? 'package ' + x.pkg : '<span class="warn-text">not from a package</span>'}</span></div></td>
+      <td>${x.fresh ? `<span class="badge badge--accent">+${x.fresh.length} host this week</span>` : '<span class="subtle">No change</span>'}</td>
+      <td>${x.risk ? `<span style="color:var(--warn);font-size:12.5px">⚠ ${x.risk}</span>` : ''}</td></tr>`).join('');
+  return `<div class="view">
+    <header class="view-pad" style="padding-top:20px;padding-bottom:8px"><h1 style="margin:0">Services <span class="subtle num" style="font-size:16px;font-weight:500">${rows.length}${rows.length !== SERVICES.length ? ' of ' + SERVICES.length : ''}</span></h1><span class="subtle">${SERVICES.filter(svcExposed).length} listen on an exposed port · ${SERVICES.filter(x => !x.pkg).length} not from a package · ${SERVICES.filter(x => x.fresh).length} with new hosts this week · ${SERVICES.filter(x => x.risk).length} need a look</span></header>
+    ${filterBar(SFILTERS, st, SERVICES, 'Search service or program…')}
+    <div class="table-wrap" style="margin:0 24px 40px"><table class="table" aria-label="Services"><thead><tr><th style="width:230px">Service</th><th style="width:90px">Hosts</th><th style="width:150px">Runs as</th><th style="width:170px">Ports</th><th>Programs</th><th style="width:160px">This week</th><th style="width:250px">Needs a look</th></tr></thead><tbody>${tr || '<tr><td colspan="7" class="subtle">No service matches these filters.</td></tr>'}</tbody></table></div></div>`;
+}
+function liveServices(st) {
+  hostsActive('/services'); $('.topbar__title').textContent = 'Services';
+  const render = (focus) => { $('.view-area').innerHTML = servicesList(st); if (focus) { const i = $('[data-q]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } };
+  render(); liveFilters(st, render, () => { location.href = '22-service.html'; });
+}
+function servicePage(x, st) {
+  const card = (title, aside, body, pad = true) => `<section class="card" style="overflow:hidden"><div class="row row--between" style="padding:12px 16px;border-bottom:1px solid var(--line)"><h2 class="section-title" style="margin:0">${title}</h2>${aside || ''}</div><div style="${pad ? 'padding:14px 16px' : ''}">${body}</div></section>`;
+  const kv = (rows) => `<dl class="kv" style="margin:0;row-gap:10px;grid-template-columns:110px minmax(0,1fr)">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  const tile = (label, value, sub, tone) => `<div class="card card__body" style="display:grid;gap:4px"><span class="subtle">${label}</span><span style="font-size:26px;font-weight:650;${tone ? `color:var(--${tone})` : ''}">${value}</span><span class="subtle" style="font-size:12.5px">${sub}</span></div>`;
+  const hs = HOSTS.filter(h => x.hosts.includes(h.name));
+  const per = { 'web-01': ['1.26.2', 5, '80, 443'], 'mx-01': ['1.22.1', 3, '80'] };
+  const byGroup = HG.filter(g => g.kind !== 'manual').map(g => [g.name, membersOf(g).filter(h => x.hosts.includes(h.name)).length, membersOf(g).length]).filter(r => r[1]);
+  return `<div class="view"><div>
+    <div class="view-pad" style="padding-top:20px"><span class="subtle"><a href="21-services.html">Services</a></span></div>
+    <header class="view-pad" style="display:flex;gap:16px;align-items:center;padding-top:8px;padding-bottom:16px">
+      <span style="display:grid;place-items:center;width:56px;height:56px;border-radius:14px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:13px">SVC</span>
+      <div class="stack grow" style="gap:4px"><div class="row" style="gap:10px"><h1 style="margin:0;font-size:24px"><span class="mono" style="font-size:inherit">${x.unit}</span></h1><span class="subtle" style="font-size:18px">${x.desc}</span></div>
+        <span class="subtle">Running on ${hs.length} of ${HOSTS.length} hosts · 8 processes · runs as ${x.user} · listens on ${x.ports.join(', ')} · package ${x.pkg}</span></div>
+      <div class="row" style="gap:8px"><button type="button" class="button">Export</button><button type="button" class="button">Add to case</button><button type="button" class="button">Ask about this</button></div></header>
+    <div class="view-pad" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding-bottom:16px">
+      ${tile('Hosts running it', hs.length, `of ${HOSTS.length} hosts`, '')}${tile('Open alarms', 1, 'on web-01 · high', 'bad')}${tile('Vulnerabilities', 2, 'in the nginx package · 1 high', 'crit')}${tile('Versions', 2, '1.26.2 and 1.22.1', '')}
+    </div>
+    <div class="view-pad" style="display:grid;grid-template-columns:380px minmax(0,1fr);gap:24px;align-items:start;margin-bottom:60px">
+      <div class="stack" style="gap:16px">
+        ${card('Details', '', kv([['Unit', `<span class="mono">${x.unit}</span>`], ['Description', x.desc], ['Programs', `<span class="mono">${x.programs.join(', ')}</span>`], ['Runs as', `<span class="mono">${x.user}</span> <span class="subtle">(main process as root)</span>`], ['Package', `<a href="#" class="mono">${x.pkg}</a>`], ['First seen', '23 Jul 2026 on web-01']]))}
+        ${card('Ports', '', `<div class="stack" style="gap:8px">${x.ports.map(p => { const o = portOf(p); return `<div class="row row--between"><a href="20-port.html" class="mono">${p}</a><span class="row" style="gap:8px"><span class="subtle">${o.name}</span><span class="badge ${exposedOn(o).length ? 'badge--warn' : 'badge--plain'}">${exposedOn(o).length ? 'Exposed' : 'Local only'}</span></span></div>`; }).join('')}</div>`)}
+        ${card('By group', '', `<div class="stack" style="gap:10px">${byGroup.map(([g, n, of]) => `<div class="stack" style="gap:4px"><span class="row row--between"><a href="#">${g}</a><span class="subtle num">${n} of ${of}</span></span><span style="height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden"><span style="display:block;height:100%;width:${Math.round(100 * n / of)}%;background:var(--accent)"></span></span></div>`).join('')}</div>`)}
+        ${card('Recent changes', '<a href="#" style="font-size:12.5px">History</a>', `<ul class="list list--plain" style="margin:0;padding:0">${[['web-01 updated nginx to 1.26.2', '4 days ago'], ['mx-01 started running it', '3 weeks ago']].map(([a, d]) => `<li style="display:grid;gap:2px;padding:6px 0;border-bottom:1px solid var(--line)"><span>${a}</span><span class="subtle" style="font-size:12.5px">${d}</span></li>`).join('')}</ul>`)}
+      </div>
+      <div class="stack" style="gap:16px">
+        ${card(`Hosts <span class="subtle num" style="text-transform:none;letter-spacing:0;font-weight:500">${hs.length}</span>`, '',
+          `<div class="table-wrap" style="margin:0;border:0;border-radius:0"><table class="table"><thead><tr><th>Host</th><th style="width:110px">Version</th><th style="width:110px">Processes</th><th style="width:130px">Ports</th><th style="width:140px">Problems</th><th style="width:120px">Last report</th></tr></thead><tbody>${hs.map(h => `<tr><td><div class="cell-two"><a href="17-host.html" class="mono">${h.name}</a><span class="subtle">${h.distro} · ${h.ip}</span></div></td><td class="mono">${per[h.name][0]}</td><td class="num">${per[h.name][1]}</td><td class="mono">${per[h.name][2]}</td><td>${h.name === 'web-01' ? '<span class="badge badge--bad">1 alarm</span>' : '<span class="subtle">None open</span>'}</td><td>${h.seen}</td></tr>`).join('')}</tbody></table></div>`, false)}
+        ${card('Related', '', `<div class="stack" style="gap:10px">
+          <div class="row row--between"><span><b>Alarm:</b> A web server started a shell <span class="subtle mono">nginx → sh</span> on web-01</span><span class="row" style="gap:8px"><span class="badge badge--high">High · 2 min ago</span><a href="#" style="font-size:12.5px">Open</a></span></div>
+          <div class="row row--between"><span><b>Vulnerability:</b> CVE-2026-10112 in nginx 1.22.1</span><span class="row" style="gap:8px"><span class="badge badge--high">High · mx-01</span><a href="#" style="font-size:12.5px">Open</a></span></div>
+          <div class="row row--between"><span><b>Vulnerability:</b> CVE-2026-10118 in nginx</span><span class="row" style="gap:8px"><span class="badge badge--medium">Medium · 2 hosts</span><a href="#" style="font-size:12.5px">Open</a></span></div>
+          <div class="row row--between"><span><b>Compliance:</b> checks about nginx</span><span class="row" style="gap:8px"><span class="subtle">All passing</span></span></div></div>`)}
+      </div>
+    </div></div></div>`;
+}
+"""
+screen(
+    "21-services", "services",
+    "<b>21 · Services.</b> Search plus filters (Runs as, Listens, Group, Package, Changes), and more in the table: what it is, how many hosts, who it runs as, its ports (exposed in amber), programs and package, this week, and what needs a look. <b>Try it:</b> filter, then click a service.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + SERVICESUI + "liveServices({ filters: {}, q: '', open: null });",
+)
+screen(
+    "22-service", "services",
+    "<b>22 · A service's page.</b> nginx.service in the shared layout: details, its ports, spread by group and recent changes on the left; its hosts (version, processes, ports, problems) and the alarms, vulnerabilities and checks that concern it on the right.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + SERVICESUI + "hostsActive('/services'); $('.topbar__title').textContent = 'Services'; $('.view-area').innerHTML = servicePage(SERVICES.find(x => x.unit === 'nginx.service'));",
+)
+
+SOFTWAREUI = r"""
+// ---- Software list with filters, and a package's page ----
+const SW = [
+  { name: 'openssl', type: 'deb, rpm', desc: 'TLS and crypto library', hosts: LINUX, versions: ['3.0.13', '3.0.15', '3.2.2'], worst: 'Critical', n: 2, exploited: true, fix: 2, used: ['nginx', 'sshd', 'postfix', 'haproxy'], week: 'Updated on 2 hosts' },
+  { name: 'curl', type: 'deb, rpm', desc: 'URL transfer tool and library', hosts: LINUX, versions: ['8.5.0', '8.9.1'], worst: 'High', n: 3, exploited: true, fix: 3, used: [], week: '' },
+  { name: 'glibc', type: 'deb, rpm', desc: 'GNU C library', hosts: LINUX, versions: ['2.39', '2.40'], worst: 'High', n: 1, exploited: false, fix: 0, used: ['everything'], week: '' },
+  { name: 'nginx', type: 'deb, rpm', desc: 'Web server', hosts: ['web-01', 'mx-01'], versions: ['1.22.1', '1.26.2'], worst: 'High', n: 2, exploited: false, fix: 1, used: ['nginx.service'], week: 'Updated on web-01' },
+  { name: 'openssh-server', type: 'deb, rpm', desc: 'OpenSSH server', hosts: LINUX, versions: ['9.6p1'], worst: 'Medium', n: 1, exploited: false, fix: 0, used: ['sshd.service'], week: '' },
+  { name: 'postgresql-16', type: 'deb', desc: 'PostgreSQL database', hosts: ['db-02'], versions: ['16.4'], worst: '', n: 0, exploited: false, fix: 0, used: ['postgresql.service'], week: '' },
+  { name: 'bash', type: 'deb, rpm', desc: 'GNU shell', hosts: LINUX, versions: ['5.2.37'], worst: '', n: 0, exploited: false, fix: 0, used: [], week: '' },
+  { name: 'nodejs', type: 'rpm', desc: 'JavaScript runtime', hosts: ['web-01'], versions: ['22.11.0'], worst: 'Medium', n: 1, exploited: false, fix: 1, used: ['api.service'], week: 'New on web-01' },
+  { name: 'Microsoft Edge', type: 'Windows', desc: 'Web browser', hosts: WIN, versions: ['141.0.3537', '140.0.3485'], worst: 'High', n: 2, exploited: true, fix: 2, used: [], week: 'Updated on 4 hosts' },
+  { name: '7-Zip', type: 'Windows', desc: 'File archiver', hosts: ['win-file-07', 'win-file-08', 'win-test-01'], versions: ['23.01', '24.08'], worst: 'High', n: 1, exploited: false, fix: 2, used: [], week: '' },
+];
+const SWF = {
+  Vulnerabilities: { opts: ['Exploited', 'Critical or high', 'Any', 'None'], test: (x, v) => v === 'Exploited' ? x.exploited : v === 'Critical or high' ? ['Critical', 'High'].includes(x.worst) : v === 'Any' ? x.n > 0 : x.n === 0 },
+  Fix: { opts: ['Fix available', 'No fix yet'], test: (x, v) => v === 'Fix available' ? x.fix > 0 : x.n > 0 && x.fix === 0 },
+  Versions: { opts: ['One version', 'Several versions'], test: (x, v) => (x.versions.length > 1) === (v === 'Several versions') },
+  Group: { opts: () => HG.map(g => g.name), test: (x, v) => membersOf(HG.find(g => g.name === v)).some(h => x.hosts.includes(h.name)) },
+  Type: { opts: ['deb', 'rpm', 'Windows'], test: (x, v) => x.type.includes(v) },
+  Changes: { opts: ['Changed this week'], test: (x) => !!x.week },
+};
+const sevBadge = (x) => x.worst ? `<span class="badge badge--${x.worst === 'Critical' ? 'critical' : x.worst === 'High' ? 'high' : 'medium'}">${x.worst}</span>` : '';
+function softwareList(st) {
+  const rows = SW.filter(x => Object.entries(st.filters).every(([k, v]) => SWF[k].test(x, v)) && (!st.q || (x.name + ' ' + x.desc).toLowerCase().includes(st.q.toLowerCase())));
+  const tr = rows.map(x => `<tr data-row="${x.name}" style="cursor:pointer"><td><div class="cell-two"><span class="mono">${x.name}</span><span class="subtle">${x.desc} · ${x.type}</span></div></td>
+      <td class="num">${x.hosts.length} <span class="subtle">of ${HOSTS.length}</span></td>
+      <td><div class="cell-two"><span class="mono" style="font-size:12.5px">${x.versions.length > 1 ? x.versions[0] + ' … ' + x.versions[x.versions.length - 1] : x.versions[0]}</span><span class="subtle">${x.versions.length > 1 ? x.versions.length + ' versions' : '1 version'}</span></div></td>
+      <td>${x.n ? `<span class="row" style="gap:6px;flex-wrap:nowrap">${sevBadge(x)}<span class="subtle">${x.n} advisor${x.n > 1 ? 'ies' : 'y'}</span>${x.exploited ? '<span class="badge badge--bad">Exploited</span>' : ''}</span>` : '<span class="subtle">None open</span>'}</td>
+      <td>${x.fix ? `<span class="badge badge--warn">Update on ${x.fix} host${x.fix > 1 ? 's' : ''}</span>` : x.n ? '<span class="subtle">No fix yet</span>' : '<span class="subtle">—</span>'}</td>
+      <td><span class="mono" style="font-size:12.5px">${x.used.join(', ') || '<span class="subtle">—</span>'}</span></td>
+      <td>${x.week ? `<span class="badge badge--accent">${x.week}</span>` : '<span class="subtle">No change</span>'}</td></tr>`).join('');
+  return `<div class="view">
+    <header class="view-pad" style="padding-top:20px;padding-bottom:8px"><h1 style="margin:0">Software <span class="subtle num" style="font-size:16px;font-weight:500">${rows.length}${rows.length !== SW.length ? ' of ' + SW.length : ''}</span></h1><span class="subtle">${SW.filter(x => x.exploited).length} with exploited vulnerabilities · ${SW.filter(x => x.fix).length} with an update that fixes something · ${SW.filter(x => x.versions.length > 1).length} in several versions · ${SW.filter(x => x.week).length} changed this week</span></header>
+    ${filterBar(SWF, st, SW, 'Search package or description…')}
+    <div class="table-wrap" style="margin:0 24px 40px"><table class="table" aria-label="Software"><thead><tr><th style="width:260px">Package</th><th style="width:90px">Hosts</th><th style="width:170px">Versions</th><th style="width:270px">Vulnerabilities</th><th style="width:160px">Fix</th><th>Used by</th><th style="width:180px">This week</th></tr></thead><tbody>${tr || '<tr><td colspan="7" class="subtle">No package matches these filters.</td></tr>'}</tbody></table></div></div>`;
+}
+function liveSoftware(st) {
+  hostsActive('/software'); $('.topbar__title').textContent = 'Software';
+  const render = (focus) => { $('.view-area').innerHTML = softwareList(st); if (focus) { const i = $('[data-q]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } };
+  render(); liveFilters(st, render, () => { location.href = '24-package.html'; });
+}
+function packagePage(st) {
+  const card = (title, aside, body, pad = true) => `<section class="card" style="overflow:hidden"><div class="row row--between" style="padding:12px 16px;border-bottom:1px solid var(--line)"><h2 class="section-title" style="margin:0">${title}</h2>${aside || ''}</div><div style="${pad ? 'padding:14px 16px' : ''}">${body}</div></section>`;
+  const kv = (rows) => `<dl class="kv" style="margin:0;row-gap:10px;grid-template-columns:110px minmax(0,1fr)">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  const tile = (label, value, sub, tone) => `<div class="card card__body" style="display:grid;gap:4px"><span class="subtle">${label}</span><span style="font-size:26px;font-weight:650;${tone ? `color:var(--${tone})` : ''}">${value}</span><span class="subtle" style="font-size:12.5px">${sub}</span></div>`;
+  const ver = { 'web-01': ['3.0.13', 'nginx, sshd'], 'db-02': ['3.0.13', 'sshd, postgres'], 'mx-01': ['3.0.15', 'postfix, nginx, haproxy, sshd'], 'mx-backup-03': ['3.0.15', 'postfix, sshd'], 'lab-ws-04': ['3.2.2', 'sshd'] };
+  const hs = HOSTS.filter(h => ver[h.name]);
+  const needs = (h) => ver[h.name][0] === '3.0.13';
+  const shown = hs.filter(h => st.show === 'all' || (st.show === 'update') === needs(h));
+  const versions = [['3.0.13', 2, 'Vulnerable: CVE-2026-10037, CVE-2026-10051', 'crit'], ['3.0.15', 2, 'Fixed', 'ok'], ['3.2.2', 1, 'Fixed', 'ok']];
+  const seg = (id, label, n) => `<button type="button" class="chip" data-show="${id}" aria-pressed="${st.show === id}">${label} <span class="subtle num">${n}</span></button>`;
+  return `<div class="view"><div>
+    <div class="view-pad" style="padding-top:20px"><span class="subtle"><a href="23-software.html">Software</a></span></div>
+    <header class="view-pad" style="display:flex;gap:16px;align-items:center;padding-top:8px;padding-bottom:16px">
+      <span style="display:grid;place-items:center;width:56px;height:56px;border-radius:14px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:13px">PKG</span>
+      <div class="stack grow" style="gap:4px"><div class="row" style="gap:10px"><h1 style="margin:0;font-size:24px"><span class="mono" style="font-size:inherit">openssl</span></h1><span class="subtle" style="font-size:18px">TLS and crypto library</span></div>
+        <span class="subtle">Installed on 5 of ${HOSTS.length} hosts · 3 versions · deb and rpm · used by nginx, sshd, postfix, haproxy</span></div>
+      <div class="row" style="gap:8px"><button type="button" class="button">Export</button><button type="button" class="button">Add to case</button><button type="button" class="button">Ask about this</button></div></header>
+    <div class="view-pad" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding-bottom:16px">
+      ${tile('Hosts', 5, `of ${HOSTS.length} hosts`, '')}${tile('Vulnerabilities', 2, '1 critical · exploited', 'crit')}${tile('Need an update', 2, 'to 3.0.15 or later', 'warn')}${tile('Versions', 3, 'oldest 3.0.13', '')}
+    </div>
+    <div class="view-pad" style="display:grid;grid-template-columns:380px minmax(0,1fr);gap:24px;align-items:start;margin-bottom:60px">
+      <div class="stack" style="gap:16px">
+        ${card('Details', '', kv([['Package', '<span class="mono">openssl, libssl3</span>'], ['Description', 'TLS and crypto library'], ['Types', 'deb (Debian, Ubuntu), rpm (Fedora)'], ['Source', '<span class="mono">openssl</span>'], ['First seen', '23 Jul 2026']]))}
+        ${card('Versions', '', `<div class="stack" style="gap:12px">${versions.map(([v, n, note, tone]) => `<div class="stack" style="gap:4px"><span class="row row--between"><span class="mono">${v}</span><span class="subtle num">${n} host${n > 1 ? 's' : ''}</span></span><span style="height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden"><span style="display:block;height:100%;width:${n * 20}%;background:var(--${tone === 'crit' ? 'crit' : 'accent'})"></span></span><span class="subtle" style="font-size:12.5px;${tone === 'crit' ? 'color:var(--crit)' : ''}">${note}</span></div>`).join('')}</div>`)}
+        ${card('Used by', '', `<div class="stack" style="gap:8px">${[['nginx.service', 2], ['sshd.service', 5], ['postfix.service', 2], ['haproxy.service', 1], ['postgresql.service', 1]].map(([u, n]) => `<div class="row row--between"><a href="22-service.html" class="mono">${u}</a><span class="subtle">${n} host${n > 1 ? 's' : ''}</span></div>`).join('')}</div>`)}
+        ${card('Recent changes', '<a href="#" style="font-size:12.5px">History</a>', `<ul class="list list--plain" style="margin:0;padding:0">${[['mx-01 updated 3.0.13 → 3.0.15', '2 days ago'], ['mx-backup-03 updated 3.0.13 → 3.0.15', '2 days ago'], ['CVE-2026-10037 marked exploited', '5 days ago']].map(([a, d]) => `<li style="display:grid;gap:2px;padding:6px 0;border-bottom:1px solid var(--line)"><span>${a}</span><span class="subtle" style="font-size:12.5px">${d}</span></li>`).join('')}</ul>`)}
+      </div>
+      <div class="stack" style="gap:16px">
+        ${card('Vulnerabilities <span class="subtle num" style="text-transform:none;letter-spacing:0;font-weight:500">2</span>', '<a href="#" style="font-size:12.5px">Show in Vulnerabilities</a>',
+          `<div class="table-wrap" style="margin:0;border:0;border-radius:0"><table class="table"><thead><tr><th>Advisory</th><th style="width:110px">Severity</th><th style="width:150px">Affects</th><th style="width:120px">Fixed in</th><th style="width:100px">Hosts</th></tr></thead><tbody>
+          <tr><td>CVE-2026-10037 <span class="badge badge--bad">Exploited</span><div class="subtle" style="font-size:12.5px">Memory corruption in TLS 1.3 handshake</div></td><td><span class="badge badge--critical">Critical</span></td><td class="mono">< 3.0.15</td><td class="mono">3.0.15</td><td class="num">2</td></tr>
+          <tr><td>CVE-2026-10051<div class="subtle" style="font-size:12.5px">Timing side channel in RSA decryption</div></td><td><span class="badge badge--medium">Medium</span></td><td class="mono">< 3.0.15</td><td class="mono">3.0.15</td><td class="num">2</td></tr></tbody></table></div>`, false)}
+        ${card(`Hosts <span class="subtle num" style="text-transform:none;letter-spacing:0;font-weight:500">${hs.length}</span>`, `<span class="row" style="gap:6px">${seg('all', 'All', hs.length)}${seg('update', 'Need an update', hs.filter(needs).length)}${seg('ok', 'Up to date', hs.filter(h => !needs(h)).length)}</span>`,
+          `<div class="table-wrap" style="margin:0;border:0;border-radius:0"><table class="table"><thead><tr><th>Host</th><th style="width:110px">Version</th><th style="width:170px">Status</th><th>Used by</th><th style="width:120px">Last report</th></tr></thead><tbody>${shown.map(h => `<tr><td><div class="cell-two"><a href="17-host.html" class="mono">${h.name}</a><span class="subtle">${h.distro} · ${h.ip}</span></div></td><td class="mono">${ver[h.name][0]}</td><td>${needs(h) ? '<span class="badge badge--warn">Update to 3.0.15</span>' : '<span class="badge badge--ok">Up to date</span>'}</td><td class="mono" style="font-size:12.5px">${ver[h.name][1]}</td><td class="${h.online ? '' : 'warn-text'}">${h.seen}</td></tr>`).join('')}</tbody></table></div>`, false)}
+      </div>
+    </div></div></div>`;
+}
+function livePackage() {
+  const st = { show: 'all' };
+  hostsActive('/software'); $('.topbar__title').textContent = 'Software';
+  const render = () => { $('.view-area').innerHTML = packagePage(st); };
+  render();
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-show]'); if (t) { st.show = t.dataset.show; render(); } });
+}
+"""
+screen(
+    "23-software", "software",
+    "<b>23 · Software.</b> Search plus filters (Vulnerabilities, Fix, Versions, Group, Type, Changes), and one line per package: what it is, hosts, version range, worst advisory (exploited flagged), where an update fixes something, what uses it, and this week. <b>Try it:</b> filter, then click a package.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + SOFTWAREUI + "liveSoftware({ filters: {}, q: '', open: null });",
+)
+screen(
+    "24-package", "software",
+    "<b>24 · A package's page.</b> openssl in the shared layout: details, versions (which are vulnerable), what uses it and recent changes on the left; its vulnerabilities and its hosts (need an update / up to date) on the right. <b>Try it:</b> switch Need an update / Up to date.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + SOFTWAREUI + "livePackage();",
+)
+
+VULNSUI = r"""
+// ---- Vulnerabilities list with filters, and an advisory's page ----
+const V = [
+  { id: 'CVE-2026-10037', title: 'openssl: memory corruption in the TLS 1.3 handshake', sev: 'Critical', ex: true, pkg: 'openssl', fixv: '3.0.15', open: 2, of: 5, cvss: 9.8, epss: 87.9, due: '30 Oct', dueSoon: true, who: '' },
+  { id: 'CVE-2026-10042', title: 'curl: heap overflow in SOCKS5 proxy handshake', sev: 'High', ex: true, pkg: 'curl', fixv: '8.9.1', open: 3, of: 5, cvss: 8.6, epss: 63.1, due: '6 Nov', dueSoon: true, who: 'Sam Analyst' },
+  { id: 'CVE-2026-10079', title: 'glibc: buffer overflow in iconv', sev: 'High', ex: false, pkg: 'glibc', fixv: '', open: 5, of: 5, cvss: 7.8, epss: 4.2, due: '', who: '' },
+  { id: 'CVE-2026-10112', title: 'nginx: request smuggling with HTTP/2', sev: 'High', ex: false, pkg: 'nginx', fixv: '1.26.2', open: 1, of: 2, cvss: 7.5, epss: 12.0, due: '', who: 'Wendy Ward' },
+  { id: 'CVE-2026-20871', title: 'Microsoft Edge: type confusion in V8', sev: 'High', ex: true, pkg: 'Microsoft Edge', fixv: '141.0.3537', open: 2, of: 6, cvss: 8.8, epss: 41.0, due: '13 Nov', who: 'Wendy Ward' },
+  { id: 'CVE-2026-10118', title: 'nginx: memory disclosure in the mp4 module', sev: 'Medium', ex: false, pkg: 'nginx', fixv: '1.26.3', open: 2, of: 2, cvss: 5.9, epss: 1.1, due: '', who: '' },
+  { id: 'CVE-2026-10051', title: 'openssl: timing side channel in RSA decryption', sev: 'Medium', ex: false, pkg: 'openssl', fixv: '3.0.15', open: 2, of: 5, cvss: 5.3, epss: 0.8, due: '', who: '' },
+  { id: 'CVE-2026-10140', title: 'openssh: information leak in agent forwarding', sev: 'Medium', ex: false, pkg: 'openssh-server', fixv: '', open: 5, of: 5, cvss: 5.0, epss: 0.4, due: '', who: '' },
+  { id: 'CVE-2026-20430', title: '7-Zip: directory traversal when extracting', sev: 'High', ex: false, pkg: '7-Zip', fixv: '24.08', open: 2, of: 3, cvss: 7.0, epss: 2.6, due: '', who: '' },
+  { id: 'CVE-2026-10155', title: 'nodejs: path traversal in the permission model', sev: 'Medium', ex: false, pkg: 'nodejs', fixv: '22.11.1', open: 1, of: 1, cvss: 6.5, epss: 0.9, due: '', who: '' },
+];
+const VF = {
+  Severity: { opts: ['Critical', 'High', 'Medium'], test: (x, v) => x.sev === v },
+  State: { opts: ['Open', 'Mitigated', 'Risk accepted', 'False positive', 'Resolved'], test: (x, v) => v === 'Open' ? x.open > 0 : v === 'Resolved' ? x.open < x.of : false },
+  Signals: { opts: ['Known exploited', 'Due within 30 days', 'No fix yet', 'Reboot needed', 'Lower confidence'], test: (x, v) => v === 'Known exploited' ? x.ex : v === 'Due within 30 days' ? !!x.due : v === 'No fix yet' ? !x.fixv : false },
+  Package: { opts: () => [...new Set(V.map(x => x.pkg))].sort(), test: (x, v) => x.pkg === v },
+  Group: { opts: () => HG.map(g => g.name), test: (x, v) => true },
+  Assignee: { opts: ['Unassigned', 'Sam Analyst', 'Wendy Ward', 'Me'], test: (x, v) => v === 'Unassigned' ? !x.who : x.who === v },
+};
+const sevB = (s) => `<span class="badge badge--${s === 'Critical' ? 'critical' : s === 'High' ? 'high' : 'medium'}">${s}</span>`;
+function vulnsList(st) {
+  const rows = V.filter(x => Object.entries(st.filters).every(([k, v]) => VF[k].test(x, v)) && (!st.q || (x.id + ' ' + x.title + ' ' + x.pkg).toLowerCase().includes(st.q.toLowerCase())));
+  const tr = rows.map(x => `<tr data-row="${x.id}" style="cursor:pointer"><td><input type="checkbox" aria-label="Select ${x.id}" data-sel="${x.id}" ${st.sel.includes(x.id) ? 'checked' : ''}></td><td>${sevB(x.sev)}</td>
+      <td><div class="cell-two"><span>${x.title} ${x.ex ? '<span class="badge badge--bad">Exploited</span>' : ''}</span><span class="subtle mono" style="font-size:12px">${x.id}</span></div></td>
+      <td><div class="cell-two"><span class="mono" style="font-size:12.5px">${x.pkg}</span><span class="subtle">${x.fixv ? 'fixed in ' + x.fixv : '<span class="warn-text">no fix yet</span>'}</span></div></td>
+      <td class="num">${x.cvss.toFixed(1)}</td><td class="num">${x.epss.toFixed(1)}%</td>
+      <td><div class="stack" style="gap:4px"><span class="num"><b>${x.open}</b> <span class="subtle">open of ${x.of}</span></span><span style="height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden;width:110px"><span style="display:block;height:100%;width:${Math.round(100 * (x.of - x.open) / x.of)}%;background:var(--ok)"></span></span></div></td>
+      <td>${x.due ? `<span class="${x.dueSoon ? 'warn-text' : ''}">${x.due}</span>` : '<span class="subtle">—</span>'}</td>
+      <td>${x.who ? x.who : '<span class="subtle">Unassigned</span>'}</td></tr>`).join('');
+  const bulk = st.sel.length ? `<div class="view-pad" style="padding-bottom:10px"><div class="card row" style="gap:10px;padding:8px 12px;background:var(--accent-soft)"><b>${st.sel.length} selected</b><button type="button" class="button button--small">Set state ▾</button><button type="button" class="button button--small">Assign ▾</button><button type="button" class="button button--small">Add to case</button><span class="grow"></span><button type="button" class="button button--ghost button--small" data-selnone>Clear</button></div></div>` : '';
+  return `<div class="view">
+    <header class="view-pad" style="padding-top:20px;padding-bottom:8px"><h1 style="margin:0">Vulnerabilities <span class="subtle num" style="font-size:16px;font-weight:500">${rows.length}${rows.length !== V.length ? ' of ' + V.length : ''}</span></h1><span class="subtle">${V.length} open advisories on ${HOSTS.length} hosts · ${V.filter(x => x.ex).length} known exploited · ${V.filter(x => x.due).length} with a due date · ${V.filter(x => !x.fixv).length} without a fix · ${V.filter(x => !x.who).length} unassigned</span></header>
+    ${filterBar(VF, st, V, 'Search CVE, advisory or package…')}${bulk}
+    <div class="table-wrap" style="margin:0 24px 40px"><table class="table" aria-label="Vulnerabilities"><thead><tr><th style="width:36px"><input type="checkbox" aria-label="Select all" data-selall></th><th style="width:100px">Severity</th><th>Advisory</th><th style="width:170px">Package</th><th style="width:70px">CVSS</th><th style="width:80px">EPSS</th><th style="width:140px">Hosts</th><th style="width:90px">Due</th><th style="width:130px">Assignee</th></tr></thead><tbody>${tr || '<tr><td colspan="9" class="subtle">No advisory matches these filters.</td></tr>'}</tbody></table></div></div>`;
+}
+function liveVulns(st) {
+  hostsActive('/vulnerabilities'); $('.topbar__title').textContent = 'Vulnerabilities';
+  const render = (focus) => { $('.view-area').innerHTML = vulnsList(st); if (focus) { const i = $('[data-q]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } };
+  document.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-sel]'); if (c) { e.stopImmediatePropagation(); st.sel = c.checked ? [...st.sel, c.dataset.sel] : st.sel.filter(x => x !== c.dataset.sel); render(); return; }
+    if (e.target.closest('[data-selall]')) { e.stopImmediatePropagation(); st.sel = e.target.checked ? V.map(x => x.id) : []; render(); return; }
+    if (e.target.closest('[data-selnone]')) { e.stopImmediatePropagation(); st.sel = []; render(); }
+  }, true);
+  render(); liveFilters(st, render, () => { location.href = '26-advisory.html'; });
+}
+function advisoryPage(st) {
+  const card = (title, aside, body, pad = true) => `<section class="card" style="overflow:hidden"><div class="row row--between" style="padding:12px 16px;border-bottom:1px solid var(--line)"><h2 class="section-title" style="margin:0">${title}</h2>${aside || ''}</div><div style="${pad ? 'padding:14px 16px' : ''}">${body}</div></section>`;
+  const kv = (rows) => `<dl class="kv" style="margin:0;row-gap:10px;grid-template-columns:110px minmax(0,1fr)">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  const tile = (label, value, sub, tone) => `<div class="card card__body" style="display:grid;gap:4px"><span class="subtle">${label}</span><span style="font-size:26px;font-weight:650;${tone ? `color:var(--${tone})` : ''}">${value}</span><span class="subtle" style="font-size:12.5px">${sub}</span></div>`;
+  const H = [['web-01', '8.5.0-1.fc44', 'Open', 'Sam Analyst', 'Fedora: FEDORA-2026-3a245276'], ['db-02', '7.88.1-10', 'Open', 'Sam Analyst', 'Debian: DSA-5891-1'], ['mx-backup-03', '8.5.0-2ubuntu10', 'Open', '—', 'Ubuntu: USN-7102-1'], ['lab-ws-04', '8.5.0-1.fc44', 'Mitigated', 'Sam Analyst', 'Fedora: FEDORA-2026-3a245276'], ['mx-01', '7.88.1-10+deb12u8', 'Resolved', '—', 'Debian: DSA-5891-1']];
+  const stB = (x) => `<span class="badge ${x === 'Open' ? 'badge--bad' : x === 'Resolved' ? 'badge--ok' : 'badge--plain'}">${x}</span>`;
+  const shown = H.filter(r => st.show === 'all' || r[2] === st.show);
+  const seg = (id, label) => `<button type="button" class="chip" data-show="${id}" aria-pressed="${st.show === id}">${label} <span class="subtle num">${id === 'all' ? H.length : H.filter(r => r[2] === id).length}</span></button>`;
+  return `<div class="view"><div>
+    <div class="view-pad" style="padding-top:20px"><span class="subtle"><a href="25-vulnerabilities.html">Vulnerabilities</a></span></div>
+    <header class="view-pad" style="display:flex;gap:16px;align-items:center;padding-top:8px;padding-bottom:12px">
+      <span style="display:grid;place-items:center;width:56px;height:56px;border-radius:14px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:13px">CVE</span>
+      <div class="stack grow" style="gap:4px"><div class="row" style="gap:10px"><h1 style="margin:0;font-size:22px">curl: heap overflow in SOCKS5 proxy handshake</h1>${sevB('High')}<span class="badge badge--bad">Known exploited</span></div>
+        <span class="subtle"><span class="mono">CVE-2026-10042</span> · package curl · fixed in 8.9.1 · open on 3 of 5 hosts · assigned to Sam Analyst</span></div>
+      <div class="row" style="gap:8px"><button type="button" class="button">Set state ▾</button><button type="button" class="button">Assign ▾</button><button type="button" class="button">Add to case</button><button type="button" class="button" aria-label="More actions">⋯</button></div></header>
+    <div class="view-pad" style="padding-bottom:16px"><div class="callout" style="margin:0;background:var(--crit-soft, #fde8ef);color:var(--text)"><span style="color:var(--crit)">⏱</span><span>Known exploited: CISA asks for remediation by <b>6 Nov 2026</b> (in 21 days).</span></div></div>
+    <div class="view-pad" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding-bottom:16px">
+      ${tile('Open on', 3, 'of 5 hosts with curl', 'bad')}${tile('Fix available', 3, 'update curl to 8.9.1', 'warn')}${tile('EPSS', '63.1%', 'chance of exploitation in 30 days', '')}${tile('CVSS', '8.6', 'network, no privileges needed', '')}
+    </div>
+    <div class="view-pad" style="display:grid;grid-template-columns:380px minmax(0,1fr);gap:24px;align-items:start;margin-bottom:60px">
+      <div class="stack" style="gap:16px">
+        ${card('What to do', '', `<div class="stack" style="gap:10px"><span>Update <a href="24-package.html" class="mono">curl</a> to <b class="mono">8.9.1</b> or the fixed distribution build:</span><div class="stack" style="gap:6px">${[['Fedora 44', '8.9.1-3.fc44'], ['Debian 12', '7.88.1-10+deb12u8'], ['Ubuntu 24.04', '8.5.0-2ubuntu10.5']].map(([d, v]) => `<span class="row row--between"><span>${d}</span><span class="mono" style="font-size:12.5px">${v}</span></span>`).join('')}</div><span class="subtle" style="font-size:12.5px">No reboot needed.</span></div>`)}
+        ${card('Details', '', kv([['Advisories', '<span class="stack" style="gap:2px"><a href="#">FEDORA-2026-3a245276</a><a href="#">DSA-5891-1</a><a href="#">USN-7102-1</a></span>'], ['Published', '9 Oct 2026'], ['Confidence', '98% <span class="subtle">· package version from inventory</span>'], ['Vector', '<span class="mono" style="font-size:12px">AV:N/AC:L/PR:N/UI:R</span>']]))}
+        ${card('History', '<a href="#" style="font-size:12.5px">All</a>', `<ul class="list list--plain" style="margin:0;padding:0">${[['Sam Analyst assigned to themself', '2 h ago'], ['lab-ws-04 marked Mitigated: “outbound SOCKS blocked at the firewall”', 'yesterday'], ['mx-01 resolved by updating curl', '2 days ago'], ['Added to the CISA known-exploited list', '5 days ago']].map(([a, d]) => `<li style="display:grid;gap:2px;padding:6px 0;border-bottom:1px solid var(--line)"><span>${a}</span><span class="subtle" style="font-size:12.5px">${d}</span></li>`).join('')}</ul>`)}
+      </div>
+      <div class="stack" style="gap:16px">
+        ${card('Hosts <span class="subtle num" style="text-transform:none;letter-spacing:0;font-weight:500">5</span>', `<span class="row" style="gap:6px">${seg('all', 'All')}${seg('Open', 'Open')}${seg('Mitigated', 'Mitigated')}${seg('Resolved', 'Resolved')}</span>`,
+          `<div class="table-wrap" style="margin:0;border:0;border-radius:0"><table class="table"><thead><tr><th style="width:36px"><input type="checkbox" aria-label="Select all"></th><th>Host</th><th style="width:170px">Installed</th><th style="width:110px">State</th><th style="width:130px">Assignee</th><th style="width:210px">Advisory</th></tr></thead><tbody>${shown.map(([n, v, s, w, a]) => { const h = HOSTS.find(x => x.name === n); return `<tr><td><input type="checkbox" aria-label="Select ${n}"></td><td><div class="cell-two"><a href="17-host.html" class="mono">${n}</a><span class="subtle">${h.distro} · ${h.ip}</span></div></td><td class="mono" style="font-size:12.5px">${v}</td><td>${stB(s)}</td><td>${w === '—' ? '<span class="subtle">—</span>' : w}</td><td class="subtle" style="font-size:12.5px">${a}</td></tr>`; }).join('')}</tbody></table></div>`, false)}
+        ${card('Related', '', `<div class="stack" style="gap:10px">
+          <div class="row row--between"><span><b>Alarm:</b> A shell downloaded a program <span class="subtle mono">bash → curl</span> on web-01</span><span class="row" style="gap:8px"><span class="badge badge--medium">Medium · 1 h ago</span><a href="#" style="font-size:12.5px">Open</a></span></div>
+          <div class="row row--between"><span><b>Case:</b> Outbound downloads from web servers</span><span class="row" style="gap:8px"><span class="badge badge--plain">Open · Sam Analyst</span><a href="#" style="font-size:12.5px">Open</a></span></div>
+          <div class="row row--between"><span><b>Same package:</b> 2 more curl advisories</span><span class="row" style="gap:8px"><span class="subtle">Medium, Low</span><a href="#" style="font-size:12.5px">Show</a></span></div></div>`)}
+      </div>
+    </div></div></div>`;
+}
+function liveAdvisory() {
+  const st = { show: 'all' };
+  hostsActive('/vulnerabilities'); $('.topbar__title').textContent = 'Vulnerabilities';
+  const render = () => { $('.view-area').innerHTML = advisoryPage(st); };
+  render();
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-show]'); if (t) { st.show = t.dataset.show; render(); } });
+}
+"""
+screen(
+    "25-vulnerabilities", "vulns",
+    "<b>25 · Vulnerabilities.</b> The nine toggles become filters (Severity, State, Signals, Package, Group, Assignee); each row adds the package and its fix, hosts open with progress, the due date and the assignee. Selecting rows shows the bulk bar. <b>Try it:</b> tick two rows; filter; click an advisory.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + VULNSUI + "liveVulns({ filters: {}, q: '', open: null, sel: [] });",
+)
+screen(
+    "26-advisory", "vulns",
+    "<b>26 · An advisory's page.</b> CVE-2026-10042 in the shared layout: triage in the header, the CISA due date, what to do per distribution, details and history on the left; its hosts (open, mitigated, resolved) and related alarms and cases on the right. <b>Try it:</b> switch the host states.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + VULNSUI + "liveAdvisory();",
+)
+
+COMPLIANCEUI = r"""
+// ---- Compliance list with filters, and a check's page ----
+const C = [
+  { title: 'Docker API exposed without TLS', id: 'port.docker_api.exposed', set: 'baseline', area: 'Network exposure', sev: 'Critical', open: 1, mit: 0, acc: 0, checked: 11, since: '10 Sep', who: '' },
+  { title: 'SSH allows root login', id: 'ssh.permit_root_login', set: 'hardening-linux-l1', area: 'SSH', sev: 'Critical', open: 2, mit: 0, acc: 0, checked: 5, since: '23 Jul', who: 'Sam Analyst' },
+  { title: 'Password maximum age too long', id: 'accounts.pass_max_days', set: 'hardening-linux-l1', area: 'Accounts', sev: 'Critical', open: 2, mit: 0, acc: 1, checked: 5, since: '23 Jul', who: '' },
+  { title: 'SSH password login allowed', id: 'ssh.password_authentication', set: 'hardening-linux-l1', area: 'SSH', sev: 'High', open: 1, mit: 0, acc: 0, checked: 5, since: '2 Aug', who: '' },
+  { title: 'Redis exposed to the network', id: 'port.redis.exposed', set: 'baseline', area: 'Network exposure', sev: 'High', open: 1, mit: 0, acc: 0, checked: 11, since: '10 Sep', who: '' },
+  { title: 'PostgreSQL exposed to the network', id: 'port.postgresql.exposed', set: 'baseline', area: 'Network exposure', sev: 'Medium', open: 1, mit: 0, acc: 0, checked: 11, since: '10 Sep', who: 'Wendy Ward' },
+  { title: 'SMB exposed to the network', id: 'port.smb.exposed', set: 'baseline', area: 'Network exposure', sev: 'Medium', open: 3, mit: 2, acc: 0, checked: 11, since: '10 Sep', who: 'Wendy Ward' },
+  { title: 'Unattended upgrades off', id: 'packages.auto_updates', set: 'baseline', area: 'Packages', sev: 'Medium', open: 3, mit: 0, acc: 1, checked: 5, since: '23 Jul', who: '' },
+  { title: 'IP forwarding enabled', id: 'kernel.ip_forward', set: 'hardening-linux-l1', area: 'Kernel', sev: 'Medium', open: 1, mit: 0, acc: 0, checked: 5, since: '5 Oct', who: '' },
+  { title: 'telnet-server installed', id: 'package.telnet_server.installed', set: 'baseline', area: 'Packages', sev: 'Low', open: 1, mit: 0, acc: 0, checked: 5, since: '23 Jul', who: '' },
+];
+const CF = {
+  Severity: { opts: ['Critical', 'High', 'Medium', 'Low'], test: (x, v) => x.sev === v },
+  State: { opts: ['Open', 'Mitigated', 'Risk accepted', 'False positive', 'Resolved'], test: (x, v) => v === 'Open' ? x.open > 0 : v === 'Mitigated' ? x.mit > 0 : v === 'Risk accepted' ? x.acc > 0 : false },
+  'Rule set': { opts: ['baseline', 'hardening-linux-l1'], test: (x, v) => x.set === v },
+  Area: { opts: () => [...new Set(C.map(x => x.area))].sort(), test: (x, v) => x.area === v },
+  Group: { opts: () => HG.map(g => g.name), test: () => true },
+  Assignee: { opts: ['Unassigned', 'Sam Analyst', 'Wendy Ward', 'Me'], test: (x, v) => v === 'Unassigned' ? !x.who : x.who === v },
+};
+const sevC = (s) => `<span class="badge badge--${s === 'Critical' ? 'critical' : s === 'High' ? 'high' : s === 'Medium' ? 'medium' : 'low'}">${s}</span>`;
+const stateBar = (x) => { const pass = x.checked - x.open - x.mit - x.acc; const seg = (n, c) => n ? `<span style="width:${100 * n / x.checked}%;background:var(--${c})"></span>` : '';
+  return `<div class="stack" style="gap:4px"><span style="display:flex;height:6px;width:130px;border-radius:3px;overflow:hidden;background:var(--surface-2)">${seg(x.open, 'bad')}${seg(x.mit, 'ok')}${seg(x.acc, 'muted, #8a94a6')}</span><span class="subtle" style="font-size:12px">${x.open} open${x.mit ? ` · ${x.mit} mitigated` : ''}${x.acc ? ` · ${x.acc} accepted` : ''} · ${pass} pass</span></div>`; };
+function complianceList(st) {
+  const rows = C.filter(x => Object.entries(st.filters).every(([k, v]) => CF[k].test(x, v)) && (!st.q || (x.title + ' ' + x.id + ' ' + x.set).toLowerCase().includes(st.q.toLowerCase())));
+  const tr = rows.map(x => `<tr data-row="${x.id}" style="cursor:pointer"><td><input type="checkbox" aria-label="Select ${x.title}" data-sel="${x.id}" ${st.sel.includes(x.id) ? 'checked' : ''}></td><td>${sevC(x.sev)}</td>
+      <td><div class="cell-two"><span>${x.title}</span><span class="subtle" style="font-size:12px"><span class="mono">${x.id}</span> · ${x.set}</span></div></td>
+      <td>${x.area}</td>
+      <td class="num"><b>${x.open}</b> <span class="subtle">of ${x.checked}</span></td>
+      <td>${stateBar(x)}</td><td>${x.since}</td>
+      <td>${x.who ? x.who : '<span class="subtle">Unassigned</span>'}</td></tr>`).join('');
+  const bulk = st.sel.length ? `<div class="view-pad" style="padding-bottom:10px"><div class="card row" style="gap:10px;padding:8px 12px;background:var(--accent-soft)"><b>${st.sel.length} selected</b><button type="button" class="button button--small">Set state ▾</button><button type="button" class="button button--small">Assign ▾</button><button type="button" class="button button--small">Add to case</button><span class="grow"></span><button type="button" class="button button--ghost button--small" data-selnone>Clear</button></div></div>` : '';
+  return `<div class="view">
+    <header class="view-pad" style="padding-top:20px;padding-bottom:8px"><h1 style="margin:0">Compliance <span class="subtle num" style="font-size:16px;font-weight:500">${rows.length}${rows.length !== C.length ? ' of ' + C.length : ''}</span></h1><span class="subtle">${C.length} checks failing on ${HOSTS.length} hosts · ${C.filter(x => x.sev === 'Critical').length} critical · ${C.filter(x => !x.who).length} unassigned · baseline ${C.filter(x => x.set === 'baseline').length}, hardening-linux-l1 ${C.filter(x => x.set !== 'baseline').length}</span></header>
+    ${filterBar(CF, st, C, 'Search check, rule or rule set…')}${bulk}
+    <div class="table-wrap" style="margin:0 24px 40px"><table class="table" aria-label="Compliance"><thead><tr><th style="width:36px"><input type="checkbox" aria-label="Select all" data-selall></th><th style="width:100px">Severity</th><th>Check</th><th style="width:150px">Area</th><th style="width:90px">Failing</th><th style="width:220px">Hosts</th><th style="width:80px">Since</th><th style="width:130px">Assignee</th></tr></thead><tbody>${tr || '<tr><td colspan="8" class="subtle">No check matches these filters.</td></tr>'}</tbody></table></div></div>`;
+}
+function liveCompliance(st) {
+  hostsActive('/compliance'); $('.topbar__title').textContent = 'Compliance';
+  const render = (focus) => { $('.view-area').innerHTML = complianceList(st); if (focus) { const i = $('[data-q]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } };
+  document.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-sel]'); if (c) { e.stopImmediatePropagation(); st.sel = c.checked ? [...st.sel, c.dataset.sel] : st.sel.filter(x => x !== c.dataset.sel); render(); return; }
+    if (e.target.closest('[data-selall]')) { e.stopImmediatePropagation(); st.sel = e.target.checked ? C.map(x => x.id) : []; render(); return; }
+    if (e.target.closest('[data-selnone]')) { e.stopImmediatePropagation(); st.sel = []; render(); }
+  }, true);
+  render(); liveFilters(st, render, () => { location.href = '28-check.html'; });
+}
+function checkPage(st) {
+  const card = (title, aside, body, pad = true) => `<section class="card" style="overflow:hidden"><div class="row row--between" style="padding:12px 16px;border-bottom:1px solid var(--line)"><h2 class="section-title" style="margin:0">${title}</h2>${aside || ''}</div><div style="${pad ? 'padding:14px 16px' : ''}">${body}</div></section>`;
+  const kv = (rows) => `<dl class="kv" style="margin:0;row-gap:10px;grid-template-columns:110px minmax(0,1fr)">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  const tile = (label, value, sub, tone) => `<div class="card card__body" style="display:grid;gap:4px"><span class="subtle">${label}</span><span style="font-size:26px;font-weight:650;${tone ? `color:var(--${tone})` : ''}">${value}</span><span class="subtle" style="font-size:12.5px">${sub}</span></div>`;
+  const H = [['web-01', 'Open', '<span class="mono">PermitRootLogin yes</span> in /etc/ssh/sshd_config line 32', 'Sam Analyst', '1 min ago'], ['mx-backup-03', 'Open', '<span class="mono">PermitRootLogin yes</span> in /etc/ssh/sshd_config.d/50-cloud.conf', 'Sam Analyst', '2 min ago'], ['mx-01', 'Passing', '<span class="mono">PermitRootLogin no</span>', '', '1 min ago'], ['db-02', 'Passing', '<span class="mono">PermitRootLogin prohibit-password</span>', '', '1 min ago'], ['lab-ws-04', 'Passing', '<span class="mono">PermitRootLogin no</span>', '', '2 days ago']];
+  const stB = (x) => `<span class="badge ${x === 'Open' ? 'badge--bad' : x === 'Passing' ? 'badge--ok' : 'badge--plain'}">${x}</span>`;
+  const shown = H.filter(r => st.show === 'all' || r[1] === st.show);
+  const seg = (id, label) => `<button type="button" class="chip" data-show="${id}" aria-pressed="${st.show === id}">${label} <span class="subtle num">${id === 'all' ? H.length : H.filter(r => r[1] === id).length}</span></button>`;
+  const spark = [3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2];
+  return `<div class="view"><div>
+    <div class="view-pad" style="padding-top:20px"><span class="subtle"><a href="27-compliance.html">Compliance</a></span></div>
+    <header class="view-pad" style="display:flex;gap:16px;align-items:center;padding-top:8px;padding-bottom:16px">
+      <span style="display:grid;place-items:center;width:56px;height:56px;border-radius:14px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:13px">CHK</span>
+      <div class="stack grow" style="gap:4px"><div class="row" style="gap:10px"><h1 style="margin:0;font-size:22px">SSH allows root login</h1>${sevC('Critical')}</div>
+        <span class="subtle"><span class="mono">ssh.permit_root_login</span> · hardening-linux-l1 v4 · SSH · failing on 2 of 5 hosts checked · assigned to Sam Analyst</span></div>
+      <div class="row" style="gap:8px"><button type="button" class="button">Set state ▾</button><button type="button" class="button">Assign ▾</button><button type="button" class="button">Add to case</button><button type="button" class="button">Ask about this</button></div></header>
+    <div class="view-pad" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding-bottom:16px">
+      ${tile('Failing on', 2, 'of 5 hosts checked', 'bad')}${tile('Passing', 3, 'checked within the last day', 'ok')}${tile('First seen', '23 Jul', 'on web-01', '')}
+      <div class="card card__body" style="display:grid;gap:4px"><span class="subtle">Last 14 days</span><span style="display:flex;align-items:flex-end;gap:3px;height:34px">${spark.map(n => `<span style="flex:1;height:${n * 10}px;background:var(--bad);opacity:.75;border-radius:2px"></span>`).join('')}</span><span class="subtle" style="font-size:12.5px">3 → 2 hosts failing</span></div>
+    </div>
+    <div class="view-pad" style="display:grid;grid-template-columns:380px minmax(0,1fr);gap:24px;align-items:start;margin-bottom:60px">
+      <div class="stack" style="gap:16px">
+        ${card('Why it matters', '', '<p style="margin:0">Logging in as root over SSH means one stolen password or key gives full control, and the audit trail cannot tell people apart. Log in as yourself and use sudo.</p>')}
+        ${card('How to fix', '', `<div class="stack" style="gap:8px"><span>In <span class="mono">/etc/ssh/sshd_config</span> (and any file in <span class="mono">sshd_config.d/</span>), set:</span><pre class="mono" style="margin:0;padding:10px 12px;background:var(--surface-2);border-radius:var(--r-1);font-size:12.5px">PermitRootLogin no</pre><span>Then reload SSH: <span class="mono">systemctl reload sshd</span>. Fixed hosts pass on their next scan.</span></div>`)}
+        ${card('Details', '', kv([['Rule', '<span class="mono">ssh.permit_root_login</span> · version 3'], ['Rule set', '<a href="#">hardening-linux-l1</a> v4'], ['Applies to', 'Linux hosts running sshd'], ['Reference', 'CIS Linux 5.2.10']]))}
+        ${card('History', '<a href="#" style="font-size:12.5px">All</a>', `<ul class="list list--plain" style="margin:0;padding:0">${[['db-02 passes after a config change', '6 days ago'], ['Sam Analyst assigned to themself', '1 week ago'], ['Rule set hardening-linux-l1 v4 published', '3 weeks ago']].map(([a, d]) => `<li style="display:grid;gap:2px;padding:6px 0;border-bottom:1px solid var(--line)"><span>${a}</span><span class="subtle" style="font-size:12.5px">${d}</span></li>`).join('')}</ul>`)}
+      </div>
+      <div class="stack" style="gap:16px">
+        ${card('Hosts <span class="subtle num" style="text-transform:none;letter-spacing:0;font-weight:500">5</span>', `<span class="row" style="gap:6px">${seg('all', 'All')}${seg('Open', 'Failing')}${seg('Passing', 'Passing')}</span>`,
+          `<div class="table-wrap" style="margin:0;border:0;border-radius:0"><table class="table"><thead><tr><th style="width:36px"><input type="checkbox" aria-label="Select all"></th><th style="width:200px">Host</th><th style="width:100px">State</th><th>Evidence</th><th style="width:120px">Assignee</th><th style="width:110px">Checked</th></tr></thead><tbody>${shown.map(([n, s, ev, w, t]) => { const h = HOSTS.find(x => x.name === n); return `<tr><td><input type="checkbox" aria-label="Select ${n}"></td><td><div class="cell-two"><a href="17-host.html" class="mono">${n}</a><span class="subtle">${h.distro}</span></div></td><td>${stB(s)}</td><td style="font-size:12.5px">${ev}</td><td>${w || '<span class="subtle">—</span>'}</td><td class="${h.online ? '' : 'warn-text'}">${t}</td></tr>`; }).join('')}</tbody></table></div>`, false)}
+        ${card('Related', '', `<div class="stack" style="gap:10px">
+          <div class="row row--between"><span><b>Port:</b> 22/tcp SSH, exposed on 4 hosts</span><a href="20-port.html" style="font-size:12.5px">Open</a></div>
+          <div class="row row--between"><span><b>Service:</b> sshd.service</span><a href="#" style="font-size:12.5px">Open</a></div>
+          <div class="row row--between"><span><b>Same area:</b> SSH password login allowed</span><span class="row" style="gap:8px"><span class="badge badge--high">High · 1 host</span><a href="#" style="font-size:12.5px">Open</a></span></div></div>`)}
+      </div>
+    </div></div></div>`;
+}
+function liveCheck() {
+  const st = { show: 'all' };
+  hostsActive('/compliance'); $('.topbar__title').textContent = 'Compliance';
+  const render = () => { $('.view-area').innerHTML = checkPage(st); };
+  render();
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-show]'); if (t) { st.show = t.dataset.show; render(); } });
+}
+"""
+screen(
+    "27-compliance", "compliance",
+    "<b>27 · Compliance.</b> Each check gets a short name (the explanation moves to its page); filters (Severity, State, Rule set, Area, Group, Assignee); the colour bar gets words (open · mitigated · accepted · pass). Bulk selection stays. <b>Try it:</b> tick rows; filter by Area; click a check.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + COMPLIANCEUI + "liveCompliance({ filters: {}, q: '', open: null, sel: [] });",
+)
+screen(
+    "28-check", "compliance",
+    "<b>28 · A check's page.</b> SSH allows root login in the shared layout: why it matters, how to fix, details and history on the left; each host with its evidence (the exact config line) and related port, service and checks on the right. <b>Try it:</b> switch Failing / Passing.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + COMPLIANCEUI + "liveCheck();",
+)
+
+ALARMSUI = r"""
+// ---- Alarms list with filters, and an alarm's page ----
+const A = [
+  { id: 'a1', title: 'A web server started a shell', chain: 'nginx → sh', host: 'web-01', sev: 'High', count: 41, first: 'today 08:12', last: '2 min ago', state: 'Open', who: 'Sam Analyst', kase: 'C-104', tech: 'T1505.003', supp: false },
+  { id: 'a2', title: 'A database server started a shell', chain: 'postgres → bash', host: 'db-02', sev: 'Critical', count: 1, first: '2 h ago', last: '2 h ago', state: 'Open', who: '', kase: 'C-103', tech: 'T1059.004', supp: false },
+  { id: 'a3', title: 'A shell downloaded a program and ran it', chain: 'bash → curl', host: 'web-01', sev: 'Medium', count: 1, first: '1 h ago', last: '1 h ago', state: 'Open', who: '', kase: '', tech: 'T1105', supp: false },
+  { id: 'a4', title: 'Unexpected listening port 8081', chain: 'node', host: 'web-01', sev: 'Medium', count: 1, first: 'yesterday', last: 'yesterday', state: 'Open', who: '', kase: '', tech: 'T1571', supp: false },
+  { id: 'a5', title: 'PowerShell downloaded and ran a script', chain: 'powershell.exe → iex', host: 'win-file-07', sev: 'High', count: 2, first: '3 h ago', last: '40 min ago', state: 'Open', who: 'Wendy Ward', kase: '', tech: 'T1059.001', supp: false },
+  { id: 'a6', title: 'An Office app started a command shell', chain: 'winword.exe → cmd.exe', host: 'win-app-03', sev: 'High', count: 1, first: '5 h ago', last: '5 h ago', state: 'Open', who: '', kase: '', tech: 'T1204.002', supp: false },
+  { id: 'a7', title: 'A shell downloaded a program and ran it', chain: 'bash → curl', host: 'mx-backup-03', sev: 'Medium', count: 3, first: 'yesterday', last: '6 h ago', state: 'Mitigated', who: 'Sam Analyst', kase: '', tech: 'T1105', supp: false },
+  { id: 'a8', title: 'A backup job started PowerShell', chain: 'backup.exe → powershell.exe', host: 'win-file-07', sev: 'Low', count: 14, first: 'last week', last: '02:00', state: 'Open', who: '', kase: '', tech: 'T1059.001', supp: true },
+];
+const AF = {
+  Severity: { opts: ['Critical', 'High', 'Medium', 'Low'], test: (x, v) => x.sev === v },
+  State: { opts: ['Open', 'Mitigated', 'Risk accepted', 'False positive', 'Resolved'], test: (x, v) => x.state === v },
+  Suppressed: { opts: ['Hide suppressed', 'Only suppressed'], test: (x, v) => x.supp === (v === 'Only suppressed') },
+  Host: { opts: () => [...new Set(A.map(x => x.host))].sort(), test: (x, v) => x.host === v },
+  Group: { opts: () => HG.map(g => g.name), test: (x, v) => membersOf(HG.find(g => g.name === v)).some(h => h.name === x.host) },
+  Technique: { opts: () => [...new Set(A.map(x => x.tech))].sort(), test: (x, v) => x.tech === v },
+  Case: { opts: ['In a case', 'Not in a case'], test: (x, v) => !!x.kase === (v === 'In a case') },
+  Assignee: { opts: ['Unassigned', 'Sam Analyst', 'Wendy Ward', 'Me'], test: (x, v) => v === 'Unassigned' ? !x.who : x.who === v },
+};
+const sevA = (s) => `<span class="badge badge--${s === 'Critical' ? 'critical' : s === 'High' ? 'high' : s === 'Medium' ? 'medium' : 'low'}">${s}</span>`;
+const stA = (s) => `<span class="badge ${s === 'Open' ? 'badge--bad' : 'badge--plain'}">${s}</span>`;
+function alarmsList(st) {
+  const rows = A.filter(x => Object.entries(st.filters).every(([k, v]) => AF[k].test(x, v)) && (st.filters.Suppressed || !x.supp) && (!st.q || (x.title + ' ' + x.chain + ' ' + x.host).toLowerCase().includes(st.q.toLowerCase())));
+  const tr = rows.map(x => { const h = HOSTS.find(y => y.name === x.host);
+    return `<tr data-row="${x.id}" style="cursor:pointer"><td><input type="checkbox" aria-label="Select ${x.title}" data-sel="${x.id}" ${st.sel.includes(x.id) ? 'checked' : ''}></td><td>${sevA(x.sev)}</td>
+      <td><div class="cell-two"><span>${x.title} ${x.supp ? '<span class="badge badge--plain">Suppressed</span>' : ''}</span><span class="subtle" style="font-size:12px"><span class="mono">${x.chain}</span> · ${x.tech}</span></div></td>
+      <td><div class="cell-two"><a href="17-host.html" class="mono">${x.host}</a><span class="subtle">${h.distro}</span></div></td>
+      <td class="num"><b>${x.count}</b>×</td>
+      <td><div class="cell-two"><span>${x.last}</span><span class="subtle">first ${x.first}</span></div></td>
+      <td>${stA(x.state)}</td><td>${x.who || '<span class="subtle">Unassigned</span>'}</td>
+      <td>${x.kase ? `<a href="#" class="badge badge--accent" style="text-decoration:none">${x.kase}</a>` : '<span class="subtle">—</span>'}</td></tr>`; }).join('');
+  const bulk = st.sel.length ? `<div class="view-pad" style="padding-bottom:10px"><div class="card row" style="gap:10px;padding:8px 12px;background:var(--accent-soft)"><b>${st.sel.length} selected</b><button type="button" class="button button--small">Set state ▾</button><button type="button" class="button button--small">Assign ▾</button><button type="button" class="button button--small">Add to case</button><button type="button" class="button button--small">Suppress…</button><span class="grow"></span><button type="button" class="button button--ghost button--small" data-selnone>Clear</button></div></div>` : '';
+  const live = A.filter(x => !x.supp);
+  return `<div class="view">
+    <header class="view-pad" style="padding-top:20px;padding-bottom:8px"><h1 style="margin:0">Alarms <span class="subtle num" style="font-size:16px;font-weight:500">${rows.length}</span></h1><span class="subtle">${live.filter(x => x.state === 'Open').length} open on ${new Set(live.filter(x => x.state === 'Open').map(x => x.host)).size} hosts · ${live.filter(x => x.sev === 'Critical' || x.sev === 'High').length} critical or high · ${live.filter(x => !x.who && x.state === 'Open').length} unassigned · ${A.filter(x => x.supp).length} suppressed (hidden) · new ones appear live</span></header>
+    ${filterBar(AF, st, A, 'Search alarm, program or host…')}${bulk}
+    <div class="table-wrap" style="margin:0 24px 40px"><table class="table" aria-label="Alarms"><thead><tr><th style="width:36px"><input type="checkbox" aria-label="Select all" data-selall></th><th style="width:100px">Severity</th><th>Alarm</th><th style="width:150px">Host</th><th style="width:70px">Count</th><th style="width:140px">Last seen</th><th style="width:110px">State</th><th style="width:130px">Assignee</th><th style="width:80px">Case</th></tr></thead><tbody>${tr || '<tr><td colspan="9" class="subtle">No alarm matches these filters.</td></tr>'}</tbody></table></div></div>`;
+}
+function liveAlarms(st) {
+  hostsActive('/alarms'); $('.topbar__title').textContent = 'Alarms';
+  const render = (focus) => { $('.view-area').innerHTML = alarmsList(st); if (focus) { const i = $('[data-q]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } };
+  document.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-sel]'); if (c) { e.stopImmediatePropagation(); st.sel = c.checked ? [...st.sel, c.dataset.sel] : st.sel.filter(x => x !== c.dataset.sel); render(); return; }
+    if (e.target.closest('[data-selall]')) { e.stopImmediatePropagation(); st.sel = e.target.checked ? A.map(x => x.id) : []; render(); return; }
+    if (e.target.closest('[data-selnone]')) { e.stopImmediatePropagation(); st.sel = []; render(); }
+  }, true);
+  render(); liveFilters(st, render, () => { location.href = '30-alarm.html'; });
+}
+function alarmPage() {
+  const card = (title, aside, body, pad = true) => `<section class="card" style="overflow:hidden"><div class="row row--between" style="padding:12px 16px;border-bottom:1px solid var(--line)"><h2 class="section-title" style="margin:0">${title}</h2>${aside || ''}</div><div style="${pad ? 'padding:14px 16px' : ''}">${body}</div></section>`;
+  const kv = (rows) => `<dl class="kv" style="margin:0;row-gap:10px;grid-template-columns:110px minmax(0,1fr)">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  const tile = (label, value, sub, tone) => `<div class="card card__body" style="display:grid;gap:4px"><span class="subtle">${label}</span><span style="font-size:26px;font-weight:650;${tone ? `color:var(--${tone})` : ''}">${value}</span><span class="subtle" style="font-size:12.5px">${sub}</span></div>`;
+  const hours = [0, 0, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2];
+  const proc = (exe, cmd, meta, alarm) => `<div style="padding:10px 14px;border-radius:var(--r-1);background:var(--surface-2);${alarm ? 'border-left:3px solid var(--bad)' : ''}"><div class="mono" style="font-weight:600">${exe}</div><div class="mono subtle" style="font-size:12.5px">${cmd}</div><div class="subtle" style="font-size:12px">${meta}</div></div>`;
+  return `<div class="view"><div>
+    <div class="view-pad" style="padding-top:20px"><span class="subtle"><a href="29-alarms.html">Alarms</a></span></div>
+    <header class="view-pad" style="display:flex;gap:16px;align-items:center;padding-top:8px;padding-bottom:16px">
+      <span style="display:grid;place-items:center;width:56px;height:56px;border-radius:14px;background:var(--bad-soft, #fde2e1);color:var(--bad);font-weight:700;font-size:13px">ALM</span>
+      <div class="stack grow" style="gap:4px"><div class="row" style="gap:10px"><h1 style="margin:0;font-size:22px">A web server started a shell</h1>${sevA('High')}${stA('Open')}<span class="badge badge--plain">41×</span></div>
+        <span class="subtle">on <a href="17-host.html" class="mono">web-01</a> · <span class="mono">nginx → sh</span> · rule web-server-spawns-shell · baseline · ATT&CK T1505.003 · assigned to Sam Analyst · in case <a href="#">C-104</a></span></div>
+      <div class="row" style="gap:8px"><button type="button" class="button">Set state ▾</button><button type="button" class="button">Assign ▾</button><button type="button" class="button">Suppress…</button><button type="button" class="button">Ask about this</button><button type="button" class="button" aria-label="More actions">⋯</button></div></header>
+    <div class="view-pad" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding-bottom:16px">
+      ${tile('Starts matched', 41, 'last 2 min ago', 'bad')}${tile('Different commands', 2, '1 seen only once', 'warn')}${tile('First seen', '08:12', 'today', '')}${tile('Confidence', '80', 'web server parent, shell child', '')}
+    </div>
+    <div class="view-pad" style="display:grid;grid-template-columns:380px minmax(0,1fr);gap:24px;align-items:start;margin-bottom:60px">
+      <div class="stack" style="gap:16px">
+        ${card('What happened', '', '<div class="stack" style="gap:8px"><p style="margin:0">nginx, a web server, started a shell. Web servers rarely need one; it is how a web shell or an exploited bug usually runs commands.</p><p style="margin:0"><b>Check:</b> is the command expected (a health check, a script you know)? If it is, suppress that exact command. If not, isolate the host and look at the web logs around the first time it ran.</p></div>')}
+        ${card('Details', '', kv([['Rule', '<span class="mono">web-server-spawns-shell</span> · v1'], ['Rule set', 'baseline v4'], ['Technique', '<a href="#">T1505.003 Web shell</a>'], ['Host', '<a href="17-host.html" class="mono">web-01</a> · Fedora 44'], ['User', '<span class="mono">www-data</span> (uid 33)']]))}
+        ${card('History', '<a href="#" style="font-size:12.5px">All</a>', `<ul class="list list--plain" style="margin:0;padding:0">${[['Added to case C-104 by Sam Analyst', '1 h ago'], ['Assigned to Sam Analyst', '1 h ago'], ['First seen', 'today 08:12']].map(([a, d]) => `<li style="display:grid;gap:2px;padding:6px 0;border-bottom:1px solid var(--line)"><span>${a}</span><span class="subtle" style="font-size:12.5px">${d}</span></li>`).join('')}</ul>`)}
+      </div>
+      <div class="stack" style="gap:16px">
+        ${card('Commands seen <span class="subtle num" style="text-transform:none;letter-spacing:0;font-weight:500">2</span>', '<span class="subtle" style="font-size:12.5px">Each distinct command line, with how often it ran</span>',
+          `<div class="table-wrap" style="margin:0;border:0;border-radius:0"><table class="table"><thead><tr><th>Command</th><th style="width:80px">Count</th><th style="width:150px">Last</th><th style="width:170px"></th></tr></thead><tbody>
+          <tr><td class="mono" style="font-size:12.5px">sh -c /usr/local/bin/healthcheck</td><td class="num">40×</td><td>2 min ago</td><td><button type="button" class="button button--small">Suppress this command…</button></td></tr>
+          <tr style="background:var(--warn-soft, #fff4dc)"><td class="mono" style="font-size:12.5px">sh -c id; uname -a <span class="badge badge--warn" style="font-family:inherit">Seen once</span></td><td class="num">1×</td><td>today 08:12</td><td><button type="button" class="button button--small">Add to case</button></td></tr></tbody></table></div>`, false)}
+        ${card('Process chain', '<span class="subtle" style="font-size:12.5px">At the first time it ran</span>', `<div class="stack" style="gap:8px">${proc('/usr/lib/systemd/systemd', 'systemd --system', 'pid 1 · root')}${proc('/usr/sbin/nginx', 'nginx: worker process', 'pid 1102 · user www-data (33) · in /')}${proc('/usr/bin/sh', 'sh -c id; uname -a', 'pid 50877 · user www-data (33) · in /var/www', true)}</div>`)}
+        ${card('Last 24 hours', '', `<div class="stack" style="gap:6px"><span style="display:flex;align-items:flex-end;gap:3px;height:48px">${hours.map(n => `<span style="flex:1;height:${n * 14 + 2}px;background:var(--bad);opacity:${n ? .75 : .15};border-radius:2px"></span>`).join('')}</span><span class="row row--between subtle" style="font-size:12px"><span>yesterday 15:00</span><span>about twice an hour since 08:12</span><span>now</span></span></div>`)}
+        ${card('Related', '', `<div class="stack" style="gap:10px">
+          <div class="row row--between"><span><b>Same host:</b> A shell downloaded a program <span class="subtle mono">bash → curl</span></span><span class="row" style="gap:8px"><span class="badge badge--medium">Medium · 1 h ago</span><a href="#" style="font-size:12.5px">Open</a></span></div>
+          <div class="row row--between"><span><b>Same host:</b> Unexpected listening port 8081</span><span class="row" style="gap:8px"><span class="badge badge--medium">Medium · yesterday</span><a href="20-port.html" style="font-size:12.5px">Open</a></span></div>
+          <div class="row row--between"><span><b>Vulnerability:</b> nginx request smuggling (CVE-2026-10112)</span><span class="row" style="gap:8px"><span class="badge badge--high">High · mx-01</span><a href="#" style="font-size:12.5px">Open</a></span></div>
+          <div class="row row--between"><span><b>Same rule elsewhere:</b> none in the last 30 days</span></div></div>`)}
+      </div>
+    </div></div></div>`;
+}
+"""
+screen(
+    "29-alarms", "alarms",
+    "<b>29 · Alarms.</b> Filters (Severity, State, Suppressed, Host, Group, Technique, Case, Assignee); each row adds the ATT&CK technique, the host's OS, first and last seen, assignee and case. The per-row Quiet… menu moves to the bulk bar (Suppress…) and the alarm's page. <b>Try it:</b> tick rows; filter; click an alarm.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + ALARMSUI + "liveAlarms({ filters: {}, q: '', open: null, sel: [] });",
+)
+screen(
+    "30-alarm", "alarms",
+    "<b>30 · An alarm's page.</b> In the shared layout: what happened and what to check, details and history on the left; every distinct command with its count (a rare one stands out, and the usual one can be suppressed right there), the process chain, the last 24 hours and related alarms and vulnerabilities on the right.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + ALARMSUI + "hostsActive('/alarms'); $('.topbar__title').textContent = 'Alarms'; $('.view-area').innerHTML = alarmPage();",
+)
+
+CASESUI = r"""
+// ---- Cases list with filters, and a case's page ----
+const K = [
+  { id: 'C-104', title: 'Shells started by nginx on web-01', by: 'Sam Analyst', opened: '1 h ago', sev: 'High', status: 'Investigating', who: 'Sam Analyst', hosts: ['web-01'], items: { alarms: 2, vulns: 1, findings: 0 }, done: 1, total: 3, updated: '12 min ago', note: 'One command is the health check; sh -c id is not ours.' },
+  { id: 'C-103', title: 'PostgreSQL started a shell on db-02', by: 'Sam Analyst', opened: '2 h ago', sev: 'Critical', status: 'Open', who: '', hosts: ['db-02'], items: { alarms: 1, vulns: 0, findings: 1 }, done: 0, total: 2, updated: '45 min ago', note: '' },
+  { id: 'C-102', title: 'openssl known exploited on 2 hosts', by: 'Alex Admin', opened: 'yesterday', sev: 'Critical', status: 'Investigating', who: 'Wendy Ward', hosts: ['web-01', 'db-02'], items: { alarms: 0, vulns: 2, findings: 0 }, done: 1, total: 2, updated: '5 h ago', note: 'Update scheduled tonight for db-02.' },
+  { id: 'C-101', title: 'PowerShell downloads on the file servers', by: 'Wendy Ward', opened: '3 days ago', sev: 'High', status: 'Open', who: 'Wendy Ward', hosts: ['win-file-07', 'win-file-08'], items: { alarms: 2, vulns: 0, findings: 1 }, done: 0, total: 3, updated: '1 day ago', note: '' },
+  { id: 'C-100', title: 'Root SSH login on mail servers', by: 'Sam Analyst', opened: 'last week', sev: 'Medium', status: 'Closed', who: 'Sam Analyst', hosts: ['mx-01', 'mx-backup-03'], items: { alarms: 0, vulns: 0, findings: 2 }, done: 2, total: 2, updated: '2 days ago', note: 'Fixed on both; closed.' },
+];
+const KF = {
+  Status: { opts: ['Open', 'Investigating', 'Closed'], test: (x, v) => x.status === v },
+  Severity: { opts: ['Critical', 'High', 'Medium', 'Low'], test: (x, v) => x.sev === v },
+  Assignee: { opts: ['Me', 'Unassigned', 'Sam Analyst', 'Wendy Ward'], test: (x, v) => v === 'Unassigned' ? !x.who : v === 'Me' ? false : x.who === v },
+  Contains: { opts: ['Alarms', 'Vulnerabilities', 'Compliance findings'], test: (x, v) => (v === 'Alarms' ? x.items.alarms : v === 'Vulnerabilities' ? x.items.vulns : x.items.findings) > 0 },
+  Host: { opts: () => [...new Set(K.flatMap(x => x.hosts))].sort(), test: (x, v) => x.hosts.includes(v) },
+  Group: { opts: () => HG.map(g => g.name), test: (x, v) => membersOf(HG.find(g => g.name === v)).some(h => x.hosts.includes(h.name)) },
+  Updated: { opts: ['Today', 'This week', 'Quiet for 7 days or more'], test: (x, v) => v === 'Today' ? /min|h ago/.test(x.updated) : v === 'This week' ? !/week/.test(x.updated) : /week/.test(x.updated) },
+};
+const sevK = (s) => `<span class="badge badge--${s === 'Critical' ? 'critical' : s === 'High' ? 'high' : s === 'Medium' ? 'medium' : 'low'}">${s}</span>`;
+const stK = (s) => `<span class="badge ${s === 'Open' ? 'badge--bad' : s === 'Investigating' ? 'badge--warn' : 'badge--plain'}">${s}</span>`;
+function casesList(st) {
+  const rows = K.filter(x => Object.entries(st.filters).every(([k, v]) => KF[k].test(x, v)) && (st.filters.Status || x.status !== 'Closed') && (!st.q || (x.id + ' ' + x.title + ' ' + x.who).toLowerCase().includes(st.q.toLowerCase())));
+  const kinds = (i) => [[i.alarms, 'alarm'], [i.vulns, 'vulnerability', 'vulnerabilities'], [i.findings, 'finding']].filter(([n]) => n).map(([n, a, b]) => `${n} ${n > 1 ? (b || a + 's') : a}`).join(' · ');
+  const tr = rows.map(x => `<tr data-row="${x.id}" style="cursor:pointer"><td class="mono">${x.id}</td>
+      <td><div class="cell-two"><span>${x.title}</span><span class="subtle">Opened by ${x.by}, ${x.opened}${x.note ? ` · <i>“${x.note}”</i>` : ''}</span></div></td>
+      <td>${sevK(x.sev)}</td><td>${stK(x.status)}</td><td>${x.who || '<span class="subtle">Unassigned</span>'}</td>
+      <td style="white-space:nowrap">${x.hosts.slice(0, 2).map(h => `<a href="17-host.html" class="mono" style="font-size:12.5px">${h}</a>`).join(', ')}</td>
+      <td><div class="stack" style="gap:4px"><span style="font-size:12.5px;white-space:nowrap">${kinds(x.items)}</span><span class="row" style="gap:6px"><span style="height:5px;width:80px;border-radius:3px;background:var(--surface-2);overflow:hidden"><span style="display:block;height:100%;width:${100 * x.done / x.total}%;background:var(--ok)"></span></span><span class="subtle" style="font-size:12px;white-space:nowrap">${x.done}/${x.total} with an outcome</span></span></div></td>
+      <td>${x.updated}</td></tr>`).join('');
+  const live = K.filter(x => x.status !== 'Closed');
+  return `<div class="view">
+    <header class="view-pad" style="padding-top:20px;padding-bottom:8px"><div class="row row--between"><div><h1 style="margin:0">Cases <span class="subtle num" style="font-size:16px;font-weight:500">${rows.length}</span></h1><span class="subtle">${live.filter(x => x.status === 'Open').length} open · ${live.filter(x => x.status === 'Investigating').length} investigating · ${live.filter(x => !x.who).length} unassigned · ${live.reduce((n, x) => n + x.total - x.done, 0)} items need an outcome · closed cases hidden</span></div><button type="button" class="button button--primary button--small">+ New case</button></div></header>
+    ${filterBar(KF, st, K, 'Search case, title or assignee…')}
+    <div class="table-wrap" style="margin:0 24px 40px"><table class="table" aria-label="Cases"><thead><tr><th style="width:70px">Case</th><th>Title</th><th style="width:95px">Severity</th><th style="width:125px">Status</th><th style="width:120px">Assignee</th><th style="width:200px">Hosts</th><th style="width:240px">Items</th><th style="width:110px">Updated</th></tr></thead><tbody>${tr || '<tr><td colspan="8" class="subtle">No case matches these filters.</td></tr>'}</tbody></table></div></div>`;
+}
+function liveCases(st) {
+  hostsActive('/cases'); $('.topbar__title').textContent = 'Cases';
+  const render = (focus) => { $('.view-area').innerHTML = casesList(st); if (focus) { const i = $('[data-q]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } };
+  render(); liveFilters(st, render, () => { location.href = '32-case.html'; });
+}
+function casePage(st) {
+  const card = (title, aside, body, pad = true) => `<section class="card" style="overflow:hidden"><div class="row row--between" style="padding:12px 16px;border-bottom:1px solid var(--line)"><h2 class="section-title" style="margin:0">${title}</h2>${aside || ''}</div><div style="${pad ? 'padding:14px 16px' : ''}">${body}</div></section>`;
+  const kv = (rows) => `<dl class="kv" style="margin:0;row-gap:10px;grid-template-columns:110px minmax(0,1fr)">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  const tile = (label, value, sub, tone) => `<div class="card card__body" style="display:grid;gap:4px"><span class="subtle">${label}</span><span style="font-size:26px;font-weight:650;${tone ? `color:var(--${tone})` : ''}">${value}</span><span class="subtle" style="font-size:12.5px">${sub}</span></div>`;
+  const outcome = (i) => `<select class="input" data-outcome="${i}" style="height:30px;font-size:12.5px;width:170px">${['Needs an outcome', 'Confirmed malicious', 'Expected activity', 'False positive', 'Fixed'].map(o => `<option ${st.out[i] === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+  const items = [['Alarm', 'A web server started a shell', '<span class="mono">nginx → sh</span> · 41×', 'High', '30-alarm.html'], ['Alarm', 'A shell downloaded a program and ran it', '<span class="mono">bash → curl</span> · 1×', 'Medium', '#'], ['Vulnerability', 'curl: heap overflow in SOCKS5 proxy handshake', 'CVE-2026-10042 · Exploited', 'High', '26-advisory.html']];
+  const need = items.filter((_, i) => st.out[i] === 'Needs an outcome').length;
+  const tl = [...st.notes.map(n => ['You', 'added a note', 'just now', n]), ['Sam Analyst', 'set the shell alarm to Confirmed malicious for sh -c id', '12 min ago', ''], ['Sam Analyst', 'added a note', '20 min ago', 'One command is the health check; sh -c id is not ours. Isolating web-01 from the internet while we look.'], ['Sam Analyst', 'added vulnerability CVE-2026-10042', '50 min ago', ''], ['Sam Analyst', 'started investigating', '55 min ago', ''], ['Sam Analyst', 'opened the case with 2 alarms', '1 h ago', '']];
+  return `<div class="view"><div>
+    <div class="view-pad" style="padding-top:20px"><span class="subtle"><a href="31-cases.html">Cases</a></span></div>
+    <header class="view-pad" style="display:flex;gap:16px;align-items:center;padding-top:8px;padding-bottom:16px">
+      <span style="display:grid;place-items:center;width:56px;height:56px;border-radius:14px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:13px">C-104</span>
+      <div class="stack grow" style="gap:4px"><div class="row" style="gap:10px"><h1 style="margin:0;font-size:22px">Shells started by nginx on web-01</h1>${sevK('High')}${stK('Investigating')}</div>
+        <span class="subtle">Opened by Sam Analyst 1 h ago · assigned to Sam Analyst · 3 items on 1 host · updated 12 min ago</span></div>
+      <div class="row" style="gap:8px"><button type="button" class="button">Edit</button><button type="button" class="button">Assign ▾</button><button type="button" class="button">Ask about this</button><button type="button" class="button button--primary">Close case…</button><button type="button" class="button" aria-label="More actions">⋯</button></div></header>
+    <div class="view-pad" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding-bottom:16px">
+      ${tile('Items', 3, '2 alarms · 1 vulnerability', '')}${tile('Need an outcome', need, need ? 'set one on each item to close' : 'ready to close', need ? 'warn' : 'ok')}${tile('Hosts', 1, 'web-01', '')}${tile('Open for', '1 h', 'since 08:40', '')}
+    </div>
+    <div class="view-pad" style="display:grid;grid-template-columns:380px minmax(0,1fr);gap:24px;align-items:start;margin-bottom:60px">
+      <div class="stack" style="gap:16px">
+        ${card('Details', '', kv([['Case', '<span class="mono">C-104</span>'], ['Severity', sevK('High')], ['Status', stK('Investigating')], ['Assignee', 'Sam Analyst'], ['Opened', 'today 08:40 by Sam Analyst']]))}
+        ${card('Hosts in this case', '', `<div class="stack" style="gap:10px"><div class="row row--between"><span class="stack" style="gap:2px"><a href="17-host.html" class="mono">web-01</a><span class="subtle" style="font-size:12.5px">Fedora 44 · 10.0.5.1 · online</span></span><span class="row" style="gap:6px"><span class="badge badge--bad">3 alarms</span><span class="badge badge--critical">1 critical</span></span></div></div>`)}
+        ${card('Who can see it', '', '<span class="subtle">Everyone who can see web-01 (its alarms or vulnerabilities), plus the people it is assigned to.</span>')}
+      </div>
+      <div class="stack" style="gap:16px">
+        ${card('Items <span class="subtle num" style="text-transform:none;letter-spacing:0;font-weight:500">3</span>', '<button type="button" class="button button--small">+ Add item</button>',
+          `<div class="table-wrap" style="margin:0;border:0;border-radius:0"><table class="table"><thead><tr><th style="width:110px">Kind</th><th>Item</th><th style="width:100px">Severity</th><th style="width:100px">Host</th><th style="width:190px">Outcome</th><th style="width:40px"></th></tr></thead><tbody>${items.map(([k, t, sub, sv, href], i) => `<tr><td><span class="badge badge--plain">${k}</span></td><td><div class="cell-two"><a href="${href}">${t}</a><span class="subtle" style="font-size:12px">${sub}</span></div></td><td>${sevK(sv)}</td><td><a href="17-host.html" class="mono" style="font-size:12.5px">web-01</a></td><td>${outcome(i)}</td><td><button type="button" class="icon-button" aria-label="Remove from case" title="Remove from case">${ICON_X}</button></td></tr>`).join('')}</tbody></table></div>`, false)}
+        ${card('Notes and timeline', '', `<div class="stack" style="gap:12px">
+          <div class="stack" style="gap:8px"><textarea class="textarea" rows="2" data-note placeholder="What you found or decided. Everyone who can see this case can read it.">${esc(st.draft)}</textarea><div class="row" style="justify-content:flex-end"><button type="button" class="button button--primary button--small" data-addnote ${st.draft.trim() ? '' : 'disabled'}>Add note</button></div></div>
+          <ul class="list list--plain" style="margin:0;padding:0">${tl.map(([w, a, d, note]) => `<li style="display:grid;gap:4px;padding:10px 0;border-top:1px solid var(--line)"><span><b>${w}</b> ${a} <span class="subtle" style="font-size:12.5px">· ${d}</span></span>${note ? `<div style="padding:8px 12px;background:var(--surface-2);border-radius:var(--r-1)">${esc(note)}</div>` : ''}</li>`).join('')}</ul></div>`)}
+      </div>
+    </div></div></div>`;
+}
+function liveCase() {
+  const st = { out: ['Confirmed malicious', 'Needs an outcome', 'Needs an outcome'], draft: '', notes: [] };
+  hostsActive('/cases'); $('.topbar__title').textContent = 'Cases';
+  const render = (focus) => { const v = $('.view-area'); const top = v.scrollTop; v.innerHTML = casePage(st); v.scrollTop = top; if (focus) { const t = $('[data-note]'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); } };
+  render();
+  document.addEventListener('change', (e) => { if (e.target.dataset.outcome) { st.out[Number(e.target.dataset.outcome)] = e.target.value; render(); } });
+  document.addEventListener('input', (e) => { if (e.target.dataset.note !== undefined) { st.draft = e.target.value; render(true); } });
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-addnote]') && st.draft.trim()) { st.notes.unshift(st.draft.trim()); st.draft = ''; render(); } });
+}
+"""
+screen(
+    "31-cases", "cases",
+    "<b>31 · Cases.</b> The eleven toggles become filters (Status, Severity, Assignee, Contains, Host, Group, Updated; closed hidden by default); each row adds the latest note, the hosts, what the items are and how many have an outcome. <b>Try it:</b> filter, then click a case.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + CASESUI + "liveCases({ filters: {}, q: '', open: null });",
+)
+screen(
+    "32-case", "cases",
+    "<b>32 · A case's page.</b> C-104 in the shared layout: details, its hosts and who can see it on the left; items with an outcome each, and notes with the timeline on the right. <b>Try it:</b> set an outcome on each item (the tile counts down), add a note.",
+    PEOPLE + HOSTGROUPS + HOSTSUI + PORTSUI + CASESUI + "liveCase();",
 )
 
 slugs = [s[0] for s in SCREENS]
