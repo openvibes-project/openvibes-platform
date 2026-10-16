@@ -16,7 +16,6 @@ import { AuditEventPanel, RetentionPanel } from "../panels/admin/AuditPanels";
 import { EnrollmentTokenPanel } from "../panels/admin/EnrollmentTokenPanel";
 import { PublishBundle, RuleSetPanel } from "../panels/rules/RuleSetPanel";
 import { ServiceAccountPanel } from "../panels/admin/ServiceAccountPanel";
-import { NewUser, UserPanel } from "../panels/admin/UserPanel";
 import { AdvisoryPanel } from "../panels/findings/AdvisoryPanel";
 import { AlarmPanel } from "../panels/alarms/AlarmPanel";
 import { CasePanel, NewCasePanel } from "../panels/cases/CasePanel";
@@ -102,7 +101,6 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   "enrollment-token": { label: "Enrollment token", icon: "enrollment", title: (id) => id === "new" ? "New token" : id, render: (id) => <EnrollmentTokenPanel id={id} /> },
   "service-account": { label: "Service account", icon: "service", title: (id) => id === "new" ? "New account" : id, render: (id) => <ServiceAccountPanel id={id} /> },
   "audit-event": { label: "Audit event", icon: "audit", title: (id) => `#${id}`, render: (id) => <AuditEventPanel id={id} /> },
-  user: { label: "User", icon: "user", title: (id) => id === "new" ? "New user" : id, render: (id) => id === "new" ? <NewUser /> : <UserPanel id={id} /> },
   "site-rule": { label: "Site rule", icon: "rules", title: (id) => { const name = id.slice(id.indexOf("/") + 1); return name === "new" ? "New rule" : name; }, render: (id) => <SiteRulePanel id={id} /> },
   "rule-bundle": { label: "Rule bundle", icon: "rules", title: () => "Publish bundle", render: () => <PublishBundle /> },
   "widget-gallery": { label: "Add widget", icon: "plus", title: () => "Add widget", render: () => <WidgetGalleryPanel /> },

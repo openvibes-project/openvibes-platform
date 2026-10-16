@@ -256,3 +256,52 @@
   .role-bar { padding: 12px 16px; }
   .role-bar__summary { flex-basis: 100%; flex-wrap: wrap; }
 }
+
+/* Settings › People (views/admin/settings/People.tsx) and a person's page
+   (views/admin/people): the shared layout, a narrow left column of cards
+   and a wide right one (approved screens 6–8). */
+.people-roles { gap: 6px; }
+.people-roles__where { font-weight: 400; opacity: .8; }
+.person-page__crumb { padding-bottom: 0; }
+.person-page__head { display: flex; gap: 16px; align-items: center; padding: 8px 24px 16px; }
+.person-page__avatar { display: grid; place-items: center; width: 64px; height: 64px; flex: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 22px; }
+.person-page__title { gap: 4px; min-width: 0; flex: 1 1 0; }
+.person-page__title h1 { margin: 0; }
+.person-page__error { margin: 0 24px 16px; }
+.person-page__cols { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 24px; align-items: start; padding: 0 24px 40px; }
+.person-page__col { gap: 16px; min-width: 0; }
+.person-card { overflow: hidden; }
+.person-card__head { padding: 12px 16px; border-bottom: 1px solid var(--line); min-height: 48px; }
+.person-card__head .section-title { margin: 0; }
+.person-card__body { padding: 14px 16px; }
+.person-page__kv { margin: 0; row-gap: 10px; grid-template-columns: 118px minmax(0, 1fr); }
+.person-page__none { margin: 0; }
+.person-page__activity { list-style: none; margin: 0; padding: 0; display: grid; }
+.person-page__activity li { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.person-page__activity li:last-child { border-bottom: 0; }
+.person-page__activity .subtle { font-size: 12px; }
+.person-page__roles { gap: 8px; }
+.person-role { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-2); }
+.person-role__text { gap: 6px; min-width: 0; }
+.person-role__where, .person-access__line { cursor: default; background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.person-page__access-head { margin-top: 8px; }
+.person-page__access-head .section-title { margin: 0; }
+.person-page__access-head > .subtle { font-size: 12.5px; }
+.person-access { overflow: hidden; }
+.person-access__head { padding: 14px 20px; border-bottom: 1px solid var(--line); font-size: 15px; }
+.person-access__areas { display: grid; gap: 10px; margin: 0; padding: 14px 20px; }
+.person-access__area { display: grid; grid-template-columns: 180px 1fr; gap: 10px; align-items: start; }
+.person-access__area dt { padding-top: 3px; }
+.person-access__area dd { margin: 0; gap: 6px; }
+@media (max-width: 1000px) {
+  .person-page__cols { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .person-page__head { flex-wrap: wrap; gap: 12px; padding: 8px 16px 16px; }
+  .person-page__avatar { width: 48px; height: 48px; font-size: 17px; }
+  .person-page__title h1 { font-size: 22px; }
+  .person-page__actions { flex-basis: 100%; }
+  .person-page__cols { padding: 0 16px 32px; }
+  .person-page__error { margin: 0 16px 16px; }
+  .person-access__area { grid-template-columns: 1fr; gap: 4px; }
+}

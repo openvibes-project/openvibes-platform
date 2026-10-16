@@ -159,13 +159,13 @@ test("a finding mitigated on every open host leaves the default Findings list (b
 
 test("an administrator creates a user and sees the one-time password once (board #85)", async ({ page }) => {
   await page.goto("/settings?tab=people");
-  await page.getByRole("button", { name: "New user" }).click();
+  await page.getByRole("button", { name: "New person" }).click();
   await page.getByLabel("Username").fill("jdoe");
   await page.getByLabel("Display name").fill("Jane Doe");
-  await expect(page.getByRole("button", { name: "Create user" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Create person" })).toBeDisabled();
   await page.getByRole("combobox", { name: "Role" }).click();
   await page.getByRole("option", { name: "Viewer" }).click();
-  await page.getByRole("button", { name: "Create user" }).click();
+  await page.getByRole("button", { name: "Create person" }).click();
   await expect(page.locator(".secret")).toContainText("demo1-pass2-word3-onlyx");
   await expect(page.getByText("It is shown only once")).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();

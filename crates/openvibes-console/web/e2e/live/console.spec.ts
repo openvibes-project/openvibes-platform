@@ -274,14 +274,14 @@ for (const scheme of ["light", "dark"] as const) {
 test("a new user signs in with a one-time password and must set their own first (board #85)", async ({ page, browser }, info) => {
   await signIn(page, "alex");
   await page.goto("/settings?tab=people");
-  await page.getByRole("button", { name: "New user" }).click();
+  await page.getByRole("button", { name: "New person" }).click();
   const username = `e2e-${info.project.name}-${Date.now().toString(36)}`;
   await page.getByLabel("Username").fill(username);
   await page.getByLabel("Display name").fill("E2E Person");
   await page.getByRole("combobox", { name: "Role" }).click();
   // A fresh install holds Administrator, plus sam's Analyst (console-e2e-server.sh).
   await page.getByRole("option", { name: /analyst/i }).click();
-  await page.getByRole("button", { name: "Create user" }).click();
+  await page.getByRole("button", { name: "Create person" }).click();
   const oneTime = (await page.locator(".secret .grow").innerText()).trim();
   expect(oneTime.length).toBeGreaterThanOrEqual(15);
 

@@ -7,11 +7,12 @@ import { type Access, grantsAny, useSession } from "../../../app/session";
 import { RULE_READERS } from "../../../panels/rules/ruleAssignment";
 import { Tabs } from "../../../ui/panel";
 import { Empty } from "../../../ui/bits";
+import { PersonPage } from "../people/PersonPage";
 import { RolePage } from "../roles/RolePage";
-import { Access as PeopleTab } from "./Access";
 import { AssistantSettings } from "./AssistantSettings";
 import { Enrollment } from "./Enrollment";
 import { HostGroups } from "./HostGroups";
+import { People } from "./People";
 import { Roles } from "./Roles";
 import { RuleSets } from "./RuleSets";
 import { ServiceAccounts } from "./ServiceAccounts";
@@ -19,7 +20,7 @@ import { ServiceAccounts } from "./ServiceAccounts";
 type Tab = { id: string; label: string; access: readonly Access[]; render: () => ReactNode };
 
 const tabs: readonly Tab[] = [
-  { id: "people", label: "People", access: [{ permission: "access.read" }], render: () => <PeopleTab /> },
+  { id: "people", label: "People", access: [{ permission: "access.read" }], render: () => <People /> },
   { id: "roles", label: "Roles", access: [{ permission: "access.read" }], render: () => <Roles /> },
   { id: "host-groups", label: "Host groups", access: [{ permission: "access.read" }, { permission: "host_groups.manage" }], render: () => <HostGroups /> },
   { id: "service-accounts", label: "Service accounts", access: [{ permission: "service_accounts.read" }], render: () => <ServiceAccounts /> },
@@ -33,14 +34,14 @@ export const settingsAccess: readonly Access[] = tabs.flatMap((tab) => tab.acces
 
 /**
  * Full pages under /settings/…, shown in place of the Settings header and tabs
- * (approved screens 2 and 5: a breadcrumb back instead). Step 9 adds
- * /settings/people/{id}.
+ * (approved screens 2, 5 and 7: a breadcrumb back instead).
  */
 function subPage(path: string): ReactNode | undefined {
-  const role = /^\/settings\/roles\/([^/]+)$/.exec(path)?.[1];
-  if (!role) return undefined;
+  const [, kind, id] = /^\/settings\/(roles|people)\/([^/]+)$/.exec(path) ?? [];
+  if (!id) return undefined;
   try {
-    return <RolePage key={role} roleId={decodeURIComponent(role)} />;
+    const decoded = decodeURIComponent(id);
+    return kind === "roles" ? <RolePage key={id} roleId={decoded} /> : <PersonPage key={id} userId={decoded} />;
   } catch {
     return undefined; // a malformed %-escape: "Not found"
   }

@@ -18,16 +18,16 @@ vi.mock("../../api/client", () => ({
 }));
 
 import { ServiceAccountPanel } from "./ServiceAccountPanel";
-import { NewUser } from "./UserPanel";
+import { NewPersonDialog } from "../../views/admin/people/NewPersonDialog";
 
 const submit = (html: string, label: string) => html.match(new RegExp(`<button[^>]*type="submit"[^>]*>(?:(?!</button>).)*${label}`))?.[0] ?? "";
 
 describe("role pickers", () => {
-  it("a new user starts with no role and cannot be created until one is chosen", () => {
-    const html = renderToStaticMarkup(<NewUser />);
+  it("a new person starts with no role and cannot be created until one is chosen", () => {
+    const html = renderToStaticMarkup(<NewPersonDialog onClose={() => {}} />);
     expect(html).toContain("Choose a role…");
     expect(html).not.toContain("Administrator");
-    expect(submit(html, "Create user")).toContain('disabled=""');
+    expect(submit(html, "Create person")).toContain('disabled=""');
   });
   it("a new service account starts with no role and cannot be created until one is chosen", () => {
     const html = renderToStaticMarkup(<ServiceAccountPanel id="new" />);

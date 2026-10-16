@@ -417,14 +417,15 @@ triage on alarms and findings stays as it is.
     `investigate/` (Alarms, Compliance, Vulnerabilities, Hosts, Software,
     Ports and Services, Cases), `operate/` (Alarm suppressions, Site rules,
     Coverage), `admin/` (`Audit.tsx`, `settings/`: `Settings.tsx` plus
-    one file per tab, and `roles/`: the role page) and `help/` (About). `views/lists/` holds what the
+    one file per tab, `roles/`: the role page, and `people/`: a person's
+    page) and `help/` (About). `views/lists/` holds what the
     lists share: filter catalogues (`filters.ts`), row selection and
     sorting (`rows.ts`) and the test-trigger rules (`testRules.ts`).
   - `panels/`: one folder per subject (`hosts/`, `alarms/`, `findings/`,
     `triage/`, `cases/`, `rules/`, `admin/`), one file per object kind,
     named `<Kind>Panel.tsx`, holding
-    that kind's panel and its "new" form (`UserPanel.tsx` has `UserPanel`
-    and `NewUser`).
+    that kind's panel and its "new" form (`ServiceAccountPanel.tsx` has
+    both).
   - Logic without React sits beside its component in a lowercase `.ts`
     file with a unit test (`ruleAssignment.ts` next to `WhereItRuns.tsx`).
   - `app/`: session, navigation and the registry; `ui/`: shared controls;
@@ -484,6 +485,41 @@ triage on alarms and findings stays as it is.
   - **How to test:** `roles/RolePage.test.tsx` (reducer, markup and the
     request bodies, no DOM library); the demo e2e `roles.spec.ts`
     (Task 10) clicks through it.
+- **People (`views/admin/settings/People.tsx`, `views/admin/people/`):**
+  - **Purpose:** Settings › People lists everyone inside the viewer's
+    share: Person, Roles as badges "<role> · <where it applies>", Signs in
+    with (Password / Single sign-on), Status (Active / Disabled) and Last
+    sign-in. "+ New person" (`access.users`) opens a dialog that creates a
+    local sign-in and shows its one-time password once. A row opens
+    `/settings/people/{id}`, one page with no tabs: the header (initials,
+    name, status, "<n> roles · <n> permissions · last signed in <when>",
+    Edit details for yourself or with `access.users`, and ⋯ with Reset
+    password and Disable/Enable, hidden on your own page); Details and
+    Recent activity (with a link to the audit log filtered to the person)
+    on the left; Roles (compact cards with Open role and Remove, "+ Add
+    role") and Access (grouped under "On all hosts", "Only on <groups>"
+    and "Across the platform", each line "<permission> · from <role>") on
+    the right.
+  - **Interfaces:** `GET/POST /api/v1/users`, `GET/PATCH
+    /api/v1/users/{id}` (display name and email), `POST
+    …/disable|enable|reset-password`, `PUT|DELETE …/roles/{role_id}`,
+    `GET /api/v1/roles`. A change invalidates `/api/v1/users` and
+    `/api/v1/roles` (members counts).
+  - **Config:** none. Add role and Remove need `access.grant` and are
+    hidden on your own page (the server refuses changing your own roles).
+    Add role and New person offer only roles inside the viewer's share
+    (`fitsShare` in `people/people.ts`, the client copy of
+    `access/share.rs`); the server decides.
+  - **Failure behaviour:** a refused change shows above the columns; a 409
+    `last_administrator` reads "This is the last Administrator. Give
+    someone else the Administrator role first." A person outside the
+    share is a 404 (`user_not_found`), shown as an error. A refused
+    Edit details shows the server's message in the form and keeps the
+    edits.
+  - **How to test:** `people/PersonPage.test.tsx` and
+    `settings/People.test.tsx` (markup, grouping, the PUT with a stubbed
+    fetch, the 409 message, no Disable on your own page); the demo e2e
+    creates a person with a one-time password (`smoke.spec.ts`).
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
   after mutations, and the `useResource`/`useAllPages` hooks. Live requests
@@ -563,9 +599,8 @@ assignee and date (refused for an unknown assignee, shown again on
 reselect), a dashboard shared with a role and seen
 read-only, and axe in both themes.
 The live tests also check the service accounts empty state on a fresh server
-and the Access and Audit filtered empty states at narrow widths in light and
-dark themes. Access keeps asset groups visible when no people match; Audit
-distinguishes an empty date range from filters that hide existing events.
+and the People and Audit filtered empty states at narrow widths in light and
+dark themes. Audit distinguishes an empty date range from filters that hide existing events.
 
 The `Console demo preview` workflow (`console-demo-pages.yml`) runs lint,
 types, unit tests and the demo end-to-end tests on pull requests; on pushes
