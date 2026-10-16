@@ -70,6 +70,9 @@ pub enum RoleWrite {
     Protected,
     /// The role still has this many active bindings.
     InUse(i64),
+    /// A permission or group id does not exist (or the group was deleted
+    /// during the write).
+    UnknownReference,
 }
 
 /// Who holds roles.
@@ -160,68 +163,81 @@ async fn read_role<C: GenericClient + Sync>(
         .map(stored))
 }
 
-fn name_taken(error: &tokio_postgres::Error) -> bool {
-    error.as_db_error().is_some_and(|db| {
-        db.code() == &SqlState::UNIQUE_VIOLATION
-            && db.constraint() == Some("console_roles_name_unique")
-    })
+/// The refusal a failed role write means, if it is one: a name clash, or a
+/// permission or group id that does not exist (or a group deleted meanwhile).
+fn refusal(error: &tokio_postgres::Error) -> Option<RoleWrite> {
+    let db = error.as_db_error()?;
+    if db.code() == &SqlState::UNIQUE_VIOLATION
+        && db.constraint() == Some("console_roles_name_unique")
+    {
+        Some(RoleWrite::NameTaken)
+    } else if db.code() == &SqlState::FOREIGN_KEY_VIOLATION
+        || db.code() == &SqlState::INVALID_TEXT_REPRESENTATION
+    {
+        Some(RoleWrite::UnknownReference)
+    } else {
+        None
+    }
 }
 
-/// Writes permissions and groups, then audits; `Ok(None)` when the name is taken.
+/// Writes name, permissions and groups, then audits.
 async fn write_contents(
     tx: &deadpool_postgres::Transaction<'_>,
     role_id: &str,
     input: &RoleInput<'_>,
     action: &str,
     actor_id: &str,
-) -> Result<Option<StoredRole>, StoreError> {
+    now: DateTime<Utc>,
+) -> Result<RoleWrite, StoreError> {
     let all_hosts = *input.reach == Reach::All;
-    let renamed = tx
-        .execute(
-            "UPDATE console_roles SET display_name = $2, description = $3, all_hosts = $4
-             WHERE role_id = $1",
-            &[&role_id, &input.name, &input.description, &all_hosts],
-        )
-        .await;
-    match renamed {
-        Err(error) if name_taken(&error) => return Ok(None),
-        other => other?,
-    };
-    tx.execute(
-        "DELETE FROM console_role_permissions WHERE role_id = $1",
-        &[&role_id],
-    )
-    .await?;
-    tx.execute(
-        "INSERT INTO console_role_permissions (role_id, permission_id)
-         SELECT $1, unnest($2::text[])",
-        &[&role_id, &input.permissions],
-    )
-    .await?;
     let groups: &[String] = match input.reach {
         Reach::Groups(groups) => groups,
         Reach::None | Reach::All => &[],
     };
-    tx.execute(
-        "DELETE FROM console_role_groups WHERE role_id = $1",
-        &[&role_id],
-    )
-    .await?;
-    tx.execute(
-        "INSERT INTO console_role_groups (role_id, asset_group_id)
-         SELECT $1, unnest($2::text[])::uuid",
-        &[&role_id, &groups],
-    )
-    .await?;
+    let written: Result<u64, tokio_postgres::Error> = async {
+        tx.execute(
+            "UPDATE console_roles SET display_name = $2, description = $3, all_hosts = $4
+             WHERE role_id = $1",
+            &[&role_id, &input.name, &input.description, &all_hosts],
+        )
+        .await?;
+        tx.execute(
+            "DELETE FROM console_role_permissions WHERE role_id = $1",
+            &[&role_id],
+        )
+        .await?;
+        tx.execute(
+            "INSERT INTO console_role_permissions (role_id, permission_id)
+             SELECT DISTINCT $1::text, unnest($2::text[])",
+            &[&role_id, &input.permissions],
+        )
+        .await?;
+        tx.execute(
+            "DELETE FROM console_role_groups WHERE role_id = $1",
+            &[&role_id],
+        )
+        .await?;
+        tx.execute(
+            "INSERT INTO console_role_groups (role_id, asset_group_id)
+             SELECT DISTINCT $1::text, unnest($2::text[])::uuid",
+            &[&role_id, &groups],
+        )
+        .await
+    }
+    .await;
+    if let Err(error) = written {
+        return refusal(&error).ok_or_else(|| error.into());
+    }
     let role = read_role(tx, role_id).await?.ok_or(StoreError::Query)?;
-    audit(tx, action, actor_id, &role).await?;
-    Ok(Some(role))
+    audit(tx, action, actor_id, now, &role).await?;
+    Ok(RoleWrite::Saved(role))
 }
 
 async fn audit(
     tx: &deadpool_postgres::Transaction<'_>,
     action: &str,
     actor_id: &str,
+    now: DateTime<Utc>,
     role: &StoredRole,
 ) -> Result<(), StoreError> {
     let reach = match &role.reach {
@@ -233,10 +249,10 @@ async fn audit(
         "name": role.name, "permissions": role.permissions, "reach": reach,
     });
     tx.execute(
-        "INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_id,
+        "INSERT INTO audit_log (at, actor, action, target, result, detail, actor_kind, actor_id,
              actor_display, target_kind, target_id)
-         VALUES ($1, $2, 'role', 'success', $3, 'user', $1, $1, 'role', $4)",
-        &[&actor_id, &action, &detail, &role.role_id],
+         VALUES ($5, $1, $2, 'role', 'success', $3, 'user', $1, $1, 'role', $4)",
+        &[&actor_id, &action, &detail, &role.role_id, &now],
     )
     .await?;
     Ok(())
@@ -266,15 +282,14 @@ pub async fn create_role(
         )
         .await;
     let role_id: String = match inserted {
-        Err(error) if name_taken(&error) => return Ok(RoleWrite::NameTaken),
-        other => other?.get(0),
+        Ok(row) => row.get(0),
+        Err(error) => return refusal(&error).ok_or_else(|| error.into()),
     };
-    let Some(role) = write_contents(&tx, &role_id, input, "rbac.role.created", actor_id).await?
-    else {
-        return Ok(RoleWrite::NameTaken);
-    };
-    tx.commit().await?;
-    Ok(RoleWrite::Saved(role))
+    let written = write_contents(&tx, &role_id, input, "rbac.role.created", actor_id, now).await?;
+    if matches!(written, RoleWrite::Saved(_)) {
+        tx.commit().await?;
+    }
+    Ok(written)
 }
 
 /// Locks the role row; `Err(outcome)` when it is protected or missing.
@@ -303,7 +318,7 @@ pub async fn update_role(
     version: i32,
     input: &RoleInput<'_>,
     actor_id: &str,
-    _now: DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Result<RoleWrite, StoreError> {
     let tx = client.transaction().await?;
     let current = match locked(&tx, role_id).await? {
@@ -318,20 +333,19 @@ pub async fn update_role(
         &[&role_id],
     )
     .await?;
-    let Some(role) = write_contents(&tx, role_id, input, "rbac.role.updated", actor_id).await?
-    else {
-        return Ok(RoleWrite::NameTaken);
-    };
-    tx.commit().await?;
-    Ok(RoleWrite::Saved(role))
+    let written = write_contents(&tx, role_id, input, "rbac.role.updated", actor_id, now).await?;
+    if matches!(written, RoleWrite::Saved(_)) {
+        tx.commit().await?;
+    }
+    Ok(written)
 }
 
-/// Deletes a role nobody holds. Dashboards shared with it become private.
+/// Deletes a role nobody holds; dashboards shared with it lose that share.
 pub async fn delete_role(
     client: &mut Client,
     role_id: &str,
     actor_id: &str,
-    _now: DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Result<RoleWrite, StoreError> {
     let tx = client.transaction().await?;
     if let Err(outcome) = locked(&tx, role_id).await? {
@@ -343,7 +357,7 @@ pub async fn delete_role(
     }
     tx.execute("DELETE FROM console_roles WHERE role_id = $1", &[&role_id])
         .await?;
-    audit(&tx, "rbac.role.deleted", actor_id, &role).await?;
+    audit(&tx, "rbac.role.deleted", actor_id, now, &role).await?;
     tx.commit().await?;
     Ok(RoleWrite::Saved(role))
 }

@@ -91,9 +91,12 @@ host reach (spec 2026-10-16-roles-permissions-design.md §4): `Reach::None`,
   one transaction under the access-binding advisory lock, write an
   `rbac.role.created/updated/deleted` audit row (target kind `role`, detail
   name, permissions, reach), and return `RoleWrite`: `Saved`, `NameTaken`
-  (unique `lower(display_name)`), `Stale`, `NotFound`, `Protected` (`admin`,
+  (unique `lower(display_name)`), `UnknownReference` (a permission or group
+  id that does not exist, or a group deleted during the write; duplicate ids
+  collapse), `Stale`, `NotFound`, `Protected` (`admin`,
   shown as Administrator, is never changed or deleted) or `InUse(n)` (a role
-  with active bindings is not deleted). New ids are `r_` and 16 hex digits.
+  with active bindings is not deleted; dashboards shared with a deleted role
+  lose that share). The audit row carries the caller's `now`. New ids are `r_` and 16 hex digits.
   The store does not check permission closure or the editor's share; the
   console does.
 - `grants(client, Principal::User | ServiceAccount)` returns, in one query,
@@ -104,7 +107,8 @@ Migration 52 converts existing data (§12 parts 2–3): Administrator keeps id
 hosts when held and are deleted otherwise (so a fresh install has only
 Administrator); each holder's scoped bindings of one role become one role
 "<Role> (<groups>)" with the old agent-scoped permissions only, and an
-`rbac.binding.migrated` audit row per moved binding. Revoked bindings of a
+`rbac.binding.migrated` audit row per moved binding. Dashboard shares move to
+`console_dashboard_roles` and follow scoped holders to their new roles. Revoked bindings of a
 deleted role go with it. `console_users` gains `email`, `auth_source` and
 `last_sign_in_at`.
 
@@ -122,7 +126,7 @@ context fields and never include credentials or browser secrets.
 
 ```sh
 eval "$(scripts/test-db.sh)"
-cargo test --locked -p platform-store --test console_auth --test custom_roles
+cargo test --locked -p platform-store --test console_auth --test custom_roles --test role_writes
 ```
 
 Tests create and drop independent PostgreSQL databases. They fail rather than

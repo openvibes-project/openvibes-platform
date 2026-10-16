@@ -663,13 +663,16 @@ with a role. Only the layout is stored; widgets read their data through the
 permission-checked console API, so sharing never exposes data.
 
 - `list_visible(user)`: own dashboards first, then those shared with a role
-  the user holds through any unrevoked binding (global or asset-group), each
-  group by name. `get_visible(user, id)` returns `None` for unknown,
+  the user holds through any unrevoked binding, each group by name. Since
+  schema 52 shares live in `console_dashboard_roles` (a dashboard may be
+  shared with several roles after the upgrade); `shared_role_id` in
+  responses is the first by id. `get_visible(user, id)` returns `None` for unknown,
   invisible and malformed ids (ids are compared as text).
 - `create` (at most `MAX_DASHBOARDS_PER_OWNER` = 100 per owner, serialised
   per owner), `update` (owner only, `expected_version` must match),
   `delete` (owner only; homes pointing at it go by cascade),
-  `set_sharing(role | None)` (owner only; the caller checks
+  `set_sharing(role | None)` (owner only, replaces all of the dashboard's
+  shares with that one role or none; the caller checks
   `dashboards.share`), `home` (only if still visible) and
   `set_home(id | None)` (must be visible).
 - Ids are checked to be UUIDs in Rust (malformed ids are not found without a
@@ -862,8 +865,11 @@ unique regardless of case. Role bindings lose `asset_group_id`: migration 52
 turns each holder's scoped bindings of one role into one role reaching those
 groups, keeps held former built-ins (viewer, analyst, operator) as ordinary
 roles reaching all hosts, deletes unheld ones, and shows `admin` as
-Administrator. The console role may write roles, their permissions and
-groups, and `console_users` `email`, `display_name` and `last_sign_in_at`.
+Administrator. Dashboard shares move from `console_dashboards.shared_role_id`
+(dropped) to `console_dashboard_roles`, and a share with a role whose scoped
+holders moved is copied to their new roles, so nobody loses a dashboard.
+The console role may write roles, their permissions and groups, dashboard
+shares, and `console_users` `email`, `display_name` and `last_sign_in_at`.
 Interface and guards: [console-auth-store.md](console-auth-store.md).
-Tests: `tests/custom_roles.rs`; tests that bind a former built-in id create
+Tests: `tests/custom_roles.rs` (upgrade) and `tests/role_writes.rs`; tests that bind a former built-in id create
 it first with `common::seed_role`.

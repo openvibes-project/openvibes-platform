@@ -14,6 +14,12 @@ CREATE TABLE console_role_groups (
   role_id text NOT NULL REFERENCES console_roles ON DELETE CASCADE,
   asset_group_id uuid NOT NULL REFERENCES console_asset_groups ON DELETE RESTRICT,
   PRIMARY KEY (role_id, asset_group_id));
+-- Dashboards are shared with roles through this table (one or more roles;
+-- shared_role_id is copied here and dropped below).
+CREATE TABLE console_dashboard_roles (
+  dashboard_id uuid NOT NULL REFERENCES console_dashboards ON DELETE CASCADE,
+  role_id text NOT NULL REFERENCES console_roles ON DELETE CASCADE,
+  PRIMARY KEY (dashboard_id, role_id));
 -- A role with no active binding may be deleted; its revoked history goes
 -- with it (the audit log keeps the record).
 ALTER TABLE console_role_bindings DROP CONSTRAINT console_role_bindings_role_id_fkey,
@@ -74,7 +80,17 @@ INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_
 UPDATE console_role_bindings SET revoked_at = now(), revoked_by = 'migration'
   WHERE revoked_at IS NULL AND asset_group_id IS NOT NULL;
 
--- unused built-ins go (dashboards shared with them become private: ON DELETE SET NULL)
+-- dashboards: still shared with the role, and with every role its scoped
+-- holders moved to, so nobody loses a dashboard they could see
+INSERT INTO console_dashboard_roles (dashboard_id, role_id)
+  SELECT dashboard_id, shared_role_id FROM console_dashboards WHERE shared_role_id IS NOT NULL
+  UNION
+  SELECT d.dashboard_id, n.new_role FROM console_dashboards d
+  JOIN new_roles n ON n.old_role = d.shared_role_id;
+ALTER TABLE console_dashboards DROP COLUMN shared_role_id;
+
+-- unused built-ins go (their dashboard shares go with them; the shares
+-- copied to the roles their scoped holders moved to stay)
 DELETE FROM console_roles r WHERE r.role_id IN ('viewer','analyst','operator')
   AND NOT EXISTS (SELECT 1 FROM console_role_bindings b WHERE b.role_id = r.role_id AND b.revoked_at IS NULL);
 
@@ -92,4 +108,5 @@ ALTER TABLE console_users
   ADD COLUMN last_sign_in_at timestamptz;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON console_roles, console_role_permissions, console_role_groups TO "openvibes-console";
+GRANT SELECT, INSERT, DELETE ON console_dashboard_roles TO "openvibes-console";
 GRANT UPDATE (email, display_name, last_sign_in_at) ON console_users TO "openvibes-console";
