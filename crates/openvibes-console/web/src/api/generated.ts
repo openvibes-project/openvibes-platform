@@ -36,22 +36,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/access-control": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["authenticated_access_inventory"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/access-control/asset-groups": {
         parameters: {
             query?: never;
@@ -80,59 +64,6 @@ export interface paths {
         /** Replaces an asset group's name and complete selector conjunction. */
         put: operations["update_authenticated_asset_group"];
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/access-control/bindings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Adds one active local-user role binding. */
-        post: operations["create_authenticated_access_binding"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/access-control/bindings/{binding_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["revoke_authenticated_access_binding"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/access-control/users": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Creates a local user with one global built-in role and a one-time
-         *     password, returned only here; the user must replace it at first sign-in.
-         */
-        post: operations["create_user"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1002,6 +933,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/host-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every host group with its selectors and how many roles reach it, for
+         *     the Host groups tab and the role reach picker.
+         */
+        get: operations["host_groups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/home": {
         parameters: {
             query?: never;
@@ -1394,7 +1345,10 @@ export interface paths {
         /** Lists service accounts without secret material. */
         get: operations["authenticated_service_accounts"];
         put?: never;
-        /** Creates a named service identity holding one role. */
+        /**
+         * Creates a named service identity holding roles that all fit inside the
+         *     creator's own access.
+         */
         post: operations["create_authenticated_service_account"];
         delete?: never;
         options?: never;
@@ -1414,6 +1368,24 @@ export interface paths {
         /** Disables an account and revokes its issued tokens. */
         post: operations["disable_authenticated_service_account"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-accounts/{service_account_id}/roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Gives a service account a role (idempotent). */
+        put: operations["give_account_role"];
+        post?: never;
+        /** Takes a role from a service account (idempotent). */
+        delete: operations["remove_account_role"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1583,6 +1555,126 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** People, filtered to the caller's share. */
+        get: operations["list_people"];
+        put?: never;
+        /**
+         * Adds a person with a one-time password, holding roles that all fit
+         *     inside the creator's own access.
+         */
+        post: operations["create_person"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A person's page: details, roles, access and recent activity. Anyone may
+         *     read their own; others need `access.read` and the share.
+         */
+        get: operations["get_person"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Changes a person's display name or email: anyone their own, others
+         *     with `access.users` inside the share.
+         */
+        patch: operations["update_person"];
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disables a person and ends their sessions; never yourself, never the
+         *     last Administrator.
+         */
+        post: operations["disable_person"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Lets a disabled person sign in again. */
+        post: operations["enable_person"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gives a person a one-time password, shown only here: they must set
+         *     their own at the next sign-in, and their sessions end.
+         */
+        post: operations["reset_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Gives a person a role (idempotent). */
+        put: operations["give_user_role"];
+        post?: never;
+        /** Takes a role from a person (idempotent); never the last Administrator. */
+        delete: operations["remove_user_role"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1801,57 +1893,18 @@ export interface components {
             /** @description Exact `key=value` selectors, all of which must match. */
             selectors: string[];
         };
-        /** @description Active local-user role assignment. */
-        AccessBinding: {
-            /** @description Asset group id; null denotes global scope. */
-            asset_group_id?: string | null;
-            /** @description Asset group name, when scoped. */
-            asset_group_name?: string | null;
-            /** @description Stable binding identifier. */
-            binding_id: string;
-            /** @description RFC 3339 creation time. */
-            created_at: string;
-            /** @description Actor who created the binding. */
-            created_by: string;
-            /** @description Display label. */
-            display_name: string;
-            /** @description Role identifier. */
-            role_id: string;
-            /** @description Stable local user identifier. */
-            user_id: string;
-            /** @description Local username. */
-            username: string;
-        };
-        /** @description Read-only review of roles, bindings, and asset groups. */
-        AccessInventory: {
-            /** @description Manual asset groups and their exact tag selectors. */
-            asset_groups: components["schemas"]["AccessAssetGroup"][];
-            /** @description Active local-user role bindings. */
-            bindings: components["schemas"]["AccessBinding"][];
-            /** @description All available roles and granted permission identifiers. */
-            roles: components["schemas"]["AccessRole"][];
-            /** @description Enabled users who can receive role bindings. */
-            users: components["schemas"]["AccessUser"][];
-        };
-        /** @description Role and permission mapping. */
-        AccessRole: {
-            /** @description Whether this is a built-in role. */
-            builtin: boolean;
-            /** @description Operator-facing name. */
-            display_name: string;
-            /** @description Permission identifiers. */
-            permissions: string[];
-            /** @description Stable role identifier. */
-            role_id: string;
-        };
-        /** @description Enabled local user in the access-management picker. */
-        AccessUser: {
-            /** @description Operator-facing display name. */
-            display_name: string;
-            /** @description Stable local user UUID. */
-            user_id: string;
-            /** @description Canonical username. */
-            username: string;
+        /** @description One permission a person holds through one role. */
+        AccessLine: {
+            applies: components["schemas"]["Applies"];
+            /** @description The catalogue's area, e.g. "Hosts". */
+            area: string;
+            /** @description The role's name. */
+            from_role: string;
+            /** @description The groups, when it applies on groups. */
+            groups: components["schemas"]["GroupRef"][];
+            /** @description The catalogue's label, e.g. "View hosts". */
+            label: string;
+            permission: components["schemas"]["Permission"];
         };
         /** @description One item in an open case. */
         ActiveCaseItem: {
@@ -1870,6 +1923,13 @@ export interface components {
              *     the number of the open case holding it.
              */
             items: components["schemas"]["ActiveCaseItem"][];
+        };
+        /** @description One audited action. */
+        ActivityLine: {
+            action: string;
+            /** @description RFC 3339. */
+            at: string;
+            target?: string | null;
         };
         /** @description A note for the timeline. */
         AddCaseNoteRequest: {
@@ -2178,6 +2238,11 @@ export interface components {
              */
             version: number;
         };
+        /**
+         * @description Where a permission applies.
+         * @enum {string}
+         */
+        Applies: "all" | "groups" | "platform";
         /** @description Confirmed tag update request, bound to an impact preview. */
         ApplyAgentTagsRequest: {
             /** @description Opaque preview token. */
@@ -2709,15 +2774,6 @@ export interface components {
             /** @description Title. */
             title: string;
         };
-        /** @description Request to assign a role to one local user with optional asset-group scope. */
-        CreateAccessBindingRequest: {
-            /** @description Asset-group UUID; omitted means global scope. */
-            asset_group_id?: string | null;
-            /** @description Built-in role identifier. */
-            role_id: string;
-            /** @description Stable local-user UUID. */
-            user_id: string;
-        };
         /** @description "Don't alarm on this again", derived from one alarm. */
         CreateAlarmSuppressionRequest: {
             /** @description The platform's id of the alarm to derive it from. */
@@ -2759,12 +2815,12 @@ export interface components {
              */
             max_uses: number;
         };
-        /** @description Request to create a service identity with one initial global role. */
+        /** @description Request to create a service identity holding roles. */
         CreateServiceAccountRequest: {
             /** @description Unique operator name, at most 128 characters. */
             name: string;
-            /** @description Initial built-in global role. */
-            role_id: string;
+            /** @description 1 to 64 roles, each inside the creator's own access. */
+            role_ids: string[];
         };
         /** @description Request to issue one expiring service bearer token. */
         CreateServiceTokenRequest: {
@@ -2777,14 +2833,16 @@ export interface components {
             label: string;
         };
         /**
-         * @description Creates a local console user with one global built-in role and a
-         *     one-time password (`POST /api/v1/access-control/users`).
+         * @description Creates a local console user holding roles, with a one-time password
+         *     (`POST /api/v1/users`).
          */
         CreateUserRequest: {
             /** @description Operator-facing name, 1 to 160 printable characters. */
             display_name: string;
-            /** @description Initial built-in global role. */
-            role_id: string;
+            /** @description Optional email address, at most 254 characters. */
+            email?: string | null;
+            /** @description 1 to 64 roles, each inside the creator's own access. */
+            role_ids: string[];
             /** @description 1 to 64 ASCII letters, digits or `._@+-`; stored lowercase. */
             username: string;
         };
@@ -2823,8 +2881,8 @@ export interface components {
              * @description One-time password; the user must replace it at first sign-in.
              */
             readonly one_time_password: string;
-            /** @description The role granted. */
-            role_id: string;
+            /** @description The roles given. */
+            role_ids: string[];
             /** @description New user id. */
             user_id: string;
             /** @description Canonical (lowercase) username. */
@@ -3300,6 +3358,18 @@ export interface components {
             /** @description Visible dashboard id, or `null`. */
             dashboard_id?: string | null;
         };
+        /** @description A host group, for the Host groups tab and the role reach picker. */
+        HostGroupView: {
+            asset_group_id: string;
+            name: string;
+            /**
+             * Format: int64
+             * @description How many roles reach the group.
+             */
+            roles: number;
+            /** @description Exact `key=value` selectors. */
+            selectors: string[];
+        };
         /** @description A page of a host's packages, by name. */
         HostPackagePage: {
             /** @description Packages on this page. */
@@ -3473,6 +3543,11 @@ export interface components {
              */
             value: number;
         };
+        /** @description A reset password, shown only in this response. */
+        OneTimePassword: {
+            /** Format: password */
+            readonly one_time_password: string;
+        };
         /**
          * @description Stable console permission identifiers, one per action (spec §3). Their
          *     metadata (area, column, scope, needs) lives in `access/catalogue.rs`.
@@ -3488,6 +3563,36 @@ export interface components {
             asset_group_ids: string[];
             /** @enum {string} */
             kind: "asset_groups";
+        };
+        /** @description One person in the People list. */
+        PersonRow: {
+            /** @description How they sign in: `password` or `sso`. */
+            auth_source: string;
+            display_name: string;
+            email?: string | null;
+            enabled: boolean;
+            /** @description RFC 3339; null until their first sign-in. */
+            last_sign_in_at?: string | null;
+            /** @description The roles they hold, with their reach. */
+            roles: components["schemas"]["RoleView"][];
+            user_id: string;
+            username: string;
+        };
+        /** @description A person's page. */
+        PersonView: {
+            /** @description Each permission they hold, where it applies and the role giving it. */
+            access: components["schemas"]["AccessLine"][];
+            auth_source: string;
+            created_at: string;
+            display_name: string;
+            email?: string | null;
+            enabled: boolean;
+            last_sign_in_at?: string | null;
+            /** @description Their newest actions (at most 10). */
+            recent: components["schemas"]["ActivityLine"][];
+            roles: components["schemas"]["RoleView"][];
+            user_id: string;
+            username: string;
         };
         /** @description One port across the caller's hosts: a page of the hosts listening on it. */
         PortDetail: {
@@ -4444,6 +4549,13 @@ export interface components {
             /** @description Workflow state. */
             state: string;
         };
+        /** @description New details; a field left out is unchanged. */
+        UpdatePerson: {
+            /** @description 1 to 160 printable characters. */
+            display_name?: string | null;
+            /** @description An address of at most 254 characters; empty clears it. */
+            email?: string | null;
+        };
         /** @description Result of the newer-version check. */
         UpdateResponse: {
             /**
@@ -4735,26 +4847,6 @@ export interface operations {
             };
         };
     };
-    authenticated_access_inventory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Roles, active bindings, and asset groups */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessInventory"];
-                };
-            };
-        };
-    };
     create_authenticated_asset_group: {
         parameters: {
             query?: never;
@@ -4840,129 +4932,6 @@ export interface operations {
                 };
             };
             /** @description Name conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    create_authenticated_access_binding: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateAccessBindingRequest"];
-            };
-        };
-        responses: {
-            /** @description Role binding created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessBinding"];
-                };
-            };
-            /** @description Invalid binding request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Binding conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    revoke_authenticated_access_binding: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Role binding UUID */
-                binding_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Role binding revoked */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Binding not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    create_user: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateUserRequest"];
-            };
-        };
-        responses: {
-            /** @description User created; the one-time password is shown only here */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreatedUser"];
-                };
-            };
-            /** @description Invalid username, display name or role */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Needs access.users with a global binding */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description The username is taken */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8333,6 +8302,35 @@ export interface operations {
             };
         };
     };
+    host_groups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Host groups */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostGroupView"][];
+                };
+            };
+            /** @description Needs access.read or host_groups.manage */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_home: {
         parameters: {
             query?: never;
@@ -9710,6 +9708,24 @@ export interface operations {
                     "application/json": components["schemas"]["ServiceAccountView"];
                 };
             };
+            /** @description Invalid name or roles */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs service_accounts.manage, or a role outside your access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Name already exists */
             409: {
                 headers: {
@@ -9746,6 +9762,84 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    give_account_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_account_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Held */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Needs access.grant, or the role is outside your access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such service account inside your access, or no such role */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_account_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_account_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not held */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Needs access.grant, or the role is outside your access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such service account inside your access, or no such role */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -10242,6 +10336,398 @@ export interface operations {
             };
             /** @description Missing the kind's read permission */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_people: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description People */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonRow"][];
+                };
+            };
+            /** @description Needs access.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_person: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Created; the one-time password is shown only here */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedUser"];
+                };
+            };
+            /** @description Invalid username, display name or roles */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs access.users, or a role outside your access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The username is taken */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_email */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_person: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The person */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonView"];
+                };
+            };
+            /** @description Needs access.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such person inside your access */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_person: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePerson"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Needs access.users */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such person inside your access */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_user or invalid_email */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    disable_person: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disabled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Needs access.users; or yourself */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such person inside your access */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description last_administrator */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    enable_person: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enabled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Needs access.users */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such person inside your access */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    reset_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The one-time password */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OneTimePassword"];
+                };
+            };
+            /** @description Needs access.users */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such person inside your access */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    give_user_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Held */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Needs access.grant; the role is outside your access; or yourself */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such person inside your access, or no such role */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_user_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not held */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Needs access.grant; the role is outside your access; or yourself */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such person inside your access, or no such role */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description last_administrator */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

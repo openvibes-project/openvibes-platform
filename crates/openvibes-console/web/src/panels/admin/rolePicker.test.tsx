@@ -8,13 +8,13 @@ vi.hoisted(() => {
   Object.assign(globalThis, { window: { location: { pathname: "/", search: "" }, history: { replaceState() {} }, addEventListener() {} } });
 });
 
-// The live role list, as GET /api/v1/access-control answers on a fresh install plus one role.
+// The live role list, as GET /api/v1/roles answers on a fresh install plus one role.
 vi.mock("../../api/client", () => ({
   apiMessage: () => "", invalidate() {}, request: async () => ({}),
-  useResource: () => ({ loading: false, data: { roles: [
-    { role_id: "admin", display_name: "Administrator", builtin: true, permissions: [] },
-    { role_id: "r_1", display_name: "Night shift", builtin: false, permissions: [] },
-  ] } }),
+  useResource: () => ({ loading: false, data: [
+    { role_id: "admin", name: "Administrator", builtin: true, permissions: [], reach: { kind: "all" } },
+    { role_id: "r_1", name: "Night shift", builtin: false, permissions: [], reach: { kind: "all" } },
+  ] }),
 }));
 
 import { ServiceAccountPanel } from "./ServiceAccountPanel";

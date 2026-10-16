@@ -870,6 +870,8 @@ Administrator. Dashboard shares move from `console_dashboards.shared_role_id`
 holders moved is copied to their new roles, so nobody loses a dashboard.
 The console role may write roles, their permissions and groups, dashboard
 shares, and `console_users` `email`, `display_name` and `last_sign_in_at`.
+`audit_log_actor_recent_idx` (`actor_id`, `at DESC`) serves a person's recent
+activity. People reads and writes and role gifts live in `console_people`.
 Interface and guards: [console-auth-store.md](console-auth-store.md).
 Tests: `tests/custom_roles.rs` (upgrade) and `tests/role_writes.rs`; tests that bind a former built-in id create
 it first with `common::seed_role`.

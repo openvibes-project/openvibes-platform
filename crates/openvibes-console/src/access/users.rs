@@ -1,6 +1,6 @@
-//! Console users (#85): an administrator creates a local user with a
-//! one-time password, and every user sets their own password, which the
-//! one-time password forces at first sign-in (`password_must_change`).
+//! Passwords (#85): every user sets their own password, which a one-time
+//! password (from New user or Reset password) forces at first sign-in
+//! (`password_must_change`); and the one-time password generator.
 
 use axum::{
     Json,
@@ -9,7 +9,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use platform_store::{console_auth, console_read::AgentScope};
+use platform_store::console_auth;
 use ring::rand::{SecureRandom, SystemRandom};
 
 use crate::{
@@ -17,9 +17,7 @@ use crate::{
         NormalizedPassword, PresentedCredentials, hash_password, presented_credentials,
         verify_password,
     },
-    access::guard::{
-        authenticated_permission, authentication_required, checked_session, unavailable_auth,
-    },
+    access::guard::{authentication_required, checked_session, unavailable_auth},
     access::login::bounded_user_agent,
     access::throttle::{ACCOUNT_FAILURE_LIMIT, account_throttle_bucket},
     http::AuthHttpState,
@@ -44,7 +42,7 @@ fn no_store(mut response: Response) -> Response {
 }
 
 /// The CLI's rule: 1 to 64 ASCII letters, digits or `._@+-`, lowercased.
-fn canonical_username(username: &str) -> Option<String> {
+pub(crate) fn canonical_username(username: &str) -> Option<String> {
     let valid = !username.is_empty()
         && username.len() <= 64
         && username
@@ -72,7 +70,7 @@ fn one_time_password() -> Option<String> {
     )
 }
 
-fn random_uuid() -> Option<String> {
+pub(crate) fn random_uuid() -> Option<String> {
     let mut bytes = [0_u8; 16];
     SystemRandom::new().fill(&mut bytes).ok()?;
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -88,137 +86,27 @@ fn random_uuid() -> Option<String> {
     ))
 }
 
-/// Creates a local user with one global built-in role and a one-time
-/// password, returned only here; the user must replace it at first sign-in.
-#[utoipa::path(post, path = "/api/v1/access-control/users", tag = "access control",
-    request_body = crate::CreateUserRequest,
-    responses(
-        (status = 201, description = "User created; the one-time password is shown only here", body = crate::CreatedUser),
-        (status = 400, description = "Invalid username, display name or role", body = ProblemDetails),
-        (status = 403, description = "Needs access.users with a global binding", body = ProblemDetails),
-        (status = 409, description = "The username is taken", body = ProblemDetails),
-    ))]
-pub(crate) async fn create_user(
-    State(state): State<AuthHttpState>,
-    headers: HeaderMap,
-    payload: Result<Json<crate::CreateUserRequest>, JsonRejection>,
-) -> Response {
-    // Authentication, CSRF and permission first: nothing about the body is
-    // answered to a caller who may not make the request (no validation
-    // oracle; a forced-change session gets 403, not 400).
-    let (scope, actor) = match authenticated_permission(
-        &state,
-        &headers,
-        crate::Permission::AccessUsers,
-        true,
-    )
-    .await
-    {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
-    // Users get global roles; only a global administrator makes them.
-    if !matches!(scope, AgentScope::Global) {
-        return problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Access is not available",
-        ));
-    }
-    let Ok(Json(request)) = payload else {
-        return bad_request("invalid_user", "Provide a username, display name and role");
-    };
-    let display_name = request.display_name.trim();
-    let (Some(username), true) = (
-        canonical_username(&request.username),
-        !display_name.is_empty()
-            && display_name.chars().count() <= 160
-            && !display_name.chars().any(char::is_control),
-    ) else {
-        return bad_request(
-            "invalid_user",
-            "Use 1 to 64 letters, digits or ._@+- for the username and 1 to 160 characters for the name",
-        );
-    };
-    let Ok(mut client) = state.pool.get().await else {
-        return unavailable_auth();
-    };
-    match platform_store::console_roles::role(&client, &request.role_id).await {
-        Ok(Some(_)) => {}
-        Ok(None) => return bad_request("unknown_role", "Choose an existing role"),
-        Err(_) => return unavailable_auth(),
-    }
-    match console_auth::username_taken(&client, &username).await {
-        Ok(false) => {}
-        Ok(true) => {
-            return problem_response(ProblemDetails::new(
-                StatusCode::CONFLICT,
-                "user_conflict",
-                "A user with this username already exists",
-            ));
-        }
-        Err(_) => return unavailable_auth(),
-    }
-    let (Some(password), Some(user_id), Some(binding_id)) =
-        (one_time_password(), random_uuid(), random_uuid())
-    else {
-        return unavailable_auth();
-    };
-    let Ok(normalized) = NormalizedPassword::new(&password) else {
-        return unavailable_auth(); // the generator always makes a valid one
-    };
-    let Ok(permit) = state.password_slots.clone().try_acquire_owned() else {
-        return busy();
-    };
-    let Ok(Ok(phc)) = tokio::task::spawn_blocking(move || {
+/// A one-time password and its Argon2id hash, made on a password slot.
+pub(crate) async fn one_time_credentials(
+    state: &AuthHttpState,
+) -> Result<(String, String), Response> {
+    let password = one_time_password().ok_or_else(unavailable_auth)?;
+    // The generator always makes a valid one.
+    let normalized = NormalizedPassword::new(&password).map_err(|_| unavailable_auth())?;
+    let permit = state
+        .password_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| busy())?;
+    let phc = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         hash_password(&normalized).map(|hash| hash.as_str().to_owned())
     })
-    .await
-    else {
-        return unavailable_auth();
-    };
-    let created = console_auth::create_local_user(
-        &mut client,
-        &console_auth::NewLocalUser {
-            user_id: &user_id,
-            binding_id: &binding_id,
-            username: &username,
-            display_name,
-            password_phc: &phc,
-            role_id: &request.role_id,
-            actor_id: &actor,
-            actor_kind: "user",
-            password_must_change: true,
-            now: Utc::now(),
-        },
-    )
     .await;
-    if created.is_err() {
-        // Lost a race with another create of the same name (the unique
-        // username refused it): a conflict, not an outage.
-        return match console_auth::username_taken(&client, &username).await {
-            Ok(true) => problem_response(ProblemDetails::new(
-                StatusCode::CONFLICT,
-                "user_conflict",
-                "A user with this username already exists",
-            )),
-            _ => unavailable_auth(),
-        };
+    match phc {
+        Ok(Ok(phc)) => Ok((password, phc)),
+        _ => Err(unavailable_auth()),
     }
-    no_store(
-        (
-            StatusCode::CREATED,
-            Json(crate::CreatedUser {
-                user_id,
-                username,
-                display_name: display_name.to_owned(),
-                role_id: request.role_id,
-                one_time_password: password,
-            }),
-        )
-            .into_response(),
-    )
 }
 
 fn too_many_attempts() -> Response {

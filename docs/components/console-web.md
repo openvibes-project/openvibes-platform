@@ -447,7 +447,8 @@ triage on alarms and findings stays as it is.
     (`cargo run -p openvibes-console --bin export_openapi -- --permissions >
     crates/openvibes-console/web/src/api/permissions.json`); tests fail while
     either is stale. Role pickers read the live role list from
-    `GET /api/v1/access-control`; the demo builds its roles from
+    `GET /api/v1/roles` (people: `GET /api/v1/users*`, group cards:
+    `GET /api/v1/host-groups`); the demo builds its roles from
     `templates.json` (the personas) and `permissions.json` (Administrator).
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`

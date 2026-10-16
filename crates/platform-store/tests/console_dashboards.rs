@@ -7,10 +7,9 @@ use chrono::Utc;
 use common::TestDb;
 use platform_store::{
     Client,
-    console_auth::{
-        NewLocalUser, create_local_user, create_user_role_binding, revoke_user_role_binding,
-    },
-    console_roles::{Reach, RoleInput, RoleWrite, create_role},
+    console_auth::{NewLocalUser, create_local_user},
+    console_people::{give_role, remove_role},
+    console_roles::{Principal, Reach, RoleInput, RoleWrite, create_role},
     dashboards::{self, Refusal},
 };
 use serde_json::json;
@@ -288,10 +287,15 @@ async fn scoped_binding_sees_shared_dashboard() {
         RoleWrite::Saved(role) => role.role_id,
         _ => panic!("role not saved"),
     };
-    create_user_role_binding(&mut client, BOB, &scoped, "test", Utc::now())
-        .await
-        .unwrap()
-        .unwrap();
+    give_role(
+        &mut client,
+        Principal::User(BOB),
+        &scoped,
+        "test",
+        Utc::now(),
+    )
+    .await
+    .unwrap();
     let created = dashboards::create(&mut client, ALICE, "Analysts", &layout(), Utc::now())
         .await
         .unwrap()
@@ -316,10 +320,15 @@ async fn scoped_binding_sees_shared_dashboard() {
 #[tokio::test]
 async fn revoked_binding_hides_dashboard_and_home() {
     let (db, mut client) = setup().await;
-    let binding = create_user_role_binding(&mut client, BOB, "analyst", "test", Utc::now())
-        .await
-        .unwrap()
-        .unwrap();
+    give_role(
+        &mut client,
+        Principal::User(BOB),
+        "analyst",
+        "test",
+        Utc::now(),
+    )
+    .await
+    .unwrap();
     let created = dashboards::create(&mut client, ALICE, "Analysts", &layout(), Utc::now())
         .await
         .unwrap()
@@ -344,9 +353,15 @@ async fn revoked_binding_hides_dashboard_and_home() {
         dashboards::home(&client, BOB).await.unwrap(),
         Some(created.dashboard_id.clone())
     );
-    revoke_user_role_binding(&mut client, &binding.binding_id, "test", Utc::now())
-        .await
-        .unwrap();
+    remove_role(
+        &mut client,
+        Principal::User(BOB),
+        "analyst",
+        "test",
+        Utc::now(),
+    )
+    .await
+    .unwrap();
     assert!(
         dashboards::list_visible(&client, BOB)
             .await

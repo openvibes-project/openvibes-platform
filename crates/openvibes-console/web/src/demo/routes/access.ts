@@ -1,30 +1,60 @@
-// Access: users, role bindings, asset groups and service accounts.
+// Access: people and roles, host groups and service accounts.
 import type { DemoContext } from "../context";
 import { json, problem } from "../http";
 
 export function registerAccessRoutes(ctx: DemoContext) {
   const { data, iso, actor, audit, route } = ctx;
-  route("GET", "/api/v1/access-control", "access.read", () => json(data.access));
-  route("POST", "/api/v1/access-control/users", "access.users", (_, __, body) => {
+  // People and roles, minimally (the demo's full People API is roles step 10).
+  type DemoRole = (typeof data.access.roles)[number];
+  const roleView = (role: DemoRole) => ({
+    role_id: role.role_id, name: role.display_name, description: "", builtin: role.builtin, permissions: role.permissions,
+    reach: { kind: "all" as const }, members: data.access.bindings.filter((b) => b.role_id === role.role_id).length, version: 1,
+  });
+  const heldRoles = (userId: string) => data.access.bindings.filter((b) => b.user_id === userId)
+    .flatMap((b) => data.access.roles.filter((r) => r.role_id === b.role_id).map(roleView));
+  const personRow = (user: (typeof data.access.users)[number]) => ({
+    ...user, enabled: true, auth_source: "password", last_sign_in_at: null, roles: heldRoles(user.user_id),
+  });
+  const bind = (userId: string, roleId: string) => {
+    if (data.access.bindings.some((b) => b.user_id === userId && b.role_id === roleId)) return;
+    const user = data.access.users.find((u) => u.user_id === userId);
+    data.access.bindings.push({ binding_id: `b-${Date.now().toString(36)}${data.access.bindings.length}`, user_id: userId, username: user?.username ?? "", display_name: user?.display_name ?? "", role_id: roleId, asset_group_id: null, asset_group_name: null, created_at: iso(), created_by: actor });
+    audit("rbac.binding.created", userId, "user");
+  };
+  route("GET", "/api/v1/roles", "access.read", () => json(data.access.roles.map(roleView)));
+  route("GET", "/api/v1/users", "access.read", () => json(data.access.users.map(personRow)));
+  route("GET", "/api/v1/users/{id}", "access.read", ({ id = "" }) => {
+    const user = data.access.users.find((u) => u.user_id === id);
+    if (!user) return problem(404, "user_not_found", "No such person");
+    const roles = heldRoles(id);
+    const access = roles.flatMap((role) => role.permissions.map((permission) => ({ permission, label: permission, area: "", applies: "all", groups: [], from_role: role.name })));
+    return json({ ...personRow(user), created_at: iso(), access, recent: [] });
+  });
+  route("POST", "/api/v1/users", "access.users", (_, __, body) => {
     const username = String(body.username ?? "").toLowerCase();
     const displayName = String(body.display_name ?? "").trim();
-    if (!/^[a-z0-9._@+-]{1,64}$/.test(username) || displayName === "") return problem(400, "invalid_user", "Use 1 to 64 letters, digits or ._@+- for the username, and a name");
+    const roleIds = ((body.role_ids ?? []) as unknown[]).map(String);
+    if (!/^[a-z0-9._@+-]{1,64}$/.test(username) || displayName === "" || roleIds.length === 0) return problem(400, "invalid_user", "Use 1 to 64 letters, digits or ._@+- for the username, a name and a role");
+    if (roleIds.some((id) => !data.access.roles.some((r) => r.role_id === id))) return problem(400, "unknown_role", "Choose an existing role");
     if (data.access.users.some((u) => u.username === username)) return problem(409, "user_conflict", "A user with this username already exists");
-    const user = { user_id: `u-${Date.now().toString(36)}`, username, display_name: displayName };
+    const user = { user_id: `u-${Date.now().toString(36)}`, username, display_name: displayName, email: null };
     data.access.users.push(user);
-    data.access.bindings.push({ binding_id: `b-${Date.now().toString(36)}`, user_id: user.user_id, username, display_name: displayName, role_id: String(body.role_id ?? "viewer"), asset_group_id: null, asset_group_name: null, created_at: iso(), created_by: actor });
+    for (const roleId of roleIds) bind(user.user_id, roleId);
     audit("user.created", user.user_id, "user");
-    return json({ ...user, role_id: String(body.role_id ?? "viewer"), one_time_password: "demo1-pass2-word3-onlyx" }, 201);
+    return json({ user_id: user.user_id, username, display_name: displayName, role_ids: roleIds, one_time_password: "demo1-pass2-word3-onlyx" }, 201);
   });
-  route("POST", "/api/v1/access-control/bindings", "access.grant", (_, __, body) => {
-    const user = data.access.users.find((u) => u.user_id === body.user_id);
-    if (!user) return problem(422, "invalid_user", "Choose a user");
-    const group = data.access.asset_groups.find((g) => g.asset_group_id === body.asset_group_id);
-    const binding = { binding_id: `b-${Date.now().toString(36)}`, user_id: user.user_id, username: user.username, display_name: user.display_name, role_id: String(body.role_id), asset_group_id: group?.asset_group_id ?? null, asset_group_name: group?.name ?? null, created_at: iso(), created_by: actor };
-    data.access.bindings.push(binding);
-    audit("access.binding.create", binding.binding_id, "binding");
-    return json(binding, 201);
+  route("PUT", "/api/v1/users/{id}/roles/{role}", "access.grant", ({ id = "", role = "" }) => {
+    if (!data.access.users.some((u) => u.user_id === id)) return problem(404, "user_not_found", "No such person");
+    if (!data.access.roles.some((r) => r.role_id === role)) return problem(404, "role_not_found", "No such role");
+    bind(id, role);
+    return new Response(null, { status: 204 });
   });
+  route("DELETE", "/api/v1/users/{id}/roles/{role}", "access.grant", ({ id = "", role = "" }) => {
+    data.access.bindings = data.access.bindings.filter((b) => !(b.user_id === id && b.role_id === role));
+    audit("rbac.binding.revoked", id, "user");
+    return new Response(null, { status: 204 });
+  });
+  route("GET", "/api/v1/host-groups", "access.read", () => json(data.access.asset_groups.map((g) => ({ ...g, roles: 0 }))));
   const saveGroup = (id: string, body: Record<string, unknown>) => {
     const name = String(body.name ?? "").trim();
     const selectors = ((body.selectors ?? []) as { key: string; value: string }[]).map((sel) => `${sel.key}=${sel.value}`);
@@ -47,18 +77,13 @@ export function registerAccessRoutes(ctx: DemoContext) {
     audit("access.asset_group.update", id, "asset_group");
     return json(group);
   });
-  route("DELETE", "/api/v1/access-control/bindings/{id}", "access.grant", ({ id = "" }) => {
-    data.access.bindings = data.access.bindings.filter((b) => b.binding_id !== id);
-    audit("access.binding.delete", id, "binding");
-    return new Response(null, { status: 204 });
-  });
 
   route("GET", "/api/v1/service-accounts", "service_accounts.read", () => json({ items: data.serviceAccounts }));
   route("GET", "/api/v1/service-accounts/{id}/tokens", "service_accounts.read", ({ id = "" }) => json({ items: data.serviceTokens.get(id) ?? [] }));
   route("POST", "/api/v1/service-accounts", "service_accounts.manage", (_, __, body) => {
     const name = String(body.name ?? "").trim();
     if (name === "" || name.length > 128) return problem(422, "invalid_name", "Give the account a name");
-    const account = { service_account_id: `sa-${Date.now().toString(36)}`, name, role_ids: [String(body.role_id ?? "viewer")], enabled: true, active_tokens: 0, created_at: iso() };
+    const account = { service_account_id: `sa-${Date.now().toString(36)}`, name, role_ids: ((body.role_ids ?? ["viewer"]) as unknown[]).map(String), enabled: true, active_tokens: 0, created_at: iso() };
     data.serviceAccounts.push(account);
     audit("service_account.create", account.service_account_id, "service_account");
     return json(account, 201);

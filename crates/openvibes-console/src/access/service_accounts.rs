@@ -1,4 +1,4 @@
-//! Service accounts: list, create and disable.
+//! Service accounts: list, create and disable (their roles: `people_roles`).
 
 use axum::{
     extract::{Json, Path, State},
@@ -6,8 +6,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use platform_store::console_auth;
+use platform_store::{console_auth, console_roles::Principal};
 
+use crate::access::auth::{PresentedCredentials, presented_credentials};
+use crate::access::editor::{caller, principal_editor, role_fits, roles_fit};
+use crate::access::people::{all_roles, held};
 use crate::http::headers::no_store;
 use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
@@ -50,6 +53,21 @@ pub(crate) async fn authenticated_service_accounts(
         Ok(value) => value,
         Err(_) => return unavailable_auth(),
     };
+    // Only accounts whose roles all fit inside the caller's share (§4.4).
+    let principal = match presented_credentials(&headers) {
+        Ok(PresentedCredentials::Bearer(_)) => Principal::ServiceAccount(&actor),
+        _ => Principal::User(&actor),
+    };
+    let (Ok(editor), Ok(roles)) = (
+        principal_editor(&client, principal).await,
+        all_roles(&client).await,
+    ) else {
+        return unavailable_auth();
+    };
+    let accounts: Vec<_> = accounts
+        .into_iter()
+        .filter(|account| roles_fit(&editor, &held(&account.role_ids, &roles)))
+        .collect();
     if platform_store::audit::record(
         &client,
         &actor,
@@ -82,59 +100,62 @@ pub(crate) async fn authenticated_service_accounts(
     )
 }
 
-/// Creates a named service identity holding one role.
-#[utoipa::path(post,path="/api/v1/service-accounts",tag="service_accounts",request_body=crate::CreateServiceAccountRequest,responses((status=201,description="Service account created",body=crate::ServiceAccountView),(status=409,description="Name already exists",body=ProblemDetails)))]
+/// Creates a named service identity holding roles that all fit inside the
+/// creator's own access.
+#[utoipa::path(post,path="/api/v1/service-accounts",tag="service_accounts",request_body=crate::CreateServiceAccountRequest,responses((status=201,description="Service account created",body=crate::ServiceAccountView),(status=400,description="Invalid name or roles",body=ProblemDetails),(status=403,description="Needs service_accounts.manage, or a role outside your access",body=ProblemDetails),(status=409,description="Name already exists",body=ProblemDetails)))]
 pub(crate) async fn create_authenticated_service_account(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
     Json(request): Json<crate::CreateServiceAccountRequest>,
 ) -> Response {
     let name = request.name.trim();
-    if name.is_empty() || name.chars().count() > 128 || name.chars().any(char::is_control) {
+    let mut role_ids = request.role_ids.clone();
+    role_ids.sort();
+    role_ids.dedup();
+    if name.is_empty()
+        || name.chars().count() > 128
+        || name.chars().any(char::is_control)
+        || role_ids.is_empty()
+        || role_ids.len() > 64
+    {
         return problem_response(ProblemDetails::new(
             StatusCode::BAD_REQUEST,
             "invalid_service_account",
-            "Provide a valid name",
+            "Provide a valid name and 1 to 64 roles",
         ));
     }
-    let (scope, actor) = match authenticated_permission(
-        &state,
-        &headers,
-        crate::Permission::ServiceAccountsManage,
-        true,
-    )
-    .await
-    {
-        Ok(value) => value,
+    let editor = match caller(&state, &headers, true).await {
+        Ok(editor) => editor,
         Err(response) => return response,
     };
-    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
-        return problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Access is not available",
-        ));
+    if let Some(response) = editor.denied(crate::Permission::ServiceAccountsManage) {
+        return response;
     }
     let mut client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),
     };
-    match platform_store::console_roles::role(&client, &request.role_id).await {
-        Ok(Some(_)) => {}
-        Ok(None) => {
+    let roles = match all_roles(&client).await {
+        Ok(roles) => roles,
+        Err(response) => return response,
+    };
+    for id in &role_ids {
+        let Some(role) = roles.get(id) else {
             return problem_response(ProblemDetails::new(
                 StatusCode::BAD_REQUEST,
                 "unknown_role",
                 "Choose an existing role",
             ));
+        };
+        if let Err(problem) = role_fits(&editor, role) {
+            return problem_response(problem);
         }
-        Err(_) => return unavailable_auth(),
     }
     let id = match console_auth::create_service_account(
         &mut client,
         name,
-        &request.role_id,
-        &actor,
+        &role_ids,
+        &editor.actor,
         Utc::now(),
     )
     .await
@@ -149,16 +170,15 @@ pub(crate) async fn create_authenticated_service_account(
         }
         Err(_) => return unavailable_auth(),
     };
-    let response = Json(crate::ServiceAccountView {
+    let mut response = Json(crate::ServiceAccountView {
         service_account_id: id,
         name: name.to_owned(),
         enabled: true,
         created_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         active_tokens: 0,
-        role_ids: vec![request.role_id],
+        role_ids,
     })
     .into_response();
-    let mut response = response;
     *response.status_mut() = StatusCode::CREATED;
     no_store(response)
 }

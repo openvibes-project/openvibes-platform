@@ -106,6 +106,8 @@ ALTER TABLE console_users
   ADD COLUMN email text CHECK (email IS NULL OR (char_length(email) <= 254 AND email ~ '^[^@\s]+@[^@\s]+$')),
   ADD COLUMN auth_source text NOT NULL DEFAULT 'password' CHECK (auth_source IN ('password','sso')),
   ADD COLUMN last_sign_in_at timestamptz;
+-- a person's recent activity (People › person page)
+CREATE INDEX audit_log_actor_recent_idx ON audit_log (actor_id, at DESC);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON console_roles, console_role_permissions, console_role_groups TO "openvibes-console";
 GRANT SELECT, INSERT, DELETE ON console_dashboard_roles TO "openvibes-console";

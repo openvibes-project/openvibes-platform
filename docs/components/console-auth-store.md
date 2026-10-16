@@ -20,8 +20,14 @@ tokens, and CSRF values stay in the console process.
 - `user_role_bindings` returns active bindings (role ids; since schema 52 a
   binding has no group scope, the role carries its reach) for per-request
   capability resolution. It does not cache effective permission state.
-- `access_inventory` lists roles/permission ids, enabled local users, active
-  local-user bindings, and exact asset-group selectors without credential data.
+- `console_people` (People, spec §9.1): `people`/`person` (email,
+  `auth_source`, `last_sign_in_at`, active role ids), `recent_activity` (the
+  newest audit rows with the person as `actor_id`, served by
+  `audit_log_actor_recent_idx`), `create_user` (several roles and an email
+  in one transaction with `create_local_user`'s writes), `set_details`
+  (`user.updated`), `enable_user` (`user.enabled`), `reset_password` (new
+  one-time hash, `password_must_change`, generation bump and every session
+  revoked, `user.password_reset`, one transaction).
 - `save_asset_group` creates or replaces a complete bounded selector set and
   its audit detail atomically. Selector writes share a transaction advisory
   lock with tag mutations so a tag impact preview cannot race selector edits.
@@ -32,7 +38,7 @@ tokens, and CSRF values stay in the console process.
   under the same key conflicts. `list_enrollment_tokens` returns bounded
   secret-free metadata; `revoke_enrollment_token` commits its audit row with
   the revocation.
-- Service-account operations create identities with an initial built-in role,
+- Service-account operations create identities holding one or more roles,
   issue and list expiring hash-only bearer tokens, revoke individual tokens,
   and atomically disable an identity with all of its tokens. Issuance is
   idempotent for 24 hours and never stores the token secret in its replay row.
@@ -49,11 +55,15 @@ tokens, and CSRF values stay in the console process.
   a proposed tag set. `apply_agent_tags` verifies the preview token under a
   transaction lock, then replaces tags and records detailed impact atomically.
   Preview bindings are capped at 500 per direction; larger impacts fail closed.
-- `create_user_role_binding` and `revoke_user_role_binding` commit binding
-  changes with their audit events atomically. Revocation serializes through the
-  access-binding advisory lock and refuses (`LastAdministrator`) to remove the
-  `admin` binding of the last enabled Administrator, counted by
-  `enabled_administrators`.
+- `console_people::give_role` and `remove_role` give or take a role from a
+  user or service account (`Principal`) with `rbac.binding.created` /
+  `rbac.binding.revoked` in the same transaction, under the access-binding
+  advisory lock. Giving a held role changes nothing (`AlreadyHeld`); removal
+  refuses (`LastAdministrator`) to take `admin` from the last enabled
+  Administrator, counted by `enabled_administrators`, so two concurrent
+  removals cannot both succeed.
+- `console_roles::host_groups` lists groups with their selectors and how
+  many roles reach each.
 - `create_session` stamps `console_users.last_sign_in_at` and accepts only a currently enabled account at the generation
   observed after password verification and can revoke the prior session in the
   same transaction during login rotation. Session lookups require matching

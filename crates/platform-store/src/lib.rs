@@ -31,6 +31,8 @@ pub mod console_auth;
 pub mod console_cases;
 /// Console reads of installed software: host packages and fleet software.
 pub mod console_inventory;
+/// People: users with their roles, details, enable, reset and role gifts.
+pub mod console_people;
 /// Bounded global read models for the human console.
 pub mod console_read;
 /// Console roles with a host reach, and what a principal holds (schema 52).

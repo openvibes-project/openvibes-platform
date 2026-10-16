@@ -109,26 +109,6 @@
         }
       }
     },
-    "/api/v1/access-control": {
-      "get": {
-        "tags": [
-          "access control"
-        ],
-        "operationId": "authenticated_access_inventory",
-        "responses": {
-          "200": {
-            "description": "Roles, active bindings, and asset groups",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccessInventory"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/access-control/asset-groups": {
       "post": {
         "tags": [
@@ -240,152 +220,6 @@
           },
           "409": {
             "description": "Name conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/access-control/bindings": {
-      "post": {
-        "tags": [
-          "access control"
-        ],
-        "summary": "Adds one active local-user role binding.",
-        "operationId": "create_authenticated_access_binding",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAccessBindingRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Role binding created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccessBinding"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid binding request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Binding conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/access-control/bindings/{binding_id}": {
-      "delete": {
-        "tags": [
-          "access control"
-        ],
-        "operationId": "revoke_authenticated_access_binding",
-        "parameters": [
-          {
-            "name": "binding_id",
-            "in": "path",
-            "description": "Role binding UUID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Role binding revoked"
-          },
-          "404": {
-            "description": "Binding not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/access-control/users": {
-      "post": {
-        "tags": [
-          "access control"
-        ],
-        "summary": "Creates a local user with one global built-in role and a one-time\npassword, returned only here; the user must replace it at first sign-in.",
-        "operationId": "create_user",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateUserRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "User created; the one-time password is shown only here",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreatedUser"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid username, display name or role",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Needs access.users with a global binding",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The username is taken",
             "content": {
               "application/json": {
                 "schema": {
@@ -4966,6 +4800,40 @@
         }
       }
     },
+    "/api/v1/host-groups": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Every host group with its selectors and how many roles reach it, for\nthe Host groups tab and the role reach picker.",
+        "operationId": "host_groups",
+        "responses": {
+          "200": {
+            "description": "Host groups",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HostGroupView"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.read or host_groups.manage",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/home": {
       "get": {
         "tags": [
@@ -6737,7 +6605,7 @@
         "tags": [
           "service_accounts"
         ],
-        "summary": "Creates a named service identity holding one role.",
+        "summary": "Creates a named service identity holding roles that all fit inside the\ncreator's own access.",
         "operationId": "create_authenticated_service_account",
         "requestBody": {
           "content": {
@@ -6756,6 +6624,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ServiceAccountView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid name or roles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs service_accounts.manage, or a role outside your access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -6798,6 +6686,108 @@
             "description": "Unknown or already disabled",
             "content": {
               "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{service_account_id}/roles/{role_id}": {
+      "put": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Gives a service account a role (idempotent).",
+        "operationId": "give_account_role",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Held"
+          },
+          "403": {
+            "description": "Needs access.grant, or the role is outside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such service account inside your access, or no such role",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Takes a role from a service account (idempotent).",
+        "operationId": "remove_account_role",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Not held"
+          },
+          "403": {
+            "description": "Needs access.grant, or the role is outside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such service account inside your access, or no such role",
+            "content": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
                 }
@@ -7543,6 +7533,483 @@
         }
       }
     },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "People, filtered to the caller's share.",
+        "operationId": "list_people",
+        "responses": {
+          "200": {
+            "description": "People",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonRow"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Adds a person with a one-time password, holding roles that all fit\ninside the creator's own access.",
+        "operationId": "create_person",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created; the one-time password is shown only here",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid username, display name or roles",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.users, or a role outside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The username is taken",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_email",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "A person's page: details, roles, access and recent activity. Anyone may\nread their own; others need `access.read` and the share.",
+        "operationId": "get_person",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The person",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person inside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Changes a person's display name or email: anyone their own, others\nwith `access.users` inside the share.",
+        "operationId": "update_person",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePerson"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Saved"
+          },
+          "403": {
+            "description": "Needs access.users",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person inside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_user or invalid_email",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}/disable": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Disables a person and ends their sessions; never yourself, never the\nlast Administrator.",
+        "operationId": "disable_person",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Disabled"
+          },
+          "403": {
+            "description": "Needs access.users; or yourself",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person inside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "last_administrator",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}/enable": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Lets a disabled person sign in again.",
+        "operationId": "enable_person",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Enabled"
+          },
+          "403": {
+            "description": "Needs access.users",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person inside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}/reset-password": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Gives a person a one-time password, shown only here: they must set\ntheir own at the next sign-in, and their sessions end.",
+        "operationId": "reset_password",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The one-time password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OneTimePassword"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.users",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person inside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}/roles/{role_id}": {
+      "put": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Gives a person a role (idempotent).",
+        "operationId": "give_user_role",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Held"
+          },
+          "403": {
+            "description": "Needs access.grant; the role is outside your access; or yourself",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person inside your access, or no such role",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Takes a role from a person (idempotent); never the last Administrator.",
+        "operationId": "remove_user_role",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Not held"
+          },
+          "403": {
+            "description": "Needs access.grant; the role is outside your access; or yourself",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person inside your access, or no such role",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "last_administrator",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/vulnerabilities": {
       "get": {
         "tags": [
@@ -8218,154 +8685,42 @@
           }
         }
       },
-      "AccessBinding": {
+      "AccessLine": {
         "type": "object",
-        "description": "Active local-user role assignment.",
+        "description": "One permission a person holds through one role.",
         "required": [
-          "binding_id",
-          "user_id",
-          "username",
-          "display_name",
-          "role_id",
-          "created_at",
-          "created_by"
+          "permission",
+          "label",
+          "area",
+          "applies",
+          "groups",
+          "from_role"
         ],
         "properties": {
-          "asset_group_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Asset group id; null denotes global scope."
+          "applies": {
+            "$ref": "#/components/schemas/Applies"
           },
-          "asset_group_name": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Asset group name, when scoped."
-          },
-          "binding_id": {
+          "area": {
             "type": "string",
-            "description": "Stable binding identifier."
+            "description": "The catalogue's area, e.g. \"Hosts\"."
           },
-          "created_at": {
+          "from_role": {
             "type": "string",
-            "description": "RFC 3339 creation time."
+            "description": "The role's name."
           },
-          "created_by": {
-            "type": "string",
-            "description": "Actor who created the binding."
-          },
-          "display_name": {
-            "type": "string",
-            "description": "Display label."
-          },
-          "role_id": {
-            "type": "string",
-            "description": "Role identifier."
-          },
-          "user_id": {
-            "type": "string",
-            "description": "Stable local user identifier."
-          },
-          "username": {
-            "type": "string",
-            "description": "Local username."
-          }
-        }
-      },
-      "AccessInventory": {
-        "type": "object",
-        "description": "Read-only review of roles, bindings, and asset groups.",
-        "required": [
-          "roles",
-          "bindings",
-          "asset_groups",
-          "users"
-        ],
-        "properties": {
-          "asset_groups": {
+          "groups": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AccessAssetGroup"
+              "$ref": "#/components/schemas/GroupRef"
             },
-            "description": "Manual asset groups and their exact tag selectors."
+            "description": "The groups, when it applies on groups."
           },
-          "bindings": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AccessBinding"
-            },
-            "description": "Active local-user role bindings."
-          },
-          "roles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AccessRole"
-            },
-            "description": "All available roles and granted permission identifiers."
-          },
-          "users": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AccessUser"
-            },
-            "description": "Enabled users who can receive role bindings."
-          }
-        }
-      },
-      "AccessRole": {
-        "type": "object",
-        "description": "Role and permission mapping.",
-        "required": [
-          "role_id",
-          "display_name",
-          "builtin",
-          "permissions"
-        ],
-        "properties": {
-          "builtin": {
-            "type": "boolean",
-            "description": "Whether this is a built-in role."
-          },
-          "display_name": {
+          "label": {
             "type": "string",
-            "description": "Operator-facing name."
+            "description": "The catalogue's label, e.g. \"View hosts\"."
           },
-          "permissions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Permission identifiers."
-          },
-          "role_id": {
-            "type": "string",
-            "description": "Stable role identifier."
-          }
-        }
-      },
-      "AccessUser": {
-        "type": "object",
-        "description": "Enabled local user in the access-management picker.",
-        "required": [
-          "user_id",
-          "username",
-          "display_name"
-        ],
-        "properties": {
-          "display_name": {
-            "type": "string",
-            "description": "Operator-facing display name."
-          },
-          "user_id": {
-            "type": "string",
-            "description": "Stable local user UUID."
-          },
-          "username": {
-            "type": "string",
-            "description": "Canonical username."
+          "permission": {
+            "$ref": "#/components/schemas/Permission"
           }
         }
       },
@@ -8401,6 +8756,29 @@
               "$ref": "#/components/schemas/ActiveCaseItem"
             },
             "description": "Item ref (alarm id, `agent/rule_set/rule`, `agent/advisory`) and\nthe number of the open case holding it."
+          }
+        }
+      },
+      "ActivityLine": {
+        "type": "object",
+        "description": "One audited action.",
+        "required": [
+          "action",
+          "at"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -9207,6 +9585,15 @@
             "description": "Version for If-Match (also the ETag)."
           }
         }
+      },
+      "Applies": {
+        "type": "string",
+        "description": "Where a permission applies.",
+        "enum": [
+          "all",
+          "groups",
+          "platform"
+        ]
       },
       "ApplyAgentTagsRequest": {
         "type": "object",
@@ -10604,38 +10991,6 @@
           }
         }
       },
-      "CreateAccessBindingRequest": {
-        "type": "object",
-        "description": "Request to assign a role to one local user with optional asset-group scope.",
-        "required": [
-          "user_id",
-          "role_id"
-        ],
-        "properties": {
-          "asset_group_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Asset-group UUID; omitted means global scope.",
-            "maxLength": 36,
-            "minLength": 36
-          },
-          "role_id": {
-            "type": "string",
-            "description": "Built-in role identifier.",
-            "maxLength": 64,
-            "minLength": 1
-          },
-          "user_id": {
-            "type": "string",
-            "description": "Stable local-user UUID.",
-            "maxLength": 36,
-            "minLength": 36
-          }
-        },
-        "additionalProperties": false
-      },
       "CreateAlarmSuppressionRequest": {
         "type": "object",
         "description": "\"Don't alarm on this again\", derived from one alarm.",
@@ -10727,19 +11082,22 @@
       },
       "CreateServiceAccountRequest": {
         "type": "object",
-        "description": "Request to create a service identity with one initial global role.",
+        "description": "Request to create a service identity holding roles.",
         "required": [
           "name",
-          "role_id"
+          "role_ids"
         ],
         "properties": {
           "name": {
             "type": "string",
             "description": "Unique operator name, at most 128 characters."
           },
-          "role_id": {
-            "type": "string",
-            "description": "Initial built-in global role."
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "1 to 64 roles, each inside the creator's own access."
           }
         },
         "additionalProperties": false
@@ -10767,11 +11125,11 @@
       },
       "CreateUserRequest": {
         "type": "object",
-        "description": "Creates a local console user with one global built-in role and a\none-time password (`POST /api/v1/access-control/users`).",
+        "description": "Creates a local console user holding roles, with a one-time password\n(`POST /api/v1/users`).",
         "required": [
           "username",
           "display_name",
-          "role_id"
+          "role_ids"
         ],
         "properties": {
           "display_name": {
@@ -10779,9 +11137,20 @@
             "description": "Operator-facing name, 1 to 160 printable characters.",
             "maxLength": 160
           },
-          "role_id": {
-            "type": "string",
-            "description": "Initial built-in global role."
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional email address, at most 254 characters.",
+            "maxLength": 254
+          },
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "1 to 64 roles, each inside the creator's own access."
           },
           "username": {
             "type": "string",
@@ -10868,7 +11237,7 @@
           "user_id",
           "username",
           "display_name",
-          "role_id",
+          "role_ids",
           "one_time_password"
         ],
         "properties": {
@@ -10882,9 +11251,12 @@
             "description": "One-time password; the user must replace it at first sign-in.",
             "readOnly": true
           },
-          "role_id": {
-            "type": "string",
-            "description": "The role granted."
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The roles given."
           },
           "user_id": {
             "type": "string",
@@ -12012,6 +12384,36 @@
         },
         "additionalProperties": false
       },
+      "HostGroupView": {
+        "type": "object",
+        "description": "A host group, for the Host groups tab and the role reach picker.",
+        "required": [
+          "asset_group_id",
+          "name",
+          "selectors",
+          "roles"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many roles reach the group."
+          },
+          "selectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Exact `key=value` selectors."
+          }
+        }
+      },
       "HostPackagePage": {
         "type": "object",
         "description": "A page of a host's packages, by name.",
@@ -12411,6 +12813,20 @@
           }
         }
       },
+      "OneTimePassword": {
+        "type": "object",
+        "description": "A reset password, shown only in this response.",
+        "required": [
+          "one_time_password"
+        ],
+        "properties": {
+          "one_time_password": {
+            "type": "string",
+            "format": "password",
+            "readOnly": true
+          }
+        }
+      },
       "Permission": {
         "type": "string",
         "description": "Stable console permission identifiers, one per action (spec §3). Their\nmetadata (area, column, scope, needs) lives in `access/catalogue.rs`.",
@@ -12507,6 +12923,123 @@
           }
         ],
         "description": "Effective object scope attached to one permission."
+      },
+      "PersonRow": {
+        "type": "object",
+        "description": "One person in the People list.",
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "enabled",
+          "auth_source",
+          "roles"
+        ],
+        "properties": {
+          "auth_source": {
+            "type": "string",
+            "description": "How they sign in: `password` or `sso`."
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "last_sign_in_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339; null until their first sign-in."
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoleView"
+            },
+            "description": "The roles they hold, with their reach."
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "PersonView": {
+        "type": "object",
+        "description": "A person's page.",
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "enabled",
+          "auth_source",
+          "created_at",
+          "roles",
+          "access",
+          "recent"
+        ],
+        "properties": {
+          "access": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessLine"
+            },
+            "description": "Each permission they hold, where it applies and the role giving it."
+          },
+          "auth_source": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "last_sign_in_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityLine"
+            },
+            "description": "Their newest actions (at most 10)."
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoleView"
+            }
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
       },
       "PortDetail": {
         "type": "object",
@@ -14791,6 +15324,27 @@
           "state": {
             "type": "string",
             "description": "Workflow state."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdatePerson": {
+        "type": "object",
+        "description": "New details; a field left out is unchanged.",
+        "properties": {
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "1 to 160 printable characters."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An address of at most 254 characters; empty clears it."
           }
         },
         "additionalProperties": false

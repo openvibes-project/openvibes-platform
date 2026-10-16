@@ -1,8 +1,8 @@
-// An asset group: the hosts it selects, and its role bindings.
+// An asset group: the hosts it selects, and how many roles reach it.
 import { useState } from "react";
 
 import { apiMessage, invalidate, request, useResource } from "../../api/client";
-import type { AccessInventory } from "../../api/types";
+import type { HostGroup } from "../../api/types";
 import { nav } from "../../app/nav";
 import { useSession } from "../../app/session";
 import { Icon } from "../../ui/Icon";
@@ -12,8 +12,8 @@ import { toast } from "../../ui/toast";
 
 export function AssetGroupPanel({ id }: { id: string }) {
   const { can } = useSession();
-  const inventory = useResource<AccessInventory>("/api/v1/access-control");
-  const group = inventory.data?.asset_groups.find((g) => g.asset_group_id === id);
+  const inventory = useResource<HostGroup[]>("/api/v1/host-groups");
+  const group = inventory.data?.find((g) => g.asset_group_id === id);
   const [name, setName] = useState<string>();
   const [selectors, setSelectors] = useState<string>();
   const [error, setError] = useState<string>();
@@ -21,7 +21,7 @@ export function AssetGroupPanel({ id }: { id: string }) {
   if (id !== "new" && !group) return inventory.loading ? <Loading /> : <div className="panel-body"><Empty title="Asset group not found" /></div>;
   const currentName = name ?? group?.name ?? "";
   const currentSelectors = selectors ?? group?.selectors.join("\n") ?? "";
-  const bindings = inventory.data?.bindings.filter((b) => b.asset_group_id === id) ?? [];
+  const roles = group?.roles ?? 0;
   const manage = can("host_groups.manage", true);
   return (
     <>
@@ -40,7 +40,7 @@ export function AssetGroupPanel({ id }: { id: string }) {
           ? request<{ asset_group_id: string }>("POST", "/api/v1/access-control/asset-groups", body)
           : request<{ asset_group_id: string }>("PUT", `/api/v1/access-control/asset-groups/${encodeURIComponent(id)}`, body);
         call.then((saved) => {
-          invalidate("/api/v1/access-control");
+          invalidate("/api/v1/host-groups");
           toast(id === "new" ? `${body.name} created` : `${body.name} saved`);
           setName(undefined);
           setSelectors(undefined);
@@ -52,20 +52,12 @@ export function AssetGroupPanel({ id }: { id: string }) {
           <textarea className="textarea mono" rows={4} disabled={!manage} value={currentSelectors} onChange={(e) => setSelectors(e.target.value)} placeholder={"env=prod\nrole=web"} />
         </label>
         {id !== "new" && manage && (selectors !== undefined || name !== undefined) && (
-          <div className="callout callout--warn"><Icon name="alert" size={16} /><span>Changing selectors changes which hosts belong to the group, and so what {bindings.length === 1 ? "1 person" : `${bindings.length} people`} with roles on it can see.</span></div>
+          <div className="callout callout--warn"><Icon name="alert" size={16} /><span>Changing selectors changes which hosts belong to the group, and so what {roles === 1 ? "the 1 role" : `the ${roles} roles`} reaching it can see.</span></div>
         )}
         {error && <p className="confirm__error" role="alert">{error}</p>}
         {manage && <div><button className="button button--primary" type="submit">{id === "new" ? "Create group" : "Save"}</button></div>}
       </form>
-      {id !== "new" && (
-        <Section title={`Roles granted on this group (${bindings.length})`}>
-          <ul className="list list--plain" style={{ padding: "0 20px" }}>
-            {bindings.length === 0 ? <li className="subtle list__row list__row--static">None yet. Grant one from a person's panel under Access.</li> : bindings.map((b) => (
-              <li key={b.binding_id} className="list__row list__row--static"><Icon name="user" size={14} /><span className="grow">{b.display_name}</span><span className="badge badge--accent badge--plain">{b.role_id}</span></li>
-            ))}
-          </ul>
-        </Section>
-      )}
+      {id !== "new" && <Section title="Roles"><p className="subtle" style={{ padding: "0 20px" }}>{roles === 0 ? "No role reaches this group yet." : `${roles} ${roles === 1 ? "role reaches" : "roles reach"} this group.`}</p></Section>}
     </>
   );
 }

@@ -569,7 +569,7 @@ async fn bearer_tokens_are_refused_even_for_reads() {
     let account = platform_store::console_auth::create_service_account(
         &mut client,
         "ci",
-        "admin",
+        &["admin".to_owned()],
         ALICE,
         Utc::now(),
     )

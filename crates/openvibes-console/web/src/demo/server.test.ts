@@ -196,7 +196,7 @@ describe("demo server", () => {
 
   it("creates a service account, issues a token once, and revokes it", async () => {
     const server = createDemoServer({ persona: "admin" });
-    const created = await json(await server.handle("POST", "/api/v1/service-accounts", { name: "Backup job", role_id: "viewer" }));
+    const created = await json(await server.handle("POST", "/api/v1/service-accounts", { name: "Backup job", role_ids: ["viewer"] }));
     const id = String(created.service_account_id);
     const body = { label: "cron", expires_in_hours: 24 };
     expect((await server.handle("POST", `/api/v1/service-accounts/${id}/tokens`, body)).status).toBe(400);
@@ -263,8 +263,8 @@ describe("demo server", () => {
     const id = String(created.asset_group_id);
     expect(created.selectors).toEqual(["role=web"]);
     await server.handle("PUT", `/api/v1/access-control/asset-groups/${id}`, { name: "Web servers", selectors: [{ key: "role", value: "web" }, { key: "env", value: "prod" }] });
-    const inventory = await json(await server.handle("GET", "/api/v1/access-control"));
-    expect((inventory.asset_groups as { asset_group_id: string; name: string }[]).find((g) => g.asset_group_id === id)?.name).toBe("Web servers");
+    const groups = (await (await server.handle("GET", "/api/v1/host-groups")).json()) as { asset_group_id: string; name: string }[];
+    expect(groups.find((g) => g.asset_group_id === id)?.name).toBe("Web servers");
     expect((await server.handle("POST", "/api/v1/access-control/asset-groups", { name: "", selectors: [] })).status).toBe(422);
   });
 

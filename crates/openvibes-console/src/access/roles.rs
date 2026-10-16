@@ -1,6 +1,6 @@
 //! The roles API (spec §4.1–4.4, §13): the permission catalogue, the
 //! templates, and creating, editing and deleting roles. Every write is
-//! checked against the editor's share (`share::fits`).
+//! checked against the editor's share (`editor::within_share`).
 
 use std::collections::BTreeSet;
 
@@ -10,21 +10,20 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use platform_store::console_roles::{self, Principal, Reach, RoleInput, RoleWrite};
+use platform_store::console_roles::{self, Reach, RoleInput, RoleWrite};
 
-use crate::access::auth::{PresentedCredentials, presented_credentials};
+use crate::Permission;
 use crate::access::catalogue::{catalogue_json, def};
+use crate::access::editor::{Editor, caller, role_fits, within_share};
 use crate::access::guard::{authenticated_permission, session_user, unavailable_auth};
-use crate::access::rbac::{ADMIN_ROLE, resolve_capabilities};
+use crate::access::rbac::ADMIN_ROLE;
 use crate::access::roles_types::{ReachInput, RoleView, SaveRole};
-use crate::access::share::{RoleReach, fits, refusal_message};
 use crate::access::templates::templates_json;
 use crate::http::{
     AuthHttpState,
     problem::{FieldError, ProblemDetails, problem_response},
     validate::valid_uuid,
 };
-use crate::{EffectiveCapability, Permission};
 
 /// The permission catalogue: area, column, scope and needs of each.
 #[utoipa::path(get, path = "/api/v1/permissions", tag = "access control",
@@ -230,9 +229,7 @@ pub(crate) async fn delete_role(
 
 /// Edit and delete both need the role as stored to fit inside the
 /// editor's share (§4.4), at `version` when one is given (else 409
-/// `stale_role`). A stored permission id the catalogue does not know is
-/// refused, not ignored, except to an Administrator, who holds everything
-/// and must be able to clean such a role up.
+/// `stale_role`).
 async fn stored_role_fits(
     client: &platform_store::Client,
     editor: &Editor,
@@ -247,49 +244,16 @@ async fn stored_role_fits(
     if version.is_some_and(|version| version != stored.version) {
         return Err(conflict("stale_role", "The role changed since you read it"));
     }
-    let mut permissions = Vec::with_capacity(stored.permissions.len());
-    for id in &stored.permissions {
-        let Some(permission) = Permission::from_id(id) else {
-            if editor.admin {
-                continue;
-            }
-            let mut problem = ProblemDetails::new(StatusCode::FORBIDDEN, "permission_denied", "");
-            problem.title =
-                format!("The role holds a permission this console does not know ({id})");
-            return Err(problem_response(problem));
-        };
-        permissions.push(permission);
-    }
-    within_share(&editor.capabilities, &permissions, &stored.reach).map_err(problem_response)
+    role_fits(editor, &stored).map_err(problem_response)
 }
 
-/// Who is editing: their id, everything they hold, and whether they hold
-/// Administrator.
-struct Editor {
-    actor: String,
-    capabilities: Vec<EffectiveCapability>,
-    admin: bool,
-}
-
-/// The caller, holding `access.roles` (CSRF checked), and everything they
-/// hold: the share every write is checked against.
+/// The caller, holding `access.roles` (CSRF checked).
 async fn editor(state: &AuthHttpState, headers: &HeaderMap) -> Result<Editor, Response> {
-    let (_scope, actor) =
-        authenticated_permission(state, headers, Permission::AccessRoles, true).await?;
-    let principal = match presented_credentials(headers) {
-        Ok(PresentedCredentials::Bearer(_)) => Principal::ServiceAccount(&actor),
-        _ => Principal::User(&actor),
-    };
-    let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
-    // The same grants and test as `rbac::principal_capabilities`.
-    let grants = console_roles::grants(&client, principal)
-        .await
-        .map_err(|_| unavailable_auth())?;
-    Ok(Editor {
-        admin: grants.iter().any(|grant| grant.role_id == ADMIN_ROLE),
-        capabilities: resolve_capabilities(&grants),
-        actor,
-    })
+    let editor = caller(state, headers, true).await?;
+    if let Some(response) = editor.denied(Permission::AccessRoles) {
+        return Err(response);
+    }
+    Ok(editor)
 }
 
 /// A `SaveRole` that passed validation, ready for the store.
@@ -363,29 +327,6 @@ impl Checked {
             reach: &self.reach,
         }
     }
-}
-
-/// 403 with the share message when the role does not fit (§4.4).
-fn within_share(
-    editor: &[EffectiveCapability],
-    permissions: &[Permission],
-    reach: &Reach,
-) -> Result<(), ProblemDetails> {
-    let reach = match reach {
-        Reach::None => RoleReach::None,
-        Reach::All => RoleReach::All,
-        Reach::Groups(groups) => RoleReach::Groups(groups),
-    };
-    fits(editor, permissions, reach).map_err(|refusal| {
-        tracing::info!(
-            permission = refusal.permission.id(),
-            reason = refusal.reason,
-            "role write outside the editor's share"
-        );
-        let mut problem = ProblemDetails::new(StatusCode::FORBIDDEN, "permission_denied", "");
-        problem.title = refusal_message(&refusal);
-        problem
-    })
 }
 
 fn answer(status: StatusCode, written: Result<RoleWrite, platform_store::StoreError>) -> Response {

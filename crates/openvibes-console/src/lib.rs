@@ -36,14 +36,13 @@ pub use access::catalogue::catalogue_json;
 pub use access::rbac::{ADMIN_ROLE, resolve_capabilities};
 pub use access::templates::templates_json;
 pub use access::{
-    AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser,
-    AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput,
-    AgentTagPreviewResponse, ApplyAgentTagsRequest, AssetGroupSelectorInput, AuthenticationLevel,
-    AuthenticationMethod, ChangePasswordRequest, CreateAccessBindingRequest,
-    CreateServiceAccountRequest, CreateServiceTokenRequest, CreateUserRequest, CreatedServiceToken,
-    CreatedUser, EffectiveCapability, LoginRequest, LoginResponse, Permission, PermissionScope,
-    PreauthResponse, SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView,
-    ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse,
+    AccessAssetGroup, AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact,
+    AgentTagInput, AgentTagPreviewResponse, ApplyAgentTagsRequest, AssetGroupSelectorInput,
+    AuthenticationLevel, AuthenticationMethod, ChangePasswordRequest, CreateServiceAccountRequest,
+    CreateServiceTokenRequest, CreateUserRequest, CreatedServiceToken, CreatedUser,
+    EffectiveCapability, LoginRequest, LoginResponse, Permission, PermissionScope, PreauthResponse,
+    SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
+    ServiceTokenView, SessionPrincipal, SessionResponse,
 };
 pub use assistant::{AssistantInternet, AssistantInternetTest, UpdateAssistantInternetRequest};
 pub use audit::{

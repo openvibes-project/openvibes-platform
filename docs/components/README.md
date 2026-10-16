@@ -36,7 +36,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-dashboards` | console module | user dashboards: layouts, sharing by role, home (schema 26) | [console-dashboards.md](console-dashboards.md) |
 | `console-cases` | console module | investigations: items, notes, assignment, closing with evidence; scope-aware visibility (schema 35) | [console-cases.md](console-cases.md) |
 | `count-history` | store module and console endpoint | daily per-host problem counts (schema 44) written by maintenance, served as count history graphs by `/api/v1/metrics/history` | [count-history.md](count-history.md) |
-| `console-rbac` | console module | permission resolution and access-control inventory, role-binding, and asset-group selector APIs | [console-rbac.md](console-rbac.md) |
+| `console-rbac` | console module | permission resolution, the share check, people and role-holder APIs, and asset-group selector APIs | [console-rbac.md](console-rbac.md) |
 | `rule-set-assignment` | store module, console API, distribution and ingest behaviour | per-group switches for the project's assignable rule sets (hardening L1/L2): defaults, overrides, on wins, `410` answers, matches ended when a host stops running a set (schema 49) | [rule-set-assignment.md](rule-set-assignment.md) |
 | `console-about` | console module | About page, platform/component versions, newer-release check | [console-about.md](console-about.md) |
 | `console-build-stamp` | build-script module | sorted frontend inventories and SHA-256 validation | [console-build-stamp.md](console-build-stamp.md) |

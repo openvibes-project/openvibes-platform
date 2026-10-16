@@ -2,7 +2,7 @@
 import { useState } from "react";
 
 import { apiMessage, invalidate, request, useResource } from "../../api/client";
-import type { AccessInventory } from "../../api/types";
+import type { PersonView, Role } from "../../api/types";
 import { nav } from "../../app/nav";
 import { useSession } from "../../app/session";
 import { SelectField } from "../../ui/Field";
@@ -14,44 +14,37 @@ import { toast } from "../../ui/toast";
 
 export function UserPanel({ id }: { id: string }) {
   const { can } = useSession();
-  const inventory = useResource<AccessInventory>("/api/v1/access-control");
+  const person = useResource<PersonView>(`/api/v1/users/${encodeURIComponent(id)}`);
+  const roles = useResource<Role[]>(can("access.read") ? "/api/v1/roles" : null).data ?? [];
   const [role, setRole] = useState("");
-  const [group, setGroup] = useState("");
-  if (inventory.error) return <div className="panel-body"><ErrorBox error={inventory.error} /></div>;
-  const data = inventory.data;
-  const user = data?.users.find((item) => item.user_id === id);
-  if (!data || !user) return inventory.loading ? <Loading /> : <div className="panel-body"><Empty title="User not found" /></div>;
-  const bindings = data.bindings.filter((binding) => binding.user_id === id);
+  if (person.error) return <div className="panel-body"><ErrorBox error={person.error} /></div>;
+  const user = person.data;
+  if (!user) return person.loading ? <Loading /> : <div className="panel-body"><Empty title="User not found" /></div>;
   const manage = can("access.grant", true);
-  const effective = [...new Set(bindings.flatMap((binding) => data.roles.find((r) => r.role_id === binding.role_id)?.permissions ?? []))].sort((a, b) => a.localeCompare(b));
+  const change = (method: "PUT" | "DELETE", roleId: string, done: string) => {
+    request(method, `/api/v1/users/${encodeURIComponent(id)}/roles/${encodeURIComponent(roleId)}`)
+      .then(() => { invalidate("/api/v1/users"); toast(done); }, (e: unknown) => toast(apiMessage(e, "Failed"), true));
+  };
+  const effective = [...new Set(user.access.map((line) => line.permission))].sort((a, b) => a.localeCompare(b));
   return (
     <>
       <PanelHeader icon="user" kind="User" title={user.display_name} subtitle={<span className="mono subtle">{user.username}</span>} />
       <div className="panel-body stack">
         <Section title="Roles">
-          {bindings.length === 0 ? <p className="subtle">No roles: this user can sign in but see nothing.</p> : (
+          {user.roles.length === 0 ? <p className="subtle">No roles: this user can sign in but see nothing.</p> : (
             <ul className="list list--plain">
-              {bindings.map((binding) => (
-                <li key={binding.binding_id} className="list__row list__row--static">
-                  <span className="badge badge--accent badge--plain">{data.roles.find((r) => r.role_id === binding.role_id)?.display_name ?? binding.role_id}</span>
-                  <span className="grow subtle">{binding.asset_group_name ? `on ${binding.asset_group_name}` : "everywhere"}</span>
-                  {manage && <button type="button" className="icon-button" aria-label="Remove role" onClick={() => {
-                    request("DELETE", `/api/v1/access-control/bindings/${encodeURIComponent(binding.binding_id)}`)
-                      .then(() => { invalidate("/api/v1/access-control"); toast("Role removed"); }, (e: unknown) => toast(apiMessage(e, "Failed"), true));
-                  }}><Icon name="close" size={14} /></button>}
+              {user.roles.map((held) => (
+                <li key={held.role_id} className="list__row list__row--static">
+                  <span className="badge badge--accent badge--plain">{held.name}</span>
+                  <span className="grow subtle">{reachLabel(held)}</span>
+                  {manage && <button type="button" className="icon-button" aria-label="Remove role" onClick={() => change("DELETE", held.role_id, "Role removed")}><Icon name="close" size={14} /></button>}
                 </li>
               ))}
             </ul>
           )}
           {manage && (
-            <form className="row" onSubmit={(event) => {
-              event.preventDefault();
-              request("POST", "/api/v1/access-control/bindings", { user_id: id, role_id: role, asset_group_id: group || null })
-                .then(() => { invalidate("/api/v1/access-control"); toast("Role granted"); }, (e: unknown) => toast(apiMessage(e, "Failed"), true));
-            }}>
-              <Select label="Role" value={role} placeholder="Choose a role…" onChange={setRole} options={data.roles.map((r) => ({ value: r.role_id, label: r.display_name }))} />
-              <div className="grow"><Select label="Scope" value={group} onChange={setGroup}
-                options={[{ value: "", label: "Everywhere" }, ...data.asset_groups.map((g) => ({ value: g.asset_group_id, label: g.name }))]} /></div>
+            <form className="row" onSubmit={(event) => { event.preventDefault(); change("PUT", role, "Role granted"); }}>
+              <div className="grow"><Select label="Role" value={role} placeholder="Choose a role…" onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.name }))} /></div>
               <button className="button button--small" type="submit" disabled={!role}><Icon name="plus" size={14} /> Grant</button>
             </form>
           )}
@@ -64,13 +57,20 @@ export function UserPanel({ id }: { id: string }) {
   );
 }
 
-type CreatedUser = { user_id: string; username: string; display_name: string; role_id: string; one_time_password: string };
+/** Where a role's host permissions apply, in words. */
+export function reachLabel(role: Role): string {
+  if (role.reach.kind === "all") return "all hosts";
+  if (role.reach.kind === "groups") return `on ${role.reach.groups.map((g) => g.name).join(", ")}`;
+  return "no hosts";
+}
+
+type CreatedUser = { user_id: string; username: string; display_name: string; role_ids: string[]; one_time_password: string };
 
 /** A local user with a one-time password, shown once; they set their own at first sign-in (#85). */
 export function NewUser() {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const roles = useResource<AccessInventory>("/api/v1/access-control").data?.roles ?? [];
+  const roles = useResource<Role[]>("/api/v1/roles").data ?? [];
   // No default role: least privilege is a deliberate choice.
   const [role, setRole] = useState("");
   const [error, setError] = useState<string>();
@@ -79,7 +79,7 @@ export function NewUser() {
   if (created) {
     return (
       <>
-        <PanelHeader icon="user" kind="User" title={created.display_name} subtitle={`${created.username} · ${roles.find((r) => r.role_id === created.role_id)?.display_name ?? created.role_id}`} />
+        <PanelHeader icon="user" kind="User" title={created.display_name} subtitle={`${created.username} · ${created.role_ids.map((rid) => roles.find((r) => r.role_id === rid)?.name ?? rid).join(", ")}`} />
         <div className="panel-body stack">
           <div className="callout callout--warn"><Icon name="alert" size={16} /> Copy the one-time password now. It is shown only once.</div>
           <div className="secret"><span className="grow">{created.one_time_password}</span>
@@ -99,13 +99,13 @@ export function NewUser() {
         if (busy) return;
         setBusy(true);
         setError(undefined);
-        request<CreatedUser>("POST", "/api/v1/access-control/users", { username: username.trim(), display_name: displayName.trim(), role_id: role })
-          .then((user) => { invalidate("/api/v1/access-control"); setCreated(user); }, (e: unknown) => setError(apiMessage(e, "Could not create the user")))
+        request<CreatedUser>("POST", "/api/v1/users", { username: username.trim(), display_name: displayName.trim(), role_ids: [role] })
+          .then((user) => { invalidate("/api/v1/users"); setCreated(user); }, (e: unknown) => setError(apiMessage(e, "Could not create the user")))
           .finally(() => setBusy(false));
       }}>
         <label className="field">Username<input className="input mono" required maxLength={64} pattern="[A-Za-z0-9._@+\-]+" autoComplete="off" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. jdoe" /></label>
         <label className="field">Display name<input className="input" required maxLength={160} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="e.g. Jane Doe" /></label>
-        <SelectField label="Role"><Select label="Role" value={role} placeholder="Choose a role…" onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.display_name }))} /></SelectField>
+        <SelectField label="Role"><Select label="Role" value={role} placeholder="Choose a role…" onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.name }))} /></SelectField>
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div><button className="button button--primary" type="submit" disabled={busy || !role}><Icon name="plus" size={15} /> {busy ? "Creating…" : "Create user"}</button></div>
       </form>

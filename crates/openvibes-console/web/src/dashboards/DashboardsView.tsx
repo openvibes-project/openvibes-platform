@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { apiMessage, invalidate, request, useResource } from "../api/client";
-import type { AccessInventory, AgentSummary, Dashboard, DashboardPage, HomeDashboard } from "../api/types";
+import type { AgentSummary, Dashboard, DashboardPage, HomeDashboard, Role } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { Empty, ErrorBox, Loading } from "../ui/bits";
@@ -102,7 +102,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
   const agents = useResource<AgentSummary>(builtin && can("hosts.read") ? "/api/v1/agents/summary" : null);
   const [menu, setMenu] = useState(false);
   // The roles to share with, fetched when the menu opens.
-  const roles = useResource<AccessInventory>(menu && can("dashboards.share", true) ? "/api/v1/access-control" : null).data?.roles ?? [];
+  const roles = useResource<Role[]>(menu && can("dashboards.share", true) ? "/api/v1/roles" : null).data ?? [];
   const id = builtin ? null : dashboard?.dashboard_id ?? null;
   // Unknown until loaded, so the pin never flickers "pressed" on the built-in.
   const isHome = home.data !== undefined && (home.data.dashboard_id ?? null) === id;
@@ -182,7 +182,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                       <div className="section-title">Share with role</div>
                       {[null, ...roles.map((r) => r.role_id)].map((role) => (
                         <button key={role ?? "none"} type="button" role="menuitemradio" aria-checked={(dashboard?.shared_role_id ?? null) === role} className="menu__item"
-                          onClick={() => void share(role).catch(fail)}>{(dashboard?.shared_role_id ?? null) === role ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />} {role === null ? "Not shared" : roles.find((r) => r.role_id === role)?.display_name ?? role}</button>
+                          onClick={() => void share(role).catch(fail)}>{(dashboard?.shared_role_id ?? null) === role ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />} {role === null ? "Not shared" : roles.find((r) => r.role_id === role)?.name ?? role}</button>
                       ))}
                     </div>
                   )}

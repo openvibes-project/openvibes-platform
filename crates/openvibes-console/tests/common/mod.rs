@@ -3,6 +3,7 @@
 #![allow(dead_code, reason = "each test binary uses some of these")]
 
 pub mod http;
+pub mod people;
 
 use chrono::Utc;
 use platform_store::{

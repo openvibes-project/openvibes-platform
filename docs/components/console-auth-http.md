@@ -39,9 +39,12 @@ permission-checked read models, enrollment-token management, and audit routes.
   `GET /api/v1/enrollment-tokens/{token_id}` returns one secret-free record.
   `POST /api/v1/enrollment-tokens/{token_id}/revoke` requires `tokens.manage`
   and audits the revocation. These responses are `Cache-Control: no-store`.
-- `/api/v1/service-accounts` lists safe account metadata and creates an account
-  holding one role (an unknown role id is 400 `unknown_role`; so is one
-  given to `POST /api/v1/access-control/users`). Per-account token routes list metadata, issue
+- `/api/v1/service-accounts` lists safe account metadata (filtered to the
+  caller's share for non-administrators) and creates an account holding
+  `role_ids` (1–64, each inside the creator's share; an unknown role id is
+  400 `unknown_role`, as for `POST /api/v1/users`).
+  `PUT`/`DELETE /api/v1/service-accounts/{id}/roles/{role}` give or take a
+  role (`access.grant` and the share). Per-account token routes list metadata, issue
   an expiring `ovc_` bearer secret once, revoke a token, or disable the account
   (which also revokes all its tokens). Token issue requires an
   `Idempotency-Key`; a matching retry returns metadata without the original
@@ -79,11 +82,29 @@ caller. Handlers still check their own permission, scope and CSRF.
 `tests/auth_first_http.rs` sends a malformed body to every `/api` route
 in the OpenAPI document, with no session and with a forced-change one.
 
+### People (spec §9.1, §13)
+
+| Route | Needs | Answer |
+|---|---|---|
+| `GET /api/v1/users` | `access.read` | `[PersonRow]`, only people inside the share for non-administrators |
+| `GET /api/v1/users/{id}` | `access.read` and the share, or one's own | `PersonView`: details, roles, access lines (`applies` all, groups or platform, `from_role`), the newest 10 actions |
+| `POST /api/v1/users` | `access.users`, roles inside the share | 201 `CreatedUser` with a one-time password |
+| `PATCH /api/v1/users/{id}` | one's own, or `access.users` and the share | 204; 422 `invalid_email`/`invalid_user`; `user.updated` |
+| `POST /api/v1/users/{id}/disable`, `/enable` | `access.users` and the share; never oneself | 204; 409 `last_administrator` |
+| `POST /api/v1/users/{id}/reset-password` | `access.users` and the share | `{one_time_password}` (`no-store`); sets `password_must_change`, ends their sessions, `user.password_reset` |
+| `PUT`/`DELETE /api/v1/users/{id}/roles/{role}` | `access.grant`, the whole role inside the share; never one's own | 204 (idempotent); 409 `last_administrator` |
+| `GET /api/v1/host-groups` | `access.read` or `host_groups.manage` | `[{asset_group_id, name, selectors, roles}]` |
+
+People routes take browser sessions only (bearer tokens get 403). Someone
+outside the editor's share answers 404, exactly like someone who does not
+exist. Tests: `tests/people_http.rs` and `tests/people_share_http.rs` (fixture in `tests/common/people.rs`).
+
 ### Users and passwords (#85)
 
-- `POST /api/v1/access-control/users` (`access.users`, global binding, CSRF):
-  username (the CLI's rule, stored lowercase), display name and a built-in
-  role (a create that loses a race on the same name is 409, not 503). The
+- `POST /api/v1/users` (`access.users`, CSRF): username (the CLI's rule,
+  stored lowercase), display name, optional email and `role_ids` (1–64,
+  each inside the creator's share, else 403); a create that loses a race on
+  the same name is 409, not 503. The
   answer (201, `no-store`) carries a generated one-time password
   (20 symbols from an unambiguous alphabet, about 99 bits), shown only
   there. 409 when the username is taken. Audited as `user.created` with

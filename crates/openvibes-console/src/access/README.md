@@ -1,6 +1,6 @@
 # src/access
 
-Who may do what in the console: sign-in and the session, the checks every area's handlers run, roles, users, service accounts, role bindings, asset groups and host tags.
+Who may do what in the console: sign-in and the session, the checks every area's handlers run, roles, people and their roles, service accounts, host groups and host tags.
 
 | File | What it does |
 |---|---|
@@ -13,20 +13,23 @@ Who may do what in the console: sign-in and the session, the checks every area's
 | `permission.rs` | `Permission`, the 48 stable permission identifiers, and `PermissionScope`. |
 | `catalogue.rs` | The permission catalogue: area, console text, column, scope and needs of each permission; `with_needs`. |
 | `templates.rs` | The six role templates and their permissions. |
-| `users.rs` | Console users and setting one's own password. |
+| `users.rs` | Setting one's own password, and the one-time password generator. |
+| `people.rs` | The People API: list, a person's page, add and edit details, filtered to the editor's share; shared lookups and answers. |
+| `people_admin.rs` | Disable, enable and reset password for a person inside the editor's share. |
+| `people_roles.rs` | Giving and removing roles for people and service accounts. |
+| `people_types.rs` | Request and response types of the People API and the host-group list. |
+| `editor.rs` | Who is changing access (`caller`), and the share checks on whole stored roles (`role_fits`, `roles_fit`, `within_share`). |
 | `session.rs` | The browser session read. |
 | `login.rs` | Sign-in: the pre-login challenge, login and logout. |
 | `throttle.rs` | Sign-in throttle buckets and failure limits, per account and per source address. |
-| `service_accounts.rs` | Service accounts: list, create, disable. |
+| `service_accounts.rs` | Service accounts: list (filtered to the share), create, disable. |
 | `service_tokens.rs` | Service-account tokens: list, create, revoke. |
-| `roles.rs` | The roles API: the catalogue, templates, and role list, read, create, edit and delete, each write checked by `share.rs`. |
+| `roles.rs` | The roles API: the catalogue, templates, and role list, read, create, edit and delete, each write checked against the editor's share. |
 | `roles_types.rs` | Request and response types of the roles API. |
 | `share.rs` | The share check: a role fits only inside the editor's own permissions and reach (spec §4.4). |
-| `bindings.rs` | Role bindings: create and revoke. |
-| `asset_groups.rs` | Asset groups: create and update. |
+| `asset_groups.rs` | Host (asset) groups: list (`GET /v1/host-groups`), create and update. |
 | `tags.rs` | Host tags: preview and apply. |
-| `inventory.rs` | The access inventory: users, roles, bindings and asset groups. |
 | `session_types.rs` | Request and response types of sign-in, the session and users. |
-| `grant_types.rs` | Request and response types of the access inventory, bindings, asset groups, host tags and service accounts. |
+| `grant_types.rs` | Request and response types of asset groups, host tags and service accounts. |
 
 More: [docs/components/openvibes-console.md](../../../../docs/components/openvibes-console.md)

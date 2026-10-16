@@ -7,9 +7,9 @@ use chrono::Utc;
 use platform_store::{
     Client,
     console_auth::{
-        AuditContext, BindingRevocation, DisableOutcome, NewLocalUser, create_local_user,
-        create_user_role_binding, disable_local_user, revoke_user_role_binding,
+        AuditContext, DisableOutcome, NewLocalUser, create_local_user, disable_local_user,
     },
+    console_people::{BindingRevocation, RoleGift, give_role, remove_role},
     console_roles::{
         Principal, Reach, RoleInput, RoleWrite, StoredRole, create_role, delete_role, grants, role,
         update_role,
@@ -201,10 +201,12 @@ async fn grants_are_one_query_per_principal() {
     );
     assert_eq!(a.group_names, [(G_LAB.to_owned(), "Lab".to_owned())]);
     person(&mut client, ANA, "ana", &a.role_id).await;
-    create_user_role_binding(&mut client, ANA, &b.role_id, "t", now)
-        .await
-        .unwrap()
-        .unwrap();
+    assert_eq!(
+        give_role(&mut client, Principal::User(ANA), &b.role_id, "t", now)
+            .await
+            .unwrap(),
+        RoleGift::Given
+    );
     let mut held = grants(&client, Principal::User(ANA)).await.unwrap();
     held.sort_by(|x, y| x.role_id.cmp(&y.role_id));
     let mut expected = vec![
@@ -221,7 +223,7 @@ async fn grants_are_one_query_per_principal() {
     let sa = platform_store::console_auth::create_service_account(
         &mut client,
         "ci",
-        &a.role_id,
+        std::slice::from_ref(&a.role_id),
         "t",
         now,
     )
@@ -241,17 +243,9 @@ async fn the_last_enabled_administrator_cannot_be_removed_or_disabled() {
     let (db, mut client) = common::migrated().await;
     let now = Utc::now();
     person(&mut client, ADM, "adm", "admin").await;
-    let binding: String = client
-        .query_one(
-            "SELECT binding_id::text FROM console_role_bindings WHERE user_id = $1::text::uuid",
-            &[&ADM],
-        )
-        .await
-        .unwrap()
-        .get(0);
     let audit = AuditContext::default();
     assert_eq!(
-        revoke_user_role_binding(&mut client, &binding, "t", now)
+        remove_role(&mut client, Principal::User(ADM), "admin", "t", now)
             .await
             .unwrap(),
         BindingRevocation::LastAdministrator

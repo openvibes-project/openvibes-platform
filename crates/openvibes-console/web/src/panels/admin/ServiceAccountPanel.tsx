@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 
 import { apiMessage, invalidate, request, useResource } from "../../api/client";
-import type { AccessInventory, ServiceAccount, ServiceToken } from "../../api/types";
+import type { Role, ServiceAccount, ServiceToken } from "../../api/types";
 import { nav } from "../../app/nav";
 import { useSession } from "../../app/session";
 import { SelectField } from "../../ui/Field";
@@ -67,7 +67,7 @@ function ExistingServiceAccount({ id }: { id: string }) {
 
 function NewServiceAccount() {
   const [name, setName] = useState("");
-  const roles = useResource<AccessInventory>("/api/v1/access-control").data?.roles ?? [];
+  const roles = useResource<Role[]>("/api/v1/roles").data ?? [];
   // No default role: least privilege is a deliberate choice.
   const [role, setRole] = useState("");
   const [error, setError] = useState<string>();
@@ -77,12 +77,12 @@ function NewServiceAccount() {
       <form className="panel-body stack" onSubmit={(event) => {
         event.preventDefault();
         setError(undefined);
-        request<{ service_account_id: string }>("POST", "/api/v1/service-accounts", { name: name.trim(), role_id: role })
+        request<{ service_account_id: string }>("POST", "/api/v1/service-accounts", { name: name.trim(), role_ids: [role] })
           .then((account) => { invalidate("/api/v1/service-accounts"); toast(`${name.trim()} created`); nav.open({ kind: "service-account", id: account.service_account_id }, true); },
             (e: unknown) => setError(apiMessage(e, "Could not create the account")));
       }}>
         <label className="field">Name<input className="input" required maxLength={128} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. SIEM export" /></label>
-        <SelectField label="Role"><Select label="Role" value={role} placeholder="Choose a role…" onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.display_name }))} /></SelectField>
+        <SelectField label="Role"><Select label="Role" value={role} placeholder="Choose a role…" onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.name }))} /></SelectField>
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div><button className="button button--primary" type="submit" disabled={!role}><Icon name="plus" size={15} /> Create account</button></div>
       </form>

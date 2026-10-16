@@ -76,17 +76,19 @@ list) `cases.assign`; enrollment tokens `tokens.manage`, the agent installer
 host groups and host tags `host_groups.manage`; service accounts
 `service_accounts.manage`, their tokens `service_accounts.tokens`.
 
-The
-global-permission `GET /api/v1/access-control` view returns role permissions,
-active local-user bindings, enabled user options, and exact asset-group
-selectors. Viewing it emits `access_control.viewed`. Global `access.grant`
-users can create or revoke local-user bindings through POST/DELETE under
-`/api/v1/access-control/bindings`; both require exact Origin, same-origin
-Fetch Metadata, and the current session CSRF token. Binding changes and their
-audit rows commit atomically. Revoke prevents removal of the final enabled
-Administrator binding under a transaction advisory lock. The Access page exposes these
-controls only when the current session has global `access.grant`
-(New user: `access.users`). SQL still
+People (spec §4.4, §9.1; `access/people.rs`, `people_roles.rs`): `GET
+/api/v1/users` (`access.read`) and `GET /api/v1/users/{id}` (`access.read`,
+or one's own page) return, to an editor without Administrator, only people
+whose roles all fit inside the editor's share (`editor::roles_fit`, built
+on `share::all_fit`); anyone else answers 404 exactly like someone who does
+not exist. The Service accounts list is filtered the same way. Giving or
+removing a role (`PUT`/`DELETE /api/v1/users/{id}/roles/{role}` and the
+service-account equivalent) needs `access.grant` and the whole role inside
+the editor's share; nobody changes their own roles, and nobody disables
+themself. These routes take browser sessions only (CSRF on writes); a
+session that must still set its password is refused. The last enabled
+Administrator is kept by the store under the access-binding advisory lock
+(409 `last_administrator`). SQL still
 enforces resolved asset scope before any filtering, aggregation, pagination,
 or facet calculation.
 
