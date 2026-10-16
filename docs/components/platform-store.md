@@ -859,6 +859,8 @@ group); the console role reads and writes them. Behaviour, grants and tests:
 
 ## Custom roles (`console_roles::…`, schema 52)
 
+Migration 51 renames the permissions to the catalogue of 48 (see
+console-rbac.md); 51 and 52 both start with the needs-backup marker.
 Roles carry a host reach (all hosts, some asset groups in
 `console_role_groups`, or none), a description and a version; names are
 unique regardless of case. Role bindings lose `asset_group_id`: migration 52

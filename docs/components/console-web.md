@@ -34,7 +34,7 @@ Show everything, without page changes for details:
   - agents, with tags and revocation;
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
-  - access: roles, bindings and asset groups;
+  - settings: people, roles and host groups;
   - service accounts, with tokens issued once;
   - audit log, with ranges, CSV export and retention.
 - **Host hardening** (`panels/hosts/HostHardening.tsx`): the host panel's Hardening
@@ -408,9 +408,11 @@ triage on alarms and findings stays as it is.
 ## Interfaces
 
 - **Entry:** `web/index.html` → `src/main.tsx` → `shell/App.tsx`.
-- **Browser routes:** every view's path, `/login` and
-  `/dashboards/{dashboard_id}`, listed in `web/frontend-contract.json` for
-  the server's router; `app/frontendContract.test.ts` keeps the two in step.
+- **Browser routes:** every view's path, `/login`,
+  `/dashboards/{dashboard_id}`, `/settings/roles/{role_id}` and
+  `/settings/people/{user_id}`, listed in `web/frontend-contract.json` for
+  the server's router; `app/frontendContract.test.ts` keeps the two in step
+  (a page missing there loads in the app but is a 404 on reload or a link).
 - **`app/registry.tsx`:** declares every view (path, icon, group, required
   permissions, shortcut) and object kind (panel). A new module is one entry
   in each.
@@ -513,6 +515,8 @@ triage on alarms and findings stays as it is.
     Add role and New person offer only roles inside the viewer's share
     (`fitsShare`/`outsideShare` in `people/people.ts`, the client copy of
     `access/share.rs`, which the demo server uses too); the server decides.
+    `fitsShare` skips `assistant.use`, which the session leaves out while
+    no assistant is set up.
   - **Failure behaviour:** a refused change shows above the columns; a 409
     `last_administrator` reads "This is the last Administrator. Give
     someone else the Administrator role first." A person outside the
@@ -524,7 +528,10 @@ triage on alarms and findings stays as it is.
     fetch, the 409 message, no Disable on your own page); the demo e2e
     creates a person with a one-time password (`smoke.spec.ts`), and
     `people.spec.ts` gives and removes a role on one group ("Only on
-    WindowsServers", with axe) and checks your own page.
+    WindowsServers", with axe) and checks your own page. The live e2e
+    (`e2e/live/console.spec.ts`) runs two teams against the real server:
+    each sees only its hosts, and a team lead gives only roles inside
+    their access (see console-rbac.md, Live check).
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
   after mutations, and the `useResource`/`useAllPages` hooks. Live requests

@@ -7,8 +7,8 @@ tokens, and CSRF values stay in the console process.
 
 ## Interface
 
-- `create_local_user` inserts a local user, Argon2id PHC credential, global
-  role binding, and audit event in one transaction.
+- `create_local_user` inserts a local user, Argon2id PHC credential, role
+  binding, and audit event in one transaction.
 - `credential_by_username` returns the PHC string and account generation,
   including disabled accounts so the caller can keep password-failure work
   indistinguishable.

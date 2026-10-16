@@ -16,7 +16,8 @@ host groups, or none).
   permission applies on the union of the reaches of the roles holding it;
   reach all dominates, reach none grants it nowhere. Group ids are
   de-duplicated and sorted. Stored ids the catalogue does not know are
-  ignored.
+  ignored. A group reach never covers imported hosts (`agents.status =
+  'imported'`, from export files): only a role reaching all hosts sees them.
 - **Administrator** (`ADMIN_ROLE`, `admin`) holds all 48 permissions
   globally, whatever its stored rows say.
 - Creating a user or a service account checks the role id in the database;
@@ -98,9 +99,9 @@ through POST/PUT under `/api/v1/access-control/asset-groups`. Selector keys are
 unique within a group and key/value lengths follow the schema limits. Changes
 require the same Origin, Fetch Metadata, and CSRF checks, and their selector
 data and audit detail commit in one transaction. Selector writes serialize
-with agent tag changes. The Access page provides create/edit forms; editing
-requires explicit confirmation because it can change membership and scoped
-visibility.
+with agent tag changes. Settings › Host groups provides the create/edit forms; editing
+requires explicit confirmation because it can change membership and what
+the roles reaching the group see.
 
 Run `cargo test -p openvibes-console --lib access::`,
 `cargo test -p platform-store --test permission_catalogue` and
@@ -117,4 +118,12 @@ role reaching one group, as migration 52 does).
 
 ## Share check
 
-`access/share.rs` (pure) decides whether a role (permissions plus reach) fits inside an editor's own capabilities: every permission must be held, and host permissions must cover the role's reach (reaches from several held roles combine; platform permissions ignore reach). Refusals name the permission in console words. The roles API (`access/roles.rs`) calls it on every create, edit and delete, with the capabilities of whoever made the request; the people and service-account handlers will too.
+`access/share.rs` (pure) decides whether a role (permissions plus reach) fits inside an editor's own capabilities: every permission must be held, and host permissions must cover the role's reach (reaches from several held roles combine; platform permissions ignore reach). Refusals name the permission in console words. The roles API (`access/roles.rs`) calls it on every create, edit and delete, and the people and service-account handlers on every role given, removed or set at creation, always with the capabilities of whoever made the request, read unfiltered from the database (`editor::caller`). The session's list (`GET /api/v1/session`) leaves out `assistant.use` while no assistant is set up, so the web's copy of the check (`fitsShare`) does not judge that permission; the server still does.
+
+## Upgrading
+
+Existing roles are kept: migrations 51 and 52 (both are marked as needing a backup) rename the permissions and turn each holder's scoped grants of one role into a role of its own, such as "Operator (Lab)", reaching those groups, so nobody gains or loses access (`platform-store/tests/custom_roles.rs` compares access before and after).
+
+## Live check
+
+`scripts/test-console-e2e.sh` (real console, throwaway database) runs the two-team journey of spec §15: an Administrator makes "Linux team" and "Windows team" from the Analyst template, each on a host group made through the asset-group API (`scripts/console-e2e-server.sh` seeds two enrolled hosts tagged `os=linux` and two `os=windows`); each person sees only their two hosts in Hosts and Compliance and has no Roles tab; with a Team lead role on Linux (plus `access.users`) the Linux person adds someone with "Linux team", is not offered "Windows team", and the API refuses it with "You can only give roles that fit inside your own access (… is outside it)".

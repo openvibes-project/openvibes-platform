@@ -15,7 +15,9 @@ permission-checked read models, enrollment-token management, and audit routes.
 - `GET /api/v1/session` accepts exactly one valid `__Host-openvibes-session`
   cookie, rejects bearer or conflicting credentials, checks session and CSRF
   digests in constant time, touches the bounded idle expiry, and resolves active
-  role bindings on each request.
+  role bindings on each request. Its `capabilities` leave out `assistant.use`
+  while no assistant is set up (the web hides the assistant by it); permission
+  and share checks read the unfiltered set.
 - `GET /auth/v1/preauth` stores a five-minute, one-use hash-only challenge and
   returns its CSRF token with separate HttpOnly pre-auth and browser-binding
   cookies. It sets no cookies if persistence fails. The in-memory secret
