@@ -6,11 +6,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use platform_store::{console_auth, console_roles::Principal};
+use platform_store::console_auth;
 
-use crate::access::auth::{PresentedCredentials, presented_credentials};
-use crate::access::editor::{caller, principal_editor, role_fits, roles_fit};
+use crate::access::editor::{authenticated_editor, caller, role_fits, roles_fit};
 use crate::access::people::{all_roles, held};
+use crate::access::people_roles::account_in_share;
 use crate::http::headers::no_store;
 use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
@@ -54,12 +54,8 @@ pub(crate) async fn authenticated_service_accounts(
         Err(_) => return unavailable_auth(),
     };
     // Only accounts whose roles all fit inside the caller's share (§4.4).
-    let principal = match presented_credentials(&headers) {
-        Ok(PresentedCredentials::Bearer(_)) => Principal::ServiceAccount(&actor),
-        _ => Principal::User(&actor),
-    };
     let (Ok(editor), Ok(roles)) = (
-        principal_editor(&client, principal).await,
+        authenticated_editor(&client, &headers, &actor).await,
         all_roles(&client).await,
     ) else {
         return unavailable_auth();
@@ -108,6 +104,15 @@ pub(crate) async fn create_authenticated_service_account(
     headers: HeaderMap,
     Json(request): Json<crate::CreateServiceAccountRequest>,
 ) -> Response {
+    // Authentication, CSRF and permission first: nothing about the body is
+    // answered to a caller who may not make the request.
+    let editor = match caller(&state, &headers, true).await {
+        Ok(editor) => editor,
+        Err(response) => return response,
+    };
+    if let Some(response) = editor.denied(crate::Permission::ServiceAccountsManage) {
+        return response;
+    }
     let name = request.name.trim();
     let mut role_ids = request.role_ids.clone();
     role_ids.sort();
@@ -123,13 +128,6 @@ pub(crate) async fn create_authenticated_service_account(
             "invalid_service_account",
             "Provide a valid name and 1 to 64 roles",
         ));
-    }
-    let editor = match caller(&state, &headers, true).await {
-        Ok(editor) => editor,
-        Err(response) => return response,
-    };
-    if let Some(response) = editor.denied(crate::Permission::ServiceAccountsManage) {
-        return response;
     }
     let mut client = match state.pool.get().await {
         Ok(value) => value,
@@ -208,6 +206,12 @@ pub(crate) async fn disable_authenticated_service_account(
             "Access is not available",
         ));
     }
+    // An account outside the caller's share is answered as missing (§4.4).
+    let service_account_id =
+        match account_in_share(&state, &headers, &actor, &service_account_id).await {
+            Ok(id) => id,
+            Err(response) => return response,
+        };
     let mut client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),

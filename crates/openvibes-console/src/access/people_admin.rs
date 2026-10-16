@@ -20,7 +20,11 @@ use crate::access::guard::unavailable_auth;
 use crate::access::people::{forbidden, last_administrator, user_not_found, visible_person};
 use crate::access::people_types::OneTimePassword;
 use crate::access::users::one_time_credentials;
-use crate::http::{AuthHttpState, headers::no_store, problem::ProblemDetails};
+use crate::http::{
+    AuthHttpState,
+    headers::no_store,
+    problem::{ProblemDetails, problem_response},
+};
 
 /// Disables a person and ends their sessions; never yourself, never the
 /// last Administrator.
@@ -88,7 +92,7 @@ pub(crate) async fn enable_person(
 #[utoipa::path(post, path = "/api/v1/users/{user_id}/reset-password", tag = "access control",
     params(("user_id" = String, Path)),
     responses((status = 200, description = "The one-time password", body = OneTimePassword),
-        (status = 403, description = "Needs access.users", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Needs access.users; use_change_password for yourself", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 404, description = "No such person inside your access", body = ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn reset_password(
     State(state): State<AuthHttpState>,
@@ -99,6 +103,15 @@ pub(crate) async fn reset_password(
         Ok(found) => found,
         Err(response) => return response,
     };
+    // Your own password changes with the current one (POST
+    // /api/v1/session/password), never by reset.
+    if person.user_id == editor.actor {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "use_change_password",
+            "Use Change password for your own account",
+        ));
+    }
     let (password, phc) = match one_time_credentials(&state).await {
         Ok(credentials) => credentials,
         Err(response) => return response,

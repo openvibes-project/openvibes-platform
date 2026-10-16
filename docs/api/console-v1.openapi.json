@@ -7876,7 +7876,7 @@
             }
           },
           "403": {
-            "description": "Needs access.users",
+            "description": "Needs access.users; use_change_password for yourself",
             "content": {
               "application/problem+json": {
                 "schema": {

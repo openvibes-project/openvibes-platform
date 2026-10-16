@@ -187,6 +187,7 @@ pub async fn sign_in(router: &axum::Router, username: &str) -> Session {
         "/api/v1/session",
         &(cookie.clone(), String::new()),
         None,
+        &[],
     )
     .await;
     let csrf = body(session).await["csrf_token"]
@@ -205,7 +206,19 @@ pub async fn call(
     who: &Session,
     json: Option<Value>,
 ) -> (StatusCode, Value) {
-    let response = send(router, method, uri, who, json).await;
+    call_with(router, method, uri, who, json, &[]).await
+}
+
+/// [`call`] with extra request headers.
+pub async fn call_with(
+    router: &axum::Router,
+    method: &str,
+    uri: &str,
+    who: &Session,
+    json: Option<Value>,
+    extra: &[(&str, &str)],
+) -> (StatusCode, Value) {
+    let response = send(router, method, uri, who, json, extra).await;
     (response.status(), body(response).await)
 }
 
@@ -215,8 +228,9 @@ async fn send(
     uri: &str,
     (cookie, csrf): &Session,
     json: Option<Value>,
+    extra: &[(&str, &str)],
 ) -> axum::response::Response {
-    let request = Request::builder()
+    let mut request = Request::builder()
         .method(method)
         .uri(uri)
         .header(header::COOKIE, cookie)
@@ -224,6 +238,9 @@ async fn send(
         .header("sec-fetch-site", "same-origin")
         .header("x-csrf-token", csrf)
         .header(header::CONTENT_TYPE, "application/json");
+    for (name, value) in extra {
+        request = request.header(*name, *value);
+    }
     router
         .clone()
         .oneshot(

@@ -44,7 +44,11 @@ permission-checked read models, enrollment-token management, and audit routes.
   `role_ids` (1–64, each inside the creator's share; an unknown role id is
   400 `unknown_role`, as for `POST /api/v1/users`).
   `PUT`/`DELETE /api/v1/service-accounts/{id}/roles/{role}` give or take a
-  role (`access.grant` and the share). Per-account token routes list metadata, issue
+  role (`access.grant` and the share). The token list, issue and revoke
+  routes and disable also need the account inside the caller's share
+  (`people_roles::account_in_share`); an account outside it answers 404
+  `service_account_not_found`, like one that does not exist, so nobody
+  mints a token for an account holding more than they do. Per-account token routes list metadata, issue
   an expiring `ovc_` bearer secret once, revoke a token, or disable the account
   (which also revokes all its tokens). Token issue requires an
   `Idempotency-Key`; a matching retry returns metadata without the original
@@ -91,7 +95,7 @@ in the OpenAPI document, with no session and with a forced-change one.
 | `POST /api/v1/users` | `access.users`, roles inside the share | 201 `CreatedUser` with a one-time password |
 | `PATCH /api/v1/users/{id}` | one's own, or `access.users` and the share | 204; 422 `invalid_email`/`invalid_user`; `user.updated` |
 | `POST /api/v1/users/{id}/disable`, `/enable` | `access.users` and the share; never oneself | 204; 409 `last_administrator` |
-| `POST /api/v1/users/{id}/reset-password` | `access.users` and the share | `{one_time_password}` (`no-store`); sets `password_must_change`, ends their sessions, `user.password_reset` |
+| `POST /api/v1/users/{id}/reset-password` | `access.users` and the share; never oneself (403 `use_change_password`) | `{one_time_password}` (`no-store`); sets `password_must_change`, ends their sessions, `user.password_reset` |
 | `PUT`/`DELETE /api/v1/users/{id}/roles/{role}` | `access.grant`, the whole role inside the share; never one's own | 204 (idempotent); 409 `last_administrator` |
 | `GET /api/v1/host-groups` | `access.read` or `host_groups.manage` | `[{asset_group_id, name, selectors, roles}]` |
 

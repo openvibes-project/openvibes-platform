@@ -10630,7 +10630,7 @@ export interface operations {
                     "application/json": components["schemas"]["OneTimePassword"];
                 };
             };
-            /** @description Needs access.users */
+            /** @description Needs access.users; use_change_password for yourself */
             403: {
                 headers: {
                     [name: string]: unknown;

@@ -16,7 +16,7 @@ use platform_store::{
 };
 
 use crate::Permission;
-use crate::access::editor::{Editor, caller, role_fits, roles_fit};
+use crate::access::editor::{Editor, authenticated_editor, caller, role_fits, roles_fit};
 use crate::access::guard::unavailable_auth;
 use crate::access::people::{
     all_roles, forbidden, held, last_administrator, user_not_found, visible_person,
@@ -140,6 +140,9 @@ async fn change(
         }
         Err(_) => return unavailable_auth(),
     };
+    // ponytail: the share is decided before, not inside, the store's
+    // transaction; a concurrent role edit in between is not seen (the last
+    // Administrator is still guarded inside it).
     if let Err(problem) = role_fits(&editor, &role) {
         return problem_response(problem);
     }
@@ -167,10 +170,15 @@ async fn change(
 }
 
 /// The service account's id when it exists and all its roles fit inside
-/// the editor's share.
+/// the editor's share; otherwise 404 `service_account_not_found`, the same
+/// for an account outside the share as for one that does not exist.
 // ponytail: reads the whole (small) account list; add a one-account read
 // if there are ever thousands.
-async fn visible_account(client: &Client, editor: &Editor, id: &str) -> Result<String, Response> {
+pub(crate) async fn visible_account(
+    client: &Client,
+    editor: &Editor,
+    id: &str,
+) -> Result<String, Response> {
     let not_found = || {
         problem_response(ProblemDetails::not_found(
             "service_account_not_found",
@@ -192,4 +200,21 @@ async fn visible_account(client: &Client, editor: &Editor, id: &str) -> Result<S
         return Err(not_found());
     }
     Ok(account.service_account_id)
+}
+
+/// For the token and disable routes: the account `id` when it is inside the
+/// share of the caller `authenticated_permission` let in as `actor`.
+// ponytail: the share is decided before, not inside, the store's
+// transaction; a concurrent role change in between is not seen.
+pub(crate) async fn account_in_share(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+    actor: &str,
+    id: &str,
+) -> Result<String, Response> {
+    let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
+    let editor = authenticated_editor(&client, headers, actor)
+        .await
+        .map_err(|_| unavailable_auth())?;
+    visible_account(&client, &editor, id).await
 }

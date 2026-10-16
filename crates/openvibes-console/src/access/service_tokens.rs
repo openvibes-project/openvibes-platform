@@ -8,6 +8,7 @@ use axum::{
 use chrono::Utc;
 use platform_store::console_auth;
 
+use crate::access::people_roles::account_in_share;
 use crate::http::headers::no_store;
 use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
@@ -43,6 +44,12 @@ pub(crate) async fn authenticated_service_tokens(
             "Access is not available",
         ));
     }
+    // An account outside the caller's share is answered as missing (§4.4).
+    let service_account_id =
+        match account_in_share(&state, &headers, &actor, &service_account_id).await {
+            Ok(id) => id,
+            Err(response) => return response,
+        };
     let client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),
@@ -160,6 +167,12 @@ pub(crate) async fn create_authenticated_service_token(
             "Access is not available",
         ));
     }
+    // An account outside the caller's share is answered as missing (§4.4).
+    let service_account_id =
+        match account_in_share(&state, &headers, &actor, &service_account_id).await {
+            Ok(id) => id,
+            Err(response) => return response,
+        };
     let mut secret = [0u8; 32];
     if SystemRandom::new().fill(&mut secret).is_err() {
         return unavailable_auth();
@@ -268,6 +281,12 @@ pub(crate) async fn revoke_authenticated_service_token(
             "Access is not available",
         ));
     }
+    // An account outside the caller's share is answered as missing (§4.4).
+    let service_account_id =
+        match account_in_share(&state, &headers, &actor, &service_account_id).await {
+            Ok(id) => id,
+            Err(response) => return response,
+        };
     let mut client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),

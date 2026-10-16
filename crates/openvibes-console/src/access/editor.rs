@@ -102,6 +102,21 @@ pub(crate) async fn caller(
         .map_err(|_| unavailable_auth())
 }
 
+/// The [`Editor`] of a caller `authenticated_permission` already let in as
+/// `actor`: their session's user, or the bearer token's service account.
+pub(crate) async fn authenticated_editor(
+    client: &platform_store::Client,
+    headers: &HeaderMap,
+    actor: &str,
+) -> Result<Editor, platform_store::StoreError> {
+    use crate::access::auth::{PresentedCredentials, presented_credentials};
+    let principal = match presented_credentials(headers) {
+        Ok(PresentedCredentials::Bearer(_)) => Principal::ServiceAccount(actor),
+        _ => Principal::User(actor),
+    };
+    principal_editor(client, principal).await
+}
+
 /// What `principal` holds, as an [`Editor`] (its id is the actor).
 pub(crate) async fn principal_editor(
     client: &platform_store::Client,
