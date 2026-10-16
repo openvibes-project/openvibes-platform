@@ -47,7 +47,7 @@ test("sign-in, every view, and no CSP violations or third-party requests", async
     "/agents",
     "/settings?tab=enrollment",
     "/settings?tab=rule-sets",
-    "/settings?tab=access",
+    "/settings?tab=people",
     "/settings?tab=service-accounts",
     "/audit"
   ]) {
@@ -156,7 +156,7 @@ test("an Access filter with no matches explains the empty list", async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "light" });
   await signIn(page, "alex");
-  await page.goto("/settings?tab=access&q=no-such-person");
+  await page.goto("/settings?tab=people&q=no-such-person");
   await expect(page.getByText("Nothing matches these filters")).toBeVisible();
   await expect(page.getByText("Clear a filter to see more.")).toBeVisible();
 });
@@ -273,7 +273,7 @@ for (const scheme of ["light", "dark"] as const) {
 
 test("a new user signs in with a one-time password and must set their own first (board #85)", async ({ page, browser }, info) => {
   await signIn(page, "alex");
-  await page.goto("/settings?tab=access");
+  await page.goto("/settings?tab=people");
   await page.getByRole("button", { name: "New user" }).click();
   const username = `e2e-${info.project.name}-${Date.now().toString(36)}`;
   await page.getByLabel("Username").fill(username);
@@ -313,7 +313,7 @@ test("a new user signs in with a one-time password and must set their own first 
 
 test("rule-set switches: a group is added, a failed change keeps the switch and says why, an analyst changes none", async ({ page, browser }, info) => {
   await signIn(page, "alex");
-  await page.goto("/settings?tab=access");
+  await page.goto("/settings?tab=host-groups");
   await page.getByRole("button", { name: "New group" }).click();
   const group = `Lab ${info.project.name}`;
   await page.getByLabel("Name").fill(group);

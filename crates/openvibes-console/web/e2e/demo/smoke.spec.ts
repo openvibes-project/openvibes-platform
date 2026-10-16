@@ -158,7 +158,7 @@ test("a finding mitigated on every open host leaves the default Findings list (b
 });
 
 test("an administrator creates a user and sees the one-time password once (board #85)", async ({ page }) => {
-  await page.goto("/settings?tab=host-groups");
+  await page.goto("/settings?tab=people");
   await page.getByRole("button", { name: "New user" }).click();
   await page.getByLabel("Username").fill("jdoe");
   await page.getByLabel("Display name").fill("Jane Doe");

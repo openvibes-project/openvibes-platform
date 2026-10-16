@@ -73,6 +73,6 @@ export const readsRules = (can: (permission: Permission) => boolean): boolean =>
 
 /** Why "+ Add group" is disabled, or null when a group can be added. */
 export function addGroupBlocked(groups: number, free: number): string | null {
-  if (groups === 0) return "No asset groups yet: create one under Settings › Access.";
+  if (groups === 0) return "No asset groups yet: create one under Settings › Host groups.";
   return free === 0 ? "Every asset group is listed." : null;
 }

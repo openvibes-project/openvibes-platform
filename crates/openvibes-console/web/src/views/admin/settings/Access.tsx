@@ -24,7 +24,7 @@ export function Access() {
       <ViewHeader title="People" count={rows.length} refresh="/api/v1/users" placeholder="Filter people or roles…"
         actions={can("access.users") && <button type="button" className="button button--primary button--small" onClick={() => nav.open({ kind: "user", id: "new" }, true)}><Icon name="plus" size={14} /> New user</button>} />
       {inventory.error ? <div className="view-pad"><ErrorBox error={inventory.error} /></div> : !data ? <Loading /> : (
-          <>
+        <>
           {rows.length === 0 ? (
             <Empty icon="access" title={data.length === 0 ? "No people" : "Nothing matches these filters"}>
               {data.length === 0 ? "Add a person with New user." : "Clear a filter to see more."}

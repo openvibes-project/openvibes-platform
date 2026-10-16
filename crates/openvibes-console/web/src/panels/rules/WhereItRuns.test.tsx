@@ -42,7 +42,7 @@ describe("Where it runs", () => {
   it("with no asset groups, Add group is disabled and says why", () => {
     const out = html(l2, []);
     expect(out).toMatch(/disabled="">\+ Add group/);
-    expect(out).toContain("No asset groups yet: create one under Settings › Access.");
+    expect(out).toContain("No asset groups yet: create one under Settings › Host groups.");
   });
   it("a very long group name stays on one line, with the full name on hover", () => {
     const long = "g".repeat(200);

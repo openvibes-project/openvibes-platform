@@ -31,7 +31,7 @@ describe("the Rule sets list", () => {
     expect(sourceDetail("site", null)).toBe("");
   });
   it("explains why a group cannot be added", () => {
-    expect(addGroupBlocked(0, 0)).toBe("No asset groups yet: create one under Settings › Access.");
+    expect(addGroupBlocked(0, 0)).toBe("No asset groups yet: create one under Settings › Host groups.");
     expect(addGroupBlocked(2, 0)).toBe("Every asset group is listed.");
     expect(addGroupBlocked(2, 1)).toBeNull();
   });
