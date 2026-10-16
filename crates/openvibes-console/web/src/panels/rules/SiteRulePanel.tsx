@@ -147,7 +147,7 @@ export function SiteRulePanel({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const current = form ?? (draft ? fromDraft(draft) : BLANK);
   const effectiveId = isNew ? typedId.trim() : ruleId;
-  const write = can("site_rules.write", true);
+  const write = can("site_rules.write");
 
   // Live check: the server runs the agent's own loader on what is typed.
   const body = JSON.stringify(toInput(current, alarm));

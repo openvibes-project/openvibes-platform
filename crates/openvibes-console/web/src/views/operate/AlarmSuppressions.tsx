@@ -26,7 +26,7 @@ export function AlarmSuppressions() {
             { key: "rule", header: "Rule", sort: (s) => s.rule_id, render: (s) => <div className="cell-two"><span className="mono">{s.rule_id}</span><span className="subtle">{what(s)}</span></div> },
             { key: "note", header: "Why", hideBelow: 560, render: (s) => <span className="truncate">{s.note}</span> },
             { key: "created", header: "By", width: "180px", hideBelow: 760, sort: (s) => s.created_at, render: (s) => <span className="subtle">{s.created_by}, <Ago value={s.created_at} /></span> },
-            { key: "remove", header: "Remove", width: "120px", render: (s) => can("alarms.suppress", s.scope !== "host") && (
+            { key: "remove", header: "Remove", width: "120px", render: (s) => can("alarms.suppress") && (
               <Confirm danger label={`Remove? Matching alarms raise again from now on.`} onConfirm={async () => {
                 await request("DELETE", `/api/v1/alarm-suppressions/${encodeURIComponent(s.id)}`);
                 invalidate("/api/v1/alarm");

@@ -60,7 +60,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
   const people = useResource<{ items: CaseUser[] }>(can("cases.assign") ? "/api/v1/cases/assignees" : null).data?.items;
   if (count === 0 || !can(triagePermission[kind])) return null;
 
-  const menu = [...STATE_ITEMS, ...(kind === "alarms" && !inline && can("alarms.suppress", true) && !without.includes("suppress") ? [SUPPRESS_ITEM] : [])];
+  const menu = [...STATE_ITEMS, ...(kind === "alarms" && !inline && can("alarms.suppress") && !without.includes("suppress") ? [SUPPRESS_ITEM] : [])];
   const me = session?.principal?.username;
   // The current assignee is listed even when the people list lacks them
   // (no cases.assign, or no longer assignable), so it shows with initials.

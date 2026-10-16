@@ -49,7 +49,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
     }
     for (const view of views) if (canView(view.path)) out.push({ id: `v${view.path}`, group: "Go to", icon: view.icon, label: view.label, hint: view.keys, run: () => nav.view(view.path) });
     if (can("assistant.use")) out.push({ id: "a-assistant", group: "Actions", icon: "sparkles", label: "Ask the assistant", hint: "Ctrl J", run: () => assistant.toggle() });
-    if (can("tokens.manage", true)) out.push({ id: "a-token", group: "Actions", icon: "enrollment", label: "New enrollment token", run: () => { nav.view("/settings", { tab: "enrollment" }); nav.open({ kind: "enrollment-token", id: "new" }, true); } });
+    if (can("tokens.manage")) out.push({ id: "a-token", group: "Actions", icon: "enrollment", label: "New enrollment token", run: () => { nav.view("/settings", { tab: "enrollment" }); nav.open({ kind: "enrollment-token", id: "new" }, true); } });
     out.push({ id: "a-dark", group: "Actions", icon: "moon", label: "Theme: dark", run: () => setTheme("dark") });
     out.push({ id: "a-light", group: "Actions", icon: "sun", label: "Theme: light", run: () => setTheme("light") });
     out.push({ id: "a-system", group: "Actions", icon: "monitor", label: "Theme: follow the system", run: () => setTheme("system") });

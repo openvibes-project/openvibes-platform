@@ -20,7 +20,7 @@ export function UserPanel({ id }: { id: string }) {
   if (person.error) return <div className="panel-body"><ErrorBox error={person.error} /></div>;
   const user = person.data;
   if (!user) return person.loading ? <Loading /> : <div className="panel-body"><Empty title="User not found" /></div>;
-  const manage = can("access.grant", true);
+  const manage = can("access.grant");
   const change = (method: "PUT" | "DELETE", roleId: string, done: string) => {
     request(method, `/api/v1/users/${encodeURIComponent(id)}/roles/${encodeURIComponent(roleId)}`)
       .then(() => { invalidate("/api/v1/users"); toast(done); }, (e: unknown) => toast(apiMessage(e, "Failed"), true));

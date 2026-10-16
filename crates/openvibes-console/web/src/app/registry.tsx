@@ -51,7 +51,7 @@ type ViewDef = {
   short?: string;
   icon: IconName;
   group: "Investigate" | "Operate" | "Admin" | "Help";
-  /** Any of these opens the view; `global` requires an unscoped grant. Empty: any signed-in user. */
+  /** Any of these opens the view. Empty: any signed-in user. */
   access: readonly Access[];
   keys: string;
   render: () => ReactNode;
@@ -68,10 +68,10 @@ export const views: readonly ViewDef[] = [
   { path: "/services", label: "Services", icon: "layers", group: "Investigate", phoneMore: true, keys: "g u", access: [{ permission: "hosts.read" }], render: () => <Services /> },
   { path: "/cases", label: "Cases", icon: "cases", group: "Investigate", keys: "g c", access: [{ permission: "cases.read" }], render: () => <Cases /> },
   { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.suppressions.read" }], render: () => <AlarmSuppressions /> },
-  { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "site_rules.read", global: true }], render: () => <SiteRules /> },
-  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: [{ permission: "rules.coverage.read", global: true }], render: () => <Coverage /> },
-  { path: "/settings", label: "Settings", icon: "settings", group: "Admin", keys: "g h", access: settingsAccess, render: () => <Settings /> },
-  { path: "/audit", label: "Audit log", icon: "audit", group: "Admin", keys: "g l", access: [{ permission: "audit.read", global: true }], render: () => <Audit /> },
+  { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "site_rules.read" }], render: () => <SiteRules /> },
+  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: [{ permission: "rules.coverage.read" }], render: () => <Coverage /> },
+  { path: "/settings", prefix: "/settings/", label: "Settings", icon: "settings", group: "Admin", keys: "g h", access: settingsAccess, render: () => <Settings /> },
+  { path: "/audit", label: "Audit log", icon: "audit", group: "Admin", keys: "g l", access: [{ permission: "audit.read" }], render: () => <Audit /> },
   { path: "/about", label: "About", icon: "help", group: "Help", keys: "g i", access: [], render: () => <About /> },
 ];
 

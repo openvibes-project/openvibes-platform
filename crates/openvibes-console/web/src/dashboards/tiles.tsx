@@ -145,7 +145,7 @@ function ListTileBody({ view, params, limit }: NonNullable<ReturnType<typeof par
   const { can } = useSession();
   const permission = { "/compliance": "compliance.read", "/vulnerabilities": "vulnerabilities.read", "/agents": "hosts.read", "/audit": "audit.read" }[view] as "compliance.read";
   // Nothing is requested for a list the viewer's role cannot read.
-  const allowed = can(permission, view === "/audit");
+  const allowed = can(permission);
   const { rows, total, loading, error } = useListRows(allowed ? view : null, params);
   if (!allowed) return <Unavailable />;
   if (error) return <div className="tile-empty"><Icon name="alert" size={18} /> {error.message}</div>;

@@ -37,7 +37,7 @@ export function Audit() {
         ]}
         actions={<>
           {retention.data && <button type="button" className="button button--ghost" onClick={() => nav.open({ kind: "audit-retention", id: "policy" }, true)} title="Retention policy"><Icon name="clock" size={15} /> Kept {retention.data.retention_days} days</button>}
-          {can("audit.export", true) && (isDemo()
+          {can("audit.export") && (isDemo()
             ? <button type="button" className="button" onClick={() => downloadCsv(rows)}><Icon name="download" size={15} /> Export CSV</button>
             : <a className="button" href={`/api/v1/audit-export.csv?since=${encodeURIComponent(since)}`} download><Icon name="download" size={15} /> Export CSV</a>)}
         </>} />

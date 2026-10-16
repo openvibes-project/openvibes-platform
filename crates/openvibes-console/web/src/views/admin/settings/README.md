@@ -4,8 +4,9 @@ The Settings page, one tab per area. A tab opens to its own permission; a new ta
 
 | File | What it does |
 |---|---|
-| `Settings.tsx` | The Settings page and its tab list. |
-| `Access.tsx` | Users, their roles and asset groups. |
+| `Settings.tsx` | The Settings page, its tab list and the `subPage` hook for full pages under `/settings/…`. |
+| `Access.tsx` | The People tab: users and their roles. |
+| `HostGroups.tsx` | The Host groups tab: the group cards. |
 | `Enrollment.tsx` | Adding hosts and managing enrollment tokens. |
 | `RuleSets.tsx` | Published rule sets, where each runs (with `rules.assignment.read`) and its state. |
 | `ServiceAccounts.tsx` | API identities and their tokens. |

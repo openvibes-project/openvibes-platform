@@ -189,7 +189,7 @@ export function AgentPanel({ id }: { id: string }) {
             </Section>
             {data.status !== "imported" && <LastTestSection test={data.last_test} />}
             {data.status !== "imported" && <HostRuleSets agent={data} />}
-            {can("host_groups.manage", true) && <TagEditor id={id} />}
+            {can("host_groups.manage") && <TagEditor id={id} />}
             <Section title="Certificates">
               <ul className="list list--plain">
                 {data.certificates.map((certificate, index) => (

@@ -102,7 +102,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
   const agents = useResource<AgentSummary>(builtin && can("hosts.read") ? "/api/v1/agents/summary" : null);
   const [menu, setMenu] = useState(false);
   // The roles to share with, fetched when the menu opens.
-  const roles = useResource<Role[]>(menu && can("dashboards.share", true) ? "/api/v1/roles" : null).data ?? [];
+  const roles = useResource<Role[]>(menu && can("dashboards.share") ? "/api/v1/roles" : null).data ?? [];
   const id = builtin ? null : dashboard?.dashboard_id ?? null;
   // Unknown until loaded, so the pin never flickers "pressed" on the built-in.
   const isHome = home.data !== undefined && (home.data.dashboard_id ?? null) === id;
@@ -177,7 +177,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                   <div role="menuitem" aria-disabled="true" className="menu__note dashboard-phone-only">Editing needs a wider screen</div>
                   <button type="button" role="menuitem" className="menu__item" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={14} /> Duplicate</button>
                   {mine && dashboard && <button type="button" role="menuitem" className="menu__item" onClick={() => { editor.begin(dashboard); setTimeout(() => document.querySelector<HTMLInputElement>(".dashboard-name")?.select(), 0); }}><Icon name="pencil" size={14} /> Rename</button>}
-                  {mine && can("dashboards.share", true) && (
+                  {mine && can("dashboards.share") && (
                     <div className="menu__section">
                       <div className="section-title">Share with role</div>
                       {[null, ...roles.map((r) => r.role_id)].map((role) => (

@@ -27,7 +27,7 @@ export function EnrollmentTokenPanel({ id }: { id: string }) {
       <PanelHeader icon="enrollment" kind="Enrollment token" title={token.label ?? token.token_id}
         subtitle={<span className="mono subtle">{token.token_id}</span>}
         badges={<span className={`badge badge--${state.tone}`}>{state.label}</span>}
-        actions={can("tokens.manage", true) && tokenUsable(token) && (
+        actions={can("tokens.manage") && tokenUsable(token) && (
           <Confirm danger label="Revoke this token? Hosts can no longer enroll with it." onConfirm={async () => {
             await request("POST", `/api/v1/enrollment-tokens/${encodeURIComponent(id)}/revoke`);
             invalidate("/api/v1/enrollment-tokens");

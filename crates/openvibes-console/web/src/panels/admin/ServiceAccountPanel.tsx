@@ -30,25 +30,25 @@ function ExistingServiceAccount({ id }: { id: string }) {
       <PanelHeader icon="service" kind="Service account" title={account.name}
         subtitle={<span className="mono subtle">{account.service_account_id}</span>}
         badges={<><span className={`badge badge--${account.enabled ? "ok" : "plain"}`}>{account.enabled ? "Enabled" : "Disabled"}</span>{account.role_ids.map((role) => <span key={role} className="badge badge--accent badge--plain">{role}</span>)}</>}
-        actions={can("service_accounts.manage", true) && account.enabled && (
+        actions={can("service_accounts.manage") && account.enabled && (
           <Confirm danger label="Disable this account? All of its tokens stop working." onConfirm={async () => {
             await request("POST", `/api/v1/service-accounts/${encodeURIComponent(id)}/disable`);
             invalidate("/api/v1/service-accounts");
             toast(`${account.name} disabled`);
           }}>Disable</Confirm>
         )} />
-      {can("service_accounts.tokens", true) && account.enabled && <div className="panel-body"><IssueServiceToken accountId={id} /></div>}
+      {can("service_accounts.tokens") && account.enabled && <div className="panel-body"><IssueServiceToken accountId={id} /></div>}
       <Section title="Tokens" flush>
         {!tokens.data ? <Loading rows={2} /> : tokens.data.items.length === 0 ? <Empty title="No tokens" /> : (
           <table className="table table--compact">
-            <thead><tr><th>Label</th><th>Expires</th><th>State</th>{can("service_accounts.tokens", true) && <th />}</tr></thead>
+            <thead><tr><th>Label</th><th>Expires</th><th>State</th>{can("service_accounts.tokens") && <th />}</tr></thead>
             <tbody>
               {tokens.data.items.map((token) => (
                 <tr key={token.token_id}>
                   <td>{token.label}</td>
                   <td><Ago value={token.expires_at} /></td>
                   <td><span className={`badge badge--${token.revoked ? "bad" : isPast(token.expires_at) ? "plain" : "ok"}`}>{token.revoked ? "Revoked" : isPast(token.expires_at) ? "Expired" : "Active"}</span></td>
-                  {can("service_accounts.tokens", true) && <td>{!token.revoked && !isPast(token.expires_at) && (
+                  {can("service_accounts.tokens") && <td>{!token.revoked && !isPast(token.expires_at) && (
                     <Confirm danger label={`Revoke ${token.label}? Whatever uses it stops working at once.`} onConfirm={async () => {
                       await request("POST", `/api/v1/service-accounts/${encodeURIComponent(id)}/tokens/${encodeURIComponent(token.token_id)}/revoke`);
                       invalidate("/api/v1/service-accounts");

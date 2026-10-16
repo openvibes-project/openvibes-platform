@@ -57,7 +57,7 @@ export function RetentionPanel() {
           <dt>Changed</dt><dd>{when(current.updated_at)} by {current.updated_by}</dd>
           <dt>Version</dt><dd className="num">{current.version}</dd>
         </dl>
-        {can("audit.retention.manage", true) && (
+        {can("audit.retention.manage") && (
           <form className="row" onSubmit={(event) => {
             event.preventDefault();
             setError(undefined);

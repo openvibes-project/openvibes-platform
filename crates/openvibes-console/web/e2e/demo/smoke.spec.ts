@@ -130,8 +130,8 @@ test("audit retention changes from its panel", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Kept 400 days/ })).toBeVisible();
 });
 
-test("an asset group is created from the access view", async ({ page }) => {
-  await page.goto("/settings?tab=access");
+test("a host group is created from the Host groups tab", async ({ page }) => {
+  await page.goto("/settings?tab=host-groups");
   await page.getByRole("button", { name: "New group" }).click();
   await page.getByLabel("Name").fill("Web servers");
   await page.getByLabel("Selectors (one key=value per line)").fill("role=web");
@@ -158,7 +158,7 @@ test("a finding mitigated on every open host leaves the default Findings list (b
 });
 
 test("an administrator creates a user and sees the one-time password once (board #85)", async ({ page }) => {
-  await page.goto("/settings?tab=access");
+  await page.goto("/settings?tab=host-groups");
   await page.getByRole("button", { name: "New user" }).click();
   await page.getByLabel("Username").fill("jdoe");
   await page.getByLabel("Display name").fill("Jane Doe");

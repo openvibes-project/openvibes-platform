@@ -10,7 +10,7 @@ import { Empty, ErrorBox, Loading } from "../../../ui/bits";
 
 export function ServiceAccounts() {
   const { can } = useSession();
-  const canManage = can("service_accounts.manage", true);
+  const canManage = can("service_accounts.manage");
   const accounts = useResource<{ items: ServiceAccount[] }>("/api/v1/service-accounts");
   const top = useTopPanel();
   const rows = accounts.data?.items ?? [];

@@ -14,7 +14,7 @@ export function RuleSets() {
   const { can } = useSession();
   const sets = useResource<{ items: RuleSet[] }>("/api/v1/rule-sets");
   // Where each set runs needs rules.assignment.read; the list itself only rules.read.
-  const canSeeWhere = can("rules.assignment.read", true);
+  const canSeeWhere = can("rules.assignment.read");
   const assignments = useResource<RuleSetAssignments>(canSeeWhere ? "/api/v1/rule-set-assignments" : null);
   const top = useTopPanel();
   const rows = ruleSetRows(sets.data?.items ?? [], assignments.data?.items ?? []);
@@ -23,7 +23,7 @@ export function RuleSets() {
   return (
     <div className="view">
       <ViewHeader title="Rule sets" count={rows.length} refresh="/api/v1/rule-set"
-        actions={can("rules.publish", true) && (
+        actions={can("rules.publish") && (
           <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "rule-bundle", id: "new" }, true)}><Icon name="plus" size={15} /> Publish bundle</button>
         )} />
       {error ? <div className="view-pad"><ErrorBox error={error} /></div> : !loaded ? <Loading /> : rows.length === 0 ? (

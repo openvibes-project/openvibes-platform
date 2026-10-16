@@ -439,7 +439,12 @@ triage on alarms and findings stays as it is.
     `access`), its path in `frontend-contract.json`.
   - A Settings tab: its file in `views/admin/settings/` and one line in the
     `tabs` list of `Settings.tsx`, with its `access`. The Settings menu
-    entry opens to any tab's access by itself.
+    entry opens to any tab's access by itself. Tabs: People, Host groups,
+    Service accounts, Enrollment, Rule sets, Assistant (Roles arrives with its view).
+  - A full page under `/settings/…` (roles, people): the `subPage` function in
+    `Settings.tsx`; it renders in place of the tab panel with the tabs shown.
+  - Permission checks are `can(permission)`; there is no `global` flag. The
+    catalogue and the needs closure helpers are in `app/permissions.ts`.
   - A permission: the server side only (`access/permission.rs`
     `Permission`, `access/catalogue.rs`, a migration for the database's
     permission rows, and the route's check). Then regenerate the API client

@@ -45,9 +45,9 @@ function selectAlarms(loaded: readonly AlarmSummary[], params: URLSearchParams):
 }
 
 const quietScopes = [
-  { scope: "host", label: "On this host", global: false },
-  { scope: "program", label: "For this program, any host", global: true },
-  { scope: "command", label: "For this exact command, any host", global: true },
+  { scope: "host", label: "On this host" },
+  { scope: "program", label: "For this program, any host" },
+  { scope: "command", label: "For this exact command, any host" },
 ] as const;
 
 /** Creates a suppression derived from one alarm ("don't alarm on this again"). */
@@ -72,7 +72,7 @@ async function closeAndQuiet(alarmId: string, scope: string, note: string): Prom
 export function QuietMenu({ alarm }: Readonly<{ alarm: AlarmSummary }>) {
   const { can } = useSession();
   const [scope, setScope] = useState("");
-  const scopes = quietScopes.filter((s) => can("alarms.suppress", s.global));
+  const scopes = can("alarms.suppress") ? quietScopes : [];
   if (scopes.length === 0 || alarm.suppressed_by) return null;
   const chosen = quietScopes.find((s) => s.scope === scope);
   const what = {

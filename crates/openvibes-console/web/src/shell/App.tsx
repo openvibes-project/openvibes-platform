@@ -49,10 +49,10 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
 
   useEffect(() => onSignedOut(() => setAuth("signin")), []);
 
-  const can = useCallback((permission: Permission, global = false) => allows(session, { permission, global }), [session]);
+  const can = useCallback((permission: Permission) => allows(session, { permission }), [session]);
   const canView = useCallback((path: string) => {
     const found = views.find((v) => v.path === path);
-    return found !== undefined && (found.access.length === 0 || found.access.some((a) => can(a.permission, a.global)));
+    return found !== undefined && (found.access.length === 0 || found.access.some((a) => can(a.permission)));
   }, [can]);
   const context = useMemo(() => ({ session, demo: persona !== undefined, can }), [session, persona, can]);
   const current = views.find((v) => v.path === view || (v.prefix !== undefined && view.startsWith(v.prefix)));
