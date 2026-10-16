@@ -40,4 +40,4 @@ libc.workspace = true
 workspace = true
 
 [dev-dependencies]
-zip = { version = "8.6.0", default-features = false }
+zip = { version = "9.0.3", default-features = false }

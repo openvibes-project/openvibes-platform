@@ -367,7 +367,8 @@ pub fn read_zip<R: std::io::Read + std::io::Seek>(
     let mut total = 0u64;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(|_| ParseError::Malformed)?;
-        if !entry.name().ends_with(".json") {
+        // zip 9 refuses names that are not valid UTF-8; such an entry is skipped like any non-JSON one.
+        if !entry.name().is_ok_and(|name| name.ends_with(".json")) {
             continue;
         }
         let mut bytes = Vec::new();
