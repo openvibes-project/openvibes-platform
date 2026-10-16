@@ -169,12 +169,18 @@ pub(crate) async fn update_role(
         Ok(role) => role,
         Err(problem) => return problem_response(problem),
     };
-    if let Err(response) = within_share(&editor, &role.ids, &role.reach) {
-        return problem_response(response);
-    }
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
+    // The stored role must fit too, at the version the caller read: a
+    // stale version is refused before the share check, and the store's
+    // locked version check closes the race between this read and the write.
+    if let Err(response) = stored_role_fits(&client, &editor, &role_id, Some(version)).await {
+        return response;
+    }
+    if let Err(response) = within_share(&editor, &role.ids, &role.reach) {
+        return problem_response(response);
+    }
     let written = console_roles::update_role(
         &mut client,
         &role_id,
@@ -209,26 +215,47 @@ pub(crate) async fn delete_role(
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    // ponytail: checked outside the delete's transaction; a concurrent edit
-    // that widens the role in between is still deleted (it has no holders).
-    let current = match console_roles::role(&client, &role_id).await {
-        Ok(Some(role)) => role,
-        Ok(None) => return role_not_found(),
-        Err(_) => return unavailable_auth(),
-    };
-    let permissions: Vec<Permission> = current
-        .permissions
-        .iter()
-        .map(String::as_str)
-        .filter_map(Permission::from_id)
-        .collect();
-    if let Err(response) = within_share(&editor, &permissions, &current.reach) {
-        return problem_response(response);
+    // ponytail: checked outside the delete's transaction (a delete carries
+    // no version); a concurrent widening edit in between is still deleted,
+    // and the role has no holders anyway.
+    if let Err(response) = stored_role_fits(&client, &editor, &role_id, None).await {
+        return response;
     }
     match console_roles::delete_role(&mut client, &role_id, &actor, Utc::now()).await {
         Ok(RoleWrite::Saved(_)) => StatusCode::NO_CONTENT.into_response(),
         written => answer(StatusCode::NO_CONTENT, written),
     }
+}
+
+/// Edit and delete both need the role as stored to fit inside the
+/// editor's share (§4.4), at `version` when one is given (else 409
+/// `stale_role`). A stored permission id the catalogue does not know is
+/// refused, not ignored.
+async fn stored_role_fits(
+    client: &platform_store::Client,
+    editor: &[EffectiveCapability],
+    role_id: &str,
+    version: Option<i32>,
+) -> Result<(), Response> {
+    let stored = match console_roles::role(client, role_id).await {
+        Ok(Some(role)) => role,
+        Ok(None) => return Err(role_not_found()),
+        Err(_) => return Err(unavailable_auth()),
+    };
+    if version.is_some_and(|version| version != stored.version) {
+        return Err(conflict("stale_role", "The role changed since you read it"));
+    }
+    let mut permissions = Vec::with_capacity(stored.permissions.len());
+    for id in &stored.permissions {
+        let Some(permission) = Permission::from_id(id) else {
+            let mut problem = ProblemDetails::new(StatusCode::FORBIDDEN, "permission_denied", "");
+            problem.title =
+                format!("The role holds a permission this console does not know ({id})");
+            return Err(problem_response(problem));
+        };
+        permissions.push(permission);
+    }
+    within_share(editor, &permissions, &stored.reach).map_err(problem_response)
 }
 
 /// The caller, holding `access.roles` (CSRF checked), and everything they

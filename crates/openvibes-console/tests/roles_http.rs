@@ -286,6 +286,7 @@ async fn team_admin_cannot_widen_a_role_they_hold() {
     let revoke = save("Revokers", &["hosts.read", "hosts.revoke"], win(), None);
     let (status, refused) = fx.call(&wl, "POST", "/api/v1/roles", Some(revoke)).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(refused["code"], "permission_denied");
     assert!(
         refused["title"].as_str().unwrap().contains("Revoke a host"),
         "{refused}"
@@ -295,12 +296,50 @@ async fn team_admin_cannot_widen_a_role_they_hold() {
     let (status, created) = fx.call(&wl, "POST", "/api/v1/roles", Some(fits)).await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
 
-    // The same role but deleted: also checked against the share.
+    // A role wider than wl's share can be neither narrowed nor deleted.
     let all = fx.role("Everywhere", &["hosts.read"], Reach::All).await;
-    let (status, _) = fx
-        .call(&wl, "DELETE", &format!("/api/v1/roles/{all}"), None)
-        .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    let uri = format!("/api/v1/roles/{all}");
+    let narrow = save("Everywhere", &["hosts.read"], win(), Some(1));
+    for (method, body) in [("PATCH", Some(narrow)), ("DELETE", None)] {
+        let (status, refused) = fx.call(&wl, method, &uri, body).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{method} {refused}");
+        assert_eq!(refused["code"], "permission_denied");
+        assert!(
+            refused["title"].as_str().unwrap().contains("View hosts"),
+            "{method} {refused}"
+        );
+    }
+    fx.db.drop().await;
+}
+
+#[tokio::test]
+async fn a_stored_permission_the_console_does_not_know_is_refused() {
+    let Some(fx) = Fx::new().await else { return };
+    let id = fx.role("Legacy", &["alarms.read"], Reach::All).await;
+    fx.db
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .batch_execute(&format!(
+            "INSERT INTO console_permissions (permission_id, scope_class)
+             VALUES ('legacy.thing', 'global');
+             INSERT INTO console_role_permissions (role_id, permission_id)
+             VALUES ('{id}', 'legacy.thing')"
+        ))
+        .await
+        .unwrap();
+    let uri = format!("/api/v1/roles/{id}");
+    let edit = save("Legacy", &["alarms.read"], json!({"kind": "all"}), Some(1));
+    for (method, body) in [("PATCH", Some(edit)), ("DELETE", None)] {
+        let (status, refused) = fx.call(&fx.admin, method, &uri, body).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{method} {refused}");
+        assert_eq!(refused["code"], "permission_denied");
+        assert!(
+            refused["title"].as_str().unwrap().contains("legacy.thing"),
+            "{method} {refused}"
+        );
+    }
     fx.db.drop().await;
 }
 
