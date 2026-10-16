@@ -16,6 +16,8 @@ use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::Value;
 use tower::ServiceExt;
 
+mod common;
+
 struct TestDb {
     pool: platform_store::Pool,
     admin_url: String,
@@ -120,6 +122,7 @@ async fn user(
     name: &str,
     role: &str,
 ) {
+    common::ensure_role(client, role).await;
     let phc = hash_password(&NormalizedPassword::new(PASSWORD).unwrap()).unwrap();
     create_local_user(
         client,
@@ -268,14 +271,12 @@ async fn setup() -> (TestDb, axum::Router) {
         "viewer",
     )
     .await;
-    client
-        .execute(
-            "UPDATE console_role_bindings SET asset_group_id = $1::text::uuid
-             WHERE binding_id = '21111111-1111-4111-8111-111111111113'",
-            &[&GROUP_A],
-        )
-        .await
-        .unwrap();
+    common::scope_bindings(
+        &mut client,
+        "binding_id = '21111111-1111-4111-8111-111111111113'",
+        GROUP_A,
+    )
+    .await;
     drop(client);
     let router = authenticated_router(db.pool.clone(), "https://console.example");
     (db, router)

@@ -16,6 +16,8 @@ use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::Value;
 use tower::ServiceExt;
 
+mod common;
+
 struct TestDb {
     pool: platform_store::Pool,
     admin_url: String,
@@ -120,6 +122,7 @@ async fn user(
     name: &str,
     role: &str,
 ) {
+    common::ensure_role(client, role).await;
     let phc = hash_password(&NormalizedPassword::new(PASSWORD).unwrap()).unwrap();
     create_local_user(
         client,
@@ -465,12 +468,16 @@ async fn the_host_view_stays_within_the_callers_asset_groups() {
         .await
         .unwrap()
         .batch_execute(&format!(
-            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ('{outside}', 'active', now());
-             UPDATE console_role_bindings SET asset_group_id = '{WEB}'
-              WHERE user_id = '33333333-3333-4333-8333-333333333333';"
+            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ('{outside}', 'active', now());"
         ))
         .await
         .unwrap();
+    common::scope_bindings(
+        &mut db.pool.get().await.unwrap(),
+        "user_id = '33333333-3333-4333-8333-333333333333'",
+        WEB,
+    )
+    .await;
     // bob (analyst) holds hosts.read for the web group only.
     let (cookie, csrf) = login(&router, "bob").await;
     let inside = format!("/api/v1/agents/{AGENT}/rule-set-assignments");

@@ -40,6 +40,16 @@ admin() { "${root}/target/debug/openvibes-admin" --config "${work}/admin.toml" "
 admin migrate >/dev/null
 admin maintenance >/dev/null
 printf '%s\n' "${password}" | admin user create --username alex --display-name "Alex Admin" --role admin --password-stdin >/dev/null
+# A fresh install holds only Administrator (schema 52): sam's role is the
+# Analyst template, reaching every host.
+psql -qX -v ON_ERROR_STOP=1 "${database_url}" >/dev/null <<'SQL'
+INSERT INTO console_roles (role_id, display_name, all_hosts) VALUES ('analyst', 'Analyst', true);
+INSERT INTO console_role_permissions (role_id, permission_id)
+SELECT 'analyst', unnest(ARRAY['alarms.read', 'alarms.suppressions.read', 'compliance.read',
+    'vulnerabilities.read', 'hosts.read', 'cases.read', 'rules.read', 'rules.coverage.read',
+    'alarms.triage', 'alarms.suppress', 'compliance.triage', 'vulnerabilities.triage',
+    'cases.write', 'assistant.use']);
+SQL
 printf '%s\n' "${password}" | admin user create --username sam --display-name "Sam Analyst" --role analyst --password-stdin >/dev/null
 
 # Findings as agent export files (the import path), observed minutes ago.

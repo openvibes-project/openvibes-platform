@@ -20,7 +20,17 @@ pub(super) async fn access_inventory(headers: HeaderMap) -> Response {
     if let Some(response) = read_error(mode) {
         return response;
     }
-    let roles = crate::builtin_roles();
+    // The Administrator and the personas' roles (see `persona.rs`).
+    let mut roles = vec![serde_json::json!({
+        "role_id": crate::access::rbac::ADMIN_ROLE, "display_name": "Administrator", "builtin": true,
+        "permissions": Permission::ALL.map(Permission::id).to_vec()
+    })];
+    roles.extend(crate::access::templates::TEMPLATES[..3].iter().map(|template| {
+        serde_json::json!({
+            "role_id": template.name.to_lowercase(), "display_name": template.name, "builtin": false,
+            "permissions": template.permissions.iter().map(|p| p.id()).collect::<Vec<_>>()
+        })
+    }));
     let bindings = if matches!(persona, Persona::Admin) {
         vec![serde_json::json!({
             "binding_id": "seeded-admin-binding", "user_id": "seeded-admin", "username": "admin",

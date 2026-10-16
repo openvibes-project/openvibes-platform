@@ -6364,7 +6364,7 @@
         "tags": [
           "service_accounts"
         ],
-        "summary": "Creates a named service identity with one initial global built-in role.",
+        "summary": "Creates a named service identity holding one role.",
         "operationId": "create_authenticated_service_account",
         "requestBody": {
           "content": {

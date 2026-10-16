@@ -149,6 +149,10 @@ pub fn def(p: Permission) -> &'static PermissionDef {
 
 /// The set plus everything it needs, transitively.
 #[must_use]
+#[allow(
+    dead_code,
+    reason = "role writes check closure under needs from roles step 5"
+)]
 pub fn with_needs(set: &BTreeSet<Permission>) -> BTreeSet<Permission> {
     let mut out = set.clone();
     let mut stack: Vec<Permission> = set.iter().copied().collect();

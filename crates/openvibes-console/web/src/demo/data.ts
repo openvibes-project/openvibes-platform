@@ -1,6 +1,7 @@
 // Deterministic synthetic data for the in-browser demo. Everything here is
 // invented; host names use the reserved example.test domain.
-import builtinRoles from "../api/roles.json";
+import catalogue from "../api/permissions.json";
+import templates from "../api/templates.json";
 import type {
   AccessInventory, Agent, AuditEvent, Certificate, Cve, EnrollmentToken, Finding as FindingView,
   RuleBundle, RuleSet, ServiceAccount, ServiceToken, Severity, Tag, Triage, Vulnerability,
@@ -245,7 +246,11 @@ export function buildDemoData(now = Date.now()) {
     ["u-vic", "vic", "Vic Viewer"], ["u-lab", "lab-ops", "Lab operator"],
   ] as const;
   const access: AccessInventory = {
-    roles: builtinRoles,
+    // The Administrator and the personas' roles: the first three templates.
+    roles: [
+      { role_id: "admin", display_name: "Administrator", builtin: true, permissions: catalogue.map((p) => p.id) },
+      ...templates.slice(0, 3).map((t) => ({ role_id: t.name.toLowerCase(), display_name: t.name, builtin: false, permissions: t.permissions })),
+    ],
     users: people.map(([user_id, username, display_name]) => ({ user_id, username, display_name })),
     asset_groups: [
       { asset_group_id: "grp-prod", name: "Production", selectors: ["env=prod"] },

@@ -1,4 +1,5 @@
-//! Rule-set assignment reads and writes refuse grants scoped to an asset group.
+//! Rule-set permissions are platform-wide: a role that reaches only one
+//! host group still holds them everywhere (roles spec §3, §6).
 
 use std::{
     hash::{BuildHasher, Hasher},
@@ -15,6 +16,8 @@ use openvibes_console::{NormalizedPassword, TrustedPeer, authenticated_router, h
 use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::Value;
 use tower::ServiceExt;
+
+mod common;
 
 struct TestDb {
     pool: platform_store::Pool,
@@ -120,6 +123,7 @@ async fn user(
     name: &str,
     role: &str,
 ) {
+    common::ensure_role(client, role).await;
     let phc = hash_password(&NormalizedPassword::new(PASSWORD).unwrap()).unwrap();
     create_local_user(
         client,
@@ -225,11 +229,11 @@ const READS: [&str; 5] = [
 ];
 
 #[tokio::test]
-async fn grants_scoped_to_an_asset_group_are_refused_on_every_rule_read_and_write() {
+async fn rule_permissions_apply_everywhere_even_in_a_role_reaching_one_group() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     platform_store::migrate(&mut client).await.unwrap();
-    // operator and admin hold rules.assignment.read; both scoped to WEB.
+    // operator and admin hold rules.assignment.read; both roles reach only WEB.
     for (n, name, role) in [(1, "upload", "operator"), (2, "read", "admin")] {
         user(
             &mut client,
@@ -243,24 +247,34 @@ async fn grants_scoped_to_an_asset_group_are_refused_on_every_rule_read_and_writ
     client
         .batch_execute(&format!(
             "INSERT INTO console_asset_groups VALUES ('{WEB}', 'web', now(), 'test');
-             INSERT INTO console_asset_group_selectors VALUES ('{WEB}', 'env', 'web', now());
-             UPDATE console_role_bindings SET asset_group_id = '{WEB}'
-              WHERE user_id IN ('11111111-1111-4111-8111-111111111111',
-                                '22111111-1111-4111-8111-111111111111');"
+             INSERT INTO console_asset_group_selectors VALUES ('{WEB}', 'env', 'web', now());"
         ))
         .await
         .unwrap();
+    common::scope_bindings(
+        &mut client,
+        "user_id IN ('11111111-1111-4111-8111-111111111111',
+                     '22111111-1111-4111-8111-111111111111')",
+        WEB,
+    )
+    .await;
     drop(client);
     let router = authenticated_router(db.pool.clone(), "https://console.example");
     for name in ["upload", "read"] {
         let (cookie, csrf) = login(&router, name).await;
         for path in READS {
             let (status, ..) = call(&router, "GET", path, &cookie, &csrf, None, None).await;
-            assert_eq!(status, StatusCode::FORBIDDEN, "{name} {path}");
+            // No baseline is published yet: a 404 is past the permission check.
+            let expected = if path.ends_with("/bundles") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::OK
+            };
+            assert_eq!(status, expected, "{name} {path}");
         }
         let off = Some(serde_json::json!({"default_enabled": false}));
-        let (status, ..) = call(&router, "PUT", L1, &cookie, &csrf, off, None).await;
-        assert_eq!(status, StatusCode::FORBIDDEN, "{name} PUT");
+        let (status, body, _) = call(&router, "PUT", L1, &cookie, &csrf, off, None).await;
+        assert_eq!(status, StatusCode::OK, "{name} PUT {body}");
     }
     db.drop().await;
 }

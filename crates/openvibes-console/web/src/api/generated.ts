@@ -1320,7 +1320,7 @@ export interface paths {
         /** Lists service accounts without secret material. */
         get: operations["authenticated_service_accounts"];
         put?: never;
-        /** Creates a named service identity with one initial global built-in role. */
+        /** Creates a named service identity holding one role. */
         post: operations["create_authenticated_service_account"];
         delete?: never;
         options?: never;

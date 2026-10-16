@@ -129,21 +129,25 @@ pub(crate) async fn create_user(
         return bad_request("invalid_user", "Provide a username, display name and role");
     };
     let display_name = request.display_name.trim();
-    let (Some(username), true, true) = (
+    let (Some(username), true) = (
         canonical_username(&request.username),
         !display_name.is_empty()
             && display_name.chars().count() <= 160
             && !display_name.chars().any(char::is_control),
-        crate::BuiltInRole::from_id(&request.role_id).is_some(),
     ) else {
         return bad_request(
             "invalid_user",
-            "Use 1 to 64 letters, digits or ._@+- for the username, 1 to 160 characters for the name, and a built-in role",
+            "Use 1 to 64 letters, digits or ._@+- for the username and 1 to 160 characters for the name",
         );
     };
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
+    match platform_store::console_roles::role(&client, &request.role_id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return bad_request("unknown_role", "Choose an existing role"),
+        Err(_) => return unavailable_auth(),
+    }
     match console_auth::username_taken(&client, &username).await {
         Ok(false) => {}
         Ok(true) => {

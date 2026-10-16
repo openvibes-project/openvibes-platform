@@ -364,10 +364,17 @@ cat > "$W/site.json" <<'RULES'
  {"id":"site.processes","version":1,"title":"Our own check","severity":"info",
   "confidence":100,"expression":"facts['process.count'] >= 1","finding_message":"Written by the site"}]}
 RULES
+# A fresh install holds only Administrator (schema 52): the publisher gets
+# a role with what publishing a site rule set needs.
 in_c "set -e
+      runuser -u openvibes-admin -- psql -d openvibes -qX -v ON_ERROR_STOP=1 -c \"
+          INSERT INTO console_roles (role_id, display_name) VALUES ('publisher', 'Publisher');
+          INSERT INTO console_role_permissions (role_id, permission_id)
+          SELECT 'publisher', unnest(ARRAY['rules.read', 'site_rules.read', 'site_rules.write',
+                 'site_rules.test', 'site_rules.publish'])\"
       printf '%s\n' 'a long enough publisher password' |
           runuser -u openvibes-admin -- openvibes-admin user create --username publisher \
-              --display-name Publisher --role operator --password-stdin
+              --display-name Publisher --role publisher --password-stdin
       usermod -aG openvibes-signer-clients openvibes-admin
       runuser -u openvibes-admin -- openvibes-admin rules trust add site site.key -- '$SITE_KEY'" >/dev/null 2>&1 ||
     fail "site publisher, socket group and trust"

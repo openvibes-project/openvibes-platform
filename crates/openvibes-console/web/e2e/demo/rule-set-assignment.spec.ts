@@ -80,13 +80,14 @@ test("hosts: a group switched L1 off, one host pending, one without root facts",
   await expect(page.locator(".inspector")).toContainText("has not reported since enrollment (openvibes-agent-facts.timer)");
 });
 
-test("a viewer has no Rule sets tab, an operator reads the rule list and changes switches", async ({ page }) => {
+test("a viewer reads the rule list without its switches, an operator reads the rule list and changes switches", async ({ page }) => {
+  // The Viewer template holds rules.read and rules.coverage.read, not rules.assignment.read.
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitemradio", { name: "viewer" }).click();
-  await expect(page.getByRole("link", { name: "Settings" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Coverage" })).toHaveCount(0);
-  await page.goto("/settings?tab=rule-sets");
-  await expect(page.getByRole("tab", { name: "Rule sets" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Coverage" })).toBeVisible();
+  await page.goto("/settings?tab=rule-sets&open=rule-set%3Ahardening-linux-l1");
+  await expect(page.locator(".inspector").getByText("Published versions")).toBeVisible();
+  await expect(page.locator(".inspector").getByRole("switch", { name: "On for Linux hosts by default" })).toHaveCount(0);
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitemradio", { name: "operator", exact: true }).click();
   await expect(page.getByRole("link", { name: "Coverage" })).toBeVisible();

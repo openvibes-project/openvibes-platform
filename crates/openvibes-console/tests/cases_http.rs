@@ -17,6 +17,8 @@ use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+mod common;
+
 struct TestDb {
     pool: platform_store::Pool,
     admin_url: String,
@@ -121,6 +123,7 @@ async fn user(
     name: &str,
     role: &str,
 ) {
+    common::ensure_role(client, role).await;
     let phc = hash_password(&NormalizedPassword::new(PASSWORD).unwrap()).unwrap();
     create_local_user(
         client,
@@ -438,13 +441,12 @@ async fn setup() -> Option<Fx> {
     ] {
         user(&mut client, id, binding, name, role).await;
     }
-    client
-        .batch_execute(&format!(
-            "UPDATE console_role_bindings SET asset_group_id = '{PROD}'
-             WHERE binding_id = '44444444-4444-4444-8444-444444444444'"
-        ))
-        .await
-        .unwrap();
+    common::scope_bindings(
+        &mut client,
+        "binding_id = '44444444-4444-4444-8444-444444444444'",
+        PROD,
+    )
+    .await;
     drop(client);
     let router = authenticated_router(db.pool.clone(), "https://console.example");
     Some(Fx {
@@ -1918,5 +1920,72 @@ async fn resolved_evidence_that_returns_reopens_the_case_when_it_is_next_read() 
         .filter(|(a, _)| a == "case.reopen")
         .count();
     assert_eq!(reopen_audits, 1);
+    fx.db.drop().await;
+}
+
+/// `cases.write` without `cases.assign`: setting or changing the assignee
+/// is refused, every other change works. `cases.assign` is held or not,
+/// whatever its reach: the case itself is already limited by the scope of
+/// `cases.write` (roles step 3 decision).
+#[tokio::test]
+async fn writing_cases_without_cases_assign_cannot_set_the_assignee() {
+    let fx = fixture!();
+    let mut client = fx.db.pool.get().await.unwrap();
+    let role = common::create_role(
+        &mut client,
+        "Case writer",
+        &["cases.read", "cases.write", "alarms.read", "hosts.read"],
+        platform_store::console_roles::Reach::All,
+    )
+    .await;
+    const CARL: &str = "99999999-9999-4999-8999-99999999999c";
+    user(
+        &mut client,
+        CARL,
+        "99999999-9999-4999-8999-99999999999d",
+        "carl",
+        &role,
+    )
+    .await;
+    drop(client);
+    let carl = fx.session("carl").await;
+    let alarm = json!([{"kind": "alarm", "ref": fx.web_alarm}]);
+    let (status, _, _) = fx
+        .send(
+            &carl,
+            "POST",
+            "/api/v1/cases",
+            Some(json!({"title": "Assigned", "items": alarm, "assignee_user_id": DAVE})),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "creating with an assignee");
+    let case = fx.open(&carl, "Unassigned", alarm).await;
+    let uri = case_uri(&case);
+    let (status, _, _) = fx
+        .send(
+            &carl,
+            "PUT",
+            &uri,
+            Some(put_body(&case, json!({"assignee_user_id": DAVE}))),
+            Some(&version(&case)),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "changing the assignee");
+    let (status, saved, _) = fx
+        .send(
+            &carl,
+            "PUT",
+            &uri,
+            Some(put_body(
+                &case,
+                json!({"title": "Renamed", "severity": "high"}),
+            )),
+            Some(&version(&case)),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(saved["title"], "Renamed");
+    assert!(saved["assignee"].is_null());
     fx.db.drop().await;
 }

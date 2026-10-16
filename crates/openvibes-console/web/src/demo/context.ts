@@ -1,6 +1,7 @@
 // The demo server's shared context: the persona's data, permissions and
 // visibility, the helpers more than one area uses, and the route registrar.
 import type { AuditEvent, Capability, FindingGroup, Permission, TriageCounts } from "../api/types";
+import catalogue from "../api/permissions.json";
 import { buildDemoData } from "./data";
 import { problem, severityRank } from "./http";
 import type { Persona } from "./personas";
@@ -11,12 +12,9 @@ type Route = { method: string; pattern: RegExp; keys: string[]; permission: Perm
 
 export type DemoContext = ReturnType<typeof createDemoContext>;
 
-// What the scoped operator persona holds globally: what operators' old
-// tokens.* and rules.upload became (migration 51).
-const PLATFORM_FOR_SCOPED: readonly string[] = [
-  "tokens.read", "tokens.manage", "tokens.installer",
-  "rules.publish", "rules.read", "rules.assignment.read", "rules.coverage.read",
-];
+// A role's platform permissions apply whatever its reach; the scoped
+// operator's host ones only on production.
+const PLATFORM = new Set(catalogue.filter((p) => p.scope === "platform").map((p) => p.id));
 
 export function createDemoContext({ persona, now }: { persona: Persona; now: number }) {
   const data = buildDemoData(now);
@@ -26,7 +24,7 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
   const scoped = persona === "scoped_operator";
   const capabilities: Capability[] = permissions.map((permission) => ({
     permission,
-    scope: scoped && !PLATFORM_FOR_SCOPED.includes(permission)
+    scope: scoped && !PLATFORM.has(permission)
       ? { kind: "asset_groups", asset_group_ids: ["grp-prod"] }
       : { kind: "global" },
   }));

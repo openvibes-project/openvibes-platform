@@ -279,7 +279,8 @@ test("a new user signs in with a one-time password and must set their own first 
   await page.getByLabel("Username").fill(username);
   await page.getByLabel("Display name").fill("E2E Person");
   await page.getByRole("combobox", { name: "Role" }).click();
-  await page.getByRole("option", { name: /viewer/i }).click();
+  // A fresh install holds Administrator, plus sam's Analyst (console-e2e-server.sh).
+  await page.getByRole("option", { name: /analyst/i }).click();
   await page.getByRole("button", { name: "Create user" }).click();
   const oneTime = (await page.locator(".secret .grow").innerText()).trim();
   expect(oneTime.length).toBeGreaterThanOrEqual(15);
@@ -310,7 +311,7 @@ test("a new user signs in with a one-time password and must set their own first 
   await context.close();
 });
 
-test("rule-set switches: a group is added, a failed change keeps the switch and says why, an analyst sees none", async ({ page, browser }, info) => {
+test("rule-set switches: a group is added, a failed change keeps the switch and says why, an analyst changes none", async ({ page, browser }, info) => {
   await signIn(page, "alex");
   await page.goto("/settings?tab=access");
   await page.getByRole("button", { name: "New group" }).click();
@@ -351,10 +352,11 @@ test("rule-set switches: a group is added, a failed change keeps the switch and 
   await expect(labSwitch).toHaveAttribute("aria-checked", "true");
   await page.unroute(groupPath);
 
-  // An analyst holds neither rules.read nor rules.publish (a second user, as in the dashboards test).
+  // The Analyst template reads rule sets but holds no switch (a second user, as in the dashboards test).
   const sam = await browser.newPage();
   await signIn(sam, "sam");
-  await sam.goto("/settings");
-  await expect(sam.getByRole("tab", { name: "Rule sets" })).toHaveCount(0);
+  await sam.goto("/settings?tab=rule-sets&open=rule-set%3Ahardening-linux-l2");
+  await expect(sam.getByRole("tab", { name: "Rule sets" })).toBeVisible();
+  await expect(sam.getByRole("switch")).toHaveCount(0);
   await sam.close();
 });

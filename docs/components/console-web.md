@@ -441,12 +441,14 @@ triage on alarms and findings stays as it is.
     `tabs` list of `Settings.tsx`, with its `access`. The Settings menu
     entry opens to any tab's access by itself.
   - A permission: the server side only (`access/permission.rs`
-    `Permission`, `access/rbac.rs` `ALL_PERMISSIONS` and the role table,
-    a migration for the database's role tables, and the route's check). Then regenerate the API client
-    (`npm run generate:api`) and `web/src/api/roles.json`
-    (`cargo run -p openvibes-console --bin export_openapi -- --roles >
-    crates/openvibes-console/web/src/api/roles.json`); tests fail while
-    either is stale.
+    `Permission`, `access/catalogue.rs`, a migration for the database's
+    permission rows, and the route's check). Then regenerate the API client
+    (`npm run generate:api`) and `web/src/api/permissions.json`
+    (`cargo run -p openvibes-console --bin export_openapi -- --permissions >
+    crates/openvibes-console/web/src/api/permissions.json`); tests fail while
+    either is stale. Role pickers read the live role list from
+    `GET /api/v1/access-control`; the demo builds its roles from
+    `templates.json` (the personas) and `permissions.json` (Administrator).
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
   after mutations, and the `useResource`/`useAllPages` hooks. Live requests

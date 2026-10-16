@@ -12,14 +12,6 @@ fn generated_openapi_matches_the_committed_snapshot() {
     assert_eq!(openapi_json().unwrap(), SNAPSHOT);
 }
 
-/// The web console's demo grants what the real roles grant. Regenerate with
-/// `cargo run -p openvibes-console --bin export_openapi -- --roles > crates/openvibes-console/web/src/api/roles.json`.
-#[test]
-fn the_web_role_table_matches_the_rust_one() {
-    let web = include_str!("../web/src/api/roles.json");
-    assert_eq!(web.trim_end(), openvibes_console::builtin_roles_json());
-}
-
 /// The web console's permission catalogue and role templates are the Rust
 /// ones. Regenerate with `export_openapi -- --permissions` and `-- --templates`.
 #[test]

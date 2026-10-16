@@ -40,7 +40,8 @@ permission-checked read models, enrollment-token management, and audit routes.
   `POST /api/v1/enrollment-tokens/{token_id}/revoke` requires `tokens.manage`
   and audits the revocation. These responses are `Cache-Control: no-store`.
 - `/api/v1/service-accounts` lists safe account metadata and creates an account
-  with one global built-in role. Per-account token routes list metadata, issue
+  holding one role (an unknown role id is 400 `unknown_role`; so is one
+  given to `POST /api/v1/access-control/users`). Per-account token routes list metadata, issue
   an expiring `ovc_` bearer secret once, revoke a token, or disable the account
   (which also revokes all its tokens). Token issue requires an
   `Idempotency-Key`; a matching retry returns metadata without the original
@@ -143,10 +144,13 @@ CSRF, exact Origin, same-origin Fetch Metadata, and a version-matching
 ## Failure behaviour
 
 Invalid credentials never reveal whether an account exists. Database errors
-are reduced to the generic authentication-unavailable problem. Unknown persisted
-role ids grant no capabilities. Asset-scoped bindings flow through the existing
-RBAC resolver; endpoints must still enforce those scopes in SQL before serving
-agent or finding records.
+are reduced to the generic authentication-unavailable problem. Capabilities
+are read from the database on every request, for sessions and bearer tokens
+alike (`rbac::principal_capabilities`, see console-rbac.md): a role edit
+reaches an issued token at its next request. A permission id the catalogue
+does not know grants nothing. A role's host permissions apply on its reach;
+endpoints must still enforce that scope in SQL before serving agent or
+finding records.
 
 ## How to test
 

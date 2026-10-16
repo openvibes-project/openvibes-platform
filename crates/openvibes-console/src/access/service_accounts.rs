@@ -82,7 +82,7 @@ pub(crate) async fn authenticated_service_accounts(
     )
 }
 
-/// Creates a named service identity with one initial global built-in role.
+/// Creates a named service identity holding one role.
 #[utoipa::path(post,path="/api/v1/service-accounts",tag="service_accounts",request_body=crate::CreateServiceAccountRequest,responses((status=201,description="Service account created",body=crate::ServiceAccountView),(status=409,description="Name already exists",body=ProblemDetails)))]
 pub(crate) async fn create_authenticated_service_account(
     State(state): State<AuthHttpState>,
@@ -90,15 +90,11 @@ pub(crate) async fn create_authenticated_service_account(
     Json(request): Json<crate::CreateServiceAccountRequest>,
 ) -> Response {
     let name = request.name.trim();
-    if name.is_empty()
-        || name.chars().count() > 128
-        || name.chars().any(char::is_control)
-        || crate::BuiltInRole::from_id(&request.role_id).is_none()
-    {
+    if name.is_empty() || name.chars().count() > 128 || name.chars().any(char::is_control) {
         return problem_response(ProblemDetails::new(
             StatusCode::BAD_REQUEST,
             "invalid_service_account",
-            "Provide a valid name and built-in global role",
+            "Provide a valid name",
         ));
     }
     let (scope, actor) = match authenticated_permission(
@@ -123,6 +119,17 @@ pub(crate) async fn create_authenticated_service_account(
         Ok(value) => value,
         Err(_) => return unavailable_auth(),
     };
+    match platform_store::console_roles::role(&client, &request.role_id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "unknown_role",
+                "Choose an existing role",
+            ));
+        }
+        Err(_) => return unavailable_auth(),
+    }
     let id = match console_auth::create_service_account(
         &mut client,
         name,

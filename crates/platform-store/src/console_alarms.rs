@@ -299,7 +299,7 @@ pub async fn update_triage(
         return Ok(TriageOutcome::InvalidTransition);
     }
     let assignee = match assigned_to_username {
-        Some(username) => match assignee(&tx, username).await? {
+        Some(username) => match assignee(&tx, username, "alarms.triage").await? {
             Some(found) => Some(found),
             None => return Ok(TriageOutcome::AssigneeUnavailable),
         },

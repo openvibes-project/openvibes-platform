@@ -100,9 +100,10 @@ test("Add to case from an alarm opens a case, and then points at it", async ({ p
   await expect(page.getByRole("alert")).toContainText("already in another open case: C-105");
 });
 
-test("a viewer has no Cases, and an analyst manages them", async ({ page }) => {
+test("an operator has no Cases, and an analyst manages them", async ({ page }) => {
+  // The Operator template holds no cases permission; Viewer reads them.
   await page.getByRole("button", { name: "Account" }).click();
-  await page.getByRole("menuitemradio", { name: "viewer" }).click();
+  await page.getByRole("menuitemradio", { name: "operator", exact: true }).click();
   await expect(page.getByRole("link", { name: "Cases", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitemradio", { name: "analyst" }).click();

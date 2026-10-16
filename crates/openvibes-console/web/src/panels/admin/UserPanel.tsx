@@ -4,7 +4,6 @@ import { useState } from "react";
 import { apiMessage, invalidate, request, useResource } from "../../api/client";
 import type { AccessInventory } from "../../api/types";
 import { nav } from "../../app/nav";
-import { roles } from "../../app/roles";
 import { useSession } from "../../app/session";
 import { SelectField } from "../../ui/Field";
 import { Icon } from "../../ui/Icon";
@@ -16,7 +15,7 @@ import { toast } from "../../ui/toast";
 export function UserPanel({ id }: { id: string }) {
   const { can } = useSession();
   const inventory = useResource<AccessInventory>("/api/v1/access-control");
-  const [role, setRole] = useState("viewer");
+  const [picked, setRole] = useState<string>();
   const [group, setGroup] = useState("");
   if (inventory.error) return <div className="panel-body"><ErrorBox error={inventory.error} /></div>;
   const data = inventory.data;
@@ -24,6 +23,7 @@ export function UserPanel({ id }: { id: string }) {
   if (!data || !user) return inventory.loading ? <Loading /> : <div className="panel-body"><Empty title="User not found" /></div>;
   const bindings = data.bindings.filter((binding) => binding.user_id === id);
   const manage = can("access.grant", true);
+  const role = picked ?? (data.roles.find((r) => !r.builtin) ?? data.roles[0])?.role_id ?? "";
   const effective = [...new Set(bindings.flatMap((binding) => data.roles.find((r) => r.role_id === binding.role_id)?.permissions ?? []))].sort((a, b) => a.localeCompare(b));
   return (
     <>
@@ -71,14 +71,16 @@ type CreatedUser = { user_id: string; username: string; display_name: string; ro
 export function NewUser() {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [role, setRole] = useState("viewer");
+  const roles = useResource<AccessInventory>("/api/v1/access-control").data?.roles ?? [];
+  const [picked, setRole] = useState<string>();
+  const role = picked ?? (roles.find((r) => !r.builtin) ?? roles[0])?.role_id ?? "";
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<CreatedUser>();
   if (created) {
     return (
       <>
-        <PanelHeader icon="user" kind="User" title={created.display_name} subtitle={`${created.username} · ${roles.find(([id]) => id === created.role_id)?.[1] ?? created.role_id}`} />
+        <PanelHeader icon="user" kind="User" title={created.display_name} subtitle={`${created.username} · ${roles.find((r) => r.role_id === created.role_id)?.display_name ?? created.role_id}`} />
         <div className="panel-body stack">
           <div className="callout callout--warn"><Icon name="alert" size={16} /> Copy the one-time password now. It is shown only once.</div>
           <div className="secret"><span className="grow">{created.one_time_password}</span>
@@ -104,7 +106,7 @@ export function NewUser() {
       }}>
         <label className="field">Username<input className="input mono" required maxLength={64} pattern="[A-Za-z0-9._@+\-]+" autoComplete="off" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. jdoe" /></label>
         <label className="field">Display name<input className="input" required maxLength={160} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="e.g. Jane Doe" /></label>
-        <SelectField label="Role"><Select label="Role" value={role} onChange={setRole} options={roles.map(([id, label]) => ({ value: id, label }))} /></SelectField>
+        <SelectField label="Role"><Select label="Role" value={role} onChange={setRole} options={roles.map((r) => ({ value: r.role_id, label: r.display_name }))} /></SelectField>
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div><button className="button button--primary" type="submit" disabled={busy}><Icon name="plus" size={15} /> {busy ? "Creating…" : "Create user"}</button></div>
       </form>

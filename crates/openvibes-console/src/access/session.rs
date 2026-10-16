@@ -104,28 +104,25 @@ pub(crate) async fn authenticated_session(
             "Authentication required",
         ));
     }
-    let bindings = match console_auth::user_role_bindings(&client, &active.user_id).await {
-        Ok(bindings) => bindings,
-        Err(_) => {
-            return problem_response(ProblemDetails::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "authentication_unavailable",
-                "Authentication is temporarily unavailable",
-            ));
-        }
-    };
-    let mut resolved = Vec::with_capacity(bindings.len());
-    for binding in bindings {
-        // Interim (roles step 2): bindings carry no scope; see guard.rs.
-        if let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) {
-            resolved.push(crate::RoleBinding::global(role));
-        }
-    }
     let idle_expiry = (now + Duration::minutes(30)).min(active.absolute_expires_at);
     let mut capabilities = if active.password_must_change {
         Vec::new() // nothing but setting the password until then (#85)
     } else {
-        crate::resolve_capabilities(&resolved)
+        match crate::access::rbac::principal_capabilities(
+            &client,
+            platform_store::console_roles::Principal::User(&active.user_id),
+        )
+        .await
+        {
+            Ok(capabilities) => capabilities,
+            Err(_) => {
+                return problem_response(ProblemDetails::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "authentication_unavailable",
+                    "Authentication is temporarily unavailable",
+                ));
+            }
+        }
     };
     if state.assistant.is_none() {
         capabilities.retain(|capability| capability.permission != crate::Permission::AssistantUse);

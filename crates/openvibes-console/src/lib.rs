@@ -33,10 +33,7 @@ pub use access::auth::{
     session_cookie, verify_password,
 };
 pub use access::catalogue::catalogue_json;
-pub use access::rbac::{
-    BuiltInRole, RoleBinding, RoleBindingError, builtin_roles, builtin_roles_json,
-    resolve_capabilities,
-};
+pub use access::rbac::{ADMIN_ROLE, resolve_capabilities};
 pub use access::templates::templates_json;
 pub use access::{
     AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser,

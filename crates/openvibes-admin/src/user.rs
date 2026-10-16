@@ -1,7 +1,7 @@
 //! Audited local console-account administration.
 
 use chrono::{SecondsFormat, Utc};
-use clap::{Subcommand, ValueEnum};
+use clap::Subcommand;
 use openvibes_console::{NormalizedPassword, hash_password};
 use platform_store::{
     Client,
@@ -9,28 +9,10 @@ use platform_store::{
         self, AuditContext, DisableOutcome, NewLocalUser, disable_local_user, list_local_users,
         replace_password, unlock_local_user,
     },
+    console_roles,
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use zeroize::Zeroizing;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum BuiltInRole {
-    Viewer,
-    Analyst,
-    Operator,
-    Admin,
-}
-
-impl BuiltInRole {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Viewer => "viewer",
-            Self::Analyst => "analyst",
-            Self::Operator => "operator",
-            Self::Admin => "admin",
-        }
-    }
-}
 
 #[derive(Subcommand)]
 pub enum UserCommand {
@@ -42,9 +24,10 @@ pub enum UserCommand {
         /// Operator-facing display name.
         #[arg(long)]
         display_name: String,
-        /// Initial built-in role.
-        #[arg(long, value_enum, default_value = "admin")]
-        role: BuiltInRole,
+        /// Initial role, by ID (`admin` is the Administrator; the console's
+        /// Roles page shows the others).
+        #[arg(long, default_value = "admin")]
+        role: String,
         /// Read the password from one line of standard input instead of
         /// prompting twice (for scripts and Setup).
         #[arg(long)]
@@ -139,6 +122,11 @@ pub async fn run(
                 Ok(id) => id,
                 Err(error) => return (Err(error), Some(username)),
             };
+            match console_roles::role(client, role).await {
+                Ok(Some(_)) => {}
+                Ok(None) => return (Err(format!("no role with ID {role}")), Some(username)),
+                Err(error) => return (Err(error.to_string()), Some(username)),
+            }
             let now = Utc::now();
             let result = console_auth::create_local_user(
                 client,
@@ -148,7 +136,7 @@ pub async fn run(
                     username: &username,
                     display_name: display_name.trim(),
                     password_phc: credential.as_str(),
-                    role_id: role.as_str(),
+                    role_id: role,
                     actor_id: actor,
                     actor_kind: "local_admin",
                     password_must_change: *must_change,
@@ -156,12 +144,7 @@ pub async fn run(
                 },
             )
             .await
-            .map(|()| {
-                format!(
-                    "created local user {username} with role {}\n",
-                    role.as_str()
-                )
-            })
+            .map(|()| format!("created local user {username} with role {role}\n"))
             .map_err(|error| error.to_string());
             (result, Some(username))
         }
@@ -170,12 +153,20 @@ pub async fn run(
                 Ok(users) => users,
                 Err(error) => return (Err(error.to_string()), None),
             };
+            let names = match console_roles::list_roles(client).await {
+                Ok(roles) => roles
+                    .into_iter()
+                    .map(|role| (role.role_id, role.name))
+                    .collect::<std::collections::HashMap<_, _>>(),
+                Err(error) => return (Err(error.to_string()), None),
+            };
             let mut output = String::from("USERNAME\tSTATUS\tROLES\tDISPLAY NAME\tLAST SEEN\n");
             for user in users {
                 let roles = if user.role_ids.is_empty() {
                     "none".to_owned()
                 } else {
-                    user.role_ids.join(",")
+                    let name = |id: &String| printable_field(names.get(id).unwrap_or(id));
+                    user.role_ids.iter().map(name).collect::<Vec<_>>().join(",")
                 };
                 let last_seen = user
                     .last_seen_at
@@ -396,7 +387,7 @@ fn printable_field(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{BuiltInRole, UserCommand, canonical_username, printable_field, random_uuid};
+    use super::{UserCommand, canonical_username, printable_field, random_uuid};
     use clap::Parser;
 
     #[derive(Parser)]
@@ -426,10 +417,7 @@ mod tests {
         .unwrap();
         assert!(matches!(
             parsed.command,
-            UserCommand::Create {
-                role: BuiltInRole::Admin,
-                ..
-            }
+            UserCommand::Create { ref role, .. } if role == "admin"
         ));
         assert!(
             TestCli::try_parse_from([

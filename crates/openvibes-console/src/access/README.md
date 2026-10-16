@@ -9,7 +9,7 @@ Who may do what in the console: sign-in and the session, the checks every area's
 | `auth.rs` | Session, password and CSRF primitives. |
 | `auth_tests.rs` | Tests for those primitives. |
 | `auth_first.rs` | Authenticates every `/api` request before its handler runs. |
-| `rbac.rs` | Built-in roles, permissions and asset-scope resolution. |
+| `rbac.rs` | Turns held roles (from the database, per request) into capabilities and their host scope; Administrator holds everything. |
 | `permission.rs` | `Permission`, the 48 stable permission identifiers, and `PermissionScope`. |
 | `catalogue.rs` | The permission catalogue: area, console text, column, scope and needs of each permission; `with_needs`. |
 | `templates.rs` | The six role templates and their permissions. |

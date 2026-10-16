@@ -17,6 +17,8 @@ use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::Value;
 use tower::ServiceExt;
 
+mod common;
+
 const ORIGIN: &str = "https://console.example";
 const ADMIN_PASSWORD: &str = "violet-satellite-mountain-otter-2026";
 
@@ -182,6 +184,7 @@ async fn post(
 async fn local_user(db: &TestDb, username: &str, role_id: &str, index: u8) {
     let phc = hash_password(&NormalizedPassword::new(ADMIN_PASSWORD).unwrap()).unwrap();
     let mut client = db.pool.get().await.unwrap();
+    common::ensure_role(&client, role_id).await;
     create_local_user(
         &mut client,
         &NewLocalUser {
@@ -251,6 +254,17 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
     )
     .await;
     assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+    let unknown = post(
+        &router,
+        "/api/v1/access-control/users",
+        &admin,
+        serde_json::json!({"username": "zed", "display_name": "Zed", "role_id": "no_such"}),
+    )
+    .await;
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+    let unknown: Value =
+        serde_json::from_slice(&to_bytes(unknown.into_body(), 4096).await.unwrap()).unwrap();
+    assert_eq!(unknown["code"], "unknown_role");
 
     let created = post(
         &router,

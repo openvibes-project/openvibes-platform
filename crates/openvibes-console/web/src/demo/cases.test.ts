@@ -28,19 +28,19 @@ async function freeObjects(server: Server) {
 }
 
 describe("demo cases: permissions and the seed", () => {
-  it("grants cases.write to the analyst and the admin only, as the server's role table does", async () => {
+  it("grants cases.write to the analyst and the admin only, as the role templates do", async () => {
     for (const [persona, manage] of [["viewer", false], ["operator", false], ["analyst", true], ["admin", true]] as const) {
       const server = createDemoServer({ persona });
       const session = (await call<{ capabilities: { permission: string }[] }>(server, "GET", "/api/v1/session")).body;
       const permissions = session.capabilities.map((c) => c.permission);
       expect(permissions.includes("cases.write"), persona).toBe(manage);
-      expect(permissions.includes("cases.read"), persona).toBe(persona === "analyst" || persona === "admin");
+      expect(permissions.includes("cases.read"), persona).toBe(persona !== "operator");
     }
   });
 
   it("refuses without the permission, with problem details", async () => {
+    expect((await call(createDemoServer({ persona: "operator" }), "GET", "/api/v1/cases")).status).toBe(403);
     const viewer = createDemoServer({ persona: "viewer" });
-    expect((await call(viewer, "GET", "/api/v1/cases")).status).toBe(403);
     const response = await call(viewer, "POST", "/api/v1/cases", { title: "x" });
     expect(response.status).toBe(403);
     expect(response.body.code).toBe("forbidden");
@@ -108,8 +108,9 @@ describe("demo cases: permissions and the seed", () => {
     }
   });
 
-  it("lists who can be assigned: users holding cases.read, for those who manage", async () => {
-    const server = createDemoServer({ persona: "analyst" });
+  it("lists who can be assigned: users holding cases.read, for those who may assign", async () => {
+    expect((await call(createDemoServer({ persona: "analyst" }), "GET", "/api/v1/cases/assignees")).status).toBe(403);
+    const server = createDemoServer({ persona: "admin" });
     const users = (await call<{ items: { username: string }[] }>(server, "GET", "/api/v1/cases/assignees")).body.items.map((u) => u.username);
     expect(users.sort()).toEqual(["admin", "sam"]);
   });
@@ -412,7 +413,8 @@ describe("demo cases data", () => {
     const data = buildDemoData(Date.parse("2026-10-04T12:00:00Z"));
     expect(data.access.roles.find((r) => r.role_id === "analyst")?.permissions).toContain("cases.write");
     expect(data.access.roles.find((r) => r.role_id === "admin")?.permissions).toContain("cases.write");
-    expect(data.access.roles.find((r) => r.role_id === "viewer")?.permissions).not.toContain("cases.read");
+    expect(data.access.roles.find((r) => r.role_id === "viewer")?.permissions).not.toContain("cases.write");
+    expect(data.access.roles.find((r) => r.role_id === "operator")?.permissions).not.toContain("cases.read");
     // The server's admin holds every permission the other roles do.
     const admin = data.access.roles.find((r) => r.role_id === "admin")?.permissions ?? [];
     for (const role of data.access.roles) expect(admin, role.role_id).toEqual(expect.arrayContaining(role.permissions));
