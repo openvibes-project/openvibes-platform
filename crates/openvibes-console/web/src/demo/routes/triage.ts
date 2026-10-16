@@ -132,7 +132,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore }) {
   for (const [kind, permission] of [["alarms", "alarms.triage"], ["compliance", "compliance.triage"], ["vulnerabilities", "vulnerabilities.triage"]] as const) {
     const has = (p: string) => capabilities.some((c) => c.permission === p);
     const allowed = (action: string) => action === "state" || action === "assign"
-      || (action === "case" && has("cases.write")) || (action === "suppress" && kind === "alarms" && has("alarms.suppress"));
+      || (action === "case" && has("cases.write") && has("cases.read")) || (action === "suppress" && kind === "alarms" && has("alarms.suppress"));
     route("POST", `/api/v1/${kind}/bulk`, permission, (_, __, body) => {
       const items = Array.isArray(body.items) ? (body.items as Record<string, unknown>[]) : [];
       if (items.length === 0 || items.length > 10_000) return problem(400, "invalid_items", "Select 1 to 10,000 items");

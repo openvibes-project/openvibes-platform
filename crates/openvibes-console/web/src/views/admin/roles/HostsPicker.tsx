@@ -1,7 +1,7 @@
 // Step "Hosts": a search over host groups with "All hosts" first; chosen ones
 // show as chips with ×. All hosts clears the groups; nothing chosen is "No hosts".
 // A search field plus a list of toggle buttons (Tab moves through them), not a combobox.
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { HostGroup } from "../../../api/types";
 import { Icon } from "../../../ui/Icon";
@@ -19,12 +19,16 @@ function note(reach: Reach): string {
 export function HostsPicker({ reach, groups, dispatch, readOnly }: { reach: Reach; groups: readonly HostGroup[]; dispatch: (action: Action) => void; readOnly: boolean }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
   const chosen = reach.kind === "groups" ? reach.groups : [];
   const isChosen = (id: string) => chosen.some((g) => g.asset_group_id === id);
   const options = [{ id: "", name: ALL }, ...groups.map((g) => ({ id: g.asset_group_id, name: g.name }))].filter((o) => matches([o.name], query));
   const pick = (id: string, name: string) => {
     dispatch(id ? { type: "group", group: { asset_group_id: id, name } } : { type: "allHosts" });
     setQuery("");
+    // Closed after each pick, so it never covers the bar below; click, type or ArrowDown reopens it.
+    setOpen(false);
+    input.current?.focus();
   };
   const chips = reach.kind === "all" ? [{ id: "", name: ALL }] : chosen.map((g) => ({ id: g.asset_group_id, name: g.name }));
   return (
@@ -35,8 +39,9 @@ export function HostsPicker({ reach, groups, dispatch, readOnly }: { reach: Reac
           <label className="search">
             <Icon name="search" size={15} />
             <span className="sr-only">Search host groups</span>
-            <input className="input" type="search" placeholder="Search host groups, or choose All hosts" value={query} autoComplete="off"
-              onFocus={() => setOpen(true)} onChange={(e) => { setQuery(e.target.value); setOpen(true); }} />
+            <input ref={input} className="input" type="search" placeholder="Search host groups, or choose All hosts" value={query} autoComplete="off"
+              onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+              onKeyDown={(e) => { if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); } }} />
           </label>
           {open && (
             <div className="sel__popup hosts-picker__popup">

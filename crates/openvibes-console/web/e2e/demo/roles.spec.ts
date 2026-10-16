@@ -26,13 +26,15 @@ test("an administrator creates a role from the Analyst template on one host grou
   await expect(page.locator(".role-page__notice")).toContainText("Also turned on: Share dashboards with your roles");
   await page.getByRole("searchbox", { name: "Search host groups" }).click();
   await page.getByRole("group", { name: "Host groups" }).getByRole("button", { name: "WindowsServers" }).click();
-  await page.keyboard.press("Escape");
+  // The list closes on a pick, so Create role is clickable straight away.
+  await expect(page.getByRole("group", { name: "Host groups" })).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole("button", { name: "Create role" }).click();
   await expect(page.locator(".toast")).toContainText("Role created");
   const created = list.filter({ hasText: "Night shift" });
   await expect(created).toContainText("WindowsServers");
-  await expect(created).toContainText("17");
+  // Columns: Role, Hosts, Permissions, People.
+  await expect(created.locator("td").nth(2)).toHaveText("17");
 });
 
 test("a role name is taken whatever its case", async ({ page }) => {

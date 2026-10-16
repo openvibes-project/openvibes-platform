@@ -17,7 +17,8 @@ async function nightShift(page: Page) {
   await page.getByRole("option", { name: /^Analyst template/ }).click();
   await page.getByRole("searchbox", { name: "Search host groups" }).click();
   await page.getByRole("group", { name: "Host groups" }).getByRole("button", { name: "WindowsServers" }).click();
-  await page.keyboard.press("Escape");
+  // The list closes on a pick, so Create role is clickable straight away.
+  await expect(page.getByRole("group", { name: "Host groups" })).toHaveCount(0);
   await page.getByRole("button", { name: "Create role" }).click();
   await expect(page.locator(".toast")).toContainText("Role created");
 }
@@ -28,6 +29,7 @@ test("an administrator gives a person a role on one group and takes it away", as
   await page.getByRole("tab", { name: "People" }).click();
   await page.getByRole("table", { name: "People" }).locator("tbody tr").filter({ hasText: "Vic Viewer" }).locator("td").first().click();
   await expect(page.getByRole("heading", { level: 1, name: "Vic Viewer" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More actions" })).toBeVisible();
   await expect(page.locator(".person-page__activity li").first()).toContainText("Revoked a host");
   await page.getByRole("button", { name: "Add role" }).click();
   await page.getByRole("group", { name: "Roles to add" }).getByRole("button", { name: /^Night shift/ }).click();
@@ -50,5 +52,6 @@ test("on your own page Disable and Remove are not offered", async ({ page }) => 
   await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Add role" })).toHaveCount(0);
   await expect(page.getByText("Nobody can change their own roles.")).toBeVisible();
-  await expect(page.getByText("Disable user…")).toHaveCount(0);
+  // Reset password and Disable live in More actions, which is absent on your own page.
+  await expect(page.getByRole("button", { name: "More actions" })).toHaveCount(0);
 });

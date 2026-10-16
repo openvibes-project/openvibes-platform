@@ -240,7 +240,10 @@
 .hosts-picker { gap: 10px; }
 .hosts-picker__search { position: relative; }
 .hosts-picker__search .input { height: 40px; }
-.hosts-picker__popup { position: absolute; top: calc(100% + 4px); left: 0; width: 100%; z-index: 30; }
+/* Below the role page's sticky bar (z-index 20; beats .sel__popup's 60); the list inside scrolls. */
+.sel__popup.hosts-picker__popup { position: absolute; top: calc(100% + 4px); left: 0; width: 100%; z-index: 15; max-height: min(340px, 50vh); }
+/* Hosts is the role page's last step, just above the sticky bar: its list opens upwards, over the matrix. */
+.hosts-picker .hosts-picker__popup { top: auto; bottom: calc(100% + 4px); }
 .hosts-picker__option { all: unset; box-sizing: border-box; display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-1); font-size: 13px; cursor: pointer; }
 .hosts-picker__option:hover, .hosts-picker__option:focus-visible { background: var(--surface-2); }
 .hosts-picker__chip { gap: 4px; padding-right: 4px; cursor: default; background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
