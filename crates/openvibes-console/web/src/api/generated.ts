@@ -1050,6 +1050,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The permission catalogue: area, column, scope and needs of each. */
+        get: operations["permissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ports": {
         parameters: {
             query?: never;
@@ -1080,6 +1097,63 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/role-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The role templates; picking one only fills the form. */
+        get: operations["role_templates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every role, Administrator first, then by name. */
+        get: operations["list_roles"];
+        put?: never;
+        /** Creates a role that fits inside the editor's own access. */
+        post: operations["create_role"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One role. */
+        get: operations["get_role"];
+        put?: never;
+        post?: never;
+        /** Deletes a role nobody holds, when it fits inside the editor's access. */
+        delete: operations["delete_role"];
+        options?: never;
+        head?: never;
+        /**
+         * Replaces a role's contents when `version` is still current; the
+         *     result must fit inside the editor's own access.
+         */
+        patch: operations["update_role"];
         trace?: never;
     };
     "/api/v1/rule-bundles/preview": {
@@ -3187,6 +3261,11 @@ export interface components {
             /** @description Latest observed severity. */
             severity: components["schemas"]["Severity"];
         };
+        /** @description A host group a role reaches. */
+        GroupRef: {
+            asset_group_id: string;
+            name: string;
+        };
         /** @description Complete historical rule definition, read-only. */
         HistoricalRuleView: {
             /** @description MITRE ATT&CK pairs (P18); empty when the rule has none. */
@@ -3469,13 +3548,7 @@ export interface components {
             csrf_token: string;
         };
         /** @description Stable RFC Problem Details-style error response used by the console API. */
-        ProblemDetails: {
-            /**
-             * Format: int64
-             * @description With `item_in_case`: the number of the open case that holds the
-             *     item, only when the caller may see that case.
-             */
-            case_number?: number | null;
+        ProblemDetails: components["schemas"]["ProblemExtra"] & {
             /** @description Stable machine-readable error code. */
             code: string;
             /** @description Bounded request-field errors when validation can safely identify them. */
@@ -3489,6 +3562,24 @@ export interface components {
             status: number;
             /** @description Short human-readable error title. */
             title: string;
+        };
+        /** @description Fields that only some problem codes carry. */
+        ProblemExtra: {
+            /**
+             * Format: int64
+             * @description With `item_in_case`: the number of the open case that holds the
+             *     item, only when the caller may see that case.
+             */
+            case_number?: number | null;
+            /**
+             * Format: int64
+             * @description With `role_in_use`: how many people and service accounts hold it.
+             */
+            holders?: number | null;
+            /** @description With `missing_needs`: the permission it needs. */
+            needs?: string | null;
+            /** @description With `missing_needs`: the permission whose need is missing. */
+            permission?: string | null;
         };
         /** @description The password the signer checks again before it signs. */
         PublishDraftsRequest: {
@@ -3512,10 +3603,55 @@ export interface components {
              */
             version: number;
         };
+        /** @description The hosts a role reaches, as sent. */
+        ReachInput: {
+            /** @enum {string} */
+            kind: "none";
+        } | {
+            /** @enum {string} */
+            kind: "all";
+        } | {
+            /** @description Host group UUIDs, each once. */
+            asset_group_ids: string[];
+            /** @enum {string} */
+            kind: "groups";
+        };
+        /** @description The hosts a role reaches, with group names. */
+        ReachView: {
+            /** @enum {string} */
+            kind: "none";
+        } | {
+            /** @enum {string} */
+            kind: "all";
+        } | {
+            groups: components["schemas"]["GroupRef"][];
+            /** @enum {string} */
+            kind: "groups";
+        };
         /** @description Reason supplied by an operator when revoking an agent. */
         RevokeAgentRequest: {
             /** @description Short operator reason recorded in the audit event. */
             reason: string;
+        };
+        /** @description One role as the console shows it. */
+        RoleView: {
+            /** @description Only Administrator is built in; it cannot be changed or deleted. */
+            builtin: boolean;
+            description: string;
+            /**
+             * Format: int64
+             * @description Active bindings (people and service accounts) holding the role.
+             */
+            members: number;
+            name: string;
+            permissions: components["schemas"]["Permission"][];
+            reach: components["schemas"]["ReachView"];
+            role_id: string;
+            /**
+             * Format: int32
+             * @description Send it back when editing.
+             */
+            version: number;
         };
         /** @description Published bundle history for one set. */
         RuleBundlePage: {
@@ -3766,6 +3902,25 @@ export interface components {
             layout: Record<string, never>;
             /** @description 1–80 characters. */
             name: string;
+        };
+        /** @description A role to create, or a role's new contents. */
+        SaveRole: {
+            /** @description At most 500 characters. */
+            description?: string;
+            /**
+             * @description 1–64 characters after trimming, no control characters; unique
+             *     regardless of case.
+             */
+            name: string;
+            /** @description Closed under needs: each permission's needs are included too. */
+            permissions: components["schemas"]["Permission"][];
+            /** @description The hosts the role's host permissions apply on. */
+            reach: components["schemas"]["ReachInput"];
+            /**
+             * Format: int32
+             * @description The version read; required when editing, ignored when creating.
+             */
+            version?: number | null;
         };
         /** @description Bounded service-account inventory. */
         ServiceAccountPage: {
@@ -8405,6 +8560,35 @@ export interface operations {
             };
         };
     };
+    permissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The permission catalogue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     list_ports: {
         parameters: {
             query?: never;
@@ -8510,6 +8694,291 @@ export interface operations {
             };
             /** @description No visible host listens on it */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    role_templates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_roles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Roles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleView"][];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs access.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveRole"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleView"];
+                };
+            };
+            /** @description Invalid name, description or reach */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs access.roles, or outside the editor's access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description role_name_taken */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description missing_needs or unknown_group */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The role */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleView"];
+                };
+            };
+            /** @description Needs access.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such role */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description protected_role, or outside the editor's access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such role */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description role_in_use, with holders */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveRole"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleView"];
+                };
+            };
+            /** @description Invalid fields or no version */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description protected_role, or outside the editor's access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such role */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description stale_role or role_name_taken */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description missing_needs or unknown_group */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

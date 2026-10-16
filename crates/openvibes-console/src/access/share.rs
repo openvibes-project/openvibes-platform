@@ -57,6 +57,10 @@ pub fn fits(
 }
 
 /// Are all of these roles inside the editor's share (§4.4)? An empty set fits.
+#[allow(
+    dead_code,
+    reason = "the People and Service accounts lists use it from roles step 6"
+)]
 pub fn all_fit<'a>(
     editor: &[EffectiveCapability],
     roles: impl IntoIterator<Item = (&'a [Permission], RoleReach<'a>)>,

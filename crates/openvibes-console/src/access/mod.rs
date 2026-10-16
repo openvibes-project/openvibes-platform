@@ -19,12 +19,12 @@ pub(crate) mod inventory;
 pub(crate) mod login;
 mod permission;
 pub(crate) mod rbac;
+pub(crate) mod roles;
+pub(crate) mod roles_types;
 pub(crate) mod service_accounts;
 pub(crate) mod service_tokens;
 pub(crate) mod session;
 mod session_types;
-// Callers arrive in the role and people handlers (tasks 5 and 6).
-#[allow(dead_code)]
 pub(crate) mod share;
 pub(crate) mod tags;
 pub mod templates;
@@ -53,6 +53,15 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
     Router::new()
         .route("/v1/session", get(session::authenticated_session))
         .route("/v1/session/password", post(users::change_password))
+        .route("/v1/permissions", get(roles::permissions))
+        .route("/v1/role-templates", get(roles::role_templates))
+        .route("/v1/roles", get(roles::list_roles).post(roles::create_role))
+        .route(
+            "/v1/roles/{role_id}",
+            get(roles::get_role)
+                .patch(roles::update_role)
+                .delete(roles::delete_role),
+        )
         .route(
             "/v1/agents/{agent_id}/tags/preview",
             post(tags::preview_authenticated_agent_tags),

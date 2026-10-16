@@ -109,6 +109,31 @@ in the OpenAPI document, with no session and with a forced-change one.
   signed out, and `auth.password.changed` is audited. The same route is the
   account menu's Change password.
 
+### Roles (spec §4.1–4.4)
+
+`access/roles.rs` (types in `roles_types.rs`):
+
+- `GET /api/v1/permissions` and `GET /api/v1/role-templates`: the
+  catalogue and the six templates, to any signed-in person (bearer
+  tokens are refused, as for other per-person reads).
+- `GET /api/v1/roles` and `GET /api/v1/roles/{role_id}` (`access.read`):
+  `RoleView` (permissions, reach `none` / `all` / `groups` with names,
+  members, version), Administrator first.
+- `POST /api/v1/roles` (201), `PATCH /api/v1/roles/{role_id}` (200, needs
+  the `version` read) and `DELETE /api/v1/roles/{role_id}` (204):
+  `access.roles` and CSRF. The name is trimmed, 1–64 characters without
+  control characters; the description at most 500 (else 400
+  `invalid_role` with a field error). Permissions must be closed under
+  needs (422 `missing_needs` with `permission` and `needs`); groups are
+  1–64 distinct UUIDs that exist (422 `unknown_group`).
+- Every write is checked against the editor's share before it reaches
+  the store: the new contents for create and edit, the stored role for
+  delete. A refusal is 403 `permission_denied` whose title names the
+  permission ("... (View hosts is outside it)").
+- 403 `protected_role` for `admin`; 409 `role_name_taken` (any case),
+  `stale_role`, `role_in_use` with `holders`. Audited by the store as
+  `rbac.role.created`, `rbac.role.updated`, `rbac.role.deleted`.
+
 ## Configuration
 
 The router constructor accepts a `platform_store::Pool` and canonical public

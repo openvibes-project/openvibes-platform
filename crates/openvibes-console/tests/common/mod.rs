@@ -2,6 +2,8 @@
 //! only the Administrator, so each test creates the roles it binds.
 #![allow(dead_code, reason = "each test binary uses some of these")]
 
+pub mod http;
+
 use chrono::Utc;
 use platform_store::{
     Client,

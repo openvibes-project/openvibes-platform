@@ -5244,6 +5244,40 @@
         }
       }
     },
+    "/api/v1/permissions": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "The permission catalogue: area, column, scope and needs of each.",
+        "operationId": "permissions",
+        "responses": {
+          "200": {
+            "description": "The permission catalogue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ports": {
       "get": {
         "tags": [
@@ -5407,6 +5441,345 @@
           },
           "404": {
             "description": "No visible host listens on it",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/role-templates": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "The role templates; picking one only fills the form.",
+        "operationId": "role_templates",
+        "responses": {
+          "200": {
+            "description": "Role templates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/roles": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Every role, Administrator first, then by name.",
+        "operationId": "list_roles",
+        "responses": {
+          "200": {
+            "description": "Roles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoleView"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Creates a role that fits inside the editor's own access.",
+        "operationId": "create_role",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRole"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid name, description or reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.roles, or outside the editor's access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "role_name_taken",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "missing_needs or unknown_group",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/roles/{role_id}": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "One role.",
+        "operationId": "get_role",
+        "parameters": [
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such role",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Deletes a role nobody holds, when it fits inside the editor's access.",
+        "operationId": "delete_role",
+        "parameters": [
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "description": "protected_role, or outside the editor's access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such role",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "role_in_use, with holders",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Replaces a role's contents when `version` is still current; the\nresult must fit inside the editor's own access.",
+        "operationId": "update_role",
+        "parameters": [
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRole"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields or no version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "protected_role, or outside the editor's access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such role",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "stale_role or role_name_taken",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "missing_needs or unknown_group",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11539,6 +11912,22 @@
           }
         }
       },
+      "GroupRef": {
+        "type": "object",
+        "description": "A host group a role reaches.",
+        "required": [
+          "asset_group_id",
+          "name"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "HistoricalRuleView": {
         "type": "object",
         "description": "Complete historical rule definition, read-only.",
@@ -12257,14 +12646,58 @@
         }
       },
       "ProblemDetails": {
-        "type": "object",
-        "description": "Stable RFC Problem Details-style error response used by the console API.",
-        "required": [
-          "code",
-          "title",
-          "status",
-          "request_id"
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProblemExtra",
+            "description": "Fields a few codes add (boxed: every handler returns this type)."
+          },
+          {
+            "type": "object",
+            "required": [
+              "code",
+              "title",
+              "status",
+              "request_id"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Stable machine-readable error code."
+              },
+              "field_errors": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "#/components/schemas/FieldError"
+                },
+                "description": "Bounded request-field errors when validation can safely identify them.",
+                "maxItems": 32
+              },
+              "request_id": {
+                "type": "string",
+                "description": "Process-local correlation identifier."
+              },
+              "status": {
+                "type": "integer",
+                "format": "int32",
+                "description": "HTTP status code.",
+                "maximum": 599,
+                "minimum": 400
+              },
+              "title": {
+                "type": "string",
+                "description": "Short human-readable error title."
+              }
+            }
+          }
         ],
+        "description": "Stable RFC Problem Details-style error response used by the console API."
+      },
+      "ProblemExtra": {
+        "type": "object",
+        "description": "Fields that only some problem codes carry.",
         "properties": {
           "case_number": {
             "type": [
@@ -12274,35 +12707,27 @@
             "format": "int64",
             "description": "With `item_in_case`: the number of the open case that holds the\nitem, only when the caller may see that case."
           },
-          "code": {
-            "type": "string",
-            "description": "Stable machine-readable error code."
-          },
-          "field_errors": {
+          "holders": {
             "type": [
-              "array",
+              "integer",
               "null"
             ],
-            "items": {
-              "$ref": "#/components/schemas/FieldError"
-            },
-            "description": "Bounded request-field errors when validation can safely identify them.",
-            "maxItems": 32
+            "format": "int64",
+            "description": "With `role_in_use`: how many people and service accounts hold it."
           },
-          "request_id": {
-            "type": "string",
-            "description": "Process-local correlation identifier."
+          "needs": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `missing_needs`: the permission it needs."
           },
-          "status": {
-            "type": "integer",
-            "format": "int32",
-            "description": "HTTP status code.",
-            "maximum": 599,
-            "minimum": 400
-          },
-          "title": {
-            "type": "string",
-            "description": "Short human-readable error title."
+          "permission": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `missing_needs`: the permission whose need is missing."
           }
         }
       },
@@ -12351,6 +12776,118 @@
           }
         }
       },
+      "ReachInput": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "No host: only platform permissions apply.",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "none"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Every host.",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "all"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The hosts of 1–64 existing host groups.",
+            "required": [
+              "asset_group_ids",
+              "kind"
+            ],
+            "properties": {
+              "asset_group_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Host group UUIDs, each once."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "groups"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "The hosts a role reaches, as sent."
+      },
+      "ReachView": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "none"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "all"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "groups",
+              "kind"
+            ],
+            "properties": {
+              "groups": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRef"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "groups"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "The hosts a role reaches, with group names."
+      },
       "RevokeAgentRequest": {
         "type": "object",
         "description": "Reason supplied by an operator when revoking an agent.",
@@ -12364,6 +12901,54 @@
           }
         },
         "additionalProperties": false
+      },
+      "RoleView": {
+        "type": "object",
+        "description": "One role as the console shows it.",
+        "required": [
+          "role_id",
+          "name",
+          "description",
+          "builtin",
+          "permissions",
+          "reach",
+          "members",
+          "version"
+        ],
+        "properties": {
+          "builtin": {
+            "type": "boolean",
+            "description": "Only Administrator is built in; it cannot be changed or deleted."
+          },
+          "description": {
+            "type": "string"
+          },
+          "members": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active bindings (people and service accounts) holding the role."
+          },
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            }
+          },
+          "reach": {
+            "$ref": "#/components/schemas/ReachView"
+          },
+          "role_id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Send it back when editing."
+          }
+        }
       },
       "RuleBundlePage": {
         "type": "object",
@@ -12946,6 +13531,45 @@
           "name": {
             "type": "string",
             "description": "1–80 characters."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveRole": {
+        "type": "object",
+        "description": "A role to create, or a role's new contents.",
+        "required": [
+          "name",
+          "permissions",
+          "reach"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "At most 500 characters."
+          },
+          "name": {
+            "type": "string",
+            "description": "1–64 characters after trimming, no control characters; unique\nregardless of case."
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            },
+            "description": "Closed under needs: each permission's needs are included too."
+          },
+          "reach": {
+            "$ref": "#/components/schemas/ReachInput",
+            "description": "The hosts the role's host permissions apply on."
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The version read; required when editing, ignored when creating."
           }
         },
         "additionalProperties": false

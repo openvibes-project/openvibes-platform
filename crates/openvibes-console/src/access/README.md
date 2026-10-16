@@ -19,6 +19,8 @@ Who may do what in the console: sign-in and the session, the checks every area's
 | `throttle.rs` | Sign-in throttle buckets and failure limits, per account and per source address. |
 | `service_accounts.rs` | Service accounts: list, create, disable. |
 | `service_tokens.rs` | Service-account tokens: list, create, revoke. |
+| `roles.rs` | The roles API: the catalogue, templates, and role list, read, create, edit and delete, each write checked by `share.rs`. |
+| `roles_types.rs` | Request and response types of the roles API. |
 | `share.rs` | The share check: a role fits only inside the editor's own permissions and reach (spec §4.4). |
 | `bindings.rs` | Role bindings: create and revoke. |
 | `asset_groups.rs` | Asset groups: create and update. |

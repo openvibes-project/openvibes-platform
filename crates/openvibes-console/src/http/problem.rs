@@ -26,10 +26,27 @@ pub struct ProblemDetails {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(max_items = 32)]
     pub field_errors: Option<Vec<FieldError>>,
+    /// Fields a few codes add (boxed: every handler returns this type).
+    #[serde(flatten)]
+    pub extra: Box<ProblemExtra>,
+}
+
+/// Fields that only some problem codes carry.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, ToSchema)]
+pub struct ProblemExtra {
     /// With `item_in_case`: the number of the open case that holds the
     /// item, only when the caller may see that case.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub case_number: Option<i64>,
+    /// With `missing_needs`: the permission whose need is missing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permission: Option<String>,
+    /// With `missing_needs`: the permission it needs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub needs: Option<String>,
+    /// With `role_in_use`: how many people and service accounts hold it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holders: Option<i64>,
 }
 
 /// Safe validation detail for one request field.
@@ -51,7 +68,7 @@ impl ProblemDetails {
             status: status.as_u16(),
             request_id: next_request_id(),
             field_errors: None,
-            case_number: None,
+            extra: Box::default(),
         }
     }
 
@@ -62,7 +79,7 @@ impl ProblemDetails {
             status: StatusCode::NOT_FOUND.as_u16(),
             request_id: next_request_id(),
             field_errors: None,
-            case_number: None,
+            extra: Box::default(),
         }
     }
 
@@ -73,7 +90,7 @@ impl ProblemDetails {
             status: StatusCode::SERVICE_UNAVAILABLE.as_u16(),
             request_id: next_request_id(),
             field_errors: None,
-            case_number: None,
+            extra: Box::default(),
         }
     }
 }

@@ -115,4 +115,4 @@ role reaching one group, as migration 52 does).
 
 ## Share check
 
-`access/share.rs` (pure) decides whether a role (permissions plus reach) fits inside an editor's own capabilities: every permission must be held, and host permissions must cover the role's reach (reaches from several held roles combine; platform permissions ignore reach). Refusals name the permission in console words. Role, user and service-account handlers call it.
+`access/share.rs` (pure) decides whether a role (permissions plus reach) fits inside an editor's own capabilities: every permission must be held, and host permissions must cover the role's reach (reaches from several held roles combine; platform permissions ignore reach). Refusals name the permission in console words. The roles API (`access/roles.rs`) calls it on every create, edit and delete, with the capabilities of whoever made the request; the people and service-account handlers will too.
