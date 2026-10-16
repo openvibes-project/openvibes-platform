@@ -722,7 +722,7 @@ Migration 32 creates the `openvibes-signer` role with column grants for a
 password and permission check only (see
 [openvibes-signer.md](openvibes-signer.md)). `signer_user` reads a
 credential (either must-change flag counts), `may_upload_rules` checks
-`site_rules.publish` through an active global role binding, and
+`site_rules.publish` (a platform permission) through an active role binding, and
 `record_signer_failure` counts a wrong password in the account's sign-in
 bucket without an audit row. Sign-in and the signer share
 `console_auth::count_failure` and `account_throttle_bucket`, so a wrong
@@ -853,3 +853,17 @@ group); the console role reads and writes them. Behaviour, grants and tests:
 [rule-set-assignment.md](rule-set-assignment.md).
 `hardening_facts(agent)` returns the hardening outcome of the latest report and
 `hardening_facts_ok_at`, for the host panel's facts warning.
+
+## Custom roles (`console_roles::…`, schema 52)
+
+Roles carry a host reach (all hosts, some asset groups in
+`console_role_groups`, or none), a description and a version; names are
+unique regardless of case. Role bindings lose `asset_group_id`: migration 52
+turns each holder's scoped bindings of one role into one role reaching those
+groups, keeps held former built-ins (viewer, analyst, operator) as ordinary
+roles reaching all hosts, deletes unheld ones, and shows `admin` as
+Administrator. The console role may write roles, their permissions and
+groups, and `console_users` `email`, `display_name` and `last_sign_in_at`.
+Interface and guards: [console-auth-store.md](console-auth-store.md).
+Tests: `tests/custom_roles.rs`; tests that bind a former built-in id create
+it first with `common::seed_role`.

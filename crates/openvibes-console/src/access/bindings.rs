@@ -63,6 +63,14 @@ pub(crate) async fn create_authenticated_access_binding(
             "Access is not available",
         ));
     }
+    // Since schema 52 a role carries its host reach; a binding has no scope.
+    if request.asset_group_id.is_some() {
+        return problem_response(ProblemDetails::new(
+            StatusCode::BAD_REQUEST,
+            "scoped_grants_are_roles",
+            "Give a role that reaches the group instead of scoping the grant",
+        ));
+    }
     let mut client = match state.pool.get().await {
         Ok(v) => v,
         Err(_) => return unavailable_auth(),
@@ -71,7 +79,6 @@ pub(crate) async fn create_authenticated_access_binding(
         &mut client,
         &request.user_id,
         &request.role_id,
-        request.asset_group_id.as_deref(),
         &user_id,
         Utc::now(),
     )
@@ -95,8 +102,8 @@ pub(crate) async fn create_authenticated_access_binding(
             username: binding.username,
             display_name: binding.display_name,
             role_id: binding.role_id,
-            asset_group_id: binding.asset_group_id,
-            asset_group_name: binding.asset_group_name,
+            asset_group_id: None,
+            asset_group_name: None,
             created_at: binding
                 .created_at
                 .to_rfc3339_opts(SecondsFormat::Millis, true),
@@ -162,7 +169,7 @@ pub(crate) async fn revoke_authenticated_access_binding(
                 "Access is not available",
             ))
         }
-        Ok(platform_store::console_auth::BindingRevocation::LastGlobalAdmin) => {
+        Ok(platform_store::console_auth::BindingRevocation::LastAdministrator) => {
             problem_response(ProblemDetails::new(
                 StatusCode::CONFLICT,
                 "last_global_admin",

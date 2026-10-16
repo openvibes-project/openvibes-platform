@@ -10,6 +10,7 @@ use platform_store::{
     console_auth::{
         NewLocalUser, create_local_user, create_user_role_binding, revoke_user_role_binding,
     },
+    console_roles::{Reach, RoleInput, RoleWrite, create_role},
     dashboards::{self, Refusal},
 };
 use serde_json::json;
@@ -41,6 +42,8 @@ async fn setup() -> (TestDb, Client) {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     platform_store::migrate(&mut client).await.unwrap();
+    common::seed_role(&client, "viewer", &["hosts.read"]).await;
+    common::seed_role(&client, "analyst", &["hosts.read"]).await;
     user(
         &mut client,
         ALICE,
@@ -267,17 +270,28 @@ async fn scoped_binding_sees_shared_dashboard() {
             &[],
         )
         .await.unwrap().get(0);
-    create_user_role_binding(
+    // A role reaching one group (what a scoped binding became in schema 52).
+    let scoped = match create_role(
         &mut client,
-        BOB,
-        "analyst",
-        Some(&group),
+        &RoleInput {
+            name: "Analyst (Production)",
+            description: "",
+            permissions: &["hosts.read".to_owned()],
+            reach: &Reach::Groups(vec![group]),
+        },
         "test",
         Utc::now(),
     )
     .await
     .unwrap()
-    .unwrap();
+    {
+        RoleWrite::Saved(role) => role.role_id,
+        _ => panic!("role not saved"),
+    };
+    create_user_role_binding(&mut client, BOB, &scoped, "test", Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
     let created = dashboards::create(&mut client, ALICE, "Analysts", &layout(), Utc::now())
         .await
         .unwrap()
@@ -286,7 +300,7 @@ async fn scoped_binding_sees_shared_dashboard() {
         &mut client,
         ALICE,
         &created.dashboard_id,
-        Some("analyst"),
+        Some(&scoped),
         Utc::now(),
     )
     .await
@@ -302,7 +316,7 @@ async fn scoped_binding_sees_shared_dashboard() {
 #[tokio::test]
 async fn revoked_binding_hides_dashboard_and_home() {
     let (db, mut client) = setup().await;
-    let binding = create_user_role_binding(&mut client, BOB, "analyst", None, "test", Utc::now())
+    let binding = create_user_role_binding(&mut client, BOB, "analyst", "test", Utc::now())
         .await
         .unwrap()
         .unwrap();

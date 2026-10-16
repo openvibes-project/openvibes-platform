@@ -84,8 +84,8 @@ pub(crate) async fn authenticated_access_inventory(
                 username: binding.username,
                 display_name: binding.display_name,
                 role_id: binding.role_id,
-                asset_group_id: binding.asset_group_id,
-                asset_group_name: binding.asset_group_name,
+                asset_group_id: None,
+                asset_group_name: None,
                 created_at: binding
                     .created_at
                     .to_rfc3339_opts(SecondsFormat::Millis, true),

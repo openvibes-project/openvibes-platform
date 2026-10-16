@@ -133,16 +133,11 @@ async fn console_store_writes_work_as_hyphenated_console_role() {
         platform_store::console_auth::EnrollmentTokenCreation::Created { .. }
     ));
 
-    let service_account = create_service_account(
-        &mut client,
-        "console-role-test",
-        "operator",
-        "operator",
-        now,
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let service_account =
+        create_service_account(&mut client, "console-role-test", "admin", "operator", now)
+            .await
+            .unwrap()
+            .unwrap();
     let token = create_service_token(
         &mut client,
         &NewServiceToken {

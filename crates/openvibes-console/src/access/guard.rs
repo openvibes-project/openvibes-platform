@@ -56,15 +56,11 @@ pub(crate) async fn authenticated_permission(
                 .ok_or_else(authentication_required)?;
             let mut resolved = Vec::with_capacity(token.bindings.len());
             for binding in token.bindings {
-                let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) else {
-                    continue;
-                };
-                let resolved_binding = match binding.asset_group_id {
-                    Some(group_id) => crate::RoleBinding::scoped(role, [group_id]),
-                    None => Ok(crate::RoleBinding::global(role)),
-                };
-                if let Ok(binding) = resolved_binding {
-                    resolved.push(binding);
+                // Interim (roles step 2): bindings carry no scope; roles other
+                // than the former built-ins give no access until the access
+                // check reads roles from the database (step 3).
+                if let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) {
+                    resolved.push(crate::RoleBinding::global(role));
                 }
             }
             let capabilities = crate::resolve_capabilities(&resolved);
@@ -228,15 +224,9 @@ async fn session_capabilities(
         .map_err(|_| unavailable_auth())?;
     let mut resolved = Vec::with_capacity(bindings.len());
     for binding in bindings {
-        let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) else {
-            continue;
-        };
-        let resolved_binding = match binding.asset_group_id {
-            Some(group_id) => crate::RoleBinding::scoped(role, [group_id]),
-            None => Ok(crate::RoleBinding::global(role)),
-        };
-        if let Ok(binding) = resolved_binding {
-            resolved.push(binding);
+        // Interim (roles step 2): see the service-token branch above.
+        if let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) {
+            resolved.push(crate::RoleBinding::global(role));
         }
     }
     let capabilities = crate::resolve_capabilities(&resolved);

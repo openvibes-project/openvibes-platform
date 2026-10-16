@@ -12,6 +12,9 @@ async fn migration_43_renames_permissions_dashboards_and_case_items() {
          INSERT INTO console_role_permissions VALUES ('custom', 'findings.read');
          INSERT INTO console_users (user_id, username, display_name, created_at)
               VALUES ('00000000-0000-0000-0000-000000000001', 'u', 'U', now());
+         -- held, so migration 52 keeps the analyst role
+         INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+              VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'analyst', now(), 't');
          INSERT INTO console_dashboards (dashboard_id, owner_user_id, name, layout, created_at, updated_at)
          VALUES ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-000000000001', 'Mine',
            '{\"schema\":1,\"widgets\":[

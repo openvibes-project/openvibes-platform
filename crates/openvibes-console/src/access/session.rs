@@ -116,15 +116,9 @@ pub(crate) async fn authenticated_session(
     };
     let mut resolved = Vec::with_capacity(bindings.len());
     for binding in bindings {
-        let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) else {
-            continue;
-        };
-        let binding = match binding.asset_group_id {
-            Some(group_id) => crate::RoleBinding::scoped(role, [group_id]),
-            None => Ok(crate::RoleBinding::global(role)),
-        };
-        if let Ok(binding) = binding {
-            resolved.push(binding);
+        // Interim (roles step 2): bindings carry no scope; see guard.rs.
+        if let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) {
+            resolved.push(crate::RoleBinding::global(role));
         }
     }
     let idle_expiry = (now + Duration::minutes(30)).min(active.absolute_expires_at);

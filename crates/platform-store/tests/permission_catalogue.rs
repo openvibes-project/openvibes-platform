@@ -11,8 +11,9 @@ async fn old_ids_map_to_the_new_catalogue_and_roles_gain_their_needs() {
     let before = role_permissions(&client).await;
     assert!(before.contains(&("operator".into(), "rules.upload".into())));
     drop(client);
-    let mut client = db.pool.get().await.unwrap();
-    assert_eq!(platform_store::migrate(&mut client).await.unwrap(), 51);
+    // Migration 52 later drops built-in roles nobody holds: compare at 51.
+    let db51 = common::TestDb::create().await;
+    let client = common::at_version(&db51, 51).await;
     let after = role_permissions(&client).await;
     for (role, old, new) in [
         ("operator", "agents.read", "hosts.read"),
@@ -75,6 +76,7 @@ async fn old_ids_map_to_the_new_catalogue_and_roles_gain_their_needs() {
         ])
     );
     db.drop().await;
+    db51.drop().await;
 }
 
 async fn role_permissions(c: &tokio_postgres::Client) -> BTreeSet<(String, String)> {

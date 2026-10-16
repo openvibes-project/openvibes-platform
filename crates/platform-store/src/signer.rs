@@ -54,8 +54,8 @@ pub async fn signer_user(
     }))
 }
 
-/// Whether the user holds `site_rules.publish` through an active, global
-/// (not asset-group) role binding: publishing a rule set reaches every agent.
+/// Whether the user holds `site_rules.publish` (a platform permission, so
+/// the role's host reach does not matter) through an active binding.
 pub async fn may_upload_rules(client: &Client, user_id: &str) -> Result<bool, StoreError> {
     let row = client
         .query_one(
@@ -63,7 +63,7 @@ pub async fn may_upload_rules(client: &Client, user_id: &str) -> Result<bool, St
                 SELECT 1 FROM console_role_bindings b
                 JOIN console_role_permissions p USING (role_id)
                 WHERE b.user_id = $1::text::uuid AND b.revoked_at IS NULL
-                  AND b.asset_group_id IS NULL AND p.permission_id = 'site_rules.publish'
+                  AND p.permission_id = 'site_rules.publish'
              )",
             &[&user_id],
         )

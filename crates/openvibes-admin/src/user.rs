@@ -6,8 +6,8 @@ use openvibes_console::{NormalizedPassword, hash_password};
 use platform_store::{
     Client,
     console_auth::{
-        self, AuditContext, NewLocalUser, disable_local_user, list_local_users, replace_password,
-        unlock_local_user,
+        self, AuditContext, DisableOutcome, NewLocalUser, disable_local_user, list_local_users,
+        replace_password, unlock_local_user,
     },
 };
 use ring::rand::{SecureRandom, SystemRandom};
@@ -223,10 +223,14 @@ pub async fn run(
             )
             .await
             .map_err(|error| error.to_string())
-            .and_then(|disabled| {
-                disabled
-                    .then(|| format!("disabled local user {username}\n"))
-                    .ok_or_else(|| format!("local user {username} changed concurrently"))
+            .and_then(|outcome| match outcome {
+                DisableOutcome::Disabled => Ok(format!("disabled local user {username}\n")),
+                DisableOutcome::NotFound => {
+                    Err(format!("local user {username} changed concurrently"))
+                }
+                DisableOutcome::LastAdministrator => {
+                    Err("That is the last enabled Administrator.".to_owned())
+                }
             });
             (result, Some(username))
         }
