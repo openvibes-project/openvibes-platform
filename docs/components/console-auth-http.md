@@ -130,7 +130,8 @@ in the OpenAPI document, with no session and with a forced-change one.
   the store: the new contents for create; for edit and delete the stored
   role too (edit at the version read: a stale one is 409 `stale_role`
   before any share check). A stored permission id the catalogue does not
-  know is refused, not ignored. A refusal is 403 `permission_denied` whose title names the
+  know is refused, not ignored, except to an Administrator (they can clean
+  such a role up). A refusal is 403 `permission_denied` whose title names the
   permission ("... (View hosts is outside it)").
 - 403 `protected_role` for `admin`; 409 `role_name_taken` (any case),
   `stale_role`, `role_in_use` with `holders`. Audited by the store as

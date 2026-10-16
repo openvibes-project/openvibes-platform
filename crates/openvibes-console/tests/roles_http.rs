@@ -312,10 +312,8 @@ async fn team_admin_cannot_widen_a_role_they_hold() {
     fx.db.drop().await;
 }
 
-#[tokio::test]
-async fn a_stored_permission_the_console_does_not_know_is_refused() {
-    let Some(fx) = Fx::new().await else { return };
-    let id = fx.role("Legacy", &["alarms.read"], Reach::All).await;
+/// Gives role `id` a permission id this console does not know.
+async fn legacy(fx: &Fx, id: &str) {
     fx.db
         .pool
         .get()
@@ -323,16 +321,27 @@ async fn a_stored_permission_the_console_does_not_know_is_refused() {
         .unwrap()
         .batch_execute(&format!(
             "INSERT INTO console_permissions (permission_id, scope_class)
-             VALUES ('legacy.thing', 'global');
+             VALUES ('legacy.thing', 'global') ON CONFLICT DO NOTHING;
              INSERT INTO console_role_permissions (role_id, permission_id)
              VALUES ('{id}', 'legacy.thing')"
         ))
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn a_stored_permission_the_console_does_not_know_is_refused() {
+    let Some(fx) = Fx::new().await else { return };
+    let perms = ["access.read", "access.roles", "alarms.read"];
+    let editors = fx.role("Editors", &perms, Reach::All).await;
+    fx.db.user("ed", &editors, 2).await;
+    let ed = sign_in(&fx.router, "ed").await;
+    let id = fx.role("Legacy", &["alarms.read"], Reach::All).await;
+    legacy(&fx, &id).await;
     let uri = format!("/api/v1/roles/{id}");
-    let edit = save("Legacy", &["alarms.read"], json!({"kind": "all"}), Some(1));
-    for (method, body) in [("PATCH", Some(edit)), ("DELETE", None)] {
-        let (status, refused) = fx.call(&fx.admin, method, &uri, body).await;
+    let edit = || save("Legacy", &["alarms.read"], json!({"kind": "all"}), Some(1));
+    for (method, body) in [("PATCH", Some(edit())), ("DELETE", None)] {
+        let (status, refused) = fx.call(&ed, method, &uri, body).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{method} {refused}");
         assert_eq!(refused["code"], "permission_denied");
         assert!(
@@ -340,6 +349,16 @@ async fn a_stored_permission_the_console_does_not_know_is_refused() {
             "{method} {refused}"
         );
     }
+    // An Administrator holds everything: they may clean such roles up.
+    let (status, saved) = fx.call(&fx.admin, "PATCH", &uri, Some(edit())).await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(saved["permissions"], json!(["alarms.read"]));
+    let other = fx.role("Legacy two", &["alarms.read"], Reach::All).await;
+    legacy(&fx, &other).await;
+    let (status, _) = fx
+        .call(&fx.admin, "DELETE", &format!("/api/v1/roles/{other}"), None)
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
     fx.db.drop().await;
 }
 

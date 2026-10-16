@@ -15,7 +15,7 @@ use platform_store::console_roles::{self, Principal, Reach, RoleInput, RoleWrite
 use crate::access::auth::{PresentedCredentials, presented_credentials};
 use crate::access::catalogue::{catalogue_json, def};
 use crate::access::guard::{authenticated_permission, session_user, unavailable_auth};
-use crate::access::rbac::{ADMIN_ROLE, principal_capabilities};
+use crate::access::rbac::{ADMIN_ROLE, resolve_capabilities};
 use crate::access::roles_types::{ReachInput, RoleView, SaveRole};
 use crate::access::share::{RoleReach, fits, refusal_message};
 use crate::access::templates::templates_json;
@@ -115,7 +115,7 @@ pub(crate) async fn create_role(
     headers: HeaderMap,
     payload: Result<Json<SaveRole>, JsonRejection>,
 ) -> Response {
-    let (actor, editor) = match editor(&state, &headers).await {
+    let editor = match editor(&state, &headers).await {
         Ok(editor) => editor,
         Err(response) => return response,
     };
@@ -126,13 +126,14 @@ pub(crate) async fn create_role(
         Ok(role) => role,
         Err(problem) => return problem_response(problem),
     };
-    if let Err(response) = within_share(&editor, &role.ids, &role.reach) {
+    if let Err(response) = within_share(&editor.capabilities, &role.ids, &role.reach) {
         return problem_response(response);
     }
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    let written = console_roles::create_role(&mut client, &role.input(), &actor, Utc::now()).await;
+    let written =
+        console_roles::create_role(&mut client, &role.input(), &editor.actor, Utc::now()).await;
     answer(StatusCode::CREATED, written)
 }
 
@@ -152,7 +153,7 @@ pub(crate) async fn update_role(
     Path(role_id): Path<String>,
     payload: Result<Json<SaveRole>, JsonRejection>,
 ) -> Response {
-    let (actor, editor) = match editor(&state, &headers).await {
+    let editor = match editor(&state, &headers).await {
         Ok(editor) => editor,
         Err(response) => return response,
     };
@@ -178,7 +179,7 @@ pub(crate) async fn update_role(
     if let Err(response) = stored_role_fits(&client, &editor, &role_id, Some(version)).await {
         return response;
     }
-    if let Err(response) = within_share(&editor, &role.ids, &role.reach) {
+    if let Err(response) = within_share(&editor.capabilities, &role.ids, &role.reach) {
         return problem_response(response);
     }
     let written = console_roles::update_role(
@@ -186,7 +187,7 @@ pub(crate) async fn update_role(
         &role_id,
         version,
         &role.input(),
-        &actor,
+        &editor.actor,
         Utc::now(),
     )
     .await;
@@ -205,7 +206,7 @@ pub(crate) async fn delete_role(
     headers: HeaderMap,
     Path(role_id): Path<String>,
 ) -> Response {
-    let (actor, editor) = match editor(&state, &headers).await {
+    let editor = match editor(&state, &headers).await {
         Ok(editor) => editor,
         Err(response) => return response,
     };
@@ -221,7 +222,7 @@ pub(crate) async fn delete_role(
     if let Err(response) = stored_role_fits(&client, &editor, &role_id, None).await {
         return response;
     }
-    match console_roles::delete_role(&mut client, &role_id, &actor, Utc::now()).await {
+    match console_roles::delete_role(&mut client, &role_id, &editor.actor, Utc::now()).await {
         Ok(RoleWrite::Saved(_)) => StatusCode::NO_CONTENT.into_response(),
         written => answer(StatusCode::NO_CONTENT, written),
     }
@@ -230,10 +231,11 @@ pub(crate) async fn delete_role(
 /// Edit and delete both need the role as stored to fit inside the
 /// editor's share (§4.4), at `version` when one is given (else 409
 /// `stale_role`). A stored permission id the catalogue does not know is
-/// refused, not ignored.
+/// refused, not ignored, except to an Administrator, who holds everything
+/// and must be able to clean such a role up.
 async fn stored_role_fits(
     client: &platform_store::Client,
-    editor: &[EffectiveCapability],
+    editor: &Editor,
     role_id: &str,
     version: Option<i32>,
 ) -> Result<(), Response> {
@@ -248,6 +250,9 @@ async fn stored_role_fits(
     let mut permissions = Vec::with_capacity(stored.permissions.len());
     for id in &stored.permissions {
         let Some(permission) = Permission::from_id(id) else {
+            if editor.admin {
+                continue;
+            }
             let mut problem = ProblemDetails::new(StatusCode::FORBIDDEN, "permission_denied", "");
             problem.title =
                 format!("The role holds a permission this console does not know ({id})");
@@ -255,15 +260,20 @@ async fn stored_role_fits(
         };
         permissions.push(permission);
     }
-    within_share(editor, &permissions, &stored.reach).map_err(problem_response)
+    within_share(&editor.capabilities, &permissions, &stored.reach).map_err(problem_response)
+}
+
+/// Who is editing: their id, everything they hold, and whether they hold
+/// Administrator.
+struct Editor {
+    actor: String,
+    capabilities: Vec<EffectiveCapability>,
+    admin: bool,
 }
 
 /// The caller, holding `access.roles` (CSRF checked), and everything they
 /// hold: the share every write is checked against.
-async fn editor(
-    state: &AuthHttpState,
-    headers: &HeaderMap,
-) -> Result<(String, Vec<EffectiveCapability>), Response> {
+async fn editor(state: &AuthHttpState, headers: &HeaderMap) -> Result<Editor, Response> {
     let (_scope, actor) =
         authenticated_permission(state, headers, Permission::AccessRoles, true).await?;
     let principal = match presented_credentials(headers) {
@@ -271,10 +281,15 @@ async fn editor(
         _ => Principal::User(&actor),
     };
     let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
-    let capabilities = principal_capabilities(&client, principal)
+    // The same grants and test as `rbac::principal_capabilities`.
+    let grants = console_roles::grants(&client, principal)
         .await
         .map_err(|_| unavailable_auth())?;
-    Ok((actor, capabilities))
+    Ok(Editor {
+        admin: grants.iter().any(|grant| grant.role_id == ADMIN_ROLE),
+        capabilities: resolve_capabilities(&grants),
+        actor,
+    })
 }
 
 /// A `SaveRole` that passed validation, ready for the store.
