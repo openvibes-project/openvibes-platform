@@ -112,3 +112,7 @@ and audit journey. `cases_http`'s
 `tests/common` (`ensure_role` for the former viewer, analyst and operator,
 `create_role`, and `scope_bindings`, which gives a binding a copy of its
 role reaching one group, as migration 52 does).
+
+## Share check
+
+`access/share.rs` (pure) decides whether a role (permissions plus reach) fits inside an editor's own capabilities: every permission must be held, and host permissions must cover the role's reach (reaches from several held roles combine; platform permissions ignore reach). Refusals name the permission in console words. Role, user and service-account handlers call it.

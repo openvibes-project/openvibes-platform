@@ -23,6 +23,9 @@ pub(crate) mod service_accounts;
 pub(crate) mod service_tokens;
 pub(crate) mod session;
 mod session_types;
+// Callers arrive in the role and people handlers (tasks 5 and 6).
+#[allow(dead_code)]
+pub(crate) mod share;
 pub(crate) mod tags;
 pub mod templates;
 pub(crate) mod throttle;
