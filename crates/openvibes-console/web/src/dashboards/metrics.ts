@@ -1,5 +1,5 @@
 // The count catalogue; ids and permissions must equal the server's CATALOGUE
-// (crates/openvibes-console/src/metrics.rs), which catalogue.test.ts enforces.
+// (crates/openvibes-console/src/dashboards/metrics.rs), which catalogue.test.ts enforces.
 // No DOM imports here so tests can read it.
 // A cross-kind entry has no view of its own: only its parts navigate.
 import { count } from "../ui/format";

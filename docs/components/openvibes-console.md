@@ -64,8 +64,9 @@ hourly limit, `assistant.internet.lookup` audit row) and answers
 `{ "ok": bool, "detail": string }` (`N results`, the refusal or unreachable
 note, or `web search is off` below level 2; the fetch service re-reads the
 level). Tested with a fake fetch socket (`authenticated_router_with_fetch`).
-The assistant's `reference` and `web_search` lookups (`src/fetch_client.rs`)
-are offered per question from that level (`internet_specs(current_level)`) and
+The assistant's `reference` and `web_search` lookups
+(`src/assistant/fetch_client.rs`) are offered per question from that level
+(`internet_specs(current_level)`) and
 run through the fetch service's socket (`/run/openvibes-fetch/fetch.sock`,
 `AuthHttpState.fetch_socket`): the request JSON is written, the write side
 closed, a reply of at most 64 KiB read, within 25 s (longer than the fetch
@@ -186,7 +187,7 @@ link host/advisory views, preserve opaque cursors, disable triage for readers,
 and send mutations with the session CSRF token. The demo server supplies
 synthetic API models for these routes.
 
-### Installed software (assets v1, `src/software.rs`)
+### Installed software (assets v1, `src/hosts/software.rs`)
 
 All three need `agents.read` and are scoped like the agents. A scoped
 caller's counts include only hosts in the scope, and a host or package no
@@ -236,7 +237,7 @@ vulnerabilities: a software page takes ~235 ms, the `fixable` filter
 ~365 ms, a 100-host scope 78 ms, and one host's packages 6 ms
 (`platform-store` test `measure_the_fleet_aggregate_on_1000_hosts`).
 
-### Open ports and running services (P15, `src/ports.rs`)
+### Open ports and running services (P15, `src/hosts/ports.rs`)
 
 Assets v2, from each agent's `HostServices` report (stored by ingest in
 `host_listeners` and `host_services`, replaced per report). Reads need
@@ -272,7 +273,7 @@ hosts out.
 The fleet lists are not paged: distinct ports and units across a fleet
 stay in the low thousands.
 
-### Live agent presence (`src/presence.rs`)
+### Live agent presence (`src/hosts/presence.rs`)
 
 - `GET /api/v1/agents/events` (`agents.read`): a `text/event-stream`. It sends
   `event: presence` when the fleet's online set changed (a host came online or
@@ -282,7 +283,7 @@ stay in the low thousands.
   `online_fingerprint` every 5 s, only while a stream is open. Not in the
   OpenAPI snapshot (it is not JSON).
 
-### Threat alarms (P14, `src/alarms.rs`)
+### Threat alarms (P14, `src/alarms/`)
 
 - `GET /api/v1/alarms` (`alarms.read`): newest `last_seen` first, scoped
   to the caller's agents; filters `agent_id`, `rule_id`, `severity`,
@@ -324,7 +325,7 @@ stay in the low thousands.
   (`alarm.suppression.created` / `.removed`).
 - Alarms are not offered to the assistant in P14.
 
-Draft site rules (`rule_drafts.rs`; need `rules.write`, global scope; the
+Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; need `rules.write`, global scope; the
 `site` findings set and the `site-alarms` alarm set only, else 404):
 
 - `GET /api/v1/rules/coverage` (global `rules.read` or `rules.upload`): MITRE ATT&CK
@@ -387,6 +388,35 @@ Draft site rules (`rule_drafts.rs`; need `rules.write`, global scope; the
   Before the first publish a host that lists a set counts as current.
 
 A draft reaches an agent only once published this way.
+
+## Where code lives
+
+Server code is `crates/openvibes-console/src`, one folder per area:
+
+- `http/`: routers, route table, middleware, serving the web app, error answers, the OpenAPI document.
+- `access/`: sign-in, session, permission checks, roles, users, service accounts, role bindings, asset groups, host tags.
+- `audit/`: the audit event list, CSV export, retention.
+- `hosts/`: agents, enrollment, install package, software, ports, presence, the site rule-set fleet.
+- `compliance/`: findings, finding groups, history, triage, and the triage shared by every kind: bulk triage of findings, alarms and vulnerabilities, and the per-host triage detail.
+- `vulnerabilities/`: summary, prioritised list, advisory detail.
+- `alarms/`: alarms, suppressions, detection evidence.
+- `cases/`: cases.
+- `rules/`: rule sets, bundles, draft rules, publishing, rule tests, ATT&CK coverage.
+- `assistant/`: chat endpoints, runtime, lookups, internet lookups switch.
+- `dashboards/`: dashboards and the count history.
+- `seeded/`: fixed demo data for the loopback development listener.
+- `server/`: listeners, TLS, trusted proxy, shutdown; it sets the readiness flag, which `http/router.rs` (`Readiness`, the health router) defines.
+- `about.rs`, `config.rs`, `lib.rs`, `main.rs`, and `bin/` (`export_openapi`).
+
+Each area's `mod.rs` exposes `routes()`; `http/routes.rs` merges them. Every
+folder has a `README.md` listing its files, checked by
+`scripts/check-folder-readmes.sh`.
+
+To add an endpoint: write the handler in its area's file, add the route to
+that area's `routes()`, put its types in the area's `*_types.rs` or
+`types.rs`, add `#[utoipa::path]` and list it in `http/openapi.rs`, then
+regenerate `docs/api/console-v1.openapi.json` (`export_openapi`) and the web
+client (`npm --prefix crates/openvibes-console/web run generate:api`).
 
 ## Interfaces
 
@@ -477,7 +507,7 @@ matches while exact installation IDs remain addressable.
 ## Configuration
 
 
-### Bulk triage and the detail view (triage v2, `src/bulk.rs`, `src/triage_detail.rs`)
+### Bulk triage and the detail view (triage v2, `src/compliance/bulk.rs`, `src/compliance/triage_detail.rs`)
 
 Spec `docs/specs/2026-10-10-bulk-triage-design.md` (#237, #239, #240).
 

@@ -10,85 +10,79 @@
 //! by the `embedded-ui` feature after their Vite output has been validated.
 
 mod about;
-mod agent_package;
-mod alarm_suppressions;
+mod access;
 mod alarms;
-mod api;
-#[cfg(feature = "embedded-ui")]
-mod assets;
 mod assistant;
-mod assistant_internet;
-mod auth;
-mod auth_first;
-mod bulk;
+mod audit;
 mod cases;
+mod compliance;
 mod config;
-mod coverage;
 mod dashboards;
-mod detection;
-mod error;
-mod fetch_client;
-#[cfg(feature = "embedded-ui")]
-mod frontend_contract;
-mod metrics;
-mod openapi;
-mod ports;
-mod presence;
-mod problem;
-mod rbac;
-mod router;
-mod rule_assignment;
-mod rule_drafts;
-mod rule_test;
+mod hosts;
+mod http;
+mod rules;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;
-mod site_fleet;
-mod software;
-mod triage_detail;
-mod users;
+mod vulnerabilities;
 
-pub use api::{
-    AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentAlarmsView,
-    AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus, AgentSummary,
-    AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput,
-    AgentTagPreviewResponse, AgentView, ApplyAgentTagsRequest, AssetGroupSelectorInput,
-    AssistantInternet, AssistantInternetTest, AuditEventPage, AuditEventView, AuditRetentionPolicy,
-    AuthenticationLevel, AuthenticationMethod, BulkFindingTriageChange, BulkFindingTriageRequest,
-    BulkFindingTriageResponse, CertificatePage, CertificateView, ChangePasswordRequest,
-    CreateAccessBindingRequest, CreateEnrollmentTokenRequest, CreateServiceAccountRequest,
-    CreateServiceTokenRequest, CreateUserRequest, CreatedEnrollmentToken, CreatedServiceToken,
-    CreatedUser, CursorPage, CursorPagination, CveDetailView, DEFAULT_PAGE_SIZE, DashboardPage,
-    DashboardView, EffectiveCapability, EnrollmentTokenPage, EnrollmentTokenView,
-    FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage, FindingGroupView,
-    FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
-    FindingTriageCounts, FindingTriageView, FindingView, HomeDashboard, LoginRequest,
-    LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope,
-    PreauthResponse, RevokeAgentRequest, RuleBundlePage, RuleBundlePreview, RuleBundleView,
-    RuleSetPage, RuleSetView, SaveAssetGroupRequest, SaveDashboardRequest, ServiceAccountPage,
-    ServiceAccountView, ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse,
-    Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest, UpdateAssistantInternetRequest,
-    UpdateAuditRetentionRequest, UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail,
-    VulnerabilityPage, VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary,
-    VulnerabilityTopHost, VulnerabilityView,
-};
-pub use auth::{
+pub use access::auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,
     PasswordVerification, PresentedCredentials, PresentedSecret, SessionLifetime, SessionSecret,
     browser_origin_allowed, csrf_token_matches, hash_password, presented_credentials,
     session_cookie, verify_password,
 };
-pub use config::{AgentInstallConfig, ConsoleConfig, ConsoleTransportMode, load_config};
-pub use error::ConsoleError;
-pub use openapi::{document as console_openapi, json as openapi_json};
-pub use problem::{FieldError, ProblemDetails};
-pub use rbac::{
+pub use access::rbac::{
     BuiltInRole, RoleBinding, RoleBindingError, builtin_roles, builtin_roles_json,
     resolve_capabilities,
 };
-pub use router::{
+pub use access::{
+    AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser,
+    AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput,
+    AgentTagPreviewResponse, ApplyAgentTagsRequest, AssetGroupSelectorInput, AuthenticationLevel,
+    AuthenticationMethod, ChangePasswordRequest, CreateAccessBindingRequest,
+    CreateServiceAccountRequest, CreateServiceTokenRequest, CreateUserRequest, CreatedServiceToken,
+    CreatedUser, EffectiveCapability, LoginRequest, LoginResponse, Permission, PermissionScope,
+    PreauthResponse, SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView,
+    ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse,
+};
+pub use assistant::{AssistantInternet, AssistantInternetTest, UpdateAssistantInternetRequest};
+pub use audit::{
+    AuditEventPage, AuditEventView, AuditRetentionPolicy, UpdateAuditRetentionRequest,
+};
+pub use compliance::{
+    BulkFindingTriageChange, BulkFindingTriageRequest, BulkFindingTriageResponse,
+    FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage, FindingGroupView,
+    FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
+    FindingTriageCounts, FindingTriageView, FindingView, Severity, UpdateFindingTriageRequest,
+};
+pub use config::{AgentInstallConfig, ConsoleConfig, ConsoleTransportMode, load_config};
+pub use dashboards::{
+    DashboardPage, DashboardView, HomeDashboard, SaveDashboardRequest, ShareDashboardRequest,
+};
+pub use hosts::{
+    AgentAlarmsView, AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus,
+    AgentSummary, AgentView, CertificatePage, CertificateView, CreateEnrollmentTokenRequest,
+    CreatedEnrollmentToken, EnrollmentTokenPage, EnrollmentTokenView, RevokeAgentRequest,
+};
+pub use http::error::ConsoleError;
+pub use http::openapi::{document as console_openapi, json as openapi_json};
+pub use http::pagination::{
+    CursorPage, CursorPagination, DEFAULT_PAGE_SIZE, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE,
+    PaginationError,
+};
+pub use http::problem::{FieldError, ProblemDetails};
+pub use http::{
     Readiness, authenticated_router, authenticated_router_for_hosts,
     authenticated_router_with_agent_install, authenticated_router_with_fetch,
     authenticated_router_with_signer, development_router, health_router, public_router,
 };
+pub use rules::{
+    RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage, RuleSetView,
+    SignedRuleEnvelopeRequest,
+};
 pub use server::{TrustedPeer, run, serve};
+pub use vulnerabilities::{
+    CveDetailView, VulnerabilityAdvisoryDetail, VulnerabilityPage, VulnerabilitySeverity,
+    VulnerabilitySeverityCount, VulnerabilitySummary, VulnerabilityTopHost, VulnerabilityView,
+};

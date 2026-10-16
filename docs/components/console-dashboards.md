@@ -1,6 +1,6 @@
 # console-dashboards
 
-User dashboards over `/api/v1` (module `crates/openvibes-console/src/dashboards.rs`,
+User dashboards over `/api/v1` (folder `crates/openvibes-console/src/dashboards/`,
 store `platform_store::dashboards`, schema 26). Spec:
 [2026-09-28-console-dashboards-design.md](../superpowers/specs/2026-09-28-console-dashboards-design.md).
 

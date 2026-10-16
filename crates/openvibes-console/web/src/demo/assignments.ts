@@ -1,5 +1,5 @@
 // The demo's rule-set assignment: the real API's routes, JSON and status codes
-// (crates/openvibes-console/src/rule_assignment.rs,
+// (crates/openvibes-console/src/rules/assignment.rs,
 // docs/components/rule-set-assignment.md), in memory and, in a browser, in
 // localStorage. Hosts, tags and asset groups come from the rest of the demo,
 // so the Access view's groups are the same ones.
