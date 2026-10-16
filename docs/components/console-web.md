@@ -416,8 +416,8 @@ triage on alarms and findings stays as it is.
   - `views/`: one file per page, in a folder per menu group:
     `investigate/` (Alarms, Compliance, Vulnerabilities, Hosts, Software,
     Ports and Services, Cases), `operate/` (Alarm suppressions, Site rules,
-    Coverage), `admin/` (`Audit.tsx`, and `settings/`: `Settings.tsx` plus
-    one file per tab) and `help/` (About). `views/lists/` holds what the
+    Coverage), `admin/` (`Audit.tsx`, `settings/`: `Settings.tsx` plus
+    one file per tab, and `roles/`: the role page) and `help/` (About). `views/lists/` holds what the
     lists share: filter catalogues (`filters.ts`), row selection and
     sorting (`rows.ts`) and the test-trigger rules (`testRules.ts`).
   - `panels/`: one folder per subject (`hosts/`, `alarms/`, `findings/`,
@@ -439,10 +439,13 @@ triage on alarms and findings stays as it is.
     `access`), its path in `frontend-contract.json`.
   - A Settings tab: its file in `views/admin/settings/` and one line in the
     `tabs` list of `Settings.tsx`, with its `access`. The Settings menu
-    entry opens to any tab's access by itself. Tabs: People, Host groups,
-    Service accounts, Enrollment, Rule sets, Assistant (Roles arrives with its view).
+    entry opens to any tab's access by itself. Tabs: People, Roles, Host
+    groups, Service accounts, Enrollment, Rule sets, Assistant. Settings has
+    no outer filter: each tab has its own search field.
   - A full page under `/settings/…` (roles, people): the `subPage` function in
-    `Settings.tsx`; it renders in place of the tab panel with the tabs shown.
+    `Settings.tsx`; it renders in place of the Settings header and tabs, with
+    a "Settings › …" breadcrumb back (approved screens 2 and 5). The rail
+    keeps Settings current on these pages (`prefix` in the registry).
   - Permission checks are `can(permission)`; there is no `global` flag. The
     catalogue and the needs closure helpers are in `app/permissions.ts`.
   - A permission: the server side only (`access/permission.rs`
@@ -455,6 +458,32 @@ triage on alarms and findings stays as it is.
     `GET /api/v1/roles` (people: `GET /api/v1/users*`, group cards:
     `GET /api/v1/host-groups`); the demo builds its roles from
     `templates.json` (the personas) and `permissions.json` (Administrator).
+- **Roles (`views/admin/settings/Roles.tsx`, `views/admin/roles/`):**
+  - **Purpose:** Settings › Roles lists the roles (Administrator first,
+    "Protected"; templates are not roles) with where each applies, its
+    permission count and members. `/settings/roles/new` and
+    `/settings/roles/{id}` open the role page: 1 Name and 2 Start from
+    (Blank or a template; new roles only), the permission matrix (areas ×
+    View / Change / Export / Approve and publish, "All" per row and a toggle
+    per column, ⓘ on platform permissions), Hosts (All hosts or host groups)
+    and a sticky bar with the summary, Cancel, Delete role, Create or Save.
+  - **Interfaces:** `GET/POST /api/v1/roles`, `GET/PATCH/DELETE
+    /api/v1/roles/{id}` (PATCH sends the `version` read),
+    `GET /api/v1/host-groups`. Templates and the catalogue come from
+    `app/permissions.ts`, so `/role-templates` is not fetched. Turning a
+    permission on adds what it needs (`turnOn`), turning it off removes
+    what depends on it (`turnOff`), and a notice names the others changed:
+    the console only ever sends a closed set.
+  - **Config:** none. Read-only for Administrator ("cannot be changed") and
+    for anyone without `access.roles`.
+  - **Failure behaviour:** a refused save or delete (403 with the missing
+    permission, 409 name taken or role in use, 422 missing needs or unknown
+    group, 400) shows the server's message above the bar and keeps the
+    edits. A 409 `stale_role` reloads the role and says "Someone else
+    changed this role; your edits were not saved."
+  - **How to test:** `roles/RolePage.test.tsx` (reducer, markup and the
+    request bodies, no DOM library); the demo e2e `roles.spec.ts`
+    (Task 10) clicks through it.
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
   after mutations, and the `useResource`/`useAllPages` hooks. Live requests

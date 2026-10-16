@@ -40,6 +40,7 @@ export type Cve = S["CveDetailView"];
 export type AuditEvent = S["AuditEventView"];
 export type AuditRetention = S["AuditRetentionPolicy"];
 export type Role = S["RoleView"];
+export type SaveRole = S["SaveRole"];
 export type PersonRow = S["PersonRow"];
 export type PersonView = S["PersonView"];
 export type HostGroup = S["HostGroupView"];
