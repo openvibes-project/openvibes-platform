@@ -56,9 +56,16 @@ export function outsideShare(capabilities: readonly Capability[], permissions: r
   });
 }
 
-/** Whether the viewer may hand out this role; the server decides, this only hides what it refuses. */
+/**
+ * Whether the viewer may hand out this role; the server decides, this only
+ * hides what it refuses. The session leaves out assistant.use while no
+ * assistant is set up (access/session.rs), so that one is not judged here.
+ */
+// ponytail: a role holding assistant.use can be offered to someone who lacks
+// it and is then refused by the server; send the session's unfiltered
+// permissions if that ever matters.
 export const fitsShare = (capabilities: readonly Capability[], role: Role): boolean =>
-  outsideShare(capabilities, role.permissions, role.reach) === undefined;
+  outsideShare(capabilities, role.permissions.filter((p) => p !== "assistant.use"), role.reach) === undefined;
 
 /** What to say when a change is refused. */
 export const refusal = (error: unknown, fallback: string): string =>

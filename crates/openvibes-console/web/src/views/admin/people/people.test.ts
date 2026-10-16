@@ -17,6 +17,8 @@ describe("fitsShare", () => {
     ["a host permission held on groups, role on all hosts", [on("hosts.read", "g1")], role(["hosts.read"], { kind: "all" }), false],
     ["role on a subset of the viewer's groups", [on("hosts.read", "g1", "g2")], role(["hosts.read"], { kind: "groups", groups: [g("g1")] }), true],
     ["role on a group the viewer does not reach", [on("hosts.read", "g1")], role(["hosts.read"], { kind: "groups", groups: [g("g1"), g("g3")] }), false],
+    // The session drops assistant.use while no assistant is set up; the server still checks it.
+    ["assistant.use, missing from the session", [on("hosts.read", "g1")], role(["hosts.read", "assistant.use"], { kind: "groups", groups: [g("g1")] }), true],
     ["role reaching no hosts", [on("hosts.read", "g1")], role(["hosts.read"], { kind: "none" }), true],
   ];
   it.each(cases)("%s", (_, caps, r, fits) => expect(fitsShare(caps, r)).toBe(fits));
