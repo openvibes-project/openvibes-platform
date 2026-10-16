@@ -216,15 +216,24 @@ fills the form.
 
 ### 4.3 Administrator
 
-Administrator is the role `administrator`, marked `builtin`.
+Administrator is the role `admin` (its ID is unchanged, so setup and the
+admin CLI keep `--role admin`), shown as "Administrator" and marked
+`builtin`.
 
-- Its permissions are not stored. The access check treats it as "every
-  permission in the catalogue, all hosts".
-- First-run setup and the admin CLI's recovery command put the first
-  person on it.
+- The access check treats it as "every permission in the catalogue, all
+  hosts", whatever is stored.
+- Its permission rows are still stored, all of them, so that SQL joining
+  role permissions (case assignees, the signer's upload check) sees it.
+  Every migration that adds a permission also gives it to `admin`.
+- It cannot be edited or deleted.
+- First-run setup (`openvibes-admin user create --role admin`) puts the
+  first person on it, and the same command recovers access.
 - The guards that keep its last enabled member live in the store, inside
   the same transaction as the change, so two concurrent removals cannot
   both succeed.
+
+(Plan ruling, 2026-10-16: the ID stays `admin` instead of becoming
+`administrator`.)
 
 ### 4.4 Granting within your share
 
@@ -363,9 +372,10 @@ One function decides every request:
   items is visible to those holding `cases.read` on all hosts, and to
   its creator and assignee.
 
-The resolved set is cached per session for 30 s and dropped on any role,
-binding or group change, so a revoked right stops within 30 s at most and
-at once for changes made on this platform.
+The resolved set is loaded from the database on every request, with one
+indexed query, as permissions are today. A revoked right stops at the
+next request. (Plan ruling, 2026-10-16: no cache; it is added only if
+measurements call for it.)
 
 ## 7. Settings › General
 
@@ -662,7 +672,8 @@ when the viewer holds its permission on those hosts (§6).
 
 ## 12. Upgrade
 
-One migration, in one transaction; nobody's access changes. The order:
+Migrations applied together in one transaction; nobody's access
+changes. The order:
 
 1. **Permissions:** the new catalogue replaces `console_permissions`. Old
    IDs map to new ones:
@@ -688,15 +699,20 @@ One migration, in one transaction; nobody's access changes. The order:
    - `alarms.suppressions.read` with `alarms.read`;
    - `rules.assignment.read`, `rules.coverage.read` and
      `rules.contents.read` with `rules.read`;
-   - `site_rules.read` with `rules.write`.
+   - `site_rules.read` with `rules.write`;
+   - `rules.read`, `rules.assignment.read` and `rules.coverage.read`
+     with `rules.upload`, whose holders can see Rule sets and Coverage
+     today (plan ruling, 2026-10-16).
 2. **Roles:**
-   - The built-in `admin` becomes `administrator`, protected (§4.3).
+   - The built-in `admin` stays `admin`, shown as Administrator and
+     protected (§4.3).
    - Every other built-in role in use (viewer, analyst, operator) becomes
      an ordinary role with the same name, its mapped permissions, reach
      **all hosts**, and its members.
    - A built-in role nobody holds is deleted (the templates cover it).
-3. **Scoped bindings** (`asset_group_id` set): for each distinct (role,
-   set of groups), a role named "<Role> (<groups>)" — for example
+3. **Scoped bindings** (`asset_group_id` set): a holder's scoped
+   bindings of one role are taken together as one set of groups. For each
+   distinct (role, set of groups), a role named "<Role> (<groups>)" — for example
    "Operator (Lab)" — is created with that reach. The bindings move to it.
    - As before, only the old agent-bound permissions applied there. The
      new role gets those permissions only, so that nobody gains anything.
@@ -752,6 +768,9 @@ The OpenAPI document, the demo server and `roles.json` follow, as today.
 - **Concurrent edits:** a role, group or setting changed by someone else
   since it was read returns 409. The console reloads it and shows what
   changed.
+- **A role in use:** deleting a role that people or service accounts
+  hold is refused with 409 `role_in_use`, naming how many hold it (plan
+  ruling, 2026-10-16).
 - **A group in use:** deleting a group that a role reaches is refused,
   naming the roles, until they no longer use it. A group used by a
   rule-set override can be deleted; the override goes with it, and the
