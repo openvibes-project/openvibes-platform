@@ -182,11 +182,11 @@ DO $$
 DECLARE f record; gid uuid; gname text;
 BEGIN
   FOR f IN SELECT DISTINCT 'os_family' AS field, os_family AS val, console_os_family_name(os_family) AS display
-           FROM agents WHERE status = 'active' AND os_family IS NOT NULL
+           FROM agents WHERE status = 'active' AND os_family IN ('linux', 'windows')
            UNION
            SELECT DISTINCT 'distribution', distribution, console_distribution_name(distribution)
            FROM agents WHERE status = 'active'
-             AND distribution ~ '^[a-z0-9._-]{1,32} [a-z0-9._-]{1,32}$'
+             AND distribution ~ '^(debian|ubuntu|fedora|rocky|almalinux) [a-z0-9._-]{1,32}$'
            ORDER BY 1 DESC, 2 LIMIT 200 LOOP
     gid := gen_random_uuid();
     gname := console_free_group_name(f.display, 'automatic');

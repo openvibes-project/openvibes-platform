@@ -368,3 +368,35 @@ async fn cut_or_merged_tags_are_audited() {
     assert_eq!(labels, 4);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_128_character_name_differing_only_in_case_is_renamed_within_128() {
+    let (a, b) = ("A".repeat(128), "a".repeat(128));
+    let (db, c) = upgraded_from(&format!(
+        "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ('{PROD}','active',now());
+         INSERT INTO console_agent_tags VALUES ('{PROD}','env','prod',now(),'t');
+         INSERT INTO console_asset_groups VALUES ('{G_PROD}','{a}',now() - interval '1 hour','t'),
+                                                 ('{G_PROD_WEB}','{b}',now(),'t');
+         INSERT INTO console_asset_group_selectors VALUES
+           ('{G_PROD}','env','prod',now()), ('{G_PROD_WEB}','env','prod',now());"
+    ))
+    .await;
+    let rows = c
+        .query(
+            "SELECT g.name, (SELECT count(*) FROM console_host_group_members m
+                             WHERE m.asset_group_id = g.asset_group_id)
+             FROM console_asset_groups g WHERE g.kind = 'manual' ORDER BY g.created_at",
+            &[],
+        )
+        .await
+        .unwrap();
+    let (first, second): (String, String) = (rows[0].get(0), rows[1].get(0));
+    assert_eq!(first, a);
+    assert!(
+        second.chars().count() <= 128 && second.ends_with(" (2)"),
+        "{second}"
+    );
+    assert!(second.starts_with(&"a".repeat(124)));
+    assert_eq!((rows[0].get::<_, i64>(1), rows[1].get::<_, i64>(1)), (1, 1));
+    db.drop().await;
+}

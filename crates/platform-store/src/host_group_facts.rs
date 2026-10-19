@@ -22,11 +22,17 @@ fn is_token(word: &str) -> bool {
         })
 }
 
-/// `<id> <release>`, both tokens: the only distributions that get a group.
+/// Only these os ids get an automatic group: an agent reports its own
+/// os-release, so anything else would let a hostile one fill the cap or squat
+/// names. Users make rule groups for other systems. Migration 53's backfill
+/// lists the same ids.
+const KNOWN_OS_IDS: [&str; 5] = ["debian", "ubuntu", "fedora", "rocky", "almalinux"];
+
+/// `<known id> <release>`, the release a token: the only distributions that get a group.
 fn is_distribution(distribution: &str) -> bool {
     distribution
         .split_once(' ')
-        .is_some_and(|(id, release)| is_token(id) && is_token(release))
+        .is_some_and(|(id, release)| KNOWN_OS_IDS.contains(&id) && is_token(release))
 }
 
 /// Display name of an OS family; migration 53's `console_os_family_name`
@@ -81,7 +87,9 @@ pub async fn ensure_automatic_groups(
     ];
     let mut locked = false;
     for (field, value, display) in wanted {
-        if field == "distribution" && !is_distribution(value) {
+        if (field == "distribution" && !is_distribution(value))
+            || (field == "os_family" && !matches!(value, "linux" | "windows"))
+        {
             continue;
         }
         let key = format!("{field}:{value}");

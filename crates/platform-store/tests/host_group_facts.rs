@@ -293,6 +293,15 @@ async fn odd_os_ids_and_the_cap_create_nothing() {
     }
     let keys: Vec<String> = groups(&admin).await.into_iter().map(|g| g.0).collect();
     assert_eq!(keys, ["os_family:linux"]);
+    // unknown os ids and families get no automatic group at all
+    ensure_automatic_groups(&ingest, "freebsd", "production 1", now)
+        .await
+        .unwrap();
+    ensure_automatic_groups(&ingest, "linux", "admins 2", now)
+        .await
+        .unwrap();
+    let keys: Vec<String> = groups(&admin).await.into_iter().map(|g| g.0).collect();
+    assert_eq!(keys, ["os_family:linux"]);
     admin
         .execute(
             "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind, auto_key)

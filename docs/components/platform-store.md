@@ -944,10 +944,12 @@ makes the missing, undismissed automatic groups, one statement each, under the
 transaction advisory lock `AUTO_GROUP_LOCK` (0x4F564847) taken only
 when a group is missing; names come from `console_free_group_name`, and the
 Rust display map must equal the migration's. Hardening (agents report their own os-release): a distribution gets a group
-only when both of `<id> <release>` match `[a-z0-9._-]{1,32}`; there are at most
+only when its os id is one of debian, ubuntu, fedora, rocky, almalinux and the
+release matches `[a-z0-9._-]{1,32}`, and an OS family only when linux or windows
+(unknown ids get no group at all, so a hostile agent cannot fill the cap or
+squat a name; users make rule groups for them); there are at most
 200 automatic groups (at the cap nothing is created, a line goes to stderr, the
-agent gets no error); names of ids outside the known map (debian, ubuntu, fedora,
-rocky, almalinux; linux/windows families) stay raw lowercase (`production 1`),
-never capitalised into something that reads like an admin-made group. Migration
-53's name functions and its backfill (same pattern, 200 at most) agree.
+agent gets no error); the name functions of an unknown id (not reachable from ingest) return it raw
+lowercase, never capitalised. Migration 53's name functions and its backfill
+(same ids and pattern, 200 at most) agree.
 Test: `tests/host_group_facts.rs`.
