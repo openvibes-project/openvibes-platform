@@ -14,25 +14,31 @@ const AUTO_GROUP_LOCK: i64 = 0x4F56_4847;
 /// so without a cap a hostile one could make groups without end.
 const MAX_AUTOMATIC_GROUPS: i64 = 200;
 
-/// `[a-z0-9._-]{1,32}`, the os-release identifier format.
-fn is_token(word: &str) -> bool {
-    (1..=32).contains(&word.len())
-        && word.bytes().all(|b| {
-            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'_' | b'-')
-        })
-}
-
 /// Only these os ids get an automatic group: an agent reports its own
 /// os-release, so anything else would let a hostile one fill the cap or squat
 /// names. Users make rule groups for other systems. Migration 53's backfill
 /// lists the same ids.
 const KNOWN_OS_IDS: [&str; 5] = ["debian", "ubuntu", "fedora", "rocky", "almalinux"];
 
-/// `<known id> <release>`, the release a token: the only distributions that get a group.
+/// Most automatic distribution groups per os id: a hostile agent can report
+/// any release of a known id, so each id gets a bounded share of the cap.
+const MAX_RELEASES_PER_OS_ID: i64 = 20;
+
+/// `[0-9]{1,4}(\.[0-9]{1,4}){0,2}`: `12`, `24.04`, `9` (rocky after the
+/// major collapse). Words like `prod-servers` would let an agent squat names.
+fn is_release(release: &str) -> bool {
+    let parts: Vec<&str> = release.split('.').collect();
+    parts.len() <= 3
+        && parts
+            .iter()
+            .all(|p| (1..=4).contains(&p.len()) && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// `<known id> <numeric release>`: the only distributions that get a group.
 fn is_distribution(distribution: &str) -> bool {
     distribution
         .split_once(' ')
-        .is_some_and(|(id, release)| KNOWN_OS_IDS.contains(&id) && is_token(release))
+        .is_some_and(|(id, release)| KNOWN_OS_IDS.contains(&id) && is_release(release))
 }
 
 /// Display name of an OS family; migration 53's `console_os_family_name`
@@ -121,6 +127,23 @@ pub async fn ensure_automatic_groups(
                 "openvibes: automatic host group cap ({MAX_AUTOMATIC_GROUPS}) reached; not creating {key}"
             );
             continue;
+        }
+        if field == "distribution" {
+            let os_id = value.split(' ').next().unwrap_or_default();
+            let releases: i64 = client
+                .query_one(
+                    "SELECT count(*) FROM console_asset_groups
+                     WHERE kind = 'automatic' AND starts_with(auto_key, $1)",
+                    &[&format!("distribution:{os_id} ")],
+                )
+                .await?
+                .get(0);
+            if releases >= MAX_RELEASES_PER_OS_ID {
+                eprintln!(
+                    "openvibes: {MAX_RELEASES_PER_OS_ID} automatic groups for {os_id} already; not creating {key}"
+                );
+                continue;
+            }
         }
         let description = if field == "os_family" {
             format!("Every host that reports {display}. Kept up to date by OpenVIBES.")

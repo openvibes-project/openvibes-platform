@@ -945,11 +945,13 @@ transaction advisory lock `AUTO_GROUP_LOCK` (0x4F564847) taken only
 when a group is missing; names come from `console_free_group_name`, and the
 Rust display map must equal the migration's. Hardening (agents report their own os-release): a distribution gets a group
 only when its os id is one of debian, ubuntu, fedora, rocky, almalinux and the
-release matches `[a-z0-9._-]{1,32}`, and an OS family only when linux or windows
+release is a dotted number `[0-9]{1,4}(\.[0-9]{1,4}){0,2}` (`12`, `24.04`;
+never a word such as `prod-servers`), and an OS family only when linux or windows
 (unknown ids get no group at all, so a hostile agent cannot fill the cap or
-squat a name; users make rule groups for them); there are at most
-200 automatic groups (at the cap nothing is created, a line goes to stderr, the
-agent gets no error); the name functions of an unknown id (not reachable from ingest) return it raw
+squat a name; users make rule groups for them); there are at most 20
+automatic distribution groups per os id and 200 automatic groups in all
+(OS family groups are made first; at a cap nothing is created, a line goes to
+stderr, the agent gets no error); the name functions of an unknown id (not reachable from ingest) return it raw
 lowercase, never capitalised. Migration 53's name functions and its backfill
-(same ids and pattern, 200 at most) agree.
+(same ids and pattern, 20 per os id, 200 at most) agree.
 Test: `tests/host_group_facts.rs`.

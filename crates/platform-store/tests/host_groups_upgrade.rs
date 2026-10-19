@@ -314,7 +314,7 @@ async fn automatic_names_clash_at_two_levels_and_odd_releases_get_none() {
         .collect();
     assert_eq!(names["os_family:linux"], "Linux (automatic 2)");
     assert_eq!(names["distribution:debian 12"], "Debian 12");
-    // an os-release outside `[a-z0-9._-]{1,32}` gets no group
+    // an unknown id or a non-numeric release gets no group
     assert!(!names.contains_key(&format!("distribution:{long_id} {long_version}")));
     db.drop().await;
 }

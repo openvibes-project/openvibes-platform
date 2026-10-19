@@ -184,9 +184,12 @@ BEGIN
   FOR f IN SELECT DISTINCT 'os_family' AS field, os_family AS val, console_os_family_name(os_family) AS display
            FROM agents WHERE status = 'active' AND os_family IN ('linux', 'windows')
            UNION
-           SELECT DISTINCT 'distribution', distribution, console_distribution_name(distribution)
-           FROM agents WHERE status = 'active'
-             AND distribution ~ '^(debian|ubuntu|fedora|rocky|almalinux) [a-z0-9._-]{1,32}$'
+           SELECT 'distribution', distribution, console_distribution_name(distribution)
+           FROM (SELECT distribution, row_number() OVER (
+                          PARTITION BY split_part(distribution, ' ', 1) ORDER BY distribution) AS nth
+                 FROM (SELECT DISTINCT distribution FROM agents WHERE status = 'active'
+                         AND distribution ~ '^(debian|ubuntu|fedora|rocky|almalinux) [0-9]{1,4}(\.[0-9]{1,4}){0,2}$') d) r
+           WHERE nth <= 20  -- at most 20 releases per os id, as host_group_facts.rs
            ORDER BY 1 DESC, 2 LIMIT 200 LOOP
     gid := gen_random_uuid();
     gname := console_free_group_name(f.display, 'automatic');

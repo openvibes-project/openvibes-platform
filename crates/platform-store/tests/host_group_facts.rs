@@ -329,3 +329,52 @@ async fn odd_os_ids_and_the_cap_create_nothing() {
     drop((ingest, admin));
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_non_numeric_release_creates_nothing() {
+    let (db, admin, ingest) = setup().await;
+    let now = Utc::now();
+    for bad in [
+        "debian prod-servers",
+        "debian 12a",
+        "debian 12.",
+        "debian .12",
+        "ubuntu 24.04.1.2",
+        "debian 12345",
+        "fedora rawhide",
+    ] {
+        ensure_automatic_groups(&ingest, "linux", bad, now)
+            .await
+            .unwrap();
+    }
+    let keys: Vec<String> = groups(&admin).await.into_iter().map(|g| g.0).collect();
+    assert_eq!(keys, ["os_family:linux"]);
+    ensure_automatic_groups(&ingest, "linux", "ubuntu 24.04.1", now)
+        .await
+        .unwrap();
+    let keys: Vec<String> = groups(&admin).await.into_iter().map(|g| g.0).collect();
+    assert_eq!(keys, ["distribution:ubuntu 24.04.1", "os_family:linux"]);
+    drop((ingest, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn the_21st_release_of_one_distribution_is_skipped() {
+    let (db, admin, ingest) = setup().await;
+    let now = Utc::now();
+    for n in 1..=21 {
+        ensure_automatic_groups(&ingest, "linux", &format!("debian {n}"), now)
+            .await
+            .unwrap();
+    }
+    ensure_automatic_groups(&ingest, "linux", "ubuntu 24.04", now)
+        .await
+        .unwrap();
+    let keys: Vec<String> = groups(&admin).await.into_iter().map(|g| g.0).collect();
+    assert_eq!(keys.len(), 22, "{keys:?}"); // linux + 20 debian + ubuntu
+    assert!(!keys.contains(&"distribution:debian 21".to_string()));
+    assert!(keys.contains(&"distribution:debian 20".to_string()));
+    assert!(keys.contains(&"distribution:ubuntu 24.04".to_string()));
+    drop((ingest, admin));
+    db.drop().await;
+}
