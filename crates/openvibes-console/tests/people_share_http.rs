@@ -231,3 +231,30 @@ async fn nobody_resets_their_own_password() {
     assert_eq!(refused["title"], "Use Change password for your own account");
     fx.db.drop().await;
 }
+
+/// Creating a service account or token answers who may first: a caller
+/// who may not gets 401 or 403 whatever the body (security review).
+#[tokio::test]
+async fn service_account_writes_check_the_caller_before_the_body() {
+    let Some(fx) = Fx::new().await else { return };
+    fx.db.user("bob", &fx.win_viewers, 3).await;
+    let bob = sign_in(&fx.router, "bob").await;
+    let nobody = (String::new(), String::new());
+    let token = "/api/v1/service-accounts/99999999-9999-4999-8999-999999999999/tokens";
+    let key = [("idempotency-key", "0123456789abcdef0123")];
+    for (uri, bad) in [
+        ("/api/v1/service-accounts", json!({"name": ""})),
+        (token, json!({"label": "x", "expires_in_hours": 0})),
+        (token, json!({"nope": 1})),
+    ] {
+        for (who, expected) in [
+            (&nobody, StatusCode::UNAUTHORIZED),
+            (&bob, StatusCode::FORBIDDEN),
+        ] {
+            let (status, body) =
+                call_with(&fx.router, "POST", uri, who, Some(bad.clone()), &key).await;
+            assert_eq!(status, expected, "{uri} {bad}: {body}");
+        }
+    }
+    fx.db.drop().await;
+}
