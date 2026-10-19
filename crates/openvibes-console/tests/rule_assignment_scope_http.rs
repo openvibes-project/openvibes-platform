@@ -246,8 +246,7 @@ async fn rule_permissions_apply_everywhere_even_in_a_role_reaching_one_group() {
     }
     client
         .batch_execute(&format!(
-            "INSERT INTO console_asset_groups VALUES ('{WEB}', 'web', now(), 'test');
-             INSERT INTO console_asset_group_selectors VALUES ('{WEB}', 'env', 'web', now());"
+            "INSERT INTO console_asset_groups VALUES ('{WEB}', 'web', now(), 'test');"
         ))
         .await
         .unwrap();

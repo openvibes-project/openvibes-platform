@@ -617,7 +617,7 @@ async fn observation_rules_are_historical_and_require_the_observation_scope() {
         .unwrap()
         .get(0);
     assert_eq!(history, detail);
-    client.batch_execute("INSERT INTO console_asset_groups (asset_group_id,name,created_at,created_by) VALUES ('31111111-1111-4111-8111-111111111111','outside',now(),'test'); INSERT INTO console_asset_group_selectors (asset_group_id,tag_key,tag_value,created_at) VALUES ('31111111-1111-4111-8111-111111111111','scope','outside',now());").await.unwrap();
+    client.batch_execute("INSERT INTO console_asset_groups (asset_group_id,name,created_at,created_by) VALUES ('31111111-1111-4111-8111-111111111111','outside',now(),'test');").await.unwrap();
     common::scope_bindings(
         &mut client,
         "user_id = '11111111-1111-4111-8111-111111111112'",

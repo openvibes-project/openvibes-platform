@@ -28,9 +28,6 @@ tokens, and CSRF values stay in the console process.
   (`user.updated`), `enable_user` (`user.enabled`), `reset_password` (new
   one-time hash, `password_must_change`, generation bump and every session
   revoked, `user.password_reset`, one transaction).
-- `save_asset_group` creates or replaces a complete bounded selector set and
-  its audit detail atomically. Selector writes share a transaction advisory
-  lock with tag mutations so a tag impact preview cannot race selector edits.
 - `create_enrollment_token` stores only the SHA-256 digest of the decoded
   32-byte secret. It serializes each actor/idempotency-key pair and atomically
   stores token metadata, a 24-hour request/response idempotency record, and
@@ -50,11 +47,14 @@ tokens, and CSRF values stay in the console process.
   advisory lock. Console publication writes the bundle and a redacted audit
   row in the same transaction. Migration 10 grants the console role `SELECT`
   on public trust keys only; trust-key changes remain local CLI operations.
-- `preview_agent_tags` reports group membership changes, and the bindings of
-  roles reaching the changed groups, for
-  a proposed tag set. `apply_agent_tags` verifies the preview token under a
-  transaction lock, then replaces tags and records detailed impact atomically.
-  Preview bindings are capped at 500 per direction; larger impacts fail closed.
+- Tags, tag selectors and their writes (`save_asset_group`,
+  `preview_agent_tags`, `apply_agent_tags`) are gone since schema 53: host
+  groups and labels replace them (platform-store.md "Host groups"). The
+  console's old tag and asset-group routes answer 410 `moved` until the
+  host-group routes arrive.
+- `revoke_agent_in_scope` checks the caller's scope with
+  `console_read::agent_visibility`, so a scoped caller can revoke only an
+  active host in one of its groups.
 - `console_people::give_role` and `remove_role` give or take a role from a
   user or service account (`Principal`) with `rbac.binding.created` /
   `rbac.binding.revoked` in the same transaction, under the access-binding
@@ -62,8 +62,8 @@ tokens, and CSRF values stay in the console process.
   refuses (`LastAdministrator`) to take `admin` from the last enabled
   Administrator, counted by `enabled_administrators`, so two concurrent
   removals cannot both succeed.
-- `console_roles::host_groups` lists groups with their selectors and how
-  many roles reach each.
+- `console_roles::host_groups` lists groups and how many roles reach each;
+  `selectors` is empty since schema 53.
 - `create_session` stamps `console_users.last_sign_in_at` and accepts only a currently enabled account at the generation
   observed after password verification and can revoke the prior session in the
   same transaction during login rotation. Session lookups require matching

@@ -408,36 +408,32 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
     }
     client
         .execute(
-            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by)
-             VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'production', $1, 'test')",
+            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind)
+             VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'production', $1, 'test', 'rule')",
             &[&now],
         )
         .await
         .unwrap();
+    // A rule group of two conditions: hostname prod-* and an address in
+    // 10.0.0.0/8. Only the first two hosts satisfy both.
     client
-        .execute(
-            "INSERT INTO console_asset_group_selectors
-                 (asset_group_id, tag_key, tag_value, created_at)
-             VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'env', 'prod', $1),
-                    ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'team', 'blue', $1)",
-            &[&now],
+        .batch_execute(
+            "INSERT INTO console_host_group_conditions (asset_group_id, position, field, negate, vals)
+             VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 0, 'hostname', false, '{prod-*}'),
+                    ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 1, 'ip', false, '{10.0.0.0/8}')",
         )
         .await
         .unwrap();
-    for (id, key, value) in [
-        (ids[0], "env", "prod"),
-        (ids[0], "team", "blue"),
-        (ids[1], "env", "prod"),
-        (ids[1], "team", "blue"),
-        (ids[2], "env", "dev"),
-        (ids[2], "team", "blue"),
-        (ids[3], "team", "blue"),
+    for (id, hostname, address) in [
+        (ids[0], "prod-1", Some("10.0.0.1")),
+        (ids[1], "prod-2", Some("10.0.0.2")),
+        (ids[2], "dev-1", Some("10.0.0.3")),
+        (ids[3], "prod-3", None),
     ] {
         client
             .execute(
-                "INSERT INTO console_agent_tags (agent_id, tag_key, tag_value, changed_at, changed_by)
-                 VALUES ($1, $2, $3, $4, 'test')",
-                &[&id, &key, &value, &now],
+                "UPDATE agents SET hostname = $2, last_address = $3::text::inet WHERE agent_id = $1",
+                &[&id, &hostname, &address],
             )
             .await
             .unwrap();
@@ -681,35 +677,9 @@ async fn scoped_host_lookup_does_not_let_a_hidden_id_shadow_a_hostname() {
             .await
             .unwrap();
     }
-    let group = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-    client
-        .execute(
-            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by)
-             VALUES ($1::text::uuid, 'visible', $2, 'test')",
-            &[&group, &now],
-        )
-        .await
-        .unwrap();
-    client
-        .execute(
-            "INSERT INTO console_asset_group_selectors
-                 (asset_group_id, tag_key, tag_value, created_at)
-             VALUES ($1::text::uuid, 'env', 'prod', $2)",
-            &[&group, &now],
-        )
-        .await
-        .unwrap();
-    client
-        .execute(
-            "INSERT INTO console_agent_tags
-                 (agent_id, tag_key, tag_value, changed_at, changed_by)
-             VALUES ($1, 'env', 'prod', $2, 'test')",
-            &[&visible, &now],
-        )
-        .await
-        .unwrap();
+    let group = common::manual_group(&client, "visible", &[visible]).await;
 
-    let scope = platform_store::console_read::AgentScope::AssetGroups(vec![group.into()]);
+    let scope = platform_store::console_read::AgentScope::AssetGroups(vec![group]);
     assert_eq!(
         platform_store::vulns::hosts_named_in_scope(&client, hidden_id, &scope)
             .await

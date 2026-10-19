@@ -90,8 +90,8 @@ INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version
 SELECT 'agent.00000000-0000-4000-8000-00000000000' || n, 'active', now() - interval '1 day', now(), '0.4.2', name
 FROM (VALUES (1, 'linux-1.example.test'), (2, 'linux-2.example.test'),
              (3, 'windows-1.example.test'), (4, 'windows-2.example.test')) AS hosts (n, name);
-INSERT INTO console_agent_tags (agent_id, tag_key, tag_value, changed_at, changed_by)
-SELECT agent_id, 'os', split_part(hostname, '-', 1), now(), 'e2e' FROM agents WHERE status = 'active';
+INSERT INTO console_host_labels (agent_id, label, added_at, added_by)
+SELECT agent_id, 'os:' || split_part(hostname, '-', 1), now(), 'e2e' FROM agents WHERE status = 'active';
 INSERT INTO current_findings
 SELECT (jsonb_populate_record(c, jsonb_build_object('agent_id', a.agent_id, 'origin', 'online', 'authenticated', true,
     'rule_set_id', 'e2e', 'rule_id', 'e2e.team_host', 'severity', 'low', 'message', 'Seeded for the two-team journey'))).*

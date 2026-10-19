@@ -264,9 +264,8 @@ async fn setup() -> (TestDb, axum::Router) {
                  VALUES ('{AGENT}', 'active', now(), 'fedora',
                          '{{\"last_scan\": {{\"collectors\": {{\"hardening\": \"not_found\"}}}}}}');
              UPDATE agents SET hardening_facts_ok_at = now() - interval '3 days' WHERE agent_id = '{AGENT}';
-             INSERT INTO console_agent_tags VALUES ('{AGENT}', 'env', 'web', now(), 'test');
              INSERT INTO console_asset_groups VALUES ('{WEB}', 'web', now(), 'test');
-             INSERT INTO console_asset_group_selectors VALUES ('{WEB}', 'env', 'web', now());"
+             INSERT INTO console_host_group_members VALUES ('{WEB}', '{AGENT}', now(), 'test');"
         ))
         .await
         .unwrap();
@@ -307,7 +306,7 @@ async fn rule_readers_and_publishers_see_the_switches_and_only_publishers_change
                 {"rule_set_id": "hardening-linux-l2", "default_enabled": false, "published": false,
                  "hosts_on": 0, "hosts_off": 1, "groups": []}
             ],
-            "asset_groups": [{"asset_group_id": WEB, "name": "web", "selectors": ["env=web"], "hosts": 1}]
+            "asset_groups": [{"asset_group_id": WEB, "name": "web", "selectors": [], "hosts": 1}]
         })
     );
     for (path, expected) in RULE_READS {

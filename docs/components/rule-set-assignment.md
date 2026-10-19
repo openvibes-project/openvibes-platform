@@ -21,8 +21,8 @@ on/off overrides per asset group; deleting a group deletes its rows.
 
 **A host's state for a set:** on if any group the host matches says on (on
 wins); else off if any of its groups says off; else the default. A host
-matches a group when it carries every selector tag; a group without
-selectors matches no host (as for access).
+is in a group when `console_host_in_group` says so, as for access
+(platform-store.md "Host groups").
 
 **Distribution.** `POST /v1/rule-bundle` answers `410 Gone` with no body for an
 assignable set that is off on the asking host, checked after the 404 cases
@@ -63,7 +63,8 @@ writes triage history).
 
 **Store (`platform_store::rule_assignment`).** `overview` (sets, overrides,
 whether a live bundle is published, Linux hosts on and off per set, every
-group with its `key=value` selectors and Linux host count; a Linux host is an
+group with its Linux host count (`selectors` is empty since schema 53, until
+the console shows a membership summary); a Linux host is an
 active agent, stale included, revoked and imported not, whose inventory
 reported os-release), `for_agent` (per set: state, the group that decided it,
 the first by name when several agree, and whether the set is published),
@@ -79,9 +80,9 @@ outcome from `agents.health` and `agents.hardening_facts_ok_at` (schema 50).
 `assigned(agent, set)` (distribution) and `for_agent(scope, agent)` (the
 console's host view, `None` outside the caller's scope) share one SQL
 resolution (`HOST_STATE`). A set that is not assignable is always
-assigned. Grants: `openvibes-distribution` may read the two tables and only
-`console_agent_tags (agent_id, tag_key, tag_value)` and
-`console_asset_group_selectors (asset_group_id, tag_key, tag_value)`.
+assigned. Grants: `openvibes-distribution` may read the two tables, the
+group conditions and members, `console_asset_groups (asset_group_id, kind)`
+and the agent facts membership uses; not labels or group names.
 
 ## Console API
 
@@ -97,7 +98,8 @@ All answers carry `Cache-Control: no-store`; errors are
 | `GET /api/v1/agents/{agent_id}/rule-set-assignments` | `hosts.read` (scoped) | none | `HostRuleSetAssignmentsView` |
 
 Shapes: `RuleSetAssignmentsView { items: [RuleSetAssignmentView],
-asset_groups: [{asset_group_id, name, selectors: ["key=value"], hosts}] }`;
+asset_groups: [{asset_group_id, name, selectors: [], hosts}] }` (`selectors`
+empty since schema 53);
 `RuleSetAssignmentView { rule_set_id, default_enabled, published, hosts_on,
 hosts_off, groups: [{asset_group_id, name, enabled}] }`;
 `HostRuleSetAssignmentsView { items: [{rule_set_id, enabled, source:

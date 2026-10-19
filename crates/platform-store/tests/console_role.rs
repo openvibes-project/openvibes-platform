@@ -6,9 +6,8 @@ use chrono::{Duration, Utc};
 use common::TestDb;
 use platform_store::{
     console_auth::{
-        AgentTag, NewConsoleEnrollmentToken, NewServiceToken, apply_agent_tags,
-        create_enrollment_token, create_service_account, create_service_token, preview_agent_tags,
-        revoke_agent_in_scope, save_asset_group,
+        NewConsoleEnrollmentToken, NewServiceToken, create_enrollment_token,
+        create_service_account, create_service_token, revoke_agent_in_scope,
     },
     console_read::AgentScope,
     console_triage::{self, TriageUpdate},
@@ -84,35 +83,6 @@ async fn console_store_writes_work_as_hyphenated_console_role() {
         .await
         .unwrap();
 
-    let group = save_asset_group(
-        &mut client,
-        None,
-        "Production",
-        &[AgentTag {
-            key: "env".into(),
-            value: "prod".into(),
-        }],
-        "operator",
-        now,
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    save_asset_group(
-        &mut client,
-        Some(&group.asset_group_id),
-        "Production",
-        &[AgentTag {
-            key: "env".into(),
-            value: "production".into(),
-        }],
-        "operator",
-        now,
-    )
-    .await
-    .unwrap()
-    .unwrap();
-
     let enrollment = create_enrollment_token(
         &mut client,
         &NewConsoleEnrollmentToken {
@@ -163,17 +133,6 @@ async fn console_store_writes_work_as_hyphenated_console_role() {
         platform_store::console_auth::ServiceTokenCreation::Created { .. }
     ));
 
-    let tags = [AgentTag {
-        key: "env".into(),
-        value: "prod".into(),
-    }];
-    let preview = preview_agent_tags(&client, AGENT, &tags)
-        .await
-        .unwrap()
-        .unwrap();
-    apply_agent_tags(&mut client, AGENT, &tags, &preview.token, "operator", now)
-        .await
-        .unwrap();
     assert_eq!(
         revoke_agent_in_scope(
             &mut client,

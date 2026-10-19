@@ -166,8 +166,8 @@ async fn the_console_role_has_only_its_declared_schema_rights() {
     let write_rights = client
         .query_one(
             "SELECT has_table_privilege('openvibes-console', 'console_idempotency', 'DELETE'),
-                    has_table_privilege('openvibes-console', 'console_asset_group_selectors', 'DELETE'),
-                    has_table_privilege('openvibes-console', 'console_agent_tags', 'DELETE'),
+                    has_table_privilege('openvibes-console', 'console_host_group_members', 'DELETE'),
+                    has_table_privilege('openvibes-console', 'console_host_labels', 'DELETE'),
                     has_table_privilege('openvibes-console', 'current_findings', 'UPDATE'),
                     has_table_privilege('openvibes-console', 'rule_sets', 'UPDATE'),
                     has_table_privilege('openvibes-console', 'rule_bundles', 'INSERT')",

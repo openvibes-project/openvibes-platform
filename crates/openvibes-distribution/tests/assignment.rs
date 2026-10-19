@@ -29,45 +29,37 @@ async fn set_default(world: &World, set: &str, enabled: bool) {
         .unwrap();
 }
 
-async fn tag(world: &World, agent: &Agent, key: &str, value: &str) {
-    world
-        .db()
-        .await
-        .execute(
-            "INSERT INTO console_agent_tags (agent_id, tag_key, tag_value, changed_at, changed_by)
-             VALUES ($1, $2, $3, now(), 'test')",
-            &[&agent.id, &key, &value],
-        )
-        .await
-        .unwrap();
-}
-
-/// A group of hosts tagged `key=value` with `set` switched to `enabled`.
-async fn group(
-    world: &World,
-    name: &str,
-    key: &str,
-    value: &str,
-    set: &str,
-    enabled: bool,
-) -> String {
+/// A host group with `set` switched to `enabled`: a manual group of
+/// `members`, or with `members` empty a rule group of hosts named `web-*`.
+async fn group(world: &World, name: &str, members: &[&Agent], set: &str, enabled: bool) -> String {
     let db = world.db().await;
+    let kind = if members.is_empty() { "rule" } else { "manual" };
     let id: String = db
         .query_one(
-            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by)
-             VALUES (gen_random_uuid(), $1, now(), 'test') RETURNING asset_group_id::text",
-            &[&name],
+            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind)
+             VALUES (gen_random_uuid(), $1, now(), 'test', $2) RETURNING asset_group_id::text",
+            &[&name, &kind],
         )
         .await
         .unwrap()
         .get(0);
+    let ids: Vec<&str> = members.iter().map(|a| a.id.as_str()).collect();
     db.execute(
-        "INSERT INTO console_asset_group_selectors (asset_group_id, tag_key, tag_value, created_at)
-         VALUES ($1::text::uuid, $2, $3, now())",
-        &[&id, &key, &value],
+        "INSERT INTO console_host_group_members (asset_group_id, agent_id, added_at, added_by)
+         SELECT $1::text::uuid, unnest($2::text[]), now(), 'test'",
+        &[&id, &ids],
     )
     .await
     .unwrap();
+    if members.is_empty() {
+        db.execute(
+            "INSERT INTO console_host_group_conditions (asset_group_id, position, field, vals)
+             VALUES ($1::text::uuid, 0, 'hostname', '{web-*}')",
+            &[&id],
+        )
+        .await
+        .unwrap();
+    }
     db.execute(
         "INSERT INTO rule_set_group_assignment (rule_set_id, asset_group_id, enabled)
          VALUES ($1, $2::text::uuid, $3)",
@@ -76,6 +68,18 @@ async fn group(
     .await
     .unwrap();
     id
+}
+
+async fn name(world: &World, agent: &Agent, hostname: &str) {
+    world
+        .db()
+        .await
+        .execute(
+            "UPDATE agents SET hostname = $2 WHERE agent_id = $1",
+            &[&agent.id, &hostname],
+        )
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -107,11 +111,10 @@ async fn on_wins_across_groups() {
     world.publish(L2, 1, BUNDLE).await;
     let agent = world.agent(1).await;
     let other = world.agent(2).await;
-    tag(&world, &agent, "env", "web").await;
-    tag(&world, &agent, "tier", "db").await;
-    tag(&world, &other, "env", "web").await;
-    group(&world, "web", "env", "web", L2, false).await;
-    let db_group = group(&world, "db", "tier", "db", L2, true).await;
+    name(&world, &agent, "web-01").await;
+    name(&world, &other, "web-02").await;
+    group(&world, "web", &[], L2, false).await;
+    let db_group = group(&world, "db", &[&agent], L2, true).await;
     assert_eq!(
         status(&world, &agent, L2, None).await,
         200,

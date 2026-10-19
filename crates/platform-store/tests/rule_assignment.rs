@@ -41,30 +41,6 @@ async fn as_role(db: &TestDb, role: &str) -> Client {
     client
 }
 
-/// An asset group whose hosts carry every `selectors` tag; its id.
-async fn group(admin: &Client, name: &str, selectors: &[(&str, &str)]) -> String {
-    let id: String = admin
-        .query_one(
-            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by)
-             VALUES (gen_random_uuid(), $1, now(), 'test') RETURNING asset_group_id::text",
-            &[&name],
-        )
-        .await
-        .unwrap()
-        .get(0);
-    for (key, value) in selectors {
-        admin
-            .execute(
-                "INSERT INTO console_asset_group_selectors (asset_group_id, tag_key, tag_value, created_at)
-                 VALUES ($1::text::uuid, $2, $3, now())",
-                &[&id, key, value],
-            )
-            .await
-            .unwrap();
-    }
-    id
-}
-
 async fn audits(admin: &Client) -> Vec<serde_json::Value> {
     admin
         .query(
@@ -98,7 +74,7 @@ fn by_default(rule_set_id: &str, enabled: bool) -> HostAssignment {
 #[tokio::test]
 async fn the_defaults_are_l1_on_and_l2_off() {
     let (db, admin) = setup().await;
-    let web = group(&admin, "web", &[("env", "web")]).await;
+    let web = common::manual_group(&admin, "web", &[]).await;
     let console = as_role(&db, "openvibes-console").await;
     let overview = rule_assignment::overview(&console).await.unwrap();
     let sets: Vec<_> = overview
@@ -151,7 +127,7 @@ async fn the_defaults_are_l1_on_and_l2_off() {
 #[tokio::test]
 async fn a_change_by_an_unknown_user_fails_and_changes_nothing() {
     let (db, admin) = setup().await;
-    let web = group(&admin, "web", &[("env", "web")]).await;
+    let web = common::manual_group(&admin, "web", &[]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     let nobody = "00000000-0000-4000-8000-000000000099";
     for actor in [nobody, "not-a-uuid"] {
@@ -233,7 +209,7 @@ async fn a_default_change_is_audited_with_old_and_new() {
 #[tokio::test]
 async fn group_overrides_are_set_changed_removed_and_audited() {
     let (db, admin) = setup().await;
-    let web = group(&admin, "web", &[("env", "web")]).await;
+    let web = common::manual_group(&admin, "web", &[]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     let c = &mut console;
     let l1 = done(
@@ -318,7 +294,7 @@ async fn group_overrides_are_set_changed_removed_and_audited() {
 #[tokio::test]
 async fn deleting_a_group_deletes_its_overrides() {
     let (db, admin) = setup().await;
-    let web = group(&admin, "web", &[("env", "web")]).await;
+    let web = common::manual_group(&admin, "web", &[]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     done(
         rule_assignment::set_group(&mut console, ALICE, L1, &web, Some(false))
@@ -342,7 +318,7 @@ const A: &str = "agent.00000000-0000-4000-8000-000000000001";
 const B: &str = "agent.00000000-0000-4000-8000-000000000002";
 const NOBODY: &str = "agent.00000000-0000-4000-8000-000000000099";
 
-async fn agent(admin: &Client, id: &str, tags: &[(&str, &str)]) {
+async fn agent(admin: &Client, id: &str) {
     admin
         .execute(
             "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ($1, 'active', now())",
@@ -350,16 +326,6 @@ async fn agent(admin: &Client, id: &str, tags: &[(&str, &str)]) {
         )
         .await
         .unwrap();
-    for (key, value) in tags {
-        admin
-            .execute(
-                "INSERT INTO console_agent_tags (agent_id, tag_key, tag_value, changed_at, changed_by)
-                 VALUES ($1, $2, $3, now(), 'test')",
-                &[&id, key, value],
-            )
-            .await
-            .unwrap();
-    }
 }
 
 async fn assigned(dist: &Client, agent: &str, set: &str) -> bool {
@@ -369,9 +335,9 @@ async fn assigned(dist: &Client, agent: &str, set: &str) -> bool {
 #[tokio::test]
 async fn a_host_in_no_group_gets_the_default() {
     let (db, admin) = setup().await;
-    agent(&admin, A, &[("env", "web")]).await;
-    // A group without selectors matches nobody, so its "off" does not apply.
-    let empty = group(&admin, "empty", &[]).await;
+    agent(&admin, A).await;
+    // A rule group without conditions holds nobody, so its "off" does not apply.
+    let empty = common::rule_group(&admin, "empty", &[]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     done(
         rule_assignment::set_group(&mut console, ALICE, L1, &empty, Some(false))
@@ -395,11 +361,10 @@ async fn a_host_in_no_group_gets_the_default() {
 #[tokio::test]
 async fn on_wins_and_a_deleted_group_falls_back() {
     let (db, admin) = setup().await;
-    agent(&admin, A, &[("env", "web"), ("tier", "db")]).await;
-    agent(&admin, B, &[("env", "web"), ("tier", "web")]).await;
-    let web = group(&admin, "web", &[("env", "web")]).await;
-    // Needs both tags: B has the tier key but another value, so is not a member.
-    let web_db = group(&admin, "web-db", &[("env", "web"), ("tier", "db")]).await;
+    agent(&admin, A).await;
+    agent(&admin, B).await;
+    let web = common::manual_group(&admin, "web", &[A, B]).await;
+    let web_db = common::manual_group(&admin, "web-db", &[A]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     done(
         rule_assignment::set_group(&mut console, ALICE, L2, &web, Some(false))
@@ -452,10 +417,10 @@ async fn on_wins_and_a_deleted_group_falls_back() {
 #[tokio::test]
 async fn the_host_view_is_scoped_and_distribution_reads_no_more_than_it_needs() {
     let (db, admin) = setup().await;
-    agent(&admin, A, &[("env", "web")]).await;
-    let other = group(&admin, "other", &[("env", "db")]).await;
+    agent(&admin, A).await;
+    let other = common::manual_group(&admin, "other", &[]).await;
     let console = as_role(&db, "openvibes-console").await;
-    let web = group(&admin, "web", &[("env", "web")]).await;
+    let web = common::manual_group(&admin, "web", &[A]).await;
     assert!(
         rule_assignment::for_agent(&console, &AgentScope::AssetGroups(vec![web]), A)
             .await
@@ -478,10 +443,10 @@ async fn the_host_view_is_scoped_and_distribution_reads_no_more_than_it_needs() 
     let privileges: Vec<bool> = admin
         .query_one(
             "SELECT ARRAY[
-                has_column_privilege('openvibes-distribution', 'console_agent_tags', 'tag_value', 'SELECT'),
-                has_column_privilege('openvibes-distribution', 'console_agent_tags', 'changed_by', 'SELECT'),
+                has_table_privilege('openvibes-distribution', 'console_host_group_members', 'SELECT'),
+                has_table_privilege('openvibes-distribution', 'console_host_labels', 'SELECT'),
                 has_table_privilege('openvibes-distribution', 'rule_set_group_assignment', 'UPDATE'),
-                has_column_privilege('openvibes-distribution', 'console_asset_group_selectors', 'created_at', 'SELECT')]",
+                has_column_privilege('openvibes-distribution', 'console_asset_groups', 'name', 'SELECT')]",
             &[],
         )
         .await

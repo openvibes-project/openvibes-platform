@@ -96,15 +96,11 @@ Administrator is kept by the store under the access-binding advisory lock
 enforces resolved asset scope before any filtering, aggregation, pagination,
 or facet calculation.
 
-Global `host_groups.manage` administrators can create groups with one to 32
-exact selectors or replace an existing group's name and full selector set
-through POST/PUT under `/api/v1/access-control/asset-groups`. Selector keys are
-unique within a group and key/value lengths follow the schema limits. Changes
-require the same Origin, Fetch Metadata, and CSRF checks, and their selector
-data and audit detail commit in one transaction. Selector writes serialize
-with agent tag changes. Settings › Host groups provides the create/edit forms; editing
-requires explicit confirmation because it can change membership and what
-the roles reaching the group see.
+Since schema 53 tag-selector groups and host tags are gone: membership is
+decided by the SQL function `console_host_in_group` (platform-store.md "Host
+groups"), and the old POST/PUT under `/api/v1/access-control/asset-groups`
+and the agent tag routes answer 410 `moved` until the host-group and label
+routes arrive.
 
 Run `cargo test -p openvibes-console --lib access::`,
 `cargo test -p platform-store --test permission_catalogue` and

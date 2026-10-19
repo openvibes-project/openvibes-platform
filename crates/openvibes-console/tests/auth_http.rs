@@ -462,20 +462,10 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         )
         .await
         .unwrap();
-    assert_eq!(create_group.status(), StatusCode::CREATED);
-    let group: Value =
-        serde_json::from_slice(&to_bytes(create_group.into_body(), 8192).await.unwrap()).unwrap();
-    let group_id = group["asset_group_id"].as_str().unwrap();
-    let update_group=router.clone().oneshot(Request::builder()
-        .method("PUT").uri(format!("/api/v1/access-control/asset-groups/{group_id}"))
-        .header(header::COOKIE,session_cookie.clone()).header(header::ORIGIN,"https://console.example")
-        .header("sec-fetch-site","same-origin").header("x-csrf-token",session["csrf_token"].as_str().unwrap())
-        .header(header::CONTENT_TYPE,"application/json")
-        .body(Body::from(r#"{"name":"Production Fleet","selectors":[{"key":"env","value":"prod"},{"key":"region","value":"north"}]}"#)).unwrap()).await.unwrap();
-    assert_eq!(update_group.status(), StatusCode::OK);
-    let updated: Value =
-        serde_json::from_slice(&to_bytes(update_group.into_body(), 8192).await.unwrap()).unwrap();
-    assert_eq!(updated["selectors"].as_array().unwrap().len(), 2);
+    // Tag-based asset groups are gone (schema 53); host groups replace them.
+    assert_eq!(create_group.status(), StatusCode::GONE);
+    let group_id =
+        &common::manual_group(&db.pool.get().await.unwrap(), "Production Fleet", &[]).await;
     let people = router
         .clone()
         .oneshot(
@@ -519,71 +509,20 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let holder: Value =
         serde_json::from_slice(&to_bytes(holder.into_body(), 4096).await.unwrap()).unwrap();
     let bob_id = holder["user_id"].as_str().unwrap().to_owned();
+    // Tags are gone (schema 53); labels replace them.
     let agent_id = "agent.00000000-0000-4000-8000-000000000101";
-    let proposal_a = r#"{"tags":[{"key":"env","value":"prod"},{"key":"region","value":"north"}]}"#;
-    let preview_a = api_json(
-        &router,
-        "POST",
-        &format!("/api/v1/agents/{agent_id}/tags/preview"),
-        &session_cookie,
-        session["csrf_token"].as_str().unwrap(),
-        proposal_a,
-    )
-    .await;
-    assert_eq!(preview_a.status(), StatusCode::OK);
-    let preview_a: Value =
-        serde_json::from_slice(&to_bytes(preview_a.into_body(), 16_384).await.unwrap()).unwrap();
-    assert_eq!(preview_a["gained_groups"][0]["name"], "Production Fleet");
-    assert_eq!(
-        preview_a["gained_bindings"][0]["role_id"],
-        prod_viewer.as_str()
-    );
-    let proposal_b = r#"{"tags":[{"key":"env","value":"test"}]}"#;
-    let preview_b = api_json(
-        &router,
-        "POST",
-        &format!("/api/v1/agents/{agent_id}/tags/preview"),
-        &session_cookie,
-        session["csrf_token"].as_str().unwrap(),
-        proposal_b,
-    )
-    .await;
-    assert_eq!(preview_b.status(), StatusCode::OK);
-    let preview_b: Value =
-        serde_json::from_slice(&to_bytes(preview_b.into_body(), 16_384).await.unwrap()).unwrap();
-    let apply_b = api_json(
-        &router,
-        "PUT",
-        &format!("/api/v1/agents/{agent_id}/tags"),
-        &session_cookie,
-        session["csrf_token"].as_str().unwrap(),
-        &format!(
-            "{{\"tags\":[{{\"key\":\"env\",\"value\":\"test\"}}],\"preview_token\":\"{}\"}}",
-            preview_b["preview_token"].as_str().unwrap()
-        ),
-    )
-    .await;
-    assert_eq!(apply_b.status(), StatusCode::NO_CONTENT);
-    let stale_a=api_json(&router,"PUT",&format!("/api/v1/agents/{agent_id}/tags"),&session_cookie,session["csrf_token"].as_str().unwrap(),&format!("{{\"tags\":[{{\"key\":\"env\",\"value\":\"prod\"}},{{\"key\":\"region\",\"value\":\"north\"}}],\"preview_token\":\"{}\"}}",preview_a["preview_token"].as_str().unwrap())).await;
-    assert_eq!(stale_a.status(), StatusCode::CONFLICT);
-    let refreshed: Value =
-        serde_json::from_slice(&to_bytes(stale_a.into_body(), 16_384).await.unwrap()).unwrap();
-    assert_eq!(refreshed["current"][0]["value"], "test");
-    let apply_a=api_json(&router,"PUT",&format!("/api/v1/agents/{agent_id}/tags"),&session_cookie,session["csrf_token"].as_str().unwrap(),&format!("{{\"tags\":[{{\"key\":\"env\",\"value\":\"prod\"}},{{\"key\":\"region\",\"value\":\"north\"}}],\"preview_token\":\"{}\"}}",refreshed["preview_token"].as_str().unwrap())).await;
-    assert_eq!(apply_a.status(), StatusCode::NO_CONTENT);
-    let audit_client = db.pool.get().await.unwrap();
-    let audited: i64 = audit_client
-        .query_one(
-            "SELECT count(*) FROM audit_log WHERE action='agent.tags.changed' AND target_id=$1",
-            &[&agent_id],
+    for (method, path) in [("POST", "tags/preview"), ("PUT", "tags")] {
+        let moved = api_json(
+            &router,
+            method,
+            &format!("/api/v1/agents/{agent_id}/{path}"),
+            &session_cookie,
+            session["csrf_token"].as_str().unwrap(),
+            r#"{"tags":[]}"#,
         )
-        .await
-        .unwrap()
-        .get(0);
-    assert!(
-        audited >= 2,
-        "both successful tag replacements must be audited"
-    );
+        .await;
+        assert_eq!(moved.status(), StatusCode::GONE, "{path}");
+    }
     let token_creation_body = r#"{"label":"http journey","expires_in_hours":24,"max_uses":2}"#;
     let idempotency_key = "console-http-token-create-key-01";
     let created_token = api_json_idempotent(

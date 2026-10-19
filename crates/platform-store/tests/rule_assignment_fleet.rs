@@ -1,5 +1,5 @@
 //! Rule-set assignment, the console's figures (plan 2026-10-15, part 3):
-//! Linux host counts per set and per group, group selectors, the group that
+//! Linux host counts per set and per group, the group that
 //! decides a host's state, whether the set is published, and (Task 2) when
 //! hardening facts were last usable.
 
@@ -45,31 +45,8 @@ async fn as_role(db: &TestDb, role: &str) -> Client {
     client
 }
 
-async fn group(admin: &Client, name: &str, selectors: &[(&str, &str)]) -> String {
-    let id: String = admin
-        .query_one(
-            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by)
-             VALUES (gen_random_uuid(), $1, now(), 'test') RETURNING asset_group_id::text",
-            &[&name],
-        )
-        .await
-        .unwrap()
-        .get(0);
-    for (key, value) in selectors {
-        admin
-            .execute(
-                "INSERT INTO console_asset_group_selectors (asset_group_id, tag_key, tag_value, created_at)
-                 VALUES ($1::text::uuid, $2, $3, now())",
-                &[&id, key, value],
-            )
-            .await
-            .unwrap();
-    }
-    id
-}
-
 /// An agent; `linux` sets `os_id` as an inventory from os-release does.
-async fn agent(admin: &Client, id: &str, status: &str, linux: bool, tags: &[(&str, &str)]) {
+async fn agent(admin: &Client, id: &str, status: &str, linux: bool) {
     admin
         .execute(
             "INSERT INTO agents (agent_id, status, enrolled_at, os_id) VALUES ($1, $2, now(), $3)",
@@ -77,16 +54,6 @@ async fn agent(admin: &Client, id: &str, status: &str, linux: bool, tags: &[(&st
         )
         .await
         .unwrap();
-    for (key, value) in tags {
-        admin
-            .execute(
-                "INSERT INTO console_agent_tags (agent_id, tag_key, tag_value, changed_at, changed_by)
-                 VALUES ($1, $2, $3, now(), 'test')",
-                &[&id, key, value],
-            )
-            .await
-            .unwrap();
-    }
 }
 
 async fn switch(console: &mut Client, set: &str, group: &str, on: bool) {
@@ -99,15 +66,16 @@ async fn switch(console: &mut Client, set: &str, group: &str, on: bool) {
 #[tokio::test]
 async fn hosts_are_counted_per_set_and_per_group_on_linux_hosts_only() {
     let (db, admin) = setup().await;
-    agent(&admin, A, "active", true, &[("env", "prod")]).await;
-    agent(&admin, B, "active", true, &[("env", "lab")]).await;
-    // Not counted: no os-release reported yet, revoked, imported.
-    agent(&admin, C, "active", false, &[("env", "prod")]).await;
-    agent(&admin, D, "revoked", true, &[("env", "prod")]).await;
-    agent(&admin, E, "imported", true, &[("env", "prod")]).await;
-    let prod = group(&admin, "prod", &[("env", "prod")]).await;
-    let lab = group(&admin, "lab", &[("env", "lab")]).await;
-    group(&admin, "empty", &[]).await;
+    agent(&admin, A, "active", true).await;
+    agent(&admin, B, "active", true).await;
+    // Not counted: no os-release reported yet, revoked, imported (the last two
+    // are in no group).
+    agent(&admin, C, "active", false).await;
+    agent(&admin, D, "revoked", true).await;
+    agent(&admin, E, "imported", true).await;
+    let prod = common::manual_group(&admin, "prod", &[A, C, D, E]).await;
+    let lab = common::manual_group(&admin, "lab", &[B]).await;
+    common::manual_group(&admin, "empty", &[]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     switch(&mut console, L1, &prod, false).await;
     switch(&mut console, L2, &lab, true).await;
@@ -127,8 +95,8 @@ async fn hosts_are_counted_per_set_and_per_group_on_linux_hosts_only() {
         groups,
         [
             ("empty", vec![], 0),
-            ("lab", vec!["env=lab".to_owned()], 1),
-            ("prod", vec!["env=prod".to_owned()], 1),
+            ("lab", vec![], 1),
+            ("prod", vec![], 1),
         ]
     );
     drop((console, admin));
@@ -153,17 +121,17 @@ async fn no_linux_host_counts_zero() {
 #[tokio::test]
 async fn the_host_view_names_the_deciding_group_and_says_whether_the_set_is_published() {
     let (db, admin) = setup().await;
-    agent(&admin, A, "active", true, &[("env", "web"), ("tier", "db")]).await;
-    let zeta = group(&admin, "zeta", &[("env", "web")]).await;
-    let alpha = group(&admin, "alpha", &[("tier", "db")]).await;
-    let mid = group(&admin, "mid", &[("env", "web"), ("tier", "db")]).await;
+    agent(&admin, A, "active", true).await;
+    let zeta = common::manual_group(&admin, "zeta", &[A]).await;
+    let alpha = common::manual_group(&admin, "alpha", &[A]).await;
+    let mid = common::manual_group(&admin, "mid", &[A]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     // L2: two groups say on, one says off. On wins; the first on group by name decides.
     switch(&mut console, L2, &zeta, true).await;
     switch(&mut console, L2, &alpha, true).await;
     switch(&mut console, L2, &mid, false).await;
     // L1: only off groups; the first by name decides ("mid" before "zzz").
-    let late = group(&admin, "zzz", &[("env", "web")]).await;
+    let late = common::manual_group(&admin, "zzz", &[A]).await;
     switch(&mut console, L1, &late, false).await;
     switch(&mut console, L1, &mid, false).await;
     let host = rule_assignment::for_agent(&console, &AgentScope::Global, A)
@@ -224,9 +192,9 @@ async fn the_host_view_names_the_deciding_group_and_says_whether_the_set_is_publ
 #[tokio::test]
 async fn a_host_in_an_on_and_an_off_group_counts_as_on_like_distribution_says() {
     let (db, admin) = setup().await;
-    agent(&admin, A, "active", true, &[("env", "web"), ("tier", "db")]).await;
-    let web = group(&admin, "web", &[("env", "web")]).await;
-    let dbs = group(&admin, "db", &[("tier", "db")]).await;
+    agent(&admin, A, "active", true).await;
+    let web = common::rule_group(&admin, "web", &[("os_family", false, &["linux"])]).await;
+    let dbs = common::manual_group(&admin, "db", &[A]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     switch(&mut console, L1, &web, false).await;
     switch(&mut console, L1, &dbs, true).await;
@@ -242,7 +210,7 @@ async fn a_host_in_an_on_and_an_off_group_counts_as_on_like_distribution_says() 
 #[tokio::test]
 async fn the_hardening_facts_outcome_comes_from_the_latest_report() {
     let (db, admin) = setup().await;
-    agent(&admin, A, "active", true, &[]).await;
+    agent(&admin, A, "active", true).await;
     let console = as_role(&db, "openvibes-console").await;
     assert_eq!(
         rule_assignment::hardening_facts(&console, A).await.unwrap(),
@@ -272,7 +240,7 @@ async fn the_hardening_facts_outcome_comes_from_the_latest_report() {
 #[tokio::test]
 async fn ingest_records_when_hardening_facts_were_last_usable() {
     let (db, admin) = setup().await;
-    agent(&admin, A, "active", true, &[]).await;
+    agent(&admin, A, "active", true).await;
     let ingest = as_role(&db, "openvibes-ingest").await;
     let t0 = chrono::Utc::now();
     // Ten minutes apart: past the five-minute heartbeat write throttle.
