@@ -1,6 +1,6 @@
-//! Site-rule permissions are platform-wide, but the hosts they show are
-//! not: testing a rule and the fleet view keep to the caller's `hosts.read`
-//! reach (roles spec §3, §6).
+//! Rule permissions are platform-wide, but the hosts they show are not:
+//! testing a rule, the site fleet view and a host's rule sets keep to the
+//! caller's `hosts.read` reach (roles spec §3, §6).
 
 use axum::http::StatusCode;
 use openvibes_console::authenticated_router;
@@ -90,5 +90,44 @@ async fn a_role_reaching_one_group_tests_and_sees_only_its_hosts() {
     let (_, fleet) = call(&router, "GET", "/api/v1/site-rules/fleet", &abe, None).await;
     assert_eq!(fleet["hosts"].as_array().unwrap().len(), 2, "{fleet}");
     assert_eq!(fleet["reporting"], 2, "{fleet}");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn the_host_rule_set_view_stays_within_the_callers_groups() {
+    let Some(db) = TestDb::create("host_sets").await else {
+        return;
+    };
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .batch_execute(&format!(
+            "INSERT INTO console_asset_groups VALUES ('{LAB}', 'lab', now(), 'test');
+             INSERT INTO console_asset_group_selectors VALUES ('{LAB}', 'env', 'lab', now());
+             INSERT INTO agents (agent_id, status, enrolled_at) VALUES
+                ('{LAB_HOST}', 'active', now()), ('{PROD_HOST}', 'active', now());
+             INSERT INTO console_agent_tags VALUES ('{LAB_HOST}', 'env', 'lab', now(), 'test');"
+        ))
+        .await
+        .unwrap();
+    // bob (analyst) holds hosts.read for the lab group only.
+    db.user("bob", "analyst", 1).await;
+    common::scope_bindings(
+        &mut db.pool.get().await.unwrap(),
+        "user_id = '11111111-1111-4111-8111-111111111101'",
+        LAB,
+    )
+    .await;
+    let router = authenticated_router(db.pool.clone(), common::http::ORIGIN);
+    let bob = sign_in(&router, "bob").await;
+    let view = |agent: &str| format!("/api/v1/agents/{agent}/rule-set-assignments");
+    let (status, body) = call(&router, "GET", &view(LAB_HOST), &bob, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(&router, "GET", &view(PROD_HOST), &bob, None).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (StatusCode::NOT_FOUND, Some("agent_not_found"))
+    );
     db.drop().await;
 }
