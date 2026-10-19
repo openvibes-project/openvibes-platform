@@ -42,7 +42,9 @@ export function registerRoleRoutes(ctx: DemoContext) {
     const held = query.get("held") === "true";
     if (!held && !permissions.includes("access.read") && !permissions.includes("service_accounts.manage")) return problem(403, "permission_denied", "Access is not available");
     const mine = new Set(rolesOf(me).map((r) => r.role_id));
-    return json([...data.access.roles].filter((r) => !held || mine.has(r.role_id))
+    // Let in by service_accounts.manage alone: only roles inside the share.
+    const shareOnly = !held && !permissions.includes("access.read");
+    return json([...data.access.roles].filter((r) => (!held || mine.has(r.role_id)) && (!shareOnly || rolesFit([r])))
       .sort((a, b) => Number(b.builtin) - Number(a.builtin) || a.name.localeCompare(b.name)).map(roleView));
   });
   route("GET", "/api/v1/roles/{id}", "access.read", ({ id = "" }) => {

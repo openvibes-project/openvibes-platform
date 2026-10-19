@@ -5359,14 +5359,14 @@
         "tags": [
           "access control"
         ],
-        "summary": "Every role, Administrator first, then by name: for `access.read`, and\nfor `service_accounts.manage` (its role picker). With `held=true`, the\ncaller's own roles, for anyone signed in (dashboard sharing).",
+        "summary": "Every role, Administrator first, then by name: for `access.read`, and\nfor `service_accounts.manage` (its role picker; then only the roles\ninside the caller's share). With `held=true`, the\ncaller's own roles, for anyone signed in (dashboard sharing).",
         "operationId": "list_roles",
         "parameters": [
           {
             "name": "held",
-            "in": "path",
+            "in": "query",
             "description": "Only the roles the caller holds (any signed-in person may ask).",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "boolean"
             }

@@ -194,10 +194,11 @@ function registerServiceAccountRoutes(ctx: DemoContext & { roles: RoleHelpers })
   });
   const issued = new Map<string, { token_id: string; expires_at: string }>();
   route("POST", "/api/v1/service-accounts/{id}/tokens", "service_accounts.tokens", ({ id = "" }, _, body, headers) => {
-    const key = headers["idempotency-key"] ?? "";
-    if (!/^[\x21-\x7e]{16,128}$/.test(key)) return problem(400, "invalid_idempotency_key", "Provide an Idempotency-Key header between 16 and 128 visible ASCII characters");
+    // The server's order: the account's share first, then the key.
     const account = visibleAccount(id);
     if (account instanceof Response) return account;
+    const key = headers["idempotency-key"] ?? "";
+    if (!/^[\x21-\x7e]{16,128}$/.test(key)) return problem(400, "invalid_idempotency_key", "Provide an Idempotency-Key header between 16 and 128 visible ASCII characters");
     const previous = issued.get(key);
     if (previous) return json({ ...previous, secret_available: false, replayed: true });
     const token = { token_id: `st-${Date.now().toString(36)}${issued.size}`, label: String(body.label ?? ""), created_at: iso(), expires_at: iso(Date.now() + Number(body.expires_in_hours ?? 24) * 3_600_000), revoked: false };

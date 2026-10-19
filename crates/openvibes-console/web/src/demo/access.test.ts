@@ -52,6 +52,11 @@ describe("demo roles API", () => {
     expect((await call<unknown[]>(createDemoServer({ persona: "admin" }), "GET", "/api/v1/roles")).body.length).toBeGreaterThan(1);
   });
 
+  it("checks a token's account before its Idempotency-Key, as the server does", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    expect((await call(server, "POST", "/api/v1/service-accounts/sa-nope/tokens", { label: "x", expires_in_hours: 24 })).status).toBe(404);
+  });
+
   it("answers service accounts with their roles' names", async () => {
     const server = createDemoServer({ persona: "admin" });
     const accounts = await call<{ items: { name: string; roles: { role_id: string; name: string }[] }[] }>(server, "GET", "/api/v1/service-accounts");

@@ -1076,7 +1076,8 @@ export interface paths {
         };
         /**
          * Every role, Administrator first, then by name: for `access.read`, and
-         *     for `service_accounts.manage` (its role picker). With `held=true`, the
+         *     for `service_accounts.manage` (its role picker; then only the roles
+         *     inside the caller's share). With `held=true`, the
          *     caller's own roles, for anyone signed in (dashboard sharing).
          */
         get: operations["list_roles"];
@@ -8745,12 +8746,12 @@ export interface operations {
     };
     list_roles: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Only the roles the caller holds (any signed-in person may ask). */
-                held: boolean;
+                held?: boolean;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

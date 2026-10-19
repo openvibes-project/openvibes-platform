@@ -150,7 +150,8 @@ exist. Tests: `tests/people_http.rs` and `tests/people_share_http.rs` (fixture i
 - `GET /api/v1/roles` and `GET /api/v1/roles/{role_id}` (`access.read`):
   `RoleView` (permissions, reach `none` / `all` / `groups` with names,
   members, version), Administrator first. The list is also open to
-  `service_accounts.manage` (the new-account role picker). With
+  `service_accounts.manage` (the new-account role picker); a caller let in
+  by that alone sees only the roles inside their share. With
   `?held=true` it answers only the caller's own roles, to anyone signed in
   with a browser session (the dashboard Share menu: only roles you hold).
 - `POST /api/v1/roles` (201), `PATCH /api/v1/roles/{role_id}` (200, needs

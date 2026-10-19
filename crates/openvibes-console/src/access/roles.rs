@@ -18,7 +18,9 @@ use platform_store::console_roles::{self, Reach, RoleInput, RoleWrite};
 
 use crate::Permission;
 use crate::access::catalogue::{catalogue_json, def};
-use crate::access::editor::{Editor, caller, role_fits, within_share};
+use crate::access::editor::{
+    Editor, authenticated_editor, caller, role_fits, roles_fit, within_share,
+};
 use crate::access::guard::{authenticated_permission, session_user, unavailable_auth};
 use crate::access::rbac::ADMIN_ROLE;
 use crate::access::roles_types::{ReachInput, RoleView, SaveRole};
@@ -60,6 +62,7 @@ async fn static_json(state: &AuthHttpState, headers: &HeaderMap, json: String) -
 
 /// `GET /roles?held=true`: only the caller's own roles.
 #[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct RolesQuery {
     /// Only the roles the caller holds (any signed-in person may ask).
     #[serde(default)]
@@ -67,7 +70,8 @@ pub(crate) struct RolesQuery {
 }
 
 /// Every role, Administrator first, then by name: for `access.read`, and
-/// for `service_accounts.manage` (its role picker). With `held=true`, the
+/// for `service_accounts.manage` (its role picker; then only the roles
+/// inside the caller's share). With `held=true`, the
 /// caller's own roles, for anyone signed in (dashboard sharing).
 #[utoipa::path(get, path = "/api/v1/roles", tag = "access control", params(RolesQuery),
     responses((status = 200, description = "Roles", body = [RoleView]),
@@ -80,27 +84,31 @@ pub(crate) async fn list_roles(
 ) -> Response {
     // A query that does not parse asks for the full list, which is checked.
     let held = query.is_ok_and(|Query(query)| query.held);
-    let mine = if held {
+    // `mine`: list only the caller's roles; `share`: a caller let in by
+    // service_accounts.manage alone sees only roles inside their share.
+    let (mine, share) = if held {
         match session_user(&state, &headers, false).await {
-            Ok(user) => Some(user.user_id),
+            Ok(user) => (Some(user.user_id), None),
             Err(response) => return response,
         }
     } else {
-        let mut allowed =
-            authenticated_permission(&state, &headers, Permission::AccessRead, false).await;
-        if matches!(&allowed, Err(response) if response.status() == StatusCode::FORBIDDEN) {
-            allowed = authenticated_permission(
-                &state,
-                &headers,
-                Permission::ServiceAccountsManage,
-                false,
-            )
-            .await;
+        match authenticated_permission(&state, &headers, Permission::AccessRead, false).await {
+            Ok(_) => (None, None),
+            Err(response) if response.status() == StatusCode::FORBIDDEN => {
+                match authenticated_permission(
+                    &state,
+                    &headers,
+                    Permission::ServiceAccountsManage,
+                    false,
+                )
+                .await
+                {
+                    Ok((_, actor)) => (None, Some(actor)),
+                    Err(response) => return response,
+                }
+            }
+            Err(response) => return response,
         }
-        if let Err(response) = allowed {
-            return response;
-        }
-        None
     };
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
@@ -108,6 +116,13 @@ pub(crate) async fn list_roles(
     let held_ids = match &mine {
         Some(user_id) => match console_people::person(&client, user_id).await {
             Ok(person) => Some(person.map(|p| p.role_ids).unwrap_or_default()),
+            Err(_) => return unavailable_auth(),
+        },
+        None => None,
+    };
+    let editor = match &share {
+        Some(actor) => match authenticated_editor(&client, &headers, actor).await {
+            Ok(editor) => Some(editor),
             Err(_) => return unavailable_auth(),
         },
         None => None,
@@ -121,6 +136,7 @@ pub(crate) async fn list_roles(
                         .as_ref()
                         .is_none_or(|ids| ids.contains(&role.role_id))
                 })
+                .filter(|role| editor.as_ref().is_none_or(|e| roles_fit(e, &[role])))
                 .map(RoleView::from)
                 .collect::<Vec<_>>(),
         )

@@ -47,9 +47,14 @@ async fn service_accounts_show_role_names_and_their_managers_list_roles() {
     let manager = fx.role("Robots", &manage, Reach::None).await;
     fx.db.user("max", &manager, 3).await;
     let max = sign_in(&fx.router, "max").await;
+    let readers = fx
+        .role("Account readers", &["service_accounts.read"], Reach::None)
+        .await;
     let (status, roles) = fx.call(&max, "GET", "/api/v1/roles", None).await;
     assert_eq!(status, StatusCode::OK, "{roles}");
-    assert!(ids(&roles).contains(&fx.win_viewers.as_str()), "{roles}");
+    // Only roles inside max's share: not Win viewers (hosts.read), nor
+    // Administrator.
+    assert_eq!(ids(&roles), [readers.as_str(), manager.as_str()], "{roles}");
     // Without either permission the list stays closed.
     fx.db.user("nia", &fx.win_viewers, 4).await;
     let nia = sign_in(&fx.router, "nia").await;
