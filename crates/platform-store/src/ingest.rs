@@ -309,6 +309,7 @@ pub async fn authenticate(
 /// changed. A present hostname replaces the stored one; an
 /// absent one keeps it. A report whose hardening outcome is `ok` also sets
 /// `hardening_facts_ok_at`. Returns whether a write happened.
+#[allow(clippy::too_many_arguments)]
 pub async fn heartbeat(
     client: &Client,
     agent_id: &str,

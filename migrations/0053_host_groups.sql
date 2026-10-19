@@ -118,13 +118,12 @@ CREATE FUNCTION console_host_in_group(agent text, gid uuid) RETURNS boolean LANG
 -- and a test compares the two.
 CREATE FUNCTION console_os_family_name(os_family text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
   SELECT CASE os_family WHEN 'linux' THEN 'Linux' WHEN 'windows' THEN 'Windows'
-         ELSE upper(left(os_family, 1)) || substr(os_family, 2) END $$;
+         ELSE os_family END $$;
 CREATE FUNCTION console_distribution_name(distribution text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
-  SELECT CASE split_part(distribution, ' ', 1)
+  SELECT COALESCE((CASE split_part(distribution, ' ', 1)
            WHEN 'debian' THEN 'Debian' WHEN 'ubuntu' THEN 'Ubuntu' WHEN 'fedora' THEN 'Fedora'
-           WHEN 'rocky' THEN 'Rocky Linux' WHEN 'almalinux' THEN 'AlmaLinux'
-           ELSE upper(left(distribution, 1)) || substr(split_part(distribution, ' ', 1), 2) END
-         || substr(distribution, length(split_part(distribution, ' ', 1)) + 1) $$;
+           WHEN 'rocky' THEN 'Rocky Linux' WHEN 'almalinux' THEN 'AlmaLinux' END)
+         || substr(distribution, length(split_part(distribution, ' ', 1)) + 1), distribution) $$;
 
 -- upgrade (§12 part 4): every asset group becomes a manual group holding the
 -- active hosts its tag selectors match now (a group without selectors matched
@@ -186,8 +185,9 @@ BEGIN
            FROM agents WHERE status = 'active' AND os_family IS NOT NULL
            UNION
            SELECT DISTINCT 'distribution', distribution, console_distribution_name(distribution)
-           FROM agents WHERE status = 'active' AND distribution IS NOT NULL
-           ORDER BY 1 DESC, 2 LOOP
+           FROM agents WHERE status = 'active'
+             AND distribution ~ '^[a-z0-9._-]{1,32} [a-z0-9._-]{1,32}$'
+           ORDER BY 1 DESC, 2 LIMIT 200 LOOP
     gid := gen_random_uuid();
     gname := console_free_group_name(f.display, 'automatic');
     INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind, auto_key, description)

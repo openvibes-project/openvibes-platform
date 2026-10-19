@@ -291,7 +291,7 @@ async fn names_differing_only_in_case_are_renamed_and_keep_their_hosts() {
 }
 
 #[tokio::test]
-async fn automatic_names_fit_and_clash_at_two_levels() {
+async fn automatic_names_clash_at_two_levels_and_odd_releases_get_none() {
     let long_id = "x".repeat(128);
     let long_version = "9".repeat(128);
     let (db, c) = upgraded_from(&format!(
@@ -314,9 +314,8 @@ async fn automatic_names_fit_and_clash_at_two_levels() {
         .collect();
     assert_eq!(names["os_family:linux"], "Linux (automatic 2)");
     assert_eq!(names["distribution:debian 12"], "Debian 12");
-    let long = &names[&format!("distribution:{long_id} {long_version}")];
-    assert_eq!(long.chars().count(), 128);
-    assert!(long.starts_with("Xxx"));
+    // an os-release outside `[a-z0-9._-]{1,32}` gets no group
+    assert!(!names.contains_key(&format!("distribution:{long_id} {long_version}")));
     db.drop().await;
 }
 

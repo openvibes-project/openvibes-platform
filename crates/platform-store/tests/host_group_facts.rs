@@ -129,7 +129,7 @@ async fn a_name_taken_by_a_user_group_gets_automatic_appended() {
 #[tokio::test]
 async fn display_names_match_the_migration() {
     let (db, admin, _ingest) = setup().await;
-    for family in ["linux", "windows", "freebsd", "x"] {
+    for family in ["linux", "windows", "freebsd", "x", "production"] {
         let sql: String = admin
             .query_one("SELECT console_os_family_name($1)", &[&family])
             .await
@@ -149,6 +149,8 @@ async fn display_names_match_the_migration() {
         "x 1",
         "alpine 3.20.1",
         "pop 22.04",
+        "production 1",
+        "admins 2",
     ] {
         let sql: String = admin
             .query_one("SELECT console_distribution_name($1)", &[&d])
@@ -212,6 +214,109 @@ async fn an_unchanged_address_inside_the_throttle_writes_nothing() {
         last_address(&admin).await,
         Some("192.0.2.1".parse().unwrap())
     );
+    drop((ingest, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_canonical_v4_address_is_matched_by_a_v4_ip_rule() {
+    let (db, admin, ingest) = setup().await;
+    let mapped: IpAddr = "::ffff:10.0.0.5".parse().unwrap();
+    beat_with(&ingest, mapped.to_canonical(), 0, Utc::now()).await;
+    let gid = common::rule_group(&admin, "Internal", &[("ip", false, &["10.0.0.0/8"])]).await;
+    let inside: bool = admin
+        .query_one(
+            "SELECT console_host_in_group($1, $2::text::uuid)",
+            &[&AGENT, &gid],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(inside);
+    drop((ingest, admin));
+    db.drop().await;
+}
+
+async fn beat_with(ingest: &Client, address: IpAddr, minutes: i64, now: chrono::DateTime<Utc>) {
+    ingest::heartbeat(
+        ingest,
+        AGENT,
+        "0.1.0",
+        None,
+        &[],
+        None,
+        Some(address),
+        now + Duration::minutes(minutes),
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn an_inventory_replace_makes_the_linux_and_debian_groups() {
+    let (db, admin, mut ingest) = setup().await;
+    platform_store::inventory::replace(
+        &mut ingest,
+        AGENT,
+        "debian",
+        "12",
+        None,
+        &[],
+        [1; 32],
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    let keys: Vec<String> = groups(&admin).await.into_iter().map(|g| g.0).collect();
+    assert_eq!(keys, ["distribution:debian 12", "os_family:linux"]);
+    drop((ingest, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn odd_os_ids_and_the_cap_create_nothing() {
+    let (db, admin, ingest) = setup().await;
+    let now = Utc::now();
+    let long = format!("{} 1", "a".repeat(33));
+    for bad in [
+        "Debian 12",
+        "debian  12",
+        "debian",
+        long.as_str(),
+        "de bian 1 2",
+        "d\u{e9}bian 1",
+        " 1",
+    ] {
+        ensure_automatic_groups(&ingest, "linux", bad, now)
+            .await
+            .unwrap();
+    }
+    let keys: Vec<String> = groups(&admin).await.into_iter().map(|g| g.0).collect();
+    assert_eq!(keys, ["os_family:linux"]);
+    admin
+        .execute(
+            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind, auto_key)
+             SELECT gen_random_uuid(), 'f' || n, now(), 'x', 'automatic', 'distribution:f ' || n
+             FROM generate_series(1, 199) n",
+            &[],
+        )
+        .await
+        .unwrap();
+    ensure_automatic_groups(&ingest, "linux", "debian 12", now)
+        .await
+        .unwrap();
+    ensure_automatic_groups(&ingest, "windows", "ubuntu 24.04", now)
+        .await
+        .unwrap();
+    let total: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM console_asset_groups WHERE kind = 'automatic'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(total, 200);
     drop((ingest, admin));
     db.drop().await;
 }

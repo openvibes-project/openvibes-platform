@@ -135,7 +135,7 @@ pub async fn run(
                 let (tcp, ip) = tokio::select! {
                     () = &mut shutdown => break,
                     accepted = listener.accept() => match accepted {
-                        Ok((tcp, addr)) => (no_delay(tcp), addr.ip()),
+                        Ok((tcp, addr)) => (no_delay(tcp), canonical_ip(addr)),
                         Err(_) => {
                             // For example EMFILE: back off instead of spinning.
                             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -174,8 +174,23 @@ pub async fn run(
     Ok(())
 }
 
+/// The peer's IP with an IPv4-mapped IPv6 address (what a dual-stack `[::]`
+/// listener reports for an IPv4 client) turned back into plain IPv4, so
+/// `ip` rules in CIDR ranges of IPv4 match it.
+fn canonical_ip(addr: SocketAddr) -> std::net::IpAddr {
+    addr.ip().to_canonical()
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn mapped_v4_becomes_v4_and_plain_v6_stays() {
+        let mapped = "[::ffff:10.0.0.5]:1".parse().unwrap();
+        assert_eq!(super::canonical_ip(mapped).to_string(), "10.0.0.5");
+        let v6 = "[2001:db8::1]:1".parse().unwrap();
+        assert_eq!(super::canonical_ip(v6).to_string(), "2001:db8::1");
+    }
+
     use tokio::net::{TcpListener, TcpStream};
 
     #[tokio::test]

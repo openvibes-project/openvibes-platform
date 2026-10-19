@@ -53,9 +53,9 @@ pub mod finding_changes;
 pub mod health;
 /// Daily per-host problem counts for history graphs.
 pub mod history;
-/// Open ports and running services per host (P15, Assets v2).
 /// Automatic host groups made from reported OS facts (schema 53).
 pub mod host_group_facts;
+/// Open ports and running services per host (P15, Assets v2).
 pub mod host_services;
 /// Queries the ingest service runs.
 pub mod imports;
