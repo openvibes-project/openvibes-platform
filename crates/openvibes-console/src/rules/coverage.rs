@@ -279,7 +279,7 @@ async fn global_rules_read(
     state: &AuthHttpState,
     headers: &HeaderMap,
 ) -> Result<platform_store::Client, Response> {
-    super::assignment::rules_reader(state, headers).await?;
+    super::assignment::rules_reader(state, headers, crate::Permission::RulesCoverageRead).await?;
     state.pool.get().await.map_err(|_| unavailable_auth())
 }
 
@@ -304,7 +304,7 @@ pub(crate) async fn attack_catalog(
 
 #[utoipa::path(get, path = "/api/v1/rules/coverage", tag = "rules",
     responses((status = 200, description = "Which ATT&CK tactics and techniques the rules cover", body = crate::rules::coverage::AttackCoverage),
-        (status = 403, description = "Global rules.read or rules.upload needed", body = crate::ProblemDetails, content_type = "application/problem+json")))]
+        (status = 403, description = "Global rules.coverage.read needed", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn rule_coverage(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,

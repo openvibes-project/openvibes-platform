@@ -13,6 +13,6 @@ Fixed demo data for the loopback development listener (`dev-seed`): deterministi
 | `compliance.rs` | Finding summary, list, groups, group endpoints, and one finding. |
 | `vulnerabilities.rs` | Vulnerability summary, list and advisory detail. |
 | `audit.rs` | Audit events and their CSV export. |
-| `access.rs` | The access inventory. |
+| `access.rs` | Roles and people. |
 
 More: [docs/components/openvibes-console.md](../../../../docs/components/openvibes-console.md)

@@ -1,6 +1,6 @@
 //! Open ports and running services over `/api/v1` (Assets v2, P15): one
 //! host's listeners and services, and the fleet's ports and services.
-//! Reads need `agents.read` and are scoped to the caller's agents; fleet
+//! Reads need `hosts.read` and are scoped to the caller's agents; fleet
 //! counts leave revoked hosts out.
 
 use axum::{
@@ -137,7 +137,7 @@ pub(crate) async fn get_host_services(
     Path(agent_id): Path<String>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::HostsRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -179,7 +179,7 @@ pub(crate) async fn list_ports(
     params: Result<Query<PortParams>, QueryRejection>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::HostsRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -219,7 +219,7 @@ pub(crate) async fn list_services(
     headers: HeaderMap,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::HostsRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -353,7 +353,7 @@ pub(crate) async fn get_port(
     params: Result<Query<HostsParams>, QueryRejection>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::HostsRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -430,7 +430,7 @@ pub(crate) async fn get_unit(
     params: Result<Query<HostsParams>, QueryRejection>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::HostsRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };

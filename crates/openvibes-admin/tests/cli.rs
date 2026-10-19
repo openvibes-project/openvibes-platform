@@ -228,13 +228,31 @@ async fn local_user_list_and_disable_use_the_real_cli_and_audit() {
     )
     .await
     .unwrap();
+    // A second Administrator: the last enabled one cannot be disabled.
+    create_local_user(
+        &mut client,
+        &NewLocalUser {
+            user_id: "33333333-3333-4333-8333-333333333333",
+            binding_id: "44444444-4444-4444-8444-444444444444",
+            username: "bob",
+            display_name: "Bob Example",
+            password_phc: "$argon2id$v=19$m=19456,t=2,p=1$opaque-salt$opaque-hash",
+            role_id: "admin",
+            actor_id: "test-bootstrap",
+            actor_kind: "local_admin",
+            password_must_change: false,
+            now: Utc::now(),
+        },
+    )
+    .await
+    .unwrap();
     drop(client);
 
     let listing = stdout(&fixture.run(&["user", "list"]));
     assert!(
         listing
             .lines()
-            .any(|line| { line == "alice\tenabled\tadmin\tAlice Example\tnever" })
+            .any(|line| { line == "alice\tenabled\tAdministrator\tAlice Example\tnever" })
     );
     assert!(!listing.contains("opaque-hash"));
     assert!(
@@ -262,6 +280,7 @@ async fn local_user_list_and_disable_use_the_real_cli_and_audit() {
                 Some("alice".into()),
                 "success".into()
             ),
+            ("user.created".into(), Some("bob".into()), "success".into()),
             ("user.list".into(), None, "ok".into()),
             (
                 "user.disabled".into(),

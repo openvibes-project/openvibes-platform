@@ -28,7 +28,7 @@ export function registerMetricRoutes(ctx: DemoContext) {
     return undefined;
   };
   const metricPermissions = (metric: string): Permission[] =>
-    metric.startsWith("all.") ? ["alarms.read", "vulnerabilities.read", "compliance.read"] : [metric.startsWith("vulns.") ? "vulnerabilities.read" : metric.startsWith("alarms.") ? "alarms.read" : metric.startsWith("compliance.") ? "compliance.read" : "agents.read"];
+    metric.startsWith("all.") ? ["alarms.read", "vulnerabilities.read", "compliance.read"] : [metric.startsWith("vulns.") ? "vulnerabilities.read" : metric.startsWith("alarms.") ? "alarms.read" : metric.startsWith("compliance.") ? "compliance.read" : "hosts.read"];
   const invalidQuery = (field: string, code: string, message: string) => new Response(JSON.stringify({
     status: 422, code: "invalid_metric_query", title: "The metric query is invalid", request_id: `demo-${Date.now().toString(36)}`,
     field_errors: [{ field, code, message }],

@@ -34,8 +34,10 @@ Show everything, without page changes for details:
   - agents, with tags and revocation;
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
-  - access: roles, bindings and asset groups;
-  - service accounts, with tokens issued once;
+  - settings: people, roles and host groups;
+  - service accounts, with tokens issued once; roles are shown by name, and
+    the new-account picker offers only roles inside the creator's own access
+    (`fitsShare`, as for people);
   - audit log, with ranges, CSV export and retention.
 - **Host hardening** (`panels/hosts/HostHardening.tsx`): the host panel's Hardening
   row, "Hardening facts unavailable" warning and "Not assigned" badge; see
@@ -50,7 +52,9 @@ Show everything, without page changes for details:
   every row the filter matches, up to 10,000; `ui/selection.ts`). The
   triage actions (#253) are the same in a panel header and in the bulk bar
   at the bottom of a list: **Set state** (a menu, `ui/Menu.tsx`: Mitigate,
-  Accept risk, False positive, and Suppress for alarms in bulk), **Reopen
+  Accept risk, False positive, and Suppress for alarms in bulk; like
+  `Select`, it follows its button on scroll and closes only once the button
+  is off screen, `inView` in `ui/select.ts`), **Reopen
   N closed** (only when the selection holds closed items; applied at once),
   the **assignee** (the console's `Select` drawn as a button, with search,
   "Assign to me" and "Unassigned" on top; applied on pick) and **Add to
@@ -177,7 +181,8 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   480px so host names fit.
 - **Menu:**
   - Duplicate, Rename and Delete;
-  - Share with role (owner with `dashboards.share`);
+  - Share with role (owner with `dashboards.share`): only the roles the
+    owner holds (`GET /api/v1/roles?held=true`), shown and confirmed by name;
   - Set as home.
 - **The demo** (preview and dev only) keeps dashboards and home choices in the browser's
   `localStorage` (`openvibes.v2.demo.dashboards`).
@@ -269,7 +274,7 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
   what it quiets and asks why; confirming closes that alarm as a false
   positive and creates the suppression.
 
-**Site rules** (`/site-rules`, with `rules.write`) lists the site's own
+**Site rules** (`/site-rules`, with `site_rules.read`) lists the site's own
 compliance rules and alarm rules (drafts) with New rule. A rule opens in
 the inspector as a form (id for a new rule, title, severity, confidence,
 for alarms the programs, expression, message). As you type, the server's
@@ -277,12 +282,13 @@ check (the agent's own loader) shows what is wrong beside the field, and
 Save draft stays off until the rule passes. Delete asks first. Rules saved
 here are drafts. Under each table, Publish lists what changed against the
 published set; with the user's password typed again the rule signer signs
-the set and the platform publishes it (needs `rules.upload`). A compliance
-rule's panel can also be tested against one host: it runs on the packages
+the set and the platform publishes it (needs `site_rules.publish`). A compliance
+rule's panel can also be tested against one host (with `site_rules.test`;
+a host outside the user's `hosts.read` reach is not found): it runs on the packages
 and listening ports the platform holds and says match, no match or
 unavailable (a rule over anything else, such as running processes, is
 unavailable here). A Hosts section at the bottom of Site rules counts the
-hosts running each set (current, behind, refused, not set up), lists the
+hosts the user may see running each set (current, behind, refused, not set up), lists the
 ones that aren't current, and shows the `[[rule_sets]]` lines to paste into
 an existing agent's `agent.toml`.
 - **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the
@@ -290,7 +296,7 @@ an existing agent's `agent.toml`.
   working directory, pid), rule and versions, first/last seen, count, in
   the detail template (Process, Evidence, History tabs); the summary has
   the triage actions and Quiet… with the same scopes.
-- **Coverage** (`/coverage`, `g t`, global `rules.read` or `rules.upload`): an ATT&CK
+- **Coverage** (`/coverage`, `g t`, global `rules.coverage.read`): an ATT&CK
   matrix (tactics as columns, covered techniques with rule counts; empty
   tactics stay as visible gaps) above the rule list. Chips: Kill chain
   (the same cells grouped into the seven phases), Findings, Alarms, Include
@@ -321,12 +327,12 @@ triage on alarms and findings stays as it is.
   Investigating, Closed, Include closed (the default list shows open and
   investigating), the four severities, Assigned to me and Unassigned. The
   chips and severity go to the API; the text filter (title, `C-104`,
-  assignee) applies to what is loaded. **New case** (with `cases.manage`)
+  assignee) applies to what is loaded. **New case** (with `cases.write`)
   opens a form in the inspector. A row opens the case.
 - **Case panel** (`case`, id is the case's UUID, `case:new` is the form):
   - the header shows number, title, status, severity, assignee and how many
     items are unresolved;
-  - with `cases.manage`, title, severity and assignee (a picker from
+  - with `cases.write`, title, severity and (with `cases.assign`) assignee (a picker from
     `/cases/assignees`, plus Assign to me) save together with the version
     (`If-Match`). Status moves open to investigating and back, and **Close
     case…** asks for the resolution, a note and, for accepted risk, the date
@@ -344,8 +350,8 @@ triage on alarms and findings stays as it is.
     pasted id) work on open cases;
   - **Notes** (plain text) and the **Timeline**, newest first, with who did
     what.
-  - Without `cases.manage` the panel is read-only.
-- **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.manage`): a button on
+  - Without `cases.write` the panel is read-only.
+- **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.write`): a button on
   the alarm panel, on each host row of a finding and of an advisory, on the
   host panel and its vulnerabilities, and on the software panel. Its dialog
   asks `/cases/for-item` first. An alarm, finding or vulnerability that is
@@ -365,8 +371,10 @@ triage on alarms and findings stays as it is.
   It starts with four cases over real demo objects (an SSH and shell
   investigation, an exploited advisory on three hosts, web servers starting
   shells, and a closed one) and keeps cases in `localStorage`
-  (`openvibes.v2.demo.cases`). Analyst and admin hold `cases.read` and
-  `cases.manage`; the viewer and operator have neither.
+  (`openvibes.v2.demo.cases`). As on the server, anyone holding
+  `cases.read` can be assigned, and setting or changing an assignee needs
+  `cases.assign` (403 otherwise): Analyst has `cases.write` but not
+  `cases.assign`, Administrator has both, the operators have no cases.
 
 ## Assets v1 (hosts and software)
 
@@ -406,9 +414,11 @@ triage on alarms and findings stays as it is.
 ## Interfaces
 
 - **Entry:** `web/index.html` → `src/main.tsx` → `shell/App.tsx`.
-- **Browser routes:** every view's path, `/login` and
-  `/dashboards/{dashboard_id}`, listed in `web/frontend-contract.json` for
-  the server's router; `app/frontendContract.test.ts` keeps the two in step.
+- **Browser routes:** every view's path, `/login`,
+  `/dashboards/{dashboard_id}`, `/settings/roles/{role_id}` and
+  `/settings/people/{user_id}`, listed in `web/frontend-contract.json` for
+  the server's router; `app/frontendContract.test.ts` keeps the two in step
+  (a page missing there loads in the app but is a 404 on reload or a link).
 - **`app/registry.tsx`:** declares every view (path, icon, group, required
   permissions, shortcut) and object kind (panel). A new module is one entry
   in each.
@@ -416,15 +426,16 @@ triage on alarms and findings stays as it is.
   - `views/`: one file per page, in a folder per menu group:
     `investigate/` (Alarms, Compliance, Vulnerabilities, Hosts, Software,
     Ports and Services, Cases), `operate/` (Alarm suppressions, Site rules,
-    Coverage), `admin/` (`Audit.tsx`, and `settings/`: `Settings.tsx` plus
-    one file per tab) and `help/` (About). `views/lists/` holds what the
+    Coverage), `admin/` (`Audit.tsx`, `settings/`: `Settings.tsx` plus
+    one file per tab, `roles/`: the role page, and `people/`: a person's
+    page) and `help/` (About). `views/lists/` holds what the
     lists share: filter catalogues (`filters.ts`), row selection and
     sorting (`rows.ts`) and the test-trigger rules (`testRules.ts`).
   - `panels/`: one folder per subject (`hosts/`, `alarms/`, `findings/`,
     `triage/`, `cases/`, `rules/`, `admin/`), one file per object kind,
     named `<Kind>Panel.tsx`, holding
-    that kind's panel and its "new" form (`UserPanel.tsx` has `UserPanel`
-    and `NewUser`).
+    that kind's panel and its "new" form (`ServiceAccountPanel.tsx` has
+    both).
   - Logic without React sits beside its component in a lowercase `.ts`
     file with a unit test (`ruleAssignment.ts` next to `WhereItRuns.tsx`).
   - `app/`: session, navigation and the registry; `ui/`: shared controls;
@@ -439,14 +450,95 @@ triage on alarms and findings stays as it is.
     `access`), its path in `frontend-contract.json`.
   - A Settings tab: its file in `views/admin/settings/` and one line in the
     `tabs` list of `Settings.tsx`, with its `access`. The Settings menu
-    entry opens to any tab's access by itself.
+    entry opens to any tab's access by itself. Tabs: People, Roles, Host
+    groups, Service accounts, Enrollment, Rule sets, Assistant. Settings has
+    no outer filter: each tab has its own search field.
+  - A full page under `/settings/…` (roles, people): the `subPage` function in
+    `Settings.tsx`; it renders in place of the Settings header and tabs, with
+    a "Settings › …" breadcrumb back (approved screens 2 and 5). The rail
+    keeps Settings current on these pages (`prefix` in the registry).
+  - Permission checks are `can(permission)`; there is no `global` flag. The
+    catalogue and the needs closure helpers are in `app/permissions.ts`.
   - A permission: the server side only (`access/permission.rs`
-    `Permission`, `access/rbac.rs` `ALL_PERMISSIONS` and the role table,
-    a migration for the database's role tables, and the route's check). Then regenerate the API client
-    (`npm run generate:api`) and `web/src/api/roles.json`
-    (`cargo run -p openvibes-console --bin export_openapi -- --roles >
-    crates/openvibes-console/web/src/api/roles.json`); tests fail while
-    either is stale.
+    `Permission`, `access/catalogue.rs`, a migration for the database's
+    permission rows, and the route's check). Then regenerate the API client
+    (`npm run generate:api`) and `web/src/api/permissions.json`
+    (`cargo run -p openvibes-console --bin export_openapi -- --permissions >
+    crates/openvibes-console/web/src/api/permissions.json`); tests fail while
+    either is stale. Role pickers read the live role list from
+    `GET /api/v1/roles` (people: `GET /api/v1/users*`, group cards:
+    `GET /api/v1/host-groups`); the demo seeds its roles from
+    `templates.json` and `permissions.json` (Administrator).
+- **Roles (`views/admin/settings/Roles.tsx`, `views/admin/roles/`):**
+  - **Purpose:** Settings › Roles lists the roles (Administrator first,
+    "Protected"; templates are not roles) with where each applies, its
+    permission count and members. `/settings/roles/new` and
+    `/settings/roles/{id}` open the role page: 1 Name and 2 Start from
+    (Blank or a template; new roles only), the permission matrix (areas ×
+    View / Change / Export / Approve and publish, "All" per row and a toggle
+    per column, ⓘ on platform permissions), Hosts (All hosts or host groups)
+    and a sticky bar with the summary, Cancel, Delete role, Create or Save.
+  - **Interfaces:** `GET/POST /api/v1/roles`, `GET/PATCH/DELETE
+    /api/v1/roles/{id}` (PATCH sends the `version` read),
+    `GET /api/v1/host-groups`. Templates and the catalogue come from
+    `app/permissions.ts`, so `/role-templates` is not fetched. Turning a
+    permission on adds what it needs (`turnOn`), turning it off removes
+    what depends on it (`turnOff`), and a notice names the others changed:
+    the console only ever sends a closed set.
+  - **Config:** none. Read-only for Administrator ("cannot be changed") and
+    for anyone without `access.roles`.
+  - **Failure behaviour:** a refused save or delete (403 with the missing
+    permission, 409 name taken or role in use, 422 missing needs or unknown
+    group, 400) shows the server's message above the bar and keeps the
+    edits. A 409 `stale_role` reloads the role and says "Someone else
+    changed this role; your edits were not saved."
+  - **How to test:** `roles/RolePage.test.tsx` (reducer, markup and the
+    request bodies, no DOM library); the demo e2e `roles.spec.ts` creates
+    "Night shift" from the Analyst template on WindowsServers (with axe)
+    and hits the case-insensitive name check.
+- **People (`views/admin/settings/People.tsx`, `views/admin/people/`):**
+  - **Purpose:** Settings › People lists everyone inside the viewer's
+    share: Person, Roles as badges "<role> · <where it applies>", Signs in
+    with (Password / Single sign-on), Status (Active / Disabled) and Last
+    sign-in. "+ New person" (`access.users`) opens a dialog that creates a
+    local sign-in and shows its one-time password once. A row opens
+    `/settings/people/{id}`, one page with no tabs: the header (initials,
+    name, status, "<n> roles · <n> permissions · last signed in <when>",
+    Edit details for yourself or with `access.users`, and ⋯ with Reset
+    password and Disable/Enable, hidden on your own page); Details and
+    Recent activity (with a link to the audit log filtered to the person)
+    on the left; Roles (compact cards with Open role and Remove, "+ Add
+    role") and Access (grouped under "On all hosts", "Only on <groups>"
+    and "Across the platform", each line "<permission> · from <role>") on
+    the right.
+  - **Interfaces:** `GET/POST /api/v1/users`, `GET/PATCH
+    /api/v1/users/{id}` (display name and email), `POST
+    …/disable|enable|reset-password`, `PUT|DELETE …/roles/{role_id}`,
+    `GET /api/v1/roles`. A change invalidates `/api/v1/users` and
+    `/api/v1/roles` (members counts).
+  - **Config:** none. Add role and Remove need `access.grant` and are
+    hidden on your own page (the server refuses changing your own roles).
+    Add role and New person offer only roles inside the viewer's share
+    (`fitsShare`/`outsideShare` in `people/people.ts`, the client copy of
+    `access/share.rs`, which the demo server uses too); the server decides.
+    `fitsShare` skips `assistant.use`, which the session leaves out while
+    no assistant is set up.
+  - **Failure behaviour:** a refused change shows above the columns; a 409
+    `last_administrator` reads "This is the last Administrator. Give
+    someone else the Administrator role first." A person outside the
+    share is a 404 (`user_not_found`), shown as an error. A refused
+    Edit details shows the server's message in the form and keeps the
+    edits.
+  - **How to test:** `people/PersonPage.test.tsx` and
+    `settings/People.test.tsx` (markup, grouping, the PUT with a stubbed
+    fetch, the 409 message, no Disable on your own page); the demo e2e
+    creates a person with a one-time password (`smoke.spec.ts`), and
+    `people.spec.ts` gives and removes a role on one group ("Only on
+    WindowsServers", with axe) and checks your own page. The live e2e
+    (`e2e/live/teams.spec.ts`, helpers in `e2e/live/helpers.ts`) runs two
+    teams against the real server: each sees and changes only its hosts,
+    and a team lead gives only roles inside their access (see
+    console-rbac.md, Live check).
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
   after mutations, and the `useResource`/`useAllPages` hooks. Live requests
@@ -459,7 +551,21 @@ triage on alarms and findings stays as it is.
   holds the state every area shares; each area's routes are in
   `demo/routes/` (hosts, findings, alarms, rules, cases, …). It follows the wire
   types and the permission model, with personas viewer, analyst, operator,
-  scoped operator and admin. Tested. Its compliance findings use only the
+  scoped operator and admin. Each persona signs in as a seeded person
+  (Vic, Sam, Ola, Pia, Alex) whose demo roles give its capabilities through
+  `resolveCapabilities` in `demo/share.ts` (the port of `access/rbac.rs`);
+  roles are Administrator, Viewer, Analyst and Operator on all hosts,
+  "Windows lead" (Team lead on WindowsServers, held by Wen) and
+  "Operator (Prod)" (the scoped operator). `routes/roles.ts` and
+  `routes/access.ts` mirror the roles, people and service-account routes
+  with their refusal codes (`stale_role`, `role_name_taken`, `role_in_use`
+  with `holders`, `protected_role`, `missing_needs`, `unknown_group`,
+  `last_administrator`, `use_change_password`, nobody changing or disabling
+  themself) and the share check, so people and accounts outside it are
+  404. Triage assignees follow the server: holders of the area's
+  `*.triage` through a role that reaches some host, or an Administrator;
+  bulk program suppressions are skipped without `alarms.suppress` on all
+  hosts. Tested. Its compliance findings use only the
   rules OpenVIBES ships (openvibes-rules `baseline/rules.json`: ids,
   severities, messages and expressions as they are), so the public demo and
   the website's screenshots never show a check the product lacks; a test
@@ -526,9 +632,8 @@ assignee and date (refused for an unknown assignee, shown again on
 reselect), a dashboard shared with a role and seen
 read-only, and axe in both themes.
 The live tests also check the service accounts empty state on a fresh server
-and the Access and Audit filtered empty states at narrow widths in light and
-dark themes. Access keeps asset groups visible when no people match; Audit
-distinguishes an empty date range from filters that hide existing events.
+and the People and Audit filtered empty states at narrow widths in light and
+dark themes. Audit distinguishes an empty date range from filters that hide existing events.
 
 The `Console demo preview` workflow (`console-demo-pages.yml`) runs lint,
 types, unit tests and the demo end-to-end tests on pull requests; on pushes

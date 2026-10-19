@@ -7,7 +7,8 @@ use chrono::{DateTime, Utc};
 use crate::{
     Client, StoreError,
     console_read::{AgentScope, agent_visibility},
-    console_triage::{assignee, fields_valid, transition_allowed},
+    console_roles::assignee,
+    console_triage::{fields_valid, transition_allowed},
 };
 
 /// One alarm in the list.
@@ -299,7 +300,7 @@ pub async fn update_triage(
         return Ok(TriageOutcome::InvalidTransition);
     }
     let assignee = match assigned_to_username {
-        Some(username) => match assignee(&tx, username).await? {
+        Some(username) => match assignee(&tx, username, "alarms.triage").await? {
             Some(found) => Some(found),
             None => return Ok(TriageOutcome::AssigneeUnavailable),
         },

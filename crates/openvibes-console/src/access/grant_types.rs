@@ -72,66 +72,6 @@ pub struct AgentTagBindingImpact {
     pub asset_group_name: String,
 }
 
-/// Read-only review of roles, bindings, and asset groups.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
-pub struct AccessInventory {
-    /// All available roles and granted permission identifiers.
-    pub roles: Vec<AccessRole>,
-    /// Active local-user role bindings.
-    pub bindings: Vec<AccessBinding>,
-    /// Manual asset groups and their exact tag selectors.
-    pub asset_groups: Vec<AccessAssetGroup>,
-    /// Enabled users who can receive role bindings.
-    pub users: Vec<AccessUser>,
-}
-
-/// Enabled local user in the access-management picker.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
-pub struct AccessUser {
-    /// Stable local user UUID.
-    pub user_id: String,
-    /// Canonical username.
-    pub username: String,
-    /// Operator-facing display name.
-    pub display_name: String,
-}
-
-/// Role and permission mapping.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
-pub struct AccessRole {
-    /// Stable role identifier.
-    pub role_id: String,
-    /// Operator-facing name.
-    pub display_name: String,
-    /// Whether this is a built-in role.
-    pub builtin: bool,
-    /// Permission identifiers.
-    pub permissions: Vec<String>,
-}
-
-/// Active local-user role assignment.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
-pub struct AccessBinding {
-    /// Stable binding identifier.
-    pub binding_id: String,
-    /// Stable local user identifier.
-    pub user_id: String,
-    /// Local username.
-    pub username: String,
-    /// Display label.
-    pub display_name: String,
-    /// Role identifier.
-    pub role_id: String,
-    /// Asset group id; null denotes global scope.
-    pub asset_group_id: Option<String>,
-    /// Asset group name, when scoped.
-    pub asset_group_name: Option<String>,
-    /// RFC 3339 creation time.
-    pub created_at: String,
-    /// Actor who created the binding.
-    pub created_by: String,
-}
-
 /// Manual asset group and exact selectors.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
 pub struct AccessAssetGroup {
@@ -163,14 +103,14 @@ pub struct SaveAssetGroupRequest {
     pub selectors: Vec<AssetGroupSelectorInput>,
 }
 
-/// Request to create a service identity with one initial global role.
+/// Request to create a service identity holding roles.
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreateServiceAccountRequest {
     /// Unique operator name, at most 128 characters.
     pub name: String,
-    /// Initial built-in global role.
-    pub role_id: String,
+    /// 1 to 64 roles, each inside the creator's own access.
+    pub role_ids: Vec<String>,
 }
 
 /// Request to issue one expiring service bearer token.
@@ -196,8 +136,17 @@ pub struct ServiceAccountView {
     pub created_at: String,
     /// Active token count.
     pub active_tokens: i64,
-    /// Active assigned role identifiers.
-    pub role_ids: Vec<String>,
+    /// Its roles, by id.
+    pub roles: Vec<RoleName>,
+}
+
+/// A role as a list shows it: its id and name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct RoleName {
+    /// Stable role id.
+    pub role_id: String,
+    /// Its name; Administrator's is "Administrator".
+    pub name: String,
 }
 
 /// Bounded service-account inventory.
@@ -242,19 +191,4 @@ pub struct CreatedServiceToken {
     pub secret_available: bool,
     /// Expiry instant.
     pub expires_at: String,
-}
-
-/// Request to assign a role to one local user with optional asset-group scope.
-#[derive(Clone, Debug, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub struct CreateAccessBindingRequest {
-    /// Stable local-user UUID.
-    #[schema(min_length = 36, max_length = 36)]
-    pub user_id: String,
-    /// Built-in role identifier.
-    #[schema(min_length = 1, max_length = 64)]
-    pub role_id: String,
-    /// Asset-group UUID; omitted means global scope.
-    #[schema(min_length = 36, max_length = 36)]
-    pub asset_group_id: Option<String>,
 }

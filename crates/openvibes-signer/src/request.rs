@@ -68,7 +68,7 @@ pub enum Refusal {
     Credentials,
     /// The account is locked after too many wrong passwords.
     Throttled,
-    /// The account must change its password, or lacks `rules.upload`.
+    /// The account must change its password, or lacks `site_rules.publish`.
     Forbidden,
     /// Over a limit: rules per publish, or the `programs` caps.
     Limits,

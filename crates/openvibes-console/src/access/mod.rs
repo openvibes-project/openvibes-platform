@@ -1,9 +1,9 @@
 //! Who may do what: sign-in, the session and permission checks, roles,
-//! users, service accounts, role bindings, asset groups and host tags.
+//! people and their roles, service accounts, host groups and host tags.
 
 use axum::{
     Router,
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
 };
 
 use crate::http::AuthHttpState;
@@ -11,28 +11,35 @@ use crate::http::AuthHttpState;
 pub(crate) mod asset_groups;
 pub(crate) mod auth;
 pub(crate) mod auth_first;
-pub(crate) mod bindings;
+pub mod catalogue;
+pub(crate) mod editor;
 mod grant_types;
 pub(crate) mod guard;
-pub(crate) mod inventory;
 pub(crate) mod login;
+pub(crate) mod people;
+pub(crate) mod people_admin;
+pub(crate) mod people_roles;
+pub(crate) mod people_types;
 mod permission;
 pub(crate) mod rbac;
+pub(crate) mod roles;
+pub(crate) mod roles_types;
 pub(crate) mod service_accounts;
 pub(crate) mod service_tokens;
 pub(crate) mod session;
 mod session_types;
+pub(crate) mod share;
 pub(crate) mod tags;
+pub mod templates;
 pub(crate) mod throttle;
 pub(crate) mod users;
 
 pub use grant_types::{
-    AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser,
-    AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput,
-    AgentTagPreviewResponse, ApplyAgentTagsRequest, AssetGroupSelectorInput,
-    CreateAccessBindingRequest, CreateServiceAccountRequest, CreateServiceTokenRequest,
-    CreatedServiceToken, SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView,
-    ServiceTokenPage, ServiceTokenView,
+    AccessAssetGroup, AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact,
+    AgentTagInput, AgentTagPreviewResponse, ApplyAgentTagsRequest, AssetGroupSelectorInput,
+    CreateServiceAccountRequest, CreateServiceTokenRequest, CreatedServiceToken, RoleName,
+    SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
+    ServiceTokenView,
 };
 pub use permission::{Permission, PermissionScope};
 pub use session_types::{
@@ -42,12 +49,21 @@ pub use session_types::{
 };
 
 /// The signed-in session, its password change, and access control: roles,
-/// users, service accounts and their tokens, bindings, asset groups and host
-/// tags.
+/// people and their roles, service accounts and their tokens, host groups
+/// and host tags.
 pub(crate) fn routes() -> Router<AuthHttpState> {
     Router::new()
         .route("/v1/session", get(session::authenticated_session))
         .route("/v1/session/password", post(users::change_password))
+        .route("/v1/permissions", get(roles::permissions))
+        .route("/v1/role-templates", get(roles::role_templates))
+        .route("/v1/roles", get(roles::list_roles).post(roles::create_role))
+        .route(
+            "/v1/roles/{role_id}",
+            get(roles::get_role)
+                .patch(roles::update_role)
+                .delete(roles::delete_role),
+        )
         .route(
             "/v1/agents/{agent_id}/tags/preview",
             post(tags::preview_authenticated_agent_tags),
@@ -57,9 +73,34 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
             put(tags::apply_authenticated_agent_tags),
         )
         .route(
-            "/v1/access-control",
-            get(inventory::authenticated_access_inventory),
+            "/v1/users",
+            get(people::list_people).post(people::create_person),
         )
+        .route(
+            "/v1/users/{user_id}",
+            get(people::get_person).patch(people::update_person),
+        )
+        .route(
+            "/v1/users/{user_id}/disable",
+            post(people_admin::disable_person),
+        )
+        .route(
+            "/v1/users/{user_id}/enable",
+            post(people_admin::enable_person),
+        )
+        .route(
+            "/v1/users/{user_id}/reset-password",
+            post(people_admin::reset_password),
+        )
+        .route(
+            "/v1/users/{user_id}/roles/{role_id}",
+            put(people_roles::give_user_role).delete(people_roles::remove_user_role),
+        )
+        .route(
+            "/v1/service-accounts/{service_account_id}/roles/{role_id}",
+            put(people_roles::give_account_role).delete(people_roles::remove_account_role),
+        )
+        .route("/v1/host-groups", get(asset_groups::host_groups))
         .route(
             "/v1/service-accounts",
             get(service_accounts::authenticated_service_accounts)
@@ -85,14 +126,5 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
         .route(
             "/v1/access-control/asset-groups/{group_id}",
             put(asset_groups::update_authenticated_asset_group),
-        )
-        .route(
-            "/v1/access-control/bindings",
-            post(bindings::create_authenticated_access_binding),
-        )
-        .route("/v1/access-control/users", post(users::create_user))
-        .route(
-            "/v1/access-control/bindings/{binding_id}",
-            delete(bindings::revoke_authenticated_access_binding),
         )
 }

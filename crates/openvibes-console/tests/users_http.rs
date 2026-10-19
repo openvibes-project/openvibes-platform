@@ -17,6 +17,8 @@ use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::Value;
 use tower::ServiceExt;
 
+mod common;
+
 const ORIGIN: &str = "https://console.example";
 const ADMIN_PASSWORD: &str = "violet-satellite-mountain-otter-2026";
 
@@ -182,6 +184,7 @@ async fn post(
 async fn local_user(db: &TestDb, username: &str, role_id: &str, index: u8) {
     let phc = hash_password(&NormalizedPassword::new(ADMIN_PASSWORD).unwrap()).unwrap();
     let mut client = db.pool.get().await.unwrap();
+    common::ensure_role(&client, role_id).await;
     create_local_user(
         &mut client,
         &NewLocalUser {
@@ -230,35 +233,34 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
     let router = authenticated_router(db.pool.clone(), ORIGIN);
     let admin = sign_in(&router, "alice", ADMIN_PASSWORD).await;
 
-    // Only rbac.manage creates users: an analyst is refused.
+    // Only access.users creates users: an analyst is refused.
     let analyst = sign_in(&router, "carol", ADMIN_PASSWORD).await;
     let new_user =
-        serde_json::json!({"username": "Bob", "display_name": "Bob B", "role_id": "analyst"});
-    let refused = post(
-        &router,
-        "/api/v1/access-control/users",
-        &analyst,
-        new_user.clone(),
-    )
-    .await;
+        serde_json::json!({"username": "Bob", "display_name": "Bob B", "role_ids": ["analyst"]});
+    let refused = post(&router, "/api/v1/users", &analyst, new_user.clone()).await;
     assert_eq!(refused.status(), StatusCode::FORBIDDEN);
     // Bad input is 400 before anything is stored.
     let bad = post(
         &router,
-        "/api/v1/access-control/users",
+        "/api/v1/users",
         &admin,
-        serde_json::json!({"username": "b b", "display_name": "x", "role_id": "analyst"}),
+        serde_json::json!({"username": "b b", "display_name": "x", "role_ids": ["analyst"]}),
     )
     .await;
     assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
-
-    let created = post(
+    let unknown = post(
         &router,
-        "/api/v1/access-control/users",
+        "/api/v1/users",
         &admin,
-        new_user.clone(),
+        serde_json::json!({"username": "zed", "display_name": "Zed", "role_ids": ["no_such"]}),
     )
     .await;
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+    let unknown: Value =
+        serde_json::from_slice(&to_bytes(unknown.into_body(), 4096).await.unwrap()).unwrap();
+    assert_eq!(unknown["code"], "unknown_role");
+
+    let created = post(&router, "/api/v1/users", &admin, new_user.clone()).await;
     assert_eq!(created.status(), StatusCode::CREATED);
     assert_eq!(
         created.headers().get(header::CACHE_CONTROL).unwrap(),
@@ -268,7 +270,7 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
     assert_eq!(created["username"], "bob");
     let one_time = created["one_time_password"].as_str().unwrap().to_owned();
     assert!(one_time.len() >= 15);
-    let again = post(&router, "/api/v1/access-control/users", &admin, new_user).await;
+    let again = post(&router, "/api/v1/users", &admin, new_user).await;
     assert_eq!(again.status(), StatusCode::CONFLICT);
 
     // Bob signs in with it: the session says so, carries no capability,
@@ -297,7 +299,7 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
         serde_json::json!({"username": "b b"}),
         serde_json::json!("not an object"),
     ] {
-        let forced = post(&router, "/api/v1/access-control/users", &bob, bad.clone()).await;
+        let forced = post(&router, "/api/v1/users", &bob, bad.clone()).await;
         assert_eq!(forced.status(), StatusCode::FORBIDDEN, "{bad}");
         assert_eq!(
             body(forced).await["code"],
@@ -306,7 +308,7 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
         );
         let nobody = post(
             &router,
-            "/api/v1/access-control/users",
+            "/api/v1/users",
             &(String::new(), String::new()),
             bad.clone(),
         )

@@ -21,7 +21,7 @@ pub(super) async fn agent_summary(
     State(repository): State<Arc<dyn ConsoleRepository>>,
     headers: HeaderMap,
 ) -> Response {
-    let (persona, mode) = match context(&headers, Permission::AgentsRead) {
+    let (persona, mode) = match context(&headers, Permission::HostsRead) {
         Ok(context) => context,
         Err(response) => return *response,
     };
@@ -33,7 +33,7 @@ pub(super) async fn agents(
     headers: HeaderMap,
     query: Result<Query<RawAgentFilters>, QueryRejection>,
 ) -> Response {
-    let (persona, mode) = match context(&headers, Permission::AgentsRead) {
+    let (persona, mode) = match context(&headers, Permission::HostsRead) {
         Ok(context) => context,
         Err(response) => return *response,
     };
@@ -49,7 +49,7 @@ pub(super) async fn agent(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    let (persona, mode) = match context(&headers, Permission::AgentsRead) {
+    let (persona, mode) = match context(&headers, Permission::HostsRead) {
         Ok(context) => context,
         Err(response) => return *response,
     };

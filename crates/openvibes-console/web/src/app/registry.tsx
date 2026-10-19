@@ -5,7 +5,6 @@
 import type { ReactNode } from "react";
 
 import type { Access } from "./session";
-import { RULE_READERS } from "../panels/rules/ruleAssignment";
 import { panelTitle } from "./titles";
 import { DashboardsView } from "../dashboards/DashboardsView";
 import { WidgetGalleryPanel, WidgetSettingsPanel } from "../dashboards/panels";
@@ -17,7 +16,6 @@ import { AuditEventPanel, RetentionPanel } from "../panels/admin/AuditPanels";
 import { EnrollmentTokenPanel } from "../panels/admin/EnrollmentTokenPanel";
 import { PublishBundle, RuleSetPanel } from "../panels/rules/RuleSetPanel";
 import { ServiceAccountPanel } from "../panels/admin/ServiceAccountPanel";
-import { NewUser, UserPanel } from "../panels/admin/UserPanel";
 import { AdvisoryPanel } from "../panels/findings/AdvisoryPanel";
 import { AlarmPanel } from "../panels/alarms/AlarmPanel";
 import { CasePanel, NewCasePanel } from "../panels/cases/CasePanel";
@@ -52,7 +50,7 @@ type ViewDef = {
   short?: string;
   icon: IconName;
   group: "Investigate" | "Operate" | "Admin" | "Help";
-  /** Any of these opens the view; `global` requires an unscoped grant. Empty: any signed-in user. */
+  /** Any of these opens the view. Empty: any signed-in user. */
   access: readonly Access[];
   keys: string;
   render: () => ReactNode;
@@ -63,16 +61,16 @@ export const views: readonly ViewDef[] = [
   { path: "/alarms", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
   { path: "/compliance", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "compliance.read" }], render: () => <Findings /> },
   { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
-  { path: "/agents", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
-  { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "agents.read" }], render: () => <Software /> },
-  { path: "/ports", label: "Ports", icon: "activity", group: "Investigate", phoneMore: true, keys: "g o", access: [{ permission: "agents.read" }], render: () => <Ports /> },
-  { path: "/services", label: "Services", icon: "layers", group: "Investigate", phoneMore: true, keys: "g u", access: [{ permission: "agents.read" }], render: () => <Services /> },
+  { path: "/agents", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "hosts.read" }], render: () => <Agents /> },
+  { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "hosts.read" }], render: () => <Software /> },
+  { path: "/ports", label: "Ports", icon: "activity", group: "Investigate", phoneMore: true, keys: "g o", access: [{ permission: "hosts.read" }], render: () => <Ports /> },
+  { path: "/services", label: "Services", icon: "layers", group: "Investigate", phoneMore: true, keys: "g u", access: [{ permission: "hosts.read" }], render: () => <Services /> },
   { path: "/cases", label: "Cases", icon: "cases", group: "Investigate", keys: "g c", access: [{ permission: "cases.read" }], render: () => <Cases /> },
-  { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
-  { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "rules.write", global: true }], render: () => <SiteRules /> },
-  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: RULE_READERS, render: () => <Coverage /> },
-  { path: "/settings", label: "Settings", icon: "settings", group: "Admin", keys: "g h", access: settingsAccess, render: () => <Settings /> },
-  { path: "/audit", label: "Audit log", icon: "audit", group: "Admin", keys: "g l", access: [{ permission: "audit.read", global: true }], render: () => <Audit /> },
+  { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.suppressions.read" }], render: () => <AlarmSuppressions /> },
+  { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "site_rules.read" }], render: () => <SiteRules /> },
+  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: [{ permission: "rules.coverage.read" }], render: () => <Coverage /> },
+  { path: "/settings", prefix: "/settings/", label: "Settings", icon: "settings", group: "Admin", keys: "g h", access: settingsAccess, render: () => <Settings /> },
+  { path: "/audit", label: "Audit log", icon: "audit", group: "Admin", keys: "g l", access: [{ permission: "audit.read" }], render: () => <Audit /> },
   { path: "/about", label: "About", icon: "help", group: "Help", keys: "g i", access: [], render: () => <About /> },
 ];
 
@@ -103,7 +101,6 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   "enrollment-token": { label: "Enrollment token", icon: "enrollment", title: (id) => id === "new" ? "New token" : id, render: (id) => <EnrollmentTokenPanel id={id} /> },
   "service-account": { label: "Service account", icon: "service", title: (id) => id === "new" ? "New account" : id, render: (id) => <ServiceAccountPanel id={id} /> },
   "audit-event": { label: "Audit event", icon: "audit", title: (id) => `#${id}`, render: (id) => <AuditEventPanel id={id} /> },
-  user: { label: "User", icon: "user", title: (id) => id === "new" ? "New user" : id, render: (id) => id === "new" ? <NewUser /> : <UserPanel id={id} /> },
   "site-rule": { label: "Site rule", icon: "rules", title: (id) => { const name = id.slice(id.indexOf("/") + 1); return name === "new" ? "New rule" : name; }, render: (id) => <SiteRulePanel id={id} /> },
   "rule-bundle": { label: "Rule bundle", icon: "rules", title: () => "Publish bundle", render: () => <PublishBundle /> },
   "widget-gallery": { label: "Add widget", icon: "plus", title: () => "Add widget", render: () => <WidgetGalleryPanel /> },

@@ -26,22 +26,24 @@ opened it or is assigned to it.
 ## Interfaces
 
 Browser session only; a service-account bearer token gets 403, for reads too.
-Changes also check CSRF and the browser origin. `cases.read` and
-`cases.manage` are agent-scoped permissions (Analyst and Admin hold both;
-migration 34 adds `cases.manage`); changes need both.
+Changes also check CSRF and the browser origin. `cases.read`,
+`cases.write` and `cases.assign` are host-scoped permissions (Analyst and
+Admin hold all three since schema 51; `cases.manage` became `cases.write`
+and `cases.assign`); changes need `cases.write` and `cases.read`, and
+setting or changing the assignee also `cases.assign`.
 
 | Route | Needs | Result |
 |---|---|---|
 | `GET /api/v1/cases` | `cases.read` | `CasePage` `{items, next_cursor}`. Filters `status` (`open`, `investigating`, `closed`, `all`; default open and investigating), `severity`, `assignee` (a user id, `me`, `none`), `q` (title text or `C-104`), `cursor`, `limit` 1–100 (50). Newest change first |
-| `POST /api/v1/cases` | `cases.manage` | `201 CaseDetailView` + `ETag`. Body `{title, severity?, assignee_user_id?, items?: [{kind, ref}]}`, at most 50 items |
+| `POST /api/v1/cases` | `cases.write` (`cases.assign` with an assignee) | `201 CaseDetailView` + `ETag`. Body `{title, severity?, assignee_user_id?, items?: [{kind, ref}]}`, at most 50 items |
 | `GET /api/v1/cases/{id}` | `cases.read` | `CaseDetailView` + `ETag` (the version) |
-| `PUT /api/v1/cases/{id}` | `cases.manage`, `If-Match` | `CaseDetailView` + new `ETag` |
-| `POST /api/v1/cases/{id}/notes` | `cases.manage` | `201 CaseEventView`; body `{body}` |
-| `POST /api/v1/cases/{id}/items` | `cases.manage` | `201 CaseItemView`; body `{kind, ref}` |
-| `DELETE /api/v1/cases/{id}/items/{item_id}` | `cases.manage` | 204; open cases only |
-| `PUT /api/v1/cases/{id}/items/{item_id}/outcome` | `cases.manage` | `CaseItemView`; body `{outcome: "resolved" \| "false_positive" \| "accepted_risk" \| null, note?}` |
+| `PUT /api/v1/cases/{id}` | `cases.write` (`cases.assign` to change the assignee), `If-Match` | `CaseDetailView` + new `ETag` |
+| `POST /api/v1/cases/{id}/notes` | `cases.write` | `201 CaseEventView`; body `{body}` |
+| `POST /api/v1/cases/{id}/items` | `cases.write` | `201 CaseItemView`; body `{kind, ref}` |
+| `DELETE /api/v1/cases/{id}/items/{item_id}` | `cases.write` | 204; open cases only |
+| `PUT /api/v1/cases/{id}/items/{item_id}/outcome` | `cases.write` | `CaseItemView`; body `{outcome: "resolved" \| "false_positive" \| "accepted_risk" \| null, note?}` |
 | `GET /api/v1/cases/for-item?kind=&ref=` | `cases.read` | `{items: [{case: CaseSummaryView, item_id, outcome}]}` |
-| `GET /api/v1/cases/assignees` | `cases.manage` | `{items: [{user_id, username, display_name}]}`: enabled users who hold `cases.read` |
+| `GET /api/v1/cases/assignees` | `cases.assign` | `{items: [{user_id, username, display_name}]}`: enabled users who hold `cases.read` |
 
 `CaseSummaryView` (also the head of `CaseDetailView`, which adds
 `resolution_note`, `items` and `events`): `case_id`, `number` (shown as
@@ -188,7 +190,7 @@ None.
 | Situation | Result |
 |---|---|
 | no session | 401 |
-| bearer token, no `cases.read` or `cases.manage` | 403 |
+| bearer token, no `cases.read` or `cases.write` | 403 |
 | missing or wrong CSRF token or origin on a change | 403 |
 | unknown, malformed or invisible case | 404 `case_not_found` (the same answer) |
 | item missing, or outside the caller's scope, or not in the case | 404 `item_not_found` (the same answer, so nothing is revealed) |

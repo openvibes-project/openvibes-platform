@@ -10,7 +10,7 @@ import { Empty, ErrorBox, Loading } from "../../../ui/bits";
 
 export function ServiceAccounts() {
   const { can } = useSession();
-  const canManage = can("service_accounts.manage", true);
+  const canManage = can("service_accounts.manage");
   const accounts = useResource<{ items: ServiceAccount[] }>("/api/v1/service-accounts");
   const top = useTopPanel();
   const rows = accounts.data?.items ?? [];
@@ -31,7 +31,7 @@ export function ServiceAccounts() {
           defaultSort={{ key: "name", direction: "asc" }}
           columns={[
             { key: "name", header: "Name", sort: (a) => a.name, render: (a) => <div className="cell-two"><span>{a.name}</span><span className="mono subtle">{a.service_account_id}</span></div> },
-            { key: "roles", header: "Roles", render: (a) => <span className="row">{a.role_ids.map((r) => <span key={r} className="badge badge--accent badge--plain">{r}</span>)}</span> },
+            { key: "roles", header: "Roles", render: (a) => <span className="row">{a.roles.map((r) => <span key={r.role_id} className="badge badge--accent badge--plain">{r.name}</span>)}</span> },
             { key: "tokens", header: "Active tokens", numeric: true, width: "120px", sort: (a) => a.active_tokens, render: (a) => <span className="num">{a.active_tokens}</span> },
             { key: "state", header: "State", width: "110px", sort: (a) => a.enabled, render: (a) => <span className={`badge badge--${a.enabled ? "ok" : "plain"}`}>{a.enabled ? "Enabled" : "Disabled"}</span> },
           ]} />

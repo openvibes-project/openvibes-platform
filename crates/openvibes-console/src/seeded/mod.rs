@@ -27,7 +27,8 @@ pub(crate) fn router() -> Router {
         )
         .route("/api/v1/audit-events", get(audit::audit_events))
         .route("/api/v1/audit-export.csv", get(audit::audit_export))
-        .route("/api/v1/access-control", get(access::access_inventory))
+        .route("/api/v1/roles", get(access::list_roles))
+        .route("/api/v1/users", get(access::list_people))
         .route("/api/v1/compliance/latest", get(compliance::findings))
         .route("/api/v1/compliance/groups", get(compliance::finding_groups))
         .route(

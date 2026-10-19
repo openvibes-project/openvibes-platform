@@ -22,7 +22,7 @@ fn refusal(code: &str) -> String {
     match code {
         "credentials" => "wrong username or password".into(),
         "throttled" => "the account is locked after wrong passwords; try again in 15 minutes".into(),
-        "forbidden" => "the account may not publish rules (rules.upload), or must change its password first".into(),
+        "forbidden" => "the account may not publish rules (site_rules.publish), or must change its password first".into(),
         "limits" => "over a limit: too many rules, or an alarm rule naming more than 8 programs (32 per set)".into(),
         "invalid" => "not a valid site rule set (site: findings rules only; site-alarms: alarm rules with programs)".into(),
         "rate" => "the hourly publish limit is reached; try again later".into(),

@@ -1,5 +1,6 @@
 import { allowedStates, noteRequired } from "../../panels/triage/triage";
 import { caseSeverityOf, type CaseStore } from "../cases";
+import type { Permission } from "../../api/types";
 import type { DemoContext } from "../context";
 import { json, problem } from "../http";
 
@@ -55,10 +56,10 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore }) {
   };
   const targetsOf = { alarms: alarmTargets, compliance: findingTargets, vulnerabilities: vulnerabilityTargets };
 
-  const bulkState = (picked: Picked, body: Record<string, unknown>, note: string | null, skipped: Skip[]): number | Response => {
+  const bulkState = (picked: Picked, body: Record<string, unknown>, note: string | null, skipped: Skip[], triage: Permission): number | Response => {
     const state = text(body.state);
     const fields = { state, note, accepted_until: body.accepted_until ?? null };
-    if (!allowedStates(["open"]).includes(state) || (noteRequired.has(state) && !note) || triageProblem(fields)) {
+    if (!allowedStates(["open"]).includes(state) || (noteRequired.has(state) && !note) || triageProblem(fields, triage)) {
       return problem(400, "invalid_triage", "Triage state, note, or expiry is invalid (closing needs a note)");
     }
     let changed = 0;
@@ -71,12 +72,12 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore }) {
     }
     return changed;
   };
-  const bulkAssign = (picked: Picked, body: Record<string, unknown>, skipped: Skip[]): number => {
+  const bulkAssign = (picked: Picked, body: Record<string, unknown>, skipped: Skip[], triage: Permission): number => {
     const assignee = typeof body.assignee === "string" ? body.assignee : null;
     let changed = 0;
     for (const t of picked.found) {
       const current = t.current();
-      if (assignee !== null && triageProblem({ state: current.state, accepted_until: current.accepted_until, assigned_to: assignee })) {
+      if (assignee !== null && triageProblem({ state: current.state, accepted_until: current.accepted_until, assigned_to: assignee }, triage)) {
         skipped.push({ id: t.id, reason: "assignee unavailable" });
         continue;
       }
@@ -111,23 +112,27 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore }) {
     }
     return { changed, caseId };
   };
-  const bulkSuppress = (picked: Picked, note: string): number => {
+  // A program suppression quiets every host: like the server, each is
+  // skipped unless alarms.suppress holds on all hosts.
+  const suppressesEverywhere = capabilities.some((c) => c.permission === "alarms.suppress" && c.scope.kind === "global");
+  const bulkSuppress = (picked: Picked, note: string, skipped: Skip[]): number => {
     const seen = new Set<string>();
     for (const t of picked.found) {
       const alarm = alarmList().find((a) => a.id === t.id);
       const key = `${alarm?.rule_id}|${alarm?.exe}`;
       if (!alarm || seen.has(key)) continue;
       seen.add(key);
-      addSuppression(alarm, "program", note);
+      if (suppressesEverywhere) addSuppression(alarm, "program", note);
+      else skipped.push({ id: alarm.id, reason: "program suppressions need global scope" });
     }
-    return seen.size;
+    return suppressesEverywhere ? seen.size : 0;
   };
 
   const ACTIONS = ["state", "assign", "case", "suppress"];
   for (const [kind, permission] of [["alarms", "alarms.triage"], ["compliance", "compliance.triage"], ["vulnerabilities", "vulnerabilities.triage"]] as const) {
     const has = (p: string) => capabilities.some((c) => c.permission === p);
     const allowed = (action: string) => action === "state" || action === "assign"
-      || (action === "case" && has("cases.manage")) || (action === "suppress" && kind === "alarms" && has("alarms.suppress"));
+      || (action === "case" && has("cases.write") && has("cases.read")) || (action === "suppress" && kind === "alarms" && has("alarms.suppress"));
     route("POST", `/api/v1/${kind}/bulk`, permission, (_, __, body) => {
       const items = Array.isArray(body.items) ? (body.items as Record<string, unknown>[]) : [];
       if (items.length === 0 || items.length > 10_000) return problem(400, "invalid_items", "Select 1 to 10,000 items");
@@ -140,9 +145,9 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore }) {
       const note = text(body.note).trim() || null;
       let changed: number | Response;
       let caseId: string | null = null;
-      if (action === "state") changed = bulkState(picked, body, note, skipped);
-      else if (action === "assign") changed = bulkAssign(picked, body, skipped);
-      else if (action === "suppress") changed = note ? bulkSuppress(picked, note) : problem(400, "invalid_note", "A suppression needs a note");
+      if (action === "state") changed = bulkState(picked, body, note, skipped, permission);
+      else if (action === "assign") changed = bulkAssign(picked, body, skipped, permission);
+      else if (action === "suppress") changed = note ? bulkSuppress(picked, note, skipped) : problem(400, "invalid_note", "A suppression needs a note");
       else {
         const filed = bulkCase(picked, body, skipped);
         if (filed instanceof Response) return filed;
@@ -160,7 +165,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore }) {
     if (headers["if-match"] !== `"${v.triage_version}"`) return problem(412, "stale_triage", "The triage changed; reload it");
     const state = text(body.state);
     const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
-    if (!allowedStates(["open"]).includes(state) || (noteRequired.has(state) && !note) || triageProblem(body)) {
+    if (!allowedStates(["open"]).includes(state) || (noteRequired.has(state) && !note) || triageProblem(body, "vulnerabilities.triage")) {
       return problem(400, "invalid_triage", "Triage state, note, or expiry is invalid (closing needs a note)");
     }
     v.triage_state = state;

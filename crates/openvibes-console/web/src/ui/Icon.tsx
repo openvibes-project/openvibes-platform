@@ -17,6 +17,7 @@ const paths = {
   search: [c(11, 11, 7.5), "m21 21-4.3-4.3"],
   sparkles: ["M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z", "M19 3v4M17 5h4M5 17v4M3 19h4"],
   close: ["M18 6 6 18M6 6l12 12"],
+  info: [c(12, 12, 9), "M12 16v-4M12 8h.01"],
   back: ["M19 12H5M12 19l-7-7 7-7"],
   chevronRight: ["m9 18 6-6-6-6"],
   chevronDown: ["m6 9 6 6 6-6"],

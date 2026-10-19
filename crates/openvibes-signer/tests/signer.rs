@@ -41,6 +41,17 @@ impl Fixture {
             &platform_password::NormalizedPassword::new(PASSWORD).unwrap(),
         )
         .unwrap();
+        // A fresh database holds only Administrator (schema 52).
+        client
+            .batch_execute(
+                "INSERT INTO console_roles (role_id, display_name) VALUES
+                    ('operator', 'Operator'), ('viewer', 'Viewer');
+                 INSERT INTO console_role_permissions (role_id, permission_id) VALUES
+                    ('operator', 'site_rules.read'), ('operator', 'site_rules.write'),
+                    ('operator', 'site_rules.publish'), ('viewer', 'site_rules.read');",
+            )
+            .await
+            .unwrap();
         for (n, (name, role, must_change)) in [
             ("publisher", "operator", false),
             ("watcher", "viewer", false),

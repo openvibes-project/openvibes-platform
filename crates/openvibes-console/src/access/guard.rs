@@ -7,7 +7,7 @@ use axum::{
     response::Response,
 };
 use chrono::{Duration, Utc};
-use platform_store::console_auth;
+use platform_store::{console_auth, console_roles::Principal};
 use subtle::ConstantTimeEq;
 
 use crate::http::{
@@ -33,7 +33,6 @@ pub(crate) async fn authenticated_permission(
     csrf_required: bool,
 ) -> Result<(platform_store::console_read::AgentScope, String), Response> {
     use crate::access::auth::{PresentedCredentials, presented_credentials, session_digest};
-    use platform_store::console_read::AgentScope;
 
     let now = Utc::now();
     let secret = match presented_credentials(headers) {
@@ -54,61 +53,47 @@ pub(crate) async fn authenticated_permission(
                 .await
                 .map_err(|_| unavailable_auth())?
                 .ok_or_else(authentication_required)?;
-            let mut resolved = Vec::with_capacity(token.bindings.len());
-            for binding in token.bindings {
-                let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) else {
-                    continue;
-                };
-                let resolved_binding = match binding.asset_group_id {
-                    Some(group_id) => crate::RoleBinding::scoped(role, [group_id]),
-                    None => Ok(crate::RoleBinding::global(role)),
-                };
-                if let Ok(binding) = resolved_binding {
-                    resolved.push(binding);
-                }
-            }
-            let capabilities = crate::resolve_capabilities(&resolved);
-            return match capabilities
-                .iter()
-                .find(|capability| capability.permission == permission)
-            {
-                Some(capability) => match &capability.scope {
-                    crate::PermissionScope::Global => {
-                        Ok((AgentScope::Global, token.service_account_id))
-                    }
-                    crate::PermissionScope::AssetGroups { asset_group_ids } => Ok((
-                        AgentScope::AssetGroups(asset_group_ids.clone()),
-                        token.service_account_id,
-                    )),
-                },
-                None => Err(problem_response(ProblemDetails::new(
-                    StatusCode::FORBIDDEN,
-                    "permission_denied",
-                    "Access is not available",
-                ))),
-            };
+            let capabilities = crate::access::rbac::principal_capabilities(
+                &client,
+                Principal::ServiceAccount(&token.service_account_id),
+            )
+            .await
+            .map_err(|_| unavailable_auth())?;
+            return scope_of(&capabilities, permission)
+                .map(|scope| (scope, token.service_account_id))
+                .ok_or_else(permission_denied);
         }
         _ => return Err(authentication_required()),
     };
     let user = session_capabilities(state, headers, secret.expose_secret(), csrf_required).await?;
-    match user
-        .capabilities
+    scope_of(&user.capabilities, permission)
+        .map(|scope| (scope, user.user_id))
+        .ok_or_else(permission_denied)
+}
+
+/// The scope `capabilities` give `permission`, if they hold it.
+fn scope_of(
+    capabilities: &[crate::EffectiveCapability],
+    permission: crate::Permission,
+) -> Option<platform_store::console_read::AgentScope> {
+    use platform_store::console_read::AgentScope;
+    let capability = capabilities
         .iter()
-        .find(|capability| capability.permission == permission)
-    {
-        Some(capability) => match &capability.scope {
-            crate::PermissionScope::Global => Ok((AgentScope::Global, user.user_id)),
-            crate::PermissionScope::AssetGroups { asset_group_ids } => Ok((
-                AgentScope::AssetGroups(asset_group_ids.clone()),
-                user.user_id,
-            )),
-        },
-        None => Err(problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Access is not available",
-        ))),
-    }
+        .find(|capability| capability.permission == permission)?;
+    Some(match &capability.scope {
+        crate::PermissionScope::Global => AgentScope::Global,
+        crate::PermissionScope::AssetGroups { asset_group_ids } => {
+            AgentScope::AssetGroups(asset_group_ids.clone())
+        }
+    })
+}
+
+fn permission_denied() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::FORBIDDEN,
+        "permission_denied",
+        "Access is not available",
+    ))
 }
 
 /// A signed-in browser user and their effective capabilities. Bearer
@@ -223,23 +208,10 @@ async fn session_capabilities(
         return Err(password_change_required());
     }
     let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
-    let bindings = console_auth::user_role_bindings(&client, &active.user_id)
-        .await
-        .map_err(|_| unavailable_auth())?;
-    let mut resolved = Vec::with_capacity(bindings.len());
-    for binding in bindings {
-        let Some(role) = crate::BuiltInRole::from_id(&binding.role_id) else {
-            continue;
-        };
-        let resolved_binding = match binding.asset_group_id {
-            Some(group_id) => crate::RoleBinding::scoped(role, [group_id]),
-            None => Ok(crate::RoleBinding::global(role)),
-        };
-        if let Ok(binding) = resolved_binding {
-            resolved.push(binding);
-        }
-    }
-    let capabilities = crate::resolve_capabilities(&resolved);
+    let capabilities =
+        crate::access::rbac::principal_capabilities(&client, Principal::User(&active.user_id))
+            .await
+            .map_err(|_| unavailable_auth())?;
     Ok(SessionUser {
         user_id: active.user_id,
         capabilities,

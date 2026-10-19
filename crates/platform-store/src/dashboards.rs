@@ -24,8 +24,11 @@ pub struct Dashboard {
     pub name: String,
     /// Validated layout document (see the console's layout validation).
     pub layout: serde_json::Value,
-    /// Role whose holders may view the dashboard.
+    /// Role whose holders may view the dashboard (since schema 52 the first,
+    /// by id, of the roles it is shared with).
     pub shared_role_id: Option<String>,
+    /// That role's name.
+    pub shared_role_name: Option<String>,
     /// Version for conditional updates.
     pub version: i64,
     /// Creation time.
@@ -51,12 +54,16 @@ pub enum Refusal {
 
 const COLUMNS: &str =
     "d.dashboard_id::text, d.owner_user_id::text, u.display_name, d.name, d.layout,
-    d.shared_role_id, d.version::bigint, d.created_at, d.updated_at";
+    (SELECT min(dr.role_id) FROM console_dashboard_roles dr WHERE dr.dashboard_id = d.dashboard_id),
+    d.version::bigint, d.created_at, d.updated_at,
+    (SELECT r.display_name FROM console_dashboard_roles dr JOIN console_roles r USING (role_id)
+     WHERE dr.dashboard_id = d.dashboard_id ORDER BY dr.role_id LIMIT 1)";
 
 /// Visible to `$1`: owned, or shared with a role of one of `$1`'s live bindings.
-const VISIBLE: &str = "(d.owner_user_id = $1::text::uuid OR d.shared_role_id IN (
-    SELECT b.role_id FROM console_role_bindings b
-    WHERE b.user_id = $1::text::uuid AND b.revoked_at IS NULL))";
+const VISIBLE: &str = "(d.owner_user_id = $1::text::uuid OR EXISTS (
+    SELECT 1 FROM console_dashboard_roles dr JOIN console_role_bindings b USING (role_id)
+    WHERE dr.dashboard_id = d.dashboard_id AND b.user_id = $1::text::uuid
+      AND b.revoked_at IS NULL))";
 
 /// True for a canonical UUID (8-4-4-4-12 hex, any case). Other ids are simply
 /// not found, before any query, so a cast can never fail.
@@ -79,6 +86,7 @@ fn dashboard(row: &Row) -> Dashboard {
         version: row.get(6),
         created_at: row.get(7),
         updated_at: row.get(8),
+        shared_role_name: row.get(9),
     }
 }
 
@@ -336,15 +344,29 @@ pub async fn set_sharing(
     }
     let old: Option<String> = tx
         .query_one(
-            "SELECT shared_role_id FROM console_dashboards WHERE dashboard_id = $1::text::uuid",
+            "SELECT min(role_id) FROM console_dashboard_roles WHERE dashboard_id = $1::text::uuid",
             &[&dashboard_id],
         )
         .await?
         .get(0);
+    // One role or none, as the API takes today; the table can hold several
+    // (after migration 52), and responses show the first by id.
     tx.execute(
-        "UPDATE console_dashboards SET shared_role_id = $2, version = version + 1, updated_at = $3
+        "DELETE FROM console_dashboard_roles WHERE dashboard_id = $1::text::uuid",
+        &[&dashboard_id],
+    )
+    .await?;
+    if let Some(role_id) = role_id {
+        tx.execute(
+            "INSERT INTO console_dashboard_roles (dashboard_id, role_id) VALUES ($1::text::uuid, $2)",
+            &[&dashboard_id, &role_id],
+        )
+        .await?;
+    }
+    tx.execute(
+        "UPDATE console_dashboards SET version = version + 1, updated_at = $2
          WHERE dashboard_id = $1::text::uuid",
-        &[&dashboard_id, &role_id, &now],
+        &[&dashboard_id, &now],
     )
     .await?;
     audit(

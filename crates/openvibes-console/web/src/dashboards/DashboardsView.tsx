@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { apiMessage, invalidate, request, useResource } from "../api/client";
-import type { AgentSummary, Dashboard, DashboardPage, HomeDashboard } from "../api/types";
+import type { AgentSummary, Dashboard, DashboardPage, HomeDashboard, Role } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { Empty, ErrorBox, Loading } from "../ui/bits";
@@ -17,9 +17,6 @@ import { editor, useEditor } from "./editor";
 import { Grid } from "./Grid";
 import type { Layout } from "./layout";
 import { upgradeLayout } from "./legacy";
-import { roles } from "../app/roles";
-
-const ROLES = roles.map(([id]) => id);
 
 export function DashboardsView() {
   const { view } = useLocation();
@@ -102,8 +99,10 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
   const { session, can } = useSession();
   const state = useEditor();
   const home = useResource<HomeDashboard>("/api/v1/me/home");
-  const agents = useResource<AgentSummary>(builtin && can("agents.read") ? "/api/v1/agents/summary" : null);
+  const agents = useResource<AgentSummary>(builtin && can("hosts.read") ? "/api/v1/agents/summary" : null);
   const [menu, setMenu] = useState(false);
+  // The roles to share with (only those the viewer holds), fetched when the menu opens.
+  const roles = useResource<Role[]>(menu && can("dashboards.share") ? "/api/v1/roles?held=true" : null).data ?? [];
   const id = builtin ? null : dashboard?.dashboard_id ?? null;
   // Unknown until loaded, so the pin never flickers "pressed" on the built-in.
   const isHome = home.data !== undefined && (home.data.dashboard_id ?? null) === id;
@@ -125,7 +124,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
     if (!dashboard) return;
     await request("PUT", `/api/v1/dashboards/${dashboard.dashboard_id}/sharing`, { role_id: roleId });
     invalidate("/api/v1/dashboards");
-    toast(roleId ? `Shared with ${roleId}` : "No longer shared");
+    toast(roleId ? `Shared with ${roles.find((r) => r.role_id === roleId)?.name ?? "the role"}` : "No longer shared");
   };
   const fail = (error: unknown) => toast(apiMessage(error, "That did not work"), true);
 
@@ -139,8 +138,8 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
             <div><h1>{greeting()}{name ? `, ${name}` : ""}</h1>
               {agents.data && <p className="muted">{plural(agents.data.active, "host")} reporting{agents.data.stale > 0 ? `, ${agents.data.stale} stale` : ""}.</p>}</div>
           ) : (
-            <div><h1>{dashboard?.name}</h1>{!mine && <p className="muted">Shared by {dashboard?.owner_display_name}{dashboard?.shared_role_id ? ` with ${dashboard.shared_role_id}` : ""}</p>}
-              {mine && dashboard?.shared_role_id && <p className="muted">Shared with {dashboard.shared_role_id}</p>}</div>
+            <div><h1>{dashboard?.name}</h1>{!mine && <p className="muted">Shared by {dashboard?.owner_display_name}{dashboard?.shared_role_name ? ` with ${dashboard.shared_role_name}` : ""}</p>}
+              {mine && dashboard?.shared_role_name && <p className="muted">Shared with {dashboard.shared_role_name}</p>}</div>
           )}
         </div>
         <div className="row row--wrap">
@@ -178,12 +177,12 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                   <div role="menuitem" aria-disabled="true" className="menu__note dashboard-phone-only">Editing needs a wider screen</div>
                   <button type="button" role="menuitem" className="menu__item" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={14} /> Duplicate</button>
                   {mine && dashboard && <button type="button" role="menuitem" className="menu__item" onClick={() => { editor.begin(dashboard); setTimeout(() => document.querySelector<HTMLInputElement>(".dashboard-name")?.select(), 0); }}><Icon name="pencil" size={14} /> Rename</button>}
-                  {mine && can("dashboards.share", true) && (
+                  {mine && can("dashboards.share") && (
                     <div className="menu__section">
                       <div className="section-title">Share with role</div>
-                      {[null, ...ROLES].map((role) => (
+                      {[null, ...roles.map((r) => r.role_id)].map((role) => (
                         <button key={role ?? "none"} type="button" role="menuitemradio" aria-checked={(dashboard?.shared_role_id ?? null) === role} className="menu__item"
-                          onClick={() => void share(role).catch(fail)}>{(dashboard?.shared_role_id ?? null) === role ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />} {role ?? "Not shared"}</button>
+                          onClick={() => void share(role).catch(fail)}>{(dashboard?.shared_role_id ?? null) === role ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />} {role === null ? "Not shared" : roles.find((r) => r.role_id === role)?.name ?? role}</button>
                       ))}
                     </div>
                   )}

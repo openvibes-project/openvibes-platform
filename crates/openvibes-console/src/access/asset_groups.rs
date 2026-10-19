@@ -1,4 +1,4 @@
-//! Asset groups: named agent selections that scope a role binding.
+//! Host (asset) groups: named agent selections a role can reach.
 
 use axum::{
     extract::{Json, Path, State},
@@ -104,17 +104,13 @@ async fn save_authenticated_asset_group(
             "Provide a name and 1 to 32 unique exact selectors within the documented lengths",
         ));
     };
-    let (scope, actor) = match authenticated_permission(
-        &state,
-        &headers,
-        crate::Permission::AssetGroupsManage,
-        true,
-    )
-    .await
-    {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
+    let (scope, actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::HostGroupsManage, true)
+            .await
+        {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
     if !matches!(scope, AgentScope::Global) {
         return problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,
@@ -184,4 +180,42 @@ pub(crate) async fn update_authenticated_asset_group(
     Json(request): Json<crate::SaveAssetGroupRequest>,
 ) -> Response {
     save_authenticated_asset_group(state, headers, Some(group_id), request).await
+}
+
+/// Every host group with its selectors and how many roles reach it, for
+/// the Host groups tab and the role reach picker.
+#[utoipa::path(get, path = "/api/v1/host-groups", tag = "access control",
+    responses((status = 200, description = "Host groups", body = [crate::access::people_types::HostGroupView]),
+        (status = 403, description = "Needs access.read or host_groups.manage", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn host_groups(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    let editor = match crate::access::editor::caller(&state, &headers, false).await {
+        Ok(editor) => editor,
+        Err(response) => return response,
+    };
+    if !editor.holds(crate::Permission::HostGroupsManage)
+        && let Some(response) = editor.denied(crate::Permission::AccessRead)
+    {
+        return response;
+    }
+    let Ok(client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    match platform_store::console_roles::host_groups(&client).await {
+        Ok(groups) => Json(
+            groups
+                .into_iter()
+                .map(|g| crate::access::people_types::HostGroupView {
+                    asset_group_id: g.asset_group_id,
+                    name: g.name,
+                    selectors: g.selectors,
+                    roles: g.roles,
+                })
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(_) => unavailable_auth(),
+    }
 }

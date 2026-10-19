@@ -136,7 +136,7 @@ async fn console_store_writes_work_as_hyphenated_console_role() {
     let service_account = create_service_account(
         &mut client,
         "console-role-test",
-        "operator",
+        &["admin".to_owned()],
         "operator",
         now,
     )

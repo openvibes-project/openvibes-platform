@@ -8,7 +8,7 @@ const FIXED: Record<string, string> = { baseline: "All hosts", "baseline-alarms"
 /** The panel's Source detail per assignable set. */
 const LEVEL: Record<string, string> = { "hardening-linux-l1": "Level 1", "hardening-linux-l2": "Level 2: stricter, may affect services" };
 
-type RuleSetRow = { rule_set_id: string; set: RuleSet | undefined; assignment: RuleSetAssignment | undefined };
+export type RuleSetRow = { rule_set_id: string; set: RuleSet | undefined; assignment: RuleSetAssignment | undefined };
 
 /** Published sets and assignable ones: an assignable set is listed before it is published. */
 export function ruleSetRows(sets: readonly RuleSet[], assignments: readonly RuleSetAssignment[]): RuleSetRow[] {
@@ -66,13 +66,13 @@ export function factsNote(outcome: string, okAt: string | null | undefined, now 
   return `The agent's root-facts helper has not reported for ${days} ${days === 1 ? "day" : "days"}${FACTS_TAIL}`;
 }
 
-/** Who reads the rule sets, their switches, history and coverage: `rules.read` or `rules.upload`, globally. */
-export const RULE_READERS: readonly Access[] = [{ permission: "rules.read", global: true }, { permission: "rules.upload", global: true }];
+/** Who reads the rule sets and their history: `rules.read`. */
+export const RULE_READERS: readonly Access[] = [{ permission: "rules.read" }];
 
-export const readsRules = (can: (permission: Permission, global?: boolean) => boolean): boolean => grantsAny(can, RULE_READERS);
+export const readsRules = (can: (permission: Permission) => boolean): boolean => grantsAny(can, RULE_READERS);
 
 /** Why "+ Add group" is disabled, or null when a group can be added. */
 export function addGroupBlocked(groups: number, free: number): string | null {
-  if (groups === 0) return "No asset groups yet: create one under Settings › Access.";
+  if (groups === 0) return "No asset groups yet: create one under Settings › Host groups.";
   return free === 0 ? "Every asset group is listed." : null;
 }

@@ -1,10 +1,11 @@
-//! The demo's access inventory.
+//! The demo's roles and people.
 
 use axum::{
     Json,
     http::HeaderMap,
     response::{IntoResponse, Response},
 };
+use serde_json::{Value, json};
 
 use super::{
     persona::{Persona, context, read_error},
@@ -12,31 +13,52 @@ use super::{
 };
 use crate::Permission;
 
-pub(super) async fn access_inventory(headers: HeaderMap) -> Response {
-    let (persona, mode) = match context(&headers, Permission::RbacRead) {
+/// The Administrator and the personas' roles (see `persona.rs`).
+fn roles() -> Vec<Value> {
+    let mut roles = vec![json!({
+        "role_id": crate::access::rbac::ADMIN_ROLE, "name": "Administrator", "description": "",
+        "builtin": true, "permissions": Permission::ALL.map(Permission::id).to_vec(),
+        "reach": {"kind": "all"}, "members": 1, "version": 1
+    })];
+    roles.extend(crate::access::templates::TEMPLATES[..3].iter().map(|template| {
+        json!({
+            "role_id": template.name.to_lowercase(), "name": template.name, "description": "",
+            "builtin": false,
+            "permissions": template.permissions.iter().map(|p| p.id()).collect::<Vec<_>>(),
+            "reach": {"kind": "all"}, "members": 0, "version": 1
+        })
+    }));
+    roles
+}
+
+pub(super) async fn list_roles(headers: HeaderMap) -> Response {
+    let mode = match context(&headers, Permission::AccessRead) {
+        Ok((_, mode)) => mode,
+        Err(response) => return *response,
+    };
+    if let Some(response) = read_error(mode) {
+        return response;
+    }
+    Json(roles()).into_response()
+}
+
+pub(super) async fn list_people(headers: HeaderMap) -> Response {
+    let (persona, mode) = match context(&headers, Permission::AccessRead) {
         Ok(context) => context,
         Err(response) => return *response,
     };
     if let Some(response) = read_error(mode) {
         return response;
     }
-    let roles = crate::builtin_roles();
-    let bindings = if matches!(persona, Persona::Admin) {
-        vec![serde_json::json!({
-            "binding_id": "seeded-admin-binding", "user_id": "seeded-admin", "username": "admin",
-            "display_name": "Seeded administrator", "role_id": "admin", "asset_group_id": null,
-            "asset_group_name": null, "created_at": GENERATED_AT, "created_by": "bootstrap"
+    // Only the Administrator's share holds the Administrator.
+    let people = if matches!(persona, Persona::Admin) {
+        vec![json!({
+            "user_id": "seeded-admin", "username": "admin", "display_name": "Seeded administrator",
+            "email": null, "enabled": true, "auth_source": "password",
+            "last_sign_in_at": GENERATED_AT, "roles": [roles()[0]]
         })]
     } else {
         Vec::new()
     };
-    let users = if matches!(persona, Persona::Admin) {
-        vec![serde_json::json!({
-            "user_id": "seeded-admin", "username": "admin", "display_name": "Seeded administrator"
-        })]
-    } else {
-        Vec::new()
-    };
-    Json(serde_json::json!({ "roles": roles, "bindings": bindings, "asset_groups": [], "users": users }))
-        .into_response()
+    Json(people).into_response()
 }

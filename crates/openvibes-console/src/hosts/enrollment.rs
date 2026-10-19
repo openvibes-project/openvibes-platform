@@ -213,7 +213,7 @@ pub(crate) async fn create_authenticated_enrollment_token(
         ));
     }
     let (scope, actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::TokensCreate, true)
+        match authenticated_permission(&state, &headers, crate::Permission::TokensManage, true)
             .await
         {
             Ok(v) => v,
@@ -316,7 +316,7 @@ pub(crate) async fn revoke_authenticated_enrollment_token(
         ));
     }
     let (scope, actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::TokensRevoke, true)
+        match authenticated_permission(&state, &headers, crate::Permission::TokensManage, true)
             .await
         {
             Ok(v) => v,

@@ -62,6 +62,10 @@ test("a finding's Hosts tab lists every host, never cut off, and selects them fo
   await expect(last).toBeInViewport();
   await inspector.getByRole("checkbox", { name: "Select the rows on screen" }).check();
   await expect(inspector.getByRole("region", { name: "Bulk actions" })).toContainText(`${total} selected`);
+  // The sticky bar's menu stays open on an overflowing list (it closed on the
+  // scroll its own opening caused).
+  await inspector.getByRole("region", { name: "Bulk actions" }).getByRole("button", { name: /^Set state/ }).click();
+  await expect(page.getByRole("menuitem", { name: /^Mitigate/ })).toBeVisible();
 });
 
 test("on a phone the bulk bar and the detail tabs fit the width", async ({ page }) => {

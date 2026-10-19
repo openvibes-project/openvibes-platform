@@ -261,7 +261,6 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
         user_role_bindings(&client, USER_ID).await.unwrap(),
         vec![platform_store::console_auth::UserRoleBinding {
             role_id: "admin".into(),
-            asset_group_id: None,
         }]
     );
 
@@ -487,6 +486,18 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
         .await
         .unwrap()
     );
+    let signed_in: Option<chrono::DateTime<Utc>> = client
+        .query_one(
+            "SELECT last_sign_in_at FROM console_users WHERE user_id = $1::text::uuid",
+            &[&USER_ID],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        signed_in.map(|at| at.timestamp_micros()),
+        Some((now + Duration::minutes(3)).timestamp_micros())
+    );
     assert!(
         revoke_user_sessions(
             &mut client,
@@ -515,9 +526,10 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
         .unwrap()
         .get(0);
     assert_eq!(revocation_events, 1);
-    assert!(
+    // The last enabled Administrator is never disabled; a second one frees her.
+    let disable_alice = async |client: &mut platform_store::Client| {
         disable_local_user(
-            &mut client,
+            client,
             USER_ID,
             now + Duration::minutes(5),
             &platform_store::console_auth::AuditContext::default(),
@@ -526,6 +538,23 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
         )
         .await
         .unwrap()
+    };
+    assert_eq!(
+        disable_alice(&mut client).await,
+        platform_store::console_auth::DisableOutcome::LastAdministrator
+    );
+    client
+        .batch_execute(
+            "INSERT INTO console_users (user_id, username, display_name, created_at)
+               VALUES ('99999999-9999-4999-8999-999999999999', 'root2', 'Root', now());
+             INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+               VALUES (gen_random_uuid(), '99999999-9999-4999-8999-999999999999', 'admin', now(), 't');",
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        disable_alice(&mut client).await,
+        platform_store::console_auth::DisableOutcome::Disabled
     );
     let disabled = credential_by_username(&client, "alice")
         .await

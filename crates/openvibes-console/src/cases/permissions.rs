@@ -44,8 +44,8 @@ pub(super) async fn reader(
     authorize(state, headers, &[Permission::CasesRead], false).await
 }
 
-/// Changing: `cases.manage` (with `cases.read`, which the built-in roles
-/// grant together); items are checked against its scope.
+/// Changing: `cases.write` (with `cases.read`, which it needs); items are
+/// checked against its scope.
 pub(super) async fn manager(
     state: &AuthHttpState,
     headers: &HeaderMap,
@@ -53,8 +53,21 @@ pub(super) async fn manager(
     authorize(
         state,
         headers,
-        &[Permission::CasesManage, Permission::CasesRead],
+        &[Permission::CasesWrite, Permission::CasesRead],
         true,
     )
     .await
+}
+
+/// Whether the caller may also set or change a case's assignee
+/// (`cases.assign`); asked after [`manager`] has let them in.
+pub(super) async fn may_assign(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+) -> Result<bool, Response> {
+    let user = session_user(state, headers, false).await?;
+    Ok(user
+        .capabilities
+        .iter()
+        .any(|capability| capability.permission == Permission::CasesAssign))
 }

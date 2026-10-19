@@ -19,9 +19,9 @@ export function RuleSetPanel({ id }: { id: string }) {
   const sets = useResource<{ items: RuleSet[] }>(reads ? "/api/v1/rule-sets" : null);
   const set = sets.data?.items.find((item) => item.rule_set_id === id);
   const bundles = useResource<{ items: RuleBundle[] }>(set ? `/api/v1/rule-sets/${encodeURIComponent(id)}/bundles` : null);
-  const assignments = useResource<RuleSetAssignments>(reads ? "/api/v1/rule-set-assignments" : null);
+  const assignments = useResource<RuleSetAssignments>(can("rules.assignment.read") ? "/api/v1/rule-set-assignments" : null);
   const assignment = assignments.data?.items.find((item) => item.rule_set_id === id);
-  const coverage = useResource<AttackCoverage>(reads && assignment?.published ? "/api/v1/rules/coverage" : null);
+  const coverage = useResource<AttackCoverage>(can("rules.coverage.read") && assignment?.published ? "/api/v1/rules/coverage" : null);
   const checks = coverage.data ? coverage.data.rules.filter((r) => r.rule_set_id === id && !r.draft).length : null;
   const error = sets.error ?? assignments.error;
   if (error) return <div className="panel-body"><ErrorBox error={error} /></div>;
@@ -46,7 +46,7 @@ export function RuleSetPanel({ id }: { id: string }) {
             : set && <><dt>Trusted keys</dt><dd className="num">{set.trusted_keys}</dd></>}
         </dl>
         {!assignment && <p className="subtle">Bundles are signed offline; publish a new version with <code>openvibes-admin rules publish</code> or the API. Agents fetch it on their next contact.</p>}
-        {assignment && <WhereItRuns assignment={assignment} groups={assignments.data?.asset_groups ?? []} canChange={can("rules.upload", true)} />}
+        {assignment && <WhereItRuns assignment={assignment} groups={assignments.data?.asset_groups ?? []} canChange={can("rules.assignment.write")} />}
       </div>
       {set && (
         <Section title="Published versions" flush>

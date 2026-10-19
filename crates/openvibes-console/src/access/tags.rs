@@ -83,17 +83,13 @@ pub(crate) async fn preview_authenticated_agent_tags(
             "Provide at most 64 unique, non-empty tags within key and value limits",
         ));
     };
-    let (scope, _) = match authenticated_permission(
-        &state,
-        &headers,
-        crate::Permission::AssetGroupsManage,
-        true,
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(response) => return response,
-    };
+    let (scope, _) =
+        match authenticated_permission(&state, &headers, crate::Permission::HostGroupsManage, true)
+            .await
+        {
+            Ok(v) => v,
+            Err(response) => return response,
+        };
     if !matches!(scope, AgentScope::Global) {
         return problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,
@@ -143,17 +139,13 @@ pub(crate) async fn apply_authenticated_agent_tags(
             "Provide at most 64 unique, non-empty tags within key and value limits",
         ));
     };
-    let (scope, actor) = match authenticated_permission(
-        &state,
-        &headers,
-        crate::Permission::AssetGroupsManage,
-        true,
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(response) => return response,
-    };
+    let (scope, actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::HostGroupsManage, true)
+            .await
+        {
+            Ok(v) => v,
+            Err(response) => return response,
+        };
     if !matches!(scope, AgentScope::Global) {
         return problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,

@@ -121,8 +121,8 @@ Access control pages use authenticated APIs. Agent detail also provides a
 reason-required revoke operation; the store enforces the effective global or
 asset-group scope in SQL and commits revocation with its audit row.
 Enrollment-token listing, one-time secret creation with idempotent retries,
-and audited revocation are available through global `tokens.read`,
-`tokens.create`, and `tokens.revoke` capabilities. The token secret is stored
+and audited revocation are available through global `tokens.read`
+and `tokens.manage` capabilities. The token secret is stored
 only as the same SHA-256 digest used by ingest, and is never repeated on a
 replayed create response. The opt-in local assistant uses the `assistant.use`
 capability plus the caller's current agent and finding read scopes. Its model
@@ -189,7 +189,7 @@ synthetic API models for these routes.
 
 ### Installed software (assets v1, `src/hosts/software.rs`)
 
-All three need `agents.read` and are scoped like the agents. A scoped
+All three need `hosts.read` and are scoped like the agents. A scoped
 caller's counts include only hosts in the scope, and a host or package no
 visible host has is a 404. Revoked agents are not hosts and never count;
 imported hosts do. "Fixable vulnerable" means an open
@@ -241,7 +241,7 @@ vulnerabilities: a software page takes ~235 ms, the `fixable` filter
 
 Assets v2, from each agent's `HostServices` report (stored by ingest in
 `host_listeners` and `host_services`, replaced per report). Reads need
-`agents.read` and are scoped like agents; fleet counts leave revoked
+`hosts.read` and are scoped like agents; fleet counts leave revoked
 hosts out.
 
 - `GET /api/v1/agents/{agent_id}/services`: the host's listeners (exposed
@@ -275,7 +275,7 @@ stay in the low thousands.
 
 ### Live agent presence (`src/hosts/presence.rs`)
 
-- `GET /api/v1/agents/events` (`agents.read`): a `text/event-stream`. It sends
+- `GET /api/v1/agents/events` (`hosts.read`): a `text/event-stream`. It sends
   `event: presence` when the fleet's online set changed (a host came online or
   went offline), a keep-alive comment every 20 s, and closes after 60 s (the
   browser reconnects, which re-checks its session). Events carry no data: the
@@ -325,10 +325,10 @@ stay in the low thousands.
   (`alarm.suppression.created` / `.removed`).
 - Alarms are not offered to the assistant in P14.
 
-Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; need `rules.write`, global scope; the
+Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; list, fleet and changes need `site_rules.read`, check, save and delete `site_rules.write`, test `site_rules.test`, all global; the
 `site` findings set and the `site-alarms` alarm set only, else 404):
 
-- `GET /api/v1/rules/coverage` (global `rules.read` or `rules.upload`): MITRE ATT&CK
+- `GET /api/v1/rules/coverage` (global `rules.coverage.read`): MITRE ATT&CK
   coverage (protocol P18, spec `2026-10-09-attack-coverage-design.md`):
   tactics in matrix order with their derived kill-chain phase, and every
   rule of each live set's current bundle (verified with the set's trusted
@@ -336,7 +336,7 @@ Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; need `rules.write
   pairs resolved against the bundled release. The test-trigger rules are
   left out; a set whose bundle does not verify is named in
   `unverified_sets`.
-- `GET /api/v1/attack` (global `rules.read` or `rules.upload`): the bundled ATT&CK release
+- `GET /api/v1/attack` (global `rules.coverage.read`): the bundled ATT&CK release
   (`data/attack-enterprise.json`, built by `scripts/attack-data.py` from
   MITRE's STIX at a pinned version; 19.2 today) for the editor's picker.
 - `GET /api/v1/rule-drafts/{set}`: the set's drafts, by rule id. Drafts
@@ -356,19 +356,19 @@ Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; need `rules.write
 - `DELETE /api/v1/rule-drafts/{set}/{rule_id}` (CSRF): 204; audited
   (`rule_draft.deleted`).
 
-- `GET /api/v1/rule-drafts/{set}/changes` (`rules.write`): the drafts
+- `GET /api/v1/rule-drafts/{set}/changes` (`site_rules.read`): the drafts
   against the published set: added, changed, removed, unchanged count.
-- `POST /api/v1/rule-drafts/{set}/publish` (`rules.upload`, CSRF; body
+- `POST /api/v1/rule-drafts/{set}/publish` (`site_rules.publish`, CSRF; body
   `{password}`): sends the drafts, the user's name and the password to the
   rule signer's socket (`/run/openvibes-signer/sign.sock`; the signer checks
-  the password and `rules.upload` itself, rate-limits and keeps its audit),
+  the password and `site_rules.publish` itself, rate-limits and keeps its audit),
   verifies the returned envelope against the set's trusted keys like any
   upload, and stores it (audited as a bundle publish). 201 `{version,
   expires_at_ms, rules}`. Refusals: 403 wrong password or not allowed, 409
   no drafts or nothing changed, 422 over a limit, 429 locked out or hourly
   limit, 503 signer unreachable.
 
-- `POST /api/v1/rule-drafts/site/{rule_id}/test` (`rules.write`, CSRF; body
+- `POST /api/v1/rule-drafts/site/{rule_id}/test` (`site_rules.test`, CSRF; body
   `{agent_id, rule}`): runs the typed rule, saved or not, on the facts the
   platform can rebuild for the host (`package.names`, `package.count` and
   the `port.{tcp,udp}.*` facts from its listeners) with the agent's own
@@ -379,7 +379,7 @@ Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; need `rules.write
   that never reported its listeners) or `failed`. Alarm rules answer 422:
   they run on process starts, which the platform doesn't hold.
 
-- `GET /api/v1/site-rules/fleet` (`rules.write`, global): for `site` and
+- `GET /api/v1/site-rules/fleet` (`site_rules.read`, global): for `site` and
   `site-alarms`, how many hosts are current, behind, refused the bundle, or
   don't list the set (from each host's last health report), the hosts that
   are not current in either set (up to 200), how many hosts have sent no
@@ -465,7 +465,7 @@ hold, and chooses a home; service-account bearer tokens get 403. See
 [console-dashboards.md](console-dashboards.md).
 
 Cases (`/api/v1/cases` and below) are read with `cases.read` and changed with
-`cases.manage` (new in schema 35; Analyst and Admin, both agent-scoped, so a
+`cases.write` (assignee changes `cases.assign`; schema 51; Analyst and Admin, host-scoped, so a
 scoped user sees and adds only what their asset groups cover). They are
 browser-session only like dashboards; service-account bearer tokens get 403.
 A case the caller cannot see answers 404. See
@@ -523,7 +523,7 @@ Spec `docs/specs/2026-10-10-bulk-triage-design.md` (#237, #239, #240).
   new case opens when nothing is left) and, for alarms, `suppress` (one `program`
   suppression per distinct rule and program). Needs the kind's triage
   permission (`alarms.triage`, `compliance.triage`,
-  `vulnerabilities.triage`), plus `cases.manage` for `case` and
+  `vulnerabilities.triage`), plus `cases.write` for `case` and
   `alarms.suppress` for `suppress`. Answers `{changed, skipped[{id,
   reason}], case_id?, case_number?}`: items out of scope, gone or refused
   are listed, never silently changed. One audit row per action
@@ -575,7 +575,7 @@ platform and agent releases; set it to `false` on hosts that must make no outbou
 `[agent_install]` (`platform`, `ingest_port` 18423, `distribution_port` 18424,
 `root_cert_file` `/etc/openvibes/pki/root.crt`) says where agents reach the
 platform; Setup writes it. With it, `GET /api/v1/agent-package` (global
-`tokens.create`, session or token, audited as `agent_package.downloaded`)
+`tokens.installer`, session or token, audited as `agent_package.downloaded`)
 returns `openvibes-agent-install.sh`: one script that installs and enrolls an
 agent the same way on every host, so no `agent.toml` is made per agent. It
 carries the standing fleet token (the console role can read
@@ -588,7 +588,7 @@ The Enrollment page's "Add a host" section (install walkthrough, 2026-10-08:
 hosts are added from the console) has two buttons: "Install package"
 (the download) and "Copy CLI install" (copies that command; it is not shown,
 being long and holding the token), while a standing token exists and the user
-holds global `tokens.create`; without `[agent_install]` both routes answer
+holds global `tokens.installer`; without `[agent_install]` both routes answer
 404, without a standing token `no_standing_token`. The script file holds the token:
 keep it private, and revoke the standing token to rotate it.
 

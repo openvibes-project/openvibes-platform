@@ -2,8 +2,8 @@
 
 //! The rule signer (board #107, own rules, platform #151 §4): holds the
 //! site key and signs `site` and `site-alarms` rule sets for the console,
-//! only after checking the publishing user's password and `rules.upload`
-//! itself. It answers on a Unix socket, one request per connection.
+//! only after checking the publishing user's password and
+//! `site_rules.publish` itself. It answers on a Unix socket, one request per connection.
 
 pub mod config;
 pub mod request;

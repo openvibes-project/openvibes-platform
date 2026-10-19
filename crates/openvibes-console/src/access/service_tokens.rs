@@ -1,13 +1,14 @@
 //! Service-account tokens: list, create and revoke.
 
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, Path, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
 use platform_store::console_auth;
 
+use crate::access::people_roles::account_in_share;
 use crate::http::headers::no_store;
 use crate::{
     access::guard::{authenticated_permission, unavailable_auth},
@@ -43,6 +44,12 @@ pub(crate) async fn authenticated_service_tokens(
             "Access is not available",
         ));
     }
+    // An account outside the caller's share is answered as missing (§4.4).
+    let service_account_id =
+        match account_in_share(&state, &headers, &actor, &service_account_id).await {
+            Ok(id) => id,
+            Err(response) => return response,
+        };
     let client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),
@@ -109,7 +116,7 @@ pub(crate) async fn create_authenticated_service_token(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
     Path(service_account_id): Path<String>,
-    Json(request): Json<crate::CreateServiceTokenRequest>,
+    payload: Result<Json<crate::CreateServiceTokenRequest>, JsonRejection>,
 ) -> Response {
     use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
     use chrono::Duration;
@@ -118,34 +125,10 @@ pub(crate) async fn create_authenticated_service_token(
         rand::{SecureRandom, SystemRandom},
     };
     use zeroize::Zeroize;
-    let label = request.label.trim();
-    if !(1..=8760).contains(&request.expires_in_hours)
-        || label.chars().count() > 128
-        || label.chars().any(char::is_control)
-    {
-        return problem_response(ProblemDetails::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_service_token",
-            "Provide a label of at most 128 characters and expiry from 1 to 8760 hours",
-        ));
-    }
-    let Some(idempotency_key) = headers
-        .get("idempotency-key")
-        .and_then(|value| value.to_str().ok())
-        .filter(|key| {
-            (16..=128).contains(&key.len()) && key.bytes().all(|byte| byte.is_ascii_graphic())
-        })
-    else {
-        return problem_response(ProblemDetails::new(
-            StatusCode::BAD_REQUEST,
-            "idempotency_key_required",
-            "Provide an Idempotency-Key header between 16 and 128 visible ASCII characters",
-        ));
-    };
     let (scope, actor) = match authenticated_permission(
         &state,
         &headers,
-        crate::Permission::ServiceAccountsManage,
+        crate::Permission::ServiceAccountsTokens,
         true,
     )
     .await
@@ -160,6 +143,35 @@ pub(crate) async fn create_authenticated_service_token(
             "Access is not available",
         ));
     }
+    // An account outside the caller's share is answered as missing (§4.4).
+    let service_account_id =
+        match account_in_share(&state, &headers, &actor, &service_account_id).await {
+            Ok(id) => id,
+            Err(response) => return response,
+        };
+    let Ok(Json(request)) = payload else {
+        return invalid_service_token();
+    };
+    let label = request.label.trim();
+    if !(1..=8760).contains(&request.expires_in_hours)
+        || label.chars().count() > 128
+        || label.chars().any(char::is_control)
+    {
+        return invalid_service_token();
+    }
+    let Some(idempotency_key) = headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .filter(|key| {
+            (16..=128).contains(&key.len()) && key.bytes().all(|byte| byte.is_ascii_graphic())
+        })
+    else {
+        return problem_response(ProblemDetails::new(
+            StatusCode::BAD_REQUEST,
+            "idempotency_key_required",
+            "Provide an Idempotency-Key header between 16 and 128 visible ASCII characters",
+        ));
+    };
     let mut secret = [0u8; 32];
     if SystemRandom::new().fill(&mut secret).is_err() {
         return unavailable_auth();
@@ -253,7 +265,7 @@ pub(crate) async fn revoke_authenticated_service_token(
     let (scope, actor) = match authenticated_permission(
         &state,
         &headers,
-        crate::Permission::ServiceAccountsManage,
+        crate::Permission::ServiceAccountsTokens,
         true,
     )
     .await
@@ -268,6 +280,12 @@ pub(crate) async fn revoke_authenticated_service_token(
             "Access is not available",
         ));
     }
+    // An account outside the caller's share is answered as missing (§4.4).
+    let service_account_id =
+        match account_in_share(&state, &headers, &actor, &service_account_id).await {
+            Ok(id) => id,
+            Err(response) => return response,
+        };
     let mut client = match state.pool.get().await {
         Ok(value) => value,
         Err(_) => return unavailable_auth(),
@@ -289,4 +307,12 @@ pub(crate) async fn revoke_authenticated_service_token(
         )),
         Err(_) => unavailable_auth(),
     }
+}
+
+fn invalid_service_token() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::BAD_REQUEST,
+        "invalid_service_token",
+        "Provide a label of at most 128 characters and expiry from 1 to 8760 hours",
+    ))
 }

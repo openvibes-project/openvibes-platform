@@ -17,7 +17,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `platform-host` | library | host operations for the admin TUI: unit allow-list, systemd backend (services, start/stop/restart, logs) (TUI PR 1) | [platform-host.md](platform-host.md) |
 | `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2); rules (SP2); assistant check, eval (AS3); local console user bootstrap and administration (C3); local model install/check (AS5) | [openvibes-admin.md](openvibes-admin.md) |
 | `openvibes-llm` | optional service, loopback 18430 | pinned `llama-server` (CPU, Vulkan) for the assistant, hardened unit, model digest check (AS5) | [openvibes-llm.md](openvibes-llm.md) |
-| `openvibes-signer` | service, Unix socket | signs the site's own rule sets after checking the user's password and `rules.upload` itself; own DB role, journal audit, version state (#107) | [openvibes-signer.md](openvibes-signer.md) |
+| `openvibes-signer` | service, Unix socket | signs the site's own rule sets after checking the user's password and `site_rules.publish` itself; own DB role, journal audit, version state (#107) | [openvibes-signer.md](openvibes-signer.md) |
 | `openvibes-fetch` | service (socket-activated, one process per request) and library | the only outbound requests of the assistant's opt-in internet lookups: OSV and Bodhi references (level 1), web search through the admin's SearXNG (level 2), query filter, deadlines | [openvibes-fetch.md](openvibes-fetch.md) |
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |
 | `integration-agent` | test script | real agent against ingest: enroll, deliver exactly once, restart, renew, revoke, re-enroll (PM4); against distribution: poll, update, outage, refused bundle, revoke (SP2) | [integration-agent.md](integration-agent.md) |
@@ -36,7 +36,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-dashboards` | console module | user dashboards: layouts, sharing by role, home (schema 26) | [console-dashboards.md](console-dashboards.md) |
 | `console-cases` | console module | investigations: items, notes, assignment, closing with evidence; scope-aware visibility (schema 35) | [console-cases.md](console-cases.md) |
 | `count-history` | store module and console endpoint | daily per-host problem counts (schema 44) written by maintenance, served as count history graphs by `/api/v1/metrics/history` | [count-history.md](count-history.md) |
-| `console-rbac` | console module | permission resolution and access-control inventory, role-binding, and asset-group selector APIs | [console-rbac.md](console-rbac.md) |
+| `console-rbac` | console module | permission resolution, the share check, people and role-holder APIs, and asset-group selector APIs | [console-rbac.md](console-rbac.md) |
 | `rule-set-assignment` | store module, console API, distribution and ingest behaviour | per-group switches for the project's assignable rule sets (hardening L1/L2): defaults, overrides, on wins, `410` answers, matches ended when a host stops running a set (schema 49) | [rule-set-assignment.md](rule-set-assignment.md) |
 | `console-about` | console module | About page, platform/component versions, newer-release check | [console-about.md](console-about.md) |
 | `console-build-stamp` | build-script module | sorted frontend inventories and SHA-256 validation | [console-build-stamp.md](console-build-stamp.md) |

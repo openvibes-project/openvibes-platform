@@ -123,10 +123,8 @@ pub struct Session {
 /// Active role binding for a local console user.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UserRoleBinding {
-    /// Bound built-in role identifier.
+    /// Bound role identifier.
     pub role_id: String,
-    /// Asset group id for a scoped binding; `None` means global.
-    pub asset_group_id: Option<String>,
 }
 
 /// Non-secret local-user fields available to audited administrative listings.
@@ -148,42 +146,6 @@ pub struct LocalUserSummary {
     pub last_seen_at: Option<DateTime<Utc>>,
 }
 
-/// A built-in or custom role and its permission identifiers.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RoleSummary {
-    /// Stable role key.
-    pub role_id: String,
-    /// Display name.
-    pub display_name: String,
-    /// Whether the role is managed by the platform.
-    pub builtin: bool,
-    /// Permission identifiers granted by this role.
-    pub permissions: Vec<String>,
-}
-
-/// Active user role binding with its resolved asset-group label.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BindingSummary {
-    /// Stable binding UUID.
-    pub binding_id: String,
-    /// User id.
-    pub user_id: String,
-    /// Username.
-    pub username: String,
-    /// User display name.
-    pub display_name: String,
-    /// Bound role identifier.
-    pub role_id: String,
-    /// Asset group id; absent means global access.
-    pub asset_group_id: Option<String>,
-    /// Asset group label.
-    pub asset_group_name: Option<String>,
-    /// Creation instant.
-    pub created_at: DateTime<Utc>,
-    /// Actor who created the binding.
-    pub created_by: String,
-}
-
 /// Manual asset group and its exact tag selectors.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AssetGroupSummary {
@@ -193,19 +155,6 @@ pub struct AssetGroupSummary {
     pub name: String,
     /// Exact `key=value` selectors.
     pub selectors: Vec<String>,
-}
-
-/// Read-only access-control inventory for the administration page.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AccessInventory {
-    /// Roles and permission identifiers.
-    pub roles: Vec<RoleSummary>,
-    /// Active local-user role bindings.
-    pub bindings: Vec<BindingSummary>,
-    /// Manual asset groups and selectors.
-    pub asset_groups: Vec<AssetGroupSummary>,
-    /// Enabled local users available for role assignment.
-    pub users: Vec<LocalUserSummary>,
 }
 
 /// Saves an asset group and replaces its exact selector set with one audit row.
@@ -360,26 +309,28 @@ pub enum EnrollmentTokenCreation {
     Conflict,
 }
 
-/// Creates a service account and records its creation atomically.
+/// Creates a service account holding `role_ids` (at least one) and records
+/// its creation atomically. `None` when the name is taken or a role does
+/// not exist.
 pub async fn create_service_account(
     client: &mut Client,
     name: &str,
-    role_id: &str,
+    role_ids: &[String],
     actor_id: &str,
     now: DateTime<Utc>,
 ) -> Result<Option<String>, StoreError> {
     let tx = client.transaction().await?;
     let row = tx.query_opt(
-        "INSERT INTO console_service_accounts(service_account_id,name,enabled,created_at,created_by) SELECT gen_random_uuid(),$1,true,$2,$3 WHERE EXISTS(SELECT 1 FROM console_roles WHERE role_id=$4) ON CONFLICT(name) DO NOTHING RETURNING service_account_id::text",
-        &[&name, &now, &actor_id, &role_id],
+        "INSERT INTO console_service_accounts(service_account_id,name,enabled,created_at,created_by) SELECT gen_random_uuid(),$1,true,$2,$3 WHERE cardinality($4::text[]) > 0 AND (SELECT count(*) FROM console_roles WHERE role_id = ANY($4)) = cardinality($4::text[]) ON CONFLICT(name) DO NOTHING RETURNING service_account_id::text",
+        &[&name, &now, &actor_id, &role_ids],
     ).await?;
     let Some(row) = row else {
         tx.rollback().await?;
         return Ok(None);
     };
     let id: String = row.get(0);
-    tx.execute("INSERT INTO console_role_bindings(binding_id,service_account_id,role_id,created_at,created_by) VALUES(gen_random_uuid(),$1::text::uuid,$2,$3,$4)", &[&id,&role_id,&now,&actor_id]).await?;
-    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'service_account.created','service_account','success',jsonb_build_object('name',$2::text,'role_id',$3::text),'user',$1,$1,'service_account',$4)", &[&actor_id, &name, &role_id, &id]).await?;
+    tx.execute("INSERT INTO console_role_bindings(binding_id,service_account_id,role_id,created_at,created_by) SELECT gen_random_uuid(),$1::text::uuid,r,$3,$4 FROM unnest($2::text[]) r", &[&id,&role_ids,&now,&actor_id]).await?;
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'service_account.created','service_account','success',jsonb_build_object('name',$2::text,'role_ids',$3::text[]),'user',$1,$1,'service_account',$4)", &[&actor_id, &name, &role_ids, &id]).await?;
     tx.commit().await?;
     Ok(Some(id))
 }
@@ -624,7 +575,7 @@ pub async fn active_service_token(
         return Ok(None);
     };
     let service_account_id: String = row.get(1);
-    let bindings = client.query("SELECT role_id,asset_group_id::text FROM console_role_bindings WHERE service_account_id=$1::text::uuid AND revoked_at IS NULL ORDER BY role_id,asset_group_id NULLS FIRST", &[&service_account_id]).await?;
+    let bindings = client.query("SELECT role_id FROM console_role_bindings WHERE service_account_id=$1::text::uuid AND revoked_at IS NULL ORDER BY role_id", &[&service_account_id]).await?;
     Ok(Some(ActiveServiceToken {
         token_id: row.get(0),
         service_account_id,
@@ -633,7 +584,6 @@ pub async fn active_service_token(
             .into_iter()
             .map(|binding| UserRoleBinding {
                 role_id: binding.get(0),
-                asset_group_id: binding.get(1),
             })
             .collect(),
     }))
@@ -941,7 +891,7 @@ async fn tag_binding_impacts<C: deadpool_postgres::GenericClient + Sync>(
         .map(|group| group.0.clone())
         .collect::<Vec<_>>();
     let rows = client.query(
-        "SELECT b.binding_id::text,u.username,b.role_id,g.name FROM console_role_bindings b JOIN console_users u USING(user_id) JOIN console_asset_groups g USING(asset_group_id) WHERE b.revoked_at IS NULL AND u.enabled AND b.asset_group_id::text=ANY($1::text[]) ORDER BY g.name,u.username,b.role_id,b.binding_id LIMIT 501",
+        "SELECT b.binding_id::text,u.username,b.role_id,g.name FROM console_role_bindings b JOIN console_users u USING(user_id) JOIN console_role_groups rg USING(role_id) JOIN console_asset_groups g ON g.asset_group_id=rg.asset_group_id WHERE b.revoked_at IS NULL AND u.enabled AND rg.asset_group_id::text=ANY($1::text[]) ORDER BY g.name,u.username,b.role_id,b.binding_id LIMIT 501",
         &[&ids],
     ).await?;
     if rows.len() > 500 {
@@ -968,231 +918,24 @@ fn encode_hex(bytes: &[u8]) -> String {
     out
 }
 
-/// Outcome of revoking an active local-user role binding.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BindingRevocation {
-    /// Binding was revoked and audited.
-    Revoked,
-    /// Binding did not exist or was already revoked.
-    NotFound,
-    /// This is the final global Admin binding and cannot be revoked.
-    LastGlobalAdmin,
-}
+/// Serialises every change to roles and bindings, so the last-Administrator
+/// guards and role writes see a stable picture.
+pub(crate) const ACCESS_BINDING_LOCK: i64 = 0x6f76_6962_6573;
 
-/// Lists the current roles, active user bindings, and asset group selectors.
-pub async fn access_inventory(client: &Client) -> Result<AccessInventory, StoreError> {
-    let role_rows = client
-        .query(
-            "SELECT r.role_id, r.display_name, r.builtin,
-                COALESCE(array_agg(rp.permission_id ORDER BY rp.permission_id)
-                    FILTER (WHERE rp.permission_id IS NOT NULL), ARRAY[]::text[])
-         FROM console_roles r LEFT JOIN console_role_permissions rp USING (role_id)
-         GROUP BY r.role_id ORDER BY r.role_id",
-            &[],
-        )
-        .await?;
-    let binding_rows = client
-        .query(
-            "SELECT b.binding_id::text, u.user_id::text, u.username, u.display_name,
-                b.role_id, b.asset_group_id::text, g.name, b.created_at, b.created_by
-         FROM console_role_bindings b JOIN console_users u USING (user_id)
-         LEFT JOIN console_asset_groups g USING (asset_group_id)
-         WHERE b.user_id IS NOT NULL AND b.revoked_at IS NULL
-         ORDER BY u.username, b.role_id, g.name NULLS FIRST, b.binding_id",
-            &[],
-        )
-        .await?;
-    let group_rows = client.query(
-        "SELECT g.asset_group_id::text, g.name,
-                COALESCE(array_agg(s.tag_key || '=' || s.tag_value ORDER BY s.tag_key)
-                    FILTER (WHERE s.tag_key IS NOT NULL), ARRAY[]::text[])
-         FROM console_asset_groups g LEFT JOIN console_asset_group_selectors s USING (asset_group_id)
-         GROUP BY g.asset_group_id ORDER BY g.name", &[],
-    ).await?;
-    let users = list_local_users(client)
-        .await?
-        .into_iter()
-        .filter(|user| user.enabled)
-        .collect();
-    Ok(AccessInventory {
-        roles: role_rows
-            .iter()
-            .map(|row| RoleSummary {
-                role_id: row.get(0),
-                display_name: row.get(1),
-                builtin: row.get(2),
-                permissions: row.get(3),
-            })
-            .collect(),
-        bindings: binding_rows
-            .iter()
-            .map(|row| BindingSummary {
-                binding_id: row.get(0),
-                user_id: row.get(1),
-                username: row.get(2),
-                display_name: row.get(3),
-                role_id: row.get(4),
-                asset_group_id: row.get(5),
-                asset_group_name: row.get(6),
-                created_at: row.get(7),
-                created_by: row.get(8),
-            })
-            .collect(),
-        asset_groups: group_rows
-            .iter()
-            .map(|row| AssetGroupSummary {
-                asset_group_id: row.get(0),
-                name: row.get(1),
-                selectors: row.get(2),
-            })
-            .collect(),
-        users,
-    })
-}
-
-/// Creates a local-user role binding and its audit row atomically. Returns
-/// `None` when the user, role, group, or unique active binding is unavailable.
-pub async fn create_user_role_binding(
-    client: &mut Client,
-    user_id: &str,
-    role_id: &str,
-    asset_group_id: Option<&str>,
-    actor_id: &str,
-    now: DateTime<Utc>,
-) -> Result<Option<BindingSummary>, StoreError> {
-    let tx = client.transaction().await?;
-    let row = tx.query_opt(
-        "INSERT INTO console_role_bindings
-             (binding_id, user_id, role_id, asset_group_id, created_at, created_by)
-         SELECT gen_random_uuid(), u.user_id, r.role_id, g.asset_group_id, $4, $5
-         FROM console_users u CROSS JOIN console_roles r
-         LEFT JOIN console_asset_groups g ON g.asset_group_id::text = $3
-         WHERE u.user_id::text = $1 AND u.enabled AND r.role_id = $2
-           AND (($3::text IS NULL AND g.asset_group_id IS NULL) OR g.asset_group_id IS NOT NULL)
-         ON CONFLICT DO NOTHING
-         RETURNING binding_id::text, user_id::text, role_id, asset_group_id::text, created_at, created_by",
-        &[&user_id, &role_id, &asset_group_id, &now, &actor_id],
-    ).await?;
-    let Some(row) = row else {
-        tx.rollback().await?;
-        return Ok(None);
-    };
-    let group_id: Option<String> = row.get(3);
-    let group_name: Option<String> = if let Some(id) = group_id.as_deref() {
-        tx.query_opt(
-            "SELECT name FROM console_asset_groups WHERE asset_group_id::text = $1",
-            &[&id],
-        )
-        .await?
-        .map(|row| row.get(0))
-    } else {
-        None
-    };
-    let binding = tx
+/// Enabled users holding Administrator through an active binding. Call it
+/// inside a transaction holding the access-binding advisory lock.
+pub async fn enabled_administrators(
+    tx: &deadpool_postgres::Transaction<'_>,
+) -> Result<i64, StoreError> {
+    Ok(tx
         .query_one(
-            "SELECT $1::text, u.user_id::text, u.username, u.display_name, $2::text,
-                $3::text, $4::text, $5::timestamptz, $6::text
-         FROM console_users u WHERE u.user_id = $7::text::uuid",
-            &[
-                &row.get::<_, String>(0),
-                &row.get::<_, String>(2),
-                &group_id,
-                &group_name,
-                &row.get::<_, DateTime<Utc>>(4),
-                &row.get::<_, String>(5),
-                &user_id,
-            ],
+            "SELECT count(DISTINCT u.user_id) FROM console_role_bindings b
+             JOIN console_users u USING (user_id)
+             WHERE u.enabled AND b.role_id = 'admin' AND b.revoked_at IS NULL",
+            &[],
         )
-        .await?;
-    tx.execute(
-        "INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_id,
-             actor_display, target_kind, target_id)
-         VALUES ($1, 'rbac.binding.created', 'role_binding', 'success',
-             jsonb_build_object('role_id', $2::text, 'asset_group_id', $3::text),
-             'user', $1, $1, 'role_binding', $4::text)",
-        &[
-            &actor_id,
-            &role_id,
-            &asset_group_id,
-            &row.get::<_, String>(0),
-        ],
-    )
-    .await?;
-    let result = BindingSummary {
-        binding_id: binding.get(0),
-        user_id: binding.get(1),
-        username: binding.get(2),
-        display_name: binding.get(3),
-        role_id: binding.get(4),
-        asset_group_id: binding.get(5),
-        asset_group_name: binding.get(6),
-        created_at: binding.get(7),
-        created_by: binding.get(8),
-    };
-    tx.commit().await?;
-    Ok(Some(result))
-}
-
-/// Revokes one active local-user role binding and audits the change atomically.
-pub async fn revoke_user_role_binding(
-    client: &mut Client,
-    binding_id: &str,
-    actor_id: &str,
-    now: DateTime<Utc>,
-) -> Result<BindingRevocation, StoreError> {
-    let tx = client.transaction().await?;
-    const ACCESS_BINDING_LOCK: i64 = 0x6f76_6962_6573;
-    tx.query_one("SELECT pg_advisory_xact_lock($1)", &[&ACCESS_BINDING_LOCK])
-        .await?;
-    let row = tx
-        .query_opt(
-            "SELECT b.role_id, b.asset_group_id::text, u.enabled
-             FROM console_role_bindings b JOIN console_users u USING (user_id)
-             WHERE b.binding_id = $1::text::uuid AND b.user_id IS NOT NULL AND b.revoked_at IS NULL
-             FOR UPDATE",
-            &[&binding_id],
-        )
-        .await?;
-    let Some(row) = row else {
-        tx.rollback().await?;
-        return Ok(BindingRevocation::NotFound);
-    };
-    let role_id: String = row.get(0);
-    let group_id: Option<String> = row.get(1);
-    let target_enabled: bool = row.get(2);
-    if role_id == "admin" && group_id.is_none() && target_enabled {
-        let global_admins: i64 = tx
-            .query_one(
-                "SELECT count(*) FROM console_role_bindings b
-                 JOIN console_users u USING (user_id)
-                 WHERE u.enabled AND b.role_id = 'admin' AND b.asset_group_id IS NULL
-                   AND b.revoked_at IS NULL",
-                &[],
-            )
-            .await?
-            .get(0);
-        if global_admins <= 1 {
-            tx.rollback().await?;
-            return Ok(BindingRevocation::LastGlobalAdmin);
-        }
-    }
-    tx.execute(
-        "UPDATE console_role_bindings SET revoked_at = $2, revoked_by = $3
-         WHERE binding_id = $1::text::uuid",
-        &[&binding_id, &now, &actor_id],
-    )
-    .await?;
-    tx.execute(
-        "INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_id,
-             actor_display, target_kind, target_id)
-         VALUES ($1, 'rbac.binding.revoked', 'role_binding', 'success',
-             jsonb_build_object('role_id', $2::text, 'asset_group_id', $3::text),
-             'user', $1, $1, 'role_binding', $4::text)",
-        &[&actor_id, &role_id, &group_id, &binding_id],
-    )
-    .await?;
-    tx.commit().await?;
-    Ok(BindingRevocation::Revoked)
+        .await?
+        .get(0))
 }
 
 /// Lists local users without credentials, session secrets, or throttle hashes.
@@ -1294,6 +1037,16 @@ pub async fn create_local_user(
     new_user: &NewLocalUser<'_>,
 ) -> Result<(), StoreError> {
     let tx = client.transaction().await?;
+    insert_local_user(&tx, new_user).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// [`create_local_user`]'s writes, inside the caller's transaction.
+pub(crate) async fn insert_local_user(
+    tx: &deadpool_postgres::Transaction<'_>,
+    new_user: &NewLocalUser<'_>,
+) -> Result<(), StoreError> {
     tx.execute(
         "INSERT INTO console_users (user_id, username, display_name, created_at,
              password_must_change)
@@ -1340,7 +1093,6 @@ pub async fn create_local_user(
         ],
     )
     .await?;
-    tx.commit().await?;
     Ok(())
 }
 
@@ -1370,9 +1122,9 @@ pub async fn user_role_bindings(
 ) -> Result<Vec<UserRoleBinding>, StoreError> {
     let rows = client
         .query(
-            "SELECT role_id, asset_group_id::text FROM console_role_bindings
+            "SELECT role_id FROM console_role_bindings
              WHERE user_id = $1::text::uuid AND revoked_at IS NULL
-             ORDER BY role_id, asset_group_id NULLS FIRST",
+             ORDER BY role_id",
             &[&user_id],
         )
         .await?;
@@ -1380,7 +1132,6 @@ pub async fn user_role_bindings(
         .iter()
         .map(|row| UserRoleBinding {
             role_id: row.get(0),
-            asset_group_id: row.get(1),
         })
         .collect())
 }
@@ -1419,6 +1170,11 @@ pub async fn create_session(
         )
         .await?;
     if inserted == 1 {
+        tx.execute(
+            "UPDATE console_users SET last_sign_in_at = $2 WHERE user_id = $1::text::uuid",
+            &[&session.user_id, &session.now],
+        )
+        .await?;
         if let Some(previous_session_sha256) = session.previous_session_sha256 {
             tx.execute(
                 "UPDATE console_sessions SET revoked_at = $2
@@ -1806,7 +1562,19 @@ pub async fn username_taken(client: &Client, username: &str) -> Result<bool, Sto
         .is_some())
 }
 
-/// Disables an enabled user and revokes all sessions in one audited transaction.
+/// Outcome of disabling a local user.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DisableOutcome {
+    /// Disabled, sessions revoked, audited.
+    Disabled,
+    /// No such enabled user.
+    NotFound,
+    /// The user is the last enabled Administrator.
+    LastAdministrator,
+}
+
+/// Disables an enabled user and revokes all sessions in one audited
+/// transaction, never the last enabled Administrator.
 pub async fn disable_local_user(
     client: &mut Client,
     user_id: &str,
@@ -1814,8 +1582,24 @@ pub async fn disable_local_user(
     audit: &AuditContext<'_>,
     actor_id: &str,
     actor_kind: &str,
-) -> Result<bool, StoreError> {
+) -> Result<DisableOutcome, StoreError> {
     let tx = client.transaction().await?;
+    tx.query_one("SELECT pg_advisory_xact_lock($1)", &[&ACCESS_BINDING_LOCK])
+        .await?;
+    let last_administrator = tx
+        .query_one(
+            "SELECT EXISTS (SELECT 1 FROM console_role_bindings b JOIN console_users u USING (user_id)
+                 WHERE b.user_id = $1::text::uuid AND u.enabled AND b.role_id = 'admin'
+                   AND b.revoked_at IS NULL)",
+            &[&user_id],
+        )
+        .await?
+        .get::<_, bool>(0)
+        && enabled_administrators(&tx).await? <= 1;
+    if last_administrator {
+        tx.rollback().await?;
+        return Ok(DisableOutcome::LastAdministrator);
+    }
     let updated = tx
         .execute(
             "UPDATE console_users SET enabled = false, disabled_at = $2,
@@ -1826,7 +1610,7 @@ pub async fn disable_local_user(
         .await?;
     if updated == 0 {
         tx.rollback().await?;
-        return Ok(false);
+        return Ok(DisableOutcome::NotFound);
     }
     tx.execute(
         "UPDATE console_sessions SET revoked_at = COALESCE(revoked_at, $2)
@@ -1853,7 +1637,7 @@ pub async fn disable_local_user(
     )
     .await?;
     tx.commit().await?;
-    Ok(true)
+    Ok(DisableOutcome::Disabled)
 }
 
 /// Stores hash-only one-use local pre-authentication state.

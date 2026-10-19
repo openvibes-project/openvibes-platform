@@ -99,6 +99,27 @@ pub async fn at_version(db: &TestDb, version: i32) -> deadpool_postgres::Client 
     client
 }
 
+/// A role reaching all hosts with these permissions. Since schema 52 a
+/// fresh database holds only Administrator; tests that bind the former
+/// built-in ids (`viewer`, `analyst`, `operator`) create them first.
+#[allow(dead_code, reason = "used by some test binaries only")]
+pub async fn seed_role(client: &deadpool_postgres::Client, role_id: &str, permissions: &[&str]) {
+    client
+        .execute(
+            "INSERT INTO console_roles (role_id, display_name, all_hosts) VALUES ($1, initcap($1), true)",
+            &[&role_id],
+        )
+        .await
+        .unwrap();
+    client
+        .execute(
+            "INSERT INTO console_role_permissions (role_id, permission_id) SELECT $1, unnest($2::text[])",
+            &[&role_id, &permissions],
+        )
+        .await
+        .unwrap();
+}
+
 /// One case with one item of `kind`, owned by user ...0001 (which must exist).
 #[allow(dead_code, reason = "used by some test binaries only")]
 pub async fn insert_case_with_item(

@@ -7,9 +7,9 @@ use chrono::Utc;
 use common::TestDb;
 use platform_store::{
     Client,
-    console_auth::{
-        NewLocalUser, create_local_user, create_user_role_binding, revoke_user_role_binding,
-    },
+    console_auth::{NewLocalUser, create_local_user},
+    console_people::{give_role, remove_role},
+    console_roles::{Principal, Reach, RoleInput, RoleWrite, create_role},
     dashboards::{self, Refusal},
 };
 use serde_json::json;
@@ -41,6 +41,8 @@ async fn setup() -> (TestDb, Client) {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     platform_store::migrate(&mut client).await.unwrap();
+    common::seed_role(&client, "viewer", &["hosts.read"]).await;
+    common::seed_role(&client, "analyst", &["hosts.read"]).await;
     user(
         &mut client,
         ALICE,
@@ -267,16 +269,32 @@ async fn scoped_binding_sees_shared_dashboard() {
             &[],
         )
         .await.unwrap().get(0);
-    create_user_role_binding(
+    // A role reaching one group (what a scoped binding became in schema 52).
+    let scoped = match create_role(
         &mut client,
-        BOB,
-        "analyst",
-        Some(&group),
+        &RoleInput {
+            name: "Analyst (Production)",
+            description: "",
+            permissions: &["hosts.read".to_owned()],
+            reach: &Reach::Groups(vec![group]),
+        },
         "test",
         Utc::now(),
     )
     .await
     .unwrap()
+    {
+        RoleWrite::Saved(role) => role.role_id,
+        _ => panic!("role not saved"),
+    };
+    give_role(
+        &mut client,
+        Principal::User(BOB),
+        &scoped,
+        "test",
+        Utc::now(),
+    )
+    .await
     .unwrap();
     let created = dashboards::create(&mut client, ALICE, "Analysts", &layout(), Utc::now())
         .await
@@ -286,7 +304,7 @@ async fn scoped_binding_sees_shared_dashboard() {
         &mut client,
         ALICE,
         &created.dashboard_id,
-        Some("analyst"),
+        Some(&scoped),
         Utc::now(),
     )
     .await
@@ -302,10 +320,15 @@ async fn scoped_binding_sees_shared_dashboard() {
 #[tokio::test]
 async fn revoked_binding_hides_dashboard_and_home() {
     let (db, mut client) = setup().await;
-    let binding = create_user_role_binding(&mut client, BOB, "analyst", None, "test", Utc::now())
-        .await
-        .unwrap()
-        .unwrap();
+    give_role(
+        &mut client,
+        Principal::User(BOB),
+        "analyst",
+        "test",
+        Utc::now(),
+    )
+    .await
+    .unwrap();
     let created = dashboards::create(&mut client, ALICE, "Analysts", &layout(), Utc::now())
         .await
         .unwrap()
@@ -330,9 +353,15 @@ async fn revoked_binding_hides_dashboard_and_home() {
         dashboards::home(&client, BOB).await.unwrap(),
         Some(created.dashboard_id.clone())
     );
-    revoke_user_role_binding(&mut client, &binding.binding_id, "test", Utc::now())
-        .await
-        .unwrap();
+    remove_role(
+        &mut client,
+        Principal::User(BOB),
+        "analyst",
+        "test",
+        Utc::now(),
+    )
+    .await
+    .unwrap();
     assert!(
         dashboards::list_visible(&client, BOB)
             .await

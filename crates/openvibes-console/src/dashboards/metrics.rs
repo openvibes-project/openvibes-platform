@@ -25,7 +25,7 @@ use crate::{
 };
 
 use Permission::{
-    AgentsRead as AG, AlarmsRead as AL, ComplianceRead as CO, VulnerabilitiesRead as VU,
+    AlarmsRead as AL, ComplianceRead as CO, HostsRead as AG, VulnerabilitiesRead as VU,
 };
 
 /// One countable thing: who may read it and how to compute it.

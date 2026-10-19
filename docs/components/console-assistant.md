@@ -16,9 +16,9 @@ The console runs every lookup the model is offered
 
 | Lookup | Needs | Scope |
 |---|---|---|
-| `search_findings`, `finding_endpoints`, `agent_summary`, `host_services`, `software` | `agents.read`, `compliance.read` (required for the dock) | agent scope |
+| `search_findings`, `finding_endpoints`, `agent_summary`, `host_services`, `software` | `hosts.read`, `compliance.read` (required for the dock) | agent scope |
 | `host_vulnerabilities`, `vulnerability_hosts` | `vulnerabilities.read` | the user's vulnerability scope, never wider |
-| `fleet_overview` (agents, findings and vulnerabilities together) | `vulnerabilities.read` with the same scope as `agents.read` | agent scope |
+| `fleet_overview` (agents, findings and vulnerabilities together) | `vulnerabilities.read` with the same scope as `hosts.read` | agent scope |
 | `rule_description` | `rules.read` (global, as on the Rules page) for any published rule; otherwise the latest published definition of a rule the user has findings for (the Compliance page shows the version each finding was evaluated against) | rule set resolved from the user's findings |
 
 A lookup the user may not run is still offered. Running it answers the
@@ -26,7 +26,7 @@ model with "error: the user has no access to vulnerabilities (or rules);
 tell them so" (`LookupError::Forbidden`), so the answer says the user has
 no access rather than that there is no data. The response's lookup summary
 carries the same message in `error`. Every built-in role that has
-`agents.read` also has `vulnerabilities.read`, so with today's roles the
+`hosts.read` also has `vulnerabilities.read`, so with today's roles the
 vulnerability refusal guards only future custom roles; the rules refusal
 is what an Analyst (no `rules.read`) gets for a rule with no finding in
 scope. The in-scope check reads at most 100 finding groups from the last
@@ -43,7 +43,7 @@ fails it (#241).
   whether the endpoint is local or on the operator's network.
 - `POST /api/v1/assistant/messages` accepts one question plus bounded recent
   turns from the current browser tab. It requires an authenticated session,
-  `assistant.use`, and the same effective scope for `agents.read` and
+  `assistant.use`, and the same effective scope for `hosts.read` and
   `compliance.read`.
 - The dock is offered only to a principal with `assistant.use`. It renders
   plain text, and its citations open the cited objects in the inspector.

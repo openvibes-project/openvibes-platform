@@ -147,10 +147,10 @@ pub(crate) fn summarize(
 
 #[utoipa::path(get, path = "/api/v1/site-rules/fleet", tag = "rules",
     responses((status = 200, description = "Which hosts run the site rule sets", body = crate::hosts::site_fleet::SiteFleet),
-        (status = 403, description = "Needs rules.write and global access", body = crate::ProblemDetails, content_type = "application/problem+json")))]
+        (status = 403, description = "Needs site_rules.read and global access", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn site_fleet(State(state): State<AuthHttpState>, headers: HeaderMap) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::RulesWrite, false).await {
+        match authenticated_permission(&state, &headers, Permission::SiteRulesRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -161,10 +161,20 @@ pub(crate) async fn site_fleet(State(state): State<AuthHttpState>, headers: Head
             "Access is not available",
         ));
     }
+    // Hosts and their counts keep to the caller's hosts.read reach; without
+    // it the view still offers the lines to paste, over no hosts.
+    let reach = match authenticated_permission(&state, &headers, Permission::HostsRead, false).await
+    {
+        Ok((reach, _)) => reach,
+        Err(response) if response.status() == StatusCode::FORBIDDEN => {
+            AgentScope::AssetGroups(Vec::new())
+        }
+        Err(response) => return response,
+    };
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    let Ok(hosts) = platform_store::console_read::host_rule_sets(&client).await else {
+    let Ok(hosts) = platform_store::console_read::host_rule_sets(&client, &reach).await else {
         return unavailable_auth();
     };
     let mut published = [None, None];

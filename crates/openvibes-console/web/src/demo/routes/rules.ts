@@ -7,14 +7,14 @@ import type { DemoContext } from "../context";
 import { browserPersistence, json, problem } from "../http";
 
 export function registerRuleRoutes(ctx: DemoContext) {
-  const { data, iso, actor, readsRules, agentById, audit, route, send } = ctx;
+  const { data, iso, actor, readsRules, agentById, visible, audit, route, send } = ctx;
   route("GET", "/api/v1/rule-sets", null, () => (readsRules() ? json({ items: data.ruleSets }) : problem(403, "permission_denied", "Access is not available")));
   route("GET", "/api/v1/rule-sets/{id}/bundles", null, ({ id = "" }) => (readsRules() ? json({ items: data.bundles.get(id) ?? [] }) : problem(403, "permission_denied", "Access is not available")));
   const previews = new Map<string, string>();
   const envelopeOf = (body: Record<string, unknown>) => ({
     set: String(body.rule_set_id ?? ""), version: Number(body.rule_set_version), key: String(body.issuer_key_id ?? ""), expires: Number(body.expires_at_unix_ms),
   });
-  route("POST", "/api/v1/rule-bundles/preview", "rules.upload", (_, __, body) => {
+  route("POST", "/api/v1/rule-bundles/preview", "rules.publish", (_, __, body) => {
     const e = envelopeOf(body);
     const set = data.ruleSets.find((candidate) => candidate.rule_set_id === e.set);
     if (!set || !Number.isInteger(e.version) || e.key === "") return problem(422, "invalid_envelope", "The envelope failed signature or trust validation");
@@ -23,7 +23,7 @@ export function registerRuleRoutes(ctx: DemoContext) {
     previews.set(preview_token, JSON.stringify(e));
     return json({ rule_set_id: e.set, version: e.version, current_version: set.current_version ?? null, issuer_key_id: e.key, envelope_sha256: "demo".padEnd(64, "0"), expires_at_ms: e.expires, preview_token });
   });
-  route("POST", "/api/v1/rule-bundles/publish", "rules.upload", (_, __, body, headers) => {
+  route("POST", "/api/v1/rule-bundles/publish", "rules.publish", (_, __, body, headers) => {
     const token = headers["x-rule-preview-token"];
     if (token === undefined) return problem(428, "preview_required", "Preview the bundle first");
     const e = envelopeOf(body);
@@ -60,17 +60,17 @@ export function registerRuleRoutes(ctx: DemoContext) {
     }
     return problems;
   };
-  route("GET", "/api/v1/rule-drafts/{set}", "rules.write", ({ set = "" }) => {
+  route("GET", "/api/v1/rule-drafts/{set}", "site_rules.read", ({ set = "" }) => {
     const store = drafts.get(set);
     if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
     return json({ items: [...store.values()].sort((a, b) => a.rule_id.localeCompare(b.rule_id)) });
   });
-  route("POST", "/api/v1/rule-drafts/{set}/{id}/check", "rules.write", ({ set = "" }, __, body) => {
+  route("POST", "/api/v1/rule-drafts/{set}/{id}/check", "site_rules.write", ({ set = "" }, __, body) => {
     if (!drafts.has(set)) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
     const problems = draftProblems(set, body);
     return json({ ok: problems.length === 0, problems });
   });
-  route("PUT", "/api/v1/rule-drafts/{set}/{id}", "rules.write", ({ set = "", id = "" }, __, body) => {
+  route("PUT", "/api/v1/rule-drafts/{set}/{id}", "site_rules.write", ({ set = "", id = "" }, __, body) => {
     const store = drafts.get(set);
     if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
     const problems = draftProblems(set, body);
@@ -88,8 +88,8 @@ export function registerRuleRoutes(ctx: DemoContext) {
     audit("rule_draft.saved", `${set}/${id} v${next.version}`, "rule_draft");
     return json(next);
   });
-  route("GET", "/api/v1/attack", null, () => (readsRules() ? json(demoAttack) : problem(403, "permission_denied", "Access is not available")));
-  route("GET", "/api/v1/rules/coverage", null, () => !readsRules() ? problem(403, "permission_denied", "Access is not available") : json({
+  route("GET", "/api/v1/attack", null, () => (readsRules("rules.coverage.read") ? json(demoAttack) : problem(403, "permission_denied", "Access is not available")));
+  route("GET", "/api/v1/rules/coverage", null, () => !readsRules("rules.coverage.read") ? problem(403, "permission_denied", "Access is not available") : json({
     attack_version: demoAttack.version, notice: demoAttack.notice, tactics: demoAttack.tactics, unverified_sets: [],
     rules: [
       ...data.rules.map((r) => ({ rule_set_id: r.ruleSetId, rule_id: r.ruleId, title: r.message.split(" listens")[0] ?? r.ruleId, kind: "snapshot", severity: r.severity, draft: false, attack: (demoMappings[r.ruleId] ?? []).map(pairView) })),
@@ -97,16 +97,15 @@ export function registerRuleRoutes(ctx: DemoContext) {
       ...[...drafts.values()].flatMap((store) => [...store.values()]).map((d) => ({ rule_set_id: d.rule_set_id, rule_id: d.rule_id, title: d.title, kind: d.rule_set_id === "site-alarms" ? "process_event" : "snapshot", severity: d.severity, draft: true, attack: d.attack })),
     ],
   }));
-  route("DELETE", "/api/v1/rule-drafts/{set}/{id}", "rules.write", ({ set = "", id = "" }) => {
+  route("DELETE", "/api/v1/rule-drafts/{set}/{id}", "site_rules.write", ({ set = "", id = "" }) => {
     if (!drafts.get(set)?.delete(id)) return problem(404, "draft_not_found", "No such draft");
     audit("rule_draft.deleted", `${set}/${id}`, "rule_draft");
     return new Response(null, { status: 204 });
   });
-  route("POST", "/api/v1/rule-drafts/{set}/{id}/test", "rules.write", ({ set = "" }, __, body) => {
+  route("POST", "/api/v1/rule-drafts/{set}/{id}/test", "site_rules.test", ({ set = "" }, __, body) => {
     if (!drafts.has(set)) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
     if (set !== "site") return problem(422, "alarm_test_unsupported", "Alarm rules run on process starts, which the platform doesn't hold; test them on a host");
-    const agent = data.agents.find((candidate) => candidate.id === String(body.agent_id ?? ""));
-    if (!agent) return problem(404, "host_not_found", "No such host");
+    if (!agentById(String(body.agent_id ?? ""))) return problem(404, "host_not_found", "No such host");
     const rule = (body.rule ?? {}) as Record<string, unknown>;
     if (draftProblems(set, rule).length > 0) return problem(422, "invalid_rule", "The rule does not pass the agent's checks yet");
     const expression = String(rule.expression);
@@ -132,7 +131,7 @@ export function registerRuleRoutes(ctx: DemoContext) {
     out.removed = [...(before?.rules.keys() ?? [])].filter((id) => !store.has(id)).sort((a, b) => a.localeCompare(b));
     return out;
   };
-  route("GET", "/api/v1/site-rules/fleet", "rules.write", () => {
+  route("GET", "/api/v1/site-rules/fleet", "site_rules.read", () => {
     const sets = ["site", "site-alarms"].map((id) => ({ rule_set_id: id, published_version: published.get(id)?.version ?? null, current: 0, behind: 0, refused: 0, missing: 0 }));
     const hosts: { agent_id: string; hostname: string | null; site: string; site_alarms: string }[] = [];
     const stateOf = (agent: Agent, set: (typeof sets)[number]) => {
@@ -141,7 +140,7 @@ export function registerRuleRoutes(ctx: DemoContext) {
       if (entry.refused) return "refused";
       return set.published_version !== null && entry.version < set.published_version ? "behind" : "current";
     };
-    for (const agent of data.agents.filter((candidate) => candidate.status === "active" || candidate.status === "stale")) {
+    for (const agent of data.agents.filter((candidate) => visible(candidate.id) && (candidate.status === "active" || candidate.status === "stale"))) {
       const states = sets.map((set) => stateOf(agent, set));
       sets.forEach((set, index) => { set[states[index] as "current" | "behind" | "refused" | "missing"] += 1; });
       if (states.some((state) => state !== "current") && hosts.length < 200) hosts.push({ agent_id: agent.id, hostname: agent.hostname ?? null, site: states[0] ?? "missing", site_alarms: states[1] ?? "missing" });
@@ -149,12 +148,12 @@ export function registerRuleRoutes(ctx: DemoContext) {
     const line = (id: string) => `[[rule_sets]]\nid = "${id}"\ntrusted_keys = [{ issuer_key_id = "site.key", public_key = "DEMO-PUBLIC-KEY-NOT-REAL" }]\n`;
     return json({ sets, reporting: hosts.length, not_reporting: 0, hosts, hosts_truncated: false, paste: line("site") + line("site-alarms") });
   });
-  route("GET", "/api/v1/rule-drafts/{set}/changes", "rules.write", ({ set = "" }) => {
+  route("GET", "/api/v1/rule-drafts/{set}/changes", "site_rules.read", ({ set = "" }) => {
     const store = drafts.get(set);
     if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
     return json(draftChanges(set, store));
   });
-  route("POST", "/api/v1/rule-drafts/{set}/publish", "rules.upload", ({ set = "" }, __, body) => {
+  route("POST", "/api/v1/rule-drafts/{set}/publish", "site_rules.publish", ({ set = "" }, __, body) => {
     const store = drafts.get(set);
     if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
     if (store.size === 0) return problem(409, "no_rules", "Write at least one rule before publishing");
@@ -168,11 +167,11 @@ export function registerRuleRoutes(ctx: DemoContext) {
   });
 
   const assignments = createAssignmentStore(data, (setId) => audit("rules.assignment.change", setId, "rule_set"), browserPersistence("openvibes.v2.demo.rule-assignment"));
-  route("GET", "/api/v1/rule-set-assignments", null, () => (readsRules() ? json(assignments.list()) : problem(403, "permission_denied", "Access is not available")));
-  route("PUT", "/api/v1/rule-set-assignments/{set}", "rules.upload", ({ set = "" }, _, body) => send(assignments.setDefault(set, body)));
-  route("PUT", "/api/v1/rule-set-assignments/{set}/groups/{group}", "rules.upload", ({ set = "", group = "" }, _, body) => send(assignments.setGroup(set, group, body)));
-  route("DELETE", "/api/v1/rule-set-assignments/{set}/groups/{group}", "rules.upload", ({ set = "", group = "" }) => send(assignments.clearGroup(set, group)));
-  route("GET", "/api/v1/agents/{id}/rule-set-assignments", "agents.read", ({ id = "" }) => {
+  route("GET", "/api/v1/rule-set-assignments", null, () => (readsRules("rules.assignment.read") ? json(assignments.list()) : problem(403, "permission_denied", "Access is not available")));
+  route("PUT", "/api/v1/rule-set-assignments/{set}", "rules.assignment.write", ({ set = "" }, _, body) => send(assignments.setDefault(set, body)));
+  route("PUT", "/api/v1/rule-set-assignments/{set}/groups/{group}", "rules.assignment.write", ({ set = "", group = "" }, _, body) => send(assignments.setGroup(set, group, body)));
+  route("DELETE", "/api/v1/rule-set-assignments/{set}/groups/{group}", "rules.assignment.write", ({ set = "", group = "" }) => send(assignments.clearGroup(set, group)));
+  route("GET", "/api/v1/agents/{id}/rule-set-assignments", "hosts.read", ({ id = "" }) => {
     const agent = agentById(id);
     return agent ? json(assignments.host(agent)) : problem(404, "agent_not_found", "Agent not found");
   });

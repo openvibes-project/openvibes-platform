@@ -12,6 +12,9 @@ async fn migration_43_renames_permissions_dashboards_and_case_items() {
          INSERT INTO console_role_permissions VALUES ('custom', 'findings.read');
          INSERT INTO console_users (user_id, username, display_name, created_at)
               VALUES ('00000000-0000-0000-0000-000000000001', 'u', 'U', now());
+         -- held, so migration 52 keeps the analyst role
+         INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+              VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'analyst', now(), 't');
          INSERT INTO console_dashboards (dashboard_id, owner_user_id, name, layout, created_at, updated_at)
          VALUES ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-000000000001', 'Mine',
            '{\"schema\":1,\"widgets\":[
@@ -28,7 +31,8 @@ async fn migration_43_renames_permissions_dashboards_and_case_items() {
 
     let perms: Vec<String> = client
         .query(
-            "SELECT permission_id FROM console_role_permissions WHERE role_id = 'custom'",
+            "SELECT permission_id FROM console_role_permissions WHERE role_id = 'custom'
+             ORDER BY permission_id",
             &[],
         )
         .await
@@ -36,7 +40,8 @@ async fn migration_43_renames_permissions_dashboards_and_case_items() {
         .iter()
         .map(|r| r.get(0))
         .collect();
-    assert_eq!(perms, ["compliance.read"]);
+    // Migration 51 later adds the export of what a role reads.
+    assert_eq!(perms, ["compliance.export", "compliance.read"]);
     let old: i64 = client
         .query_one(
             "SELECT count(*) FROM console_permissions WHERE permission_id LIKE 'findings.%'",

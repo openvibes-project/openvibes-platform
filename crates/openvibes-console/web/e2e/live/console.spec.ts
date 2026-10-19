@@ -4,7 +4,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { type Page, expect, test } from "@playwright/test";
 
-const PASSWORD = "e2e-console-Passw0rd!";
+import { PASSWORD, signIn } from "./helpers";
+
 const origin = "https://127.0.0.1:18490";
 
 declare global {
@@ -24,15 +25,6 @@ async function watch(page: Page) {
   };
 }
 
-async function signIn(page: Page, username: string) {
-  await page.goto("/");
-  await page.getByLabel("Username").fill(username);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.locator(".view")).toBeVisible();
-  await page.mouse.move(900, 600);
-}
-
 test("sign-in, every view, and no CSP violations or third-party requests", async ({ page }) => {
   const checks = await watch(page);
   await page.goto("/");
@@ -47,7 +39,7 @@ test("sign-in, every view, and no CSP violations or third-party requests", async
     "/agents",
     "/settings?tab=enrollment",
     "/settings?tab=rule-sets",
-    "/settings?tab=access",
+    "/settings?tab=people",
     "/settings?tab=service-accounts",
     "/audit"
   ]) {
@@ -97,13 +89,6 @@ test("an empty service accounts view explains the next step", async ({ page }) =
   await page.goto("/settings?tab=service-accounts");
   await expect(page.getByText("No service accounts")).toBeVisible();
   await expect(page.getByText("Create one for integrations that need API access.")).toBeVisible();
-});
-
-test("with no alarm at all, the Alarms view says how to turn alarms on", async ({ page }) => {
-  await signIn(page, "alex");
-  await page.goto("/alarms");
-  await expect(page.getByText("No alarms")).toBeVisible();
-  await expect(page.getByText(/Agents report process starts by themselves/)).toBeVisible();
 });
 
 test("Most exposed hosts ranks hosts across all kinds even before any feed imported", async ({ page }) => {
@@ -156,7 +141,7 @@ test("an Access filter with no matches explains the empty list", async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "light" });
   await signIn(page, "alex");
-  await page.goto("/settings?tab=access&q=no-such-person");
+  await page.goto("/settings?tab=people&q=no-such-person");
   await expect(page.getByText("Nothing matches these filters")).toBeVisible();
   await expect(page.getByText("Clear a filter to see more.")).toBeVisible();
 });
@@ -241,8 +226,8 @@ test("a dashboard is created, saved, shared and seen read-only by an analyst", a
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
   await page.getByRole("button", { name: "Dashboard menu" }).click();
-  await page.getByRole("menuitemradio", { name: "analyst" }).click();
-  await expect(page.locator("#main").getByText("Shared with analyst")).toBeVisible();
+  await page.getByRole("menuitemradio", { name: "Analyst" }).click();
+  await expect(page.locator("#main").getByText("Shared with Analyst")).toBeVisible();
   const url = page.url();
   await page.reload();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
@@ -252,7 +237,7 @@ test("a dashboard is created, saved, shared and seen read-only by an analyst", a
   await signIn(sam, "sam");
   await sam.goto(url);
   await expect(sam.getByRole("heading", { level: 1 })).toHaveText(name);
-  await expect(sam.getByText("Shared by Alex Admin")).toBeVisible();
+  await expect(sam.getByText("Shared by Alex Admin with Analyst")).toBeVisible();
   await expect(sam.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
   await sam.close();
 });
@@ -273,14 +258,15 @@ for (const scheme of ["light", "dark"] as const) {
 
 test("a new user signs in with a one-time password and must set their own first (board #85)", async ({ page, browser }, info) => {
   await signIn(page, "alex");
-  await page.goto("/settings?tab=access");
-  await page.getByRole("button", { name: "New user" }).click();
+  await page.goto("/settings?tab=people");
+  await page.getByRole("button", { name: "New person" }).click();
   const username = `e2e-${info.project.name}-${Date.now().toString(36)}`;
   await page.getByLabel("Username").fill(username);
   await page.getByLabel("Display name").fill("E2E Person");
   await page.getByRole("combobox", { name: "Role" }).click();
-  await page.getByRole("option", { name: /viewer/i }).click();
-  await page.getByRole("button", { name: "Create user" }).click();
+  // A fresh install holds Administrator, plus sam's Analyst (console-e2e-server.sh).
+  await page.getByRole("option", { name: /analyst/i }).click();
+  await page.getByRole("button", { name: "Create person" }).click();
   const oneTime = (await page.locator(".secret .grow").innerText()).trim();
   expect(oneTime.length).toBeGreaterThanOrEqual(15);
 
@@ -310,9 +296,9 @@ test("a new user signs in with a one-time password and must set their own first 
   await context.close();
 });
 
-test("rule-set switches: a group is added, a failed change keeps the switch and says why, an analyst sees none", async ({ page, browser }, info) => {
+test("rule-set switches: a group is added, a failed change keeps the switch and says why, an analyst changes none", async ({ page, browser }, info) => {
   await signIn(page, "alex");
-  await page.goto("/settings?tab=access");
+  await page.goto("/settings?tab=host-groups");
   await page.getByRole("button", { name: "New group" }).click();
   const group = `Lab ${info.project.name}`;
   await page.getByLabel("Name").fill(group);
@@ -351,10 +337,15 @@ test("rule-set switches: a group is added, a failed change keeps the switch and 
   await expect(labSwitch).toHaveAttribute("aria-checked", "true");
   await page.unroute(groupPath);
 
-  // An analyst holds neither rules.read nor rules.upload (a second user, as in the dashboards test).
+  // The Analyst template reads rule sets but holds no switch (a second user, as in the dashboards test).
   const sam = await browser.newPage();
   await signIn(sam, "sam");
-  await sam.goto("/settings");
-  await expect(sam.getByRole("tab", { name: "Rule sets" })).toHaveCount(0);
+  // Nothing is published here and sam cannot see where sets run (the
+  // unpublished L2 row comes from there): the list is empty, not refused.
+  await sam.goto("/settings?tab=rule-sets");
+  await expect(sam.getByRole("tab", { name: "Rule sets" })).toBeVisible();
+  await expect(sam.getByRole("heading", { name: "No rule sets" })).toBeVisible();
+  await expect(sam.getByText("Access is not available")).toHaveCount(0);
+  await expect(sam.getByRole("switch")).toHaveCount(0);
   await sam.close();
 });

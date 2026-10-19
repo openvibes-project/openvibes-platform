@@ -1,7 +1,6 @@
-//! Draft rules for the site's own rule sets over `/api/v1`. Listing, checking,
-//! saving and deleting all need `rules.write`: `rules.read` is Admin-only, and
-//! whoever edits drafts must see them.
-//! Publishing is separate (`rules.upload`) and later. A draft never reaches
+//! Draft rules for the site's own rule sets over `/api/v1`. Listing needs
+//! `site_rules.read`; checking, saving and deleting `site_rules.write`.
+//! Publishing is separate (`site_rules.publish`). A draft never reaches
 //! an agent: only a signed, published set does.
 //!
 //! Every draft is checked with the agent's own loader code before it is
@@ -80,7 +79,7 @@ pub(crate) async fn list_drafts(
     Path(rule_set_id): Path<String>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::RulesWrite, false).await {
+        match authenticated_permission(&state, &headers, Permission::SiteRulesRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -114,7 +113,7 @@ pub(crate) async fn check_draft(
     payload: Result<Json<RuleDraftInput>, JsonRejection>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::RulesWrite, true).await {
+        match authenticated_permission(&state, &headers, Permission::SiteRulesWrite, true).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -167,7 +166,7 @@ pub(crate) async fn save_draft(
     payload: Result<Json<RuleDraftInput>, JsonRejection>,
 ) -> Response {
     let (scope, actor) =
-        match authenticated_permission(&state, &headers, Permission::RulesWrite, true).await {
+        match authenticated_permission(&state, &headers, Permission::SiteRulesWrite, true).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -266,7 +265,7 @@ pub(crate) async fn delete_draft(
     Path((rule_set_id, rule_id)): Path<(String, String)>,
 ) -> Response {
     let (scope, actor) =
-        match authenticated_permission(&state, &headers, Permission::RulesWrite, true).await {
+        match authenticated_permission(&state, &headers, Permission::SiteRulesWrite, true).await {
             Ok(context) => context,
             Err(response) => return response,
         };

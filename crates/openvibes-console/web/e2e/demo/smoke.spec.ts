@@ -31,7 +31,7 @@ test("a finding opens in the inspector, links stack, and Esc goes back", async (
 test("a finding's hosts show their assignee and accepted-risk expiry", async ({ page }) => {
   await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
   const hosts = page.locator(".inspector tbody tr");
-  await expect(hosts.filter({ hasText: "cache-04.prod.example.test" })).toContainText("analyst");
+  await expect(hosts.filter({ hasText: "cache-04.prod.example.test" })).toContainText("sam");
   await expect(hosts.filter({ hasText: "backup-02.lab.example.test" })).toContainText(/until /);
 });
 
@@ -92,8 +92,13 @@ for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/comp
 
 test("a service account is created and issues a token shown once", async ({ page }) => {
   await page.goto("/settings?tab=service-accounts");
+  // Roles are shown by name, never by id.
+  await expect(page.getByRole("row", { name: /CI rule publisher/ })).toContainText("Operator (Prod)");
   await page.getByRole("button", { name: "New account" }).click();
   await page.getByLabel("Name").fill("Backup job");
+  await expect(page.getByRole("button", { name: "Create account" })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Role" }).click();
+  await page.getByRole("option", { name: "Viewer" }).click();
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.locator(".panel-header__title")).toContainText("Backup job");
   await page.getByLabel("Token label").fill("nightly");
@@ -105,6 +110,9 @@ test("revoking a service token asks first (board #85)", async ({ page }) => {
   await page.goto("/settings?tab=service-accounts");
   await page.getByRole("button", { name: "New account" }).click();
   await page.getByLabel("Name").fill("Report job");
+  await expect(page.getByRole("button", { name: "Create account" })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Role" }).click();
+  await page.getByRole("option", { name: "Viewer" }).click();
   await page.getByRole("button", { name: "Create account" }).click();
   await page.getByLabel("Token label").fill("weekly");
   await page.getByRole("button", { name: "Issue" }).click();
@@ -124,8 +132,8 @@ test("audit retention changes from its panel", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Kept 400 days/ })).toBeVisible();
 });
 
-test("an asset group is created from the access view", async ({ page }) => {
-  await page.goto("/settings?tab=access");
+test("a host group is created from the Host groups tab", async ({ page }) => {
+  await page.goto("/settings?tab=host-groups");
   await page.getByRole("button", { name: "New group" }).click();
   await page.getByLabel("Name").fill("Web servers");
   await page.getByLabel("Selectors (one key=value per line)").fill("role=web");
@@ -152,11 +160,14 @@ test("a finding mitigated on every open host leaves the default Findings list (b
 });
 
 test("an administrator creates a user and sees the one-time password once (board #85)", async ({ page }) => {
-  await page.goto("/settings?tab=access");
-  await page.getByRole("button", { name: "New user" }).click();
+  await page.goto("/settings?tab=people");
+  await page.getByRole("button", { name: "New person" }).click();
   await page.getByLabel("Username").fill("jdoe");
   await page.getByLabel("Display name").fill("Jane Doe");
-  await page.getByRole("button", { name: "Create user" }).click();
+  await expect(page.getByRole("button", { name: "Create person" })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Role" }).click();
+  await page.getByRole("option", { name: "Viewer" }).click();
+  await page.getByRole("button", { name: "Create person" }).click();
   await expect(page.locator(".secret")).toContainText("demo1-pass2-word3-onlyx");
   await expect(page.getByText("It is shown only once")).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();

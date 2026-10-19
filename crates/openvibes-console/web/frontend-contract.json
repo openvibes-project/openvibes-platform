@@ -17,7 +17,9 @@
     "/settings",
     "/audit",
     "/about",
-    "/dashboards/{dashboard_id}"
+    "/dashboards/{dashboard_id}",
+    "/settings/roles/{role_id}",
+    "/settings/people/{user_id}"
   ],
   "publicAssets": [
     {

@@ -78,12 +78,12 @@ function Publish({ set }: { set: (typeof SITE_SETS)[number] }) {
           {pending === 0 ? <p className="subtle">{data.unchanged === 0 ? "Write a rule, then publish it here." : "The drafts match what is published."}</p> : (
             <ul className="plain">{list("Added", data.added)}{list("Changed", data.changed)}{list("Removed", data.removed)}</ul>
           )}
-          {can("rules.upload", true) ? (
+          {can("site_rules.publish") ? (
             <form className="row" onSubmit={(event) => { event.preventDefault(); publish(); }}>
               <label className="field grow">Your password, to sign<input className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={pending === 0} /></label>
               <button className="button button--primary" type="submit" disabled={busy || pending === 0 || password === ""}>Publish</button>
             </form>
-          ) : <p className="subtle">Publishing needs the rules.upload permission.</p>}
+          ) : <p className="subtle">Publishing needs the site_rules.publish permission.</p>}
           {error && <p className="confirm__error" role="alert">{error}</p>}
         </>
       )}

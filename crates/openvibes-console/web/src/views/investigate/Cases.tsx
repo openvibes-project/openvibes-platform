@@ -32,7 +32,7 @@ export function Cases() {
   return (
     <div className="view">
       <ViewHeader title="Cases" count={rows.length} total={loaded.length} refresh="/api/v1/case" placeholder="Filter by title, C-104 or assignee…"
-        actions={can("cases.manage") && (
+        actions={can("cases.write") && (
           <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "case", id: "new" }, true)}>
             <Icon name="plus" size={15} /> New case
           </button>
@@ -50,7 +50,7 @@ export function Cases() {
         <Empty icon="cases" title={filtered ? "Nothing matches these filters" : "No open cases"}>
           {filtered
             ? "Closed cases are hidden unless Include closed is on; clear a filter to see more."
-            : `A case gathers what belongs to one investigation: hosts, alarms, vulnerabilities and compliance findings, with notes and a timeline.${can("cases.manage") ? " Start one with New case, or use Add to case on an alarm, compliance finding or host." : ""}`}
+            : `A case gathers what belongs to one investigation: hosts, alarms, vulnerabilities and compliance findings, with notes and a timeline.${can("cases.write") ? " Start one with New case, or use Add to case on an alarm, compliance finding or host." : ""}`}
         </Empty>
       ) : (
         <DataTable label="Cases" rows={rows} rowKey={(c) => c.case_id}

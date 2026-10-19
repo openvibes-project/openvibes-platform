@@ -90,11 +90,11 @@ All answers carry `Cache-Control: no-store`; errors are
 
 | Method and path | Permission | Body | 200 response |
 |---|---|---|---|
-| `GET /api/v1/rule-set-assignments` | `rules.read` or `rules.upload` (global) | none | `RuleSetAssignmentsView` |
-| `PUT /api/v1/rule-set-assignments/{rule_set_id}` | `rules.upload` (global), CSRF | `{"default_enabled": bool}` | `RuleSetAssignmentView` |
-| `PUT /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.upload` (global), CSRF | `{"enabled": bool}` | `RuleSetAssignmentView` |
-| `DELETE /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.upload` (global), CSRF | none | `RuleSetAssignmentView` (idempotent) |
-| `GET /api/v1/agents/{agent_id}/rule-set-assignments` | `agents.read` (scoped) | none | `HostRuleSetAssignmentsView` |
+| `GET /api/v1/rule-set-assignments` | `rules.assignment.read` (global) | none | `RuleSetAssignmentsView` |
+| `PUT /api/v1/rule-set-assignments/{rule_set_id}` | `rules.assignment.write` (global), CSRF | `{"default_enabled": bool}` | `RuleSetAssignmentView` |
+| `PUT /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.assignment.write` (global), CSRF | `{"enabled": bool}` | `RuleSetAssignmentView` |
+| `DELETE /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.assignment.write` (global), CSRF | none | `RuleSetAssignmentView` (idempotent) |
+| `GET /api/v1/agents/{agent_id}/rule-set-assignments` | `hosts.read` (scoped) | none | `HostRuleSetAssignmentsView` |
 
 Shapes: `RuleSetAssignmentsView { items: [RuleSetAssignmentView],
 asset_groups: [{asset_group_id, name, selectors: ["key=value"], hosts}] }`;
@@ -118,12 +118,12 @@ outside their scope (user, 2026-10-15). Errors: 400 `invalid_request` (bad body)
 403 `permission_denied`, 404 `rule_set_not_assignable`,
 `asset_group_not_found`, `agent_not_found`, 503.
 
-Reading needs `rules.read` (admin) or `rules.upload` (operator, admin),
-changing `rules.upload`, all global; an analyst or viewer holds neither and
-gets 403. The same either-permission check (`rules_reader`) guards `GET
-/api/v1/rule-sets`, its bundle history, `GET /api/v1/rules/coverage` and
-`GET /api/v1/attack` (user, 2026-10-15). The list carries every asset group, so an operator (without
-`rules.read` or `rbac.read`) can add an override; operators therefore see
+Reading needs `rules.assignment.read` (operator, admin), changing
+`rules.assignment.write`, all global; an analyst or viewer holds neither and
+gets 403. The same check (`rules_reader`) guards `GET /api/v1/rule-sets` and
+its bundle history with `rules.read`, and `GET /api/v1/rules/coverage` and
+`GET /api/v1/attack` with `rules.coverage.read` (schema 51). The list carries every asset group, so an operator (without
+`access.read`) can add an override; operators therefore see
 every group's name. Writes are absolute values (no `If-Match`):
 a repeated write changes nothing and is not audited. The audit row's actor
 is the signed-in user's id. The host detail's `rule_sets[].state` (on `GET
@@ -155,11 +155,11 @@ assignment` covers the heartbeat path.
 ## Console screens
 
 Approved 2026-10-15 (`../specs/rule-set-assignment-ui/approved.md`).
-Settings › Rule sets shows the tab to holders of `rules.read` or
-`rules.upload` (global). The list merges published sets with the assignable
+Settings › Rule sets shows the tab to holders of `rules.read`
+(global). The list merges published sets with the assignable
 ones, so L2 is listed before it is published ("—", **Not published**), and
 its **Runs on** column reads the default (Linux, or Off) and how many groups
-differ (`panels/rules/ruleAssignment.ts`). Operators (`rules.upload` only) see
+differ (`panels/rules/ruleAssignment.ts`). Operators see
 the same list and panels as admins, and the Coverage menu entry (user,
 2026-10-15). A set's panel adds **Where it runs** (`panels/rules/WhereItRuns.tsx`):
 the default switch, "Runs on N Linux hosts · off on M" once published, the
@@ -171,7 +171,7 @@ shows its error in a toast and leaves the switch as it was (a failed Add
 keeps the row and its choice), and the list and host views are refetched
 either way. Until that refetch lands the controls are `aria-disabled`, not
 disabled, so focus stays on the control used, and presses are not sent
-again; after Add or ×, focus moves to "+ Add group". Without `rules.upload` the switches
+again; after Add or ×, focus moves to "+ Add group". Without `rules.assignment.write` the switches
 are disabled and Add and × are hidden. The Source row's check count comes
 from `GET /api/v1/rules/coverage`.
 Toasts: "<set> is now on/off by default", "<set> is now on/off for
@@ -196,4 +196,4 @@ than `ok` adds the warning **Hardening facts unavailable** with its cause:
 invalid hardening facts" for `invalid_data`. In the Rule sets section, a set
 the agent reports `not_assigned` shows **Not assigned** and "off for
 <group>", or "off by default" when the default switched it off. Operators
-with `rules.read` or `rules.upload` see the "behind" badge there.
+with `rules.read` see the "behind" badge there.

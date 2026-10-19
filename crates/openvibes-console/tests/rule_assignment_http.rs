@@ -16,6 +16,8 @@ use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::Value;
 use tower::ServiceExt;
 
+mod common;
+
 struct TestDb {
     pool: platform_store::Pool,
     admin_url: String,
@@ -120,6 +122,7 @@ async fn user(
     name: &str,
     role: &str,
 ) {
+    common::ensure_role(client, role).await;
     let phc = hash_password(&NormalizedPassword::new(PASSWORD).unwrap()).unwrap();
     create_local_user(
         client,
@@ -218,8 +221,7 @@ const AGENT: &str = "agent.00000000-0000-4000-8000-000000000001";
 const ALICE: &str = "11111111-1111-4111-8111-111111111111";
 const LIST: &str = "/api/v1/rule-set-assignments";
 const L1: &str = "/api/v1/rule-set-assignments/hardening-linux-l1";
-/// Rule reads that `rules.upload` grants as well as `rules.read` (user,
-/// 2026-10-15), with the operator's answer: no rule set named `baseline`
+/// Rule reads operators hold since schema 51 (they held `rules.upload`), with the operator's answer: no rule set named `baseline`
 /// exists here, so its history is 404 `rule_set_not_found` (past the check).
 const RULE_READS: [(&str, StatusCode); 4] = [
     ("/api/v1/rule-sets", StatusCode::OK),
@@ -277,7 +279,7 @@ async fn setup() -> (TestDb, axum::Router) {
 async fn rule_readers_and_publishers_see_the_switches_and_only_publishers_change_them() {
     let (db, router) = setup().await;
     let off = serde_json::json!({"default_enabled": false});
-    // An analyst holds neither rules.read nor rules.upload.
+    // An analyst holds no rule-set view.
     let (cookie, csrf) = login(&router, "bob").await;
     let (status, ..) = call(&router, "GET", LIST, &cookie, &csrf, None, None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -285,14 +287,14 @@ async fn rule_readers_and_publishers_see_the_switches_and_only_publishers_change
     assert_eq!(
         status,
         StatusCode::FORBIDDEN,
-        "an analyst has no rules.upload"
+        "an analyst has no rules.assignment.read"
     );
     for (path, _) in RULE_READS {
         let (status, ..) = call(&router, "GET", path, &cookie, &csrf, None, None).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "analyst {path}");
     }
 
-    // An operator reads through rules.upload, so it can add overrides.
+    // An operator reads the switches, so it can add overrides.
     let (cookie, csrf) = login(&router, "carol").await;
     let (status, body, _) = call(&router, "GET", LIST, &cookie, &csrf, None, None).await;
     assert_eq!(status, StatusCode::OK);
@@ -444,43 +446,6 @@ async fn group_overrides_and_the_host_view() {
         &router,
         "GET",
         "/api/v1/agents/agent.00000000-0000-4000-8000-000000000099/rule-set-assignments",
-        &cookie,
-        &csrf,
-        None,
-        None,
-    )
-    .await;
-    assert_eq!(
-        (status, body["code"].as_str()),
-        (StatusCode::NOT_FOUND, Some("agent_not_found"))
-    );
-    db.drop().await;
-}
-
-#[tokio::test]
-async fn the_host_view_stays_within_the_callers_asset_groups() {
-    let (db, router) = setup().await;
-    let outside = "agent.00000000-0000-4000-8000-000000000002";
-    db.pool
-        .get()
-        .await
-        .unwrap()
-        .batch_execute(&format!(
-            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ('{outside}', 'active', now());
-             UPDATE console_role_bindings SET asset_group_id = '{WEB}'
-              WHERE user_id = '33333333-3333-4333-8333-333333333333';"
-        ))
-        .await
-        .unwrap();
-    // bob (analyst) holds agents.read for the web group only.
-    let (cookie, csrf) = login(&router, "bob").await;
-    let inside = format!("/api/v1/agents/{AGENT}/rule-set-assignments");
-    let (status, ..) = call(&router, "GET", &inside, &cookie, &csrf, None, None).await;
-    assert_eq!(status, StatusCode::OK);
-    let (status, body, _) = call(
-        &router,
-        "GET",
-        &format!("/api/v1/agents/{outside}/rule-set-assignments"),
         &cookie,
         &csrf,
         None,

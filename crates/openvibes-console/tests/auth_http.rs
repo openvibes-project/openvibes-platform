@@ -13,8 +13,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use ed25519_dalek::{Signer, SigningKey};
 use openvibes_console::{
-    BuiltInRole, NormalizedPassword, RoleBinding, TrustedPeer, authenticated_router, hash_password,
-    resolve_capabilities,
+    NormalizedPassword, Permission, TrustedPeer, authenticated_router, hash_password,
 };
 use openvibes_core::{
     Confidence, Identifier, PayloadEncoding, ResourceLimits, Rule, RuleSet, SchemaVersion,
@@ -28,6 +27,8 @@ use platform_store::{
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tower::ServiceExt;
+
+mod common;
 
 fn signed_rule_envelope(version: u64) -> (Vec<u8>, [u8; 32]) {
     const DAY_MS: i64 = 86_400_000;
@@ -221,7 +222,7 @@ async fn api_json_idempotent(
 }
 
 #[tokio::test]
-async fn database_builtin_permissions_match_the_rust_role_table() {
+async fn a_fresh_database_holds_the_administrator_with_every_catalogue_permission() {
     if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
         eprintln!("skipping PostgreSQL role parity check: OPENVIBES_TEST_DATABASE_URL is unset");
         return;
@@ -243,26 +244,44 @@ async fn database_builtin_permissions_match_the_rust_role_table() {
         .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)))
         .collect::<BTreeSet<_>>();
 
-    let mut expected = BTreeSet::new();
-    for (role_id, role) in [
-        ("viewer", BuiltInRole::Viewer),
-        ("analyst", BuiltInRole::Analyst),
-        ("operator", BuiltInRole::Operator),
-        ("admin", BuiltInRole::Admin),
-    ] {
-        for capability in resolve_capabilities(&[RoleBinding::global(role)]) {
-            let permission = serde_json::to_value(capability.permission)
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .to_owned();
-            expected.insert((role_id.to_owned(), permission));
-        }
-    }
+    // Since schema 52 a fresh install has only the Administrator.
+    let expected = Permission::ALL
+        .iter()
+        .map(|permission| ("admin".to_owned(), permission.id().to_owned()))
+        .collect::<BTreeSet<_>>();
+
+    // The catalogue's scope is the database's scope_class.
+    let catalogue: Vec<serde_json::Value> =
+        serde_json::from_str(&openvibes_console::catalogue_json()).unwrap();
+    let scopes = client
+        .query(
+            "SELECT permission_id, scope_class FROM console_permissions",
+            &[],
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)))
+        .collect::<BTreeSet<_>>();
+    let expected_scopes = catalogue
+        .iter()
+        .map(|p| {
+            let class = if p["scope"] == "host" {
+                "agent"
+            } else {
+                "global"
+            };
+            (p["id"].as_str().unwrap().to_owned(), class.to_owned())
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        scopes, expected_scopes,
+        "PostgreSQL and Rust permission scopes diverged"
+    );
 
     assert_eq!(
         actual, expected,
-        "PostgreSQL and Rust built-in roles diverged"
+        "a fresh Administrator misses a catalogue permission"
     );
     drop(client);
     db.drop().await;
@@ -355,6 +374,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     )
     .await
     .unwrap();
+    common::ensure_role(&client, "viewer").await;
     drop(client);
 
     let router = authenticated_router(db.pool.clone(), "https://console.example");
@@ -420,7 +440,8 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             .unwrap()
             .iter()
             .any(|capability| {
-                capability["permission"] == "rbac.manage" && capability["scope"]["kind"] == "global"
+                capability["permission"] == "access.grant"
+                    && capability["scope"]["kind"] == "global"
             })
     );
     let create_group = router
@@ -455,49 +476,49 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let updated: Value =
         serde_json::from_slice(&to_bytes(update_group.into_body(), 8192).await.unwrap()).unwrap();
     assert_eq!(updated["selectors"].as_array().unwrap().len(), 2);
-    let access = router
+    let people = router
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/access-control")
+                .uri("/api/v1/users")
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(access.status(), StatusCode::OK);
-    let access: Value =
-        serde_json::from_slice(&to_bytes(access.into_body(), 16_384).await.unwrap()).unwrap();
+    assert_eq!(people.status(), StatusCode::OK);
+    let people: Value =
+        serde_json::from_slice(&to_bytes(people.into_body(), 16_384).await.unwrap()).unwrap();
     assert!(
-        access["roles"]
+        people[0]["roles"]
             .as_array()
             .is_some_and(|roles| !roles.is_empty())
     );
-    assert!(
-        access["bindings"]
-            .as_array()
-            .is_some_and(|bindings| !bindings.is_empty())
-    );
-    assert!(access.get("credentials").is_none());
-    let user_id = access["users"][0]["user_id"].as_str().unwrap();
-    let binding_response = api_json(
+    assert!(people[0].get("credentials").is_none());
+    // Since schema 52 the group is the role's reach, not the binding's scope.
+    let prod_viewer = common::create_role(
+        &mut db.pool.get().await.unwrap(),
+        "Prod viewer",
+        &["hosts.read"],
+        platform_store::console_roles::Reach::Groups(vec![group_id.to_owned()]),
+    )
+    .await;
+    let holder = api_json(
         &router,
         "POST",
-        "/api/v1/access-control/bindings",
+        "/api/v1/users",
         &session_cookie,
         session["csrf_token"].as_str().unwrap(),
         &format!(
-            "{{\"user_id\":\"{user_id}\",\"role_id\":\"viewer\",\"asset_group_id\":\"{group_id}\"}}"
+            "{{\"username\":\"bob\",\"display_name\":\"Bob\",\"role_ids\":[\"{prod_viewer}\"]}}"
         ),
     )
     .await;
-    assert_eq!(
-        binding_response.status(),
-        StatusCode::CREATED,
-        "{}",
-        String::from_utf8_lossy(&to_bytes(binding_response.into_body(), 4096).await.unwrap())
-    );
+    assert_eq!(holder.status(), StatusCode::CREATED);
+    let holder: Value =
+        serde_json::from_slice(&to_bytes(holder.into_body(), 4096).await.unwrap()).unwrap();
+    let bob_id = holder["user_id"].as_str().unwrap().to_owned();
     let agent_id = "agent.00000000-0000-4000-8000-000000000101";
     let proposal_a = r#"{"tags":[{"key":"env","value":"prod"},{"key":"region","value":"north"}]}"#;
     let preview_a = api_json(
@@ -513,7 +534,10 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let preview_a: Value =
         serde_json::from_slice(&to_bytes(preview_a.into_body(), 16_384).await.unwrap()).unwrap();
     assert_eq!(preview_a["gained_groups"][0]["name"], "Production Fleet");
-    assert_eq!(preview_a["gained_bindings"][0]["role_id"], "viewer");
+    assert_eq!(
+        preview_a["gained_bindings"][0]["role_id"],
+        prod_viewer.as_str()
+    );
     let proposal_b = r#"{"tags":[{"key":"env","value":"test"}]}"#;
     let preview_b = api_json(
         &router,
@@ -663,7 +687,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         "/api/v1/service-accounts",
         &session_cookie,
         session["csrf_token"].as_str().unwrap(),
-        r#"{"name":"http-read-integration","role_id":"viewer"}"#,
+        r#"{"name":"http-read-integration","role_ids":["viewer"]}"#,
     )
     .await;
     assert_eq!(service_account.status(), StatusCode::CREATED);
@@ -927,75 +951,25 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let token_events: i64=service_audit.query_one("SELECT count(*) FROM audit_log WHERE target_id IN ($1,$2) AND action IN ('service_token.created','service_token.revoked')",&[&service_token_id,&second_service_token_id]).await.unwrap().get(0);
     assert_eq!(account_events, 2);
     assert_eq!(token_events, 3);
-    let admin_binding_id = access["bindings"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|binding| binding["role_id"] == "admin" && binding["asset_group_id"].is_null())
-        .unwrap()["binding_id"]
-        .as_str()
-        .unwrap();
-    let last_admin_revoke = router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!(
-                    "/api/v1/access-control/bindings/{admin_binding_id}"
-                ))
-                .header(header::COOKIE, session_cookie.clone())
-                .header(header::ORIGIN, "https://console.example")
-                .header("sec-fetch-site", "same-origin")
-                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(last_admin_revoke.status(), StatusCode::CONFLICT);
-    let new_binding = router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/access-control/bindings")
-                .header(header::COOKIE, session_cookie.clone())
-                .header(header::ORIGIN, "https://console.example")
-                .header("sec-fetch-site", "same-origin")
-                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(format!(
-                    r#"{{"user_id":"{}","role_id":"viewer"}}"#,
-                    session["principal"]["id"].as_str().unwrap()
-                )))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(new_binding.status(), StatusCode::CREATED);
-    let new_binding: Value =
-        serde_json::from_slice(&to_bytes(new_binding.into_body(), 4096).await.unwrap()).unwrap();
-    assert_eq!(new_binding["role_id"], "viewer");
-    assert_eq!(new_binding["asset_group_id"], Value::Null);
-    let revoke_binding = router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!(
-                    "/api/v1/access-control/bindings/{}",
-                    new_binding["binding_id"].as_str().unwrap()
-                ))
-                .header(header::COOKIE, session_cookie.clone())
-                .header(header::ORIGIN, "https://console.example")
-                .header("sec-fetch-site", "same-origin")
-                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(revoke_binding.status(), StatusCode::NO_CONTENT);
+    // The last Administrator and the share are covered in people_http.rs.
+    for method in ["PUT", "DELETE"] {
+        let changed = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(format!("/api/v1/users/{bob_id}/roles/viewer"))
+                    .header(header::COOKIE, session_cookie.clone())
+                    .header(header::ORIGIN, "https://console.example")
+                    .header("sec-fetch-site", "same-origin")
+                    .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(changed.status(), StatusCode::NO_CONTENT, "{method}");
+    }
     let binding_events = db
         .pool
         .get()
@@ -1008,7 +982,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .await
         .unwrap()
         .get::<_, i64>(0);
-    assert_eq!(binding_events, 3);
+    assert_eq!(binding_events, 2);
     let unauthenticated_summary = router
         .clone()
         .oneshot(
@@ -1877,6 +1851,169 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .unwrap()
         .get(0);
     assert_eq!(throttles, 2);
+    drop(client);
+    db.drop().await;
+}
+
+/// Signs `username` in and returns (session cookie, CSRF token).
+async fn sign_in(router: &axum::Router, username: &str, password: &str) -> (String, String) {
+    let (preauth, browser, csrf) = new_preauth(router).await;
+    let login = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/v1/login")
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", csrf)
+                .header(header::COOKIE, format!("{preauth}; {browser}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .extension(ConnectInfo(TrustedPeer::new(
+                    "127.0.0.1:4242".parse::<SocketAddr>().unwrap(),
+                )))
+                .body(Body::from(format!(
+                    "{{\"username\":\"{username}\",\"password\":\"{password}\"}}"
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(login.status(), StatusCode::OK);
+    let cookie = cookie_pair(&login, "__Host-openvibes-session=");
+    let session = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/session")
+                .header(header::COOKIE, cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let session: Value =
+        serde_json::from_slice(&to_bytes(session.into_body(), 16_384).await.unwrap()).unwrap();
+    (cookie, session["csrf_token"].as_str().unwrap().to_owned())
+}
+
+/// Capabilities are read from the database on every request (spec §6): a
+/// role edit reaches an issued token at once.
+#[tokio::test]
+async fn service_token_follows_role_edits() {
+    use platform_store::console_roles::{self, Reach, RoleInput, RoleWrite};
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let password = "violet-satellite-mountain-otter-2026";
+    let phc = hash_password(&NormalizedPassword::new(password).unwrap()).unwrap();
+    create_local_user(
+        &mut client,
+        &NewLocalUser {
+            user_id: "11111111-1111-4111-8111-111111111111",
+            binding_id: "22222222-2222-4222-8222-222222222222",
+            username: "alice",
+            display_name: "Alice",
+            password_phc: phc.as_str(),
+            role_id: "admin",
+            actor_id: "test",
+            actor_kind: "local_admin",
+            password_must_change: false,
+            now: Utc::now(),
+        },
+    )
+    .await
+    .unwrap();
+    let role = common::create_role(&mut client, "Host reader", &["hosts.read"], Reach::All).await;
+    let router = authenticated_router(db.pool.clone(), "https://console.example");
+    let (cookie, csrf) = sign_in(&router, "alice", password).await;
+    let account = api_json(
+        &router,
+        "POST",
+        "/api/v1/service-accounts",
+        &cookie,
+        &csrf,
+        &format!(r#"{{"name":"reader","role_ids":["{role}"]}}"#),
+    )
+    .await;
+    assert_eq!(account.status(), StatusCode::CREATED);
+    let account: Value =
+        serde_json::from_slice(&to_bytes(account.into_body(), 8192).await.unwrap()).unwrap();
+    let token = api_json_idempotent(
+        &router,
+        &format!(
+            "/api/v1/service-accounts/{}/tokens",
+            account["service_account_id"].as_str().unwrap()
+        ),
+        &cookie,
+        &csrf,
+        "service-token-follows-role-edits-01",
+        r#"{"label":"reader","expires_in_hours":24}"#,
+    )
+    .await;
+    assert_eq!(token.status(), StatusCode::CREATED);
+    let token: Value =
+        serde_json::from_slice(&to_bytes(token.into_body(), 8192).await.unwrap()).unwrap();
+    let secret = token["token"].as_str().unwrap().to_owned();
+    let agents = || async {
+        router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/agents")
+                    .header(header::AUTHORIZATION, format!("Bearer {secret}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    };
+    assert_eq!(agents().await, StatusCode::OK);
+    let unknown = api_json(
+        &router,
+        "POST",
+        "/api/v1/service-accounts",
+        &cookie,
+        &csrf,
+        r#"{"name":"other","role_ids":["no_such"]}"#,
+    )
+    .await;
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+    let unknown: Value =
+        serde_json::from_slice(&to_bytes(unknown.into_body(), 4096).await.unwrap()).unwrap();
+    assert_eq!(unknown["code"], "unknown_role");
+
+    let edit = |version: i32, permissions: Vec<String>| {
+        let role = role.clone();
+        let pool = db.pool.clone();
+        async move {
+            let input = RoleInput {
+                name: "Host reader",
+                description: "",
+                permissions: &permissions,
+                reach: &Reach::All,
+            };
+            let written = console_roles::update_role(
+                &mut pool.get().await.unwrap(),
+                &role,
+                version,
+                &input,
+                "test",
+                Utc::now(),
+            )
+            .await
+            .unwrap();
+            assert!(matches!(written, RoleWrite::Saved(_)), "{written:?}");
+        }
+    };
+    edit(1, vec!["audit.read".to_owned()]).await;
+    assert_eq!(agents().await, StatusCode::FORBIDDEN);
+    edit(2, vec!["hosts.read".to_owned()]).await;
+    assert_eq!(agents().await, StatusCode::OK);
     drop(client);
     db.drop().await;
 }

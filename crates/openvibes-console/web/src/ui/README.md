@@ -11,7 +11,7 @@ Shared building blocks used by views, panels and dashboards. They know nothing a
 | `bits.tsx` | Small pieces: badges, object links, loading, empty and error states. |
 | `panel.tsx` | Panel layout pieces: sections, tabs, inline confirm. |
 | `Select.tsx` | The console's own dropdown (never the browser's native one). |
-| `select.ts` | Logic for Select.tsx: grouping, filtering, stepping, placement. |
+| `select.ts` | Logic for Select.tsx and Menu.tsx: grouping, filtering, stepping, placement, whether the button is on screen. |
 | `Segmented.tsx` | A button row for two to four choices. |
 | `segmented.ts` | Logic for Segmented.tsx: arrow-key stepping and extra option. |
 | `Menu.tsx` | A button that opens a short list of actions. |
@@ -23,6 +23,7 @@ Shared building blocks used by views, panels and dashboards. They know nothing a
 | `trend.tsx` | A small bar chart of hosts reporting per day. |
 | `toast.tsx` | Short messages that appear and fade. |
 | `format.ts` | Formatting for times, counts and plurals. |
+| `auditActions.ts` | Audit action ids as short sentences ("Gave a role"), with a readable fallback. |
 | `csv.ts` | Safe CSV cells and the download for the CSV exports. |
 
 More: [docs/components/console-web.md](../../../../../docs/components/console-web.md)

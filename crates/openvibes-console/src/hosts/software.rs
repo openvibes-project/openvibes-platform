@@ -1,6 +1,6 @@
 //! Installed software over `/api/v1` (assets v1): one host's packages,
 //! the fleet's software, and one package's versions and hosts. Reads need
-//! `agents.read` and are scoped to the caller's agents: counts include only
+//! `hosts.read` and are scoped to the caller's agents: counts include only
 //! visible hosts, and a host or package no visible host has is a 404.
 
 use axum::{
@@ -194,7 +194,7 @@ pub(crate) async fn list_host_packages(
     params: Result<Query<HostPackageParams>, QueryRejection>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::HostsRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -247,7 +247,7 @@ pub(crate) async fn list_software(
     params: Result<Query<SoftwareParams>, QueryRejection>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::HostsRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -306,7 +306,7 @@ pub(crate) async fn get_software(
     params: Result<Query<SoftwareDetailParams>, QueryRejection>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::HostsRead, false).await {
             Ok(context) => context,
             Err(response) => return response,
         };

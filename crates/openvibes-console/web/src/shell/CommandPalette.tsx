@@ -34,7 +34,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
-  const agents = useAllPages<Agent>(can("agents.read") ? "/api/v1/agents" : null);
+  const agents = useAllPages<Agent>(can("hosts.read") ? "/api/v1/agents" : null);
   const vulns = useResource<VulnerabilityPage>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities" : null);
   const dashboards = useResource<DashboardPage>("/api/v1/dashboards");
   const groups = useAllPages<FindingGroup>(can("compliance.read") ? "/api/v1/compliance/groups" : null);
@@ -49,7 +49,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
     }
     for (const view of views) if (canView(view.path)) out.push({ id: `v${view.path}`, group: "Go to", icon: view.icon, label: view.label, hint: view.keys, run: () => nav.view(view.path) });
     if (can("assistant.use")) out.push({ id: "a-assistant", group: "Actions", icon: "sparkles", label: "Ask the assistant", hint: "Ctrl J", run: () => assistant.toggle() });
-    if (can("tokens.create", true)) out.push({ id: "a-token", group: "Actions", icon: "enrollment", label: "New enrollment token", run: () => { nav.view("/settings", { tab: "enrollment" }); nav.open({ kind: "enrollment-token", id: "new" }, true); } });
+    if (can("tokens.manage")) out.push({ id: "a-token", group: "Actions", icon: "enrollment", label: "New enrollment token", run: () => { nav.view("/settings", { tab: "enrollment" }); nav.open({ kind: "enrollment-token", id: "new" }, true); } });
     out.push({ id: "a-dark", group: "Actions", icon: "moon", label: "Theme: dark", run: () => setTheme("dark") });
     out.push({ id: "a-light", group: "Actions", icon: "sun", label: "Theme: light", run: () => setTheme("light") });
     out.push({ id: "a-system", group: "Actions", icon: "monitor", label: "Theme: follow the system", run: () => setTheme("system") });

@@ -4,12 +4,13 @@
 import { type CSSProperties, type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { Icon, type IconName } from "./Icon";
-import { placement } from "./select";
+import { inView, placement } from "./select";
 
 export type MenuItem = { value: string; label: string; description?: string; dot?: string };
 
-export function MenuButton({ label, icon, items, onPick, disabled }: Readonly<{
-  label: string; icon?: IconName; items: MenuItem[]; onPick: (value: string) => void; disabled?: boolean;
+/** `compact`: the icon alone, with `label` as its accessible name (the ⋯ menu). */
+export function MenuButton({ label, icon, items, onPick, disabled, compact }: Readonly<{
+  label: string; icon?: IconName; items: MenuItem[]; onPick: (value: string) => void; disabled?: boolean; compact?: boolean;
 }>) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -24,21 +25,33 @@ export function MenuButton({ label, icon, items, onPick, disabled }: Readonly<{
     if (!button.current) return;
     const rect = button.current.getBoundingClientRect();
     const box = placement(rect, { width: window.innerWidth, height: window.innerHeight });
-    setBox({ position: "fixed", ...box, width: Math.min(300, window.innerWidth - 16) });
+    const width = Math.min(300, window.innerWidth - 16);
+    // Wider than the button: keep it inside the window (a ⋯ at the right edge).
+    setBox({ position: "fixed", ...box, width, left: Math.max(8, Math.min(box.left, window.innerWidth - 8 - width)) });
   };
   useLayoutEffect(() => { if (open) place(); }, [open]);
   useEffect(() => {
     if (!open) return;
     list.current?.focus({ preventScroll: true });
     const away = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(); };
-    const moved = () => close();
+    // Follow the button while it is on screen, as Select does; close once it is not.
+    const scrolled = (event: Event) => {
+      if (root.current?.contains(event.target as Node)) {
+        return;
+      }
+      if (inView(button.current)) {
+        place();
+      } else {
+        close();
+      }
+    };
     document.addEventListener("pointerdown", away);
-    window.addEventListener("scroll", moved, true);
-    window.addEventListener("resize", moved);
+    window.addEventListener("scroll", scrolled, true);
+    window.addEventListener("resize", place);
     return () => {
       document.removeEventListener("pointerdown", away);
-      window.removeEventListener("scroll", moved, true);
-      window.removeEventListener("resize", moved);
+      window.removeEventListener("scroll", scrolled, true);
+      window.removeEventListener("resize", place);
     };
   }, [open]);
 
@@ -57,11 +70,12 @@ export function MenuButton({ label, icon, items, onPick, disabled }: Readonly<{
 
   return (
     <div className="sel" ref={root}>
-      <button ref={button} type="button" className="button menu-button" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
+      <button ref={button} type="button" className={compact ? "button button--icon menu-button" : "button menu-button"} aria-haspopup="menu"
+        aria-label={compact ? label : undefined} title={compact ? label : undefined} aria-expanded={open} aria-controls={open ? id : undefined}
         disabled={disabled}
         onClick={() => { setActive(0); setOpen(!open); }}
         onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setActive(0); setOpen(true); } }}>
-        {icon && <Icon name={icon} size={15} />}{label}<Icon name="chevronDown" size={14} />
+        {icon && <Icon name={icon} size={15} />}{!compact && <>{label}<Icon name="chevronDown" size={14} /></>}
       </button>
       {open && (
         <div className="sel__popup" style={box}>

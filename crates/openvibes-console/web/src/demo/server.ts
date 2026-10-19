@@ -14,6 +14,7 @@ import { registerDashboardRoutes } from "./routes/dashboards";
 import { registerFindingRoutes } from "./routes/findings";
 import { registerHostRoutes } from "./routes/hosts";
 import { registerMetricRoutes } from "./routes/metrics";
+import { registerRoleRoutes } from "./routes/roles";
 import { registerRuleRoutes } from "./routes/rules";
 import { registerSessionRoutes } from "./routes/session";
 import { registerSettingsRoutes } from "./routes/settings";
@@ -34,7 +35,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   registerVulnerabilityRoutes(ctx);
   registerMetricRoutes(ctx);
   registerSettingsRoutes(ctx);
-  registerAccessRoutes(ctx);
+  registerAccessRoutes({ ...ctx, roles: registerRoleRoutes(ctx) });
   registerRuleRoutes(ctx);
   registerAssistantRoutes(ctx);
   registerDashboardRoutes(ctx);

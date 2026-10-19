@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use tokio_postgres::Transaction;
 
-use crate::{Client, StoreError};
+use crate::{Client, StoreError, console_roles::assignee};
 
 /// Safe current triage view joined with the latest detector version.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -41,7 +41,8 @@ pub enum TriageUpdate {
     Stale(TriageRecord),
     /// The requested transition is not allowed.
     InvalidTransition(TriageRecord),
-    /// The requested assignee is not an enabled Analyst or Admin.
+    /// The requested assignee is not an enabled user holding the triage
+    /// permission through a role that reaches some host, nor an Administrator.
     AssigneeUnavailable,
     /// The note or risk expiry violates the state contract.
     InvalidFields,
@@ -143,7 +144,7 @@ pub async fn update(
         return Ok(TriageUpdate::InvalidFields);
     }
     let assignee = match assigned_to_username {
-        Some(username) => assignee(&tx, username).await?,
+        Some(username) => assignee(&tx, username, "compliance.triage").await?,
         None => None,
     };
     if assigned_to_username.is_some() && assignee.is_none() {
@@ -307,7 +308,7 @@ pub async fn update_many_with_request_id(
         return Ok(BulkTriageUpdate::Stale(stale));
     }
     let assignee = match assigned_to_username {
-        Some(username) => assignee(&tx, username).await?,
+        Some(username) => assignee(&tx, username, "compliance.triage").await?,
         None => None,
     };
     if assigned_to_username.is_some() && assignee.is_none() {
@@ -378,23 +379,6 @@ pub(crate) fn fields_valid(
         && ((state == "accepted_risk") == accepted_until.is_some())
         // An accepted risk runs out within a year (triage v2 spec §1).
         && accepted_until.is_none_or(|value| value > now && value <= now + chrono::Duration::days(366))
-}
-
-/// An enabled analyst or admin by username: (user id, username).
-pub(crate) async fn assignee(
-    tx: &Transaction<'_>,
-    username: &str,
-) -> Result<Option<(String, String)>, StoreError> {
-    Ok(tx
-        .query_opt(
-            "SELECT u.user_id::text, u.username FROM console_users u
-             WHERE u.username = $1 AND u.enabled AND EXISTS (
-                SELECT 1 FROM console_role_bindings b WHERE b.user_id = u.user_id
-                AND b.role_id IN ('analyst', 'admin') AND b.revoked_at IS NULL)",
-            &[&username],
-        )
-        .await?
-        .map(|row| (row.get(0), row.get(1))))
 }
 
 /// Triage v2 (spec 2026-10-10-bulk-triage-design.md §1): any state moves to

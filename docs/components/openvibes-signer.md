@@ -15,7 +15,7 @@ password.
   `openvibes-admin` (`openvibes-admin rules publish-site`, for scripts and
   for testing the chain before the console screen exists). That is fine
   because the group isn't the boundary: every request still needs a
-  console user's live password, `rules.upload` through a global binding,
+  console user's live password, `site_rules.publish` through a global binding,
   and the signer's limits, and wrong passwords lock the account as at
   sign-in (lead, #2110).
 - **Request:** one JSON object per connection, at most 1 MiB, all of it
@@ -33,7 +33,7 @@ password.
   |---|---|
   | `credentials` | unknown user, wrong password or disabled account: one answer, after the same Argon2id work (a dummy credential for unknown names) |
   | `throttled` | the account is locked: the same per-account bucket and limit (5 in 15 minutes) as console sign-in |
-  | `forbidden` | the account must change its password, or lacks `rules.upload` through a global role binding |
+  | `forbidden` | the account must change its password, or lacks `site_rules.publish` through a global role binding |
   | `limits` | more than `rules_per_publish` rules, or an alarm rule naming more than 8 distinct `programs`, or a set naming more than 32 |
   | `invalid` | not a valid request or rule set: a `site` set with alarm rules, a `site-alarms` rule without `programs`, a rule the agent's loader or compiler refuses |
   | `rate` | more than `publishes_per_hour` signed publishes in the last hour, all users together |

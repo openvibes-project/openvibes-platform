@@ -1,10 +1,10 @@
 // The demo server's shared context: the persona's data, permissions and
 // visibility, the helpers more than one area uses, and the route registrar.
-import { RULE_READERS } from "../panels/rules/ruleAssignment";
-import type { AuditEvent, Capability, FindingGroup, Permission, TriageCounts } from "../api/types";
+import type { AuditEvent, FindingGroup, Permission, TriageCounts } from "../api/types";
 import { buildDemoData } from "./data";
 import { problem, severityRank } from "./http";
 import type { Persona } from "./personas";
+import { ADMIN_ROLE, resolveCapabilities } from "./share";
 
 type Params = Record<string, string>;
 type Handler = (params: Params, query: URLSearchParams, body: Record<string, unknown>, headers: Record<string, string>) => Response | Promise<Response>;
@@ -12,28 +12,36 @@ type Route = { method: string; pattern: RegExp; keys: string[]; permission: Perm
 
 export type DemoContext = ReturnType<typeof createDemoContext>;
 
+// Who each persona signs in as; what they may do comes from that person's roles.
+const PERSON: Record<Persona, string> = { admin: "u-admin", analyst: "u-sam", operator: "u-ola", scoped_operator: "u-pia", viewer: "u-vic" };
+
 export function createDemoContext({ persona, now }: { persona: Persona; now: number }) {
   const data = buildDemoData(now);
   const iso = (ms = Date.now()) => new Date(ms).toISOString();
-  const role = persona === "scoped_operator" ? "operator" : persona;
-  const permissions = (data.access.roles.find((r) => r.role_id === role)?.permissions ?? []) as Permission[];
-  const scoped = persona === "scoped_operator";
-  const capabilities: Capability[] = permissions.map((permission) => ({
-    permission,
-    scope: scoped && !["tokens.read", "tokens.create", "tokens.revoke", "rules.upload"].includes(permission)
-      ? { kind: "asset_groups", asset_group_ids: ["grp-prod"] }
-      : { kind: "global" },
-  }));
-  // Rule sets, their switches, history and coverage: rules.read or rules.upload, globally (the real API's rule).
-  const readsRules = () => RULE_READERS.some((r) => capabilities.some((c) => c.permission === r.permission && (!r.global || c.scope.kind === "global")));
-  const actor = { admin: "admin", analyst: "sam", operator: "ola", scoped_operator: "ola", viewer: "vic" }[persona];
+  /** The roles a person holds. */
+  const rolesOf = (userId: string) => data.access.bindings.filter((b) => b.user_id === userId)
+    .flatMap((b) => data.access.roles.filter((r) => r.role_id === b.role_id));
+  const me = PERSON[persona];
+  const actor = data.access.users.find((u) => u.user_id === me)?.username ?? persona;
+  const capabilities = resolveCapabilities(rolesOf(me));
+  const permissions = capabilities.map((c) => c.permission);
+  // Rule sets and history (rules.read), their switches (rules.assignment.read) and coverage (rules.coverage.read), globally (the real API's rule).
+  const readsRules = (permission: Permission = "rules.read") => capabilities.some((c) => c.permission === permission && c.scope.kind === "global");
 
+  // ponytail: one host scope for everything (that of hosts.read), where the
+  // server scopes each permission; per-permission scopes if a persona needs them.
+  const hostScope = capabilities.find((c) => c.permission === "hosts.read")?.scope;
+  const scoped = hostScope?.kind !== "global";
+  const inGroup = (agentId: string, groupId: string) => {
+    const selectors = data.access.asset_groups.find((g) => g.asset_group_id === groupId)?.selectors ?? [];
+    return selectors.length > 0 && selectors.every((s) => (data.tags.get(agentId) ?? []).some((t) => `${t.key}=${t.value}` === s));
+  };
   const visible = (agentId: string) =>
-    !scoped || (data.tags.get(agentId) ?? []).some((tag) => tag.key === "env" && tag.value === "prod");
+    hostScope?.kind === "global" || (hostScope?.kind === "asset_groups" && hostScope.asset_group_ids.some((g) => inGroup(agentId, g)));
   const agentById = (id: string) => data.agents.find((agent) => agent.id === id && visible(id));
   const audit = (action: string, target: string, targetKind: string) => {
     const event: AuditEvent = {
-      id: String(Number(data.audit[0]?.id ?? 0) + 1), action, actor, actor_id: `u-${actor}`, actor_kind: "user",
+      id: String(Number(data.audit[0]?.id ?? 0) + 1), action, actor, actor_id: me, actor_kind: "user",
       at: iso(), authentication_method: "local_password", result: "success", reason_code: null,
       request_id: `demo-${Date.now().toString(36)}`, target, target_id: target, target_kind: targetKind,
     };
@@ -75,15 +83,24 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
     return next;
   };
 
+  /**
+   * The server's triage assignee (console_roles::assignee): an enabled person
+   * holding the area's *.triage through a role that reaches some host, or an
+   * Administrator.
+   */
+  const triageAssignable = (username: string, triage: Permission) => {
+    const user = data.access.users.find((u) => u.username === username && u.enabled);
+    return !!user && rolesOf(user.user_id).some((r) => r.role_id === ADMIN_ROLE || (r.permissions.includes(triage) && r.reach.kind !== "none"));
+  };
   // The server's rules: an expiry in the future exactly when the risk is
-  // accepted, and an assignee who is an analyst or admin.
-  const triageProblem = (body: Record<string, unknown>) => {
+  // accepted, and an assignee who may triage the area (`triage`).
+  const triageProblem = (body: Record<string, unknown>, triage: Permission) => {
     const until = typeof body.accepted_until === "string" ? Date.parse(body.accepted_until) : null;
     if ((body.state === "accepted_risk") !== (until !== null) || (until !== null && !(until > Date.now() && until <= Date.now() + 366 * 86_400_000))) {
       return problem(400, "invalid_triage", "Triage state, note, expiry, or selection is invalid");
     }
-    if (typeof body.assigned_to === "string" && !data.access.bindings.some((b) => b.username === body.assigned_to && ["analyst", "admin"].includes(b.role_id))) {
-      return problem(400, "invalid_assignee", "Assignee must be an enabled analyst or admin");
+    if (typeof body.assigned_to === "string" && !triageAssignable(body.assigned_to, triage)) {
+      return problem(400, "invalid_assignee", "Assignee must be an enabled person who may triage this on some host, or an Administrator");
     }
     return null;
   };
@@ -139,10 +156,9 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
     if (result.etag) headers.etag = result.etag;
     return new Response(JSON.stringify(result.body), { status: result.status, headers });
   };
-  const me = `u-${actor}`;
 
   return {
-    now, data, iso, permissions, scoped, capabilities, readsRules, actor, me, visible, agentById, audit, triageKey,
+    now, data, iso, rolesOf, permissions, scoped, capabilities, readsRules, actor, me, visible, agentById, audit, triageKey,
     findings, vulnerabilities, groups, setTriage, triageProblem, alarmList, addSuppression, hostPackages, hosts, routes, route, send,
   };
 }

@@ -116,7 +116,7 @@ pub(super) fn refused(refusal: Refusal) -> Response {
                 "item_in_case",
                 "The item is already in another open case",
             );
-            problem.case_number = number;
+            problem.extra.case_number = number;
             problem_response(problem)
         }
         Refusal::AlreadyInCase => plain(

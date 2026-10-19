@@ -35,6 +35,8 @@ function useMenuCounts(): Partial<Record<string, string>> {
 
 export function Rail({ canView }: { canView: (path: string) => boolean }) {
   const { view } = useLocation();
+  /** The rail item stays current on the view's own sub-pages (/settings/roles/…). */
+  const here = (item: (typeof views)[number]) => view === item.path || (item.prefix !== undefined && view.startsWith(item.prefix));
   const counts = useMenuCounts();
   const [pinned, setPinned] = useState(() => { try { return localStorage.getItem(pinKey) === "true"; } catch { return false; } });
   const groups = ["Investigate", "Operate", "Admin", "Help"] as const;
@@ -65,7 +67,7 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
             <div key={group} className={group === "Investigate" ? "rail__group" : "rail__group rail__group--secondary"}>
               <div className="rail__heading">{group}</div>
               {items.map((item) => (
-                <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={item.label} aria-describedby={counts[item.path] ? `count-${item.icon}` : undefined} aria-current={view === item.path ? "page" : undefined}
+                <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={item.label} aria-describedby={counts[item.path] ? `count-${item.icon}` : undefined} aria-current={here(item) ? "page" : undefined}
                   onClick={(event) => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
                   <Icon name={item.icon} size={19} />
                   {counts[item.path] && <span className={item.path === "/alarms" ? "rail__count rail__count--bad" : "rail__count"} id={`count-${item.icon}`} title={`${counts[item.path]} ${item.label.toLowerCase()}`}>{counts[item.path]}</span>}
@@ -80,14 +82,14 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
         {secondary.length > 0 && (
           <div className="rail__more menu" ref={moreRef}>
             <button type="button" className="rail__item" aria-haspopup="menu" aria-expanded={more} aria-label="More"
-              aria-current={secondary.some((item) => item.path === view) ? "page" : undefined} onClick={() => setMore((m) => !m)}>
+              aria-current={secondary.some(here) ? "page" : undefined} onClick={() => setMore((m) => !m)}>
               <Icon name="more" size={19} />
               <span className="rail__short" aria-hidden="true">More</span>
             </button>
             {more && (
               <div className="menu__pop rail__more-pop" role="menu">
                 {secondary.map((item) => (
-                  <a key={item.path} role="menuitem" className="menu__item" href={nav.href(item.path)} aria-current={view === item.path ? "page" : undefined}
+                  <a key={item.path} role="menuitem" className="menu__item" href={nav.href(item.path)} aria-current={here(item) ? "page" : undefined}
                     onClick={(event) => { setMore(false); if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
                     <Icon name={item.icon} size={15} /> {item.label}
                   </a>

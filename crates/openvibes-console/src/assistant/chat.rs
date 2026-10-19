@@ -77,17 +77,12 @@ pub(crate) async fn authenticated_assistant_message(
             Ok(value) => value,
             Err(response) => return response,
         };
-    let (agent_scope, agent_actor) = match authenticated_permission(
-        &state,
-        &headers,
-        crate::Permission::AgentsRead,
-        false,
-    )
-    .await
-    {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
+    let (agent_scope, agent_actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::HostsRead, false).await
+        {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
     let (finding_scope, finding_actor) =
         match authenticated_permission(&state, &headers, crate::Permission::ComplianceRead, false)
             .await
@@ -144,13 +139,18 @@ pub(crate) async fn authenticated_assistant_message(
         Err(response) => return response,
     };
     // The Rules page is global only.
-    let rules =
-        match authenticated_permission(&state, &headers, crate::Permission::RulesRead, false).await
-        {
-            Ok((scope, _)) => scope == ConsoleScope::Global,
-            Err(response) if response.status() == StatusCode::FORBIDDEN => false,
-            Err(response) => return response,
-        };
+    let rules = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::RulesContentsRead,
+        false,
+    )
+    .await
+    {
+        Ok((scope, _)) => scope == ConsoleScope::Global,
+        Err(response) if response.status() == StatusCode::FORBIDDEN => false,
+        Err(response) => return response,
+    };
     let user_slot = runtime.principal_slot(&actor).await;
     let Ok(user_permit) = user_slot.try_acquire_owned() else {
         return problem_response(ProblemDetails::new(

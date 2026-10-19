@@ -1,8 +1,8 @@
 // Helpers the demo server's areas share: responses, paging, ranking and storage.
 export const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
-export const problem = (status: number, code: string, title: string) =>
-  new Response(JSON.stringify({ status, code, title, request_id: `demo-${Date.now().toString(36)}` }), {
+export const problem = (status: number, code: string, title: string, extra: Record<string, unknown> = {}) =>
+  new Response(JSON.stringify({ status, code, title, ...extra, request_id: `demo-${Date.now().toString(36)}` }), {
     status, headers: { "content-type": "application/problem+json" },
   });
 

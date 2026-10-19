@@ -18,6 +18,7 @@ pub(super) fn view(dashboard: Dashboard, user_id: &str) -> DashboardView {
         name: dashboard.name,
         owner_display_name: dashboard.owner_display_name,
         shared_role_id: dashboard.shared_role_id,
+        shared_role_name: dashboard.shared_role_name,
         version: dashboard.version.try_into().unwrap_or_default(),
         layout: dashboard.layout,
         created_at: dashboard

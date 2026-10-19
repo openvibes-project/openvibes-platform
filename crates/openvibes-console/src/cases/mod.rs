@@ -1,7 +1,7 @@
 //! Cases over `/api/v1`: where one investigation happens (design in
 //! `docs/specs/2026-10-04-console-cases-design.md`). Reads need
-//! `cases.read`, changes `cases.manage`; both are scoped to the caller's
-//! agents, and a case the caller cannot see reads as absent. Browser
+//! `cases.read`, changes `cases.write` (the assignee `cases.assign`); all are
+//! scoped to the caller's agents, and a case the caller cannot see reads as absent. Browser
 //! sessions only: a bearer token is refused, as for dashboards.
 
 use axum::{

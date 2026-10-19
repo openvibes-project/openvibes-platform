@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { apiMessage, invalidate, request, useResource } from "../../api/client";
 import type { Agent, AttackCatalog, AttackPairInput, RuleCheck, RuleDraft, RuleDraftInput, RuleTestResult } from "../../api/types";
 import { nav } from "../../app/nav";
+import { labelOf } from "../../app/permissions";
 import { useSession } from "../../app/session";
 import { Empty, ErrorBox, Loading } from "../../ui/bits";
 import { Icon } from "../../ui/Icon";
@@ -147,7 +148,7 @@ export function SiteRulePanel({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const current = form ?? (draft ? fromDraft(draft) : BLANK);
   const effectiveId = isNew ? typedId.trim() : ruleId;
-  const write = can("rules.write", true);
+  const write = can("site_rules.write");
 
   // Live check: the server runs the agent's own loader on what is typed.
   const body = JSON.stringify(toInput(current, alarm));
@@ -196,7 +197,7 @@ export function SiteRulePanel({ id }: { id: string }) {
       <PanelHeader icon="rules" kind={alarm ? "Alarm rule" : "Compliance rule"} title={isNew ? "New rule" : ruleId}
         subtitle={draft ? `Version ${draft.version}, saved by ${draft.updated_by}. A draft: it reaches hosts only once published.` : "Saved as a draft: it reaches hosts only once published."} />
       <div className="panel-body stack">
-        {!write && <div className="callout callout--warn">Writing rules needs the rules.write permission.</div>}
+        {!write && <div className="callout callout--warn">Writing rules needs the “{labelOf("site_rules.write")}” permission.</div>}
         <form className="stack" onSubmit={(event) => { event.preventDefault(); save(); }}>
           {isNew && field("id", "Rule id", <input className="input mono" required value={typedId} onChange={(e) => setTypedId(e.target.value)} placeholder={alarm ? "alarm.nginx.shell" : "port.redis.exposed"} />)}
           {field("title", "Title", <input className="input" required value={current.title} onChange={(e) => update({ title: e.target.value })} disabled={!write} />)}
@@ -226,7 +227,7 @@ export function SiteRulePanel({ id }: { id: string }) {
             nav.remove({ kind: "site-rule", id });
           })}>Delete</Confirm>
         )}
-        <RuleTest set={set} ruleId={effectiveId} input={toInput(current, alarm)} enabled={write && ready && check?.ok === true} />
+        <RuleTest set={set} ruleId={effectiveId} input={toInput(current, alarm)} enabled={can("site_rules.test") && ready && check?.ok === true} />
         <Section title="Publishing">
           <p className="subtle">Saved rules are drafts. Publish the set from the Site rules page.</p>
         </Section>

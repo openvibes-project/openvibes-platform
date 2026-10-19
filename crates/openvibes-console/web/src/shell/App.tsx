@@ -7,7 +7,7 @@ import { useLivePresence } from "../app/livePresence";
 import { assistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
-import { SessionContext, allows } from "../app/session";
+import { SessionContext, allows, holdsEverywhere } from "../app/session";
 import type { Persona } from "../demo/personas";
 import { Empty } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -49,12 +49,13 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
 
   useEffect(() => onSignedOut(() => setAuth("signin")), []);
 
-  const can = useCallback((permission: Permission, global = false) => allows(session, { permission, global }), [session]);
+  const can = useCallback((permission: Permission) => allows(session, { permission }), [session]);
+  const canEverywhere = useCallback((permission: Permission) => holdsEverywhere(session, permission), [session]);
   const canView = useCallback((path: string) => {
     const found = views.find((v) => v.path === path);
-    return found !== undefined && (found.access.length === 0 || found.access.some((a) => can(a.permission, a.global)));
+    return found !== undefined && (found.access.length === 0 || found.access.some((a) => can(a.permission)));
   }, [can]);
-  const context = useMemo(() => ({ session, demo: persona !== undefined, can }), [session, persona, can]);
+  const context = useMemo(() => ({ session, demo: persona !== undefined, can, canEverywhere }), [session, persona, can, canEverywhere]);
   const current = views.find((v) => v.path === view || (v.prefix !== undefined && view.startsWith(v.prefix)));
   const top = panels[panels.length - 1];
 
@@ -66,7 +67,7 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
   // appear without a reload.
   useLiveAlarms(auth === "ok" && !session?.password_must_change && can("alarms.read"));
   // Likewise for hosts coming online or going offline.
-  useLivePresence(auth === "ok" && !session?.password_must_change && can("agents.read"));
+  useLivePresence(auth === "ok" && !session?.password_must_change && can("hosts.read"));
 
   useEffect(() => {
     let pending = "";

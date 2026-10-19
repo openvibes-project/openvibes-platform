@@ -111,7 +111,9 @@ pub(crate) async fn list_suppressions(
     headers: HeaderMap,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::AlarmsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::AlarmsSuppressionsRead, false)
+            .await
+        {
             Ok(context) => context,
             Err(response) => return response,
         };

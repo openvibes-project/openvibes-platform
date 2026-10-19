@@ -114,8 +114,8 @@ impl Drop for ChangePasswordRequest {
     }
 }
 
-/// Creates a local console user with one global built-in role and a
-/// one-time password (`POST /api/v1/access-control/users`).
+/// Creates a local console user holding roles, with a one-time password
+/// (`POST /api/v1/users`).
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreateUserRequest {
@@ -125,8 +125,11 @@ pub struct CreateUserRequest {
     /// Operator-facing name, 1 to 160 printable characters.
     #[schema(max_length = 160)]
     pub display_name: String,
-    /// Initial built-in global role.
-    pub role_id: String,
+    /// Optional email address, at most 254 characters.
+    #[schema(max_length = 254)]
+    pub email: Option<String>,
+    /// 1 to 64 roles, each inside the creator's own access.
+    pub role_ids: Vec<String>,
 }
 
 /// A created user and their one-time password, shown only in this response.
@@ -138,8 +141,8 @@ pub struct CreatedUser {
     pub username: String,
     /// Display name as stored.
     pub display_name: String,
-    /// The role granted.
-    pub role_id: String,
+    /// The roles given.
+    pub role_ids: Vec<String>,
     /// One-time password; the user must replace it at first sign-in.
     #[schema(format = Password, read_only = true)]
     pub one_time_password: String,

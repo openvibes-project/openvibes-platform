@@ -4,11 +4,12 @@ import type { DemoContext } from "../context";
 import { browserPersistence } from "../http";
 
 export function registerDashboardRoutes(ctx: DemoContext) {
-  const { data, scoped, actor, me, permissions, route, send } = ctx;
+  const { data, me, permissions, rolesOf, route, send } = ctx;
   const dashboards = createDashboardStore(
     data.dashboards,
-    (userId) => (scoped && userId === `u-${actor}` ? ["operator"] : data.access.bindings.filter((b) => b.user_id === userId).map((b) => b.role_id)),
+    (userId) => rolesOf(userId).map((r) => r.role_id),
     (userId) => data.access.users.find((u) => u.user_id === userId)?.display_name ?? userId,
+    (roleId) => data.access.roles.find((r) => r.role_id === roleId)?.name ?? roleId,
     browserPersistence("openvibes.v2.demo.dashboards"),
   );
   route("GET", "/api/v1/dashboards", null, () => send(dashboards.list(me)));

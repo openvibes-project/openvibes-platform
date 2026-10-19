@@ -75,7 +75,7 @@ describe("demo rules", () => {
     expect((await server.handle("GET", "/api/v1/site-rules/fleet")).status).toBe(200);
   });
 
-  it("keeps draft site rules from a persona without rules.write", async () => {
+  it("keeps draft site rules from a persona without site_rules.read", async () => {
     const server = createDemoServer({ persona: "viewer" });
     expect((await server.handle("GET", "/api/v1/rule-drafts/site")).status).toBe(403);
   });

@@ -124,6 +124,8 @@ async fn setup() -> Fx {
         ))
         .await
         .unwrap();
+    common::seed_role(&admin, "analyst", &["cases.read", "cases.write"]).await;
+    common::seed_role(&admin, "viewer", &["hosts.read"]).await;
     user(
         &mut admin,
         ALICE,

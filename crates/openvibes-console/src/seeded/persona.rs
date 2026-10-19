@@ -5,7 +5,13 @@ use axum::{http::HeaderMap, response::Response};
 use serde::Deserialize;
 
 use super::responses::{SeedError, denied, expired, invalid_header, unavailable};
-use crate::{BuiltInRole, Permission, RoleBinding, resolve_capabilities};
+use platform_store::console_roles::{Grant, Reach};
+
+use crate::{
+    Permission,
+    access::{rbac::ADMIN_ROLE, templates::TEMPLATES},
+    resolve_capabilities,
+};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -61,10 +67,10 @@ impl Persona {
     }
 
     fn permits(self, permission: Permission, mode: SeedMode) -> bool {
-        if matches!(mode, SeedMode::PermissionRemoved) && permission == Permission::AgentsRead {
+        if matches!(mode, SeedMode::PermissionRemoved) && permission == Permission::HostsRead {
             return false;
         }
-        resolve_capabilities(&[self.binding()])
+        resolve_capabilities(&[self.grant()])
             .iter()
             .any(|capability| capability.permission == permission)
     }
@@ -73,18 +79,35 @@ impl Persona {
         !matches!(self, Self::ScopedOperator)
     }
 
-    fn binding(self) -> RoleBinding {
-        let role = match self {
-            Self::Viewer => BuiltInRole::Viewer,
-            Self::Analyst => BuiltInRole::Analyst,
-            Self::Operator | Self::ScopedOperator => BuiltInRole::Operator,
-            Self::Admin => BuiltInRole::Admin,
+    /// The persona's one role: its template (the Administrator for admin),
+    /// reaching every host, or the Prod group for the scoped operator.
+    fn grant(self) -> Grant {
+        let template = |name: &str| {
+            let template = TEMPLATES
+                .iter()
+                .find(|t| t.name == name)
+                .expect("a template");
+            template
+                .permissions
+                .iter()
+                .map(|p| p.id().to_owned())
+                .collect()
         };
-        if self.global_scope() {
-            RoleBinding::global(role)
+        let (role_id, permissions) = match self {
+            Self::Viewer => ("viewer", template("Viewer")),
+            Self::Analyst => ("analyst", template("Analyst")),
+            Self::Operator | Self::ScopedOperator => ("operator", template("Operator")),
+            Self::Admin => (ADMIN_ROLE, Vec::new()),
+        };
+        let reach = if self.global_scope() {
+            Reach::All
         } else {
-            RoleBinding::scoped(role, ["seeded-asset-group".to_owned()])
-                .expect("the seeded asset-group ID is nonempty")
+            Reach::Groups(vec!["seeded-asset-group".to_owned()])
+        };
+        Grant {
+            role_id: role_id.to_owned(),
+            permissions,
+            reach,
         }
     }
 }
@@ -114,13 +137,14 @@ mod tests {
     use crate::Permission;
 
     #[test]
-    fn seeded_personas_use_the_approved_builtin_role_permissions() {
-        assert!(!Persona::Viewer.permits(Permission::RulesRead, SeedMode::Mixed));
-        assert!(!Persona::Analyst.permits(Permission::RulesRead, SeedMode::Mixed));
-        assert!(!Persona::Operator.permits(Permission::RulesRead, SeedMode::Mixed));
+    fn seeded_personas_hold_the_templates() {
+        // The Viewer and Analyst templates read rules (spec §4.2).
+        assert!(Persona::Viewer.permits(Permission::RulesRead, SeedMode::Mixed));
+        assert!(!Persona::Viewer.permits(Permission::RulesPublish, SeedMode::Mixed));
+        assert!(Persona::Operator.permits(Permission::RulesRead, SeedMode::Mixed));
         assert!(Persona::Admin.permits(Permission::RulesRead, SeedMode::Mixed));
-        assert!(Persona::Operator.permits(Permission::RulesUpload, SeedMode::Mixed));
-        assert!(Persona::Operator.permits(Permission::TokensCreate, SeedMode::Mixed));
+        assert!(Persona::Operator.permits(Permission::RulesPublish, SeedMode::Mixed));
+        assert!(Persona::Operator.permits(Permission::TokensManage, SeedMode::Mixed));
         assert!(Persona::Viewer.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
         assert!(Persona::Analyst.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
@@ -130,8 +154,9 @@ mod tests {
         assert!(!Persona::Viewer.permits(Permission::AssistantUse, SeedMode::Mixed));
         assert!(!Persona::Operator.permits(Permission::AssistantUse, SeedMode::Mixed));
         assert!(!Persona::Operator.permits(Permission::ComplianceTriage, SeedMode::Mixed));
-        assert!(Persona::ScopedOperator.permits(Permission::AgentsRevoke, SeedMode::Mixed));
-        assert!(!Persona::ScopedOperator.permits(Permission::TokensCreate, SeedMode::Mixed));
+        assert!(Persona::ScopedOperator.permits(Permission::HostsRevoke, SeedMode::Mixed));
+        // A role's platform permissions apply whatever its reach (spec §3).
+        assert!(Persona::ScopedOperator.permits(Permission::TokensManage, SeedMode::Mixed));
         assert!(!Persona::ScopedOperator.permits(Permission::ComplianceTriage, SeedMode::Mixed));
         assert!(Persona::Admin.permits(Permission::AuditRetentionManage, SeedMode::Mixed));
     }

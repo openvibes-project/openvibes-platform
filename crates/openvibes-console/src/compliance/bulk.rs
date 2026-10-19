@@ -218,7 +218,7 @@ async fn run(
     let mut needed = vec![kind.triage()];
     match request.action.as_str() {
         "state" | "assign" => {}
-        "case" => needed.extend([Permission::CasesManage, Permission::CasesRead]),
+        "case" => needed.extend([Permission::CasesWrite, Permission::CasesRead]),
         "suppress" if kind == Kind::Alarms => needed.push(Permission::AlarmsSuppress),
         _ => {
             return bad(

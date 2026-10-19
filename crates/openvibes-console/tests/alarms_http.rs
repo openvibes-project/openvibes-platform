@@ -17,6 +17,8 @@ use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+mod common;
+
 struct TestDb {
     pool: platform_store::Pool,
     admin_url: String,
@@ -121,6 +123,7 @@ async fn user(
     name: &str,
     role: &str,
 ) {
+    common::ensure_role(client, role).await;
     let phc = hash_password(&NormalizedPassword::new(PASSWORD).unwrap()).unwrap();
     create_local_user(
         client,
@@ -614,7 +617,13 @@ async fn observation_rules_are_historical_and_require_the_observation_scope() {
         .unwrap()
         .get(0);
     assert_eq!(history, detail);
-    client.batch_execute("INSERT INTO console_asset_groups (asset_group_id,name,created_at,created_by) VALUES ('31111111-1111-4111-8111-111111111111','outside',now(),'test'); INSERT INTO console_asset_group_selectors (asset_group_id,tag_key,tag_value,created_at) VALUES ('31111111-1111-4111-8111-111111111111','scope','outside',now()); UPDATE console_role_bindings SET asset_group_id='31111111-1111-4111-8111-111111111111' WHERE user_id='11111111-1111-4111-8111-111111111112'").await.unwrap();
+    client.batch_execute("INSERT INTO console_asset_groups (asset_group_id,name,created_at,created_by) VALUES ('31111111-1111-4111-8111-111111111111','outside',now(),'test'); INSERT INTO console_asset_group_selectors (asset_group_id,tag_key,tag_value,created_at) VALUES ('31111111-1111-4111-8111-111111111111','scope','outside',now());").await.unwrap();
+    common::scope_bindings(
+        &mut client,
+        "user_id = '11111111-1111-4111-8111-111111111112'",
+        "31111111-1111-4111-8111-111111111111",
+    )
+    .await;
     for path in [&rule_path, &alarm_path] {
         let (status, _, _) = call(&router, "GET", path, &cookie, &csrf, None, None).await;
         assert_eq!(status, StatusCode::NOT_FOUND);

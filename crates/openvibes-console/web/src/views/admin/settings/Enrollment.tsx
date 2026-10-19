@@ -34,10 +34,10 @@ export function Enrollment() {
     <div className="view">
       <ViewHeader title="Enrollment" count={rows.length} refresh="/api/v1/enrollment-tokens" placeholder="Filter tokens…"
         chips={[{ label: "Show expired and revoked", param: "all", value: "true", count: hidden }]}
-        actions={can("tokens.create", true) && (<>
+        actions={can("tokens.manage") && (<>
           <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "enrollment-token", id: "new" }, true)}><Icon name="plus" size={15} /> New token</button>
         </>)} />
-      {can("tokens.create", true) && all.some((t) => t.standing && !t.revoked) && <AddHost />}
+      {can("tokens.installer") && all.some((t) => t.standing && !t.revoked) && <AddHost />}
       {tokens.error ? <div className="view-pad"><ErrorBox error={tokens.error} /></div> : !tokens.data ? <Loading /> : rows.length === 0 ? (
         <Empty icon="enrollment" title={all.length === 0 ? "No enrollment tokens" : "No usable enrollment tokens"}>
           {all.length === 0 ? "Create one to let new hosts enroll." : `${hidden} expired or revoked ${hidden === 1 ? "token is" : "tokens are"} hidden. Run openvibes-admin agent command to create the standing token.`}

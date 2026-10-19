@@ -193,3 +193,118 @@
 }
 .group-card { display: grid; gap: 6px; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color var(--fast); }
 .group-card:hover, .group-card[aria-pressed="true"] { border-color: var(--accent); }
+
+/* Settings › Roles: the role page (views/admin/roles). */
+.role-page__title { display: grid; gap: 2px; }
+.role-page__note { margin: 0 24px; max-width: 720px; background: var(--accent-soft); color: var(--text); }
+.role-page__note svg, .role-page__notice svg { color: var(--accent); flex: none; }
+.role-page__body { display: flex; flex-direction: column; gap: 32px; padding-bottom: 40px; }
+.role-page__top { display: grid; grid-template-columns: 1fr; gap: 32px; align-items: start; }
+.role-page__top--two { grid-template-columns: 1fr 1fr; }
+.role-step__body { gap: 10px; }
+.role-step { align-items: baseline; }
+.role-step__title { display: flex; gap: 10px; align-items: center; margin: 0; }
+.role-step__n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); letter-spacing: 0; }
+.role-step__count { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.role-page__name { height: 44px; font-size: 18px; width: 100%; }
+.role-page__start .select { height: 44px; font-size: 15px; width: 100%; }
+.role-page__hint, .role-page__foot { margin: 0; }
+.role-page__foot { font-size: 12.5px; }
+.role-page__foot .info-mark { vertical-align: -2px; }
+.role-page__legend { font-size: 12.5px; }
+.role-page__dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 2px 0 8px; }
+.role-page__dot--added { box-shadow: 0 0 0 2px var(--ok); }
+.role-page__dot--removed { box-shadow: 0 0 0 2px var(--bad); }
+.role-page__notice { margin: 0; background: var(--accent-soft); color: var(--text); }
+.info-mark { display: inline-flex; color: var(--text-3); }
+.role-matrix { overflow-x: auto; padding: 0; }
+.role-matrix .table tbody tr { cursor: default; }
+.role-matrix .table tbody tr:hover { background: none; }
+.role-matrix td { height: auto; padding: 10px 12px; vertical-align: top; }
+.role-matrix .role-matrix__area { width: 190px; }
+.role-matrix td.role-matrix__area { padding: 12px; }
+.role-matrix__label { display: grid; gap: 2px; font-size: 12px; }
+.role-matrix__label strong { font-size: 13px; }
+.role-matrix__name { gap: 6px; }
+.role-matrix__all { width: 70px; text-align: right; }
+.role-matrix__cell { gap: 6px; }
+.role-matrix__empty { color: var(--text-3); opacity: .5; }
+.role-matrix__heading { gap: 8px; }
+.role-matrix .table th .role-matrix__toggle { padding: 0 6px; height: 22px; border-radius: var(--r-1); font-size: 11.5px; color: var(--text-2); }
+.role-matrix .table th .role-matrix__toggle:hover:not(:disabled) { background: var(--surface-2); }
+.role-matrix .table th .role-matrix__toggle:disabled { cursor: default; opacity: .5; }
+.role-matrix .chip { white-space: nowrap; }
+.role-matrix .chip:disabled { cursor: default; }
+.role-matrix .chip[data-changed="added"] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 60%, transparent); }
+.role-matrix .chip[data-changed="removed"] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 55%, transparent); }
+.hosts-picker { gap: 10px; }
+.hosts-picker__search { position: relative; }
+.hosts-picker__search .input { height: 40px; }
+/* Below the role page's sticky bar (z-index 20; beats .sel__popup's 60); the list inside scrolls. */
+.sel__popup.hosts-picker__popup { position: absolute; top: calc(100% + 4px); left: 0; width: 100%; z-index: 15; max-height: min(340px, 50vh); }
+/* Hosts is the role page's last step, just above the sticky bar: its list opens upwards, over the matrix. */
+.hosts-picker .hosts-picker__popup { top: auto; bottom: calc(100% + 4px); }
+.hosts-picker__option { all: unset; box-sizing: border-box; display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-1); font-size: 13px; cursor: pointer; }
+.hosts-picker__option:hover, .hosts-picker__option:focus-visible { background: var(--surface-2); }
+.hosts-picker__chip { gap: 4px; padding-right: 4px; cursor: default; background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.hosts-picker__chip .icon-button { width: 20px; height: 20px; min-width: 20px; }
+.hosts-picker__note { margin: 0; }
+.role-bar { position: sticky; bottom: 0; margin-top: auto; z-index: 20; background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -6px 16px rgba(0, 0, 0, .05); padding: 12px 24px; display: grid; gap: 10px; }
+.role-bar__row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.role-bar__summary { gap: 8px; min-width: 0; }
+.role-bar__error { margin: 0; }
+@media (max-width: 720px) {
+  .role-page__top--two { grid-template-columns: 1fr; }
+  .role-page__note { margin: 0 16px; }
+  .role-bar { padding: 12px 16px; }
+  .role-bar__summary { flex-basis: 100%; flex-wrap: wrap; }
+}
+
+/* Settings › People (views/admin/settings/People.tsx) and a person's page
+   (views/admin/people): the shared layout, a narrow left column of cards
+   and a wide right one (approved screens 6–8). */
+.people-roles { gap: 6px; }
+.people-roles__where { font-weight: 400; opacity: .8; }
+.person-page__crumb { padding-bottom: 0; }
+.person-page__head { display: flex; gap: 16px; align-items: center; padding: 8px 24px 16px; }
+.person-page__avatar { display: grid; place-items: center; width: 64px; height: 64px; flex: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 22px; }
+.person-page__title { gap: 4px; min-width: 0; flex: 1 1 0; }
+.person-page__title h1 { margin: 0; }
+.person-page__error { margin: 0 24px 16px; }
+.person-page__cols { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 24px; align-items: start; padding: 0 24px 40px; }
+.person-page__col { gap: 16px; min-width: 0; }
+.person-card { overflow: hidden; }
+.person-card__head { padding: 12px 16px; border-bottom: 1px solid var(--line); min-height: 48px; }
+.person-card__head .section-title { margin: 0; }
+.person-card__body { padding: 14px 16px; }
+.person-page__kv { margin: 0; row-gap: 10px; grid-template-columns: 118px minmax(0, 1fr); }
+.person-page__none { margin: 0; }
+.person-page__activity { list-style: none; margin: 0; padding: 0; display: grid; }
+.person-page__activity li { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.person-page__activity li:last-child { border-bottom: 0; }
+.person-page__activity .subtle { font-size: 12px; }
+.person-page__roles { gap: 8px; }
+.person-role { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-2); }
+.person-role__text { gap: 6px; min-width: 0; }
+.person-role__where, .person-access__line { cursor: default; background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.person-page__access-head { margin-top: 8px; }
+.person-page__access-head .section-title { margin: 0; }
+.person-page__access-head > .subtle { font-size: 12.5px; }
+.person-access { overflow: hidden; }
+.person-access__head { padding: 14px 20px; border-bottom: 1px solid var(--line); font-size: 15px; }
+.person-access__areas { display: grid; gap: 10px; margin: 0; padding: 14px 20px; }
+.person-access__area { display: grid; grid-template-columns: 180px 1fr; gap: 10px; align-items: start; }
+.person-access__area dt { padding-top: 3px; }
+.person-access__area dd { margin: 0; gap: 6px; }
+@media (max-width: 1000px) {
+  .person-page__cols { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .person-page__head { flex-wrap: wrap; gap: 12px; padding: 8px 16px 16px; }
+  .person-page__avatar { width: 48px; height: 48px; font-size: 17px; }
+  .person-page__title h1 { font-size: 22px; }
+  .person-page__actions { flex-basis: 100%; }
+  .person-page__cols { padding: 0 16px 32px; }
+  .person-page__error { margin: 0 16px 16px; }
+  .person-access__area { grid-template-columns: 1fr; gap: 4px; }
+}

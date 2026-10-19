@@ -45,14 +45,15 @@ describe("demo rule-set assignment", () => {
     expect((await server.handle("PUT", "/api/v1/rule-set-assignments/hardening-linux-l1", { default_enabled: "no" })).status).toBe(400);
   });
 
-  it("an analyst cannot read the switches or the rule list, an operator reads both and changes switches, a viewer cannot change them", async () => {
+  it("an analyst reads the rule list but not the switches, an operator reads both and changes switches, a viewer cannot change them", async () => {
     expect((await createDemoServer({ persona: "analyst" }).handle("GET", "/api/v1/rule-set-assignments")).status).toBe(403);
     const operator = createDemoServer({ persona: "operator" });
     expect((await operator.handle("GET", "/api/v1/rule-set-assignments")).status).toBe(200);
     expect((await operator.handle("PUT", "/api/v1/rule-set-assignments/hardening-linux-l1", { default_enabled: false })).status).toBe(200);
     for (const path of ["/api/v1/rule-sets", "/api/v1/rule-sets/hardening-linux-l1/bundles", "/api/v1/rules/coverage"]) {
       expect((await operator.handle("GET", path)).status, path).toBe(200);
-      expect((await createDemoServer({ persona: "analyst" }).handle("GET", path)).status, path).toBe(403);
+      // The Analyst template holds rules.read and rules.coverage.read.
+      expect((await createDemoServer({ persona: "analyst" }).handle("GET", path)).status, path).toBe(200);
     }
     expect((await createDemoServer({ persona: "viewer" }).handle("PUT", "/api/v1/rule-set-assignments/hardening-linux-l1", { default_enabled: false })).status).toBe(403);
   });

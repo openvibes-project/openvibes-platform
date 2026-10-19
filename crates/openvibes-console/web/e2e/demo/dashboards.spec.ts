@@ -102,18 +102,20 @@ test("an analyst sees the team dashboard read-only", async ({ page }) => {
   await page.getByRole("menuitemradio", { name: "analyst" }).click();
   await page.getByRole("button", { name: "Dashboards" }).click();
   await page.getByRole("menuitemradio", { name: "Analyst triage" }).click();
-  await expect(page.getByText("Shared by")).toBeVisible();
+  await expect(page.getByText("Shared by")).toContainText("with Analyst");
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Dashboard menu" }).click();
   await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
 });
 
-test("an admin shares a dashboard with a role", async ({ page }) => {
+test("an admin shares a dashboard with a role they hold, by name", async ({ page }) => {
   await page.getByRole("button", { name: "Dashboards" }).click();
   await page.getByRole("menuitemradio", { name: "My morning check" }).click();
   await page.getByRole("button", { name: "Dashboard menu" }).click();
-  await page.getByRole("menuitemradio", { name: "analyst" }).click();
-  await expect(page.locator("#main").getByText("Shared with analyst")).toBeVisible();
+  // Only the roles the admin holds: Administrator, not Analyst.
+  await expect(page.getByRole("menuitemradio", { name: "Analyst" })).toHaveCount(0);
+  await page.getByRole("menuitemradio", { name: "Administrator" }).click();
+  await expect(page.locator("#main").getByText("Shared with Administrator")).toBeVisible();
 });
 
 for (const scheme of ["light", "dark"] as const) {

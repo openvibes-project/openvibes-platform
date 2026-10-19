@@ -15,7 +15,9 @@ permission-checked read models, enrollment-token management, and audit routes.
 - `GET /api/v1/session` accepts exactly one valid `__Host-openvibes-session`
   cookie, rejects bearer or conflicting credentials, checks session and CSRF
   digests in constant time, touches the bounded idle expiry, and resolves active
-  role bindings on each request.
+  role bindings on each request. Its `capabilities` leave out `assistant.use`
+  while no assistant is set up (the web hides the assistant by it); permission
+  and share checks read the unfiltered set.
 - `GET /auth/v1/preauth` stores a five-minute, one-use hash-only challenge and
   returns its CSRF token with separate HttpOnly pre-auth and browser-binding
   cookies. It sets no cookies if persistence fails. The in-memory secret
@@ -33,14 +35,26 @@ permission-checked read models, enrollment-token management, and audit routes.
   clears the session cookie. Repeating logout remains safe.
 - `GET /api/v1/enrollment-tokens` returns at most 100 newest token metadata
   rows and never returns token hashes or plaintext. `POST` requires
-  `tokens.create`, CSRF, and an `Idempotency-Key`; successful creation returns
+  `tokens.manage`, CSRF, and an `Idempotency-Key`; successful creation returns
   the secret once, while a same-key/same-request retry returns metadata with
   `secret_available=false`. Reusing a key for different settings returns 409.
   `GET /api/v1/enrollment-tokens/{token_id}` returns one secret-free record.
-  `POST /api/v1/enrollment-tokens/{token_id}/revoke` requires `tokens.revoke`
+  `POST /api/v1/enrollment-tokens/{token_id}/revoke` requires `tokens.manage`
   and audits the revocation. These responses are `Cache-Control: no-store`.
-- `/api/v1/service-accounts` lists safe account metadata and creates an account
-  with one global built-in role. Per-account token routes list metadata, issue
+- `/api/v1/service-accounts` lists safe account metadata (filtered to the
+  caller's share for non-administrators), each account's roles as
+  `roles: [{role_id, name}]`, and creates an account holding `role_ids`
+  (1–64, each inside the creator's share; an unknown role id is
+  400 `unknown_role`, as for `POST /api/v1/users`). Creating an account or
+  issuing a token checks the session, CSRF and permission (and the account's
+  share) before reading the body: a caller who may not gets 401 or 403
+  whatever they send.
+  `PUT`/`DELETE /api/v1/service-accounts/{id}/roles/{role}` give or take a
+  role (`access.grant` and the share). The token list, issue and revoke
+  routes and disable also need the account inside the caller's share
+  (`people_roles::account_in_share`); an account outside it answers 404
+  `service_account_not_found`, like one that does not exist, so nobody
+  mints a token for an account holding more than they do. Per-account token routes list metadata, issue
   an expiring `ovc_` bearer secret once, revoke a token, or disable the account
   (which also revokes all its tokens). Token issue requires an
   `Idempotency-Key`; a matching retry returns metadata without the original
@@ -51,16 +65,15 @@ permission-checked read models, enrollment-token management, and audit routes.
   refuses bearer-authenticated mutations; those require a browser session and
   CSRF checks.
 - `/api/v1/rule-sets` and per-set bundle history are global `rules.read`
-  or `rules.upload` reads (user, 2026-10-15). Admin is the only built-in role granted `rules.read` by default;
-  custom roles may receive it explicitly. Rule upload preview verifies the
+  reads; the operator and admin roles hold it (since schema 51). Rule upload preview verifies the
   Ed25519 signature, envelope digest,
   expiry, parser limits, and currently trusted issuer against read-only public
   trust keys. Publish repeats verification, binds the confirmation token to
   the exact bytes, and stores the bundle plus its audit row atomically. The
   console never manages private signing keys or trust-key changes.
 - `/api/v1/rule-set-assignments` (the per-group switches of the assignable
-  sets) reads with global `rules.read` or `rules.upload` and changes with
-  `rules.upload` plus CSRF; see [rule-set-assignment.md](rule-set-assignment.md).
+  sets) reads with global `rules.assignment.read` and changes with
+  `rules.assignment.write` plus CSRF; see [rule-set-assignment.md](rule-set-assignment.md).
 - Missing, malformed, expired, revoked, disabled, or stale-generation sessions
   receive the same generic `401` problem. Store failures return a generic `503`.
 - Session responses are `Cache-Control: no-store`. The CSRF token is derived
@@ -79,11 +92,29 @@ caller. Handlers still check their own permission, scope and CSRF.
 `tests/auth_first_http.rs` sends a malformed body to every `/api` route
 in the OpenAPI document, with no session and with a forced-change one.
 
+### People (spec §9.1, §13)
+
+| Route | Needs | Answer |
+|---|---|---|
+| `GET /api/v1/users` | `access.read` | `[PersonRow]`, only people inside the share for non-administrators |
+| `GET /api/v1/users/{id}` | `access.read` and the share, or one's own | `PersonView`: details, roles, access lines (`applies` all, groups or platform, `from_role`), the newest 10 actions |
+| `POST /api/v1/users` | `access.users`, roles inside the share | 201 `CreatedUser` with a one-time password |
+| `PATCH /api/v1/users/{id}` | one's own, or `access.users` and the share | 204; 422 `invalid_email`/`invalid_user`; `user.updated` |
+| `POST /api/v1/users/{id}/disable`, `/enable` | `access.users` and the share; never oneself | 204; 409 `last_administrator` |
+| `POST /api/v1/users/{id}/reset-password` | `access.users` and the share; never oneself (403 `use_change_password`) | `{one_time_password}` (`no-store`); sets `password_must_change`, ends their sessions, `user.password_reset` |
+| `PUT`/`DELETE /api/v1/users/{id}/roles/{role}` | `access.grant`, the whole role inside the share; never one's own | 204 (idempotent); 409 `last_administrator` |
+| `GET /api/v1/host-groups` | `access.read` or `host_groups.manage` | `[{asset_group_id, name, selectors, roles}]` |
+
+People routes take browser sessions only (bearer tokens get 403). Someone
+outside the editor's share answers 404, exactly like someone who does not
+exist. Tests: `tests/people_http.rs` and `tests/people_share_http.rs` (fixture in `tests/common/people.rs`).
+
 ### Users and passwords (#85)
 
-- `POST /api/v1/access-control/users` (`rbac.manage`, global binding, CSRF):
-  username (the CLI's rule, stored lowercase), display name and a built-in
-  role (a create that loses a race on the same name is 409, not 503). The
+- `POST /api/v1/users` (`access.users`, CSRF): username (the CLI's rule,
+  stored lowercase), display name, optional email and `role_ids` (1–64,
+  each inside the creator's share, else 403); a create that loses a race on
+  the same name is 409, not 503. The
   answer (201, `no-store`) carries a generated one-time password
   (20 symbols from an unambiguous alphabet, about 99 bits), shown only
   there. 409 when the username is taken. Audited as `user.created` with
@@ -109,6 +140,38 @@ in the OpenAPI document, with no session and with a forced-change one.
   signed out, and `auth.password.changed` is audited. The same route is the
   account menu's Change password.
 
+### Roles (spec §4.1–4.4)
+
+`access/roles.rs` (types in `roles_types.rs`):
+
+- `GET /api/v1/permissions` and `GET /api/v1/role-templates`: the
+  catalogue and the six templates, to any signed-in person (bearer
+  tokens are refused, as for other per-person reads).
+- `GET /api/v1/roles` and `GET /api/v1/roles/{role_id}` (`access.read`):
+  `RoleView` (permissions, reach `none` / `all` / `groups` with names,
+  members, version), Administrator first. The list is also open to
+  `service_accounts.manage` (the new-account role picker); a caller let in
+  by that alone sees only the roles inside their share. With
+  `?held=true` it answers only the caller's own roles, to anyone signed in
+  with a browser session (the dashboard Share menu: only roles you hold).
+- `POST /api/v1/roles` (201), `PATCH /api/v1/roles/{role_id}` (200, needs
+  the `version` read) and `DELETE /api/v1/roles/{role_id}` (204):
+  `access.roles` and CSRF. The name is trimmed, 1–64 characters without
+  control characters; the description at most 500 (else 400
+  `invalid_role` with a field error). Permissions must be closed under
+  needs (422 `missing_needs` with `permission` and `needs`); groups are
+  1–64 distinct UUIDs that exist (422 `unknown_group`).
+- Every write is checked against the editor's share before it reaches
+  the store: the new contents for create; for edit and delete the stored
+  role too (edit at the version read: a stale one is 409 `stale_role`
+  before any share check). A stored permission id the catalogue does not
+  know is refused, not ignored, except to an Administrator (they can clean
+  such a role up). A refusal is 403 `permission_denied` whose title names the
+  permission ("... (View hosts is outside it)").
+- 403 `protected_role` for `admin`; 409 `role_name_taken` (any case),
+  `stale_role`, `role_in_use` with `holders`. Audited by the store as
+  `rbac.role.created`, `rbac.role.updated`, `rbac.role.deleted`.
+
 ## Configuration
 
 The router constructor accepts a `platform_store::Pool` and canonical public
@@ -123,7 +186,7 @@ append their observed client address to a forwarded chain; an invalid final
 address disables only the per-source bucket.
 When auth settings are absent, the executable serves the C0
 fail-closed router. `GET /api/v1/agents/summary` now requires a live human
-session with `agents.read`, resolves role bindings on each request, and passes
+session with `hosts.read`, resolves role bindings on each request, and passes
 the effective global or asset-group scope to its SQL aggregate, paginated
 list, detail, and certificate queries. Agent and certificate cursors are
 bounded and rejected when their filters or scope differ from the current
@@ -144,10 +207,13 @@ CSRF, exact Origin, same-origin Fetch Metadata, and a version-matching
 ## Failure behaviour
 
 Invalid credentials never reveal whether an account exists. Database errors
-are reduced to the generic authentication-unavailable problem. Unknown persisted
-role ids grant no capabilities. Asset-scoped bindings flow through the existing
-RBAC resolver; endpoints must still enforce those scopes in SQL before serving
-agent or finding records.
+are reduced to the generic authentication-unavailable problem. Capabilities
+are read from the database on every request, for sessions and bearer tokens
+alike (`rbac::principal_capabilities`, see console-rbac.md): a role edit
+reaches an issued token at its next request. A permission id the catalogue
+does not know grants nothing. A role's host permissions apply on its reach;
+endpoints must still enforce that scope in SQL before serving agent or
+finding records.
 
 ## How to test
 

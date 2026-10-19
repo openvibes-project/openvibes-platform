@@ -32,7 +32,7 @@ export function AddToCase({ kind, id, label, compact, inCase }: { kind: CaseKind
   const [where, setWhere] = useState<Where | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   const close = useCallback(() => setWhere(null), []);
-  if (!can("cases.manage")) return null;
+  if (!can("cases.write")) return null;
   return (
     <>
       <button ref={button} type="button" className={compact ? "button button--small button--ghost button--icon" : "button"} aria-haspopup="dialog" aria-expanded={where !== null}
