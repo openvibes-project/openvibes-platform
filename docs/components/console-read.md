@@ -6,7 +6,7 @@ certificate metadata, latest and grouped findings, finding summaries, and retain
 history. The console crate converts these records to its HTTP DTOs and applies
 authentication and scope rules before calling them. The unscoped functions
 are global read primitives. `agents_in_scope` and `agent_in_scope` enforce
-agent visibility in SQL for the supplied global or asset-group scope.
+agent visibility in SQL for the supplied global or host-group scope.
 
 ## Interfaces
 
@@ -21,7 +21,7 @@ agent visibility in SQL for the supplied global or asset-group scope.
   hosts are in no group. Empty group sets match no agents.
   `agent_summary_in_scope`, `agents_in_scope`, and `agent_in_scope` apply that
   predicate before aggregation, status filtering, cursor traversal, ordering,
-  and limiting. Imported installations are excluded from asset-group scopes
+  and limiting. Imported installations are excluded from host-group scopes
   until an association contract exists; global readers can see them.
   `agent_in_scope` hides out-of-scope IDs as absent.
 - `certificates_in_scope` verifies the owning agent's scope in the same SQL

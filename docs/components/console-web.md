@@ -31,7 +31,7 @@ Show everything, without page changes for details:
 - **Views** (the same set v1 had):
   - findings with bulk triage and a 14-day trend of reporting hosts;
   - vulnerabilities by advisory, with CVEs, EPSS and KEV;
-  - agents, with tags and revocation;
+  - agents, with labels, host groups and revocation;
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
   - settings: people, roles and host groups;
@@ -382,7 +382,7 @@ triage on alarms and findings stays as it is.
   page** (the `agent` panel): Findings, Vulnerabilities, **Alarms** (active
   ones), **Software** (the host's packages, filtered on the server by name
   and "Fix available", 200 at a time) and Details (identity, system and
-  running kernel, "software as of", threat alarms, tags, certificates).
+  running kernel, "software as of", threat alarms, groups and labels, certificates).
   **Last test** shows when the host last raised the harmless test alarm
   and test finding (`openvibes-test alarm|finding`, from `last_test` on
   the host detail), with both commands; test alarms and findings carry a

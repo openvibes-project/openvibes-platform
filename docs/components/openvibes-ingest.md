@@ -112,7 +112,10 @@ The usual request limits apply. Test: `tests/ca.rs`.
   stored); an unchanged inventory writes nothing, otherwise
   the host's inventory is replaced in one transaction and the vulnerability
   service is notified (`inventory_changed`). Each package's `source` and
-  `source_version` (protocol P10) are stored with it. 204.
+  `source_version` (protocol P10) are stored with it. The same transaction
+  makes the automatic host groups for the host's OS family and distribution
+  when missing and not dismissed (`host_group_facts::ensure_automatic_groups`,
+  platform-store.md "Host groups"). 204.
 - `POST /v1/inventory/changes` (authenticated, protocol P11):
   `InventoryChanges`, usually gzip-compressed; `agent_id` must be the
   authenticated agent's (else 400). Under the host's row lock the change

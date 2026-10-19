@@ -50,8 +50,7 @@ tokens, and CSRF values stay in the console process.
 - Tags, tag selectors and their writes (`save_asset_group`,
   `preview_agent_tags`, `apply_agent_tags`) are gone since schema 53: host
   groups and labels replace them (platform-store.md "Host groups"). The
-  console's old tag and asset-group routes answer 410 `moved` until the
-  host-group routes arrive.
+  console's old tag and asset-group routes are gone (404).
 - `revoke_agent_in_scope` checks the caller's scope with
   `console_read::agent_visibility`, so a scoped caller can revoke only an
   active host in one of its groups.

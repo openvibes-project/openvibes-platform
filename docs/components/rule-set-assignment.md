@@ -1,7 +1,7 @@
 # Rule-set assignment
 
 Which of the project's assignable rule sets run on which hosts, switched per
-asset group in the console with no host-side step. Spec:
+host group in the console with no host-side step. Spec:
 [`../specs/2026-10-14-rule-set-assignment-design.md`](../specs/2026-10-14-rule-set-assignment-design.md).
 
 ## Purpose
@@ -17,7 +17,7 @@ saying why).
 **Tables (schema 49).** `rule_set_assignment` has one row per assignable set
 with its default: `hardening-linux-l1` on, `hardening-linux-l2` off (the row
 exists before the rules are published). `rule_set_group_assignment` holds
-on/off overrides per asset group; deleting a group deletes its rows.
+on/off overrides per host group (`asset_group_id`); deleting a group deletes its rows.
 
 **A host's state for a set:** on if any group the host matches says on (on
 wins); else off if any of its groups says off; else the default. A host
