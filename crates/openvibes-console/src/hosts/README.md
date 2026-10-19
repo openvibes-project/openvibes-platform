@@ -16,7 +16,7 @@ Hosts in the console: the agent list, summary, detail and certificates, revoking
 | `presence.rs` | Live agent presence as a server-sent event stream. |
 | `site_fleet.rs` | Which hosts run the site's own rule sets, and how current they are. |
 | `groups.rs` | Host groups: list, page, member hosts, create, edit, delete and the preview before saving (spec §5.1). |
-| `group_checks.rs` | The host-group handlers' rule and pick checks, and the store's outcomes as answers. |
+| `group_checks.rs` | The host-group handlers' rule and pick checks, the reaching-role and preview-people share checks, and the store's outcomes as answers. |
 | `groups_types.rs` | Request and response types of host groups and labels. |
 | `group_words.rs` | `membership_sentence`: a group's membership in one plain sentence, shared with rule-set assignment. |
 | `labels.rs` | Host labels: read, add and remove (spec §5.2). |

@@ -1,5 +1,6 @@
 //! Checks and answers of the host-group handlers: a proposed rule or pick
-//! of hosts, and the store's outcomes as HTTP answers.
+//! of hosts, the share checks on reaching roles and preview people, and
+//! the store's outcomes as HTTP answers.
 
 use axum::{
     extract::Json,
@@ -10,8 +11,15 @@ use platform_store::host_group_writes::{self as writes, GroupContent, GroupWrite
 use platform_store::host_groups::Condition;
 
 use super::groups_types::{GroupCondition, HostGroupView};
+use crate::Permission;
+use crate::access::catalogue::{Scope, def};
+use crate::access::editor::{Editor, roles_fit};
 use crate::access::guard::unavailable_auth;
+use crate::access::people::{all_roles, held};
+use crate::access::share::{RoleReach, fits, refusal_message};
 use crate::http::problem::{FieldError, ProblemDetails, problem_response};
+use platform_store::{console_people, console_roles};
+use std::collections::HashSet;
 
 /// Picked hosts in one manual group, at most.
 const MAX_PICKED: usize = 10_000;
@@ -168,4 +176,68 @@ pub(super) fn group_not_found() -> Response {
         "group_not_found",
         "No such host group",
     ))
+}
+
+/// The people the editor may see, as the people routes decide: themselves,
+/// and everyone whose roles all fit inside the editor's share. Previews
+/// name only them; their totals still count everyone.
+// ponytail: filters the store's first 50 of each list, so fewer may show
+// while more in-share people exist; page the store lists if that matters.
+pub(super) async fn people_in_share(
+    client: &platform_store::Client,
+    editor: &Editor,
+) -> Result<HashSet<String>, Response> {
+    let roles = all_roles(client).await?;
+    let people = console_people::people(client)
+        .await
+        .map_err(|_| unavailable_auth())?;
+    Ok(people
+        .into_iter()
+        .filter(|p| p.user_id == editor.actor || roles_fit(editor, &held(&p.role_ids, &roles)))
+        .map(|p| p.user_id)
+        .collect())
+}
+
+/// A membership change can widen the reach of every role reaching the
+/// group, so each role's host permissions must fit inside the editor's
+/// own on every host (§4.4); Administrators pass. A stored permission id
+/// the catalogue does not know is refused. The store rechecks, inside its
+/// write transaction, that the same roles still reach the group.
+pub(super) async fn reaching_roles_fit(
+    client: &platform_store::Client,
+    editor: &Editor,
+    roles: &[(String, String)],
+) -> Result<(), Response> {
+    if editor.admin {
+        return Ok(());
+    }
+    for (role_id, _) in roles {
+        let role = match console_roles::role(client, role_id).await {
+            Ok(Some(role)) => role,
+            Ok(None) => continue,
+            Err(_) => return Err(unavailable_auth()),
+        };
+        let mut host = Vec::new();
+        for id in &role.permissions {
+            match Permission::from_id(id) {
+                Some(p) if def(p).scope == Scope::Host => host.push(p),
+                Some(_) => {}
+                None => {
+                    return Err(denied(format!(
+                        "A role using this group holds a permission this console does not know ({id})"
+                    )));
+                }
+            }
+        }
+        if let Err(refusal) = fits(&editor.capabilities, &host, RoleReach::All) {
+            return Err(denied(refusal_message(&refusal)));
+        }
+    }
+    Ok(())
+}
+
+fn denied(title: String) -> Response {
+    let mut problem = ProblemDetails::new(StatusCode::FORBIDDEN, "permission_denied", "");
+    problem.title = title;
+    problem_response(problem)
 }
