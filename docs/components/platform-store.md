@@ -955,3 +955,52 @@ stderr, the agent gets no error); the name functions of an unknown id (not reach
 lowercase, never capitalised. Migration 53's name functions and its backfill
 (same ids and pattern, 20 per os id, 200 at most) agree.
 Test: `tests/host_group_facts.rs`.
+
+### Host-group store API
+
+- `host_groups::list(scope)` / `detail(id, scope)` return `GroupSummary`
+  (kind, description, ordered `conditions`, `picked`, version, changed
+  at/by, `upgraded_from_tags`). Host counts, `online` (seen within
+  `OFFLINE_AFTER_MINUTES`), `open_alarms` (agent alarms in state `open`)
+  and `critical` (`host_vulnerability_counts.critical`) count only active
+  member hosts inside the caller's `AgentScope` (`agent_visibility`); every
+  group is listed whatever the scope. `roles` are those in
+  `console_role_groups`; `people` the distinct enabled users bound to them.
+- `host_groups::hosts(id, scope, after, limit)` pages member hosts by
+  hostname (cursor: the last agent id; limit 1–100) with display
+  distribution, address, labels, last seen, online, problems and `why`
+  ("Matches the rule" / "Picked by hand"). `recent_changes(id, limit)` reads
+  the group's audit rows (`target_kind = 'host_group'`), newest first.
+- `host_group_writes::create` / `update` / `delete` run in one transaction
+  under the access-binding advisory lock (the one role writes take, so a
+  role cannot start using a group being deleted). They check the version
+  (`Stale`), refuse a malformed name, description or condition (`Invalid`
+  naming the part: `invalid_part` checks the field is one of the four,
+  1–64 values, `os_family` linux/windows, `ip` an address or CIDR, at most
+  16 conditions), a picked id that is missing or not active
+  (`UnknownHost`), and a name taken regardless of case (`NameTaken`, from
+  the unique index). The kind follows the content; updating an automatic
+  group clears its `auto_key` (not dismissed), making it the person's.
+  Manual members keep their `added_at` across updates. A delete refuses
+  while roles reach the group (`InUse` with their names), remembers an
+  automatic key in `console_host_group_dismissed`, and cascades rule-set
+  switches. Audit: `host_group.created` / `updated` (`{name, kind,
+  conditions | picked}`), `host_group.deleted` (`{name, kind,
+  overrides_removed}`).
+- `host_group_writes::preview(id, proposed)` (module `host_group_preview`)
+  compares today's membership with the proposed rule (evaluated with
+  `console_condition_holds` over active hosts) or picked list; `proposed`
+  None previews a delete and counts `overrides_removed`. `gains` / `loses`
+  are the enabled people bound to roles reaching the group who get the
+  joining / lose the leaving hosts, except those holding a role on all
+  hosts (simplified: their other groups are not checked). Lists hold at
+  most 50 entries; `joins_total`, `leaves_total`, `people_total` count all.
+- `host_labels::labels` / `add_label` / `remove_label`: trimmed, 1–64
+  characters, no control characters, at most 32 per active host (`TooMany`;
+  the agent row lock serialises adds), `AlreadyThere` for a repeat,
+  `NotFound` for a missing or non-active host, `Invalid` otherwise. Audit
+  `host.label_added` / `host.label_removed` (`{label}`). Labels are never a
+  membership field.
+
+Tests: `tests/host_group_reads.rs`, `tests/host_group_writes.rs`,
+`tests/host_labels.rs` (fixtures in `tests/common/groups.rs`).

@@ -57,15 +57,21 @@ pub(crate) async fn host_groups(
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    match platform_store::console_roles::host_groups(&client).await {
+    // ponytail: names only; Task 4's host-group routes replace this view
+    match platform_store::host_groups::list(
+        &client,
+        &platform_store::console_read::AgentScope::Global,
+    )
+    .await
+    {
         Ok(groups) => Json(
             groups
                 .into_iter()
                 .map(|g| crate::access::people_types::HostGroupView {
                     asset_group_id: g.asset_group_id,
                     name: g.name,
-                    selectors: g.selectors,
-                    roles: g.roles,
+                    selectors: Vec::new(),
+                    roles: i64::try_from(g.roles.len()).unwrap_or(i64::MAX),
                 })
                 .collect::<Vec<_>>(),
         )

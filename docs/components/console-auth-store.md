@@ -62,8 +62,10 @@ tokens, and CSRF values stay in the console process.
   refuses (`LastAdministrator`) to take `admin` from the last enabled
   Administrator, counted by `enabled_administrators`, so two concurrent
   removals cannot both succeed.
-- `console_roles::host_groups` lists groups and how many roles reach each;
-  `selectors` is empty since schema 53.
+- Host groups and labels have their own store modules (`host_groups`,
+  `host_group_writes`, `host_labels`; platform-store.md "Host-group store
+  API"). The console's `GET /v1/host-groups` maps `host_groups::list` to the
+  old view (names and role counts) until the host-group routes arrive.
 - `create_session` stamps `console_users.last_sign_in_at` and accepts only a currently enabled account at the generation
   observed after password verification and can revoke the prior session in the
   same transaction during login rotation. Session lookups require matching

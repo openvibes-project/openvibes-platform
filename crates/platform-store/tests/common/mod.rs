@@ -1,5 +1,7 @@
 //! A fresh, uniquely named database per test, dropped afterwards.
 
+pub mod groups;
+
 use std::hash::{BuildHasher, Hasher};
 
 use deadpool_postgres::Pool;

@@ -55,6 +55,14 @@ pub mod health;
 pub mod history;
 /// Automatic host groups made from reported OS facts (schema 53).
 pub mod host_group_facts;
+/// The preview before a host-group save, re-exported by `host_group_writes`.
+mod host_group_preview;
+/// Host-group writes (create, update, delete) and the preview before a save.
+pub mod host_group_writes;
+/// Host groups as the console reads them: list, detail, member hosts, changes.
+pub mod host_groups;
+/// Host labels: free strings for filtering, never part of access.
+pub mod host_labels;
 /// Open ports and running services per host (P15, Assets v2).
 pub mod host_services;
 /// Queries the ingest service runs.

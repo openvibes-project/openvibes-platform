@@ -394,41 +394,6 @@ pub async fn grants(client: &Client, principal: Principal<'_>) -> Result<Vec<Gra
         .collect())
 }
 
-/// A host group as the Host groups tab lists it.
-#[derive(Clone, Debug)]
-pub struct HostGroup {
-    /// Group UUID.
-    pub asset_group_id: String,
-    /// Group name.
-    pub name: String,
-    /// Empty since schema 53 (tag selectors are gone).
-    pub selectors: Vec<String>,
-    /// Roles that reach the group.
-    pub roles: i64,
-}
-
-/// Every host group, by name, with the number of roles reaching it.
-pub async fn host_groups(client: &Client) -> Result<Vec<HostGroup>, StoreError> {
-    let rows = client
-        .query(
-            "SELECT g.asset_group_id::text, g.name,
-                (SELECT count(*) FROM console_role_groups rg
-                 WHERE rg.asset_group_id = g.asset_group_id)
-             FROM console_asset_groups g ORDER BY g.name",
-            &[],
-        )
-        .await?;
-    Ok(rows
-        .iter()
-        .map(|row| HostGroup {
-            asset_group_id: row.get(0),
-            name: row.get(1),
-            selectors: Vec::new(),
-            roles: row.get(2),
-        })
-        .collect())
-}
-
 /// Who may be assigned a triaged item (alarm, finding, vulnerability): an
 /// enabled user by username holding `permission` (the area's `*.triage`)
 /// through an active role that reaches some host, or an Administrator.
