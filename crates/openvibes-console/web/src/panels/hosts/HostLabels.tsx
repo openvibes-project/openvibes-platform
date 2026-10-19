@@ -35,7 +35,7 @@ export function labelError(e: unknown): string {
 
 export function LabelsCard({ labels, groups, editable, error, busy = false, onAdd, onRemove }: {
   labels: readonly string[]; groups: readonly GroupRef[]; editable: boolean; error: string | undefined; busy?: boolean;
-  onAdd: (label: string) => Promise<boolean> | void; onRemove: (label: string) => void;
+  onAdd: (label: string) => Promise<boolean> | undefined; onRemove: (label: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   return (

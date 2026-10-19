@@ -10,7 +10,7 @@ import { LabelsCard, MAX_LABELS, addRequest, labelError, nextLabel, removeReques
 
 const groups = [{ asset_group_id: "g1", name: "Production", kind: "rule" as const }, { asset_group_id: "g2", name: "All hosts", kind: "automatic" as const }];
 const card = (editable: boolean, error?: string) => renderToStaticMarkup(
-  <LabelsCard labels={["db", "eu"]} groups={groups} editable={editable} error={error} onAdd={() => {}} onRemove={() => {}} />);
+  <LabelsCard labels={["db", "eu"]} groups={groups} editable={editable} error={error} onAdd={() => undefined} onRemove={() => {}} />);
 
 describe("host labels", () => {
   it("trims, and ignores empty and duplicate labels", () => {
@@ -28,7 +28,7 @@ describe("host labels", () => {
     expect(removeRequest("a/b", "x/y%z")).toEqual({ method: "DELETE", path: "/api/v1/hosts/a%2Fb/labels/x%2Fy%25z" });
   });
   it("disables the input and remove buttons while a request is in flight", () => {
-    const html = renderToStaticMarkup(<LabelsCard labels={["db"]} groups={[]} editable busy error={undefined} onAdd={() => {}} onRemove={() => {}} />);
+    const html = renderToStaticMarkup(<LabelsCard labels={["db"]} groups={[]} editable busy error={undefined} onAdd={() => undefined} onRemove={() => {}} />);
     expect(html).toMatch(/<input[^>]*disabled/);
     expect(html).toMatch(/<button[^>]*disabled[^>]*aria-label="Remove label db"|<button[^>]*aria-label="Remove label db"[^>]*disabled/);
   });
