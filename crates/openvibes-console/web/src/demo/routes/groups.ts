@@ -205,7 +205,7 @@ export function registerGroupRoutes(ctx: DemoContext & { roles: RoleHelpers; ove
     if (body.conditions != null && body.agent_ids != null) return invalid("agent_ids", "Send conditions or agent_ids, not both");
     const content: Content = body.conditions != null ? { kind: "rule", conditions: conditionsOf(body.conditions) }
       : body.agent_ids != null ? { kind: "manual", picked: body.agent_ids as string[] }
-        : g.kind === "manual" ? { kind: "manual", picked: data.agents.filter((a) => g.picked.includes(a.id) && isActive(a)).map((a) => a.id).sort() }
+        : g.kind === "manual" ? { kind: "manual", picked: data.agents.filter((a) => g.picked.includes(a.id) && isActive(a)).map((a) => a.id).sort((x, y) => x.localeCompare(y)) }
           : { kind: "rule", conditions: g.conditions };
     const valid = checked(content);
     if (valid instanceof Response) return valid;

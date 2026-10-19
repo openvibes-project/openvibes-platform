@@ -78,7 +78,7 @@ export function reduce(d: Draft, a: Action): Draft {
 }
 
 const sameRule = (a: Draft, b: Draft) => JSON.stringify(a.conditions) === JSON.stringify(b.conditions);
-const samePicks = (a: Draft, b: Draft) => a.picked.map((h) => h.agent_id).sort().join() === b.picked.map((h) => h.agent_id).sort().join();
+const samePicks = (a: Draft, b: Draft) => a.picked.map((h) => h.agent_id).sort((x, y) => x.localeCompare(y)).join() === b.picked.map((h) => h.agent_id).sort((x, y) => x.localeCompare(y)).join();
 
 /**
  * The user's edit (from `draft` against `oldBase`, what they started from)
