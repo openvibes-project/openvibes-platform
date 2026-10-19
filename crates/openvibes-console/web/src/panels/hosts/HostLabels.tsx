@@ -22,15 +22,20 @@ export const nextLabel = (labels: readonly string[], input: string): string | un
   return label && !labels.includes(label) ? label : undefined;
 };
 
+const labelsPath = (id: string) => `/api/v1/hosts/${encodeURIComponent(id)}/labels`;
+/** PUT is idempotent: adding a label already there succeeds. */
+export const addRequest = (id: string, label: string) => ({ method: "PUT", path: `${labelsPath(id)}/${encodeURIComponent(label)}` }) as const;
+export const removeRequest = (id: string, label: string) => ({ method: "DELETE", path: `${labelsPath(id)}/${encodeURIComponent(label)}` }) as const;
+
 export function labelError(e: unknown): string {
   if (e instanceof ApiError && e.code === "too_many_labels") return `A host can have at most ${MAX_LABELS} labels. Remove one first.`;
-  if (e instanceof ApiError && e.status === 422) return e.message;
+  if (e instanceof ApiError && e.code === "invalid_label") return e.message;
   return "The label could not be saved.";
 }
 
-export function LabelsCard({ labels, groups, editable, error, onAdd, onRemove }: {
-  labels: readonly string[]; groups: readonly GroupRef[]; editable: boolean; error: string | undefined;
-  onAdd: (label: string) => void; onRemove: (label: string) => void;
+export function LabelsCard({ labels, groups, editable, error, busy = false, onAdd, onRemove }: {
+  labels: readonly string[]; groups: readonly GroupRef[]; editable: boolean; error: string | undefined; busy?: boolean;
+  onAdd: (label: string) => Promise<boolean> | void; onRemove: (label: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   return (
@@ -46,18 +51,19 @@ export function LabelsCard({ labels, groups, editable, error, onAdd, onRemove }:
           {labels.length === 0 && <span className="subtle">No labels</span>}
           {labels.map((l) => (
             <span key={l} className="chip">{l}
-              {editable && <button type="button" className="icon-button" aria-label={`Remove label ${l}`} title={`Remove label ${l}`} onClick={() => onRemove(l)}><Icon name="close" size={12} /></button>}
+              {editable && <button type="button" className="icon-button" aria-label={`Remove label ${l}`} disabled={busy} title={`Remove label ${l}`} onClick={() => onRemove(l)}><Icon name="close" size={12} /></button>}
             </span>
           ))}
         </div>
         {editable && (
-          <input className="input" aria-label="Add a label" placeholder="Add a label" value={draft} onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
+          <input className="input" aria-label="Add a label" placeholder="Add a label" value={draft} disabled={busy} onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={async (e) => {
               if (e.key !== "Enter") return;
               e.preventDefault();
               const label = nextLabel(labels, draft);
-              if (label) onAdd(label);
-              setDraft("");
+              if (!label) { setDraft(""); return; }
+              // The text stays when the add fails.
+              if ((await onAdd(label)) !== false) setDraft("");
             }} />
         )}
         {error && <p className="warn-text" role="alert">{error}</p>}
@@ -69,22 +75,25 @@ export function LabelsCard({ labels, groups, editable, error, onAdd, onRemove }:
 
 export function HostLabels({ id }: { id: string }) {
   const { can } = useSession();
-  const path = `/api/v1/hosts/${encodeURIComponent(id)}/labels`;
+  const path = labelsPath(id);
   const view = useResource<View>(path);
   const [error, setError] = useState<string>();
-  const change = async (method: "POST" | "DELETE", url: string, body?: unknown) => {
+  const [busy, setBusy] = useState(false);
+  const change = async ({ method, path: url }: { method: string; path: string }): Promise<boolean> => {
     setError(undefined);
+    setBusy(true);
     try {
-      await request(method, url, body);
+      await request(method, url);
       invalidate(path);
       invalidate("/api/v1/host-groups");
-    } catch (e) { setError(labelError(e)); }
+      return true;
+    } catch (e) { setError(labelError(e)); return false; } finally { setBusy(false); }
   };
   if (view.error) return <Section title="Groups and labels"><ErrorBox error={view.error} /></Section>;
   if (!view.data) return <Loading rows={2} />;
   return (
-    <LabelsCard labels={view.data.labels} groups={view.data.groups} editable={can("hosts.label")} error={error}
-      onAdd={(label) => void change("POST", path, { label })}
-      onRemove={(label) => void change("DELETE", `${path}/${encodeURIComponent(label)}`)} />
+    <LabelsCard labels={view.data.labels} groups={view.data.groups} editable={can("hosts.label")} error={error} busy={busy}
+      onAdd={(label) => change(addRequest(id, label))}
+      onRemove={(label) => void change(removeRequest(id, label))} />
   );
 }

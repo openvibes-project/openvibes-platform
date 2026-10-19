@@ -6,7 +6,7 @@ vi.hoisted(() => {
 });
 
 import { ApiError } from "../../api/client";
-import { LabelsCard, MAX_LABELS, labelError, nextLabel } from "./HostLabels";
+import { LabelsCard, MAX_LABELS, addRequest, labelError, nextLabel, removeRequest } from "./HostLabels";
 
 const groups = [{ asset_group_id: "g1", name: "Production", kind: "rule" as const }, { asset_group_id: "g2", name: "All hosts", kind: "automatic" as const }];
 const card = (editable: boolean, error?: string) => renderToStaticMarkup(
@@ -20,8 +20,17 @@ describe("host labels", () => {
   });
   it("explains the cap and a bad label", () => {
     expect(labelError(new ApiError(409, "too_many_labels", "x"))).toBe(`A host can have at most ${MAX_LABELS} labels. Remove one first.`);
-    expect(labelError(new ApiError(422, "invalid_label", "Label must be 1-64 characters"))).toBe("Label must be 1-64 characters");
+    expect(labelError(new ApiError(400, "invalid_label", "Label must be 1-64 characters"))).toBe("Label must be 1-64 characters");
     expect(labelError(new Error("boom"))).toBe("The label could not be saved.");
+  });
+  it("pins the requests: PUT/DELETE on the encoded label", () => {
+    expect(addRequest("agent.1", "db")).toEqual({ method: "PUT", path: "/api/v1/hosts/agent.1/labels/db" });
+    expect(removeRequest("a/b", "x/y%z")).toEqual({ method: "DELETE", path: "/api/v1/hosts/a%2Fb/labels/x%2Fy%25z" });
+  });
+  it("disables the input and remove buttons while a request is in flight", () => {
+    const html = renderToStaticMarkup(<LabelsCard labels={["db"]} groups={[]} editable busy error={undefined} onAdd={() => {}} onRemove={() => {}} />);
+    expect(html).toMatch(/<input[^>]*disabled/);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*aria-label="Remove label db"|<button[^>]*aria-label="Remove label db"[^>]*disabled/);
   });
   it("shows group chips with the kind word, linking to the group page", () => {
     const html = card(true);
