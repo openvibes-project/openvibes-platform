@@ -3,7 +3,11 @@
 
 use chrono::{DateTime, Utc};
 
-use crate::{Client, StoreError};
+use crate::{
+    Client, StoreError,
+    console_read::{AgentScope, agent_visibility},
+    host_groups::GroupKind,
+};
 
 /// Most labels on one host.
 pub const MAX_LABELS: i64 = 32;
@@ -28,6 +32,56 @@ fn valid(label: &str) -> Option<&str> {
     let label = label.trim();
     ((1..=64).contains(&label.chars().count()) && !label.chars().any(char::is_control))
         .then_some(label)
+}
+
+/// A host's labels and the groups it is in, as the host page shows them.
+#[derive(Clone, Debug)]
+pub struct HostLabels {
+    /// Labels, in byte order.
+    pub labels: Vec<String>,
+    /// The groups holding the host: (id, name, kind), by name.
+    pub groups: Vec<(String, String, GroupKind)>,
+}
+
+/// Whether `agent_id` is a host other than a revoked one inside `scope`.
+pub async fn reachable(
+    client: &Client,
+    scope: &AgentScope,
+    agent_id: &str,
+) -> Result<bool, StoreError> {
+    let visible = agent_visibility("a.agent_id", "$1", "$2");
+    Ok(client
+        .query_opt(
+            &format!("SELECT 1 FROM agents a WHERE a.agent_id = $3 AND a.status <> 'revoked' AND {visible}"),
+            &[&scope.is_global(), &scope.group_ids(), &agent_id],
+        )
+        .await?
+        .is_some())
+}
+
+/// The host's labels and groups; `None` when it is not [`reachable`].
+pub async fn host_labels(
+    client: &Client,
+    scope: &AgentScope,
+    agent_id: &str,
+) -> Result<Option<HostLabels>, StoreError> {
+    if !reachable(client, scope, agent_id).await? {
+        return Ok(None);
+    }
+    let groups = client
+        .query(
+            "SELECT g.asset_group_id::text, g.name, g.kind FROM console_asset_groups g
+             WHERE console_host_in_group($1, g.asset_group_id) ORDER BY lower(g.name)",
+            &[&agent_id],
+        )
+        .await?
+        .iter()
+        .map(|row| (row.get(0), row.get(1), GroupKind::parse(row.get(2))))
+        .collect();
+    Ok(Some(HostLabels {
+        labels: labels(client, agent_id).await?,
+        groups,
+    }))
 }
 
 /// A host's labels, in byte order.

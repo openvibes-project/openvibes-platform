@@ -12,7 +12,7 @@ describe("demo rule-set assignment", () => {
     expect(l1).toMatchObject({ rule_set_id: "hardening-linux-l1", default_enabled: true, published: true, groups: [{ asset_group_id: "grp-prod", name: "Production", enabled: false }] });
     expect(l2).toMatchObject({ rule_set_id: "hardening-linux-l2", default_enabled: false, published: false, groups: [] });
     const prod = view.asset_groups.find((g) => g.name === "Production");
-    expect(prod?.selectors).toEqual(["env=prod"]);
+    expect(prod?.summary).toBe("env=prod");
     expect(l1?.hosts_off).toBe(prod?.hosts);
     expect((l1?.hosts_on ?? 0) + (l1?.hosts_off ?? 0)).toBe(l2?.hosts_off);
   });

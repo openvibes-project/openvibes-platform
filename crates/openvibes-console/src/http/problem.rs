@@ -47,6 +47,9 @@ pub struct ProblemExtra {
     /// With `role_in_use`: how many people and service accounts hold it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub holders: Option<i64>,
+    /// With `group_in_use`: the names of the roles reaching the group.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roles: Option<Vec<String>>,
 }
 
 /// Safe validation detail for one request field.

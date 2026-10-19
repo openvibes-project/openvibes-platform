@@ -306,7 +306,7 @@ async fn rule_readers_and_publishers_see_the_switches_and_only_publishers_change
                 {"rule_set_id": "hardening-linux-l2", "default_enabled": false, "published": false,
                  "hosts_on": 0, "hosts_off": 1, "groups": []}
             ],
-            "asset_groups": [{"asset_group_id": WEB, "name": "web", "selectors": [], "hosts": 1}]
+            "asset_groups": [{"asset_group_id": WEB, "name": "web", "kind": "manual", "summary": "1 host picked by hand", "hosts": 1}]
         })
     );
     for (path, expected) in RULE_READS {

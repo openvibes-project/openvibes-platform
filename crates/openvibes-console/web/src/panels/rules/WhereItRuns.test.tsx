@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import type { AssignableGroup, RuleSetAssignment } from "../../api/types";
 import { WhereItRuns } from "./WhereItRuns";
 
-const prod: AssignableGroup = { asset_group_id: "g-prod", name: "Production", selectors: ["env=prod"], hosts: 24 };
-const lab: AssignableGroup = { asset_group_id: "g-lab", name: "Lab", selectors: ["env=lab"], hosts: 31 };
+const prod: AssignableGroup = { asset_group_id: "g-prod", name: "Production", kind: "manual", summary: "24 hosts picked by hand", hosts: 24 };
+const lab: AssignableGroup = { asset_group_id: "g-lab", name: "Lab", kind: "rule", summary: "Hosts where hostname matches lab-*", hosts: 31 };
 const l1: RuleSetAssignment = { rule_set_id: "hardening-linux-l1", default_enabled: true, published: true, hosts_on: 162, hosts_off: 24, groups: [{ asset_group_id: "g-prod", name: "Production", enabled: false }] };
 const l2: RuleSetAssignment = { rule_set_id: "hardening-linux-l2", default_enabled: false, published: false, hosts_on: 0, hosts_off: 186, groups: [] };
 const html = (assignment: RuleSetAssignment, groups: AssignableGroup[], canChange = true) =>
@@ -19,7 +19,7 @@ describe("Where it runs", () => {
     expect(out).toContain("On for Linux hosts by default");
     expect(out).toContain("Runs on <b>162</b> Linux hosts · off on <b>24</b>.");
     expect(out).toContain('aria-label="Group overrides"');
-    expect(out).toContain('<span class="tag">env=prod</span>');
+    expect(out).toContain('<span class="subtle">24 hosts picked by hand</span>');
     expect(out).toContain('aria-label="Runs for Production"');
     expect(out).toContain('aria-label="Remove Production"');
     expect(out).toContain("+ Add group");

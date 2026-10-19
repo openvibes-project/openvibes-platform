@@ -9,6 +9,7 @@ use common::TestDb;
 use platform_store::{
     Client,
     console_read::AgentScope,
+    host_groups::GroupKind,
     rule_assignment::{self, Change, HostAssignment, Source},
 };
 
@@ -89,14 +90,14 @@ async fn hosts_are_counted_per_set_and_per_group_on_linux_hosts_only() {
     let groups: Vec<_> = overview
         .groups
         .iter()
-        .map(|g| (g.name.as_str(), g.selectors.clone(), g.hosts))
+        .map(|g| (g.name.as_str(), g.kind, g.hosts))
         .collect();
     assert_eq!(
         groups,
         [
-            ("empty", vec![], 0),
-            ("lab", vec![], 1),
-            ("prod", vec![], 1),
+            ("empty", GroupKind::Manual, 0),
+            ("lab", GroupKind::Manual, 1),
+            ("prod", GroupKind::Manual, 1),
         ]
     );
     drop((console, admin));

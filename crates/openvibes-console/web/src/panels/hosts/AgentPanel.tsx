@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
-import { apiMessage, invalidate, request, useAllPages, useResource } from "../../api/client";
-import type { Agent, AlarmSummary, Certificate, LastTest, Finding, HostPackage, HostRuleSetAssignments, RuleSet, Tag, TagPreview, VulnerabilityPage } from "../../api/types";
+import { invalidate, request, useAllPages, useResource } from "../../api/client";
+import type { Agent, AlarmSummary, Certificate, LastTest, Finding, HostPackage, HostRuleSetAssignments, RuleSet, VulnerabilityPage } from "../../api/types";
 import { nav } from "../../app/nav";
 import { useSession } from "../../app/session";
 import { useProvideTitle } from "../../app/titles";
@@ -189,7 +189,6 @@ export function AgentPanel({ id }: { id: string }) {
             </Section>
             {data.status !== "imported" && <LastTestSection test={data.last_test} />}
             {data.status !== "imported" && <HostRuleSets agent={data} />}
-            {can("host_groups.manage") && <TagEditor id={id} />}
             <Section title="Certificates">
               <ul className="list list--plain">
                 {data.certificates.map((certificate, index) => (
@@ -245,49 +244,6 @@ function HostRuleSets({ agent }: { agent: Agent }) {
         </ul>
       )}
       {agent.rule_sets_at && <p className="subtle">Reported <Ago value={agent.rule_sets_at} />.</p>}
-    </Section>
-  );
-}
-
-function TagEditor({ id }: { id: string }) {
-  const [draft, setDraft] = useState("");
-  const [preview, setPreview] = useState<TagPreview>();
-  const [error, setError] = useState<string>();
-  const parse = (text: string): Tag[] => text.split(/[\s,]+/).filter(Boolean).map((pair) => {
-    const [key = "", ...rest] = pair.split("=");
-    return { key, value: rest.join("=") };
-  });
-  return (
-    <Section title="Tags">
-      <form className="stack" onSubmit={(event) => {
-        event.preventDefault();
-        setError(undefined);
-        request<TagPreview>("POST", `/api/v1/agents/${encodeURIComponent(id)}/tags/preview`, { tags: parse(draft) })
-          .then(setPreview, (e: unknown) => setError(apiMessage(e, "Preview failed")));
-      }}>
-        <div className="row">
-          <input className="input grow" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="env=prod role=web" aria-label="Tags as key=value pairs" />
-          <button className="button button--small" type="submit">Preview</button>
-        </div>
-        {error && <p className="confirm__error" role="alert">{error}</p>}
-        {preview && (
-          <div className="card card__body stack">
-            <div className="row row--wrap"><span className="subtle">Now</span>{preview.current.map((t) => <span key={`${t.key}=${t.value}`} className="tag">{t.key}={t.value}</span>)}</div>
-            <div className="row row--wrap"><span className="subtle">After</span>{preview.proposed.map((t) => <span key={`${t.key}=${t.value}`} className="tag">{t.key}={t.value}</span>)}</div>
-            {(preview.gained_groups.length > 0 || preview.lost_groups.length > 0) && (
-              <p className="subtle">Joins {preview.gained_groups.map((g) => g.name).join(", ") || "no group"}; leaves {preview.lost_groups.map((g) => g.name).join(", ") || "no group"}.</p>
-            )}
-            <div className="row">
-              <button type="button" className="button button--small button--primary" onClick={() => {
-                request("PUT", `/api/v1/agents/${encodeURIComponent(id)}/tags`, { tags: preview.proposed, preview_token: preview.preview_token })
-                  .then(() => { setPreview(undefined); setDraft(""); invalidate("/api/v1/agents"); toast("Tags updated"); },
-                    (e: unknown) => setError(apiMessage(e, "Update failed")));
-              }}>Apply</button>
-              <button type="button" className="button button--small button--ghost" onClick={() => setPreview(undefined)}>Discard</button>
-            </div>
-          </div>
-        )}
-      </form>
     </Section>
   );
 }

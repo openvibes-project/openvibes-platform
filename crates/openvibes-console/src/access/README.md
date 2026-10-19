@@ -1,6 +1,6 @@
 # src/access
 
-Who may do what in the console: sign-in and the session, the checks every area's handlers run, roles, people and their roles, service accounts, host groups and host tags.
+Who may do what in the console: sign-in and the session, the checks every area's handlers run, roles, people and their roles, and service accounts. Host groups and labels live in `src/hosts`.
 
 | File | What it does |
 |---|---|
@@ -27,9 +27,7 @@ Who may do what in the console: sign-in and the session, the checks every area's
 | `roles.rs` | The roles API: the catalogue, templates, and role list, read, create, edit and delete, each write checked against the editor's share. |
 | `roles_types.rs` | Request and response types of the roles API. |
 | `share.rs` | The share check: a role fits only inside the editor's own permissions and reach (spec §4.4). |
-| `asset_groups.rs` | Host groups: list (`GET /v1/host-groups`); the old tag-selector create and update answer 410 `moved` (schema 53). |
-| `tags.rs` | Host tags: gone with schema 53; preview and apply answer 410 `moved`. |
 | `session_types.rs` | Request and response types of sign-in, the session and users. |
-| `grant_types.rs` | Request and response types of asset groups, host tags and service accounts. |
+| `grant_types.rs` | Request and response types of service accounts and their tokens. |
 
 More: [docs/components/openvibes-console.md](../../../../docs/components/openvibes-console.md)

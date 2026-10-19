@@ -109,128 +109,6 @@
         }
       }
     },
-    "/api/v1/access-control/asset-groups": {
-      "post": {
-        "tags": [
-          "access control"
-        ],
-        "summary": "Creates an asset group from a bounded conjunction of exact tag selectors.",
-        "operationId": "create_authenticated_asset_group",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SaveAssetGroupRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Asset group created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccessAssetGroup"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid selector set",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Name conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/access-control/asset-groups/{group_id}": {
-      "put": {
-        "tags": [
-          "access control"
-        ],
-        "summary": "Replaces an asset group's name and complete selector conjunction.",
-        "operationId": "update_authenticated_asset_group",
-        "parameters": [
-          {
-            "name": "group_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SaveAssetGroupRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Asset group updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccessAssetGroup"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid selector set",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Asset group not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Name conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/agent-command": {
       "get": {
         "tags": [
@@ -865,121 +743,6 @@
             "description": "Absent or outside the caller's scope",
             "content": {
               "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/agents/{agent_id}/tags": {
-      "put": {
-        "tags": [
-          "agents"
-        ],
-        "summary": "Applies an agent tag set only while its membership preview remains current.",
-        "operationId": "apply_authenticated_agent_tags",
-        "parameters": [
-          {
-            "name": "agent_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApplyAgentTagsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Tags changed and impact audited"
-          },
-          "400": {
-            "description": "Invalid tag set",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Preview is stale",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentTagPreviewResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/agents/{agent_id}/tags/preview": {
-      "post": {
-        "tags": [
-          "agents"
-        ],
-        "summary": "Previews asset group membership changes for an agent's complete tag set.",
-        "operationId": "preview_authenticated_agent_tags",
-        "parameters": [
-          {
-            "name": "agent_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentTagChangeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Membership impact preview",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentTagPreviewResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid tag set",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Agent not found",
-            "content": {
-              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
                 }
@@ -4805,8 +4568,8 @@
         "tags": [
           "access control"
         ],
-        "summary": "Every host group with its selectors and how many roles reach it, for\nthe Host groups tab and the role reach picker.",
-        "operationId": "host_groups",
+        "summary": "Every host group, by name, counted inside the caller's reach.",
+        "operationId": "list_groups",
         "responses": {
           "200": {
             "description": "Host groups",
@@ -4823,6 +4586,665 @@
           },
           "403": {
             "description": "Needs access.read or host_groups.manage",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Creates a rule or manual group.",
+        "operationId": "create_group",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHostGroup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostGroupView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_group: name, description or body",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs host_groups.manage and hosts.read on all hosts",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "group_name_taken",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_condition (naming the field) or unknown_host",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/host-groups/preview": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "The hosts a new group with `conditions` or `agent_ids` would hold.",
+        "operationId": "preview_new_group",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewHostGroup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The joining hosts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostGroupPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_group: neither conditions nor agent_ids",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs host_groups.manage and hosts.read on all hosts",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_condition",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/host-groups/{group_id}": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "A group's page: the group counted inside the caller's reach, and its\nnewest 10 changes.",
+        "operationId": "get_group",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostGroupDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.read or host_groups.manage",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "group_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Deletes a group no role reaches, with its rule-set switches.",
+        "operationId": "delete_group",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "description": "The version you read",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "400": {
+            "description": "invalid_group: no version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs host_groups.manage and hosts.read on all hosts",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "group_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "stale_group, or group_in_use with the roles' names",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Edits a group when `version` is still current. An automatic group\nedited becomes a rule group.",
+        "operationId": "update_group",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHostGroup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostGroupView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_group",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs host_groups.manage and hosts.read on all hosts",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "group_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "stale_group or group_name_taken",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_condition or unknown_host",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/host-groups/{group_id}/hosts": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "A page of the group's member hosts inside the caller's reach, by\nhostname, after the host `after`.",
+        "operationId": "group_hosts",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "The last agent id of the previous page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1 to 100; 50 when left out",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Member hosts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GroupHostView"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.read or host_groups.manage",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "group_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/host-groups/{group_id}/preview": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "What saving `conditions` or `agent_ids` into the group would change, or\nwith `{}`, what deleting it would.",
+        "operationId": "preview_group",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewHostGroup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What would change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostGroupPreview"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs host_groups.manage and hosts.read on all hosts",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "group_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_condition",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/hosts/{agent_id}/labels": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "A host's labels and the groups it is in.",
+        "operationId": "host_labels",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Labels and groups",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostLabelsView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "host_not_found: missing or outside reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/hosts/{agent_id}/labels/{label}": {
+      "put": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Adds a label (1–64 characters, at most 32 per host); adding one already\nthere is fine.",
+        "operationId": "add_label",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Added, or already there"
+          },
+          "400": {
+            "description": "invalid_label",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.label",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "host_not_found: missing or outside reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "too_many_labels",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Removes a label; removing one that is not there is fine.",
+        "operationId": "remove_label",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed, or not there"
+          },
+          "403": {
+            "description": "Needs hosts.label",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "host_not_found: missing or outside reach",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8670,32 +9092,6 @@
           }
         }
       },
-      "AccessAssetGroup": {
-        "type": "object",
-        "description": "Manual asset group and exact selectors.",
-        "required": [
-          "asset_group_id",
-          "name",
-          "selectors"
-        ],
-        "properties": {
-          "asset_group_id": {
-            "type": "string",
-            "description": "Stable group identifier."
-          },
-          "name": {
-            "type": "string",
-            "description": "Operator-facing group name."
-          },
-          "selectors": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Exact `key=value` selectors, all of which must match."
-          }
-        }
-      },
       "AccessLine": {
         "type": "object",
         "description": "One permission a person holds through one role.",
@@ -9028,149 +9424,6 @@
             "format": "int64",
             "description": "Number of visible enrolled agents.",
             "minimum": 0
-          }
-        }
-      },
-      "AgentTagBindingImpact": {
-        "type": "object",
-        "description": "Binding affected by a proposed agent tag change.",
-        "required": [
-          "binding_id",
-          "username",
-          "role_id",
-          "asset_group_name"
-        ],
-        "properties": {
-          "asset_group_name": {
-            "type": "string",
-            "description": "Asset group name."
-          },
-          "binding_id": {
-            "type": "string",
-            "description": "Binding UUID."
-          },
-          "role_id": {
-            "type": "string",
-            "description": "Role identifier."
-          },
-          "username": {
-            "type": "string",
-            "description": "Username."
-          }
-        }
-      },
-      "AgentTagChangeRequest": {
-        "type": "object",
-        "description": "Proposed exact agent tag set.",
-        "required": [
-          "tags"
-        ],
-        "properties": {
-          "tags": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentTagInput"
-            },
-            "description": "Complete replacement tag set."
-          }
-        },
-        "additionalProperties": false
-      },
-      "AgentTagGroupImpact": {
-        "type": "object",
-        "description": "Asset group affected by a proposed tag change.",
-        "required": [
-          "asset_group_id",
-          "name"
-        ],
-        "properties": {
-          "asset_group_id": {
-            "type": "string",
-            "description": "Group identifier."
-          },
-          "name": {
-            "type": "string",
-            "description": "Group name."
-          }
-        }
-      },
-      "AgentTagInput": {
-        "type": "object",
-        "description": "Exact tag key and value proposed for an agent.",
-        "required": [
-          "key",
-          "value"
-        ],
-        "properties": {
-          "key": {
-            "type": "string",
-            "description": "Tag key."
-          },
-          "value": {
-            "type": "string",
-            "description": "Tag value."
-          }
-        },
-        "additionalProperties": false
-      },
-      "AgentTagPreviewResponse": {
-        "type": "object",
-        "description": "Exact-tag impact preview.",
-        "required": [
-          "current",
-          "proposed",
-          "gained_groups",
-          "lost_groups",
-          "gained_bindings",
-          "lost_bindings",
-          "preview_token"
-        ],
-        "properties": {
-          "current": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentTagInput"
-            },
-            "description": "Existing tags."
-          },
-          "gained_bindings": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentTagBindingImpact"
-            },
-            "description": "Active scoped bindings gained."
-          },
-          "gained_groups": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentTagGroupImpact"
-            },
-            "description": "Groups the agent will enter."
-          },
-          "lost_bindings": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentTagBindingImpact"
-            },
-            "description": "Active scoped bindings lost."
-          },
-          "lost_groups": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentTagGroupImpact"
-            },
-            "description": "Groups the agent will leave."
-          },
-          "preview_token": {
-            "type": "string",
-            "description": "Token required to apply this proposal."
-          },
-          "proposed": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentTagInput"
-            },
-            "description": "Proposed tags."
           }
         }
       },
@@ -9606,54 +9859,14 @@
           "platform"
         ]
       },
-      "ApplyAgentTagsRequest": {
-        "type": "object",
-        "description": "Confirmed tag update request, bound to an impact preview.",
-        "required": [
-          "tags",
-          "preview_token"
-        ],
-        "properties": {
-          "preview_token": {
-            "type": "string",
-            "description": "Opaque preview token."
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentTagInput"
-            },
-            "description": "Complete replacement tag set."
-          }
-        },
-        "additionalProperties": false
-      },
-      "AssetGroupSelectorInput": {
-        "type": "object",
-        "description": "Exact tag selector used to define asset-group membership.",
-        "required": [
-          "key",
-          "value"
-        ],
-        "properties": {
-          "key": {
-            "type": "string",
-            "description": "Tag key."
-          },
-          "value": {
-            "type": "string",
-            "description": "Exact tag value."
-          }
-        },
-        "additionalProperties": false
-      },
       "AssignableGroupView": {
         "type": "object",
         "description": "An asset group an override can name.",
         "required": [
           "asset_group_id",
           "name",
-          "selectors",
+          "kind",
+          "summary",
           "hosts"
         ],
         "properties": {
@@ -9666,16 +9879,17 @@
             "format": "int64",
             "description": "Linux hosts it matches."
           },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind",
+            "description": "How it gets its hosts."
+          },
           "name": {
             "type": "string",
             "description": "Its name."
           },
-          "selectors": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Its selectors, `key=value`."
+          "summary": {
+            "type": "string",
+            "description": "Its membership in one sentence, e.g. \"Hosts where OS family is\nLinux\", or \"3 hosts picked by hand\"."
           }
         }
       },
@@ -11091,6 +11305,49 @@
         },
         "additionalProperties": false
       },
+      "CreateHostGroup": {
+        "type": "object",
+        "description": "A new group: a rule (`conditions`) or hosts picked by hand\n(`agent_ids`).",
+        "required": [
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "agent_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The hosts, for a manual group."
+          },
+          "conditions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/GroupCondition"
+            },
+            "description": "The rule: 1–16 conditions, all of which must hold."
+          },
+          "description": {
+            "type": "string",
+            "description": "At most 500 characters."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind",
+            "description": "`rule` or `manual`."
+          },
+          "name": {
+            "type": "string",
+            "description": "1–128 characters, unique regardless of case."
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateServiceAccountRequest": {
         "type": "object",
         "description": "Request to create a service identity holding roles.",
@@ -12302,6 +12559,123 @@
           }
         }
       },
+      "GroupChangeView": {
+        "type": "object",
+        "description": "One audited change to a group, newest first.",
+        "required": [
+          "action",
+          "actor",
+          "at",
+          "detail"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "detail": {
+            "type": "object",
+            "description": "The audited detail (name, kind, conditions; for a caller who does\nnot reach every host, without host lists or counts)."
+          }
+        }
+      },
+      "GroupCondition": {
+        "type": "object",
+        "description": "One rule condition: `field` holds when any value matches (none, when\nnegated).",
+        "required": [
+          "field",
+          "values"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "`os_family`, `distribution`, `hostname` or `ip`."
+          },
+          "negate": {
+            "type": "boolean",
+            "description": "\"is not\", \"does not match\", \"is not in\"."
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "1–64 values of 1–255 characters: `linux`/`windows`; `debian 12`; a\nhostname pattern (`*` matches any run); an address or CIDR range."
+          }
+        },
+        "additionalProperties": false
+      },
+      "GroupHostView": {
+        "type": "object",
+        "description": "A member host on the group page.",
+        "required": [
+          "agent_id",
+          "labels",
+          "online",
+          "open_alarms",
+          "critical",
+          "why"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "critical": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "distribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name, e.g. `Debian 12`."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "last_address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Source address of its last connection."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339."
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "open_alarms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "why": {
+            "type": "string",
+            "description": "\"Matches the rule\" or \"Picked by hand\"."
+          }
+        }
+      },
       "GroupRef": {
         "type": "object",
         "description": "A host group a role reaches.",
@@ -12314,6 +12688,22 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          }
+        }
+      },
+      "GroupRoleRef": {
+        "type": "object",
+        "description": "A role reaching a group.",
+        "required": [
+          "role_id",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role_id": {
             "type": "string"
           }
         }
@@ -12402,33 +12792,243 @@
         },
         "additionalProperties": false
       },
-      "HostGroupView": {
+      "HostGroupDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/HostGroupView"
+          },
+          {
+            "type": "object",
+            "required": [
+              "recent"
+            ],
+            "properties": {
+              "recent": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupChangeView"
+                },
+                "description": "The newest 10 changes."
+              }
+            }
+          }
+        ],
+        "description": "A group's page: the group and its recent changes."
+      },
+      "HostGroupKind": {
+        "type": "string",
+        "description": "How a group gets its hosts.",
+        "enum": [
+          "automatic",
+          "rule",
+          "manual"
+        ]
+      },
+      "HostGroupPreview": {
         "type": "object",
-        "description": "A host group, for the Host groups tab and the role reach picker.",
+        "description": "What saving (or deleting) would change. Lists hold at most 50 entries;\nthe totals count them all.",
+        "required": [
+          "joins",
+          "leaves",
+          "gains",
+          "loses",
+          "joins_total",
+          "leaves_total",
+          "people_total",
+          "overrides_removed"
+        ],
+        "properties": {
+          "gains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewPerson"
+            },
+            "description": "People who would gain the joining hosts."
+          },
+          "joins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewHost"
+            }
+          },
+          "joins_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "leaves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewHost"
+            }
+          },
+          "leaves_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "loses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewPerson"
+            },
+            "description": "People who would lose the leaving hosts."
+          },
+          "overrides_removed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rule-set switches a delete removes."
+          },
+          "people_total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "HostGroupRef": {
+        "type": "object",
+        "description": "A group a host is in.",
         "required": [
           "asset_group_id",
           "name",
-          "selectors",
-          "roles"
+          "kind"
         ],
         "properties": {
           "asset_group_id": {
             "type": "string"
           },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "HostGroupView": {
+        "type": "object",
+        "description": "A host group with its hosts counted inside the caller's `hosts.read`\nreach.",
+        "required": [
+          "asset_group_id",
+          "name",
+          "kind",
+          "description",
+          "conditions",
+          "membership",
+          "picked",
+          "hosts",
+          "online",
+          "open_alarms",
+          "critical",
+          "roles",
+          "people",
+          "upgraded_from_tags",
+          "version"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": "string"
+          },
+          "changed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339; when it was last changed."
+          },
+          "changed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCondition"
+            },
+            "description": "The rule, in order (empty for manual groups)."
+          },
+          "critical": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Critical vulnerabilities on those hosts."
+          },
+          "description": {
+            "type": "string"
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Member hosts inside reach."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind"
+          },
+          "membership": {
+            "type": "string",
+            "description": "The membership in one sentence, e.g. \"Hosts where OS family is\nWindows\", or \"3 hosts picked by hand\"."
+          },
           "name": {
             "type": "string"
           },
-          "roles": {
+          "online": {
             "type": "integer",
             "format": "int64",
-            "description": "How many roles reach the group."
+            "description": "Of those, seen within the online window."
           },
-          "selectors": {
+          "open_alarms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open agent alarms on those hosts."
+          },
+          "people": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Enabled people holding one of those roles."
+          },
+          "picked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active hosts picked by hand inside reach (manual groups)."
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupRoleRef"
+            },
+            "description": "Roles reaching the group, by name."
+          },
+          "upgraded_from_tags": {
+            "type": "boolean",
+            "description": "Made from tags by the upgrade (schema 53)."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Send it back with an edit or delete."
+          }
+        }
+      },
+      "HostLabelsView": {
+        "type": "object",
+        "description": "A host's labels and the groups it is in.",
+        "required": [
+          "labels",
+          "groups"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostGroupRef"
+            },
+            "description": "By name."
+          },
+          "labels": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Exact `key=value` selectors."
+            "description": "In byte order."
           }
         }
       },
@@ -13196,6 +13796,69 @@
           }
         }
       },
+      "PreviewHost": {
+        "type": "object",
+        "description": "A host in a preview.",
+        "required": [
+          "agent_id"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PreviewHostGroup": {
+        "type": "object",
+        "description": "What to preview: a rule, a pick of hosts, or (`{}`, on an existing\ngroup) deleting it.",
+        "properties": {
+          "agent_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "conditions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/GroupCondition"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreviewPerson": {
+        "type": "object",
+        "description": "A person in a preview.",
+        "required": [
+          "user_id",
+          "username",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
       "ProblemDetails": {
         "allOf": [
           {
@@ -13279,6 +13942,16 @@
               "null"
             ],
             "description": "With `missing_needs`: the permission whose need is missing."
+          },
+          "roles": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "With `group_in_use`: the names of the roles reaching the group."
           }
         }
       },
@@ -14062,28 +14735,6 @@
             "description": "`match`, `no_match`, `unavailable` or `failed`."
           }
         }
-      },
-      "SaveAssetGroupRequest": {
-        "type": "object",
-        "description": "Request to create or replace an asset group's complete selector set.",
-        "required": [
-          "name",
-          "selectors"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Operator-facing group name."
-          },
-          "selectors": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AssetGroupSelectorInput"
-            },
-            "description": "Complete conjunction of exact selectors, from one through 32."
-          }
-        },
-        "additionalProperties": false
       },
       "SaveDashboardRequest": {
         "type": "object",
@@ -15360,6 +16011,51 @@
           "state": {
             "type": "string",
             "description": "Workflow state."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateHostGroup": {
+        "type": "object",
+        "description": "New details; a field left out is unchanged. Sending `conditions` makes\nthe group a rule group, `agent_ids` a manual one.",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "agent_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "conditions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/GroupCondition"
+            }
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The version you read."
           }
         },
         "additionalProperties": false

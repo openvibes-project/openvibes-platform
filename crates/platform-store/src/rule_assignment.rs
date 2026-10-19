@@ -3,7 +3,10 @@
 //! on/off overrides per asset group; console writes are audited
 //! (`rules.assignment.change`) with the old and new value.
 
-use crate::{Client, StoreError};
+use crate::{
+    Client, StoreError,
+    host_groups::{Condition, GroupKind},
+};
 use chrono::{DateTime, Utc};
 
 /// One asset group's override for a set.
@@ -41,9 +44,12 @@ pub struct GroupName {
     pub asset_group_id: String,
     /// Its name.
     pub name: String,
-    /// Empty since schema 53 (tag selectors are gone); kept for the console
-    /// until it shows a membership summary instead.
-    pub selectors: Vec<String>,
+    /// How it gets its hosts.
+    pub kind: GroupKind,
+    /// Its rule, in order (empty for manual groups).
+    pub conditions: Vec<Condition>,
+    /// Active hosts picked by hand (manual groups).
+    pub picked: i64,
     /// Linux hosts it matches.
     pub hosts: i64,
 }
@@ -100,7 +106,13 @@ pub async fn overview(client: &Client) -> Result<Overview, StoreError> {
         .await?;
     let groups = client
         .query(
-            "SELECT asset_group_id::text, name FROM console_asset_groups ORDER BY name",
+            "SELECT g.asset_group_id::text, g.name, g.kind,
+                    COALESCE((SELECT jsonb_agg(jsonb_build_object('field', c.field, 'negate', c.negate, 'values', c.vals)
+                                               ORDER BY c.position)
+                              FROM console_host_group_conditions c WHERE c.asset_group_id = g.asset_group_id), '[]'),
+                    (SELECT count(*) FROM console_host_group_members m JOIN agents a USING (agent_id)
+                     WHERE m.asset_group_id = g.asset_group_id AND a.status = 'active')
+             FROM console_asset_groups g ORDER BY g.name",
             &[],
         )
         .await?;
@@ -159,7 +171,9 @@ pub async fn overview(client: &Client) -> Result<Overview, StoreError> {
             .map(|row| {
                 let asset_group_id: String = row.get(0);
                 GroupName {
-                    selectors: Vec::new(),
+                    kind: GroupKind::parse(row.get(2)),
+                    conditions: serde_json::from_value(row.get(3)).unwrap_or_default(),
+                    picked: row.get(4),
                     hosts: group_hosts
                         .iter()
                         .find(|h| h.get::<_, &str>(0) == asset_group_id)

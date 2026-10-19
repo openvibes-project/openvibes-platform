@@ -58,7 +58,7 @@ export function createAssignmentStore(data: DemoData, audit: (setId: string) => 
   return {
     list: (): RuleSetAssignments => ({
       items: ids().map(view),
-      asset_groups: [...groups()].sort(byName).map((g) => ({ asset_group_id: g.asset_group_id, name: g.name, selectors: g.selectors, hosts: linux().filter((a) => member(a, g.selectors)).length })),
+      asset_groups: [...groups()].sort(byName).map((g) => ({ asset_group_id: g.asset_group_id, name: g.name, kind: "manual" as const, summary: g.selectors.join(", "), hosts: linux().filter((a) => member(a, g.selectors)).length })),
     }),
     setDefault(id: string, body: Record<string, unknown>): Result {
       if (!(id in state.defaults)) return problem(404, "rule_set_not_assignable", "Rule set is not assignable");

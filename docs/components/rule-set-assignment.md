@@ -63,8 +63,7 @@ writes triage history).
 
 **Store (`platform_store::rule_assignment`).** `overview` (sets, overrides,
 whether a live bundle is published, Linux hosts on and off per set, every
-group with its Linux host count (`selectors` is empty since schema 53, until
-the console shows a membership summary); a Linux host is an
+group with its kind, rule, picked-host count and Linux host count); a Linux host is an
 active agent, stale included, revoked and imported not, whose inventory
 reported os-release), `for_agent` (per set: state, the group that decided it,
 the first by name when several agree, and whether the set is published),
@@ -98,8 +97,9 @@ All answers carry `Cache-Control: no-store`; errors are
 | `GET /api/v1/agents/{agent_id}/rule-set-assignments` | `hosts.read` (scoped) | none | `HostRuleSetAssignmentsView` |
 
 Shapes: `RuleSetAssignmentsView { items: [RuleSetAssignmentView],
-asset_groups: [{asset_group_id, name, selectors: [], hosts}] }` (`selectors`
-empty since schema 53);
+asset_groups: [{asset_group_id, name, kind, summary, hosts}] }` (`kind`
+automatic, rule or manual; `summary` the membership sentence, e.g. "Hosts
+where OS family is Linux" or "3 hosts picked by hand");
 `RuleSetAssignmentView { rule_set_id, default_enabled, published, hosts_on,
 hosts_off, groups: [{asset_group_id, name, enabled}] }`;
 `HostRuleSetAssignmentsView { items: [{rule_set_id, enabled, source:

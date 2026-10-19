@@ -77,8 +77,19 @@ alarm suppression list `alarms.suppressions.read`; creating or editing a
 case `cases.write`, and setting or changing its assignee (and the assignee
 list) `cases.assign`; enrollment tokens `tokens.manage`, the agent installer
 `tokens.installer`; creating users `access.users`; bindings `access.grant`;
-host groups and host tags `host_groups.manage`; service accounts
+changing host groups `host_groups.manage` plus `hosts.read` on all hosts;
+labels `hosts.label` on that host; service accounts
 `service_accounts.manage`, their tokens `service_accounts.tokens`.
+
+Who may change host groups (spec §5, ruling 2026-10-19; `hosts/groups.rs`):
+changing a group's membership changes access for everyone whose role
+reaches it, so creating, editing, deleting and previewing a group need
+`host_groups.manage` **and** `hosts.read` on all hosts (Administrators
+qualify); anyone else holding it gets 403 "Changing host groups needs access
+to every host". Reading groups needs `access.read` or `host_groups.manage`,
+and host counts and lists show only hosts the reader reaches with
+`hosts.read`. A group a role reaches cannot be deleted (409 `group_in_use`,
+naming the roles).
 
 People (spec §4.4, §9.1; `access/people.rs`, `people_roles.rs`): `GET
 /api/v1/users` (`access.read`) and `GET /api/v1/users/{id}` (`access.read`,

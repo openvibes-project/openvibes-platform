@@ -36,7 +36,7 @@ impl GroupKind {
         }
     }
 
-    fn parse(kind: &str) -> Self {
+    pub(crate) fn parse(kind: &str) -> Self {
         match kind {
             "automatic" => Self::Automatic,
             "rule" => Self::Rule,
@@ -225,6 +225,21 @@ pub async fn detail(
     scope: &AgentScope,
 ) -> Result<Option<GroupSummary>, StoreError> {
     Ok(summaries(client, Some(id), scope).await?.into_iter().next())
+}
+
+/// The active hosts picked by hand into group `id`, by agent id: what a
+/// rename of a manual group keeps.
+pub async fn picked_ids(client: &Client, id: &str) -> Result<Vec<String>, StoreError> {
+    Ok(client
+        .query(
+            "SELECT m.agent_id FROM console_host_group_members m JOIN agents a USING (agent_id)
+             WHERE m.asset_group_id::text = $1 AND a.status = 'active' ORDER BY m.agent_id",
+            &[&id],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect())
 }
 
 /// A page of the group's member hosts inside `scope`, by hostname, after

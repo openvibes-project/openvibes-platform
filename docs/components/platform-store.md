@@ -974,7 +974,8 @@ Test: `tests/host_group_facts.rs`.
   ("Matches the rule" / "Picked by hand"). `recent_changes(id, scope, limit)`
   reads the group's audit rows (`target_kind = 'host_group'`), newest first;
   for a scoped caller the `picked` and `hosts` details are dropped so no
-  host outside its reach is named or counted.
+  host outside its reach is named or counted. `picked_ids(id)` lists the
+  active hosts picked by hand (what a rename of a manual group keeps).
 - `host_group_writes::create` / `update` / `delete` run in one transaction
   under the access-binding advisory lock (the one role writes take, so a
   role cannot start using a group being deleted). They check the version
@@ -1007,6 +1008,11 @@ Test: `tests/host_group_facts.rs`.
   `NotFound` for a missing or non-active host, `Invalid` otherwise. Audit
   `host.label_added` / `host.label_removed` (`{label}`). Labels are never a
   membership field.
+- `host_labels::reachable(scope, agent_id)`: a non-revoked host inside the
+  scope. `host_labels::host_labels(scope, agent_id)`: its labels and the
+  groups holding it (id, name, kind), `None` when not reachable.
+- `rule_assignment::overview` lists every group with its `kind`, rule
+  `conditions` and `picked` count, for the console's membership sentence.
 
 Tests: `tests/host_group_reads.rs`, `tests/host_group_writes.rs`,
 `tests/host_labels.rs` (fixtures in `tests/common/groups.rs`).

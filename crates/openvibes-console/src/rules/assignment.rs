@@ -59,8 +59,11 @@ pub struct AssignableGroupView {
     pub asset_group_id: String,
     /// Its name.
     pub name: String,
-    /// Its selectors, `key=value`.
-    pub selectors: Vec<String>,
+    /// How it gets its hosts.
+    pub kind: crate::hosts::groups_types::HostGroupKind,
+    /// Its membership in one sentence, e.g. "Hosts where OS family is
+    /// Linux", or "3 hosts picked by hand".
+    pub summary: String,
     /// Linux hosts it matches.
     pub hosts: i64,
 }
@@ -220,7 +223,12 @@ pub(crate) async fn list_assignments(
                     .map(|g| AssignableGroupView {
                         asset_group_id: g.asset_group_id,
                         name: g.name,
-                        selectors: g.selectors,
+                        kind: g.kind.into(),
+                        summary: crate::hosts::group_words::membership_sentence(
+                            g.kind,
+                            &g.conditions,
+                            g.picked,
+                        ),
                         hosts: g.hosts,
                     })
                     .collect(),

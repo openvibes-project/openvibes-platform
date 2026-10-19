@@ -444,26 +444,6 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                     && capability["scope"]["kind"] == "global"
             })
     );
-    let create_group = router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/access-control/asset-groups")
-                .header(header::COOKIE, session_cookie.clone())
-                .header(header::ORIGIN, "https://console.example")
-                .header("sec-fetch-site", "same-origin")
-                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"name":"Production","selectors":[{"key":"env","value":"prod"}]}"#,
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    // Tag-based asset groups are gone (schema 53); host groups replace them.
-    assert_eq!(create_group.status(), StatusCode::GONE);
     let group_id =
         &common::manual_group(&db.pool.get().await.unwrap(), "Production Fleet", &[]).await;
     let people = router
@@ -509,20 +489,6 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let holder: Value =
         serde_json::from_slice(&to_bytes(holder.into_body(), 4096).await.unwrap()).unwrap();
     let bob_id = holder["user_id"].as_str().unwrap().to_owned();
-    // Tags are gone (schema 53); labels replace them.
-    let agent_id = "agent.00000000-0000-4000-8000-000000000101";
-    for (method, path) in [("POST", "tags/preview"), ("PUT", "tags")] {
-        let moved = api_json(
-            &router,
-            method,
-            &format!("/api/v1/agents/{agent_id}/{path}"),
-            &session_cookie,
-            session["csrf_token"].as_str().unwrap(),
-            r#"{"tags":[]}"#,
-        )
-        .await;
-        assert_eq!(moved.status(), StatusCode::GONE, "{path}");
-    }
     let token_creation_body = r#"{"label":"http journey","expires_in_hours":24,"max_uses":2}"#;
     let idempotency_key = "console-http-token-create-key-01";
     let created_token = api_json_idempotent(

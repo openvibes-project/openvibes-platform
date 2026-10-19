@@ -5,8 +5,11 @@ import templates from "../api/templates.json";
 import { ADMIN_ROLE, type StoredReach } from "./share";
 import type {
   Agent, AuditEvent, Certificate, Cve, EnrollmentToken, Finding as FindingView,
-  RuleBundle, RuleSet, ServiceAccount, ServiceToken, Severity, Tag, Triage, Vulnerability,
+  RuleBundle, RuleSet, ServiceAccount, ServiceToken, Severity, Triage, Vulnerability,
 } from "../api/types";
+
+/** A demo host tag; the demo moves to labels and host groups later. */
+type Tag = { key: string; value: string };
 
 function prng(seed: number) {
   let state = seed >>> 0;

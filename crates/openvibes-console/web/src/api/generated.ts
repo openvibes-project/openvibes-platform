@@ -36,40 +36,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/access-control/asset-groups": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Creates an asset group from a bounded conjunction of exact tag selectors. */
-        post: operations["create_authenticated_asset_group"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/access-control/asset-groups/{group_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Replaces an asset group's name and complete selector conjunction. */
-        put: operations["update_authenticated_asset_group"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/agent-command": {
         parameters: {
             query?: never;
@@ -233,40 +199,6 @@ export interface paths {
         get: operations["get_host_services"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/agents/{agent_id}/tags": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Applies an agent tag set only while its membership preview remains current. */
-        put: operations["apply_authenticated_agent_tags"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/agents/{agent_id}/tags/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Previews asset group membership changes for an agent's complete tag set. */
-        post: operations["preview_authenticated_agent_tags"];
         delete?: never;
         options?: never;
         head?: never;
@@ -940,14 +872,132 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Every host group, by name, counted inside the caller's reach. */
+        get: operations["list_groups"];
+        put?: never;
+        /** Creates a rule or manual group. */
+        post: operations["create_group"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/host-groups/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The hosts a new group with `conditions` or `agent_ids` would hold. */
+        post: operations["preview_new_group"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/host-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         /**
-         * Every host group with its selectors and how many roles reach it, for
-         *     the Host groups tab and the role reach picker.
+         * A group's page: the group counted inside the caller's reach, and its
+         *     newest 10 changes.
          */
-        get: operations["host_groups"];
+        get: operations["get_group"];
+        put?: never;
+        post?: never;
+        /** Deletes a group no role reaches, with its rule-set switches. */
+        delete: operations["delete_group"];
+        options?: never;
+        head?: never;
+        /**
+         * Edits a group when `version` is still current. An automatic group
+         *     edited becomes a rule group.
+         */
+        patch: operations["update_group"];
+        trace?: never;
+    };
+    "/api/v1/host-groups/{group_id}/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A page of the group's member hosts inside the caller's reach, by
+         *     hostname, after the host `after`.
+         */
+        get: operations["group_hosts"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/host-groups/{group_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What saving `conditions` or `agent_ids` into the group would change, or
+         *     with `{}`, what deleting it would.
+         */
+        post: operations["preview_group"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hosts/{agent_id}/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A host's labels and the groups it is in. */
+        get: operations["host_labels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hosts/{agent_id}/labels/{label}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Adds a label (1–64 characters, at most 32 per host); adding one already
+         *     there is fine.
+         */
+        put: operations["add_label"];
+        post?: never;
+        /** Removes a label; removing one that is not there is fine. */
+        delete: operations["remove_label"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1889,15 +1939,6 @@ export interface components {
             /** @description Whether this console serves its web UI from the same build. */
             web_ui_embedded: boolean;
         };
-        /** @description Manual asset group and exact selectors. */
-        AccessAssetGroup: {
-            /** @description Stable group identifier. */
-            asset_group_id: string;
-            /** @description Operator-facing group name. */
-            name: string;
-            /** @description Exact `key=value` selectors, all of which must match. */
-            selectors: string[];
-        };
         /** @description One permission a person holds through one role. */
         AccessLine: {
             applies: components["schemas"]["Applies"];
@@ -2044,53 +2085,6 @@ export interface components {
              * @description Number of visible enrolled agents.
              */
             total: number;
-        };
-        /** @description Binding affected by a proposed agent tag change. */
-        AgentTagBindingImpact: {
-            /** @description Asset group name. */
-            asset_group_name: string;
-            /** @description Binding UUID. */
-            binding_id: string;
-            /** @description Role identifier. */
-            role_id: string;
-            /** @description Username. */
-            username: string;
-        };
-        /** @description Proposed exact agent tag set. */
-        AgentTagChangeRequest: {
-            /** @description Complete replacement tag set. */
-            tags: components["schemas"]["AgentTagInput"][];
-        };
-        /** @description Asset group affected by a proposed tag change. */
-        AgentTagGroupImpact: {
-            /** @description Group identifier. */
-            asset_group_id: string;
-            /** @description Group name. */
-            name: string;
-        };
-        /** @description Exact tag key and value proposed for an agent. */
-        AgentTagInput: {
-            /** @description Tag key. */
-            key: string;
-            /** @description Tag value. */
-            value: string;
-        };
-        /** @description Exact-tag impact preview. */
-        AgentTagPreviewResponse: {
-            /** @description Existing tags. */
-            current: components["schemas"]["AgentTagInput"][];
-            /** @description Active scoped bindings gained. */
-            gained_bindings: components["schemas"]["AgentTagBindingImpact"][];
-            /** @description Groups the agent will enter. */
-            gained_groups: components["schemas"]["AgentTagGroupImpact"][];
-            /** @description Active scoped bindings lost. */
-            lost_bindings: components["schemas"]["AgentTagBindingImpact"][];
-            /** @description Groups the agent will leave. */
-            lost_groups: components["schemas"]["AgentTagGroupImpact"][];
-            /** @description Token required to apply this proposal. */
-            preview_token: string;
-            /** @description Proposed tags. */
-            proposed: components["schemas"]["AgentTagInput"][];
         };
         /** @description Operator-facing agent fields shared by the read API and seeded server. */
         AgentView: {
@@ -2248,20 +2242,6 @@ export interface components {
          * @enum {string}
          */
         Applies: "all" | "groups" | "platform";
-        /** @description Confirmed tag update request, bound to an impact preview. */
-        ApplyAgentTagsRequest: {
-            /** @description Opaque preview token. */
-            preview_token: string;
-            /** @description Complete replacement tag set. */
-            tags: components["schemas"]["AgentTagInput"][];
-        };
-        /** @description Exact tag selector used to define asset-group membership. */
-        AssetGroupSelectorInput: {
-            /** @description Tag key. */
-            key: string;
-            /** @description Exact tag value. */
-            value: string;
-        };
         /** @description An asset group an override can name. */
         AssignableGroupView: {
             /** @description The group. */
@@ -2271,10 +2251,15 @@ export interface components {
              * @description Linux hosts it matches.
              */
             hosts: number;
+            /** @description How it gets its hosts. */
+            kind: components["schemas"]["HostGroupKind"];
             /** @description Its name. */
             name: string;
-            /** @description Its selectors, `key=value`. */
-            selectors: string[];
+            /**
+             * @description Its membership in one sentence, e.g. "Hosts where OS family is
+             *     Linux", or "3 hosts picked by hand".
+             */
+            summary: string;
         };
         /** @description The assistant's internet-lookup setting. */
         AssistantInternet: {
@@ -2820,6 +2805,22 @@ export interface components {
              */
             max_uses: number;
         };
+        /**
+         * @description A new group: a rule (`conditions`) or hosts picked by hand
+         *     (`agent_ids`).
+         */
+        CreateHostGroup: {
+            /** @description The hosts, for a manual group. */
+            agent_ids?: string[] | null;
+            /** @description The rule: 1–16 conditions, all of which must hold. */
+            conditions?: components["schemas"]["GroupCondition"][] | null;
+            /** @description At most 500 characters. */
+            description?: string;
+            /** @description `rule` or `manual`. */
+            kind: components["schemas"]["HostGroupKind"];
+            /** @description 1–128 characters, unique regardless of case. */
+            name: string;
+        };
         /** @description Request to create a service identity holding roles. */
         CreateServiceAccountRequest: {
             /** @description Unique operator name, at most 128 characters. */
@@ -3326,10 +3327,61 @@ export interface components {
             /** @description Latest observed severity. */
             severity: components["schemas"]["Severity"];
         };
+        /** @description One audited change to a group, newest first. */
+        GroupChangeView: {
+            action: string;
+            actor: string;
+            /** @description RFC 3339. */
+            at: string;
+            /**
+             * @description The audited detail (name, kind, conditions; for a caller who does
+             *     not reach every host, without host lists or counts).
+             */
+            detail: Record<string, never>;
+        };
+        /**
+         * @description One rule condition: `field` holds when any value matches (none, when
+         *     negated).
+         */
+        GroupCondition: {
+            /** @description `os_family`, `distribution`, `hostname` or `ip`. */
+            field: string;
+            /** @description "is not", "does not match", "is not in". */
+            negate?: boolean;
+            /**
+             * @description 1–64 values of 1–255 characters: `linux`/`windows`; `debian 12`; a
+             *     hostname pattern (`*` matches any run); an address or CIDR range.
+             */
+            values: string[];
+        };
+        /** @description A member host on the group page. */
+        GroupHostView: {
+            agent_id: string;
+            /** Format: int64 */
+            critical: number;
+            /** @description Display name, e.g. `Debian 12`. */
+            distribution?: string | null;
+            hostname?: string | null;
+            labels: string[];
+            /** @description Source address of its last connection. */
+            last_address?: string | null;
+            /** @description RFC 3339. */
+            last_seen_at?: string | null;
+            online: boolean;
+            /** Format: int64 */
+            open_alarms: number;
+            /** @description "Matches the rule" or "Picked by hand". */
+            why: string;
+        };
         /** @description A host group a role reaches. */
         GroupRef: {
             asset_group_id: string;
             name: string;
+        };
+        /** @description A role reaching a group. */
+        GroupRoleRef: {
+            name: string;
+            role_id: string;
         };
         /** @description Complete historical rule definition, read-only. */
         HistoricalRuleView: {
@@ -3365,17 +3417,110 @@ export interface components {
             /** @description Visible dashboard id, or `null`. */
             dashboard_id?: string | null;
         };
-        /** @description A host group, for the Host groups tab and the role reach picker. */
+        /** @description A group's page: the group and its recent changes. */
+        HostGroupDetail: components["schemas"]["HostGroupView"] & {
+            /** @description The newest 10 changes. */
+            recent: components["schemas"]["GroupChangeView"][];
+        };
+        /**
+         * @description How a group gets its hosts.
+         * @enum {string}
+         */
+        HostGroupKind: "automatic" | "rule" | "manual";
+        /**
+         * @description What saving (or deleting) would change. Lists hold at most 50 entries;
+         *     the totals count them all.
+         */
+        HostGroupPreview: {
+            /** @description People who would gain the joining hosts. */
+            gains: components["schemas"]["PreviewPerson"][];
+            joins: components["schemas"]["PreviewHost"][];
+            /** Format: int64 */
+            joins_total: number;
+            leaves: components["schemas"]["PreviewHost"][];
+            /** Format: int64 */
+            leaves_total: number;
+            /** @description People who would lose the leaving hosts. */
+            loses: components["schemas"]["PreviewPerson"][];
+            /**
+             * Format: int64
+             * @description Rule-set switches a delete removes.
+             */
+            overrides_removed: number;
+            /** Format: int64 */
+            people_total: number;
+        };
+        /** @description A group a host is in. */
+        HostGroupRef: {
+            asset_group_id: string;
+            kind: components["schemas"]["HostGroupKind"];
+            name: string;
+        };
+        /**
+         * @description A host group with its hosts counted inside the caller's `hosts.read`
+         *     reach.
+         */
         HostGroupView: {
             asset_group_id: string;
+            /** @description RFC 3339; when it was last changed. */
+            changed_at?: string | null;
+            changed_by?: string | null;
+            /** @description The rule, in order (empty for manual groups). */
+            conditions: components["schemas"]["GroupCondition"][];
+            /**
+             * Format: int64
+             * @description Critical vulnerabilities on those hosts.
+             */
+            critical: number;
+            description: string;
+            /**
+             * Format: int64
+             * @description Member hosts inside reach.
+             */
+            hosts: number;
+            kind: components["schemas"]["HostGroupKind"];
+            /**
+             * @description The membership in one sentence, e.g. "Hosts where OS family is
+             *     Windows", or "3 hosts picked by hand".
+             */
+            membership: string;
             name: string;
             /**
              * Format: int64
-             * @description How many roles reach the group.
+             * @description Of those, seen within the online window.
              */
-            roles: number;
-            /** @description Exact `key=value` selectors. */
-            selectors: string[];
+            online: number;
+            /**
+             * Format: int64
+             * @description Open agent alarms on those hosts.
+             */
+            open_alarms: number;
+            /**
+             * Format: int64
+             * @description Enabled people holding one of those roles.
+             */
+            people: number;
+            /**
+             * Format: int64
+             * @description Active hosts picked by hand inside reach (manual groups).
+             */
+            picked: number;
+            /** @description Roles reaching the group, by name. */
+            roles: components["schemas"]["GroupRoleRef"][];
+            /** @description Made from tags by the upgrade (schema 53). */
+            upgraded_from_tags: boolean;
+            /**
+             * Format: int32
+             * @description Send it back with an edit or delete.
+             */
+            version: number;
+        };
+        /** @description A host's labels and the groups it is in. */
+        HostLabelsView: {
+            /** @description By name. */
+            groups: components["schemas"]["HostGroupRef"][];
+            /** @description In byte order. */
+            labels: string[];
         };
         /** @description A page of a host's packages, by name. */
         HostPackagePage: {
@@ -3659,6 +3804,25 @@ export interface components {
             /** @description One-use value required in `X-CSRF-Token` on the login request. */
             csrf_token: string;
         };
+        /** @description A host in a preview. */
+        PreviewHost: {
+            agent_id: string;
+            hostname?: string | null;
+        };
+        /**
+         * @description What to preview: a rule, a pick of hosts, or (`{}`, on an existing
+         *     group) deleting it.
+         */
+        PreviewHostGroup: {
+            agent_ids?: string[] | null;
+            conditions?: components["schemas"]["GroupCondition"][] | null;
+        };
+        /** @description A person in a preview. */
+        PreviewPerson: {
+            display_name: string;
+            user_id: string;
+            username: string;
+        };
         /** @description Stable RFC Problem Details-style error response used by the console API. */
         ProblemDetails: components["schemas"]["ProblemExtra"] & {
             /** @description Stable machine-readable error code. */
@@ -3692,6 +3856,8 @@ export interface components {
             needs?: string | null;
             /** @description With `missing_needs`: the permission whose need is missing. */
             permission?: string | null;
+            /** @description With `group_in_use`: the names of the roles reaching the group. */
+            roles?: string[] | null;
         };
         /** @description The password the signer checks again before it signs. */
         PublishDraftsRequest: {
@@ -4007,13 +4173,6 @@ export interface components {
             message?: string | null;
             /** @description `match`, `no_match`, `unavailable` or `failed`. */
             outcome: string;
-        };
-        /** @description Request to create or replace an asset group's complete selector set. */
-        SaveAssetGroupRequest: {
-            /** @description Operator-facing group name. */
-            name: string;
-            /** @description Complete conjunction of exact selectors, from one through 32. */
-            selectors: components["schemas"]["AssetGroupSelectorInput"][];
         };
         /** @description Create or replace a dashboard's name and layout. */
         SaveDashboardRequest: {
@@ -4563,6 +4722,21 @@ export interface components {
             /** @description Workflow state. */
             state: string;
         };
+        /**
+         * @description New details; a field left out is unchanged. Sending `conditions` makes
+         *     the group a rule group, `agent_ids` a manual one.
+         */
+        UpdateHostGroup: {
+            agent_ids?: string[] | null;
+            conditions?: components["schemas"]["GroupCondition"][] | null;
+            description?: string | null;
+            name?: string | null;
+            /**
+             * Format: int32
+             * @description The version you read.
+             */
+            version: number;
+        };
         /** @description New details; a field left out is unchanged. */
         UpdatePerson: {
             /** @description 1 to 160 printable characters. */
@@ -4857,101 +5031,6 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    create_authenticated_asset_group: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SaveAssetGroupRequest"];
-            };
-        };
-        responses: {
-            /** @description Asset group created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessAssetGroup"];
-                };
-            };
-            /** @description Invalid selector set */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Name conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    update_authenticated_asset_group: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                group_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SaveAssetGroupRequest"];
-            };
-        };
-        responses: {
-            /** @description Asset group updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessAssetGroup"];
-                };
-            };
-            /** @description Invalid selector set */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Asset group not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Name conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -5447,92 +5526,6 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    apply_authenticated_agent_tags: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agent_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApplyAgentTagsRequest"];
-            };
-        };
-        responses: {
-            /** @description Tags changed and impact audited */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid tag set */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Preview is stale */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentTagPreviewResponse"];
-                };
-            };
-        };
-    };
-    preview_authenticated_agent_tags: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agent_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentTagChangeRequest"];
-            };
-        };
-        responses: {
-            /** @description Membership impact preview */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentTagPreviewResponse"];
-                };
-            };
-            /** @description Invalid tag set */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Agent not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -8316,7 +8309,7 @@ export interface operations {
             };
         };
     };
-    host_groups: {
+    list_groups: {
         parameters: {
             query?: never;
             header?: never;
@@ -8336,6 +8329,521 @@ export interface operations {
             };
             /** @description Needs access.read or host_groups.manage */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateHostGroup"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostGroupView"];
+                };
+            };
+            /** @description invalid_group: name, description or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs host_groups.manage and hosts.read on all hosts */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description group_name_taken */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_condition (naming the field) or unknown_host */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    preview_new_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewHostGroup"];
+            };
+        };
+        responses: {
+            /** @description The joining hosts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostGroupPreview"];
+                };
+            };
+            /** @description invalid_group: neither conditions nor agent_ids */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs host_groups.manage and hosts.read on all hosts */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_condition */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The group */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostGroupDetail"];
+                };
+            };
+            /** @description Needs access.read or host_groups.manage */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description group_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_group: {
+        parameters: {
+            query: {
+                /** @description The version you read */
+                version: number;
+            };
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid_group: no version */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs host_groups.manage and hosts.read on all hosts */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description group_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description stale_group, or group_in_use with the roles' names */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateHostGroup"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostGroupView"];
+                };
+            };
+            /** @description invalid_group */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs host_groups.manage and hosts.read on all hosts */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description group_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description stale_group or group_name_taken */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_condition or unknown_host */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    group_hosts: {
+        parameters: {
+            query?: {
+                /** @description The last agent id of the previous page */
+                after?: string;
+                /** @description 1 to 100; 50 when left out */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Member hosts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupHostView"][];
+                };
+            };
+            /** @description Needs access.read or host_groups.manage */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description group_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    preview_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewHostGroup"];
+            };
+        };
+        responses: {
+            /** @description What would change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostGroupPreview"];
+                };
+            };
+            /** @description Needs host_groups.manage and hosts.read on all hosts */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description group_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_condition */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    host_labels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Labels and groups */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostLabelsView"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description host_not_found: missing or outside reach */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    add_label: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+                label: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Added, or already there */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid_label */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.label */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description host_not_found: missing or outside reach */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description too_many_labels */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_label: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+                label: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed, or not there */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Needs hosts.label */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description host_not_found: missing or outside reach */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
