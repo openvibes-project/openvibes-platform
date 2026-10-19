@@ -35,9 +35,9 @@ const winHost: GroupHost = { agent_id: "agent.1", hostname: "win-dc-01", distrib
 
 const session = { principal: { id: "u-me", display_name: "Me" }, capabilities: [] } as unknown as Session;
 type Access = { held?: (p: Permission) => boolean; everywhere?: boolean };
-const render = (group: HostGroupDetail, hosts: GroupHost[] = [winHost], access: Access = {}, editing = false) => renderToStaticMarkup(
+const render = (group: HostGroupDetail, hosts: GroupHost[] = [winHost], access: Access = {}, editing = false, reloading = false) => renderToStaticMarkup(
   <SessionContext.Provider value={{ session, demo: false, can: access.held ?? (() => true), canEverywhere: () => access.everywhere ?? true }}>
-    <GroupBody group={group} hosts={hosts} names={new Map([["u-alex", "Alex Admin"]])}
+    <GroupBody group={group} hosts={hosts} names={new Map([["u-alex", "Alex Admin"]])} reloading={reloading}
       {...(editing ? { initial: fromGroup(group, hosts.map((h) => ({ agent_id: h.agent_id, hostname: h.hostname ?? h.agent_id }))) } : {})} />
   </SessionContext.Provider>,
 );
@@ -111,6 +111,13 @@ describe("group page", () => {
     expect(html).toContain("No hosts you can see");
     expect(html).not.toContain("0 hosts picked by hand");
     expect(html).toContain("No host matches yet.");
+  });
+
+  it("Save waits while the group or its hosts reload", () => {
+    const html = render(detail(), [winHost], {}, true, true);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save changes<\/button>/);
+    expect(html).toContain("Reloading…");
+    expect(render(detail(), [winHost], {}, true)).not.toMatch(/disabled=""[^>]*>Save changes/);
   });
 
   it("a viewer who sees some hosts gets counts of what they can see", () => {

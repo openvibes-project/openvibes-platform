@@ -19,16 +19,18 @@ import { RuleEditor } from "./RuleEditor";
 export function NewGroup() {
   const from = useLocation().params.get("from");
   const source = useResource<HostGroupDetail>(from ? groupPath(from) : null);
-  const hosts = useAllPages<GroupHost>(from ? `${groupPath(from)}/hosts` : null, MAX_PICKED, "agent_id");
+  const manual = source.data?.kind === "manual";
+  // Only a manual group's picks are copied; a rule copies its conditions.
+  const hosts = useAllPages<GroupHost>(from && manual ? `${groupPath(from)}/hosts` : null, MAX_PICKED, "agent_id");
   if (!from) return <NewGroupForm initial={blankDraft("rule")} />;
   const failed = source.error ?? hosts.error;
   if (failed) return <div className="view-pad"><ErrorBox error={failed} /></div>;
-  if (!source.data || !hosts.data) return <Loading />;
-  const manual = source.data.kind === "manual";
-  const copy = fromGroup(source.data, manual ? picks(hosts.data) : []);
+  if (!source.data || (manual && !hosts.data)) return <Loading />;
+  const loaded = hosts.data ?? [];
+  const copy = fromGroup(source.data, manual ? picks(loaded) : []);
   // A copy missing some picks would quietly be a different group.
-  const short = manual && hosts.data.length < source.data.picked
-    ? `Only ${hosts.data.length} of ${source.data.picked} picked hosts could be loaded, so this group cannot be duplicated. Reload the page to try again.` : undefined;
+  const short = manual && loaded.length < source.data.picked
+    ? `Only ${loaded.length} of ${source.data.picked} picked hosts could be loaded, so this group cannot be duplicated. Reload the page to try again.` : undefined;
   return <NewGroupForm initial={{ ...copy, name: `${copy.name} (copy)` }} short={short} />;
 }
 

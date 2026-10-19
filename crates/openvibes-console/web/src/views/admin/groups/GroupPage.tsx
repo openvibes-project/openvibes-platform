@@ -49,13 +49,16 @@ export function GroupPage({ groupId }: { groupId: string }) {
   if (failed) return <div className="view-pad"><ErrorBox error={failed} /></div>;
   if (!group.data || !hosts.data) return <Loading />;
   const names = new Map((people.data ?? []).map((p) => [p.user_id, p.display_name]));
-  return <GroupBody group={group.data} hosts={hosts.data} names={names} people={people.data} roles={roles.data} />;
+  // After a refused save the group and its hosts reload separately; saving in between would mix them.
+  return <GroupBody group={group.data} hosts={hosts.data} names={names} people={people.data} roles={roles.data} reloading={group.loading || hosts.loading} />;
 }
 
-export function GroupBody({ group, hosts, names, people, roles, initial }: {
+export function GroupBody({ group, hosts, names, people, roles, initial, reloading = false }: {
   group: HostGroupDetail; hosts: readonly GroupHost[]; names: ReadonlyMap<string, string>; people?: readonly PersonRow[] | undefined; roles?: readonly Role[] | undefined;
   /** Opens in edit mode with this draft (tests). */
   initial?: Draft;
+  /** The group or its hosts are loading again: Save waits, so picks and version come from the same read. */
+  reloading?: boolean;
 }) {
   const { session, canEverywhere } = useSession();
   const write = useWriteAccess();
@@ -211,7 +214,8 @@ export function GroupBody({ group, hosts, names, people, roles, initial }: {
               {editing && <PreviewNote preview={preview} />}
               {editing && (
                 <div className="row">
-                  <button type="button" className="button button--primary button--small" disabled={busy || !draft.name.trim()} onClick={() => void save()}>{busy ? "Saving…" : "Save changes"}</button>
+                  <button type="button" className="button button--primary button--small" disabled={busy || reloading || !draft.name.trim()} onClick={() => void save()}>{busy ? "Saving…" : "Save changes"}</button>
+                  {reloading && <span className="subtle" role="status">Reloading…</span>}
                   <button type="button" className="button button--small" onClick={stop}>Cancel</button>
                 </div>
               )}
