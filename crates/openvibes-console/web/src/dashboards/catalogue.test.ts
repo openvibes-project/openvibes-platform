@@ -4,7 +4,7 @@ import { METRICS, graphMetrics, partText } from "./metrics";
 import { upgradeLayout } from "./legacy";
 
 // The server's CATALOGUE is the source of truth: read it as text so drift fails the build.
-const source = readFileSync(new URL("../../../src/metrics.rs", import.meta.url), "utf8");
+const source = readFileSync(new URL("../../../src/dashboards/metrics.rs", import.meta.url), "utf8");
 const PERMISSION = { AL: "alarms.read", VU: "vulnerabilities.read", CO: "compliance.read", AG: "agents.read" } as const;
 const start = source.indexOf("CATALOGUE: [Metric;");
 const block = source.slice(start, source.indexOf("];", start));

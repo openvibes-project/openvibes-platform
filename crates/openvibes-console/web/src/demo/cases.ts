@@ -1,5 +1,5 @@
 // The demo's cases: the real API's routes, JSON shapes, status codes and
-// rules (crates/openvibes-console/src/cases.rs, platform-store console_cases.rs;
+// rules (crates/openvibes-console/src/cases/, platform-store console_cases.rs;
 // docs/components/console-cases.md), kept in memory and, in a browser, in
 // localStorage like the dashboards. What an item is (its title, severity,
 // whether its evidence is gone) comes from the rest of the demo through

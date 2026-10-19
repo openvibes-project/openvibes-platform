@@ -1,6 +1,6 @@
 # Console authentication primitives
 
-`crates/openvibes-console/src/auth.rs` contains the console's opaque browser
+`crates/openvibes-console/src/access/auth.rs` contains the console's opaque browser
 session-secret primitive. It creates a 256-bit random value, exposes it for
 the cookie, and derives a SHA-256 digest for database storage. Its `Debug`
 output redacts both values. The cookie helper emits the approved `__Host-`

@@ -440,9 +440,9 @@ triage on alarms and findings stays as it is.
   - A Settings tab: its file in `views/admin/settings/` and one line in the
     `tabs` list of `Settings.tsx`, with its `access`. The Settings menu
     entry opens to any tab's access by itself.
-  - A permission: the server side only (`api.rs` `Permission`, `rbac.rs`
-    `ALL_PERMISSIONS` and the role table, a migration for the database's
-    role tables, and the route's check). Then regenerate the API client
+  - A permission: the server side only (`access/permission.rs`
+    `Permission`, `access/rbac.rs` `ALL_PERMISSIONS` and the role table,
+    a migration for the database's role tables, and the route's check). Then regenerate the API client
     (`npm run generate:api`) and `web/src/api/roles.json`
     (`cargo run -p openvibes-console --bin export_openapi -- --roles >
     crates/openvibes-console/web/src/api/roles.json`); tests fail while

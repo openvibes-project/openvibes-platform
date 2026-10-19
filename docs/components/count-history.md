@@ -5,7 +5,7 @@
 Daily history of the counts shown on the console Overview (alarms,
 vulnerabilities, compliance findings, agent states), so graphs can show how a
 number moved. Code: `platform_store::history` and
-`crates/openvibes-console/src/metrics.rs`.
+`crates/openvibes-console/src/dashboards/metrics.rs`.
 
 ## Table
 

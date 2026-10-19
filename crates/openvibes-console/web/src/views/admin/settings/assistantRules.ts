@@ -1,5 +1,5 @@
 // The platform's input rules for the assistant internet setting, mirrored so the
-// demo and the form refuse exactly what crates/openvibes-console/src/assistant_internet.rs refuses.
+// demo and the form refuse exactly what crates/openvibes-console/src/assistant/internet.rs refuses.
 
 /** `https://` to any host; `http://` only to localhost, loopback, RFC 1918 IPv4 or fc00::/7. */
 export function validSearxngUrl(url: string): boolean {

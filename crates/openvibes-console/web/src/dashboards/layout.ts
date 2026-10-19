@@ -1,5 +1,5 @@
 // Dashboard layouts: the same rules the server applies (the Rust module
-// openvibes-console/src/dashboards.rs), so the editor can show problems
+// openvibes-console/src/dashboards/layout.rs), so the editor can show problems
 // before saving and the demo API refuses exactly what a console refuses.
 export const WIDGET_TYPES = ["number", "breakdown", "attention", "list", "trend", "top-hosts", "note", "graph"] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
