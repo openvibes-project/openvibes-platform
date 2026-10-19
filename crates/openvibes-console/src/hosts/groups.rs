@@ -15,6 +15,7 @@ use axum::{
 };
 use chrono::Utc;
 use platform_store::console_read::AgentScope;
+use platform_store::console_roles;
 use platform_store::host_group_writes::{self as writes, GroupInput, GroupWrite, PreviewOutcome};
 use platform_store::host_groups::{self as store, GroupKind};
 use serde::Deserialize;
@@ -24,8 +25,10 @@ use super::groups_types::{
     CreateHostGroup, GroupChangeView, GroupHostView, HostGroupDetail, HostGroupKind,
     HostGroupPreview, HostGroupView, PreviewHostGroup, UpdateHostGroup,
 };
+use crate::access::catalogue::{Scope, def};
 use crate::access::editor::{Editor, caller};
 use crate::access::guard::{scope_of, unavailable_auth};
+use crate::access::share::{RoleReach, fits, refusal_message};
 use crate::http::{
     AuthHttpState,
     problem::{ProblemDetails, problem_response},
@@ -227,6 +230,12 @@ pub(crate) async fn update_group(
         Ok(None) => return group_not_found(),
         Err(_) => return unavailable_auth(),
     };
+    let membership_changes = request.conditions.is_some() || request.agent_ids.is_some();
+    if membership_changes
+        && let Err(response) = reaching_roles_fit(&client, &editor, &current.roles).await
+    {
+        return response;
+    }
     let content = match (request.conditions, request.agent_ids) {
         (Some(conditions), None) => Content::rule(conditions),
         (None, Some(picked)) => Content::Manual(picked),
@@ -392,6 +401,51 @@ async fn reader(state: &AuthHttpState, headers: &HeaderMap) -> Result<AgentScope
     }
     Ok(scope_of(&editor.capabilities, Permission::HostsRead)
         .unwrap_or_else(|| AgentScope::AssetGroups(Vec::new())))
+}
+
+/// A membership change can widen the reach of every role reaching the
+/// group, so each role's host permissions must fit inside the editor's
+/// own on every host (§4.4); Administrators pass. A stored permission id
+/// the catalogue does not know is refused.
+// ponytail: checked before the store's write transaction; a role made to
+// reach the group in between is not rechecked.
+async fn reaching_roles_fit(
+    client: &platform_store::Client,
+    editor: &Editor,
+    roles: &[(String, String)],
+) -> Result<(), Response> {
+    if editor.admin {
+        return Ok(());
+    }
+    for (role_id, _) in roles {
+        let role = match console_roles::role(client, role_id).await {
+            Ok(Some(role)) => role,
+            Ok(None) => continue,
+            Err(_) => return Err(unavailable_auth()),
+        };
+        let mut host = Vec::new();
+        for id in &role.permissions {
+            match Permission::from_id(id) {
+                Some(p) if def(p).scope == Scope::Host => host.push(p),
+                Some(_) => {}
+                None => {
+                    return Err(denied(format!(
+                        "A role using this group holds a permission this console does not know ({id})"
+                    )));
+                }
+            }
+        }
+        if let Err(refusal) = fits(&editor.capabilities, &host, RoleReach::All) {
+            return Err(denied(refusal_message(&refusal)));
+        }
+    }
+    Ok(())
+}
+
+fn denied(title: String) -> Response {
+    let mut problem = ProblemDetails::new(StatusCode::FORBIDDEN, "permission_denied", "");
+    problem.title = title;
+    problem_response(problem)
 }
 
 /// The caller (CSRF checked), holding `host_groups.manage` and `hosts.read`

@@ -975,7 +975,8 @@ Test: `tests/host_group_facts.rs`.
   reads the group's audit rows (`target_kind = 'host_group'`), newest first;
   for a scoped caller the `picked` and `hosts` details are dropped so no
   host outside its reach is named or counted. `picked_ids(id)` lists the
-  active hosts picked by hand (what a rename of a manual group keeps).
+  active hosts picked by hand (what a rename of a manual group keeps);
+  non-active members are left out, so a manual update drops them.
 - `host_group_writes::create` / `update` / `delete` run in one transaction
   under the access-binding advisory lock (the one role writes take, so a
   role cannot start using a group being deleted). They check the version

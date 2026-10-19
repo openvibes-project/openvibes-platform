@@ -64,8 +64,9 @@ tokens, and CSRF values stay in the console process.
   removals cannot both succeed.
 - Host groups and labels have their own store modules (`host_groups`,
   `host_group_writes`, `host_labels`; platform-store.md "Host-group store
-  API"). The console's `GET /v1/host-groups` maps `host_groups::list` to the
-  old view (names and role counts) until the host-group routes arrive.
+  API"); the console's host-group routes are in `src/hosts/groups.rs`.
+  `host_groups::picked_ids` returns only active members, so a manual group
+  updated through it drops its non-active members.
 - `create_session` stamps `console_users.last_sign_in_at` and accepts only a currently enabled account at the generation
   observed after password verification and can revoke the prior session in the
   same transaction during login rotation. Session lookups require matching

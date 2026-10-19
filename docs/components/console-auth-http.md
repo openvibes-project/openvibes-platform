@@ -115,7 +115,12 @@ lists count only hosts inside the caller's `hosts.read` reach (none
 without it). Writes and previews change access for everyone whose role
 reaches the group, so they need `host_groups.manage` **and** `hosts.read`
 on all hosts (CSRF); otherwise 403 "Changing host groups needs access to
-every host". Browser sessions only.
+every host". Reads and writes take browser sessions only: bearer tokens
+are refused (403). A membership change (`conditions` or `agent_ids` in a
+PATCH) also needs every role reaching the group to fit inside the editor's
+share on all hosts: each role's host-scope permissions must be held on
+every host (Administrators pass), else 403 `permission_denied` with the
+share refusal message; a rename or new description skips this.
 
 | Route | Answer |
 |---|---|

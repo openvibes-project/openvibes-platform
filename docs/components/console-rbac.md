@@ -88,7 +88,10 @@ reaches it, so creating, editing, deleting and previewing a group need
 qualify); anyone else holding it gets 403 "Changing host groups needs access
 to every host". Reading groups needs `access.read` or `host_groups.manage`,
 and host counts and lists show only hosts the reader reaches with
-`hosts.read`. A group a role reaches cannot be deleted (409 `group_in_use`,
+`hosts.read`. Changing a group's membership also needs each role reaching
+it to fit inside the editor's share on all hosts (its host permissions
+held everywhere), since the change widens those roles' reach. A group a
+role reaches cannot be deleted (409 `group_in_use`,
 naming the roles).
 
 People (spec §4.4, §9.1; `access/people.rs`, `people_roles.rs`): `GET

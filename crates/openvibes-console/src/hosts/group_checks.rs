@@ -28,7 +28,7 @@ impl Content {
     }
 
     /// Itself when valid; otherwise 422 `invalid_condition` naming the
-    /// field (or `conditions`), or 400 for too many picked hosts.
+    /// field (or `conditions`), or 400 for too many picked hosts or a bad id.
     pub(super) fn checked(self) -> Result<Self, ProblemDetails> {
         match &self {
             Self::Rule(conditions) => {
@@ -37,10 +37,11 @@ impl Content {
                 }
             }
             Self::Manual(picked) => {
-                if picked.len() > MAX_PICKED
-                    || picked.iter().any(|id| !(1..=255).contains(&id.len()))
-                {
+                if picked.len() > MAX_PICKED {
                     return Err(invalid("agent_ids", "Pick at most 10000 hosts"));
+                }
+                if picked.iter().any(|id| !(1..=255).contains(&id.len())) {
+                    return Err(invalid("agent_ids", "Host ids are 1–255 characters"));
                 }
             }
         }

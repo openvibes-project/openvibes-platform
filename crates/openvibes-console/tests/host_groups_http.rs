@@ -260,6 +260,43 @@ async fn group_lists_count_only_hosts_in_reach() {
 }
 
 #[tokio::test]
+async fn changing_membership_needs_every_reaching_roles_host_permissions() {
+    let Some(fx) = Fx::new().await else { return };
+    let mut client = fx.db.pool.get().await.unwrap();
+    let on_win = Reach::Groups(vec![fx.win.clone()]);
+    let revokers = ["hosts.read", "hosts.revoke"];
+    let revokers = common::create_role(&mut client, "Win revokers", &revokers, on_win).await;
+    let perms = ["host_groups.manage", "access.read", "hosts.read"];
+    let manager = fx.person("manager", &perms, Reach::All, 2).await;
+    platform_store::console_people::give_role(
+        &mut client,
+        platform_store::console_roles::Principal::User("11111111-1111-4111-8111-111111111102"),
+        &revokers,
+        "test",
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap();
+    let uri = format!("/api/v1/host-groups/{}", fx.win);
+    let widen = json!({"agent_ids": [W1, W2, L1], "version": 1});
+    let (status, refused) = fx.call(&manager, "PATCH", &uri, Some(widen.clone())).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
+    assert_eq!(refused["code"], "permission_denied");
+    assert!(
+        refused["title"].as_str().unwrap().contains("outside it"),
+        "{refused}"
+    );
+    let rename = json!({"name": "Windows servers", "version": 1});
+    let (status, renamed) = fx.call(&manager, "PATCH", &uri, Some(rename)).await;
+    assert_eq!(status, StatusCode::OK, "{renamed}");
+    let widen = json!({"agent_ids": [W1, W2, L1], "version": 2});
+    let (status, widened) = fx.call(&fx.admin, "PATCH", &uri, Some(widen)).await;
+    assert_eq!(status, StatusCode::OK, "{widened}");
+    assert_eq!(widened["hosts"], 3);
+    fx.db.drop().await;
+}
+
+#[tokio::test]
 async fn deleting_a_group_in_use_names_the_roles() {
     let Some(fx) = Fx::new().await else { return };
     let mut client = fx.db.pool.get().await.unwrap();
@@ -321,6 +358,15 @@ async fn invalid_conditions_name_the_field() {
     assert_eq!(
         created["membership"],
         "Hosts where IP address is in 10.0.0.0/16 and distribution is Debian 12"
+    );
+    let body = json!({"name": "Blank", "kind": "manual", "agent_ids": [""]});
+    let (status, refused) = fx
+        .call(&fx.admin, "POST", "/api/v1/host-groups", Some(body))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        refused["field_errors"][0]["message"],
+        "Host ids are 1–255 characters"
     );
     fx.db.drop().await;
 }
