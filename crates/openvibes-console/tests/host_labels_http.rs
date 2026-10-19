@@ -99,6 +99,17 @@ async fn labels_need_hosts_label_on_that_host() {
     let (status, _) = call(&router, "GET", &labels(OUT), &reader, None).await;
     assert_eq!(status, StatusCode::OK);
 
+    let (status, dots) = call(
+        &router,
+        "PUT",
+        &format!("{}/%2E%2E", labels(IN)),
+        &admin,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{dots}");
+    assert_eq!(dots["code"], "invalid_label");
+
     for n in 1..32 {
         let (status, _) = call(
             &router,

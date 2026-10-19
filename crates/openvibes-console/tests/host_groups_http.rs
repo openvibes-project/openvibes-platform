@@ -342,6 +342,27 @@ async fn deleting_a_group_in_use_names_the_roles() {
 }
 
 #[tokio::test]
+async fn renaming_a_manual_group_over_the_pick_limit_works() {
+    let Some(fx) = Fx::new().await else { return };
+    let client = fx.db.pool.get().await.unwrap();
+    client
+        .batch_execute(&format!(
+            "INSERT INTO agents (agent_id, status, enrolled_at)
+                 SELECT 'agent.00000000-0000-4000-9000-' || lpad(n::text, 12, '0'), 'active', now() FROM generate_series(1, 10001) n;
+             INSERT INTO console_host_group_members (asset_group_id, agent_id, added_at, added_by)
+                 SELECT '{}'::uuid, 'agent.00000000-0000-4000-9000-' || lpad(n::text, 12, '0'), now(), 't' FROM generate_series(1, 10001) n",
+            fx.win
+        ))
+        .await
+        .unwrap();
+    let uri = format!("/api/v1/host-groups/{}", fx.win);
+    let rename = json!({"name": "Big", "version": 1});
+    let (status, renamed) = fx.call(&fx.admin, "PATCH", &uri, Some(rename)).await;
+    assert_eq!(status, StatusCode::OK, "{renamed}");
+    fx.db.drop().await;
+}
+
+#[tokio::test]
 async fn invalid_conditions_name_the_field() {
     let Some(fx) = Fx::new().await else { return };
     let condition =

@@ -180,7 +180,7 @@ Toasts: "<set> is now on/off by default", "<set> is now on/off for
 <group>", "<group> follows the default again"; errors show the API's title
 ("Asset group not found" when the group was deleted meanwhile). "+ Add
 group" is disabled with "No asset groups yet: create one under Settings ›
-Access." or "Every asset group is listed.".
+Host groups." or "Every asset group is listed.".
 `npm test -- src/panels/WhereItRuns.test.tsx src/app/registry.test.tsx`
 covers the markup and the menu access; `e2e/demo/where-it-runs-focus.spec.ts`
 the focus, single-send and failed-Add behaviour; clicks and toasts are in the e2e.

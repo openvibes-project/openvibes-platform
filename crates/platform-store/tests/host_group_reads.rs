@@ -89,6 +89,10 @@ async fn groups_are_listed_with_counts_inside_the_scope() {
         .await
         .unwrap();
     assert_eq!(scoped.len(), 1);
+    let past_hidden = host_groups::hosts(&c, &linux, &scope, Some(A2), 10)
+        .await
+        .unwrap();
+    assert!(past_hidden.is_empty(), "db-02 is outside the scope");
     let picked = host_groups::hosts(&c, &web, &AgentScope::Global, None, 10)
         .await
         .unwrap();

@@ -544,7 +544,8 @@ pub async fn remove_label(client: &mut Client, agent_id: &str, label: &str, acto
     as distinct enabled users bound to those roles.
   - **`why`** is "Matches the rule" or "Picked by hand".
   - **`update` of an automatic group** turns it into `rule`: it clears
-    `auto_key` (the key is not dismissed) and stores the given
+    `auto_key` (the key is recorded as dismissed, so the next inventory
+    does not make it again) and stores the given
     conditions.
   - **`delete`:**
     - refuses with `InUse(role names)` when `console_role_groups`

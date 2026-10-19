@@ -84,6 +84,8 @@ describe("save bodies", () => {
   it("a stale save reloads and says so", () => {
     expect(refusal(new ApiError(409, "stale_group", "stale"), "x")).toEqual({ message: "Someone else changed this group. It has been reloaded.", reload: true });
     expect(refusal(new ApiError(409, "group_name_taken", "Another group has this name"), "x")).toEqual({ message: "Another group has this name", reload: false });
+    const inUse = new ApiError(409, "group_in_use", "Roles still use this group", undefined, undefined, { roles: ["Win viewers", "Auditors"] });
+    expect(refusal(inUse, "x")).toEqual({ message: "Roles still use this group: Win viewers, Auditors.", reload: true });
   });
 });
 

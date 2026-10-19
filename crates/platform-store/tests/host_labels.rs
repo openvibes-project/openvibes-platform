@@ -64,7 +64,7 @@ async fn labels_are_capped_at_32_and_deduplicated() {
     );
     assert_eq!(host_labels::labels(&c, A1).await.unwrap().len(), 32);
     let long = "x".repeat(65);
-    for bad in ["", "   ", "a\nb", long.as_str()] {
+    for bad in ["", "   ", "a\nb", long.as_str(), ".", " .. "] {
         assert_eq!(
             host_labels::add_label(&mut c, A2, bad, "ann", now)
                 .await

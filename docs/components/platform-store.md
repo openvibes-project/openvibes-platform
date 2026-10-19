@@ -968,7 +968,8 @@ Test: `tests/host_group_facts.rs`.
   group is listed whatever the scope. `roles` are those in
   `console_role_groups`; `people` the distinct enabled users bound to them.
 - `host_groups::hosts(id, scope, after, limit)` pages member hosts by
-  hostname (cursor: the last agent id; an unknown cursor id yields an
+  hostname (cursor: the last agent id; an unknown cursor id, or one outside
+  the scope, yields an
   empty page; limit 1–100) with display
   distribution, address, labels, last seen, online, problems and `why`
   ("Matches the rule" / "Picked by hand"). `recent_changes(id, scope, limit)`
@@ -989,7 +990,8 @@ Test: `tests/host_group_facts.rs`.
   console passes the roles it share-checked a membership change against),
   the write is `Stale` unless exactly those roles reach the group, read
   under the lock. The kind follows the content; updating an automatic
-  group clears its `auto_key` (not dismissed), making it the person's.
+  group clears its `auto_key` and records the key as dismissed, making it
+  the person's (the next inventory does not make it again).
   Manual members keep their `added_at` across updates. A delete refuses
   while roles reach the group (`InUse` with their names), remembers an
   automatic key in `console_host_group_dismissed`, and cascades rule-set
@@ -1007,7 +1009,8 @@ Test: `tests/host_group_facts.rs`.
   hosts (simplified: their other groups are not checked). Lists hold at
   most 50 entries; `joins_total`, `leaves_total`, `people_total` count all.
 - `host_labels::labels` / `add_label` / `remove_label`: trimmed, 1–64
-  characters, no control characters, at most 32 per active host (`TooMany`;
+  characters, no control characters, not `.` or `..` (they cannot be a URL
+  path segment), at most 32 per active host (`TooMany`;
   the agent row lock, `FOR NO KEY UPDATE`, serialises adds), `AlreadyThere` for a repeat,
   `NotFound` for a missing or non-active host, `Invalid` otherwise. Audit
   `host.label_added` / `host.label_removed` (`{label}`). Labels are never a

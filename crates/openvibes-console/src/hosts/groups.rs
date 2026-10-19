@@ -241,16 +241,17 @@ pub(crate) async fn update_group(
     // the roles just checked; the store refuses the write as stale if others
     // reach the group by then
     let checked_roles: Vec<String> = current.roles.iter().map(|(id, _)| id.clone()).collect();
+    // stored content (None, None) is kept unchecked so a rename never trips a limit
     let content = match (request.conditions, request.agent_ids) {
-        (Some(conditions), None) => Content::rule(conditions),
-        (None, Some(picked)) => Content::Manual(picked),
+        (Some(conditions), None) => Content::rule(conditions).checked(),
+        (None, Some(picked)) => Content::Manual(picked).checked(),
         (None, None) if current.kind == GroupKind::Manual => {
             match store::picked_ids(&client, &group_id).await {
-                Ok(picked) => Content::Manual(picked),
+                Ok(picked) => Ok(Content::Manual(picked)),
                 Err(_) => return unavailable_auth(),
             }
         }
-        (None, None) => Content::Rule(current.conditions),
+        (None, None) => Ok(Content::Rule(current.conditions)),
         (Some(_), Some(_)) => {
             return problem_response(invalid(
                 "agent_ids",
@@ -258,7 +259,7 @@ pub(crate) async fn update_group(
             ));
         }
     };
-    let content = match content.checked() {
+    let content = match content {
         Ok(content) => content,
         Err(problem) => return problem_response(problem),
     };

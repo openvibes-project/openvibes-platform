@@ -2,7 +2,7 @@
 // the rule-set switches it removes, then DELETE with the version read.
 import { useState } from "react";
 
-import { ApiError, invalidate, request } from "../../../api/client";
+import { invalidate, request } from "../../../api/client";
 import type { HostGroupDetail } from "../../../api/types";
 import { toast } from "../../../ui/toast";
 import { DialogHead, Modal } from "../people/NewPersonDialog";
@@ -24,13 +24,9 @@ export function DeleteGroup({ group, onClose }: { group: HostGroupDetail; onClos
       toast("Group deleted");
       toList();
     } catch (e) {
-      if (e instanceof ApiError && e.code === "group_in_use") {
-        setError(`Roles still use this group: ${group.roles.map((r) => r.name).join(", ") || "reload to see which"}.`);
-      } else {
-        const { message, reload } = refusal(e, "The group could not be deleted.");
-        setError(message);
-        if (reload) invalidate(path);
-      }
+      const { message, reload } = refusal(e, "The group could not be deleted.");
+      setError(message);
+      if (reload) invalidate(path);
     } finally {
       setBusy(false);
     }

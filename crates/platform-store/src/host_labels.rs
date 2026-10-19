@@ -23,15 +23,19 @@ pub enum LabelWrite {
     TooMany,
     /// No such active host.
     NotFound,
-    /// Empty after trimming, over 64 characters, or with a control character.
+    /// Empty after trimming, over 64 characters, with a control character,
+    /// or `.` or `..`.
     Invalid,
 }
 
 /// The trimmed label, if valid.
 fn valid(label: &str) -> Option<&str> {
     let label = label.trim();
-    ((1..=64).contains(&label.chars().count()) && !label.chars().any(char::is_control))
-        .then_some(label)
+    // "." and ".." cannot travel as a URL path segment
+    ((1..=64).contains(&label.chars().count())
+        && !label.chars().any(char::is_control)
+        && !matches!(label, "." | ".."))
+    .then_some(label)
 }
 
 /// A host's labels and the groups it is in, as the host page shows them.

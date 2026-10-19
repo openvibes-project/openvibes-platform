@@ -155,6 +155,10 @@ export const STALE = "Someone else changed this group. It has been reloaded.";
 /** What to say when a save or delete is refused, and whether to reload the group. */
 export function refusal(error: unknown, fallback: string): { message: string; reload: boolean } {
   if (error instanceof ApiError && error.code === "stale_group") return { message: STALE, reload: true };
+  if (error instanceof ApiError && error.code === "group_in_use") {
+    const roles = Array.isArray(error.body?.roles) ? (error.body.roles as string[]).join(", ") : "";
+    return { message: `${error.message}: ${roles || "reload to see which"}.`, reload: true };
+  }
   const field = error instanceof ApiError ? error.fieldErrors?.[0]?.message : undefined;
   return { message: field ?? apiMessage(error, fallback), reload: false };
 }

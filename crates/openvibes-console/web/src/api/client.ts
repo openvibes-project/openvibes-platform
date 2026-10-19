@@ -12,7 +12,7 @@ export function apiMessage(error: unknown, fallback: string): string {
 }
 
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string, title: string, readonly fieldErrors?: { field: string; code: string; message: string }[], readonly caseNumber?: number) {
+  constructor(readonly status: number, readonly code: string, title: string, readonly fieldErrors?: { field: string; code: string; message: string }[], readonly caseNumber?: number, readonly body?: Record<string, unknown>) {
     super(title);
   }
 }
@@ -77,7 +77,7 @@ export async function request<T>(method: string, path: string, body?: unknown, e
   if (response.status === 401 && !demo && path !== "/api/v1/session") for (const listener of signedOut) listener();
   if (!response.ok) {
     const details = (payload ?? {}) as { code?: string; title?: string; field_errors?: { field: string; code: string; message: string }[] | null; case_number?: number | null };
-    throw new ApiError(response.status, details.code ?? "unavailable", details.title ?? `Request failed (${response.status})`, details.field_errors ?? undefined, details.case_number ?? undefined);
+    throw new ApiError(response.status, details.code ?? "unavailable", details.title ?? `Request failed (${response.status})`, details.field_errors ?? undefined, details.case_number ?? undefined, details);
   }
   return payload as T;
 }

@@ -113,7 +113,7 @@ async fn editing_an_automatic_group_makes_it_a_rule_group() {
     );
     assert_eq!(
         count(&c, "SELECT count(*) FROM console_host_group_dismissed").await,
-        0
+        1
     );
     let detail: serde_json::Value = c
         .query_one(
@@ -133,6 +133,42 @@ async fn editing_an_automatic_group_makes_it_a_rule_group() {
         actions,
         ["host_group.updated", "host_group.created_automatically"]
     );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn editing_an_automatic_group_does_not_bring_it_back() {
+    let (db, mut c) = migrated().await;
+    ensure_automatic_groups(&c, "linux", "debian 12", Utc::now())
+        .await
+        .unwrap();
+    let id: String = c
+        .query_one("SELECT asset_group_id::text FROM console_asset_groups WHERE auto_key = 'distribution:debian 12'", &[])
+        .await
+        .unwrap()
+        .get(0);
+    let rule = [cond("distribution", false, &["debian 12"])];
+    let input = input("Debian twelve", GroupContent::Rule(&rule));
+    saved(
+        host_group_writes::update(&mut c, &id, 1, None, &input, "ann", Utc::now())
+            .await
+            .unwrap(),
+    );
+    ensure_automatic_groups(&c, "linux", "debian 12", Utc::now())
+        .await
+        .unwrap();
+    let kinds: Vec<String> = c
+        .query(
+            "SELECT g.kind FROM console_asset_groups g JOIN console_host_group_conditions h
+             USING (asset_group_id) WHERE h.field = 'distribution'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.get(0))
+        .collect();
+    assert_eq!(kinds, ["rule"]);
     db.drop().await;
 }
 

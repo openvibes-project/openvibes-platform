@@ -6,7 +6,7 @@ vi.hoisted(() => {
 });
 
 import { ApiError } from "../../api/client";
-import { LabelsCard, MAX_LABELS, addRequest, labelError, nextLabel, removeRequest } from "./HostLabels";
+import { INVALID_LABEL, LabelsCard, MAX_LABELS, addRequest, labelError, nextLabel, refusedLabel, removeRequest } from "./HostLabels";
 
 const groups = [{ asset_group_id: "g1", name: "Production", kind: "rule" as const }, { asset_group_id: "g2", name: "All hosts", kind: "automatic" as const }];
 const card = (editable: boolean, error?: string) => renderToStaticMarkup(
@@ -22,6 +22,11 @@ describe("host labels", () => {
     expect(labelError(new ApiError(409, "too_many_labels", "x"))).toBe(`A host can have at most ${MAX_LABELS} labels. Remove one first.`);
     expect(labelError(new ApiError(400, "invalid_label", "Label must be 1-64 characters"))).toBe("Label must be 1-64 characters");
     expect(labelError(new Error("boom"))).toBe("The label could not be saved.");
+  });
+  it("refuses . and .. before sending, with the server's words", () => {
+    expect(refusedLabel(".")).toBe(INVALID_LABEL);
+    expect(refusedLabel("..")).toBe(INVALID_LABEL);
+    expect(refusedLabel("...")).toBeUndefined();
   });
   it("pins the requests: PUT/DELETE on the encoded label", () => {
     expect(addRequest("agent.1", "db")).toEqual({ method: "PUT", path: "/api/v1/hosts/agent.1/labels/db" });

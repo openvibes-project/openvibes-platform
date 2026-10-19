@@ -22,6 +22,11 @@ export const nextLabel = (labels: readonly string[], input: string): string | un
   return label && !labels.includes(label) ? label : undefined;
 };
 
+/** The server's invalid_label words (labels.rs). */
+export const INVALID_LABEL = "Use 1 to 64 characters, without control characters, and not . or ..";
+/** "." and ".." cannot travel as a path segment, so they are refused before sending. */
+export const refusedLabel = (label: string): string | undefined => (label === "." || label === ".." ? INVALID_LABEL : undefined);
+
 const labelsPath = (id: string) => `/api/v1/hosts/${encodeURIComponent(id)}/labels`;
 /** PUT is idempotent: adding a label already there succeeds. */
 export const addRequest = (id: string, label: string) => ({ method: "PUT", path: `${labelsPath(id)}/${encodeURIComponent(label)}` }) as const;
@@ -93,7 +98,12 @@ export function HostLabels({ id }: { id: string }) {
   if (!view.data) return <Loading rows={2} />;
   return (
     <LabelsCard labels={view.data.labels} groups={view.data.groups} editable={can("hosts.label")} error={error} busy={busy}
-      onAdd={(label) => change(addRequest(id, label))}
+      onAdd={(label) => {
+        const refused = refusedLabel(label);
+        if (!refused) return change(addRequest(id, label));
+        setError(refused);
+        return Promise.resolve(false);
+      }}
       onRemove={(label) => void change(removeRequest(id, label))} />
   );
 }

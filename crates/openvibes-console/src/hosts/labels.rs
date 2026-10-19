@@ -85,7 +85,7 @@ pub(crate) async fn add_label(
         Ok(LabelWrite::Invalid) => problem_response(ProblemDetails::new(
             StatusCode::BAD_REQUEST,
             "invalid_label",
-            "Use 1 to 64 characters, without control characters",
+            "Use 1 to 64 characters, without control characters, and not . or ..",
         )),
         Err(_) => unavailable_auth(),
     }

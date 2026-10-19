@@ -243,8 +243,8 @@ pub async fn picked_ids(client: &Client, id: &str) -> Result<Vec<String>, StoreE
 }
 
 /// A page of the group's member hosts inside `scope`, by hostname, after
-/// the host `after` (an agent id from the previous page; an unknown id
-/// yields an empty page). `limit` is held to 1–100.
+/// the host `after` (an agent id from the previous page; an unknown id or
+/// one outside `scope` yields an empty page). `limit` is held to 1–100.
 pub async fn hosts(
     client: &Client,
     id: &str,
@@ -253,6 +253,7 @@ pub async fn hosts(
     limit: i64,
 ) -> Result<Vec<GroupHost>, StoreError> {
     let visible = agent_visibility("a.agent_id", "$1", "$2");
+    let after_visible = agent_visibility("b.agent_id", "$1", "$2");
     let sql = format!(
         "SELECT a.agent_id, a.hostname, console_distribution_name(a.distribution), host(a.last_address),
                 ARRAY(SELECT l.label FROM console_host_labels l WHERE l.agent_id = a.agent_id
@@ -264,7 +265,8 @@ pub async fn hosts(
            ON a.status = 'active' AND console_host_in_group(a.agent_id, g.asset_group_id)
          WHERE g.asset_group_id::text = $3 AND {visible}
            AND ($5::text IS NULL OR (COALESCE(lower(a.hostname), ''), a.agent_id) >
-                (SELECT COALESCE(lower(hostname), ''), agent_id FROM agents WHERE agent_id = $5))
+                (SELECT COALESCE(lower(b.hostname), ''), b.agent_id FROM agents b
+                 WHERE b.agent_id = $5 AND {after_visible}))
          ORDER BY COALESCE(lower(a.hostname), ''), a.agent_id
          LIMIT $6"
     );

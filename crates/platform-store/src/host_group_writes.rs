@@ -240,8 +240,18 @@ async fn write(
     if let Some(unknown) = unknown_host(&tx, &picked).await? {
         return Ok(GroupWrite::UnknownHost(unknown));
     }
+    if let Some((id, _)) = existing {
+        // an automatic group edited becomes the person's rule group; its key is
+        // dismissed so the next inventory does not make the group again
+        tx.execute(
+            "INSERT INTO console_host_group_dismissed (auto_key, dismissed_at, dismissed_by)
+             SELECT auto_key, $2, $3 FROM console_asset_groups
+             WHERE asset_group_id::text = $1 AND auto_key IS NOT NULL ON CONFLICT DO NOTHING",
+            &[&id, &now, &actor],
+        )
+        .await?;
+    }
     let head = match existing {
-        // an automatic group edited becomes the person's rule group; its key is not dismissed
         Some((id, _)) => {
             tx.query_one(
                 "UPDATE console_asset_groups SET name = $2, description = $3, kind = $4, auto_key = NULL,

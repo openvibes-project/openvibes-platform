@@ -297,8 +297,9 @@ give roles that fit inside your own access (Revoke a host is outside it)".
     `Windows`) or a new distribution and release (`Debian 12`,
     `Fedora 44`, from `os_id` and `os_release`) reports, a group is
     created. It is recorded in the audit log as made by OpenVIBES.
-  - Deleting one records its key in `console_host_group_dismissed`, so it
-    is not made again.
+  - Deleting or editing one records its key in
+    `console_host_group_dismissed`, so it is not made again (an edited one
+    becomes the person's rule group).
   - An automatic group whose last host leaves stays, with 0 hosts.
 - **Rules:**
   - A rule is a list of **conditions, all of which must match**.

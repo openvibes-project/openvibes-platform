@@ -28,7 +28,7 @@ function registerLabelRoutes(ctx: DemoContext) {
     const agent = reachable("hosts.label", id);
     if (!agent) return notFound();
     const text = label.trim();
-    if ([...text].length < 1 || [...text].length > 64 || hasControl(text)) return problem(400, "invalid_label", "Use 1 to 64 characters, without control characters");
+    if ([...text].length < 1 || [...text].length > 64 || hasControl(text) || text === "." || text === "..") return problem(400, "invalid_label", "Use 1 to 64 characters, without control characters, and not . or ..");
     if (!isActive(agent)) return notFound();
     const labels = data.labels.get(id) ?? [];
     if (labels.includes(text)) return new Response(null, { status: 204 });

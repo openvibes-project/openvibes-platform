@@ -132,7 +132,7 @@ own share); `people_total` still counts everyone.
 | `POST /api/v1/host-groups` | `{name, description?, kind: "rule"\|"manual", conditions?, agent_ids?}` → 201 `HostGroupView` |
 | `GET /api/v1/host-groups/{id}` | `HostGroupView` plus `recent` (newest 10 audit changes; no host lists or counts for a caller without global `hosts.read`) |
 | `GET /api/v1/host-groups/{id}/hosts?after=&limit=` | `[GroupHostView]`, by hostname, 1–100 (50) |
-| `PATCH /api/v1/host-groups/{id}` | `{name?, description?, conditions?, agent_ids?, version}`; a left-out field is unchanged; an automatic group edited becomes a rule group → `HostGroupView` |
+| `PATCH /api/v1/host-groups/{id}` | `{name?, description?, conditions?, agent_ids?, version}`; a left-out field is unchanged; an automatic group edited becomes a rule group and its key is dismissed → `HostGroupView` |
 | `DELETE /api/v1/host-groups/{id}?version=` | 204; removes its rule-set switches |
 | `POST /api/v1/host-groups/{id}/preview` | `{conditions}` or `{agent_ids}`, or `{}` for a delete → `{joins, leaves, gains, loses, joins_total, leaves_total, people_total, overrides_removed}` |
 | `POST /api/v1/host-groups/preview` | the same for a new group (joins only) |
@@ -147,7 +147,7 @@ Refusals: 400 `invalid_group` (name 1–128, description ≤ 500, body);
 `conditions`), `unknown_host`; 404 `group_not_found`, `host_not_found`
 (a host outside reach reads the same as a missing one); 409
 `group_name_taken`, `stale_group`, `group_in_use` (with `roles`: the
-names), `too_many_labels` (32 per host); 400 `invalid_label`. The old
+names), `too_many_labels` (32 per host); 400 `invalid_label` (also for `.` and `..`, which the web app refuses before sending). The old
 `/api/v1/access-control/asset-groups*` and `/api/v1/agents/{id}/tags*`
 routes are gone (404). Tests: `tests/host_groups_http.rs`,
 `tests/host_labels_http.rs`.
