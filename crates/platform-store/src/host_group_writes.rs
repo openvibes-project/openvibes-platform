@@ -181,11 +181,31 @@ async fn audit(
     Ok(())
 }
 
+/// Whether exactly the roles `expected` reach group `id` now (read under
+/// the access lock, so no role can start or stop reaching it before commit).
+async fn same_roles(tx: &Tx<'_>, id: &str, expected: &[String]) -> Result<bool, StoreError> {
+    let mut now: Vec<String> = tx
+        .query(
+            "SELECT role_id FROM console_role_groups WHERE asset_group_id::text = $1",
+            &[&id],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    let mut expected = expected.to_vec();
+    now.sort();
+    expected.sort();
+    expected.dedup();
+    Ok(now == expected)
+}
+
 /// Validates, locks, checks the version and picked hosts, inserts or
 /// updates the group row, then replaces the content and audits.
 async fn write(
     client: &mut Client,
     existing: Option<(&str, i32)>,
+    expected_roles: Option<&[String]>,
     input: &GroupInput<'_>,
     actor: &str,
     now: DateTime<Utc>,
@@ -210,6 +230,11 @@ async fn write(
             None => return Ok(GroupWrite::NotFound),
             Some(current) if current != version => return Ok(GroupWrite::Stale),
             Some(_) => {}
+        }
+        if let Some(expected) = expected_roles
+            && !same_roles(&tx, id, expected).await?
+        {
+            return Ok(GroupWrite::Stale);
         }
     }
     if let Some(unknown) = unknown_host(&tx, &picked).await? {
@@ -292,20 +317,32 @@ pub async fn create(
     actor: &str,
     now: DateTime<Utc>,
 ) -> Result<GroupWrite, StoreError> {
-    write(client, None, input, actor, now).await
+    write(client, None, None, input, actor, now).await
 }
 
 /// Replaces a group's name, description and content when `version` is
-/// current; an automatic group becomes a rule (or manual) group.
+/// current; an automatic group becomes a rule (or manual) group. With
+/// `expected_roles` (the role ids the caller checked a membership change
+/// against), the write is `Stale` unless exactly those roles reach the
+/// group inside the transaction.
 pub async fn update(
     client: &mut Client,
     id: &str,
     version: i32,
+    expected_roles: Option<&[String]>,
     input: &GroupInput<'_>,
     actor: &str,
     now: DateTime<Utc>,
 ) -> Result<GroupWrite, StoreError> {
-    write(client, Some((id, version)), input, actor, now).await
+    write(
+        client,
+        Some((id, version)),
+        expected_roles,
+        input,
+        actor,
+        now,
+    )
+    .await
 }
 
 /// Deletes a group no role reaches, with its rule-set switches; a deleted

@@ -35,6 +35,7 @@ async fn group_names_are_unique_regardless_of_case() {
         &mut c,
         &other.asset_group_id,
         1,
+        None,
         &input("web", GroupContent::Rule(&[])),
         "ann",
         now,
@@ -47,6 +48,7 @@ async fn group_names_are_unique_regardless_of_case() {
             &mut c,
             &web.asset_group_id,
             1,
+            None,
             &input("WEB", GroupContent::Manual(&[])),
             "ann",
             now,
@@ -87,6 +89,7 @@ async fn editing_an_automatic_group_makes_it_a_rule_group() {
             &mut c,
             &id,
             1,
+            None,
             &input("Debian 12", GroupContent::Rule(&rule)),
             "ann",
             Utc::now(),
@@ -262,6 +265,7 @@ async fn stale_versions_are_refused() {
             &mut c,
             id,
             1,
+            None,
             &input("Web 2", GroupContent::Manual(&[])),
             "ann",
             now,
@@ -273,6 +277,7 @@ async fn stale_versions_are_refused() {
         &mut c,
         id,
         1,
+        None,
         &input("Web 3", GroupContent::Manual(&[])),
         "ann",
         now,
@@ -289,6 +294,7 @@ async fn stale_versions_are_refused() {
             &mut c,
             missing,
             1,
+            None,
             &input("X", GroupContent::Manual(&[])),
             "ann",
             now,
@@ -301,6 +307,52 @@ async fn stale_versions_are_refused() {
             .unwrap();
         assert!(matches!(gone, GroupWrite::NotFound), "{gone:?}");
     }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_membership_change_checked_against_other_roles_is_stale() {
+    let (db, mut c) = migrated().await;
+    let id = manual_group(&c, "Web", &[]).await;
+    group_role(&c, "alpha", &id).await;
+    group_role(&c, "beta", &id).await;
+    let now = Utc::now();
+    for checked in [&["alpha".to_owned()][..], &[]] {
+        let stale = host_group_writes::update(
+            &mut c,
+            &id,
+            1,
+            Some(checked),
+            &input("Web 2", GroupContent::Manual(&[])),
+            "ann",
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(stale, GroupWrite::Stale), "{stale:?}");
+    }
+    assert_eq!(
+        count(
+            &c,
+            "SELECT count(*) FROM console_asset_groups WHERE name = 'Web' AND version = 1"
+        )
+        .await,
+        1,
+        "nothing written"
+    );
+    let both = ["beta".to_owned(), "alpha".to_owned()];
+    let saved = host_group_writes::update(
+        &mut c,
+        &id,
+        1,
+        Some(&both),
+        &input("Web 2", GroupContent::Manual(&[])),
+        "ann",
+        now,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(saved, GroupWrite::Saved(_)), "{saved:?}");
     db.drop().await;
 }
 

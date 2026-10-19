@@ -15,10 +15,11 @@ use axum::{
 };
 use chrono::Utc;
 use platform_store::console_read::AgentScope;
-use platform_store::console_roles;
 use platform_store::host_group_writes::{self as writes, GroupInput, GroupWrite, PreviewOutcome};
 use platform_store::host_groups::{self as store, GroupKind};
+use platform_store::{console_people, console_roles};
 use serde::Deserialize;
+use std::collections::HashSet;
 
 use super::group_checks::{Content, answer, group_not_found, invalid, invalid_condition};
 use super::groups_types::{
@@ -26,8 +27,9 @@ use super::groups_types::{
     HostGroupPreview, HostGroupView, PreviewHostGroup, UpdateHostGroup,
 };
 use crate::access::catalogue::{Scope, def};
-use crate::access::editor::{Editor, caller};
+use crate::access::editor::{Editor, caller, roles_fit};
 use crate::access::guard::{scope_of, unavailable_auth};
+use crate::access::people::{all_roles, held};
 use crate::access::share::{RoleReach, fits, refusal_message};
 use crate::http::{
     AuthHttpState,
@@ -236,6 +238,9 @@ pub(crate) async fn update_group(
     {
         return response;
     }
+    // the roles just checked; the store refuses the write as stale if others
+    // reach the group by then
+    let checked_roles: Vec<String> = current.roles.iter().map(|(id, _)| id.clone()).collect();
     let content = match (request.conditions, request.agent_ids) {
         (Some(conditions), None) => Content::rule(conditions),
         (None, Some(picked)) => Content::Manual(picked),
@@ -273,6 +278,7 @@ pub(crate) async fn update_group(
         &mut client,
         &group_id,
         request.version,
+        membership_changes.then_some(checked_roles.as_slice()),
         &input,
         &editor.actor,
         Utc::now(),
@@ -362,9 +368,10 @@ async fn preview(
     group_id: Option<&str>,
     payload: Result<Json<PreviewHostGroup>, JsonRejection>,
 ) -> Response {
-    if let Err(response) = writer(state, headers).await {
-        return response;
-    }
+    let editor = match writer(state, headers).await {
+        Ok(editor) => editor,
+        Err(response) => return response,
+    };
     let Ok(Json(request)) = payload else {
         return problem_response(invalid("body", "The request body is invalid"));
     };
@@ -383,11 +390,41 @@ async fn preview(
     };
     let proposed = content.as_ref().map(Content::as_ref);
     match writes::preview(&client, group_id, proposed.as_ref()).await {
-        Ok(PreviewOutcome::Ready(preview)) => Json(HostGroupPreview::from(preview)).into_response(),
+        Ok(PreviewOutcome::Ready(mut preview)) => {
+            if !editor.admin {
+                let visible = match people_in_share(&client, &editor).await {
+                    Ok(visible) => visible,
+                    Err(response) => return response,
+                };
+                preview.gains.retain(|p| visible.contains(&p.user_id));
+                preview.loses.retain(|p| visible.contains(&p.user_id));
+            }
+            Json(HostGroupPreview::from(preview)).into_response()
+        }
         Ok(PreviewOutcome::NotFound) => group_not_found(),
         Ok(PreviewOutcome::Invalid(part)) => invalid_condition(&part),
         Err(_) => unavailable_auth(),
     }
+}
+
+/// The people the editor may see, as the people routes decide: themselves,
+/// and everyone whose roles all fit inside the editor's share. Previews
+/// name only them; their totals still count everyone.
+// ponytail: filters the store's first 50 of each list, so fewer may show
+// while more in-share people exist; page the store lists if that matters.
+async fn people_in_share(
+    client: &platform_store::Client,
+    editor: &Editor,
+) -> Result<HashSet<String>, Response> {
+    let roles = all_roles(client).await?;
+    let people = console_people::people(client)
+        .await
+        .map_err(|_| unavailable_auth())?;
+    Ok(people
+        .into_iter()
+        .filter(|p| p.user_id == editor.actor || roles_fit(editor, &held(&p.role_ids, &roles)))
+        .map(|p| p.user_id)
+        .collect())
 }
 
 /// The caller's scope for reading groups: their `hosts.read` reach, or no
@@ -406,9 +443,8 @@ async fn reader(state: &AuthHttpState, headers: &HeaderMap) -> Result<AgentScope
 /// A membership change can widen the reach of every role reaching the
 /// group, so each role's host permissions must fit inside the editor's
 /// own on every host (§4.4); Administrators pass. A stored permission id
-/// the catalogue does not know is refused.
-// ponytail: checked before the store's write transaction; a role made to
-// reach the group in between is not rechecked.
+/// the catalogue does not know is refused. The store rechecks, inside its
+/// write transaction, that the same roles still reach the group.
 async fn reaching_roles_fit(
     client: &platform_store::Client,
     editor: &Editor,

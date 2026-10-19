@@ -985,7 +985,10 @@ Test: `tests/host_group_facts.rs`.
   1–64 values, `os_family` linux/windows, `ip` an address or CIDR, at most
   16 conditions), a picked id that is missing or not active
   (`UnknownHost`), and a name taken regardless of case (`NameTaken`, from
-  the unique index). The kind follows the content; updating an automatic
+  the unique index). `update` takes `expected_roles`: when given (the
+  console passes the roles it share-checked a membership change against),
+  the write is `Stale` unless exactly those roles reach the group, read
+  under the lock. The kind follows the content; updating an automatic
   group clears its `auto_key` (not dismissed), making it the person's.
   Manual members keep their `added_at` across updates. A delete refuses
   while roles reach the group (`InUse` with their names), remembers an

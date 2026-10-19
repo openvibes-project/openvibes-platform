@@ -120,7 +120,11 @@ are refused (403). A membership change (`conditions` or `agent_ids` in a
 PATCH) also needs every role reaching the group to fit inside the editor's
 share on all hosts: each role's host-scope permissions must be held on
 every host (Administrators pass), else 403 `permission_denied` with the
-share refusal message; a rename or new description skips this.
+share refusal message; a rename or new description skips this. The store
+rechecks under its lock that the same roles still reach the group, else
+409 `stale_group`. A preview's `gains`/`loses` name, for a
+non-administrator, only people the people routes would show them (their
+own share); `people_total` still counts everyone.
 
 | Route | Answer |
 |---|---|

@@ -297,6 +297,37 @@ async fn changing_membership_needs_every_reaching_roles_host_permissions() {
 }
 
 #[tokio::test]
+async fn previews_name_only_people_inside_the_share() {
+    let Some(fx) = Fx::new().await else { return };
+    let mut client = fx.db.pool.get().await.unwrap();
+    let on_win = || Reach::Groups(vec![fx.win.clone()]);
+    let viewers = common::create_role(&mut client, "Win viewers", &["hosts.read"], on_win()).await;
+    let revokers = ["hosts.read", "hosts.revoke"];
+    let revokers = common::create_role(&mut client, "Win revokers", &revokers, on_win()).await;
+    let perms = ["host_groups.manage", "access.read", "hosts.read"];
+    let manager = fx.person("manager", &perms, Reach::All, 2).await;
+    fx.db.user("vic", &viewers, 3).await;
+    fx.db.user("rev", &revokers, 4).await;
+    let uri = format!("/api/v1/host-groups/{}/preview", fx.win);
+    let names = |preview: &Value| -> Vec<String> {
+        preview["loses"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["username"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let (status, mine) = fx.call(&manager, "POST", &uri, Some(json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{mine}");
+    assert_eq!(names(&mine), ["vic"]);
+    assert_eq!(mine["people_total"], 2);
+    assert_eq!(mine["leaves_total"], 2);
+    let (_, all) = fx.call(&fx.admin, "POST", &uri, Some(json!({}))).await;
+    assert_eq!(names(&all), ["rev", "vic"]);
+    fx.db.drop().await;
+}
+
+#[tokio::test]
 async fn deleting_a_group_in_use_names_the_roles() {
     let Some(fx) = Fx::new().await else { return };
     let mut client = fx.db.pool.get().await.unwrap();
