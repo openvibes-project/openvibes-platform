@@ -9,6 +9,10 @@ import { matches } from "../../../ui/table";
 import type { Action, Reach } from "./roleState";
 
 const ALL = "All hosts";
+const KIND_WORD = { automatic: "Automatic", rule: "Rule", manual: "Manual" } as const;
+
+/** "Rule · 12 hosts": the kind word and the host count under a group's name. */
+export const groupMeta = (g: { kind: HostGroup["kind"]; hosts: number }) => `${KIND_WORD[g.kind]} · ${g.hosts} ${g.hosts === 1 ? "host" : "hosts"}`;
 
 function note(reach: Reach): string {
   if (reach.kind === "all") return "Its host permissions apply to every host, now and later.";
@@ -22,7 +26,7 @@ export function HostsPicker({ reach, groups, dispatch, readOnly }: { reach: Reac
   const input = useRef<HTMLInputElement>(null);
   const chosen = reach.kind === "groups" ? reach.groups : [];
   const isChosen = (id: string) => chosen.some((g) => g.asset_group_id === id);
-  const options = [{ id: "", name: ALL }, ...groups.map((g) => ({ id: g.asset_group_id, name: g.name }))].filter((o) => matches([o.name], query));
+  const options = [{ id: "", name: ALL, meta: "" }, ...groups.map((g) => ({ id: g.asset_group_id, name: g.name, meta: groupMeta(g) }))].filter((o) => matches([o.name], query));
   const pick = (id: string, name: string) => {
     dispatch(id ? { type: "group", group: { asset_group_id: id, name } } : { type: "allHosts" });
     setQuery("");
@@ -53,6 +57,7 @@ export function HostsPicker({ reach, groups, dispatch, readOnly }: { reach: Reac
                     <button key={o.id || "all"} type="button" aria-pressed={selected} className="sel__option hosts-picker__option"
                       onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o.id, o.name)}>
                       <span className="sel__label">{o.name}</span>
+                      {o.meta && <span className="subtle">{o.meta}</span>}
                       {selected && <Icon name="check" size={14} />}
                     </button>
                   );

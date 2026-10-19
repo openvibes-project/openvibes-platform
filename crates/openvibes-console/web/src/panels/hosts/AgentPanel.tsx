@@ -11,6 +11,7 @@ import { lineage } from "../../views/investigate/Alarms";
 import { packageId } from "../../views/investigate/Software";
 import { AddToCase } from "../cases/AddToCase";
 import { vulnerabilityRef } from "../cases/cases";
+import { HostLabels } from "./HostLabels";
 import { HostExport } from "./HostExport";
 import { HardeningRows, NotAssigned, hostAssignmentsPath } from "./HostHardening";
 import { HostServicesTab } from "./HostServices";
@@ -189,6 +190,7 @@ export function AgentPanel({ id }: { id: string }) {
             </Section>
             {data.status !== "imported" && <LastTestSection test={data.last_test} />}
             {data.status !== "imported" && <HostRuleSets agent={data} />}
+            <HostLabels id={id} />
             <Section title="Certificates">
               <ul className="list list--plain">
                 {data.certificates.map((certificate, index) => (
