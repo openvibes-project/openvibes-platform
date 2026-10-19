@@ -7,6 +7,8 @@ import { type Access, grantsAny, useSession } from "../../../app/session";
 import { RULE_READERS } from "../../../panels/rules/ruleAssignment";
 import { Tabs } from "../../../ui/panel";
 import { Empty } from "../../../ui/bits";
+import { GroupPage } from "../groups/GroupPage";
+import { NewGroup } from "../groups/NewGroup";
 import { PersonPage } from "../people/PersonPage";
 import { RolePage } from "../roles/RolePage";
 import { AssistantSettings } from "./AssistantSettings";
@@ -34,13 +36,14 @@ export const settingsAccess: readonly Access[] = tabs.flatMap((tab) => tab.acces
 
 /**
  * Full pages under /settings/…, shown in place of the Settings header and tabs
- * (approved screens 2, 5 and 7: a breadcrumb back instead).
+ * (approved screens 2, 5, 7 and 10: a breadcrumb back instead).
  */
 function subPage(path: string): ReactNode | undefined {
-  const [, kind, id] = /^\/settings\/(roles|people)\/([^/]+)$/.exec(path) ?? [];
+  const [, kind, id] = /^\/settings\/(roles|people|host-groups)\/([^/]+)$/.exec(path) ?? [];
   if (!id) return undefined;
   try {
     const decoded = decodeURIComponent(id);
+    if (kind === "host-groups") return decoded === "new" ? <NewGroup /> : <GroupPage key={id} groupId={decoded} />;
     return kind === "roles" ? <RolePage key={id} roleId={decoded} /> : <PersonPage key={id} userId={decoded} />;
   } catch {
     return undefined; // a malformed %-escape: "Not found"

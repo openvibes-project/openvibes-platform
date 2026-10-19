@@ -8,11 +8,11 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 describe("frontend contract", () => {
-  it("serves exactly the registry's views, sign-in, /findings, dashboards by id and the role and person pages", () => {
+  it("serves exactly the registry's views, sign-in, /findings, dashboards by id and the role, person and host-group pages", () => {
     const contract = JSON.parse(read("../../frontend-contract.json")) as { browserRoutes: string[] };
     const viewPaths = [...read("./registry.tsx").matchAll(/\{ path: "(\/[^"]*)"/g)].map((match) => match[1]);
     expect(viewPaths.length).toBeGreaterThan(5);
-    expect(new Set(contract.browserRoutes)).toEqual(new Set([...viewPaths, "/login", "/findings", "/dashboards/{dashboard_id}", "/settings/roles/{role_id}", "/settings/people/{user_id}"]));
+    expect(new Set(contract.browserRoutes)).toEqual(new Set([...viewPaths, "/login", "/findings", "/dashboards/{dashboard_id}", "/settings/roles/{role_id}", "/settings/people/{user_id}", "/settings/host-groups/{group_id}"]));
     expect(contract.browserRoutes[0]).toBe("/");
   });
 

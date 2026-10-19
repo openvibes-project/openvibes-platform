@@ -120,7 +120,7 @@ const failure = (error: unknown) => error instanceof ApiError ? error : new ApiE
 
 /** Loads `path` (skipped when null), keeping the last data while reloading. */
 export function useResource<T>(path: string | null): Resource<T> {
-  const version = useSyncExternalStore(subscribe, () => generation);
+  const version = useSyncExternalStore(subscribe, () => generation, () => generation);
   const key = `${path}#${version}`;
   const [loaded, setLoaded] = useState<Loaded<T>>({ key: "", path: "", data: undefined, error: undefined });
   useEffect(() => {
@@ -137,10 +137,13 @@ export function useResource<T>(path: string | null): Resource<T> {
   return { data: samePath ? loaded.data : undefined, error: samePath ? loaded.error : undefined, loading: loaded.key !== key };
 }
 
-/** Loads every page of a cursor-paged list (bounded) for client-side filtering. */
-export function useAllPages<T>(path: string | null, max = 2000): Resource<T[]> {
-  const version = useSyncExternalStore(subscribe, () => generation);
-  const key = `${path}#${version}#${max}`;
+/**
+ * Loads every page of a cursor-paged list (bounded) for client-side filtering.
+ * With `after`, pages are plain arrays continued by `after=<that field of the last row>`.
+ */
+export function useAllPages<T>(path: string | null, max = 2000, after?: keyof T & string): Resource<T[]> {
+  const version = useSyncExternalStore(subscribe, () => generation, () => generation);
+  const key = `${path}#${version}#${max}#${after ?? ""}`;
   const [loaded, setLoaded] = useState<Loaded<T[]>>({ key: "", path: "", data: undefined, error: undefined });
   useEffect(() => {
     if (path === null) return;
@@ -150,6 +153,13 @@ export function useAllPages<T>(path: string | null, max = 2000): Resource<T[]> {
       let cursor: string | null | undefined = null;
       do {
         const separator = path.includes("?") ? "&" : "?";
+        if (after) {
+          const rows: T[] = await load(`${path}${separator}limit=100${cursor ? `&after=${encodeURIComponent(cursor)}` : ""}`);
+          items.push(...rows);
+          const last = rows.length === 100 ? rows[rows.length - 1] : undefined;
+          cursor = last == null ? null : String(last[after]);
+          continue;
+        }
         const pageData: { items: T[]; next_cursor?: string | null } = await load(`${path}${separator}limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
         items.push(...pageData.items);
         cursor = pageData.next_cursor;
@@ -160,7 +170,7 @@ export function useAllPages<T>(path: string | null, max = 2000): Resource<T[]> {
       (error: unknown) => { if (live) setLoaded({ key, path, data: undefined, error: failure(error) }); },
     );
     return () => { live = false; };
-  }, [path, key, max]);
+  }, [path, key, max, after]);
   if (path === null) return { data: undefined, error: undefined, loading: false };
   const samePath = loaded.path === path;
   return { data: samePath ? loaded.data : undefined, error: samePath ? loaded.error : undefined, loading: loaded.key !== key };

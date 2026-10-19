@@ -415,8 +415,8 @@ triage on alarms and findings stays as it is.
 
 - **Entry:** `web/index.html` → `src/main.tsx` → `shell/App.tsx`.
 - **Browser routes:** every view's path, `/login`,
-  `/dashboards/{dashboard_id}`, `/settings/roles/{role_id}` and
-  `/settings/people/{user_id}`, listed in `web/frontend-contract.json` for
+  `/dashboards/{dashboard_id}`, `/settings/roles/{role_id}`,
+  `/settings/people/{user_id}` and `/settings/host-groups/{group_id}`, listed in `web/frontend-contract.json` for
   the server's router; `app/frontendContract.test.ts` keeps the two in step
   (a page missing there loads in the app but is a 404 on reload or a link).
 - **`app/registry.tsx`:** declares every view (path, icon, group, required
@@ -427,8 +427,8 @@ triage on alarms and findings stays as it is.
     `investigate/` (Alarms, Compliance, Vulnerabilities, Hosts, Software,
     Ports and Services, Cases), `operate/` (Alarm suppressions, Site rules,
     Coverage), `admin/` (`Audit.tsx`, `settings/`: `Settings.tsx` plus
-    one file per tab, `roles/`: the role page, and `people/`: a person's
-    page) and `help/` (About). `views/lists/` holds what the
+    one file per tab, `roles/`: the role page, `people/`: a person's
+    page, and `groups/`: a host group's page) and `help/` (About). `views/lists/` holds what the
     lists share: filter catalogues (`filters.ts`), row selection and
     sorting (`rows.ts`) and the test-trigger rules (`testRules.ts`).
   - `panels/`: one folder per subject (`hosts/`, `alarms/`, `findings/`,
@@ -466,7 +466,7 @@ triage on alarms and findings stays as it is.
     (`cargo run -p openvibes-console --bin export_openapi -- --permissions >
     crates/openvibes-console/web/src/api/permissions.json`); tests fail while
     either is stale. Role pickers read the live role list from
-    `GET /api/v1/roles` (people: `GET /api/v1/users*`, group cards:
+    `GET /api/v1/roles` (people: `GET /api/v1/users*`, host groups:
     `GET /api/v1/host-groups`); the demo seeds its roles from
     `templates.json` and `permissions.json` (Administrator).
 - **Roles (`views/admin/settings/Roles.tsx`, `views/admin/roles/`):**
@@ -539,9 +539,52 @@ triage on alarms and findings stays as it is.
     teams against the real server: each sees and changes only its hosts,
     and a team lead gives only roles inside their access (see
     console-rbac.md, Live check).
+- **Host groups (`views/admin/settings/HostGroups.tsx`, `views/admin/groups/`):**
+  - **Purpose:** Settings › Host groups (approved screen 9) lists the
+    groups, automatic first, then rule, then manual: Group (name, kind
+    badge, description), Membership (the server's sentence), Hosts ("N
+    hosts", "M online"), Open problems and Who reaches it (role badges,
+    people). "+ New group" opens `/settings/host-groups/new` (Rule or
+    Manual, then the same editor); a row opens `/settings/host-groups/{id}`
+    (screens 10, 10b, 10c) in the shared layout: the header (counts, roles,
+    people; Edit and ⋯ with Duplicate… and Delete group…), Details, Who
+    reaches it (roles linked to their page, permissions, people) and Recent
+    changes on the left; the Rule card ("Where"/"and" rows) or Hosts picked
+    by hand (chips, "Search hosts to add"), then Hosts in this group on the
+    right. Automatic groups show the "Made by OpenVIBES…" callout; groups
+    made from tags offer "Turn into a rule". While editing, a debounced
+    preview says "If you save: +N (…), −M (…)" and who gains or loses
+    access; Delete shows the same preview and the rule-set switches it
+    removes.
+  - **Interfaces:** `GET /api/v1/host-groups`, `GET|PATCH|DELETE
+    /api/v1/host-groups/{id}` (the version read; DELETE `?version=`),
+    `GET …/{id}/hosts` (all pages, `after` = last agent id, up to 2000),
+    `POST /api/v1/host-groups`, `POST …/preview` and `…/{id}/preview`
+    (`{}` previews a delete), `GET /api/v1/agents?state=active` (hosts to
+    add, filtered in the browser), and with `access.read` `GET
+    /api/v1/users` and `/api/v1/roles` (actor names, people and permission
+    counts). A save invalidates `/api/v1/host-groups` and
+    `/api/v1/rule-set-assignments`.
+  - **Config:** none. Writes need `host_groups.manage` (else hidden) and
+    `hosts.read` on every host (else disabled, titled "Changing host groups
+    needs access to every host", the server's 403). PATCH sends only what
+    changed (`patchBody`), so a rename sends the name alone. Without
+    `hosts.read` everywhere, a 0 reads "No hosts you can see" and a manual
+    group's membership drops its count.
+  - **Failure behaviour:** a refusal shows above the columns (a 422 names
+    the field). A 409 `stale_group` reloads the group and says "Someone
+    else changed this group. It has been reloaded." while the edit stays
+    open to save again. A 409 `group_in_use` on delete reads "Roles still
+    use this group: …". A failed preview shows nothing.
+  - **How to test:** `groups/groupState.test.ts` (reducer, PATCH bodies,
+    preview sentences, list wording), `groups/GroupPage.test.tsx` (markup:
+    rule, editing, automatic callout, upgraded note, write access, the
+    PATCH through a stubbed fetch) and `settings/hostGroups.test.tsx` (the
+    list's columns and order).
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
-  after mutations, and the `useResource`/`useAllPages` hooks. Live requests
+  after mutations, and the `useResource`/`useAllPages` hooks (`useAllPages`
+  also follows plain-array pages continued by `after=<field of the last row>`). Live requests
   send the session cookie, plus `x-csrf-token` on mutations.
 - **`app/source.ts`:** picks live or demo data. An installed build (`npm run
   build`, embedded in the RPM) is always live, and the demo code is left out

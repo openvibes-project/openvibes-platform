@@ -19,7 +19,8 @@
     "/about",
     "/dashboards/{dashboard_id}",
     "/settings/roles/{role_id}",
-    "/settings/people/{user_id}"
+    "/settings/people/{user_id}",
+    "/settings/host-groups/{group_id}"
   ],
   "publicAssets": [
     {
