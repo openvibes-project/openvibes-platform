@@ -959,7 +959,8 @@ Test: `tests/host_group_facts.rs`.
 ### Host-group store API
 
 - `host_groups::list(scope)` / `detail(id, scope)` return `GroupSummary`
-  (kind, description, ordered `conditions`, `picked`, version, changed
+  (kind, description, ordered `conditions`, `picked` (active picked hosts
+  inside the scope), version, changed
   at/by, `upgraded_from_tags`). Host counts, `online` (seen within
   `OFFLINE_AFTER_MINUTES`), `open_alarms` (agent alarms in state `open`)
   and `critical` (`host_vulnerability_counts.critical`) count only active
@@ -967,10 +968,13 @@ Test: `tests/host_group_facts.rs`.
   group is listed whatever the scope. `roles` are those in
   `console_role_groups`; `people` the distinct enabled users bound to them.
 - `host_groups::hosts(id, scope, after, limit)` pages member hosts by
-  hostname (cursor: the last agent id; limit 1–100) with display
+  hostname (cursor: the last agent id; an unknown cursor id yields an
+  empty page; limit 1–100) with display
   distribution, address, labels, last seen, online, problems and `why`
-  ("Matches the rule" / "Picked by hand"). `recent_changes(id, limit)` reads
-  the group's audit rows (`target_kind = 'host_group'`), newest first.
+  ("Matches the rule" / "Picked by hand"). `recent_changes(id, scope, limit)`
+  reads the group's audit rows (`target_kind = 'host_group'`), newest first;
+  for a scoped caller the `picked` and `hosts` details are dropped so no
+  host outside its reach is named or counted.
 - `host_group_writes::create` / `update` / `delete` run in one transaction
   under the access-binding advisory lock (the one role writes take, so a
   role cannot start using a group being deleted). They check the version
@@ -988,7 +992,9 @@ Test: `tests/host_group_facts.rs`.
   conditions | picked}`), `host_group.deleted` (`{name, kind,
   overrides_removed}`).
 - `host_group_writes::preview(id, proposed)` (module `host_group_preview`)
-  compares today's membership with the proposed rule (evaluated with
+  returns `PreviewOutcome::Invalid(part)` for a malformed rule
+  (`invalid_content`, the checks writes use) and `NotFound` for a missing
+  group; otherwise `Ready(Preview)`. It compares today's membership with the proposed rule (evaluated with
   `console_condition_holds` over active hosts) or picked list; `proposed`
   None previews a delete and counts `overrides_removed`. `gains` / `loses`
   are the enabled people bound to roles reaching the group who get the
@@ -997,7 +1003,7 @@ Test: `tests/host_group_facts.rs`.
   most 50 entries; `joins_total`, `leaves_total`, `people_total` count all.
 - `host_labels::labels` / `add_label` / `remove_label`: trimmed, 1–64
   characters, no control characters, at most 32 per active host (`TooMany`;
-  the agent row lock serialises adds), `AlreadyThere` for a repeat,
+  the agent row lock, `FOR NO KEY UPDATE`, serialises adds), `AlreadyThere` for a repeat,
   `NotFound` for a missing or non-active host, `Invalid` otherwise. Audit
   `host.label_added` / `host.label_removed` (`{label}`). Labels are never a
   membership field.

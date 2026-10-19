@@ -400,3 +400,36 @@ async fn a_128_character_name_differing_only_in_case_is_renamed_within_128() {
     assert_eq!((rows[0].get::<_, i64>(1), rows[1].get::<_, i64>(1)), (1, 1));
     db.drop().await;
 }
+
+#[tokio::test]
+async fn the_backfill_makes_at_most_20_releases_per_distribution() {
+    let (db, c) = upgraded_from(
+        "INSERT INTO agents (agent_id, status, enrolled_at, os_id, os_version)
+         SELECT 'agent.00000000-0000-4000-8000-' || lpad(n::text, 12, '0'), 'active', now(),
+                'debian', n::text
+         FROM generate_series(1, 21) n;
+         INSERT INTO agents (agent_id, status, enrolled_at, os_id, os_version) VALUES
+           ('agent.00000000-0000-4000-8000-000000000100','active',now(),'ubuntu','24.04'),
+           ('agent.00000000-0000-4000-8000-000000000101','active',now(),'debian','prod-servers');",
+    )
+    .await;
+    let keys: BTreeSet<String> = c
+        .query(
+            "SELECT auto_key FROM console_asset_groups WHERE kind = 'automatic'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.get(0))
+        .collect();
+    let debian = keys
+        .iter()
+        .filter(|k| k.starts_with("distribution:debian "))
+        .count();
+    assert_eq!(debian, 20, "{keys:?}");
+    assert!(keys.contains("distribution:ubuntu 24.04"));
+    assert!(keys.contains("os_family:linux"));
+    assert!(!keys.contains("distribution:debian prod-servers"));
+    db.drop().await;
+}

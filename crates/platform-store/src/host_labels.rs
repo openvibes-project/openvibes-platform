@@ -77,7 +77,7 @@ pub async fn add_label(
     // the row lock serialises adds to one host, so the cap holds
     let active = tx
         .query_opt(
-            "SELECT 1 FROM agents WHERE agent_id = $1 AND status = 'active' FOR UPDATE",
+            "SELECT 1 FROM agents WHERE agent_id = $1 AND status = 'active' FOR NO KEY UPDATE",
             &[&agent_id],
         )
         .await?;

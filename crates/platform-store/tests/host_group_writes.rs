@@ -5,6 +5,7 @@ use chrono::Utc;
 use common::groups::*;
 use common::{manual_group, migrated};
 use platform_store::{
+    console_read::AgentScope,
     host_group_facts::ensure_automatic_groups,
     host_group_writes::{self, GroupContent, GroupWrite, HostRef},
     host_groups::{self, Condition, GroupKind},
@@ -121,7 +122,9 @@ async fn editing_an_automatic_group_makes_it_a_rule_group() {
         .get(0);
     assert_eq!(detail["kind"], "rule");
     assert_eq!(detail["conditions"][1]["negate"], true);
-    let changes = host_groups::recent_changes(&c, &id, 10).await.unwrap();
+    let changes = host_groups::recent_changes(&c, &id, &AgentScope::Global, 10)
+        .await
+        .unwrap();
     let actions: Vec<&str> = changes.iter().map(|l| l.action.as_str()).collect();
     assert_eq!(
         actions,
@@ -214,7 +217,7 @@ async fn deleting_removes_rule_set_overrides_and_the_preview_counts_them() {
     let preview = host_group_writes::preview(&c, Some(&id), None)
         .await
         .unwrap()
-        .unwrap();
+        .ready();
     assert_eq!(preview.overrides_removed, 2);
     assert_eq!(
         preview.leaves,
@@ -344,6 +347,20 @@ async fn unknown_or_revoked_hosts_cannot_be_picked() {
     assert_eq!(
         detail,
         serde_json::json!({"name": "Web", "kind": "manual", "picked": [A1]})
+    );
+    // a scoped viewer's history never names picked hosts
+    let id = g.asset_group_id.as_str();
+    let global = host_groups::recent_changes(&c, id, &AgentScope::Global, 10)
+        .await
+        .unwrap();
+    assert_eq!(global[0].detail["picked"], serde_json::json!([A1]));
+    let scope = AgentScope::AssetGroups(vec![id.to_string()]);
+    let scoped = host_groups::recent_changes(&c, id, &scope, 10)
+        .await
+        .unwrap();
+    assert_eq!(
+        scoped[0].detail,
+        serde_json::json!({"name": "Web", "kind": "manual"})
     );
     db.drop().await;
 }

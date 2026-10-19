@@ -69,7 +69,7 @@ pub struct GroupSummary {
     pub description: String,
     /// The rule, in order (empty for manual groups).
     pub conditions: Vec<Condition>,
-    /// Hosts picked by hand, revoked ones included (manual groups).
+    /// Active hosts picked by hand inside the caller's scope (manual groups).
     pub picked: i64,
     /// Member hosts in scope.
     pub hosts: i64,
@@ -146,7 +146,8 @@ fn summary_sql() -> String {
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('field', c.field, 'negate', c.negate, 'values', c.vals)
                                            ORDER BY c.position)
                           FROM console_host_group_conditions c WHERE c.asset_group_id = g.asset_group_id), '[]'),
-                (SELECT count(*) FROM console_host_group_members m WHERE m.asset_group_id = g.asset_group_id),
+                (SELECT count(*) FROM console_host_group_members m JOIN agents a USING (agent_id)
+                 WHERE m.asset_group_id = g.asset_group_id AND a.status = 'active' AND {visible}),
                 h.hosts, h.online, h.open_alarms, h.critical,
                 ARRAY(SELECT r.role_id FROM console_role_groups rg JOIN console_roles r USING (role_id)
                       WHERE rg.asset_group_id = g.asset_group_id ORDER BY r.display_name, r.role_id),
@@ -227,8 +228,8 @@ pub async fn detail(
 }
 
 /// A page of the group's member hosts inside `scope`, by hostname, after
-/// the host `after` (an agent id from the previous page). `limit` is held to
-/// 1–100.
+/// the host `after` (an agent id from the previous page; an unknown id
+/// yields an empty page). `limit` is held to 1–100.
 pub async fn hosts(
     client: &Client,
     id: &str,
@@ -288,10 +289,13 @@ pub async fn hosts(
         .collect())
 }
 
-/// The newest `limit` (1–100) audit rows about the group.
+/// The newest `limit` (1–100) audit rows about the group. For a scoped
+/// caller the host lists and counts (`picked`, `hosts`) are left out of the
+/// details, so they never name or count hosts outside the caller's reach.
 pub async fn recent_changes(
     client: &Client,
     id: &str,
+    scope: &AgentScope,
     limit: i64,
 ) -> Result<Vec<AuditLine>, StoreError> {
     let rows = client
@@ -304,11 +308,20 @@ pub async fn recent_changes(
         .await?;
     Ok(rows
         .iter()
-        .map(|row| AuditLine {
-            at: row.get(0),
-            actor: row.get(1),
-            action: row.get(2),
-            detail: row.get(3),
+        .map(|row| {
+            let mut detail: serde_json::Value = row.get(3);
+            if !scope.is_global()
+                && let Some(fields) = detail.as_object_mut()
+            {
+                fields.remove("picked");
+                fields.remove("hosts");
+            }
+            AuditLine {
+                at: row.get(0),
+                actor: row.get(1),
+                action: row.get(2),
+                detail,
+            }
         })
         .collect())
 }

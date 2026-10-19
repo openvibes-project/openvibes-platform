@@ -3,7 +3,7 @@
 
 use crate::{
     Client, StoreError,
-    host_group_writes::{GroupContent, overrides},
+    host_group_writes::{GroupContent, invalid_content, overrides},
 };
 
 /// Most entries in each preview list.
@@ -27,6 +27,17 @@ pub struct PersonRef {
     pub username: String,
     /// Display name.
     pub display_name: String,
+}
+
+/// The answer to a preview request.
+#[derive(Clone, Debug)]
+pub enum PreviewOutcome {
+    /// What would change.
+    Ready(Preview),
+    /// The group does not exist.
+    NotFound,
+    /// The proposed rule is malformed (the part, as `GroupWrite::Invalid`).
+    Invalid(String),
 }
 
 /// What saving (or deleting) would change. Lists hold at most
@@ -88,15 +99,19 @@ SELECT user_id, username, display_name, count(*) OVER () FROM (
 ORDER BY username LIMIT $2";
 
 /// What saving `proposed` into group `id` (or a new group, `id` None)
-/// would change; `proposed` None previews deleting `id`. `None` when `id`
-/// does not exist. People of roles reaching the group gain the joining
+/// would change; `proposed` None previews deleting `id`. `NotFound` when
+/// `id` does not exist, `Invalid` for a malformed rule (checked before any
+/// value reaches the database). People of roles reaching the group gain the joining
 /// hosts and lose the leaving ones (simplified: their other roles' groups
 /// are not checked, only whether one reaches all hosts).
 pub async fn preview(
     client: &Client,
     id: Option<&str>,
     proposed: Option<&GroupContent<'_>>,
-) -> Result<Option<Preview>, StoreError> {
+) -> Result<PreviewOutcome, StoreError> {
+    if let Some(part) = proposed.and_then(invalid_content) {
+        return Ok(PreviewOutcome::Invalid(part));
+    }
     if let Some(id) = id {
         let exists = client
             .query_opt(
@@ -105,7 +120,7 @@ pub async fn preview(
             )
             .await?;
         if exists.is_none() {
-            return Ok(None);
+            return Ok(PreviewOutcome::NotFound);
         }
     }
     let (kind, conditions, picked) = match proposed {
@@ -161,5 +176,5 @@ pub async fn preview(
             preview.overrides_removed = overrides(client, id).await?;
         }
     }
-    Ok(Some(preview))
+    Ok(PreviewOutcome::Ready(preview))
 }

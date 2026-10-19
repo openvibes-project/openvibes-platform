@@ -14,7 +14,9 @@ use crate::{
     host_groups::{Condition, GroupKind, GroupSummary, summaries},
 };
 
-pub use crate::host_group_preview::{HostRef, PREVIEW_CAP, PersonRef, Preview, preview};
+pub use crate::host_group_preview::{
+    HostRef, PREVIEW_CAP, PersonRef, Preview, PreviewOutcome, preview,
+};
 
 /// Most conditions in a rule.
 pub const MAX_CONDITIONS: usize = 16;
@@ -102,7 +104,14 @@ pub fn invalid_part(input: &GroupInput<'_>) -> Option<String> {
     if input.description.chars().count() > 500 {
         return Some("description".into());
     }
-    let GroupContent::Rule(conditions) = input.content else {
+    invalid_content(&input.content)
+}
+
+/// The malformed part of a rule (`conditions`, or a condition's field), if
+/// any; picked lists are checked against the database instead.
+#[must_use]
+pub fn invalid_content(content: &GroupContent<'_>) -> Option<String> {
+    let GroupContent::Rule(conditions) = content else {
         return None;
     };
     if conditions.len() > MAX_CONDITIONS {

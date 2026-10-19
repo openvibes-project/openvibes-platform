@@ -4,7 +4,7 @@
 
 use platform_store::{
     Client,
-    host_group_writes::{GroupContent, GroupInput, GroupWrite},
+    host_group_writes::{GroupContent, GroupInput, GroupWrite, Preview, PreviewOutcome},
     host_groups::{Condition, GroupSummary},
 };
 
@@ -92,4 +92,19 @@ pub fn cond(field: &str, negate: bool, values: &[&str]) -> Condition {
 
 pub async fn count(c: &Client, sql: &str) -> i64 {
     c.query_one(sql, &[]).await.unwrap().get(0)
+}
+
+/// The preview of a ready outcome.
+pub trait Ready {
+    /// Panics unless ready.
+    fn ready(self) -> Preview;
+}
+
+impl Ready for PreviewOutcome {
+    fn ready(self) -> Preview {
+        match self {
+            PreviewOutcome::Ready(preview) => preview,
+            other => panic!("not ready: {other:?}"),
+        }
+    }
 }

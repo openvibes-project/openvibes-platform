@@ -6,7 +6,7 @@ use common::groups::*;
 use common::{manual_group, migrated, rule_group, seed_alarm, seed_host_vuln_counts, seed_role};
 use platform_store::{
     console_read::AgentScope,
-    host_group_writes::{self, GroupContent, HostRef, PersonRef},
+    host_group_writes::{self, GroupContent, HostRef, PersonRef, PreviewOutcome},
     host_groups::{self, GroupKind},
 };
 
@@ -25,6 +25,7 @@ async fn groups_are_listed_with_counts_inside_the_scope() {
     person(&c, U2, "bob", false).await;
     bind(&c, U1, "webteam").await;
     bind(&c, U2, "webteam").await;
+    manual_group(&c, "Both", &[A1, A2, A3]).await;
 
     let all = host_groups::list(&c, &AgentScope::Global).await.unwrap();
     let l = named(&all, "Linux hosts");
@@ -41,7 +42,17 @@ async fn groups_are_listed_with_counts_inside_the_scope() {
 
     let scope = AgentScope::AssetGroups(vec![web.clone()]);
     let scoped = host_groups::list(&c, &scope).await.unwrap();
-    assert_eq!(scoped.len(), 2, "every group is listed");
+    assert_eq!(scoped.len(), 3, "every group is listed");
+    assert_eq!(
+        named(&all, "Both").picked,
+        2,
+        "the revoked old-03 is not counted"
+    );
+    assert_eq!(
+        named(&scoped, "Both").picked,
+        1,
+        "db-02 is outside the scope"
+    );
     let l = named(&scoped, "Linux hosts");
     assert_eq!((l.hosts, l.online, l.open_alarms, l.critical), (1, 1, 1, 2));
 
@@ -104,7 +115,7 @@ async fn preview_lists_joins_leaves_and_who_gains_or_loses() {
     let p = host_group_writes::preview(&c, Some(&web), Some(&GroupContent::Manual(&picked)))
         .await
         .unwrap()
-        .unwrap();
+        .ready();
     assert_eq!(
         p.joins,
         [HostRef {
@@ -139,7 +150,7 @@ async fn preview_lists_joins_leaves_and_who_gains_or_loses() {
     let p = host_group_writes::preview(&c, None, Some(&GroupContent::Rule(&rule)))
         .await
         .unwrap()
-        .unwrap();
+        .ready();
     assert_eq!(
         p.joins.len(),
         1,
@@ -153,14 +164,25 @@ async fn preview_lists_joins_leaves_and_who_gains_or_loses() {
     )
     .await
     .unwrap()
-    .unwrap();
+    .ready();
     assert!(p.joins.is_empty() && p.leaves.is_empty() && p.gains.is_empty() && p.loses.is_empty());
     let missing = "00000000-0000-4000-8000-00000000ffff";
-    assert!(
-        host_group_writes::preview(&c, Some(missing), None)
+    let gone = host_group_writes::preview(&c, Some(missing), None)
+        .await
+        .unwrap();
+    assert!(matches!(gone, PreviewOutcome::NotFound), "{gone:?}");
+    // a bad rule is refused by name before any value reaches the database
+    for (rule, part) in [
+        (vec![cond("ip", false, &["10.0.0.0/33"])], "ip"),
+        (vec![cond("hostname", false, &[])], "hostname"),
+    ] {
+        let refused = host_group_writes::preview(&c, Some(&web), Some(&GroupContent::Rule(&rule)))
             .await
-            .unwrap()
-            .is_none()
-    );
+            .unwrap();
+        assert!(
+            matches!(&refused, PreviewOutcome::Invalid(p) if p == part),
+            "{refused:?}"
+        );
+    }
     db.drop().await;
 }
