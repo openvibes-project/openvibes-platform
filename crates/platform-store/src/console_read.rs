@@ -1331,15 +1331,26 @@ pub struct HostRuleSets {
 /// Most hosts [`host_rule_sets`] reads.
 pub const HOST_RULE_SETS_LIMIT: i64 = 20_000;
 
-/// Every active or stale host's reported rule sets, by hostname then id, up
-/// to [`HOST_RULE_SETS_LIMIT`]. Not scoped: only global callers use it.
-pub async fn host_rule_sets(client: &Client) -> Result<Vec<HostRuleSets>, StoreError> {
+/// Every active or stale host in `scope` with its reported rule sets, by
+/// hostname then id, up to [`HOST_RULE_SETS_LIMIT`].
+pub async fn host_rule_sets(
+    client: &Client,
+    scope: &AgentScope,
+) -> Result<Vec<HostRuleSets>, StoreError> {
+    let visible = agent_visibility("a.agent_id", "$2", "$3");
+    let query = format!(
+        "SELECT a.agent_id, a.hostname, a.health -> 'rule_sets', a.health_at
+         FROM agents a WHERE a.status IN ('active', 'stale') AND {visible}
+         ORDER BY a.hostname NULLS LAST, a.agent_id LIMIT $1"
+    );
     let rows = client
         .query(
-            "SELECT agent_id, hostname, health -> 'rule_sets', health_at
-             FROM agents WHERE status IN ('active', 'stale')
-             ORDER BY hostname NULLS LAST, agent_id LIMIT $1",
-            &[&HOST_RULE_SETS_LIMIT],
+            &query,
+            &[
+                &HOST_RULE_SETS_LIMIT,
+                &scope.is_global(),
+                &scope.group_ids(),
+            ],
         )
         .await?;
     Ok(rows

@@ -7,7 +7,7 @@ import type { DemoContext } from "../context";
 import { browserPersistence, json, problem } from "../http";
 
 export function registerRuleRoutes(ctx: DemoContext) {
-  const { data, iso, actor, readsRules, agentById, audit, route, send } = ctx;
+  const { data, iso, actor, readsRules, agentById, visible, audit, route, send } = ctx;
   route("GET", "/api/v1/rule-sets", null, () => (readsRules() ? json({ items: data.ruleSets }) : problem(403, "permission_denied", "Access is not available")));
   route("GET", "/api/v1/rule-sets/{id}/bundles", null, ({ id = "" }) => (readsRules() ? json({ items: data.bundles.get(id) ?? [] }) : problem(403, "permission_denied", "Access is not available")));
   const previews = new Map<string, string>();
@@ -105,8 +105,7 @@ export function registerRuleRoutes(ctx: DemoContext) {
   route("POST", "/api/v1/rule-drafts/{set}/{id}/test", "site_rules.test", ({ set = "" }, __, body) => {
     if (!drafts.has(set)) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
     if (set !== "site") return problem(422, "alarm_test_unsupported", "Alarm rules run on process starts, which the platform doesn't hold; test them on a host");
-    const agent = data.agents.find((candidate) => candidate.id === String(body.agent_id ?? ""));
-    if (!agent) return problem(404, "host_not_found", "No such host");
+    if (!agentById(String(body.agent_id ?? ""))) return problem(404, "host_not_found", "No such host");
     const rule = (body.rule ?? {}) as Record<string, unknown>;
     if (draftProblems(set, rule).length > 0) return problem(422, "invalid_rule", "The rule does not pass the agent's checks yet");
     const expression = String(rule.expression);
@@ -141,7 +140,7 @@ export function registerRuleRoutes(ctx: DemoContext) {
       if (entry.refused) return "refused";
       return set.published_version !== null && entry.version < set.published_version ? "behind" : "current";
     };
-    for (const agent of data.agents.filter((candidate) => candidate.status === "active" || candidate.status === "stale")) {
+    for (const agent of data.agents.filter((candidate) => visible(candidate.id) && (candidate.status === "active" || candidate.status === "stale"))) {
       const states = sets.map((set) => stateOf(agent, set));
       sets.forEach((set, index) => { set[states[index] as "current" | "behind" | "refused" | "missing"] += 1; });
       if (states.some((state) => state !== "current") && hosts.length < 200) hosts.push({ agent_id: agent.id, hostname: agent.hostname ?? null, site: states[0] ?? "missing", site_alarms: states[1] ?? "missing" });

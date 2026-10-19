@@ -292,12 +292,19 @@ pub(crate) async fn test_rule(
             "The rule does not pass the agent's checks yet",
         ));
     }
+    // The site-rule permissions reach everywhere; the host's facts only as
+    // far as the caller's hosts.read (an unreachable host looks missing).
+    let hosts = match authenticated_permission(&state, &headers, Permission::HostsRead, true).await
+    {
+        Ok((hosts, _)) => hosts,
+        Err(response) => return response,
+    };
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
     let (Ok(services), Ok(names)) = (
-        platform_store::host_services::for_host(&client, &scope, &request.agent_id).await,
-        platform_store::console_inventory::host_package_names(&client, &scope, &request.agent_id)
+        platform_store::host_services::for_host(&client, &hosts, &request.agent_id).await,
+        platform_store::console_inventory::host_package_names(&client, &hosts, &request.agent_id)
             .await,
     ) else {
         return unavailable_auth();
