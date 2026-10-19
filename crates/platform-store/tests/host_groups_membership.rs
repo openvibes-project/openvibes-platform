@@ -228,3 +228,56 @@ async fn agent_visibility_uses_the_function() {
     assert_eq!(agent_ids_in_scope(&c, &scope).await.unwrap(), expected);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_backslash_in_a_pattern_is_literal() {
+    let (db, c) = common::migrated().await;
+    let literal = host(&c, 1, None, Some(r"a\b"), None).await;
+    host(&c, 2, None, Some("ab"), None).await;
+    host(&c, 3, None, Some(r"a\\b"), None).await;
+    let group = common::rule_group(&c, "B", &[("hostname", false, &[r"a\b"])]).await;
+    assert_eq!(members(&c, &group).await, vec![literal]);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn null_or_unparsable_values_are_refused() {
+    let (db, c) = common::migrated().await;
+    let group = common::rule_group(&c, "G", &[]).await;
+    for (field, vals) in [
+        ("distribution", "{\"debian 12\",NULL}"),
+        ("ip", "{10.0.0.0/8,not-an-address}"),
+    ] {
+        let refused = c
+            .execute(
+                "INSERT INTO console_host_group_conditions (asset_group_id, position, field, vals)
+                 VALUES ($1::text::uuid, 0, $2, $3::text::text[])",
+                &[&group, &field, &vals],
+            )
+            .await;
+        assert!(refused.is_err(), "{field}");
+    }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_null_value_never_lets_a_host_in() {
+    let (db, c) = common::migrated().await;
+    host(&c, 1, Some(("fedora", "44")), None, None).await;
+    // Past the CHECK: membership itself must still fail closed.
+    c.batch_execute(
+        "ALTER TABLE console_host_group_conditions DROP CONSTRAINT console_host_group_conditions_no_null",
+    )
+    .await
+    .unwrap();
+    let group = common::rule_group(&c, "N", &[]).await;
+    c.execute(
+        "INSERT INTO console_host_group_conditions (asset_group_id, position, field, vals)
+         VALUES ($1::text::uuid, 0, 'distribution', '{\"debian 12\",NULL}')",
+        &[&group],
+    )
+    .await
+    .unwrap();
+    assert!(members(&c, &group).await.is_empty());
+    db.drop().await;
+}

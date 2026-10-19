@@ -22,6 +22,44 @@ ALTER TABLE console_asset_groups
   ADD COLUMN upgraded_from_tags boolean NOT NULL DEFAULT false,
   ADD CONSTRAINT console_asset_groups_auto_key_kind CHECK ((kind = 'automatic') = (auto_key IS NOT NULL));
 ALTER TABLE console_asset_groups DROP CONSTRAINT console_asset_groups_name_key;
+
+-- A free group name (case-insensitive, at most 128 characters) from `display`:
+-- itself, else display || ' (suffix)', ' (suffix 2)', …; with suffix '' it is
+-- ' (2)', ' (3)', …. The display part is cut so the suffix always fits. `keep`
+-- is a group whose own name does not count. Insert one group per statement so
+-- each call sees the names inserted before it (ingest's automatic groups too).
+CREATE FUNCTION console_free_group_name(display text, suffix text, keep uuid DEFAULT NULL) RETURNS text
+LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+  n integer := 0;
+  tail text;
+  candidate text := left(display, 128);
+BEGIN
+  WHILE EXISTS (SELECT 1 FROM console_asset_groups
+                WHERE lower(name) = lower(candidate) AND asset_group_id IS DISTINCT FROM keep) LOOP
+    n := n + 1;
+    tail := ' (' || CASE WHEN suffix = '' THEN (n + 1)::text
+                         WHEN n = 1 THEN suffix ELSE suffix || ' ' || n END || ')';
+    candidate := left(display, 128 - char_length(tail)) || tail;
+  END LOOP;
+  RETURN candidate;
+END $$;
+
+-- names differing only in case were allowed before: later ones get " (2)"…
+CREATE TEMP TABLE host_group_renamed (asset_group_id uuid PRIMARY KEY, old_name text NOT NULL);
+DO $$
+DECLARE g record;
+BEGIN
+  FOR g IN SELECT asset_group_id, name FROM (
+             SELECT asset_group_id, name, row_number() OVER (
+                      PARTITION BY lower(name) ORDER BY created_at, asset_group_id) AS rn
+             FROM console_asset_groups) d
+           WHERE rn > 1 ORDER BY lower(name), rn LOOP
+    INSERT INTO host_group_renamed VALUES (g.asset_group_id, g.name);
+    UPDATE console_asset_groups SET name = console_free_group_name(g.name, '', g.asset_group_id)
+    WHERE asset_group_id = g.asset_group_id;
+  END LOOP;
+END $$;
 CREATE UNIQUE INDEX console_asset_groups_name_unique ON console_asset_groups (lower(name));
 
 CREATE TABLE console_host_group_conditions (
@@ -30,6 +68,8 @@ CREATE TABLE console_host_group_conditions (
   field text NOT NULL CHECK (field IN ('os_family','distribution','hostname','ip')),
   negate boolean NOT NULL DEFAULT false,
   vals text[] NOT NULL CHECK (cardinality(vals) BETWEEN 1 AND 64),
+  CONSTRAINT console_host_group_conditions_no_null CHECK (array_position(vals, NULL) IS NULL),
+  CONSTRAINT console_host_group_conditions_ip CHECK (field <> 'ip' OR vals::inet[] IS NOT NULL),
   PRIMARY KEY (asset_group_id, position));
 CREATE TABLE console_host_group_members (
   asset_group_id uuid NOT NULL REFERENCES console_asset_groups ON DELETE CASCADE,
@@ -70,7 +110,8 @@ CREATE FUNCTION console_host_in_group(agent text, gid uuid) RETURNS boolean LANG
             SELECT 1 FROM console_host_group_members m WHERE m.asset_group_id = gid AND m.agent_id = a.agent_id)
           ELSE EXISTS (SELECT 1 FROM console_host_group_conditions c WHERE c.asset_group_id = gid)
            AND NOT EXISTS (SELECT 1 FROM console_host_group_conditions c
-                           WHERE c.asset_group_id = gid AND NOT console_condition_holds(a, c.field, c.negate, c.vals))
+                           WHERE c.asset_group_id = gid
+                             AND NOT COALESCE(console_condition_holds(a, c.field, c.negate, c.vals), false))
           END) $$;
 
 -- Display names of automatic groups; host_group_facts.rs holds the same map
@@ -110,41 +151,56 @@ INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_
 SELECT 'migration', 'host_group.migrated', g.name, 'success',
        jsonb_build_object('selectors', COALESCE((SELECT jsonb_agg(tag_key || '=' || tag_value ORDER BY tag_key)
                                                  FROM console_asset_group_selectors s WHERE s.asset_group_id = g.asset_group_id), '[]'),
-                          'hosts', (SELECT count(*) FROM console_host_group_members m WHERE m.asset_group_id = g.asset_group_id)),
+                          'hosts', (SELECT count(*) FROM console_host_group_members m WHERE m.asset_group_id = g.asset_group_id))
+       || CASE WHEN r.old_name IS NULL THEN '{}'::jsonb
+               ELSE jsonb_build_object('renamed_from', r.old_name, 'renamed_to', g.name) END,
        'system', 'openvibes', 'host_group', g.asset_group_id::text
-FROM console_asset_groups g;
+FROM console_asset_groups g LEFT JOIN host_group_renamed r USING (asset_group_id);
+DROP TABLE host_group_renamed;
+
+-- each tag k=v becomes the label k:v (at most 64 characters); a host whose
+-- tags were cut or fell together gets one audit row naming them
 INSERT INTO console_host_labels (agent_id, label, added_at, added_by)
 SELECT agent_id, left(tag_key || ':' || tag_value, 64), changed_at, changed_by FROM console_agent_tags
 ON CONFLICT DO NOTHING;
-
--- automatic groups for facts already reported; a name already taken
--- (case-insensitive) gets " (automatic)"
-WITH facts AS (
-  SELECT DISTINCT 'os_family' AS field, os_family AS val, console_os_family_name(os_family) AS name
-  FROM agents WHERE status = 'active' AND os_family IS NOT NULL
-  UNION
-  SELECT DISTINCT 'distribution', distribution, console_distribution_name(distribution)
-  FROM agents WHERE status = 'active' AND distribution IS NOT NULL
-), made AS (
-  INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind, auto_key, description)
-  SELECT gen_random_uuid(),
-         CASE WHEN EXISTS (SELECT 1 FROM console_asset_groups g WHERE lower(g.name) = lower(f.name))
-              THEN f.name || ' (automatic)' ELSE f.name END,
-         now(), 'openvibes', 'automatic', f.field || ':' || f.val,
-         CASE f.field WHEN 'os_family' THEN 'Every host that reports ' || f.name || '. Kept up to date by OpenVIBES.'
-                      ELSE 'Hosts running ' || f.name || '.' END
-  FROM facts f
-  RETURNING asset_group_id, name, auto_key
-), conditions AS (
-  INSERT INTO console_host_group_conditions (asset_group_id, position, field, negate, vals)
-  SELECT asset_group_id, 0, split_part(auto_key, ':', 1), false,
-         ARRAY[substr(auto_key, strpos(auto_key, ':') + 1)]
-  FROM made
-)
 INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_id, target_kind, target_id)
-SELECT 'openvibes', 'host_group.created_automatically', name, 'success',
-       jsonb_build_object('auto_key', auto_key), 'system', 'openvibes', 'host_group', asset_group_id::text
-FROM made;
+SELECT 'migration', 'host.labels_migrated', agent_id, 'success',
+       jsonb_build_object(
+         'truncated', COALESCE(jsonb_agg(jsonb_build_object('tag', tag, 'label', label) ORDER BY tag)
+                               FILTER (WHERE char_length(tag) > 64), '[]'),
+         'merged', COALESCE(jsonb_agg(jsonb_build_object('tag', tag, 'label', label) ORDER BY tag)
+                            FILTER (WHERE same > 1), '[]')),
+       'system', 'openvibes', 'agent', agent_id
+FROM (SELECT agent_id, tag, left(tag, 64) AS label,
+             count(*) OVER (PARTITION BY agent_id, left(tag, 64)) AS same
+      FROM (SELECT agent_id, tag_key || ':' || tag_value AS tag FROM console_agent_tags) t) l
+GROUP BY agent_id
+HAVING bool_or(char_length(tag) > 64 OR same > 1);
+
+-- automatic groups for facts already reported, one at a time so each name
+-- sees the ones before it
+DO $$
+DECLARE f record; gid uuid; gname text;
+BEGIN
+  FOR f IN SELECT DISTINCT 'os_family' AS field, os_family AS val, console_os_family_name(os_family) AS display
+           FROM agents WHERE status = 'active' AND os_family IS NOT NULL
+           UNION
+           SELECT DISTINCT 'distribution', distribution, console_distribution_name(distribution)
+           FROM agents WHERE status = 'active' AND distribution IS NOT NULL
+           ORDER BY 1 DESC, 2 LOOP
+    gid := gen_random_uuid();
+    gname := console_free_group_name(f.display, 'automatic');
+    INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind, auto_key, description)
+    VALUES (gid, gname, now(), 'openvibes', 'automatic', f.field || ':' || f.val,
+            left(CASE f.field WHEN 'os_family' THEN 'Every host that reports ' || f.display || '. Kept up to date by OpenVIBES.'
+                              ELSE 'Hosts running ' || f.display || '.' END, 500));
+    INSERT INTO console_host_group_conditions (asset_group_id, position, field, negate, vals)
+    VALUES (gid, 0, f.field, false, ARRAY[f.val]);
+    INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_id, target_kind, target_id)
+    VALUES ('openvibes', 'host_group.created_automatically', gname, 'success',
+            jsonb_build_object('auto_key', f.field || ':' || f.val), 'system', 'openvibes', 'host_group', gid::text);
+  END LOOP;
+END $$;
 
 DROP TABLE console_agent_tags;
 DROP TABLE console_asset_group_selectors;

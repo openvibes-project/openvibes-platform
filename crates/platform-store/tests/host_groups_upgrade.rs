@@ -234,3 +234,138 @@ async fn the_tag_tables_and_their_grants_are_gone() {
     assert!(row.get::<_, bool>(2));
     db.drop().await;
 }
+
+/// A version-52 database seeded with `sql`, migrated to 53.
+async fn upgraded_from(sql: &str) -> (common::TestDb, Client) {
+    let db = common::TestDb::create().await;
+    let client = common::at_version(&db, 52).await;
+    client.batch_execute(sql).await.unwrap();
+    drop(client);
+    let mut c = db.pool.get().await.unwrap();
+    assert_eq!(platform_store::migrate(&mut c).await.unwrap(), 53);
+    (db, c)
+}
+
+#[tokio::test]
+async fn names_differing_only_in_case_are_renamed_and_keep_their_hosts() {
+    let (db, c) = upgraded_from(&format!(
+        "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ('{PROD}','active',now());
+         INSERT INTO console_agent_tags VALUES ('{PROD}','env','prod',now(),'t');
+         INSERT INTO console_asset_groups VALUES
+           ('{G_PROD}','Prod',now() - interval '1 day','t'), ('{G_PROD_WEB}','prod',now(),'t'),
+           ('{G_EMPTY}','PROD',now(),'t');
+         INSERT INTO console_asset_group_selectors VALUES
+           ('{G_PROD}','env','prod',now()), ('{G_PROD_WEB}','env','prod',now());"
+    ))
+    .await;
+    let rows = c
+        .query(
+            "SELECT g.asset_group_id::text, g.name,
+                    (SELECT count(*) FROM console_host_group_members m WHERE m.asset_group_id = g.asset_group_id),
+                    a.detail
+             FROM console_asset_groups g JOIN audit_log a
+               ON a.action = 'host_group.migrated' AND a.target_id = g.asset_group_id::text
+             ORDER BY g.created_at, g.asset_group_id",
+            &[],
+        )
+        .await
+        .unwrap();
+    let got: Vec<(String, String, i64, serde_json::Value)> = rows
+        .iter()
+        .map(|r| (r.get(0), r.get(1), r.get(2), r.get(3)))
+        .collect();
+    assert_eq!(got[0].1, "Prod");
+    assert!(got[0].3.get("renamed_from").is_none());
+    let renamed: BTreeMap<String, (String, i64, serde_json::Value)> = got[1..]
+        .iter()
+        .map(|(id, name, hosts, detail)| (id.clone(), (name.clone(), *hosts, detail.clone())))
+        .collect();
+    let (name, hosts, detail) = &renamed[G_PROD_WEB];
+    assert_eq!(*hosts, 1, "same hosts as before");
+    assert_eq!(detail["renamed_from"], "prod");
+    assert_eq!(detail["renamed_to"], name.as_str());
+    let names: BTreeSet<String> = got.iter().map(|g| g.1.to_lowercase()).collect();
+    assert_eq!(names.len(), 3, "{got:?}");
+    assert!(names.contains("prod (2)") && names.contains("prod (3)"));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn automatic_names_fit_and_clash_at_two_levels() {
+    let long_id = "x".repeat(128);
+    let long_version = "9".repeat(128);
+    let (db, c) = upgraded_from(&format!(
+        "INSERT INTO agents (agent_id, status, enrolled_at, os_id, os_version) VALUES
+           ('{PROD}','active',now(),'debian','12'),
+           ('{LAB}','active',now(),'{long_id}','{long_version}');
+         INSERT INTO console_asset_groups VALUES
+           ('{G_PROD}','Linux',now(),'t'), ('{G_PROD_WEB}','linux (AUTOMATIC)',now(),'t');"
+    ))
+    .await;
+    let names: BTreeMap<String, String> = c
+        .query(
+            "SELECT auto_key, name FROM console_asset_groups WHERE kind = 'automatic'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| (r.get(0), r.get(1)))
+        .collect();
+    assert_eq!(names["os_family:linux"], "Linux (automatic 2)");
+    assert_eq!(names["distribution:debian 12"], "Debian 12");
+    let long = &names[&format!("distribution:{long_id} {long_version}")];
+    assert_eq!(long.chars().count(), 128);
+    assert!(long.starts_with("Xxx"));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn cut_or_merged_tags_are_audited() {
+    let long_a = format!("{}a", "v".repeat(70));
+    let long_b = format!("{}b", "v".repeat(70));
+    let (db, c) = upgraded_from(&format!(
+        "INSERT INTO agents (agent_id, status, enrolled_at) VALUES
+           ('{PROD}','active',now()), ('{LAB}','active',now());
+         INSERT INTO console_agent_tags VALUES
+           ('{PROD}','k','{long_a}',now(),'t'), ('{PROD}','l','x',now(),'t'),
+           ('{PROD}','k2','{long_b}',now(),'t'),
+           ('{PROD}','m','n:o',now(),'t'), ('{PROD}','m:n','o',now(),'t'),
+           ('{LAB}','env','lab',now(),'t');"
+    ))
+    .await;
+    let rows = c
+        .query(
+            "SELECT target_id, detail FROM audit_log WHERE action = 'host.labels_migrated'",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1, "only the host whose tags were cut or merged");
+    assert_eq!(rows[0].get::<_, &str>(0), PROD);
+    let detail: serde_json::Value = rows[0].get(1);
+    assert_eq!(detail["truncated"].as_array().unwrap().len(), 2);
+    let tags = |key: &str| -> BTreeSet<String> {
+        detail[key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["tag"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(
+        tags("truncated"),
+        BTreeSet::from([format!("k:{long_a}"), format!("k2:{long_b}")])
+    );
+    assert_eq!(tags("merged"), BTreeSet::from(["m:n:o".to_owned()]));
+    let labels: i64 = c
+        .query_one(
+            "SELECT count(*) FROM console_host_labels WHERE agent_id = $1",
+            &[&PROD],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(labels, 4);
+    db.drop().await;
+}

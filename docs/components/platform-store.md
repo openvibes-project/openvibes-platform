@@ -890,7 +890,8 @@ regardless of case. `agents` gains `last_address inet` and the generated,
 indexed `os_family` (`windows` or `linux`) and `distribution`
 (`lower(os_id || ' ' || os_version)`, Rocky and AlmaLinux cut to the major
 release). New tables: `console_host_group_conditions` (≤ 16 per group,
-`field` os_family/distribution/hostname/ip, `negate`, 1–64 `vals`),
+`field` os_family/distribution/hostname/ip, `negate`, 1–64 `vals`, no NULL
+value, `ip` values must parse as `inet`),
 `console_host_group_members` (manual groups), `console_host_group_dismissed`
 (deleted automatic keys) and `console_host_labels` (1–64 characters).
 
@@ -899,21 +900,32 @@ evaluated when queried: only active hosts; a manual group holds its
 members; a rule or automatic group holds hosts satisfying every condition,
 a condition holding when any value matches (or none does, when negated). A
 fact the host has not reported never satisfies a condition, negated or not;
-a group without conditions holds no one. Hostname patterns are
+a group without conditions holds no one; a condition that evaluates to
+unknown counts as not holding (fail closed). Hostname patterns are
 case-insensitive with `*` the only wildcard (`console_glob_like`); `ip`
 values are CIDRs or single addresses, v4 or v6. `agent_visibility`,
 `revoke_agent_in_scope` and rule-set assignment (`FLEET`, `HOST_STATE`) all
 call it. `console_os_family_name` and `console_distribution_name` give the
 display names of automatic groups (Debian, Ubuntu, Fedora, Rocky Linux,
 AlmaLinux, other ids capitalised, plus the release).
+`console_free_group_name(display, suffix, keep)` returns a free name of at
+most 128 characters: `display`, else `display (suffix)`, `(suffix 2)`, …
+(with suffix `''`: ` (2)`, ` (3)`, …), cutting `display` so the suffix fits.
+It sees only committed or earlier-statement names, so insert one group per
+statement (the migration loops; ingest's automatic groups must too).
 
-**Upgrade:** each existing asset group becomes a manual group of the active
+**Upgrade:** names that differed only in case (allowed before) are made
+unique first: the oldest keeps its name, later ones get ` (2)`, ` (3)`, …,
+recorded as `renamed_from`/`renamed_to` in their `host_group.migrated` row.
+Each existing asset group becomes a manual group of the active
 hosts its selectors matched (a group without selectors holds none), with
 `upgraded_from_tags` and a description naming its tags, and one
-`host_group.migrated` audit row; each tag `k=v` becomes the label `k:v`;
+`host_group.migrated` audit row; each tag `k=v` becomes the label `k:v` (cut to 64 characters; a host whose
+tags were cut, or fell together into one label, gets one
+`host.labels_migrated` row listing them);
 automatic groups are made for the OS families and distributions active hosts
-already report (`host_group.created_automatically`; a taken name gets
-" (automatic)"). `console_agent_tags` and `console_asset_group_selectors` are
+already report (`host_group.created_automatically`; named through
+`console_free_group_name(…, 'automatic')`). `console_agent_tags` and `console_asset_group_selectors` are
 dropped with their grants. Revoked hosts leave every group, the one access
 change. Grants: the console role reads and writes the new tables and may
 delete groups; distribution reads conditions, members, `kind` and the agent
