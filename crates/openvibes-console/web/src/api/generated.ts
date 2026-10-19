@@ -1074,7 +1074,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every role, Administrator first, then by name. */
+        /**
+         * Every role, Administrator first, then by name: for `access.read`, and
+         *     for `service_accounts.manage` (its role picker). With `held=true`, the
+         *     caller's own roles, for anyone signed in (dashboard sharing).
+         */
         get: operations["list_roles"];
         put?: never;
         /** Creates a role that fits inside the editor's own access. */
@@ -2943,6 +2947,8 @@ export interface components {
             owner_display_name: string;
             /** @description Role it is shared with, if any. */
             shared_role_id?: string | null;
+            /** @description That role's name, for display. */
+            shared_role_name?: string | null;
             /** @description RFC 3339 last change. */
             updated_at: string;
             /**
@@ -3738,6 +3744,13 @@ export interface components {
             /** @description Short operator reason recorded in the audit event. */
             reason: string;
         };
+        /** @description A role as a list shows it: its id and name. */
+        RoleName: {
+            /** @description Its name; Administrator's is "Administrator". */
+            name: string;
+            /** @description Stable role id. */
+            role_id: string;
+        };
         /** @description One role as the console shows it. */
         RoleView: {
             /** @description Only Administrator is built in; it cannot be changed or deleted. */
@@ -4045,8 +4058,8 @@ export interface components {
             enabled: boolean;
             /** @description Operator-selected name. */
             name: string;
-            /** @description Active assigned role identifiers. */
-            role_ids: string[];
+            /** @description Its roles, by id. */
+            roles: components["schemas"]["RoleName"][];
             /** @description Stable service-account UUID. */
             service_account_id: string;
         };
@@ -8734,7 +8747,10 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description Only the roles the caller holds (any signed-in person may ask). */
+                held: boolean;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -8757,7 +8773,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Needs access.read */
+            /** @description Needs access.read or service_accounts.manage, unless held=true */
             403: {
                 headers: {
                     [name: string]: unknown;

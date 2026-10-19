@@ -42,9 +42,13 @@ permission-checked read models, enrollment-token management, and audit routes.
   `POST /api/v1/enrollment-tokens/{token_id}/revoke` requires `tokens.manage`
   and audits the revocation. These responses are `Cache-Control: no-store`.
 - `/api/v1/service-accounts` lists safe account metadata (filtered to the
-  caller's share for non-administrators) and creates an account holding
-  `role_ids` (1–64, each inside the creator's share; an unknown role id is
-  400 `unknown_role`, as for `POST /api/v1/users`).
+  caller's share for non-administrators), each account's roles as
+  `roles: [{role_id, name}]`, and creates an account holding `role_ids`
+  (1–64, each inside the creator's share; an unknown role id is
+  400 `unknown_role`, as for `POST /api/v1/users`). Creating an account or
+  issuing a token checks the session, CSRF and permission (and the account's
+  share) before reading the body: a caller who may not gets 401 or 403
+  whatever they send.
   `PUT`/`DELETE /api/v1/service-accounts/{id}/roles/{role}` give or take a
   role (`access.grant` and the share). The token list, issue and revoke
   routes and disable also need the account inside the caller's share
@@ -145,7 +149,10 @@ exist. Tests: `tests/people_http.rs` and `tests/people_share_http.rs` (fixture i
   tokens are refused, as for other per-person reads).
 - `GET /api/v1/roles` and `GET /api/v1/roles/{role_id}` (`access.read`):
   `RoleView` (permissions, reach `none` / `all` / `groups` with names,
-  members, version), Administrator first.
+  members, version), Administrator first. The list is also open to
+  `service_accounts.manage` (the new-account role picker). With
+  `?held=true` it answers only the caller's own roles, to anyone signed in
+  with a browser session (the dashboard Share menu: only roles you hold).
 - `POST /api/v1/roles` (201), `PATCH /api/v1/roles/{role_id}` (200, needs
   the `version` read) and `DELETE /api/v1/roles/{role_id}` (204):
   `access.roles` and CSRF. The name is trimmed, 1–64 characters without

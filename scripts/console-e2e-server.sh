@@ -55,6 +55,12 @@ SELECT 'analyst', unnest(ARRAY['alarms.read', 'alarms.suppressions.read', 'compl
     'cases.write', 'assistant.use']);
 SQL
 printf '%s\n' "${password}" | admin user create --username sam --display-name "Sam Analyst" --role analyst --password-stdin >/dev/null
+# alex holds Analyst too, to share a dashboard with sam's role (only roles
+# you hold can be shared with).
+psql -qX -v ON_ERROR_STOP=1 "${database_url}" >/dev/null <<'SQL'
+INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+SELECT gen_random_uuid(), user_id, 'analyst', now(), 'e2e' FROM console_users WHERE username = 'alex';
+SQL
 
 # Findings as agent export files (the import path), observed minutes ago.
 node --input-type=module - "${work}/exports" <<'EOF'

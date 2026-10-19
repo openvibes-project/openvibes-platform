@@ -55,6 +55,14 @@ describe("demo dashboards", () => {
     expect((await analyst.handle("PUT", "/api/v1/me/home", { dashboard_id: "d-admin-morning" })).status).toBe(404);
   });
 
+  it("names the role a dashboard is shared with, as the API does", async () => {
+    const analyst = createDemoServer({ persona: "analyst" });
+    const items = (await json(await analyst.handle("GET", "/api/v1/dashboards"))).items as { name: string; shared_role_name: string | null }[];
+    expect(items.find((d) => d.name === "Analyst triage")?.shared_role_name).toBe("Analyst");
+    const own = await json(await createDemoServer({ persona: "admin" }).handle("POST", "/api/v1/dashboards", { name: "Mine", layout }));
+    expect(own.shared_role_name).toBeNull();
+  });
+
   it("checks a save in the server's order: If-Match, then the body, then ownership and version", async () => {
     const server = createDemoServer({ persona: "admin" });
     const created = await json(await server.handle("POST", "/api/v1/dashboards", { name: "Order", layout }));

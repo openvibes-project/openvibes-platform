@@ -1,7 +1,7 @@
 //! Service accounts: list, create and disable (their roles: `people_roles`).
 
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, Path, State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -9,7 +9,7 @@ use chrono::Utc;
 use platform_store::console_auth;
 
 use crate::access::editor::{authenticated_editor, caller, role_fits, roles_fit};
-use crate::access::people::{all_roles, held};
+use crate::access::people::{Roles, all_roles, held};
 use crate::access::people_roles::account_in_share;
 use crate::http::headers::no_store;
 use crate::{
@@ -88,12 +88,33 @@ pub(crate) async fn authenticated_service_accounts(
                         .created_at
                         .to_rfc3339_opts(SecondsFormat::Millis, true),
                     active_tokens: account.active_tokens,
-                    role_ids: account.role_ids,
+                    roles: role_names(&account.role_ids, &roles),
                 })
                 .collect(),
         })
         .into_response(),
     )
+}
+
+fn invalid_service_account() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::BAD_REQUEST,
+        "invalid_service_account",
+        "Provide a valid name and 1 to 64 roles",
+    ))
+}
+
+/// `role_ids` with their names; an id without a role keeps the id.
+fn role_names(role_ids: &[String], roles: &Roles) -> Vec<crate::RoleName> {
+    role_ids
+        .iter()
+        .map(|id| crate::RoleName {
+            role_id: id.clone(),
+            name: roles
+                .get(id)
+                .map_or_else(|| id.clone(), |role| role.name.clone()),
+        })
+        .collect()
 }
 
 /// Creates a named service identity holding roles that all fit inside the
@@ -102,7 +123,7 @@ pub(crate) async fn authenticated_service_accounts(
 pub(crate) async fn create_authenticated_service_account(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
-    Json(request): Json<crate::CreateServiceAccountRequest>,
+    payload: Result<Json<crate::CreateServiceAccountRequest>, JsonRejection>,
 ) -> Response {
     // Authentication, CSRF and permission first: nothing about the body is
     // answered to a caller who may not make the request.
@@ -113,6 +134,9 @@ pub(crate) async fn create_authenticated_service_account(
     if let Some(response) = editor.denied(crate::Permission::ServiceAccountsManage) {
         return response;
     }
+    let Ok(Json(request)) = payload else {
+        return invalid_service_account();
+    };
     let name = request.name.trim();
     let mut role_ids = request.role_ids.clone();
     role_ids.sort();
@@ -123,11 +147,7 @@ pub(crate) async fn create_authenticated_service_account(
         || role_ids.is_empty()
         || role_ids.len() > 64
     {
-        return problem_response(ProblemDetails::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_service_account",
-            "Provide a valid name and 1 to 64 roles",
-        ));
+        return invalid_service_account();
     }
     let mut client = match state.pool.get().await {
         Ok(value) => value,
@@ -174,7 +194,7 @@ pub(crate) async fn create_authenticated_service_account(
         enabled: true,
         created_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         active_tokens: 0,
-        role_ids,
+        roles: role_names(&role_ids, &roles),
     })
     .into_response();
     *response.status_mut() = StatusCode::CREATED;

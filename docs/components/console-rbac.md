@@ -40,8 +40,10 @@ permissions once (spec 2026-10-16-roles-permissions-design.md §3): for each
 its id (wire and database name), area, console text, matrix column (View,
 Change, Export, Approve and publish), scope and needs. **Host** scope applies
 on the hosts the granting binding reaches (database `scope_class = 'agent'`);
-**platform** scope applies everywhere (`'global'`) and a scoped binding does
-not grant it. Needs are transitive and acyclic; `with_needs` closes a set.
+**platform** scope applies everywhere (`'global'`): a role holding one grants
+it whatever the role's reach, even a role reaching no host. Host data a
+platform route shows (testing a site rule on a host, the site fleet view)
+still keeps to the caller's `hosts.read` reach. Needs are transitive and acyclic; `with_needs` closes a set.
 `Permission` (`permission.rs`) has one variant per row with `id()` and
 `from_id()`. `templates.rs` holds the six role templates of §4.2 (Viewer,
 Analyst, Operator, Team lead, Auditor, Rule author), each closed under needs.
@@ -67,8 +69,9 @@ Which permission each route checks: rule-set list and bundle history
 `rules.read`; switches `rules.assignment.read` / `rules.assignment.write`;
 coverage and the ATT&CK catalog `rules.coverage.read`; the assistant's rule
 contents `rules.contents.read`; draft list, fleet and publish preview
-`site_rules.read`; draft check, save and delete `site_rules.write`; test on a
-host `site_rules.test`; publishing drafts `site_rules.publish` (the signer
+`site_rules.read`, the fleet's hosts within `hosts.read`; draft check, save
+and delete `site_rules.write`; test on a host `site_rules.test` plus
+`hosts.read` reaching that host (else 404 `host_not_found`); publishing drafts `site_rules.publish` (the signer
 checks the same id); signed bundle preview and publish `rules.publish`;
 alarm suppression list `alarms.suppressions.read`; creating or editing a
 case `cases.write`, and setting or changing its assignee (and the assignee

@@ -5359,8 +5359,19 @@
         "tags": [
           "access control"
         ],
-        "summary": "Every role, Administrator first, then by name.",
+        "summary": "Every role, Administrator first, then by name: for `access.read`, and\nfor `service_accounts.manage` (its role picker). With `held=true`, the\ncaller's own roles, for anyone signed in (dashboard sharing).",
         "operationId": "list_roles",
+        "parameters": [
+          {
+            "name": "held",
+            "in": "path",
+            "description": "Only the roles the caller holds (any signed-in person may ask).",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Roles",
@@ -5386,7 +5397,7 @@
             }
           },
           "403": {
-            "description": "Needs access.read",
+            "description": "Needs access.read or service_accounts.manage, unless held=true",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11415,6 +11426,13 @@
             ],
             "description": "Role it is shared with, if any."
           },
+          "shared_role_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "That role's name, for display."
+          },
           "updated_at": {
             "type": "string",
             "description": "RFC 3339 last change."
@@ -13435,6 +13453,24 @@
         },
         "additionalProperties": false
       },
+      "RoleName": {
+        "type": "object",
+        "description": "A role as a list shows it: its id and name.",
+        "required": [
+          "role_id",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Its name; Administrator's is \"Administrator\"."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Stable role id."
+          }
+        }
+      },
       "RoleView": {
         "type": "object",
         "description": "One role as the console shows it.",
@@ -14132,7 +14168,7 @@
           "enabled",
           "created_at",
           "active_tokens",
-          "role_ids"
+          "roles"
         ],
         "properties": {
           "active_tokens": {
@@ -14152,12 +14188,12 @@
             "type": "string",
             "description": "Operator-selected name."
           },
-          "role_ids": {
+          "roles": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RoleName"
             },
-            "description": "Active assigned role identifiers."
+            "description": "Its roles, by id."
           },
           "service_account_id": {
             "type": "string",

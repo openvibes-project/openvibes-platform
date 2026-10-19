@@ -12,6 +12,7 @@ import { Ago, Empty, ErrorBox, Loading } from "../../ui/bits";
 import { isPast, when } from "../../ui/format";
 import { Confirm, PanelHeader, Section } from "../../ui/panel";
 import { toast } from "../../ui/toast";
+import { fitsShare } from "../../views/admin/people/people";
 
 export function ServiceAccountPanel({ id }: { id: string }) {
   if (id === "new") return <NewServiceAccount />;
@@ -29,7 +30,7 @@ function ExistingServiceAccount({ id }: { id: string }) {
     <>
       <PanelHeader icon="service" kind="Service account" title={account.name}
         subtitle={<span className="mono subtle">{account.service_account_id}</span>}
-        badges={<><span className={`badge badge--${account.enabled ? "ok" : "plain"}`}>{account.enabled ? "Enabled" : "Disabled"}</span>{account.role_ids.map((role) => <span key={role} className="badge badge--accent badge--plain">{role}</span>)}</>}
+        badges={<><span className={`badge badge--${account.enabled ? "ok" : "plain"}`}>{account.enabled ? "Enabled" : "Disabled"}</span>{account.roles.map((role) => <span key={role.role_id} className="badge badge--accent badge--plain">{role.name}</span>)}</>}
         actions={can("service_accounts.manage") && account.enabled && (
           <Confirm danger label="Disable this account? All of its tokens stop working." onConfirm={async () => {
             await request("POST", `/api/v1/service-accounts/${encodeURIComponent(id)}/disable`);
@@ -66,8 +67,10 @@ function ExistingServiceAccount({ id }: { id: string }) {
 }
 
 function NewServiceAccount() {
+  const { session } = useSession();
   const [name, setName] = useState("");
-  const roles = useResource<Role[]>("/api/v1/roles").data ?? [];
+  // Only roles inside the creator's own access; the server refuses the rest.
+  const roles = (useResource<Role[]>("/api/v1/roles").data ?? []).filter((r) => fitsShare(session?.capabilities ?? [], r));
   // No default role: least privilege is a deliberate choice.
   const [role, setRole] = useState("");
   const [error, setError] = useState<string>();

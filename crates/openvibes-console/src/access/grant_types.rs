@@ -136,8 +136,17 @@ pub struct ServiceAccountView {
     pub created_at: String,
     /// Active token count.
     pub active_tokens: i64,
-    /// Active assigned role identifiers.
-    pub role_ids: Vec<String>,
+    /// Its roles, by id.
+    pub roles: Vec<RoleName>,
+}
+
+/// A role as a list shows it: its id and name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct RoleName {
+    /// Stable role id.
+    pub role_id: String,
+    /// Its name; Administrator's is "Administrator".
+    pub name: String,
 }
 
 /// Bounded service-account inventory.

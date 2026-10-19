@@ -164,7 +164,12 @@ function registerServiceAccountRoutes(ctx: DemoContext & { roles: RoleHelpers })
     const account = data.serviceAccounts.find((a) => a.service_account_id === id);
     return account && rolesFit(accountRoles(account)) ? account : problem(404, "service_account_not_found", "No such service account");
   };
-  route("GET", "/api/v1/service-accounts", "service_accounts.read", () => json({ items: data.serviceAccounts.filter((a) => rolesFit(accountRoles(a))) }));
+  // The API answers each account's roles by name.
+  const accountView = (account: (typeof data.serviceAccounts)[number]) => {
+    const { role_ids, ...rest } = account;
+    return { ...rest, roles: role_ids.map((id) => ({ role_id: id, name: roleById(id)?.name ?? id })) };
+  };
+  route("GET", "/api/v1/service-accounts", "service_accounts.read", () => json({ items: data.serviceAccounts.filter((a) => rolesFit(accountRoles(a))).map(accountView) }));
   route("GET", "/api/v1/service-accounts/{id}/tokens", "service_accounts.read", ({ id = "" }) => {
     const account = visibleAccount(id);
     return account instanceof Response ? account : json({ items: data.serviceTokens.get(id) ?? [] });
@@ -185,7 +190,7 @@ function registerServiceAccountRoutes(ctx: DemoContext & { roles: RoleHelpers })
     const account = { service_account_id: `sa-${Date.now().toString(36)}`, name, role_ids: roleIds, enabled: true, active_tokens: 0, created_at: iso() };
     data.serviceAccounts.push(account);
     audit("service_account.create", account.service_account_id, "service_account");
-    return json(account, 201);
+    return json(accountView(account), 201);
   });
   const issued = new Map<string, { token_id: string; expires_at: string }>();
   route("POST", "/api/v1/service-accounts/{id}/tokens", "service_accounts.tokens", ({ id = "" }, _, body, headers) => {

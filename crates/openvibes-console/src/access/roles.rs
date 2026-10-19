@@ -5,11 +5,15 @@
 use std::collections::BTreeSet;
 
 use axum::{
-    extract::{Json, Path, State, rejection::JsonRejection},
+    extract::{
+        Json, Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
+use platform_store::console_people;
 use platform_store::console_roles::{self, Reach, RoleInput, RoleWrite};
 
 use crate::Permission;
@@ -54,24 +58,73 @@ async fn static_json(state: &AuthHttpState, headers: &HeaderMap, json: String) -
     ([(header::CONTENT_TYPE, "application/json")], json).into_response()
 }
 
-/// Every role, Administrator first, then by name.
-#[utoipa::path(get, path = "/api/v1/roles", tag = "access control",
+/// `GET /roles?held=true`: only the caller's own roles.
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+pub(crate) struct RolesQuery {
+    /// Only the roles the caller holds (any signed-in person may ask).
+    #[serde(default)]
+    held: bool,
+}
+
+/// Every role, Administrator first, then by name: for `access.read`, and
+/// for `service_accounts.manage` (its role picker). With `held=true`, the
+/// caller's own roles, for anyone signed in (dashboard sharing).
+#[utoipa::path(get, path = "/api/v1/roles", tag = "access control", params(RolesQuery),
     responses((status = 200, description = "Roles", body = [RoleView]),
         (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"),
-        (status = 403, description = "Needs access.read", body = ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn list_roles(State(state): State<AuthHttpState>, headers: HeaderMap) -> Response {
-    if let Err(response) =
-        authenticated_permission(&state, &headers, Permission::AccessRead, false).await
-    {
-        return response;
-    }
+        (status = 403, description = "Needs access.read or service_accounts.manage, unless held=true", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn list_roles(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    query: Result<Query<RolesQuery>, QueryRejection>,
+) -> Response {
+    // A query that does not parse asks for the full list, which is checked.
+    let held = query.is_ok_and(|Query(query)| query.held);
+    let mine = if held {
+        match session_user(&state, &headers, false).await {
+            Ok(user) => Some(user.user_id),
+            Err(response) => return response,
+        }
+    } else {
+        let mut allowed =
+            authenticated_permission(&state, &headers, Permission::AccessRead, false).await;
+        if matches!(&allowed, Err(response) if response.status() == StatusCode::FORBIDDEN) {
+            allowed = authenticated_permission(
+                &state,
+                &headers,
+                Permission::ServiceAccountsManage,
+                false,
+            )
+            .await;
+        }
+        if let Err(response) = allowed {
+            return response;
+        }
+        None
+    };
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
+    let held_ids = match &mine {
+        Some(user_id) => match console_people::person(&client, user_id).await {
+            Ok(person) => Some(person.map(|p| p.role_ids).unwrap_or_default()),
+            Err(_) => return unavailable_auth(),
+        },
+        None => None,
+    };
     match console_roles::list_roles(&client).await {
-        Ok(roles) => {
-            Json(roles.into_iter().map(RoleView::from).collect::<Vec<_>>()).into_response()
-        }
+        Ok(roles) => Json(
+            roles
+                .into_iter()
+                .filter(|role| {
+                    held_ids
+                        .as_ref()
+                        .is_none_or(|ids| ids.contains(&role.role_id))
+                })
+                .map(RoleView::from)
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
         Err(_) => unavailable_auth(),
     }
 }

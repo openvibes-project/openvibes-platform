@@ -14,6 +14,8 @@ pub struct DashboardView {
     pub mine: bool,
     /// Role it is shared with, if any.
     pub shared_role_id: Option<String>,
+    /// That role's name, for display.
+    pub shared_role_name: Option<String>,
     /// Version for `If-Match`.
     pub version: u64,
     /// Layout: `{ "schema": 1, "widgets": [...] }`.

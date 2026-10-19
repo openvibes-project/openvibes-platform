@@ -11,7 +11,7 @@ const problem = (status: number, code: string, title: string, field_errors?: unk
 /** Where the demo keeps dashboards between page loads (browser storage in the preview). */
 type DashboardPersistence = { load: () => unknown; save: (state: { rows: unknown[]; homes: [string, string][] }) => void };
 
-export function createDashboardStore(seed: DemoDashboard[], rolesOf: (userId: string) => string[], nameOf: (userId: string) => string, persistence?: DashboardPersistence) {
+export function createDashboardStore(seed: DemoDashboard[], rolesOf: (userId: string) => string[], nameOf: (userId: string) => string, roleName: (roleId: string) => string, persistence?: DashboardPersistence) {
   const now = () => new Date().toISOString();
   const saved = persistence?.load() as { rows?: Stored[]; homes?: [string, string][] } | undefined;
   const rows: Stored[] = Array.isArray(saved?.rows) ? saved.rows.map((row) => ({ ...row, layout: upgradeLayout(row.layout) })) : seed.map((d) => ({ ...d, version: 1, created_at: now(), updated_at: now() }));
@@ -20,7 +20,7 @@ export function createDashboardStore(seed: DemoDashboard[], rolesOf: (userId: st
   const visible = (userId: string, row: Stored) => row.owner === userId || (row.shared_role_id !== null && rolesOf(userId).includes(row.shared_role_id));
   const view = (userId: string, row: Stored) => ({
     dashboard_id: row.dashboard_id, name: row.name, owner_display_name: nameOf(row.owner), mine: row.owner === userId,
-    shared_role_id: row.shared_role_id, version: row.version, layout: row.layout, created_at: row.created_at, updated_at: row.updated_at,
+    shared_role_id: row.shared_role_id, shared_role_name: row.shared_role_id === null ? null : roleName(row.shared_role_id), version: row.version, layout: row.layout, created_at: row.created_at, updated_at: row.updated_at,
   });
   const ok = (status: number, userId: string, row: Stored): Result => ({ status, body: view(userId, row), etag: `"${row.version}"` });
   const checked = (body: Record<string, unknown>): { name: string; layout: Layout } | Result => {

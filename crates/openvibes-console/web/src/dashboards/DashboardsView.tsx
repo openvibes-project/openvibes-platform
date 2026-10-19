@@ -101,8 +101,8 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
   const home = useResource<HomeDashboard>("/api/v1/me/home");
   const agents = useResource<AgentSummary>(builtin && can("hosts.read") ? "/api/v1/agents/summary" : null);
   const [menu, setMenu] = useState(false);
-  // The roles to share with, fetched when the menu opens.
-  const roles = useResource<Role[]>(menu && can("dashboards.share") ? "/api/v1/roles" : null).data ?? [];
+  // The roles to share with (only those the viewer holds), fetched when the menu opens.
+  const roles = useResource<Role[]>(menu && can("dashboards.share") ? "/api/v1/roles?held=true" : null).data ?? [];
   const id = builtin ? null : dashboard?.dashboard_id ?? null;
   // Unknown until loaded, so the pin never flickers "pressed" on the built-in.
   const isHome = home.data !== undefined && (home.data.dashboard_id ?? null) === id;
@@ -124,7 +124,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
     if (!dashboard) return;
     await request("PUT", `/api/v1/dashboards/${dashboard.dashboard_id}/sharing`, { role_id: roleId });
     invalidate("/api/v1/dashboards");
-    toast(roleId ? `Shared with ${roleId}` : "No longer shared");
+    toast(roleId ? `Shared with ${roles.find((r) => r.role_id === roleId)?.name ?? "the role"}` : "No longer shared");
   };
   const fail = (error: unknown) => toast(apiMessage(error, "That did not work"), true);
 
@@ -138,8 +138,8 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
             <div><h1>{greeting()}{name ? `, ${name}` : ""}</h1>
               {agents.data && <p className="muted">{plural(agents.data.active, "host")} reporting{agents.data.stale > 0 ? `, ${agents.data.stale} stale` : ""}.</p>}</div>
           ) : (
-            <div><h1>{dashboard?.name}</h1>{!mine && <p className="muted">Shared by {dashboard?.owner_display_name}{dashboard?.shared_role_id ? ` with ${dashboard.shared_role_id}` : ""}</p>}
-              {mine && dashboard?.shared_role_id && <p className="muted">Shared with {dashboard.shared_role_id}</p>}</div>
+            <div><h1>{dashboard?.name}</h1>{!mine && <p className="muted">Shared by {dashboard?.owner_display_name}{dashboard?.shared_role_name ? ` with ${dashboard.shared_role_name}` : ""}</p>}
+              {mine && dashboard?.shared_role_name && <p className="muted">Shared with {dashboard.shared_role_name}</p>}</div>
           )}
         </div>
         <div className="row row--wrap">

@@ -9,6 +9,7 @@ export function registerDashboardRoutes(ctx: DemoContext) {
     data.dashboards,
     (userId) => rolesOf(userId).map((r) => r.role_id),
     (userId) => data.access.users.find((u) => u.user_id === userId)?.display_name ?? userId,
+    (roleId) => data.access.roles.find((r) => r.role_id === roleId)?.name ?? roleId,
     browserPersistence("openvibes.v2.demo.dashboards"),
   );
   route("GET", "/api/v1/dashboards", null, () => send(dashboards.list(me)));

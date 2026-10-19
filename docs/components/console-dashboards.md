@@ -24,7 +24,7 @@ Browser session only; a service-account bearer token gets 403.
 | `GET /api/v1/dashboards/{id}` | owner or holder of the shared role | `DashboardView` + `ETag` |
 | `PUT /api/v1/dashboards/{id}` | owner, `If-Match` required | `DashboardView` + new `ETag` |
 | `DELETE /api/v1/dashboards/{id}` | owner | 204 |
-| `PUT /api/v1/dashboards/{id}/sharing` | owner with global `dashboards.share` | `{ "role_id": "analyst" \| null }` |
+| `PUT /api/v1/dashboards/{id}/sharing` | owner with global `dashboards.share` | `{ "role_id": "analyst" \| null }`; the answer names the role in `shared_role_name` (`null` when not shared) |
 | `GET /api/v1/me/home` | any signed-in user | `{ "dashboard_id": id \| null }` (`null` = built-in Overview) |
 | `PUT /api/v1/me/home` | any signed-in user | the dashboard must be visible |
 

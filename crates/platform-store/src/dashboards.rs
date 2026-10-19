@@ -27,6 +27,8 @@ pub struct Dashboard {
     /// Role whose holders may view the dashboard (since schema 52 the first,
     /// by id, of the roles it is shared with).
     pub shared_role_id: Option<String>,
+    /// That role's name.
+    pub shared_role_name: Option<String>,
     /// Version for conditional updates.
     pub version: i64,
     /// Creation time.
@@ -53,7 +55,9 @@ pub enum Refusal {
 const COLUMNS: &str =
     "d.dashboard_id::text, d.owner_user_id::text, u.display_name, d.name, d.layout,
     (SELECT min(dr.role_id) FROM console_dashboard_roles dr WHERE dr.dashboard_id = d.dashboard_id),
-    d.version::bigint, d.created_at, d.updated_at";
+    d.version::bigint, d.created_at, d.updated_at,
+    (SELECT r.display_name FROM console_dashboard_roles dr JOIN console_roles r USING (role_id)
+     WHERE dr.dashboard_id = d.dashboard_id ORDER BY dr.role_id LIMIT 1)";
 
 /// Visible to `$1`: owned, or shared with a role of one of `$1`'s live bindings.
 const VISIBLE: &str = "(d.owner_user_id = $1::text::uuid OR EXISTS (
@@ -82,6 +86,7 @@ fn dashboard(row: &Row) -> Dashboard {
         version: row.get(6),
         created_at: row.get(7),
         updated_at: row.get(8),
+        shared_role_name: row.get(9),
     }
 }
 

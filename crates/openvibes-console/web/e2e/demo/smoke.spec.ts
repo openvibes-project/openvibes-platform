@@ -92,6 +92,8 @@ for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/comp
 
 test("a service account is created and issues a token shown once", async ({ page }) => {
   await page.goto("/settings?tab=service-accounts");
+  // Roles are shown by name, never by id.
+  await expect(page.getByRole("row", { name: /CI rule publisher/ })).toContainText("Operator (Prod)");
   await page.getByRole("button", { name: "New account" }).click();
   await page.getByLabel("Name").fill("Backup job");
   await expect(page.getByRole("button", { name: "Create account" })).toBeDisabled();

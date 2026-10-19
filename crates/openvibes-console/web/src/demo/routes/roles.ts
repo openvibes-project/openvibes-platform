@@ -36,8 +36,15 @@ export function registerRoleRoutes(ctx: DemoContext) {
 
   route("GET", "/api/v1/permissions", null, () => json(catalogue));
   route("GET", "/api/v1/role-templates", null, () => json(templates));
-  route("GET", "/api/v1/roles", "access.read", () => json([...data.access.roles]
-    .sort((a, b) => Number(b.builtin) - Number(a.builtin) || a.name.localeCompare(b.name)).map(roleView)));
+  // access.read lists every role, and so does service_accounts.manage (its
+  // role picker); held=true lists the caller's own roles for anyone.
+  route("GET", "/api/v1/roles", null, (_, query) => {
+    const held = query.get("held") === "true";
+    if (!held && !permissions.includes("access.read") && !permissions.includes("service_accounts.manage")) return problem(403, "permission_denied", "Access is not available");
+    const mine = new Set(rolesOf(me).map((r) => r.role_id));
+    return json([...data.access.roles].filter((r) => !held || mine.has(r.role_id))
+      .sort((a, b) => Number(b.builtin) - Number(a.builtin) || a.name.localeCompare(b.name)).map(roleView));
+  });
   route("GET", "/api/v1/roles/{id}", "access.read", ({ id = "" }) => {
     const role = roleById(id);
     return role ? json(roleView(role)) : roleNotFound();

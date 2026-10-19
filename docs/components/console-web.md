@@ -35,7 +35,9 @@ Show everything, without page changes for details:
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
   - settings: people, roles and host groups;
-  - service accounts, with tokens issued once;
+  - service accounts, with tokens issued once; roles are shown by name, and
+    the new-account picker offers only roles inside the creator's own access
+    (`fitsShare`, as for people);
   - audit log, with ranges, CSV export and retention.
 - **Host hardening** (`panels/hosts/HostHardening.tsx`): the host panel's Hardening
   row, "Hardening facts unavailable" warning and "Not assigned" badge; see
@@ -179,7 +181,8 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   480px so host names fit.
 - **Menu:**
   - Duplicate, Rename and Delete;
-  - Share with role (owner with `dashboards.share`);
+  - Share with role (owner with `dashboards.share`): only the roles the
+    owner holds (`GET /api/v1/roles?held=true`), shown and confirmed by name;
   - Set as home.
 - **The demo** (preview and dev only) keeps dashboards and home choices in the browser's
   `localStorage` (`openvibes.v2.demo.dashboards`).
@@ -280,11 +283,12 @@ Save draft stays off until the rule passes. Delete asks first. Rules saved
 here are drafts. Under each table, Publish lists what changed against the
 published set; with the user's password typed again the rule signer signs
 the set and the platform publishes it (needs `site_rules.publish`). A compliance
-rule's panel can also be tested against one host: it runs on the packages
+rule's panel can also be tested against one host (with `site_rules.test`;
+a host outside the user's `hosts.read` reach is not found): it runs on the packages
 and listening ports the platform holds and says match, no match or
 unavailable (a rule over anything else, such as running processes, is
 unavailable here). A Hosts section at the bottom of Site rules counts the
-hosts running each set (current, behind, refused, not set up), lists the
+hosts the user may see running each set (current, behind, refused, not set up), lists the
 ones that aren't current, and shows the `[[rule_sets]]` lines to paste into
 an existing agent's `agent.toml`.
 - **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the

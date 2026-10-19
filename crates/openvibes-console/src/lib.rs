@@ -41,7 +41,7 @@ pub use access::{
     AuthenticationLevel, AuthenticationMethod, ChangePasswordRequest, CreateServiceAccountRequest,
     CreateServiceTokenRequest, CreateUserRequest, CreatedServiceToken, CreatedUser,
     EffectiveCapability, LoginRequest, LoginResponse, Permission, PermissionScope, PreauthResponse,
-    SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
+    RoleName, SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
     ServiceTokenView, SessionPrincipal, SessionResponse,
 };
 pub use assistant::{AssistantInternet, AssistantInternetTest, UpdateAssistantInternetRequest};

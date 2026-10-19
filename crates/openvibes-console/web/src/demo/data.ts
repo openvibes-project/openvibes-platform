@@ -299,7 +299,8 @@ export function buildDemoData(now = Date.now()) {
     issuer_key_id: set.current_issuer_key_id ?? "ops-2026",
   }))]));
 
-  const serviceAccounts: ServiceAccount[] = [
+  // Stored with role ids; the API answers them by name (routes/access.ts).
+  const serviceAccounts: (Omit<ServiceAccount, "roles"> & { role_ids: string[] })[] = [
     { service_account_id: "sa-siem", name: "SIEM export", role_ids: ["viewer"], enabled: true, active_tokens: 1, created_at: iso(now - 60 * DAY) },
     { service_account_id: "sa-ci", name: "CI rule publisher", role_ids: ["role-opprod"], enabled: true, active_tokens: 2, created_at: iso(now - 30 * DAY) },
     { service_account_id: "sa-old", name: "Old dashboard", role_ids: ["viewer"], enabled: false, active_tokens: 0, created_at: iso(now - 200 * DAY) },

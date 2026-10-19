@@ -44,6 +44,22 @@ describe("demo access rules (rbac.rs, share.rs)", () => {
 });
 
 describe("demo roles API", () => {
+  it("lists every role for access.read, and anyone's own roles with held=true", async () => {
+    const viewer = createDemoServer({ persona: "viewer" });
+    expect((await call(viewer, "GET", "/api/v1/roles")).status).toBe(403);
+    const held = await call<{ role_id: string; name: string }[]>(viewer, "GET", "/api/v1/roles?held=true");
+    expect(held.body.map((r) => r.name)).toEqual(["Viewer"]);
+    expect((await call<unknown[]>(createDemoServer({ persona: "admin" }), "GET", "/api/v1/roles")).body.length).toBeGreaterThan(1);
+  });
+
+  it("answers service accounts with their roles' names", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const accounts = await call<{ items: { name: string; roles: { role_id: string; name: string }[] }[] }>(server, "GET", "/api/v1/service-accounts");
+    expect(accounts.body.items.find((a) => a.name === "CI rule publisher")?.roles).toEqual([{ role_id: "role-opprod", name: "Operator (Prod)" }]);
+    const made = await call<{ roles: unknown }>(server, "POST", "/api/v1/service-accounts", { name: "Backup", role_ids: ["admin"] });
+    expect(made.body.roles).toEqual([{ role_id: "admin", name: "Administrator" }]);
+  });
+
   it("creates, edits and deletes with the server's refusals", async () => {
     const server = createDemoServer({ persona: "admin" });
     expect((await call(server, "POST", "/api/v1/roles", role("WINDOWS lead", ["hosts.read"]))).body.code).toBe("role_name_taken");

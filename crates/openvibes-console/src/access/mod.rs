@@ -37,7 +37,7 @@ pub(crate) mod users;
 pub use grant_types::{
     AccessAssetGroup, AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact,
     AgentTagInput, AgentTagPreviewResponse, ApplyAgentTagsRequest, AssetGroupSelectorInput,
-    CreateServiceAccountRequest, CreateServiceTokenRequest, CreatedServiceToken,
+    CreateServiceAccountRequest, CreateServiceTokenRequest, CreatedServiceToken, RoleName,
     SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
     ServiceTokenView,
 };
