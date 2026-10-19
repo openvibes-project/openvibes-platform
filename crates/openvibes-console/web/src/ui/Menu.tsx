@@ -4,7 +4,7 @@
 import { type CSSProperties, type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { Icon, type IconName } from "./Icon";
-import { placement } from "./select";
+import { inView, placement } from "./select";
 
 export type MenuItem = { value: string; label: string; description?: string; dot?: string };
 
@@ -34,14 +34,15 @@ export function MenuButton({ label, icon, items, onPick, disabled, compact }: Re
     if (!open) return;
     list.current?.focus({ preventScroll: true });
     const away = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(); };
-    const moved = () => close();
+    // Follow the button while it is on screen, as Select does; close once it is not.
+    const scrolled = (event: Event) => { if (root.current?.contains(event.target as Node)) return; if (inView(button.current)) place(); else close(); };
     document.addEventListener("pointerdown", away);
-    window.addEventListener("scroll", moved, true);
-    window.addEventListener("resize", moved);
+    window.addEventListener("scroll", scrolled, true);
+    window.addEventListener("resize", place);
     return () => {
       document.removeEventListener("pointerdown", away);
-      window.removeEventListener("scroll", moved, true);
-      window.removeEventListener("resize", moved);
+      window.removeEventListener("scroll", scrolled, true);
+      window.removeEventListener("resize", place);
     };
   }, [open]);
 

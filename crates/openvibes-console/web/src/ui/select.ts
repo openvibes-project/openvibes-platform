@@ -1,4 +1,5 @@
-// Pure helpers behind Select (ui/Select.tsx): grouping, filtering, stepping, placement.
+// Helpers behind Select (ui/Select.tsx) and Menu (ui/Menu.tsx): grouping,
+// filtering, stepping, placement, and whether the button is still on screen.
 import type { ReactNode } from "react";
 
 import { matches } from "./table";
@@ -45,4 +46,24 @@ export function placement(rect: { left: number; right: number; top: number; bott
   return up
     ? { left, width, bottom: viewport.height - rect.top + gap, maxHeight: Math.max(120, above) }
     : { left, width, top: rect.bottom + gap, maxHeight: Math.max(120, below) };
+}
+
+/**
+ * False once `el` has scrolled out of the viewport or out of any scrolling
+ * ancestor. A fixed popup follows its button on scroll while this holds and
+ * closes after, so a scroll the opening itself causes (Chromium's scroll
+ * anchoring in a list with a sticky bar) does not close it.
+ */
+export function inView(el: Element | null): boolean {
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  let top = 0, bottom = window.innerHeight;
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    if (/(auto|scroll|hidden)/.test(getComputedStyle(p).overflowY)) {
+      const c = p.getBoundingClientRect();
+      top = Math.max(top, c.top);
+      bottom = Math.min(bottom, c.bottom);
+    }
+  }
+  return r.bottom > top && r.top < bottom;
 }

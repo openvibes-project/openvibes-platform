@@ -6,7 +6,7 @@ import type { CSSProperties, KeyboardEvent } from "react";
 
 import { Icon } from "./Icon";
 import {
-  SEARCH_ABOVE, enabledCount, filterSections, firstEnabled, placement, step, toSections,
+  SEARCH_ABOVE, enabledCount, filterSections, firstEnabled, inView, placement, step, toSections,
   type SelectGroup, type SelectOption,
 } from "./select";
 
@@ -63,21 +63,6 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
     setOpen(true);
   };
 
-  // False once the button has scrolled out of the viewport or out of any scrolling ancestor.
-  const buttonVisible = () => {
-    const el = button.current;
-    if (!el) return false;
-    const r = el.getBoundingClientRect();
-    let top = 0, bottom = window.innerHeight;
-    for (let p = el.parentElement; p; p = p.parentElement) {
-      if (/(auto|scroll|hidden)/.test(getComputedStyle(p).overflowY)) {
-        const c = p.getBoundingClientRect();
-        top = Math.max(top, c.top);
-        bottom = Math.min(bottom, c.bottom);
-      }
-    }
-    return r.bottom > top && r.top < bottom;
-  };
   const place = () => {
     if (!button.current) return;
     setBox({ position: "fixed", ...placement(button.current.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight }) });
@@ -90,7 +75,7 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
     const mine = () => close();
     closeCurrent = mine;
     const away = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(); };
-    const scrolled = (event: Event) => { if (root.current?.contains(event.target as Node)) return; if (buttonVisible()) place(); else close(); };
+    const scrolled = (event: Event) => { if (root.current?.contains(event.target as Node)) return; if (inView(button.current)) place(); else close(); };
     document.addEventListener("pointerdown", away);
     window.addEventListener("scroll", scrolled, true);
     window.addEventListener("resize", place);
