@@ -206,7 +206,7 @@ approved mockup (`gen.py` `TEMPLATE_PERMS`), with the IDs of §3:
   dashboards, view people and roles, and give people roles.
 - **Auditor:**
   - every view permission except the assistant;
-  - every export permission;
+  - every export permission except the agent installer (`tokens.installer`);
   - the audit log and its export;
   - nothing that changes anything.
 - **Rule author:** view hosts, all rule-set views, and all of Site rules.
