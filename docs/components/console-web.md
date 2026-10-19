@@ -611,7 +611,20 @@ triage on alarms and findings stays as it is.
   with `holders`, `protected_role`, `missing_needs`, `unknown_group`,
   `last_administrator`, `use_change_password`, nobody changing or disabling
   themself) and the share check, so people and accounts outside it are
-  404. Triage assignees follow the server: holders of the area's
+  404. Host groups and labels (`routes/groups.ts`, labels in
+  `routes/hosts.ts`) mirror `hosts/groups.rs` and `hosts/labels.rs`: the
+  list, page, hosts, preview, create, edit (an automatic group edited
+  becomes a rule group) and delete, with `invalid_group`,
+  `invalid_condition`, `unknown_host`, `group_name_taken`, `stale_group`,
+  `group_in_use` with `roles`, `group_not_found`, "Changing host groups
+  needs access to every host", `invalid_label`, `too_many_labels` and
+  `host_not_found`. Membership is `demo/hostGroups.ts`, a port of the SQL
+  function `console_host_in_group` (glob with `*` only, case-insensitive;
+  CIDR; negate; unknown facts never match; active hosts only, the demo's
+  "stale" counting as active), tested against the store's membership
+  cases. The demo starts with automatic groups (Linux, Debian 12, Fedora
+  44, Ubuntu 24.04), rule groups (WindowsServers, HQ network, Lab) and
+  manual ones (Production, upgraded from tags; Pilot hosts). Triage assignees follow the server: holders of the area's
   `*.triage` through a role that reaches some host, or an Administrator;
   bulk program suppressions are skipped without `alarms.suppress` on all
   hosts. Tested. Its compliance findings use only the

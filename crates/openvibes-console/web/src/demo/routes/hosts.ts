@@ -1,7 +1,52 @@
-// Hosts (agents), their tags, and enrolling new ones.
+// Hosts (agents), their labels, and enrolling new ones.
 import type { Agent } from "../../api/types";
 import type { DemoContext } from "../context";
+import { hasControl, inGroup, isActive } from "../hostGroups";
 import { json, page, problem } from "../http";
+
+const MAX_LABELS = 32;
+
+/**
+ * Host labels (hosts/labels.rs, store host_labels.rs): read with hosts.read,
+ * changed with hosts.label on the host; a host out of reach is 404 like a
+ * missing one. Labels never change groups or access.
+ */
+function registerLabelRoutes(ctx: DemoContext) {
+  const { data, audit, route, reaches, facts } = ctx;
+  const notFound = () => problem(404, "host_not_found", "No such host");
+  const reachable = (permission: "hosts.read" | "hosts.label", id: string) =>
+    data.agents.find((a) => a.id === id && a.status !== "revoked" && reaches(permission, id));
+  const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  route("GET", "/api/v1/hosts/{id}/labels", "hosts.read", ({ id = "" }) => {
+    const agent = reachable("hosts.read", id);
+    if (!agent) return notFound();
+    const groups = data.access.host_groups.filter((g) => inGroup(facts(agent), g)).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+      .map((g) => ({ asset_group_id: g.asset_group_id, name: g.name, kind: g.kind }));
+    return json({ labels: [...(data.labels.get(id) ?? [])].sort(byteOrder), groups });
+  });
+  route("PUT", "/api/v1/hosts/{id}/labels/{label}", "hosts.label", ({ id = "", label = "" }) => {
+    const agent = reachable("hosts.label", id);
+    if (!agent) return notFound();
+    const text = label.trim();
+    if ([...text].length < 1 || [...text].length > 64 || hasControl(text)) return problem(400, "invalid_label", "Use 1 to 64 characters, without control characters");
+    if (!isActive(agent)) return notFound();
+    const labels = data.labels.get(id) ?? [];
+    if (labels.includes(text)) return new Response(null, { status: 204 });
+    if (labels.length >= MAX_LABELS) return problem(409, "too_many_labels", "A host has at most 32 labels");
+    data.labels.set(id, [...labels, text]);
+    audit("host.label_added", id, "agent");
+    return new Response(null, { status: 204 });
+  });
+  route("DELETE", "/api/v1/hosts/{id}/labels/{label}", "hosts.label", ({ id = "", label = "" }) => {
+    if (!reachable("hosts.label", id)) return notFound();
+    const labels = data.labels.get(id) ?? [];
+    if (labels.includes(label.trim())) {
+      data.labels.set(id, labels.filter((l) => l !== label.trim()));
+      audit("host.label_removed", id, "agent");
+    }
+    return new Response(null, { status: 204 });
+  });
+}
 
 export function registerHostRoutes(ctx: DemoContext) {
   const { data, iso, visible, agentById, audit, route } = ctx;
@@ -31,15 +76,7 @@ export function registerHostRoutes(ctx: DemoContext) {
     audit("agent.revoke", id, "agent");
     return json(agent);
   });
-  route("POST", "/api/v1/agents/{id}/tags/preview", "host_groups.manage", ({ id = "" }, _, body) => json({
-    current: data.tags.get(id) ?? [], proposed: body.tags ?? [], preview_token: `preview-${id}`,
-    gained_groups: [], lost_groups: [], gained_bindings: [], lost_bindings: [],
-  }));
-  route("PUT", "/api/v1/agents/{id}/tags", "host_groups.manage", ({ id = "" }, _, body) => {
-    data.tags.set(id, (body.tags ?? []) as { key: string; value: string }[]);
-    audit("agent.tags.update", id, "agent");
-    return json({ tags: data.tags.get(id) });
-  });
+  registerLabelRoutes(ctx);
 
   route("GET", "/api/v1/enrollment-tokens", "tokens.read", () => json({ items: data.enrollmentTokens }));
   // The real command carries the platform's standing token; the demo's is made up.

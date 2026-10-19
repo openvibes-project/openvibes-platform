@@ -2,14 +2,12 @@
 // invented; host names use the reserved example.test domain.
 import catalogue from "../api/permissions.json";
 import templates from "../api/templates.json";
+import type { StoredGroup } from "./hostGroups";
 import { ADMIN_ROLE, type StoredReach } from "./share";
 import type {
   Agent, AuditEvent, Certificate, Cve, EnrollmentToken, Finding as FindingView,
   RuleBundle, RuleSet, ServiceAccount, ServiceToken, Severity, Triage, Vulnerability,
 } from "../api/types";
-
-/** A demo host tag; the demo moves to labels and host groups later. */
-type Tag = { key: string; value: string };
 
 function prng(seed: number) {
   let state = seed >>> 0;
@@ -60,7 +58,7 @@ const RULES: readonly DemoRule[] = [
 
 const ROLES = ["web", "api", "db", "cache", "mail", "vpn", "build", "files", "k8s-node", "ws", "nas", "backup", "proxy", "dns"] as const;
 /** os-release IDs for demo hosts, so Linux host counts and the Hardening line show. */
-const OS = [["fedora", "44"], ["debian", "13"], ["ubuntu", "24.04"], ["rhel", "10.1"]] as const;
+const OS = [["fedora", "44"], ["debian", "12"], ["ubuntu", "24.04"], ["rhel", "10.1"]] as const;
 
 type Pkg = { name: string; installed: string; fixed: string | null };
 type DemoAdvisory = {
@@ -92,7 +90,10 @@ export function buildDemoData(now = Date.now()) {
   const iso = (ms: number) => new Date(ms).toISOString();
 
   const agents: Agent[] = [];
-  const tags = new Map<string, Tag[]>();
+  // The address each host last connected from (prod 10.0.1.n, lab 10.9.0.n,
+  // office 192.168.20.n), and the labels people gave some of them.
+  const addresses = new Map<string, string>();
+  const labels = new Map<string, string[]>([["agent-00003", ["pci", "rack-b2"]], ["agent-00006", ["pci"]], ["agent-00010", ["kiosk"]]]);
   const certificates = new Map<string, Certificate[]>();
   for (let n = 1; n <= 186; n += 1) {
     const role = ROLES[n % ROLES.length] as string;
@@ -127,7 +128,7 @@ export function buildDemoData(now = Date.now()) {
         : n % 23 === 0 ? { state: "off", fault: true, source: null, reason: "audit_not_set_up", text: "this kernel has no BTF, and no program start seen through audit yet: the exec audit rule is probably not loaded, or auditd is not running", fix: "make sure auditd is installed and running, then run the command below", command: "sudo /usr/libexec/openvibes-agent/audit-fallback" }
         : { state: "on", fault: false, source: n % 9 === 0 ? "audit" : "ebpf", reason: null, text: null, fix: null, command: null },
     });
-    tags.set(id, [{ key: "env", value: n % 3 === 0 ? "prod" : n % 3 === 1 ? "lab" : "office" }, { key: "role", value: role }]);
+    if (status !== "imported") addresses.set(id, n % 3 === 0 ? `10.0.1.${n}` : n % 3 === 1 ? `10.9.0.${n}` : `192.168.20.${n}`);
     const issued = now - Math.floor(random() * 60) * DAY;
     certificates.set(id, [
       { serial: `${(n * 7919).toString(16).padStart(8, "0")}a1`, issued_at: iso(issued), not_before: iso(issued), not_after: iso(issued + 90 * DAY) },
@@ -245,6 +246,15 @@ export function buildDemoData(now = Date.now()) {
     }
   }
 
+  const groups = hostGroups(agents, now);
+  // Each group's history (the audit rows the group page shows), newest first.
+  const groupChanges = groups.map((g) => ({
+    group_id: g.asset_group_id, at: g.changed_at ?? iso(now - 60 * DAY),
+    action: g.kind === "automatic" ? "host_group.created_automatically" : g.upgraded_from_tags ? "host_group.migrated" : "host_group.created",
+    actor: g.kind === "automatic" ? "openvibes" : g.changed_by ?? "openvibes",
+    detail: { name: g.name, kind: g.kind } as Record<string, unknown>,
+  }));
+
   const people = [
     ["u-admin", "admin", "Alex Admin"], ["u-sam", "sam", "Sam Analyst"], ["u-ola", "ola", "Ola Operator"],
     ["u-vic", "vic", "Vic Viewer"], ["u-pia", "pia", "Pia Prodops"], ["u-wen", "wen", "Wen Windows"],
@@ -267,11 +277,7 @@ export function buildDemoData(now = Date.now()) {
       user_id: user_id as string, username: username as string, display_name: display_name as string, email: null as string | null, enabled: true, auth_source: "password",
       last_sign_in_at: iso(now - (index + 1) * 3 * 3_600_000) as string | null, created_at: iso(now - (90 - index * 10) * DAY),
     })),
-    asset_groups: [
-      { asset_group_id: "grp-prod", name: "Production", selectors: ["env=prod"] },
-      { asset_group_id: "grp-lab", name: "Lab", selectors: ["env=lab"] },
-      { asset_group_id: "grp-win", name: "WindowsServers", selectors: ["os=windows"] },
-    ],
+    host_groups: groups,
     bindings: [["u-admin", ADMIN_ROLE], ["u-sam", "analyst"], ["u-ola", "operator"], ["u-vic", "viewer"], ["u-pia", "role-opprod"], ["u-wen", "role-winlead"]]
       .map(([user_id, role_id]) => ({ user_id: user_id as string, role_id: role_id as string })),
   };
@@ -377,7 +383,7 @@ export function buildDemoData(now = Date.now()) {
     exe: string | null; args_sha256: string | null; note: string; created_by: string; created_at: string }[] = [];
 
   return {
-    now, rules: RULES, agents, tags, certificates, findings, triage, advisories, vulnerabilities, access,
+    now, rules: RULES, agents, addresses, labels, groupChanges, certificates, findings, triage, advisories, vulnerabilities, access,
     enrollmentTokens, ruleSets, bundles, serviceAccounts, serviceTokens, audit, alarms, alarmSuppressions,
     dashboards: [
       { dashboard_id: "d-admin-morning", owner: "u-admin", name: "My morning check", shared_role_id: null as string | null,
@@ -396,4 +402,35 @@ export function buildDemoData(now = Date.now()) {
     assistantInternet: { level: 0, searxng_url: null as string | null, internal_domains: [] as string[], platform_domain: "console.example.test", updated_at: iso(now - 30 * DAY), updated_by: "admin", version: 1 },
     retention: { retention_days: 365, updated_at: iso(now - 90 * DAY), updated_by: "admin", version: 1 },
   };
+}
+
+/**
+ * The demo's host groups, as migration 53 and ingest leave them: automatic
+ * groups for Linux and each known distribution, three rule groups, and two
+ * manual ones (Production upgraded from its env=prod tag).
+ */
+function hostGroups(agents: readonly Agent[], now: number): StoredGroup[] {
+  const at = (days: number) => new Date(now - days * DAY).toISOString();
+  const group = (asset_group_id: string, name: string, kind: StoredGroup["kind"], description: string, more: Partial<StoredGroup>): StoredGroup =>
+    ({ asset_group_id, name, kind, description, conditions: [], picked: [], upgraded_from_tags: false, changed_at: null, changed_by: null, version: 1, ...more });
+  const auto = (id: string, name: string, field: string, value: string, description: string) =>
+    group(id, name, "automatic", description, { conditions: [{ field, negate: false, values: [value] }] });
+  const active = agents.filter((a) => a.status === "active" || a.status === "stale");
+  return [
+    auto("grp-linux", "Linux", "os_family", "linux", "Every host that reports Linux. Kept up to date by OpenVIBES."),
+    auto("grp-debian-12", "Debian 12", "distribution", "debian 12", "Hosts running Debian 12."),
+    auto("grp-fedora-44", "Fedora 44", "distribution", "fedora 44", "Hosts running Fedora 44."),
+    auto("grp-ubuntu-24-04", "Ubuntu 24.04", "distribution", "ubuntu 24.04", "Hosts running Ubuntu 24.04."),
+    group("grp-win", "WindowsServers", "rule", "Windows servers, for the Windows team.",
+      { conditions: [{ field: "os_family", negate: false, values: ["windows"] }], changed_at: at(40), changed_by: "u-admin", version: 2 }),
+    group("grp-hq", "HQ network", "rule", "Hosts that connect from the head-office network.",
+      { conditions: [{ field: "ip", negate: false, values: ["10.0.0.0/16"] }], changed_at: at(12), changed_by: "u-admin" }),
+    group("grp-lab", "Lab", "rule", "The lab hosts, by name.",
+      { conditions: [{ field: "hostname", negate: false, values: ["*.lab.example.test"] }], changed_at: at(30), changed_by: "u-ola" }),
+    group("grp-prod", "Production", "manual",
+      "Upgraded from an asset group (it used the env=prod tag): the same hosts, now hand-picked. Turn it into a rule when you can.",
+      { picked: active.filter((a) => a.hostname?.includes(".prod.")).map((a) => a.id), upgraded_from_tags: true, changed_at: at(3), changed_by: "migration" }),
+    group("grp-pilot", "Pilot hosts", "manual", "Hosts that get new rule sets first.",
+      { picked: ["agent-00001", "agent-00002", "agent-00004", "agent-00005"], changed_at: at(8), changed_by: "u-ola" }),
+  ];
 }
