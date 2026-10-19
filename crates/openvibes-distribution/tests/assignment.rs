@@ -29,11 +29,9 @@ async fn set_default(world: &World, set: &str, enabled: bool) {
         .unwrap();
 }
 
-/// A host group with `set` switched to `enabled`: a manual group of
-/// `members`, or with `members` empty a rule group of hosts named `web-*`.
-async fn group(world: &World, name: &str, members: &[&Agent], set: &str, enabled: bool) -> String {
+/// A group of `kind` with `set` switched to `enabled`; returns its id.
+async fn assigned_group(world: &World, name: &str, kind: &str, set: &str, enabled: bool) -> String {
     let db = world.db().await;
-    let kind = if members.is_empty() { "rule" } else { "manual" };
     let id: String = db
         .query_one(
             "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind)
@@ -43,23 +41,6 @@ async fn group(world: &World, name: &str, members: &[&Agent], set: &str, enabled
         .await
         .unwrap()
         .get(0);
-    let ids: Vec<&str> = members.iter().map(|a| a.id.as_str()).collect();
-    db.execute(
-        "INSERT INTO console_host_group_members (asset_group_id, agent_id, added_at, added_by)
-         SELECT $1::text::uuid, unnest($2::text[]), now(), 'test'",
-        &[&id, &ids],
-    )
-    .await
-    .unwrap();
-    if members.is_empty() {
-        db.execute(
-            "INSERT INTO console_host_group_conditions (asset_group_id, position, field, vals)
-             VALUES ($1::text::uuid, 0, 'hostname', '{web-*}')",
-            &[&id],
-        )
-        .await
-        .unwrap();
-    }
     db.execute(
         "INSERT INTO rule_set_group_assignment (rule_set_id, asset_group_id, enabled)
          VALUES ($1, $2::text::uuid, $3)",
@@ -67,6 +48,45 @@ async fn group(world: &World, name: &str, members: &[&Agent], set: &str, enabled
     )
     .await
     .unwrap();
+    id
+}
+
+/// A rule group "hostname matches `pattern`" with `set` switched to `enabled`.
+async fn rule_group(world: &World, name: &str, pattern: &str, set: &str, enabled: bool) -> String {
+    let id = assigned_group(world, name, "rule", set, enabled).await;
+    world
+        .db()
+        .await
+        .execute(
+            "INSERT INTO console_host_group_conditions (asset_group_id, position, field, vals)
+             VALUES ($1::text::uuid, 0, 'hostname', ARRAY[$2::text])",
+            &[&id, &pattern],
+        )
+        .await
+        .unwrap();
+    id
+}
+
+/// A manual group of `members` with `set` switched to `enabled`.
+async fn manual_group(
+    world: &World,
+    name: &str,
+    members: &[&Agent],
+    set: &str,
+    enabled: bool,
+) -> String {
+    let id = assigned_group(world, name, "manual", set, enabled).await;
+    let ids: Vec<&str> = members.iter().map(|a| a.id.as_str()).collect();
+    world
+        .db()
+        .await
+        .execute(
+            "INSERT INTO console_host_group_members (asset_group_id, agent_id, added_at, added_by)
+             SELECT $1::text::uuid, unnest($2::text[]), now(), 'test'",
+            &[&id, &ids],
+        )
+        .await
+        .unwrap();
     id
 }
 
@@ -113,8 +133,8 @@ async fn on_wins_across_groups() {
     let other = world.agent(2).await;
     name(&world, &agent, "web-01").await;
     name(&world, &other, "web-02").await;
-    group(&world, "web", &[], L2, false).await;
-    let db_group = group(&world, "db", &[&agent], L2, true).await;
+    rule_group(&world, "web", "web-*", L2, false).await;
+    let db_group = manual_group(&world, "db", &[&agent], L2, true).await;
     assert_eq!(
         status(&world, &agent, L2, None).await,
         200,

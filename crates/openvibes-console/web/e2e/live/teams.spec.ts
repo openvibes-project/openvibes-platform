@@ -1,8 +1,8 @@
 // Spec §15: two teams, each seeing and changing only its own hosts; a team
 // lead gives only roles inside their own access. console-e2e-server.sh
-// seeds linux-1/2 (os=linux) and windows-1/2 (os=windows), each with one
-// `e2e.team_host` finding and one alarm. The browsers share one server, so
-// every name carries the project's.
+// seeds linux-1/2 and windows-1/2 (each team's rule group matches its
+// hostnames), each with one `e2e.team_host` finding and one alarm. The
+// browsers share one server, so every name carries the project's.
 import { type Page, expect, test } from "@playwright/test";
 
 import templates from "../../src/api/templates.json" with { type: "json" };
@@ -14,9 +14,11 @@ const agentOf: Record<string, string> = {
   "windows-1": "agent.00000000-0000-4000-8000-000000000003",
 };
 
-/** An asset group with one selector, made by the signed-in Administrator. */
-async function group(page: Page, name: string, os: string) {
-  const created = await api(page, "POST", "/api/v1/access-control/asset-groups", { name, selectors: [{ key: "os", value: os }] });
+/** A rule group "hostname matches `<prefix>-*`", made by the signed-in Administrator. */
+async function group(page: Page, name: string, prefix: string) {
+  const created = await api(page, "POST", "/api/v1/host-groups", {
+    name, kind: "rule", conditions: [{ field: "hostname", negate: false, values: [`${prefix}-*`] }],
+  });
   expect(created.status).toBe(201);
   return (created.json as { asset_group_id: string }).asset_group_id;
 }
