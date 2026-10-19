@@ -71,7 +71,7 @@ export function registerAccessRoutes(ctx: DemoContext & { roles: RoleHelpers }) 
     }
     const address = typeof body.email === "string" ? email(body.email) : { ok: null };
     if (address === null) return invalidEmail();
-    const roleIds = [...new Set(Array.isArray(body.role_ids) ? body.role_ids.map(String) : [])].sort();
+    const roleIds = [...new Set(Array.isArray(body.role_ids) ? body.role_ids.map(String) : [])].sort((a, b) => a.localeCompare(b));
     if (roleIds.length === 0 || roleIds.length > 64) return problem(400, "invalid_user", "Give the person 1 to 64 roles");
     for (const id of roleIds) {
       const role = roleById(id);
@@ -176,7 +176,7 @@ function registerServiceAccountRoutes(ctx: DemoContext & { roles: RoleHelpers })
   });
   route("POST", "/api/v1/service-accounts", "service_accounts.manage", (_, __, body) => {
     const name = String(body.name ?? "").trim();
-    const roleIds = [...new Set(Array.isArray(body.role_ids) ? body.role_ids.map(String) : [])].sort();
+    const roleIds = [...new Set(Array.isArray(body.role_ids) ? body.role_ids.map(String) : [])].sort((a, b) => a.localeCompare(b));
     if (name === "" || [...name].length > 128 || roleIds.length === 0 || roleIds.length > 64) {
       return problem(400, "invalid_service_account", "Provide a valid name and 1 to 64 roles");
     }
@@ -236,7 +236,7 @@ function registerServiceAccountRoutes(ctx: DemoContext & { roles: RoleHelpers })
     if (refused) return refused;
     const held = account.role_ids.includes(roleId);
     if (give !== held) {
-      account.role_ids = give ? [...account.role_ids, roleId].sort() : account.role_ids.filter((r) => r !== roleId);
+      account.role_ids = give ? [...account.role_ids, roleId].sort((a, b) => a.localeCompare(b)) : account.role_ids.filter((r) => r !== roleId);
       audit(give ? "rbac.binding.created" : "rbac.binding.revoked", `${account.name} · ${role.name}`, "service_account");
     }
     return new Response(null, { status: 204 });

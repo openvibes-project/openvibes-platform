@@ -33,7 +33,8 @@ export function refusal(error: unknown, fallback: string): { message: string; re
 /** Everything a save or delete can change elsewhere: the list, groups' role counts, people's roles. */
 const refreshAll = () => { invalidate("/api/v1/roles"); invalidate("/api/v1/host-groups"); invalidate("/api/v1/users"); };
 
-export function RolePage({ roleId }: { roleId: string | "new" }) {
+/** `roleId` is a role id, or "new" for a role not yet created. */
+export function RolePage({ roleId }: { roleId: string }) {
   const role = useResource<Role>(roleId === "new" ? null : rolePath(roleId));
   const groups = useResource<HostGroup[]>("/api/v1/host-groups");
   const [error, setError] = useState<string>();

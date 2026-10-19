@@ -88,7 +88,7 @@ ON CONFLICT (permission_id) DO UPDATE SET scope_class = EXCLUDED.scope_class;
 CREATE TEMP TABLE mapped ON COMMIT DROP AS
 SELECT DISTINCT rp.role_id, m.new_id AS permission_id
 FROM console_role_permissions rp JOIN permission_map m ON m.old_id = rp.permission_id;
-DELETE FROM console_role_permissions;
+DELETE FROM console_role_permissions WHERE permission_id IN (SELECT old_id FROM permission_map);
 INSERT INTO console_role_permissions (role_id, permission_id)
 SELECT role_id, permission_id FROM mapped;
 

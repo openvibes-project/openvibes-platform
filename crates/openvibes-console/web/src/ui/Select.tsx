@@ -75,7 +75,16 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
     const mine = () => close();
     closeCurrent = mine;
     const away = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(); };
-    const scrolled = (event: Event) => { if (root.current?.contains(event.target as Node)) return; if (inView(button.current)) place(); else close(); };
+    const scrolled = (event: Event) => {
+      if (root.current?.contains(event.target as Node)) {
+        return;
+      }
+      if (inView(button.current)) {
+        place();
+      } else {
+        close();
+      }
+    };
     document.addEventListener("pointerdown", away);
     window.addEventListener("scroll", scrolled, true);
     window.addEventListener("resize", place);

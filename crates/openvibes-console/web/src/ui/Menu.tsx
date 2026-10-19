@@ -35,7 +35,16 @@ export function MenuButton({ label, icon, items, onPick, disabled, compact }: Re
     list.current?.focus({ preventScroll: true });
     const away = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(); };
     // Follow the button while it is on screen, as Select does; close once it is not.
-    const scrolled = (event: Event) => { if (root.current?.contains(event.target as Node)) return; if (inView(button.current)) place(); else close(); };
+    const scrolled = (event: Event) => {
+      if (root.current?.contains(event.target as Node)) {
+        return;
+      }
+      if (inView(button.current)) {
+        place();
+      } else {
+        close();
+      }
+    };
     document.addEventListener("pointerdown", away);
     window.addEventListener("scroll", scrolled, true);
     window.addEventListener("resize", place);

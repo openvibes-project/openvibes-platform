@@ -74,7 +74,7 @@ export function registerRoleRoutes(ctx: DemoContext) {
     else if (reachBody.kind === "groups" && Array.isArray(reachBody.asset_group_ids)) {
       const ids = reachBody.asset_group_ids.map((id) => String(id).toLowerCase());
       if (ids.length === 0 || ids.length > 64 || new Set(ids).size !== ids.length) return invalid("reach.asset_group_ids", "Choose 1 to 64 host groups, each once");
-      reach = { kind: "groups", asset_group_ids: [...ids].sort() };
+      reach = { kind: "groups", asset_group_ids: [...ids].sort((a, b) => a.localeCompare(b)) };
     } else return invalid("body", "The request body is invalid");
     return { name, description, permissions: catalogue.filter((p) => set.has(p.id)).map((p) => p.id), reach };
   };
@@ -132,7 +132,7 @@ export function registerRoleRoutes(ctx: DemoContext) {
     return json(data.access.asset_groups.map((g) => ({ ...g, roles: reaching(g.asset_group_id) })));
   });
   const saveGroup = (id: string, body: Record<string, unknown>) => {
-    const name = String(body.name ?? "").trim();
+    const name = (typeof body.name === "string" ? body.name : "").trim();
     const selectors = ((body.selectors ?? []) as { key: string; value: string }[]).map((sel) => `${sel.key}=${sel.value}`);
     if (name === "" || selectors.length === 0 || selectors.some((sel) => /^=|=$/.test(sel))) return undefined;
     return { asset_group_id: id, name, selectors };

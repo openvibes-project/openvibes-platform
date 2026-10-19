@@ -28,7 +28,7 @@ export function resolveCapabilities(grants: readonly Grant[]): Capability[] {
       else if (grant.reach.kind === "groups") grant.reach.asset_group_ids.forEach((id) => groups.add(id));
     }
     if (global) return [{ permission: p.id as Permission, scope: { kind: "global" } }];
-    return groups.size ? [{ permission: p.id as Permission, scope: { kind: "asset_groups", asset_group_ids: [...groups].sort() } }] : [];
+    return groups.size ? [{ permission: p.id as Permission, scope: { kind: "asset_groups", asset_group_ids: [...groups].sort((a, b) => a.localeCompare(b)) } }] : [];
   });
 }
 

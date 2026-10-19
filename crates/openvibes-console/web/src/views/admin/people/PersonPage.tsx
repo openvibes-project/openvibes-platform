@@ -80,8 +80,8 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
           <Card title="Recent activity" aside={<a {...link("/audit", { q: person.username })}>Audit log</a>}>
             {person.recent.length === 0 ? <p className="subtle person-page__none">Nothing recorded yet.</p> : (
               <ul className="person-page__activity">
-                {person.recent.map((a, i) => (
-                  <li key={i}><span>{auditActionLabel(a.action)}</span><span className="subtle">{a.target ? `${a.target} · ` : ""}{ago(a.at)}</span></li>
+                {person.recent.map((a) => (
+                  <li key={`${a.at}|${a.action}|${a.target ?? ""}`}><span>{auditActionLabel(a.action)}</span><span className="subtle">{a.target ? `${a.target} · ` : ""}{ago(a.at)}</span></li>
                 ))}
               </ul>
             )}
