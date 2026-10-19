@@ -2,11 +2,10 @@
 // requests, sign-in, every view, triage, dashboards shared between two people,
 // and accessibility in both themes.
 import AxeBuilder from "@axe-core/playwright";
-import { type Browser, type Page, expect, test } from "@playwright/test";
+import { type Page, expect, test } from "@playwright/test";
 
-import templates from "../../src/api/templates.json" with { type: "json" };
+import { PASSWORD, signIn } from "./helpers";
 
-const PASSWORD = "e2e-console-Passw0rd!";
 const origin = "https://127.0.0.1:18490";
 
 declare global {
@@ -24,15 +23,6 @@ async function watch(page: Page) {
     csp: () => page.evaluate(() => window.cspViolations ?? []),
     thirdParty,
   };
-}
-
-async function signIn(page: Page, username: string) {
-  await page.goto("/");
-  await page.getByLabel("Username").fill(username);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.locator(".view")).toBeVisible();
-  await page.mouse.move(900, 600);
 }
 
 test("sign-in, every view, and no CSP violations or third-party requests", async ({ page }) => {
@@ -99,13 +89,6 @@ test("an empty service accounts view explains the next step", async ({ page }) =
   await page.goto("/settings?tab=service-accounts");
   await expect(page.getByText("No service accounts")).toBeVisible();
   await expect(page.getByText("Create one for integrations that need API access.")).toBeVisible();
-});
-
-test("with no alarm at all, the Alarms view says how to turn alarms on", async ({ page }) => {
-  await signIn(page, "alex");
-  await page.goto("/alarms");
-  await expect(page.getByText("No alarms")).toBeVisible();
-  await expect(page.getByText(/Agents report process starts by themselves/)).toBeVisible();
 });
 
 test("Most exposed hosts ranks hosts across all kinds even before any feed imported", async ({ page }) => {
@@ -365,123 +348,4 @@ test("rule-set switches: a group is added, a failed change keeps the switch and 
   await expect(sam.getByText("Access is not available")).toHaveCount(0);
   await expect(sam.getByRole("switch")).toHaveCount(0);
   await sam.close();
-});
-
-/** A JSON call from the page, as its signed-in person (session cookie, CSRF token, Origin). */
-async function api(page: Page, method: string, path: string, body?: unknown) {
-  return page.evaluate(async ({ method, path, body }) => {
-    const session = await (await fetch("/api/v1/session")).json() as { csrf_token: string };
-    const response = await fetch(path, {
-      method,
-      headers: { "x-csrf-token": session.csrf_token, ...(body === undefined ? {} : { "content-type": "application/json" }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    const text = await response.text();
-    return { status: response.status, json: (text ? JSON.parse(text) : undefined) as unknown };
-  }, { method, path, body });
-}
-
-/** A new person's first sign-in: the one-time password, then their own. */
-async function firstSignIn(browser: Browser, username: string, oneTime: string) {
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
-  const page = await context.newPage();
-  await page.goto("/");
-  await page.getByLabel("Username").fill(username);
-  await page.getByLabel("Password").fill(oneTime);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByLabel("One-time password").fill(oneTime);
-  await page.getByLabel("New password (at least 15 characters)").fill(PASSWORD);
-  await page.getByLabel("New password again").fill(PASSWORD);
-  await page.getByRole("button", { name: "Set password" }).click();
-  await expect(page.locator(".view")).toBeVisible();
-  return page;
-}
-
-// Spec §15: two teams, each seeing and changing only its own hosts; a team
-// lead gives only roles inside their own access. linux-1/2 are os=linux and
-// windows-1/2 os=windows (console-e2e-server.sh). The browsers share one server,
-// so every name carries the project's.
-test("two teams each see only their hosts, and a team lead gives only roles inside their access", async ({ page, browser }, info) => {
-  const tag = `${info.project.name}-${Date.now().toString(36)}`;
-  await signIn(page, "alex");
-  const groups: Record<string, string> = {};
-  for (const os of ["linux", "windows"]) {
-    const created = await api(page, "POST", "/api/v1/access-control/asset-groups", { name: `${os} ${tag}`, selectors: [{ key: "os", value: os }] });
-    expect(created.status).toBe(201);
-    groups[os] = (created.json as { asset_group_id: string }).asset_group_id;
-  }
-
-  // 1. Two roles from the Analyst template, each on its group, on the role page.
-  const roleIds: Record<string, string> = {};
-  for (const [os, team] of [["linux", "Linux team"], ["windows", "Windows team"]] as const) {
-    await page.goto("/settings/roles/new");
-    await page.getByRole("textbox", { name: "Name" }).fill(`${team} ${tag}`);
-    await page.getByRole("combobox", { name: "Start from" }).click();
-    await page.getByRole("option", { name: /^Analyst template/ }).click();
-    await page.getByRole("searchbox", { name: "Search host groups" }).click();
-    await page.getByRole("group", { name: "Host groups" }).getByRole("button", { name: `${os} ${tag}` }).click();
-    await page.getByRole("button", { name: "Create role" }).click();
-    await expect(page.locator(".toast").last()).toContainText("Role created");
-    const roles = (await api(page, "GET", "/api/v1/roles")).json as { role_id: string; name: string }[];
-    roleIds[os] = roles.find((r) => r.name === `${team} ${tag}`)?.role_id ?? "";
-    expect(roleIds[os]).not.toBe("");
-  }
-  const people: Record<string, { user_id: string; one_time_password: string }> = {};
-  for (const os of ["linux", "windows"]) {
-    const created = await api(page, "POST", "/api/v1/users", { username: `${os}-${tag}`, display_name: `${os} person`, role_ids: [roleIds[os]] });
-    expect(created.status).toBe(201);
-    people[os] = created.json as { user_id: string; one_time_password: string };
-  }
-
-  // 2. Each person sees only their hosts and cannot open Settings › Roles.
-  const pages: Record<string, Page> = {};
-  for (const [os, mine, theirs] of [["linux", ["linux-1", "linux-2"], ["windows-1", "windows-2"]], ["windows", ["windows-1", "windows-2"], ["linux-1", "linux-2"]]] as const) {
-    const person = await firstSignIn(browser, `${os}-${tag}`, people[os]?.one_time_password ?? "");
-    pages[os] = person;
-    await person.goto("/agents");
-    const hosts = person.getByRole("table", { name: "Hosts" }).locator("tbody tr");
-    await expect(hosts).toHaveCount(2);
-    for (const host of mine) await expect(hosts.filter({ hasText: host })).toHaveCount(1);
-    await person.goto("/compliance");
-    await person.locator(".view tbody tr").first().locator("td").nth(2).click();
-    const inspector = person.locator(".inspector");
-    for (const host of mine) await expect(inspector.getByText(host)).toHaveCount(1);
-    for (const host of theirs) await expect(inspector.getByText(host)).toHaveCount(0);
-    // No alarm is seeded (another test needs none): the view opens, empty.
-    await person.goto("/alarms");
-    await expect(person.getByText("No alarms")).toBeVisible();
-    await person.goto("/settings?tab=roles");
-    await expect(person.getByRole("tab", { name: "Roles" })).toHaveCount(0);
-    expect((await api(person, "GET", "/api/v1/roles")).status).toBe(403);
-  }
-
-  // 3. The Linux person also gets a Team lead role on Linux (plus adding people).
-  const lead = templates.find((t) => t.name === "Team lead")?.permissions ?? [];
-  const leadRole = await api(page, "POST", "/api/v1/roles", { name: `Linux lead ${tag}`, permissions: [...lead, "access.users"], reach: { kind: "groups", asset_group_ids: [groups.linux] } });
-  expect(leadRole.status).toBe(201);
-  const leadId = (leadRole.json as { role_id: string }).role_id;
-  expect((await api(page, "PUT", `/api/v1/users/${people.linux?.user_id}/roles/${leadId}`)).status).toBe(204);
-
-  // 4. The lead adds a person with "Linux team"; "Windows team" is not offered, and refused.
-  const linux = pages.linux as Page;
-  await linux.goto("/settings?tab=people");
-  await linux.getByRole("button", { name: "New person" }).click();
-  await linux.getByLabel("Username").fill(`new-${tag}`);
-  await linux.getByLabel("Display name").fill("New Linux person");
-  await linux.getByRole("combobox", { name: "Role" }).click();
-  await expect(linux.getByRole("option", { name: new RegExp(`^Windows team ${tag}`) })).toHaveCount(0);
-  await linux.getByRole("option", { name: new RegExp(`^Linux team ${tag}`) }).click();
-  await linux.getByRole("button", { name: "Create person" }).click();
-  await expect(linux.locator(".secret .grow")).not.toBeEmpty();
-  const refused = await api(linux, "POST", "/api/v1/users", { username: `win-${tag}`, display_name: "Refused", role_ids: [roleIds.windows] });
-  expect(refused.status).toBe(403);
-  expect((refused.json as { title: string }).title).toMatch(/^You can only give roles that fit inside your own access \(.+ is outside it\)$/);
-  // Nor to an existing person in the lead's reach.
-  const listed = (await api(linux, "GET", "/api/v1/users")).json as { user_id: string; username: string }[];
-  const added = listed.find((p) => p.username === `new-${tag}`);
-  expect(added).toBeDefined();
-  const give = await api(linux, "PUT", `/api/v1/users/${added?.user_id}/roles/${roleIds.windows}`);
-  expect(give.status).toBe(403);
-  expect((give.json as { title: string }).title).toMatch(/^You can only give roles that fit inside your own access/);
-  for (const person of Object.values(pages)) await person.context().close();
 });

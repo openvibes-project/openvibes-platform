@@ -50,7 +50,9 @@ Show everything, without page changes for details:
   every row the filter matches, up to 10,000; `ui/selection.ts`). The
   triage actions (#253) are the same in a panel header and in the bulk bar
   at the bottom of a list: **Set state** (a menu, `ui/Menu.tsx`: Mitigate,
-  Accept risk, False positive, and Suppress for alarms in bulk), **Reopen
+  Accept risk, False positive, and Suppress for alarms in bulk; like
+  `Select`, it follows its button on scroll and closes only once the button
+  is off screen, `inView` in `ui/select.ts`), **Reopen
   N closed** (only when the selection holds closed items; applied at once),
   the **assignee** (the console's `Select` drawn as a button, with search,
   "Assign to me" and "Unassigned" on top; applied on pick) and **Add to
@@ -529,9 +531,10 @@ triage on alarms and findings stays as it is.
     creates a person with a one-time password (`smoke.spec.ts`), and
     `people.spec.ts` gives and removes a role on one group ("Only on
     WindowsServers", with axe) and checks your own page. The live e2e
-    (`e2e/live/console.spec.ts`) runs two teams against the real server:
-    each sees only its hosts, and a team lead gives only roles inside
-    their access (see console-rbac.md, Live check).
+    (`e2e/live/teams.spec.ts`, helpers in `e2e/live/helpers.ts`) runs two
+    teams against the real server: each sees and changes only its hosts,
+    and a team lead gives only roles inside their access (see
+    console-rbac.md, Live check).
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
   after mutations, and the `useResource`/`useAllPages` hooks. Live requests
