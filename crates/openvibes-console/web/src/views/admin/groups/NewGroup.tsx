@@ -10,7 +10,8 @@ import { Icon } from "../../../ui/Icon";
 import { Segmented } from "../../../ui/Segmented";
 import { toast } from "../../../ui/toast";
 import { Card } from "../people/PersonPage";
-import { PreviewNote, groupPath, link, refreshGroups, saveGroup, toList, usePreview, useWriteAccess } from "./GroupPage";
+import { PreviewNote } from "./badges";
+import { MAX_PICKED, groupPath, link, picks, refreshGroups, saveGroup, toList, usePreview, useWriteAccess } from "./groupApi";
 import { type Draft, type Kind, blankDraft, createBody, fromGroup, previewBody, reduce, refusal } from "./groupState";
 import { PickedHosts } from "./PickedHosts";
 import { RuleEditor } from "./RuleEditor";
@@ -18,23 +19,28 @@ import { RuleEditor } from "./RuleEditor";
 export function NewGroup() {
   const from = useLocation().params.get("from");
   const source = useResource<HostGroupDetail>(from ? groupPath(from) : null);
-  const hosts = useAllPages<GroupHost>(from ? `${groupPath(from)}/hosts` : null, 2000, "agent_id");
+  const hosts = useAllPages<GroupHost>(from ? `${groupPath(from)}/hosts` : null, MAX_PICKED, "agent_id");
   if (!from) return <NewGroupForm initial={blankDraft("rule")} />;
   const failed = source.error ?? hosts.error;
   if (failed) return <div className="view-pad"><ErrorBox error={failed} /></div>;
   if (!source.data || !hosts.data) return <Loading />;
-  const copy = fromGroup(source.data, source.data.kind === "manual" ? hosts.data.map((h) => ({ agent_id: h.agent_id, hostname: h.hostname ?? h.agent_id })) : []);
-  return <NewGroupForm initial={{ ...copy, name: `${copy.name} (copy)` }} />;
+  const manual = source.data.kind === "manual";
+  const copy = fromGroup(source.data, manual ? picks(hosts.data) : []);
+  // A copy missing some picks would quietly be a different group.
+  const short = manual && hosts.data.length < source.data.picked
+    ? `Only ${hosts.data.length} of ${source.data.picked} picked hosts could be loaded, so this group cannot be duplicated. Reload the page to try again.` : undefined;
+  return <NewGroupForm initial={{ ...copy, name: `${copy.name} (copy)` }} short={short} />;
 }
 
-export function NewGroupForm({ initial }: { initial: Draft }) {
+export function NewGroupForm({ initial, short }: { initial: Draft; short?: string | undefined }) {
   const write = useWriteAccess();
   const [draft, dispatch] = useReducer(reduce, initial);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const body = previewBody(draft);
   const preview = usePreview("/api/v1/host-groups/preview", body);
-  const ready = !!draft.name.trim() && body !== undefined && !write.blocked && write.show;
+  const blocked = write.reason ?? short;
+  const ready = !!draft.name.trim() && body !== undefined && !blocked;
   const create = async () => {
     setBusy(true);
     setError(undefined);
@@ -53,7 +59,7 @@ export function NewGroupForm({ initial }: { initial: Draft }) {
     <div className="view person-page group-page">
       <div className="view-pad person-page__crumb subtle"><a {...link("/settings")}>Settings</a> › <a {...link("/settings", { tab: "host-groups" })}>Host groups</a></div>
       <header className="person-page__head"><div className="stack grow person-page__title"><h1>New group</h1></div></header>
-      {(error ?? write.blocked) && <div className="callout callout--bad person-page__error" role="alert"><Icon name="alert" size={16} /><span>{error ?? write.blocked}</span></div>}
+      {(error ?? blocked) && <div className="callout callout--bad person-page__error" role="alert"><Icon name="alert" size={16} /><span>{error ?? blocked}</span></div>}
       <div className="stack group-page__new">
         <Card title="Details">
           <div className="stack group-page__fields">

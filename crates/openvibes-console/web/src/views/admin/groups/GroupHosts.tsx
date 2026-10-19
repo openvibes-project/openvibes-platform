@@ -28,8 +28,8 @@ export function GroupHosts({ hosts }: { hosts: readonly GroupHost[] }) {
           <tbody>
             {rows.length === 0 && <tr><td colSpan={5} className="subtle">No host matches yet.</td></tr>}
             {rows.map((h) => (
-              <tr key={h.agent_id} title={h.why}>
-                <td><div className="cell-two"><ObjectLink to={{ kind: "agent", id: h.agent_id }} className="mono">{h.hostname ?? h.agent_id}</ObjectLink><span className="subtle">{h.distribution ?? " "}</span></div></td>
+              <tr key={h.agent_id}>
+                <td><div className="cell-two"><ObjectLink to={{ kind: "agent", id: h.agent_id }} className="mono">{h.hostname ?? h.agent_id}</ObjectLink><span className="subtle">{h.distribution ?? " "}</span><span className="subtle">{h.why}</span></div></td>
                 <td className="mono">{h.last_address ?? <span className="subtle">Unknown</span>}</td>
                 <td><span className="row row--wrap group-hosts__labels">{h.labels.map((l) => <span key={l} className="chip group-hosts__label">{l}</span>)}</span></td>
                 <td><span className={h.online ? undefined : "warn-text"}>{h.last_seen_at ? <Ago value={h.last_seen_at} /> : "Never"}</span></td>

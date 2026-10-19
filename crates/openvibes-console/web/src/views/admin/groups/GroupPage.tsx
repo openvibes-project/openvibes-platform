@@ -3,10 +3,10 @@
 // on the left; the rule or the hosts picked by hand, then the member hosts, on
 // the right. Edit changes the name, description and membership in place, with
 // a preview of who would join or leave before Save.
-import { type MouseEvent, useEffect, useReducer, useState } from "react";
+import { useId, useReducer, useState } from "react";
 
-import { invalidate, request, useAllPages, useResource } from "../../../api/client";
-import type { GroupHost, HostGroup, HostGroupDetail, HostGroupPreview, PersonRow, PreviewHostGroup, Role, UpdateHostGroup, CreateHostGroup } from "../../../api/types";
+import { invalidate, useAllPages, useResource } from "../../../api/client";
+import type { GroupHost, HostGroupDetail, PersonRow, Role } from "../../../api/types";
 import { nav } from "../../../app/nav";
 import { useSession } from "../../../app/session";
 import { auditActionLabel } from "../../../ui/auditActions";
@@ -17,70 +17,31 @@ import { MenuButton } from "../../../ui/Menu";
 import { toast } from "../../../ui/toast";
 import { Card } from "../people/PersonPage";
 import { initials } from "../people/people";
-import { KindBadge, Problems } from "./badges";
+import { KindBadge, PreviewNote, Problems } from "./badges";
 import { DeleteGroup } from "./DeleteGroup";
+import { MAX_PICKED, groupPath, link, picks, refreshGroups, saveGroup, usePreview, useWriteAccess } from "./groupApi";
 import { GroupHosts } from "./GroupHosts";
-import { type Action, type Draft, type Picked, fromGroup, hostsLabel, membershipChanged, membershipText, patchBody, previewBody, previewParts, reduce, refusal } from "./groupState";
+import { type Action, type Draft, fromGroup, hostsLabel, isDirty, membershipChanged, membershipText, patchBody, previewBody, rebase, reduce, refusal } from "./groupState";
 import { PickedHosts } from "./PickedHosts";
 import { RuleEditor } from "./RuleEditor";
 
-/** Why write controls are off for someone holding host_groups.manage (the server's 403 title). */
-export const NEEDS_EVERY_HOST = "Changing host groups needs access to every host";
 const KIND_WORDS = { automatic: "Automatic: made by OpenVIBES", rule: "Rule: stays up to date", manual: "Manual: hand-picked" } as const;
+const DISCARD = "Discard your changes to this group?";
 
-export const groupPath = (id: string) => `/api/v1/host-groups/${encodeURIComponent(id)}`;
-export const toList = () => nav.view("/settings", { tab: "host-groups" });
-/** A save or delete changes the list, the role page's group picker and rule-set switches. */
-export const refreshGroups = () => { invalidate("/api/v1/host-groups"); invalidate("/api/v1/rule-set-assignments"); };
-
-/** POST for a new group, PATCH (with the version read) for an existing one. */
-export const saveGroup = (groupId: string, body: CreateHostGroup | UpdateHostGroup): Promise<HostGroup> =>
-  groupId === "new" ? request<HostGroup>("POST", "/api/v1/host-groups", body) : request<HostGroup>("PATCH", groupPath(groupId), body);
-
-export function link(view: string, params?: Record<string, string>) {
-  return { href: nav.href(view, params), onClick: (e: MouseEvent) => { e.preventDefault(); nav.view(view, params); } };
+/** "4 hosts · 3 online · …"; "online" is left out when the viewer sees none of the hosts. */
+export function reachLine(group: HostGroupDetail, seesAll: boolean): string {
+  const online = group.hosts || seesAll ? ` · ${group.online} online` : "";
+  return `${hostsLabel(group.hosts, seesAll)}${online} · used by ${plural(group.roles.length, "role")} · ${
+    group.people === 1 ? "1 person reaches it" : `${group.people} people reach it`}`;
 }
-
-/** Writes need host_groups.manage and hosts.read on every host: hidden without the first, off with the reason without the second. */
-export function useWriteAccess(): { show: boolean; blocked: string | undefined } {
-  const { can, canEverywhere } = useSession();
-  return { show: can("host_groups.manage"), blocked: canEverywhere("hosts.read") ? undefined : NEEDS_EVERY_HOST };
-}
-
-/** What saving `body` would change, asked once typing pauses; undefined while unknown. */
-export function usePreview(path: string, body: PreviewHostGroup | undefined): HostGroupPreview | undefined {
-  const key = body ? JSON.stringify(body) : "";
-  const [result, setResult] = useState<{ key: string; preview: HostGroupPreview }>();
-  useEffect(() => {
-    if (!key) return;
-    let live = true;
-    const timer = setTimeout(() => {
-      request<HostGroupPreview>("POST", path, JSON.parse(key)).then((preview) => { if (live) setResult({ key, preview }); }, () => {});
-    }, 400);
-    return () => { live = false; clearTimeout(timer); };
-  }, [path, key]);
-  return result?.key === key ? result.preview : undefined;
-}
-
-/** The warn callout "If you save: +N (…), −M (…). … gain access to them."; nothing when nothing changes. */
-export function PreviewNote({ preview, verb = "save" }: { preview: HostGroupPreview | undefined; verb?: "save" | "delete" }) {
-  if (!preview) return null;
-  const { lead, changes, people } = previewParts(preview, verb);
-  if (changes.length === 0) return null;
-  return (
-    <div className="callout callout--warn group-page__preview" role="status">
-      <Icon name="info" size={16} />
-      <span>{lead}{changes.map((c, i) => <span key={c.sign}>{i ? ", " : ""}<b>{c.sign}</b> ({c.hosts})</span>)}.{people}</span>
-    </div>
-  );
-}
-
-const picks = (hosts: readonly GroupHost[]): Picked[] => hosts.map((h) => ({ agent_id: h.agent_id, hostname: h.hostname ?? h.agent_id }));
 
 export function GroupPage({ groupId }: { groupId: string }) {
   const { can } = useSession();
   const group = useResource<HostGroupDetail>(groupPath(groupId));
-  const hosts = useAllPages<GroupHost>(`${groupPath(groupId)}/hosts`, 2000, "agent_id");
+  // A manual group's hosts are its picks, all of which a save sends back: load as many as the server allows.
+  // ponytail: a rule group's table stops at 2000 hosts; page it when groups grow past that.
+  const max = group.data?.kind === "manual" ? MAX_PICKED : 2000;
+  const hosts = useAllPages<GroupHost>(group.data ? `${groupPath(groupId)}/hosts` : null, max, "agent_id");
   // People and roles name the actors and fill Who reaches it; without access.read, ids and names only.
   const people = useResource<PersonRow[]>(can("access.read") ? "/api/v1/users" : null);
   const roles = useResource<Role[]>(can("access.read") ? "/api/v1/roles" : null);
@@ -100,8 +61,20 @@ export function GroupBody({ group, hosts, names, people, roles, initial }: {
   const write = useWriteAccess();
   const seesAll = canEverywhere("hosts.read");
   const base = fromGroup(group, group.kind === "manual" ? picks(hosts) : []);
+  const baseKey = `${group.version}|${base.picked.map((h) => h.agent_id).join()}`;
   const [editing, setEditing] = useState(initial !== undefined);
   const [draft, dispatch] = useReducer(reduce, initial ?? base);
+  // What editing started from. When the group reloads (a stale save), the
+  // user's own changes move onto the reload and the rest comes from it.
+  const [editBase, setEditBase] = useState({ key: baseKey, draft: base });
+  if (editBase.key !== baseKey) {
+    setEditBase({ key: baseKey, draft: base });
+    if (editing) dispatch({ type: "reset", draft: rebase(draft, editBase.draft, base) });
+  }
+  // Every pick must be loaded before picks can be edited: a save sends them all back.
+  const picksShort = group.kind === "manual" && hosts.length < group.picked
+    ? `Only ${hosts.length} of ${group.picked} picked hosts could be loaded, so the picks cannot be changed here. Reload the page to try again.` : undefined;
+  const reasonId = useId();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -114,8 +87,14 @@ export function GroupBody({ group, hosts, names, people, roles, initial }: {
 
   const edit = (action?: Action) => {
     setError(undefined);
+    setEditBase({ key: baseKey, draft: base });
     dispatch({ type: "reset", draft: action ? reduce(base, action) : base });
     setEditing(true);
+  };
+  const stop = () => {
+    if (isDirty(draft, base) && !window.confirm(DISCARD)) return;
+    setError(undefined);
+    setEditing(false);
   };
   const save = async () => {
     const body = patchBody(draft, base, group.version);
@@ -138,13 +117,11 @@ export function GroupBody({ group, hosts, names, people, roles, initial }: {
   };
 
   const shown = editing ? draft : base;
-  const off = write.blocked ? { disabled: true, title: write.blocked } : {};
+  const off = write.reason ? { disabled: true, title: write.reason, "aria-describedby": reasonId } : {};
   const roleInfo = (roleId: string) => ({
     permissions: roles?.find((r) => r.role_id === roleId)?.permissions.length,
     holders: (people ?? []).filter((p) => p.enabled && p.roles.some((r) => r.role_id === roleId)).map((p) => p.display_name),
   });
-  const reachLine = `${hostsLabel(group.hosts, seesAll)}${group.hosts || seesAll ? ` · ${group.online} online` : ""} · used by ${plural(group.roles.length, "role")} · ${
-    group.people === 1 ? "1 person reaches it" : `${group.people} people reach it`}`;
 
   return (
     <div className="view person-page group-page">
@@ -153,19 +130,20 @@ export function GroupBody({ group, hosts, names, people, roles, initial }: {
         <span className="group-page__icon" aria-hidden="true"><Icon name="layers" size={22} /></span>
         <div className="stack grow person-page__title">
           <div className="row"><h1>{group.name}</h1><KindBadge kind={group.kind} /></div>
-          <span className="subtle">{reachLine}</span>
+          <span className="subtle">{reachLine(group, seesAll)}</span>
         </div>
         {write.show && (
           <div className="row person-page__actions">
-            <button type="button" className="button" {...off} onClick={() => (editing ? setEditing(false) : edit())}>{editing ? "Stop editing" : "Edit"}</button>
-            <span title={write.blocked}>
-              <MenuButton label="More actions" icon="more" compact disabled={!!write.blocked}
+            <button type="button" className="button" {...off} onClick={() => (editing ? stop() : edit())}>{editing ? "Stop editing" : "Edit"}</button>
+            <span title={write.reason}>
+              <MenuButton label="More actions" icon="more" compact disabled={!!write.reason}
                 items={[{ value: "duplicate", label: "Duplicate…" }, { value: "delete", label: "Delete group…" }]}
                 onPick={(v) => (v === "delete" ? setDeleting(true) : nav.view("/settings/host-groups/new", { from: group.asset_group_id }))} />
             </span>
           </div>
         )}
       </header>
+      {write.show && write.reason && <p id={reasonId} className="subtle group-page__reason">{write.reason}.</p>}
       {error && <div className="callout callout--bad person-page__error" role="alert"><Icon name="alert" size={16} /><span>{error}</span></div>}
       {deleting && <DeleteGroup group={group} onClose={() => setDeleting(false)} />}
       <div className="person-page__cols">
@@ -213,7 +191,7 @@ export function GroupBody({ group, hosts, names, people, roles, initial }: {
           </Card>
         </div>
         <div className="stack person-page__col">
-          {group.upgraded_from_tags && group.kind === "manual" && !editing && write.show && !write.blocked && (
+          {group.upgraded_from_tags && group.kind === "manual" && !editing && write.show && !write.reason && (
             <div className="callout group-page__note"><Icon name="info" size={16} />
               <span>This group was made from tags. You can turn it into a rule group.</span>
               <button type="button" className="button button--small" onClick={() => edit({ type: "toRule" })}>Turn into a rule</button>
@@ -227,13 +205,14 @@ export function GroupBody({ group, hosts, names, people, roles, initial }: {
                 </div>
               )}
               {shown.kind === "manual"
-                ? <PickedHosts draft={shown} dispatch={dispatch} editing={editing} empty={seesAll ? "No hosts yet" : "No hosts you can see"} />
+                ? <PickedHosts draft={shown} dispatch={dispatch} editing={editing && !picksShort} empty={seesAll ? "No hosts yet" : "No hosts you can see"} />
                 : <RuleEditor draft={shown} dispatch={dispatch} editing={editing} />}
+              {editing && picksShort && <p className="subtle group-page__none" role="status">{picksShort}</p>}
               {editing && <PreviewNote preview={preview} />}
               {editing && (
                 <div className="row">
                   <button type="button" className="button button--primary button--small" disabled={busy || !draft.name.trim()} onClick={() => void save()}>{busy ? "Saving…" : "Save changes"}</button>
-                  <button type="button" className="button button--small" onClick={() => { setError(undefined); setEditing(false); }}>Cancel</button>
+                  <button type="button" className="button button--small" onClick={stop}>Cancel</button>
                 </div>
               )}
             </div>

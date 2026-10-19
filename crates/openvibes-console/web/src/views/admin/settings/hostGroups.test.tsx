@@ -32,7 +32,7 @@ describe("host groups list", () => {
       <SessionContext.Provider value={{ session: undefined, demo: false, can: () => true, canEverywhere: () => true }}><HostGroups /></SessionContext.Provider>,
     );
     expect(html).toContain("New group");
-    expect(html).toContain("Filter groups, rules or hosts…");
+    expect(html).toContain("Filter groups, rules or roles…");
     // Automatic first, then rule, then manual.
     expect(html.indexOf("Debian 12")).toBeLessThan(html.indexOf("WindowsServers"));
     expect(html.indexOf("WindowsServers")).toBeLessThan(html.indexOf("Pilot hosts"));

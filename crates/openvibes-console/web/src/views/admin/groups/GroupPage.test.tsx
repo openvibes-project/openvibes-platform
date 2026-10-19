@@ -12,8 +12,11 @@ vi.hoisted(() => {
 
 import type { GroupHost, HostGroupDetail, Permission, Session } from "../../../api/types";
 import { SessionContext } from "../../../app/session";
-import { GroupBody, PreviewNote, saveGroup } from "./GroupPage";
-import { fromGroup, patchBody, reduce } from "./groupState";
+import { PreviewNote } from "./badges";
+import { saveGroup } from "./groupApi";
+import { GroupBody } from "./GroupPage";
+import { NewGroupForm } from "./NewGroup";
+import { blankDraft, fromGroup, patchBody, reduce } from "./groupState";
 
 const detail = (over: Partial<HostGroupDetail> = {}): HostGroupDetail => ({
   asset_group_id: "g-win", name: "WindowsServers", kind: "rule", description: "Windows servers the Windows team runs.",
@@ -85,7 +88,7 @@ describe("group page", () => {
     expect(html).toContain("Turn into a rule");
     expect(html).toContain("Hosts picked by hand. New hosts are never added by themselves.");
     expect(html).toContain("Manual: hand-picked");
-    expect(render(manual, [], {}, true)).toContain("Search hosts to add");
+    expect(render(manual, [{ ...winHost, why: "Picked by hand" }], {}, true)).toContain("Search hosts to add");
   });
 
   it("write controls are disabled without every host, and hidden without host_groups.manage", () => {
@@ -94,6 +97,8 @@ describe("group page", () => {
     expect(all).toContain('aria-label="More actions"');
     const some = render(detail(), [winHost], { everywhere: false });
     expect(some).toMatch(/<button[^>]*disabled=""[^>]*title="Changing host groups needs access to every host"[^>]*>Edit<\/button>/);
+    expect(some).toContain("Changing host groups needs access to every host.</p>");
+    expect(some).toMatch(/aria-describedby="[^"]+"[^>]*>Edit</);
     expect(some).not.toContain("Turn into a rule");
     const none = render(detail(), [winHost], { held: (p) => p !== "host_groups.manage" });
     expect(none).not.toContain(">Edit<");
@@ -106,6 +111,37 @@ describe("group page", () => {
     expect(html).toContain("No hosts you can see");
     expect(html).not.toContain("0 hosts picked by hand");
     expect(html).toContain("No host matches yet.");
+  });
+
+  it("a viewer who sees some hosts gets counts of what they can see", () => {
+    const html = render(detail({ hosts: 2, online: 1 }), [winHost], { everywhere: false });
+    expect(html).toContain("2 hosts you can see · 1 online · used by 1 role");
+  });
+
+  it("each host says why it is in the group", () => {
+    expect(render(detail())).toContain("Windows Server 2022</span><span class=\"subtle\">Matches the rule</span>");
+  });
+
+  it("picks cannot be edited until every pick is loaded", () => {
+    const manual = detail({ kind: "manual", conditions: [], membership: "3 hosts picked by hand", picked: 3 });
+    const html = render(manual, [{ ...winHost, why: "Picked by hand" }], {}, true);
+    expect(html).toContain("Only 1 of 3 picked hosts could be loaded, so the picks cannot be changed here.");
+    expect(html).not.toContain("Search hosts to add");
+    expect(html).not.toContain('aria-label="Remove win-dc-01"');
+  });
+
+  it("a new group without host_groups.manage says why it cannot be created", () => {
+    const html = renderToStaticMarkup(
+      <SessionContext.Provider value={{ session, demo: false, can: (p) => p !== "host_groups.manage", canEverywhere: () => true }}>
+        <NewGroupForm initial={blankDraft("rule")} />
+      </SessionContext.Provider>,
+    );
+    expect(html).toContain("Changing host groups needs the Manage host groups permission");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Create group<\/button>/);
+  });
+
+  it("a failed preview says so instead of looking like no change", () => {
+    expect(renderToStaticMarkup(<PreviewNote preview="failed" />)).toContain("Preview unavailable");
   });
 
   it("the preview names hosts and people", () => {

@@ -558,7 +558,8 @@ triage on alarms and findings stays as it is.
     removes.
   - **Interfaces:** `GET /api/v1/host-groups`, `GET|PATCH|DELETE
     /api/v1/host-groups/{id}` (the version read; DELETE `?version=`),
-    `GET …/{id}/hosts` (all pages, `after` = last agent id, up to 2000),
+    `GET …/{id}/hosts` (all pages, `after` = last agent id; up to 10000, the
+    server's pick limit, for manual groups and Duplicate, else 2000),
     `POST /api/v1/host-groups`, `POST …/preview` and `…/{id}/preview`
     (`{}` previews a delete), `GET /api/v1/agents?state=active` (hosts to
     add, filtered in the browser), and with `access.read` `GET
@@ -569,13 +570,18 @@ triage on alarms and findings stays as it is.
     `hosts.read` on every host (else disabled, titled "Changing host groups
     needs access to every host", the server's 403). PATCH sends only what
     changed (`patchBody`), so a rename sends the name alone. Without
-    `hosts.read` everywhere, a 0 reads "No hosts you can see" and a manual
-    group's membership drops its count.
+    `hosts.read` everywhere, counts read "N hosts you can see" (0: "No hosts
+    you can see", without "online") and a manual group's membership drops
+    its count. The reason writes are off shows as text under the header.
   - **Failure behaviour:** a refusal shows above the columns (a 422 names
     the field). A 409 `stale_group` reloads the group and says "Someone
     else changed this group. It has been reloaded." while the edit stays
-    open to save again. A 409 `group_in_use` on delete reads "Roles still
-    use this group: …". A failed preview shows nothing.
+    open: the user's own changes (against what editing started from) move
+    onto the reload, and everything else, such as someone else's rename or
+    added hosts, comes from it. If fewer picked hosts load than the group
+    has, picks cannot be edited (or duplicated) and the page says why.
+    Stop editing and Cancel ask before discarding changes. A 409 `group_in_use` on delete reads "Roles still
+    use this group: …". A failed preview reads "Preview unavailable".
   - **How to test:** `groups/groupState.test.ts` (reducer, PATCH bodies,
     preview sentences, list wording), `groups/GroupPage.test.tsx` (markup:
     rule, editing, automatic callout, upgraded note, write access, the

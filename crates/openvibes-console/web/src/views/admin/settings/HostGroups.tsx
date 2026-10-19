@@ -25,7 +25,7 @@ export function HostGroups() {
   const rows = useMemo(() => (data ?? []).filter((g) => matches([g.name, g.description, g.membership, g.kind, ...g.roles.map((r) => r.name)], q)), [data, q]);
   return (
     <div className="view">
-      <ViewHeader title="Host groups" count={rows.length} refresh="/api/v1/host-groups" placeholder="Filter groups, rules or hosts…"
+      <ViewHeader title="Host groups" count={rows.length} refresh="/api/v1/host-groups" placeholder="Filter groups, rules or roles…"
         actions={can("host_groups.manage") && canEverywhere("hosts.read") && (
           <button type="button" className="button button--primary button--small" onClick={() => nav.view("/settings/host-groups/new")}><Icon name="plus" size={14} /> New group</button>
         )} />
@@ -48,7 +48,7 @@ export function HostGroups() {
             ) },
             { key: "membership", header: "Membership", width: "380px", render: (g) => <span className={g.kind === "manual" ? "subtle" : undefined}>{membershipText(g, seesAll)}</span> },
             { key: "hosts", header: "Hosts", width: "130px", sort: (g) => g.hosts, render: (g) => (
-              <div className="cell-two"><span className="num">{hostsLabel(g.hosts, seesAll)}</span><span className="subtle">{g.online} online</span></div>
+              <div className="cell-two"><span className="num">{hostsLabel(g.hosts, seesAll)}</span><span className="subtle">{g.hosts || seesAll ? `${g.online} online` : " "}</span></div>
             ) },
             { key: "problems", header: "Open problems", width: "200px", sort: (g) => g.critical * 1e6 + g.open_alarms, render: (g) => <Problems alarms={g.open_alarms} critical={g.critical} /> },
             { key: "reach", header: "Who reaches it", width: "210px", sort: (g) => g.people, render: (g) => (

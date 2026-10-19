@@ -47,7 +47,7 @@ export function PickedHosts({ draft, dispatch, editing, empty }: { draft: Draft;
       <div className="row row--wrap">
         {draft.picked.length === 0 && <span className="subtle">{empty}</span>}
         {draft.picked.map((h) => (
-          <span key={h.agent_id} className="chip picked-hosts__chip" aria-pressed="true">
+          <span key={h.agent_id} className="chip picked-hosts__chip">
             <span className="mono">{h.hostname}</span>
             {editing && <button type="button" className="icon-button" aria-label={`Remove ${h.hostname}`} title={`Remove ${h.hostname}`} onClick={() => dispatch({ type: "unpick", agent_id: h.agent_id })}><Icon name="close" size={12} /></button>}
           </span>

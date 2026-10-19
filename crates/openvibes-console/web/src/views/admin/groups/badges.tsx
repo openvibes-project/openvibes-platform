@@ -1,5 +1,8 @@
-// Small pieces the host-group list and page share: the kind badge and open problems.
+// Small pieces the host-group screens share: the kind badge, open problems and the preview callout.
 import type { HostGroup } from "../../../api/types";
+import { Icon } from "../../../ui/Icon";
+import type { Preview } from "./groupApi";
+import { previewParts } from "./groupState";
 
 const KIND: Record<HostGroup["kind"], [string, string]> = {
   automatic: ["badge badge--plain", "Automatic"],
@@ -20,5 +23,21 @@ export function Problems({ alarms, critical }: { alarms: number; critical: numbe
       {alarms > 0 && <span className="badge badge--high">{alarms} {alarms === 1 ? "alarm" : "alarms"}</span>}
       {critical > 0 && <span className="badge badge--critical">{critical} critical</span>}
     </span>
+  );
+}
+
+/** The warn callout "If you save: +N (…), −M (…). … gain access to them."; nothing when nothing changes. */
+export function PreviewNote({ preview, verb = "save" }: { preview: Preview; verb?: "save" | "delete" }) {
+  if (!preview) return null;
+  if (preview === "failed") {
+    return <div className="callout group-page__preview" role="status"><Icon name="alert" size={16} /><span>Preview unavailable: who would join or leave is not known.</span></div>;
+  }
+  const { lead, changes, people } = previewParts(preview, verb);
+  if (changes.length === 0) return null;
+  return (
+    <div className="callout callout--warn group-page__preview" role="status">
+      <Icon name="info" size={16} />
+      <span>{lead}{changes.map((c, i) => <span key={c.sign}>{i ? ", " : ""}<b>{c.sign}</b> ({c.hosts})</span>)}.{people}</span>
+    </div>
   );
 }

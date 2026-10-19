@@ -6,7 +6,8 @@ import { ApiError, invalidate, request } from "../../../api/client";
 import type { HostGroupDetail } from "../../../api/types";
 import { toast } from "../../../ui/toast";
 import { DialogHead, Modal } from "../people/NewPersonDialog";
-import { PreviewNote, groupPath, refreshGroups, toList, usePreview } from "./GroupPage";
+import { PreviewNote } from "./badges";
+import { groupPath, refreshGroups, toList, usePreview } from "./groupApi";
 import { refusal } from "./groupState";
 
 export function DeleteGroup({ group, onClose }: { group: HostGroupDetail; onClose: () => void }) {
@@ -34,7 +35,7 @@ export function DeleteGroup({ group, onClose }: { group: HostGroupDetail; onClos
       setBusy(false);
     }
   };
-  const switches = preview?.overrides_removed ?? 0;
+  const switches = preview && preview !== "failed" ? preview.overrides_removed : 0;
   return (
     <Modal label="Delete group" onClose={onClose}>
       <div className="bulk-dialog stack">

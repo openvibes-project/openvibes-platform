@@ -324,6 +324,7 @@
 .group-page__note { margin: 0; background: var(--accent-soft); color: var(--text); align-items: center; }
 .group-page__note svg { color: var(--accent); flex: none; }
 .group-page__preview { margin: 0; }
+.group-page__reason { margin: 0 24px 12px; }
 .group-page__new { gap: 16px; padding: 0 24px 40px; max-width: 900px; }
 .rule-editor { gap: 10px; }
 .rule-row { gap: 4px; }
@@ -342,6 +343,7 @@
 .picked-hosts__search { position: relative; }
 .picked-hosts__results { margin-top: 4px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); }
 .view .table-wrap.group-hosts { margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+.group-hosts .cell-two > * + * { font-size: 12px; }
 .group-hosts__filter { width: 240px; }
 .group-hosts__labels { gap: 4px; }
 .group-hosts__label { cursor: default; height: 22px; }

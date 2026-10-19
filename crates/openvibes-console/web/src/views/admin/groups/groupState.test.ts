@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { HostGroup, HostGroupPreview } from "../../../api/types";
 import { ApiError } from "../../../api/client";
 import {
-  type Draft, blankDraft, valueLabel, createBody, fromGroup, hostsLabel, membershipText, patchBody, previewBody, previewSentence, reduce, refusal,
+  type Draft, blankDraft, isDirty, rebase, valueLabel, createBody, fromGroup, hostsLabel, membershipText, patchBody, previewBody, previewSentence, reduce, refusal,
 } from "./groupState";
 
 const group = (over: Partial<HostGroup> = {}): HostGroup => ({
@@ -31,7 +31,11 @@ describe("group draft", () => {
     expect(edited.conditions[2]).toEqual({ field: "ip", negate: true, values: ["10.0.0.0/16"] });
     // A new field starts with no values: "windows" is no IP range.
     expect(run(base, { type: "field", index: 0, field: "ip" }).conditions[0]).toEqual({ field: "ip", negate: false, values: [] });
-    expect(run(edited, { type: "remove", index: 0 }).conditions.map((c) => c.field)).toEqual(["hostname", "ip"]);
+    const removed = run(edited, { type: "remove", index: 0 });
+    expect(removed.conditions.map((c) => c.field)).toEqual(["hostname", "ip"]);
+    // Rows keep their keys, and a new row never reuses one.
+    expect(removed.keys).toEqual([1, 2]);
+    expect(run(removed, { type: "add" }).keys).toEqual([1, 2, 3]);
   });
 
   it("picks and unpicks hosts once each", () => {
@@ -83,6 +87,32 @@ describe("save bodies", () => {
   });
 });
 
+describe("a stale save", () => {
+  const started = fromGroup(group({ kind: "manual", conditions: [] }), [host("a1", "web-01"), host("a2", "db-02")]);
+
+  it("keeps the user's change and takes the rest from the reload", () => {
+    const mine = run(started, { type: "unpick", agent_id: "a2" }, { type: "description", description: "Mine" });
+    // Meanwhile someone renamed it and added a3.
+    const reloaded = { ...started, name: "Pilot", picked: [...started.picked, host("a3", "mx-03")] };
+    const next = rebase(mine, started, reloaded);
+    expect(next.name).toBe("Pilot");
+    expect(next.description).toBe("Mine");
+    expect(next.picked.map((h) => h.agent_id)).toEqual(["a1", "a3"]);
+    expect(patchBody(next, reloaded, 6)).toEqual({ description: "Mine", agent_ids: ["a1", "a3"], version: 6 });
+  });
+
+  it("a rename alone does not touch the reloaded rule", () => {
+    const rule = fromGroup(group(), []);
+    const mine = run(rule, { type: "name", name: "Win" });
+    const reloaded = run(rule, { type: "remove", index: 1 });
+    const next = rebase(mine, rule, reloaded);
+    expect(next.conditions).toEqual(reloaded.conditions);
+    expect(patchBody(next, reloaded, 6)).toEqual({ name: "Win", version: 6 });
+    expect(isDirty(mine, rule)).toBe(true);
+    expect(isDirty(rule, rule)).toBe(false);
+  });
+});
+
 describe("preview sentence", () => {
   it("names joins and who gains", () => {
     expect(previewSentence(preview({ joins: [host("a", "web-01"), host("b", "db-02")], joins_total: 2, gains: [person("Wendy Ward")], people_total: 1 })))
@@ -119,7 +149,8 @@ describe("list wording", () => {
   it("counts read as what you can see when you do not see every host", () => {
     expect(hostsLabel(0, true)).toBe("0 hosts");
     expect(hostsLabel(0, false)).toBe("No hosts you can see");
-    expect(hostsLabel(1, false)).toBe("1 host");
+    expect(hostsLabel(1, false)).toBe("1 host you can see");
+    expect(hostsLabel(3, false)).toBe("3 hosts you can see");
     const manual = group({ kind: "manual", membership: "0 hosts picked by hand" });
     expect(membershipText(manual, true)).toBe("0 hosts picked by hand");
     expect(membershipText(manual, false)).toBe("Hosts picked by hand");

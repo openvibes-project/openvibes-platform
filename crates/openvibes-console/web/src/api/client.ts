@@ -138,9 +138,29 @@ export function useResource<T>(path: string | null): Resource<T> {
 }
 
 /**
- * Loads every page of a cursor-paged list (bounded) for client-side filtering.
- * With `after`, pages are plain arrays continued by `after=<that field of the last row>`.
+ * Every page of a cursor-paged list, up to about `max` rows. With `after`,
+ * pages are plain arrays continued by `after=<that field of the last row>`.
  */
+export async function loadAllPages<T>(path: string, max = 2000, after?: keyof T & string): Promise<T[]> {
+  const items: T[] = [];
+  const separator = path.includes("?") ? "&" : "?";
+  let cursor: string | null | undefined = null;
+  do {
+    if (after) {
+      const rows: T[] = await load(`${path}${separator}limit=100${cursor ? `&after=${encodeURIComponent(cursor)}` : ""}`);
+      items.push(...rows);
+      const last = rows.length === 100 ? rows[rows.length - 1] : undefined;
+      cursor = last == null ? null : String(last[after]);
+      continue;
+    }
+    const pageData: { items: T[]; next_cursor?: string | null } = await load(`${path}${separator}limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+    items.push(...pageData.items);
+    cursor = pageData.next_cursor;
+  } while (cursor && items.length < max);
+  return items;
+}
+
+/** `loadAllPages` as a hook, reloading when a prefix of `path` is invalidated. */
 export function useAllPages<T>(path: string | null, max = 2000, after?: keyof T & string): Resource<T[]> {
   const version = useSyncExternalStore(subscribe, () => generation, () => generation);
   const key = `${path}#${version}#${max}#${after ?? ""}`;
@@ -148,24 +168,7 @@ export function useAllPages<T>(path: string | null, max = 2000, after?: keyof T 
   useEffect(() => {
     if (path === null) return;
     let live = true;
-    (async () => {
-      const items: T[] = [];
-      let cursor: string | null | undefined = null;
-      do {
-        const separator = path.includes("?") ? "&" : "?";
-        if (after) {
-          const rows: T[] = await load(`${path}${separator}limit=100${cursor ? `&after=${encodeURIComponent(cursor)}` : ""}`);
-          items.push(...rows);
-          const last = rows.length === 100 ? rows[rows.length - 1] : undefined;
-          cursor = last == null ? null : String(last[after]);
-          continue;
-        }
-        const pageData: { items: T[]; next_cursor?: string | null } = await load(`${path}${separator}limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
-        items.push(...pageData.items);
-        cursor = pageData.next_cursor;
-      } while (cursor && items.length < max);
-      return items;
-    })().then(
+    loadAllPages<T>(path, max, after).then(
       (data) => { if (live) setLoaded({ key, path, data, error: undefined }); },
       (error: unknown) => { if (live) setLoaded({ key, path, data: undefined, error: failure(error) }); },
     );
