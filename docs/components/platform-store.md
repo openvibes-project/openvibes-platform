@@ -935,3 +935,12 @@ Tests: `tests/host_groups_membership.rs` (the function),
 `tests/host_groups_upgrade.rs` (every role reaches the same hosts after the
 upgrade). Fixtures make groups with `common::manual_group` and
 `common::rule_group`.
+
+Agent facts: `ingest::heartbeat` takes the peer `address` and stores it as
+`last_address` (written at once when it changes, like the hostname).
+`host_group_facts::ensure_automatic_groups` (called by `inventory::finish` in
+the inventory transaction with the row's generated `os_family`/`distribution`)
+makes the missing, undismissed automatic groups, one statement each, under the
+transaction advisory lock `AUTO_GROUP_LOCK` (0x4F564847) taken only
+when a group is missing; names come from `console_free_group_name`, and the
+Rust display map must equal the migration's. Test: `tests/host_group_facts.rs`.

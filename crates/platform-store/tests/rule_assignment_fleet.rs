@@ -249,7 +249,7 @@ async fn ingest_records_when_hardening_facts_were_last_usable() {
         ("not_found", t0 + chrono::Duration::minutes(10)),
     ] {
         let health = serde_json::json!({"last_scan": {"collectors": {"hardening": outcome}}});
-        platform_store::ingest::heartbeat(&ingest, A, "0.5.0", None, &[], Some(&health), at)
+        platform_store::ingest::heartbeat(&ingest, A, "0.5.0", None, &[], Some(&health), None, at)
             .await
             .unwrap();
     }
@@ -258,7 +258,7 @@ async fn ingest_records_when_hardening_facts_were_last_usable() {
     let packages_only = serde_json::json!({"last_scan": {"collectors": {"packages": "ok"}}});
     for (n, health) in [(20, Some(&packages_only)), (30, None)] {
         let at = t0 + chrono::Duration::minutes(n);
-        platform_store::ingest::heartbeat(&ingest, A, "0.5.0", None, &[], health, at)
+        platform_store::ingest::heartbeat(&ingest, A, "0.5.0", None, &[], health, None, at)
             .await
             .unwrap();
     }

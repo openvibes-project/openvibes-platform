@@ -316,6 +316,7 @@ pub async fn heartbeat(
     hostname: Option<&str>,
     capabilities: &[String],
     health: Option<&serde_json::Value>,
+    address: Option<std::net::IpAddr>,
     now: DateTime<Utc>,
 ) -> Result<bool, StoreError> {
     let stale_before = now - Duration::minutes(HEARTBEAT_WRITE_MINUTES);
@@ -327,6 +328,7 @@ pub async fn heartbeat(
         .execute(
             "UPDATE agents SET last_seen_at = $2, scanner_version = $3, capabilities = $4,
                  hostname = COALESCE($6, hostname),
+                 last_address = COALESCE($8::inet, last_address),
                  health_previous = CASE WHEN $7::jsonb IS NULL THEN health_previous ELSE health END,
                  health = COALESCE($7::jsonb, health),
                  health_at = CASE WHEN $7::jsonb IS NULL THEN health_at ELSE $2 END,
@@ -336,6 +338,7 @@ pub async fn heartbeat(
              WHERE agent_id = $1
                AND (last_seen_at IS NULL OR last_seen_at < $5
                     OR hostname IS DISTINCT FROM COALESCE($6, hostname)
+                    OR last_address IS DISTINCT FROM COALESCE($8::inet, last_address)
                     OR capabilities IS DISTINCT FROM $4
                     OR health->'rule_sets' IS DISTINCT FROM
                        COALESCE($7::jsonb->'rule_sets', health->'rule_sets'))",
@@ -347,6 +350,7 @@ pub async fn heartbeat(
                 &stale_before,
                 &hostname,
                 &health,
+                &address,
             ],
         )
         .await?;

@@ -11,7 +11,11 @@ use tokio::{net::TcpListener, sync::Semaphore};
 use tokio_rustls::TlsAcceptor;
 
 use crate::{
-    MAX_BODY_BYTES, ServerError, auth::Peer, health, limits::Limits, stall::WriteDeadline,
+    MAX_BODY_BYTES, ServerError,
+    auth::{Peer, PeerAddr},
+    health,
+    limits::Limits,
+    stall::WriteDeadline,
     tls::server_config,
 };
 
@@ -128,10 +132,10 @@ pub async fn run(
             // the kernel backlog instead of consuming descriptors and tasks.
             permit = connections.clone().acquire_owned() => {
                 let Ok(permit) = permit else { break };
-                let tcp = tokio::select! {
+                let (tcp, ip) = tokio::select! {
                     () = &mut shutdown => break,
                     accepted = listener.accept() => match accepted {
-                        Ok((tcp, _)) => no_delay(tcp),
+                        Ok((tcp, addr)) => (no_delay(tcp), addr.ip()),
                         Err(_) => {
                             // For example EMFILE: back off instead of spinning.
                             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -153,7 +157,7 @@ pub async fn run(
                         .peer_certificates()
                         .and_then(|chain| chain.first().cloned())
                         .map(|leaf| leaf.into_owned());
-                    let service = TowerToHyperService::new(router.layer(Extension(Peer(peer))));
+                    let service = TowerToHyperService::new(router.layer(Extension(Peer(peer))).layer(Extension(PeerAddr(ip))));
                     let connection = hyper::server::conn::http1::Builder::new()
                         .timer(TokioTimer::new())
                         .header_read_timeout(timeout)

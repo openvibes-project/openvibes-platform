@@ -14,6 +14,10 @@ use crate::ApiError;
 #[derive(Clone)]
 pub(crate) struct Peer(pub Option<CertificateDer<'static>>);
 
+/// The client's IP address, attached per connection (the agent's last address).
+#[derive(Clone, Copy)]
+pub struct PeerAddr(pub std::net::IpAddr);
+
 /// An agent authenticated by a recorded certificate (serial and key hash)
 /// whose status is active.
 pub struct AuthenticatedAgent(pub String);

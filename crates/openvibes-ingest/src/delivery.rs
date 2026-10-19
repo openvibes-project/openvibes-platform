@@ -1,5 +1,5 @@
 use axum::{
-    Json,
+    Extension, Json,
     body::Bytes,
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -14,7 +14,7 @@ use openvibes_core::{
 };
 use platform_store::{alarms, finding_changes, host_services, ingest, inventory, wire};
 
-use platform_agent_server::{ApiError, AuthenticatedAgent, parse};
+use platform_agent_server::{ApiError, AuthenticatedAgent, PeerAddr, parse};
 
 use crate::server::AppState;
 
@@ -33,6 +33,7 @@ fn not_assigned_sets(heartbeat: &Heartbeat) -> Vec<String> {
 pub(crate) async fn heartbeat(
     State(state): State<AppState>,
     AuthenticatedAgent(agent_id): AuthenticatedAgent,
+    Extension(PeerAddr(address)): Extension<PeerAddr>,
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
     let heartbeat: Heartbeat = parse(&body)?;
@@ -79,6 +80,7 @@ pub(crate) async fn heartbeat(
         heartbeat.hostname.as_deref(),
         &capabilities,
         health.as_ref(),
+        Some(address),
         now,
     )
     .await?;
