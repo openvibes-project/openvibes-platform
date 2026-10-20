@@ -123,6 +123,10 @@ test("with approval on, a request waits on its alarm, is withdrawn, asked again 
 
   // An approver on the same hosts (the administrator) sees it waiting and approves.
   await persona("admin");
+  await page.goto("/alarms");
+  const theirs = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
+  await expect(theirs).toContainText("Waiting for approval");
+  await expect(theirs.getByRole("button", { name: /^Suppress…/ })).toHaveCount(0);
   await page.goto("/alarm-suppressions");
   const listed = page.locator(".view tbody tr").filter({ hasText: "nightly vacuum script" });
   await expect(listed).toContainText("waiting");

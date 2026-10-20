@@ -289,8 +289,10 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
   tested. Keys typed in a dialog opened from a row (or in any textarea)
   never move the table cursor or open a row; closing the form returns
   focus to the button that opened it (the shared `Modal`). A row's button
-  is labelled with the alarm and host; a row whose alarm has the viewer's
-  own waiting request shows "Requested" instead, so the list cannot ask
+  is labelled with the alarm and host. A row whose alarm has a waiting
+  request shows "Requested" (the viewer's own) or "Waiting for approval"
+  (someone else's) instead, like the panel; until the waiting list has
+  loaded, or if it fails, no row offers Suppress…, so the list never asks
   twice.
 
 **Site rules** (`/site-rules`, with `site_rules.read`) lists the site's own

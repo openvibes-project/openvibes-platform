@@ -56,10 +56,17 @@ export function Alarms() {
   const [selected, setSelected] = useSelection(filterKey(params));
   const chosen = () => rows.filter((a) => selected.has(a.id));
   const cases = useCaseBadges("alarm");
-  // Alarms with my own waiting request show it, not a second Suppress….
+  // An alarm with a waiting request shows it, never a second Suppress…;
+  // until the list of waiting requests is known (or if it fails), no row offers one.
   const { can } = useSession();
-  const waiting = useResource<{ items: AlarmSuppression[] }>(can("alarms.suppressions.read") && can("alarms.suppress") ? "/api/v1/alarm-suppressions?state=waiting" : null);
-  const requested = useMemo(() => new Set((waiting.data?.items ?? []).filter((s) => s.can_withdraw && s.alarm_id).map((s) => s.alarm_id)), [waiting.data]);
+  const readsRequests = can("alarms.suppressions.read") && can("alarms.suppress");
+  const waiting = useResource<{ items: AlarmSuppression[] }>(readsRequests ? "/api/v1/alarm-suppressions?state=waiting" : null);
+  const requests = useMemo(() => {
+    const byAlarm = new Map<string, boolean>();
+    for (const s of waiting.data?.items ?? []) if (s.alarm_id) byAlarm.set(s.alarm_id, (byAlarm.get(s.alarm_id) ?? false) || s.can_withdraw);
+    return byAlarm;
+  }, [waiting.data]);
+  const offers = !readsRequests || (waiting.data !== undefined && !waiting.error);
   const top = panels[panels.length - 1];
   // An empty filtered page: does any alarm exist at all? If not, the
   // empty state explains how to turn alarms on, not the chips.
@@ -92,9 +99,9 @@ export function Alarms() {
             { key: "count", header: "Count", numeric: true, width: "80px", sort: (a) => a.count, render: (a) => <span className="num">{a.count}</span> },
             { key: "state", header: "Triage", width: "130px", hideBelow: 760, sort: (a) => a.state, render: (a) => <TriageBadge state={a.state} /> },
             { key: "last", header: "Last seen", width: "120px", hideBelow: 900, sort: (a) => a.last_seen, render: (a) => <span className="subtle"><Ago value={a.last_seen} /></span> },
-            { key: "suppress", header: "Suppress", width: "120px", hideBelow: 900, render: (a) => requested.has(a.id)
-              ? <span className="badge badge--plain" title="Your suppression request waits for approval">Requested</span>
-              : <SuppressButton alarm={a} label={`Suppress… ${a.message} on ${a.hostname ?? a.agent_id}`} /> },
+            { key: "suppress", header: "Suppress", width: "140px", hideBelow: 900, render: (a) => requests.has(a.id)
+              ? <span className="badge badge--plain">{requests.get(a.id) ? "Requested" : "Waiting for approval"}</span>
+              : offers && <SuppressButton alarm={a} label={`Suppress… ${a.message} on ${a.hostname ?? a.agent_id}`} /> },
           ]} />
       )}
       <BulkBar kind="alarms" noun={selected.size === 1 ? "alarm" : "alarms"} count={selected.size} onClear={() => setSelected(new Set())}
