@@ -106,5 +106,23 @@ async fn settings_are_typed_guarded_and_audited() {
         (&recent[1]["old"], &recent[1]["new"]),
         (&json!(null), &json!(30))
     );
+
+    // The audit list filters by action prefix (Recent changes on the pages).
+    let since = "/api/v1/audit-events?since=2000-01-01T00%3A00%3A00Z";
+    let (status, body) = fx
+        .call(a, "GET", &format!("{since}&action_prefix=settings."), None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let items = body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert!(items.iter().all(|i| i["action"] == "settings.changed"));
+    let long = "a".repeat(65);
+    for bad in ["", "Settings.", "settings-", "settings.%25", long.as_str()] {
+        let (status, body) = fx
+            .call(a, "GET", &format!("{since}&action_prefix={bad}"), None)
+            .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+        assert_eq!(body["code"], "invalid_query");
+    }
     fx.db.drop().await;
 }

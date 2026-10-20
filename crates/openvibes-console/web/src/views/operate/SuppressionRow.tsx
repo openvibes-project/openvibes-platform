@@ -32,9 +32,9 @@ const whereText = (s: AlarmSuppression) =>
       : s.where.kind === "all" ? "All hosts" : "a device";
 const whatText = (what: string) => what === "program" ? "Program" : what === "command" ? "Exact command" : what.charAt(0).toUpperCase() + what.slice(1);
 
-/** The suppress form's fields from a rejected row, for "Ask again…". */
-function again(s: AlarmSuppression): Partial<SuppressFields> {
-  const where = s.where.kind === "group" && s.where.group_id ? `group:${s.where.group_id}` : s.where.kind === "all" ? "all" : "host";
+/** The suppress form's fields from a rejected row, for "Ask again…"; a deleted group stays `group:` so the form says it is gone. */
+export function again(s: AlarmSuppression): Partial<SuppressFields> {
+  const where = s.where.kind === "group" ? `group:${s.where.group_id ?? ""}` : s.where.kind === "all" ? "all" : "host";
   return { ...(s.what === "command" || s.what === "program" ? { what: s.what } : {}), where, forDays: s.for_days ?? null, reason: s.reason };
 }
 
@@ -81,10 +81,11 @@ export function SuppressionRow({ s, focus, onDone }: { s: AlarmSuppression; focu
   };
   const [label, tone] = STATUS[s.status] ?? [s.status, "badge--outline"];
   const n = s.would_close;
+  const name = s.exe ?? s.rule_id;
   return (
     <li className="stack suppression-row" data-id={s.id} tabIndex={-1} ref={self}>
       <div className="row row--between">
-        <span className="mono">{s.exe ?? s.rule_id}</span>
+        <span className="mono">{name}</span>
         <span className={`badge badge--plain ${tone}`}>{label}</span>
       </div>
       <div className="row suppression-row__chips">
@@ -102,13 +103,13 @@ export function SuppressionRow({ s, focus, onDone }: { s: AlarmSuppression; focu
       {rejecting ? <RejectForm id={s.id} onDone={() => onDone(s.id, false)} onCancel={() => { cancelled.current = true; setRejecting(false); }} /> : (
         <div className="row suppression-row__actions">
           {s.alarm_id && <ObjectLink to={{ kind: "alarm", id: s.alarm_id }}>Open alarm</ObjectLink>}
-          {s.can_decide && <button type="button" className="button button--small button--primary" disabled={busy} onClick={() => run("POST", "/approve", false)}>Approve</button>}
-          {s.can_decide && <button type="button" className="button button--small" ref={rejectButton} disabled={busy} onClick={() => setRejecting(true)}>Reject…</button>}
-          {s.can_withdraw && <button type="button" className="button button--small" disabled={busy} onClick={() => run("POST", "/withdraw", true)}>Withdraw</button>}
+          {s.can_decide && <button type="button" className="button button--small button--primary" aria-label={`Approve ${name}`} disabled={busy} onClick={() => run("POST", "/approve", false)}>Approve</button>}
+          {s.can_decide && <button type="button" className="button button--small" ref={rejectButton} aria-label={`Reject… ${name}`} disabled={busy} onClick={() => setRejecting(true)}>Reject…</button>}
+          {s.can_withdraw && <button type="button" className="button button--small" aria-label={`Withdraw ${name}`} disabled={busy} onClick={() => run("POST", "/withdraw", true)}>Withdraw</button>}
           {s.can_remove && (
-            <Confirm danger label="Remove it? Matching alarms raise again from now on." onConfirm={async () => { await act("DELETE", path(s.id)); onDone(s.id, true); }}>Remove…</Confirm>
+            <Confirm danger buttonLabel={`Remove… ${name}`} label="Remove it? Matching alarms raise again from now on." onConfirm={async () => { await act("DELETE", path(s.id)); onDone(s.id, true); }}>Remove…</Confirm>
           )}
-          {s.status === "rejected" && s.alarm_id && can("alarms.suppress") && <button type="button" className="button button--small" onClick={() => setAsking(true)}>Ask again…</button>}
+          {s.status === "rejected" && s.alarm_id && can("alarms.suppress") && <button type="button" className="button button--small" aria-label={`Ask again… ${name}`} onClick={() => setAsking(true)}>Ask again…</button>}
         </div>
       )}
       {asking && s.alarm_id && <SuppressDialog alarmId={s.alarm_id} initial={again(s)} onClose={() => setAsking(false)} />}

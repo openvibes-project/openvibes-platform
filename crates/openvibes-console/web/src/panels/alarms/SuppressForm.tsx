@@ -40,7 +40,10 @@ const FOR = [{ value: "7", label: "7 days" }, { value: "30", label: "30 days" },
 export function SuppressForm({ source, options, initial, onClose }: {
   source: SuppressSource; options: AlarmSuppressionOptions; initial?: Partial<SuppressFields> | undefined; onClose: () => void;
 }) {
-  const [fields, setFields] = useState<SuppressFields>({ what: "program", where: "host", forDays: 7, reason: "", ...initial });
+  const choices = whereChoices(source, options);
+  // "Ask again…" may name a group (or all hosts) the asker can't choose, or a deleted group: say so and start at this host.
+  const [lost] = useState(() => initial?.where !== undefined && !choices.some((c) => c.value === initial.where) ? initial.where : undefined);
+  const [fields, setFields] = useState<SuppressFields>({ what: "program", forDays: 7, reason: "", ...initial, where: lost ? "host" : initial?.where ?? "host" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const set = (patch: Partial<SuppressFields>) => setFields((f) => ({ ...f, ...patch }));
@@ -70,7 +73,8 @@ export function SuppressForm({ source, options, initial, onClose }: {
             <span className="mono subtle">{fields.what === "program" ? `${source.exe}, with any arguments` : [source.exe, ...source.args].join(" ")}</span>
           </SelectField>
           <SelectField label="Where">
-            <Select label="Where" value={fields.where} onChange={(where) => set({ where })} options={whereChoices(source, options)} disabled={busy} />
+            <Select label="Where" value={fields.where} onChange={(where) => set({ where })} options={choices} disabled={busy} />
+            {lost && <span className="subtle" role="note">{lost === "all" ? "All hosts" : "The group this was for"} isn't one you can choose; pick where it applies.</span>}
           </SelectField>
           <SelectField label="For">
             <Segmented label="For" value={fields.forDays === null ? "" : String(fields.forDays)} onChange={(v) => set({ forDays: v === "" ? null : Number(v) })} options={FOR} />

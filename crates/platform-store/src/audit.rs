@@ -41,6 +41,8 @@ pub struct AuditQuery {
     pub action: Option<String>,
     /// Optional exact result filter.
     pub result: Option<String>,
+    /// Optional action prefix, such as `alarm.suppression.`.
+    pub action_prefix: Option<String>,
     /// Exclusive keyset cursor.
     pub after: Option<AuditCursor>,
     /// Bounded page size.
@@ -233,6 +235,7 @@ pub async fn events(client: &Client, query: &AuditQuery) -> Result<AuditPage, St
                AND ($4::text IS NULL OR action = $4)
                AND ($5::text IS NULL OR result = $5)
                AND ($6::boolean = false OR (at, id) < ($7, $8))
+               AND ($10::text IS NULL OR starts_with(action, $10))
              ORDER BY at DESC, id DESC LIMIT $9",
             &[
                 &query.since,
@@ -244,6 +247,7 @@ pub async fn events(client: &Client, query: &AuditQuery) -> Result<AuditPage, St
                 &after.map(|cursor| cursor.at),
                 &after.map(|cursor| cursor.id),
                 &(i64::from(query.limit.get()) + 1),
+                &query.action_prefix,
             ],
         )
         .await?;

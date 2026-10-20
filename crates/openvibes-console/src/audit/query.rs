@@ -10,6 +10,7 @@ pub(crate) struct AuditEventListParams {
     pub(super) actor: Option<String>,
     pub(super) action: Option<String>,
     pub(super) result: Option<String>,
+    pub(super) action_prefix: Option<String>,
     pub(super) cursor: Option<String>,
     pub(super) limit: Option<u16>,
 }
@@ -32,6 +33,8 @@ pub(super) struct AuditEventCursorToken {
     pub(super) actor: Option<String>,
     pub(super) action: Option<String>,
     pub(super) result: Option<String>,
+    #[serde(default)]
+    pub(super) action_prefix: Option<String>,
     pub(super) at: String,
     pub(super) id: i64,
 }

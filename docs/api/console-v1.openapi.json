@@ -1866,6 +1866,15 @@
             }
           },
           {
+            "name": "action_prefix",
+            "in": "query",
+            "description": "Actions starting with this ([a-z_.], at most 64 characters)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,

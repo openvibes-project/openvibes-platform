@@ -50,8 +50,9 @@ export function registerSettingsRoutes(ctx: DemoContext) {
   });
   route("GET", "/api/v1/audit-events", "audit.read", (_, query) => {
     const since = Date.parse(query.get("since") ?? "");
-    if (Number.isNaN(since) || since > Date.now()) return problem(400, "invalid_query", "Audit event query parameters are invalid");
-    return json(page(data.audit.filter((event) => Date.parse(event.at) >= since), query));
+    const prefix = query.get("action_prefix");
+    if (Number.isNaN(since) || since > Date.now() || (prefix !== null && !/^[a-z_.]{1,64}$/.test(prefix))) return problem(400, "invalid_query", "Audit event query parameters are invalid");
+    return json(page(data.audit.filter((event) => Date.parse(event.at) >= since && event.action.startsWith(prefix ?? "")), query));
   });
   route("GET", "/api/v1/assistant-internet", "assistant.admin", () => json(data.assistantInternet));
   route("PUT", "/api/v1/assistant-internet", "assistant.admin", (_, __, body, headers) => {

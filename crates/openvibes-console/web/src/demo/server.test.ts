@@ -182,6 +182,20 @@ describe("demo server", () => {
     expect((recent.items as { at: string }[]).every((e) => Date.parse(e.at) >= Date.now() - 3_600_000 - 1000)).toBe(true);
   });
 
+  it("filters audit events by action prefix, validated like the real API", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    expect((await server.handle("PATCH", "/api/v1/settings/suppressions.require_approval", { value: true })).status).toBe(200);
+    const since = `since=${new Date(Date.now() - 30 * 86_400_000).toISOString()}`;
+    const all = (await json(await server.handle("GET", `/api/v1/audit-events?limit=100&${since}`))).items as { action: string }[];
+    const prefixed = (await json(await server.handle("GET", `/api/v1/audit-events?limit=100&${since}&action_prefix=settings.`))).items as { action: string }[];
+    expect(prefixed.length).toBeGreaterThan(0);
+    expect(prefixed.every((e) => e.action.startsWith("settings."))).toBe(true);
+    expect(prefixed.length).toBeLessThan(all.length);
+    for (const bad of ["", "Alarm.", "a%25", "a".repeat(65)]) {
+      expect((await server.handle("GET", `/api/v1/audit-events?${since}&action_prefix=${bad}`)).status).toBe(400);
+    }
+  });
+
   it("needs an Idempotency-Key to create an enrollment token, and a replay never returns the secret", async () => {
     const server = createDemoServer({ persona: "admin" });
     const body = { label: "x", max_uses: 1, expires_in_hours: 1 };

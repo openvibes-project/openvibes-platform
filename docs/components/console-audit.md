@@ -28,8 +28,10 @@ matching `If-Match` version. Audit cleanup remains a bounded maintenance
 operation and must use the effective policy cutoff.
 
 `GET /api/v1/audit-events` accepts a required `since`, optional exclusive
-`until`, exact `actor`/`action`/`result` filters, and a limit from 1 to 100.
-Opaque cursors bind all filters. Successful reads append `audit.accessed`; the
+`until`, exact `actor`/`action`/`result` filters, an `action_prefix` filter
+(`[a-z_.]`, 1 to 64 characters, such as `alarm.suppression.`; anything else
+is `400 invalid_query`), and a limit from 1 to 100. Opaque cursors bind all
+filters. Successful reads append `audit.accessed`; the
 response does not include event details or request source metadata.
 `GET /api/v1/audit-export.csv` accepts the same exact filters and requires the
 global `audit.export` capability. Exports are capped at 10,000 rows and 5 MiB;

@@ -22,14 +22,18 @@ const CARDS = [
 const anchor = (key: string) => `suppressions-${key}`;
 const PREFIX = "alarm.suppression.";
 
-function Recent({ lines }: { lines: readonly AuditEvent[] }) {
+/** `loading` and `failed` say so in the card instead of looking empty. */
+type RecentLines = readonly AuditEvent[] | "loading" | "failed";
+
+function Recent({ lines }: { lines: RecentLines }) {
+  const none = lines === "loading" ? "Loading recent changes…" : lines === "failed" ? "Recent changes could not be loaded; the audit log has them." : "No suppression changes in the last 30 days.";
   return (
     <Card title="Recent changes" aside={<a {...link("/audit", { q: PREFIX })}>Audit log</a>}>
-      {lines.length === 0 ? <p className="subtle person-page__none">Nothing recorded yet.</p> : (
+      {typeof lines === "string" || lines.length === 0 ? <p className="subtle person-page__none">{none}</p> : (
         <ul className="person-page__activity">
           {lines.map((e) => (
             <li key={e.id}>
-              <span>{auditActionLabel(e.action)}{e.target ? ` #${e.target}` : ""}</span>
+              <span>{auditActionLabel(e.action)}{e.target_id ? ` #${e.target_id}` : ""}</span>
               <span className="subtle">{e.actor} · {ago(e.at)}</span>
             </li>
           ))}
@@ -40,7 +44,7 @@ function Recent({ lines }: { lines: readonly AuditEvent[] }) {
 }
 
 /** The screen from the list; `recent` is undefined without audit access (the card is hidden). */
-export function AlarmSuppressionsBody({ items, recent }: { items: readonly AlarmSuppression[]; recent?: readonly AuditEvent[] | undefined }) {
+export function AlarmSuppressionsBody({ items, recent }: { items: readonly AlarmSuppression[]; recent?: RecentLines | undefined }) {
   // The row that moved to another card keeps focus there.
   const [focus, setFocus] = useState<string>();
   const done = (card: string) => (id: string, gone: boolean) => {
@@ -91,11 +95,9 @@ export function AlarmSuppressions() {
   const { can } = useSession();
   const [since] = useState(() => new Date(Date.now() - 30 * 86_400_000).toISOString());
   const list = useResource<{ items: AlarmSuppression[] }>("/api/v1/alarm-suppressions");
-  // ponytail: the audit API filters by exact action only, so the newest 100
-  // events of 30 days are filtered here; a prefix filter if this misses lines.
-  const audit = useResource<{ items: AuditEvent[] }>(can("audit.read") ? `/api/v1/audit-events?since=${encodeURIComponent(since)}&limit=100` : null);
+  const audit = useResource<{ items: AuditEvent[] }>(can("audit.read") ? `/api/v1/audit-events?since=${encodeURIComponent(since)}&action_prefix=${PREFIX}&limit=8` : null);
   if (list.error) return <div className="view-pad"><ErrorBox error={list.error} /></div>;
   if (!list.data) return <Loading />;
-  const recent = audit.data?.items.filter((e) => e.action.startsWith(PREFIX)).slice(0, 8);
+  const recent = !can("audit.read") ? undefined : audit.error ? "failed" : audit.data?.items ?? "loading";
   return <AlarmSuppressionsBody items={list.data.items} recent={recent} />;
 }

@@ -24,7 +24,9 @@ use crate::{
         ("since" = String, Query, description = "Inclusive RFC3339 lower bound"),
         ("until" = Option<String>, Query, description = "Exclusive RFC3339 upper bound"),
         ("actor" = Option<String>, Query), ("action" = Option<String>, Query),
-        ("result" = Option<String>, Query), ("cursor" = Option<String>, Query),
+        ("result" = Option<String>, Query),
+        ("action_prefix" = Option<String>, Query, description = "Actions starting with this ([a-z_.], at most 64 characters)"),
+        ("cursor" = Option<String>, Query),
         ("limit" = Option<u16>, Query)
     ),
     responses((status = 200, description = "Safe audit event page", body = crate::AuditEventPage))
@@ -81,6 +83,13 @@ pub(crate) async fn authenticated_audit_events(
         .into_iter()
         .flatten()
         .any(|v| v.is_empty() || v.len() > 128 || v.chars().any(char::is_control))
+        || params.action_prefix.as_deref().is_some_and(|v| {
+            v.is_empty()
+                || v.len() > 64
+                || !v
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b == b'_' || b == b'.')
+        })
     {
         return invalid_query();
     }
@@ -117,6 +126,7 @@ pub(crate) async fn authenticated_audit_events(
                 || token.actor != params.actor
                 || token.action != params.action
                 || token.result != params.result
+                || token.action_prefix != params.action_prefix
             {
                 return invalid_query();
             }
@@ -140,6 +150,7 @@ pub(crate) async fn authenticated_audit_events(
             actor: params.actor.clone(),
             action: params.action.clone(),
             result: params.result.clone(),
+            action_prefix: params.action_prefix.clone(),
             after,
             limit,
         },
@@ -168,6 +179,7 @@ pub(crate) async fn authenticated_audit_events(
             actor: params.actor,
             action: params.action,
             result: params.result,
+            action_prefix: params.action_prefix,
             at: cursor.at.to_rfc3339_opts(SecondsFormat::Nanos, true),
             id: cursor.id,
         };

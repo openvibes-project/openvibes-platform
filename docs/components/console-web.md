@@ -336,10 +336,10 @@ an existing agent's `agent.toml`.
 - **Alarm suppressions** (`/alarm-suppressions`, `g q`; approved screen 14,
   `views/operate/AlarmSuppressions.tsx` and `SuppressionRow.tsx`), in the
   shared layout. Left: By status (Waiting / Active with expired / Rejected,
-  counts linking to their cards) and Recent changes: the newest
-  `alarm.suppression.*` audit lines, shown with `audit.read` only. The
-  audit API filters by exact action, so the page reads the newest 100
-  events of 30 days and filters them in the browser. Right: one card per
+  counts linking to their cards) and Recent changes: the newest eight
+  `alarm.suppression.*` audit lines of 30 days (`action_prefix`), each
+  with its suppression number, shown with `audit.read` only; while loading,
+  empty or failed the card says so in words. Right: one card per
   status; each row shows the program, What/Where/For chips, the quoted
   reason, "asked by … · when", "Would have closed N alarms in the last 7
   days" on waiting rows ("at least N" when capped), the status badge (a
@@ -347,7 +347,11 @@ an existing agent's `agent.toml`.
   Reject… with an inline required reason (`can_decide`), Withdraw
   (`can_withdraw`), Remove… with a confirm (`can_remove`), and Ask again…
   (rejected rows with an alarm, for `alarms.suppress`) opening the
-  suppress form prefilled from the row. Each action is busy until it
+  suppress form prefilled from the row (alarm, what, where, for, reason);
+  when the row's group is gone or outside the asker's reach (or all hosts
+  is), the form starts at this host and says "The group this was for
+  isn't one you can choose; pick where it applies." Every action button's
+  accessible name names the row's program ("Approve /usr/bin/sh"). Each action is busy until it
   returns, shows errors in `role=alert`, reloads the list, the menu count
   and recent changes, and toasts "Saved · recorded in the audit log"; a
   row that moves to another card keeps focus, and a row that leaves
@@ -591,7 +595,8 @@ triage on alarms and findings stays as it is.
     (`e2e/live/teams.spec.ts`, helpers in `e2e/live/helpers.ts`) runs two
     teams against the real server: each sees and changes only its hosts,
     and a team lead gives only roles inside their access (see
-    console-rbac.md, Live check).
+    console-rbac.md, Live check). `e2e/live/suppressions.spec.ts` runs
+    a suppression through approval by the other team lead (same section).
 - **Host groups (`views/admin/settings/HostGroups.tsx`, `views/admin/groups/`):**
   - **Purpose:** Settings › Host groups (approved screen 9) lists the
     groups, automatic first, then rule, then manual: Group (name, kind

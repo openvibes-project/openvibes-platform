@@ -11,7 +11,8 @@ vi.hoisted(() => {
 import type { AlarmSuppression, AuditEvent } from "../../api/types";
 import { SessionContext } from "../../app/session";
 import { AlarmSuppressionsBody } from "./AlarmSuppressions";
-import { RejectForm } from "./SuppressionRow";
+import { bodyOf } from "../../panels/alarms/SuppressForm";
+import { RejectForm, again } from "./SuppressionRow";
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 const row = (id: string, more: Partial<AlarmSuppression> = {}): AlarmSuppression => ({
@@ -28,9 +29,9 @@ const items: AlarmSuppression[] = [
   row("6", { status: "rejected", decided_by: "Lee", decision_reason: "too broad", alarm_id: "9002" }),
 ];
 const recent: AuditEvent[] = [
-  { id: "a1", at: hoursAgo(1), actor: "lee", action: "alarm.suppression.rejected", result: "success", target: "6" },
+  { id: "a1", at: hoursAgo(1), actor: "lee", action: "alarm.suppression.rejected", result: "success", target: "alarm_suppression", target_id: "6" },
 ];
-const html = (can: (p: string) => boolean = () => true, audit: AuditEvent[] | null = recent) => renderToStaticMarkup(
+const html = (can: (p: string) => boolean = () => true, audit: AuditEvent[] | "loading" | "failed" | null = recent) => renderToStaticMarkup(
   <SessionContext.Provider value={{ session: undefined, demo: false, can, canEverywhere: can }}>
     <AlarmSuppressionsBody items={items} recent={audit ?? undefined} />
   </SessionContext.Provider>,
@@ -50,7 +51,13 @@ describe("AlarmSuppressions", () => {
     expect(out).toMatch(/href="#suppressions-active"[^>]*>Active<\/a><span[^>]*>3</);
     expect(out).toMatch(/href="#suppressions-rejected"[^>]*>Rejected<\/a><span[^>]*>1</);
     expect(out.indexOf("By status")).toBeLessThan(out.indexOf("Recent changes"));
-    expect(out).toContain("Rejected a suppression");
+    expect(out).toContain("Rejected a suppression #6");
+    expect(out).not.toContain("#alarm_suppression");
+  });
+  it("says what an empty, loading or failed Recent changes means", () => {
+    expect(html(undefined, [])).toContain("No suppression changes in the last 30 days.");
+    expect(html(undefined, "loading")).toContain("Loading recent changes…");
+    expect(html(undefined, "failed")).toContain("Recent changes could not be loaded");
   });
   it("hides Recent changes without audit access", () => {
     expect(html((p) => p !== "audit.read", null)).not.toContain("Recent changes");
@@ -103,6 +110,14 @@ describe("AlarmSuppressions", () => {
     expect(rowOf(out, "6")).toContain(">Ask again…</button>");
     expect(rowOf(html((p) => p !== "alarms.suppress"), "6")).not.toContain("Ask again");
   });
+  it("names the row in each action's label, keeping the visible text", () => {
+    const out = html();
+    expect(rowOf(out, "1")).toContain('aria-label="Approve /usr/bin/sh"');
+    expect(rowOf(out, "1")).toContain('aria-label="Reject… /usr/bin/sh"');
+    expect(rowOf(out, "2")).toContain('aria-label="Withdraw /usr/bin/sh"');
+    expect(rowOf(out, "3")).toContain('aria-label="Remove… /usr/bin/sh"');
+    expect(rowOf(out, "6")).toContain('aria-label="Ask again… /usr/bin/sh"');
+  });
   it("puts waiting rows in Waiting and expired ones in Active", () => {
     const out = html();
     expect(cardOf(out, "Waiting")).toContain('data-id="2"');
@@ -118,5 +133,20 @@ describe("RejectForm", () => {
     expect(form("   ")).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>Reject<\/button>/);
     expect(form("too broad")).not.toMatch(/type="submit"[^>]*disabled/);
     expect(form("")).toContain("Reason (required)");
+  });
+});
+
+describe("Ask again…", () => {
+  const defaults = { what: "program", where: "host", forDays: 7, reason: "" } as const;
+  it("prefills the alarm, what, where, for and reason of the rejected row", () => {
+    const rejected = row("7", { status: "rejected", what: "command", where: { kind: "group", group_id: "g-web", group_name: "Web" }, for_days: 30, reason: "nightly job", alarm_id: "9003" });
+    expect(again(rejected)).toEqual({ what: "command", where: "group:g-web", forDays: 30, reason: "nightly job" });
+    expect(bodyOf(rejected.alarm_id ?? "", { ...defaults, ...again(rejected) }))
+      .toEqual({ alarm_id: "9003", what: "command", where: { kind: "group", group_id: "g-web" }, for_days: 30, reason: "nightly job" });
+    expect(again(row("8", { where: { kind: "all" }, for_days: null }))).toMatchObject({ what: "program", where: "all", forDays: null });
+    expect(again(row("9"))).toMatchObject({ where: "host", forDays: 7 });
+  });
+  it("keeps a deleted group as a group, so the form can say it is gone", () => {
+    expect(again(row("10", { where: { kind: "group", group_name: null } })).where).toBe("group:");
   });
 });

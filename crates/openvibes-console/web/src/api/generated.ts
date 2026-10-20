@@ -6589,6 +6589,8 @@ export interface operations {
                 actor?: string;
                 action?: string;
                 result?: string;
+                /** @description Actions starting with this ([a-z_.], at most 64 characters) */
+                action_prefix?: string;
                 cursor?: string;
                 limit?: number;
             };

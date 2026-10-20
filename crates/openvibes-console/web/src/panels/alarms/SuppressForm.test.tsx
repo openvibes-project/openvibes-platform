@@ -36,6 +36,15 @@ describe("SuppressForm", () => {
     expect(html()).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>Suppress<\/button>/);
     expect(html(options(), { reason: "health check" })).not.toMatch(/<button[^>]*type="submit"[^>]*disabled/);
   });
+  it("says when the asked-for group or all hosts can't be chosen, and starts at this host", () => {
+    const gone = html(options(), { where: "group:g-old" });
+    expect(gone).toContain("The group this was for isn&#x27;t one you can choose; pick where it applies.");
+    expect(gone).toMatch(/This host \(web-01.example.test\)/);
+    expect(html(options(), { where: "all" })).toContain("All hosts isn&#x27;t one you can choose; pick where it applies.");
+    expect(html(options(), { where: "group:g-web" })).not.toContain("isn&#x27;t one you can choose");
+    expect(html(options({ all_hosts: true }), { where: "all" })).not.toContain("isn&#x27;t one you can choose");
+    expect(html()).not.toContain("isn&#x27;t one you can choose");
+  });
   it("says a request waits when approval is on, and asks to Request", () => {
     const on = html(options({ require_approval: true }), { reason: "x" });
     expect(on).toContain("Someone who can approve on those hosts must accept it. Until then these alarms keep arriving.");
