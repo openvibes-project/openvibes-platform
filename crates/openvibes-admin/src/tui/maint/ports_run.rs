@@ -1,5 +1,5 @@
-//! The run screen of Maintenance › Ports and addresses: the five step rows,
-//! then the result or what failed.
+//! The run screen of Maintenance › Ports and addresses and › Certificates ›
+//! Names: the step rows, then the result or what failed.
 
 use platform_host::{Host, StepState};
 use ratatui::{Frame, text::Line, widgets::Paragraph};
@@ -7,7 +7,7 @@ use ratatui::{Frame, text::Line, widgets::Paragraph};
 use super::failure;
 use crate::tui::{
     app::App,
-    run::{Run, label_states},
+    run::{Kind, Run, label_states},
     ui::{bar::Bar, frame, logo::Header, steps},
 };
 
@@ -49,15 +49,17 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run:
     } else if let Some(at) = run.stopped_at() {
         let why = run.states[at].as_ref().map_or("", StepState::detail);
         let saved = run.work.labels[0].1.contains(&at);
-        lines.extend(failure(
-            t,
-            why,
-            if saved {
-                "Nothing was changed. Try again saves the ports and goes on."
-            } else {
-                "The ports are saved. Try again goes on from here."
-            },
-        ));
+        let (unsaved, kept) = match run.work.kind {
+            Kind::Names { .. } => (
+                "Nothing was changed. Try again saves the names and goes on.",
+                "The names are saved. Try again goes on from here.",
+            ),
+            _ => (
+                "Nothing was changed. Try again saves the ports and goes on.",
+                "The ports are saved. Try again goes on from here.",
+            ),
+        };
+        lines.extend(failure(t, why, if saved { unsaved } else { kept }));
     }
     frame.render_widget(Paragraph::new(lines), area);
 }

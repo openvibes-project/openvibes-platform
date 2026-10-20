@@ -282,3 +282,15 @@ pub fn not_after(cert_pem: &str) -> Result<DateTime<Utc>, PkiError> {
     let seconds = parse(&der)?.validity().not_after.timestamp();
     DateTime::from_timestamp(seconds, 0).ok_or(PkiError::InvalidPem)
 }
+
+/// The common name of the first certificate's issuer, if it has one.
+pub fn issuer_common_name(cert_pem: &str) -> Result<Option<String>, PkiError> {
+    let der = der_of(cert_pem)?;
+    let cert = parse(&der)?;
+    Ok(cert
+        .issuer()
+        .iter_common_name()
+        .next()
+        .and_then(|cn| cn.as_str().ok())
+        .map(str::to_owned))
+}

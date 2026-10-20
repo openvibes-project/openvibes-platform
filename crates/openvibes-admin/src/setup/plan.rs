@@ -372,7 +372,11 @@ pub fn check_name(name: &str) -> Result<(), String> {
     }
 }
 
-fn check_san(san: &str) -> Result<(), String> {
+/// Most extra names a plan holds.
+pub(crate) const MAX_SANS: usize = 16;
+
+/// An IP address or a lowercase DNS name.
+pub(crate) fn check_san(san: &str) -> Result<(), String> {
     if san.parse::<IpAddr>().is_ok() {
         Ok(())
     } else {
@@ -422,8 +426,8 @@ impl PlanArgs {
                 .unwrap_or(super::ports::DISTRIBUTION_DEFAULT),
         );
         super::ports::check_ports(console_port, ingest_port, distribution_port)?;
-        if self.san.len() > 16 {
-            return Err("at most 16 --san".into());
+        if self.san.len() > MAX_SANS {
+            return Err(format!("at most {MAX_SANS} --san"));
         }
         for san in &self.san {
             check_san(san)?;

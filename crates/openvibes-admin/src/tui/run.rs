@@ -61,8 +61,12 @@ pub enum Kind {
         /// The result line, without how long it took.
         done: String,
     },
-    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
-    Names,
+    /// New certificates for changed names; `what` is the title.
+    Names {
+        what: String,
+        /// The result line, without how long it took.
+        done: String,
+    },
 }
 
 impl Kind {
@@ -83,7 +87,7 @@ impl Kind {
             Kind::Report => "Reading the database".into(),
             Kind::Parts { what, .. } => what.clone(),
             Kind::Ports { what, .. } => what.clone(),
-            Kind::Names => "New certificates".into(),
+            Kind::Names { what, .. } => what.clone(),
         }
     }
     pub fn done(&self) -> String {
@@ -99,7 +103,7 @@ impl Kind {
             Kind::Report => "Read".into(),
             Kind::Parts { done, .. } => done.clone(),
             Kind::Ports { done, .. } => done.clone(),
-            Kind::Names => "New certificates made".into(),
+            Kind::Names { done, .. } => done.clone(),
         }
     }
     pub fn stopped(&self) -> String {
@@ -112,7 +116,7 @@ impl Kind {
             Kind::Report => "The database could not be read".into(),
             Kind::Parts { .. } => "The change stopped".into(),
             Kind::Ports { .. } => "The move stopped".into(),
-            Kind::Names => "The change stopped".into(),
+            Kind::Names { .. } => "The change stopped".into(),
         }
     }
     /// What Enter does once the password is typed.
@@ -124,7 +128,7 @@ impl Kind {
             Kind::Fix => "Fix",
             Kind::Uninstall { .. } => "Uninstall",
             Kind::Report => "Read",
-            Kind::Parts { .. } | Kind::Ports { .. } | Kind::Names => "Apply",
+            Kind::Parts { .. } | Kind::Ports { .. } | Kind::Names { .. } => "Apply",
         }
     }
 }

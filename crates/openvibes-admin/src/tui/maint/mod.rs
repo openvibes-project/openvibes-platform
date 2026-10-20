@@ -6,8 +6,12 @@
 pub mod backup;
 #[cfg(test)]
 mod backup_tests;
+mod certs;
+#[cfg(test)]
+mod certs_tests;
 mod database;
 pub mod folder;
+mod names;
 mod parts;
 #[cfg(test)]
 mod parts_tests;
@@ -57,6 +61,8 @@ pub enum Page {
     Repair,
     Parts,
     Ports,
+    Certificates,
+    Names,
     Uninstall,
     WhatsNew,
     /// The folder browser, reached with Tab from a typed folder.
@@ -72,6 +78,8 @@ impl Page {
             Page::Repair => "Repair",
             Page::Parts => "Optional parts",
             Page::Ports => "Ports and addresses",
+            Page::Certificates => "Certificates",
+            Page::Names => "Certificates › Names",
             Page::Uninstall => "Uninstall",
             Page::WhatsNew => "What's new",
             Page::Folder => "Choose a folder",
@@ -95,6 +103,10 @@ impl Page {
             }
             Page::Ports => {
                 "Enter on a port types a new one; Apply moves it and opens the new port."
+            }
+            Page::Certificates => "A report: Enter on Names changes the names agents may use.",
+            Page::Names => {
+                "Enter on a name types it; Add a name adds one; Apply issues new certificates."
             }
             Page::Uninstall => {
                 "Space chooses Keep the data or Remove everything; Uninstall asks first."
@@ -132,12 +144,16 @@ pub struct Maint {
     pub parts: parts::Parts,
     /// Ports and addresses: the saved plan, the edits, the port being typed.
     pub ports: ports::Ports,
+    /// Certificates: the report, read when the page opens.
+    pub certs: certs::Certs,
+    /// Names: the saved plan, the edits, the name being typed.
+    pub names: names::Names,
 }
 
 impl Maint {
     /// A value is being typed on a page: its keys are the page's.
     pub fn editing(&self) -> bool {
-        self.folder.editing() || self.typing || self.ports.typing()
+        self.folder.editing() || self.typing || self.ports.typing() || self.names.typing()
     }
 }
 
@@ -148,6 +164,7 @@ pub enum Then {
     Uninstall,
     Parts,
     Ports,
+    Names,
 }
 
 #[derive(Clone, Copy)]
@@ -157,11 +174,12 @@ enum Entry {
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 9] = [
+const ENTRIES: [(Entry, &str); 10] = [
     (Entry::Page(Page::Update), "Update OpenVIBES"),
     (Entry::Page(Page::Repair), "Repair"),
     (Entry::Page(Page::Parts), "Optional parts"),
     (Entry::Page(Page::Ports), "Ports and addresses"),
+    (Entry::Page(Page::Certificates), "Certificates"),
     (Entry::Legacy(Tab::Setup), "Components and ports"),
     (Entry::Page(Page::Database), "Database"),
     (Entry::Page(Page::Backup), "Back up"),
@@ -181,10 +199,11 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
         Entry::Page(Page::Repair) => "check every step, fix what is wrong".into(),
         Entry::Page(Page::Parts) => "agent on this host · assistant".into(),
         Entry::Page(Page::Ports) => "console, agent connections, rule distribution".into(),
+        Entry::Page(Page::Certificates) => "when they end, the names agents use".into(),
         Entry::Page(Page::Database) => "schema, size, automatic clean-up".into(),
         Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
         Entry::Page(Page::Uninstall) => "remove OpenVIBES from this host".into(),
-        Entry::Page(Page::Folder | Page::WhatsNew) => String::new(),
+        Entry::Page(Page::Names | Page::Folder | Page::WhatsNew) => String::new(),
     }
 }
 
@@ -260,6 +279,8 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
         Page::Repair => repair::draw(frame, head, app),
         Page::Parts => parts::draw(frame, head, app),
         Page::Ports => ports::draw(frame, head, app),
+        Page::Certificates => certs::draw(frame, head, app),
+        Page::Names => names::draw(frame, head, app),
         Page::Uninstall => uninstall::draw(frame, head, app),
         Page::WhatsNew => update::draw_whats_new(frame, head, app),
         Page::Folder => folder::draw(frame, head, app),
@@ -309,6 +330,8 @@ impl<H: Host> App<H> {
             Page::Repair => self.open_repair(),
             Page::Parts => self.open_parts(),
             Page::Ports => self.open_ports(),
+            Page::Certificates => self.open_certificates(),
+            Page::Names => self.open_names(),
             Page::Uninstall => self.open_uninstall(),
             Page::WhatsNew | Page::Folder => {}
         }
@@ -323,6 +346,8 @@ impl<H: Host> App<H> {
             Page::Repair => self.repair_key(key),
             Page::Parts => self.parts_key(key),
             Page::Ports => self.ports_key(key),
+            Page::Certificates => self.certificates_key(key),
+            Page::Names => self.names_key(key),
             Page::Uninstall => self.uninstall_key(key),
             Page::WhatsNew => {}
             Page::Folder => self.browse_key(key),
@@ -337,6 +362,7 @@ impl<H: Host> App<H> {
             Then::Uninstall => self.uninstall_yes(),
             Then::Parts => self.parts_yes(),
             Then::Ports => self.ports_yes(),
+            Then::Names => self.names_yes(),
         }
     }
 
@@ -348,6 +374,7 @@ impl<H: Host> App<H> {
             self.nav.go(Screen::Maint(Page::Uninstall));
         }
         if !background {
+            self.names_ended();
             self.repair_ended();
         }
     }

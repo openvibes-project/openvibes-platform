@@ -185,6 +185,7 @@ fn certificates_are_issued_for_every_name_and_installed() {
         "/var/lib/openvibes-ingest/intermediate.key",
         "INTERMEDIATE KEY",
     );
+    fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
     fake.effect(&with(&ADMIN, &["ca", "issue-server"]), |root| {
         for service in ["ingest", "distribution", "console"] {
             let dir = root.join(format!("run/openvibes-ca/{service}"));
@@ -249,6 +250,51 @@ fn certificates_are_issued_for_every_name_and_installed() {
     assert_eq!(
         fake.text("/etc/openvibes/tls/setup-names"),
         "platform.example.com\n10.0.0.5\nlocalhost\n127.0.0.1\n"
+    );
+}
+
+#[test]
+fn new_certificates_restart_the_tls_services() {
+    let fake = Fake::new("certificates-restart");
+    fake.file("/etc/openvibes/pki/intermediate.crt", "INTERMEDIATE\n");
+    fake.file(
+        "/var/lib/openvibes-ingest/intermediate.key",
+        "INTERMEDIATE KEY",
+    );
+    fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
+    fake.effect(&with(&ADMIN, &["ca", "issue-server"]), |root| {
+        for service in ["ingest", "distribution", "console"] {
+            let dir = root.join(format!("run/openvibes-ca/{service}"));
+            if dir.exists() && !dir.join("platform.example.com.crt").exists() {
+                std::fs::write(
+                    dir.join("platform.example.com.crt"),
+                    format!("{service} CERT\n"),
+                )
+                .unwrap();
+                std::fs::write(
+                    dir.join("platform.example.com.key"),
+                    format!("{service} KEY"),
+                )
+                .unwrap();
+                return;
+            }
+        }
+        panic!("no output directory");
+    });
+    let state = run_step(
+        &fake.ctx(&plan(&[Ingest, Console, Distribution])),
+        Step::Certificates,
+    );
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert_eq!(
+        fake.call(&["/usr/bin/systemctl", "try-restart"]),
+        [
+            "/usr/bin/systemctl",
+            "try-restart",
+            "openvibes-ingest",
+            "openvibes-distribution",
+            "openvibes-console"
+        ]
     );
 }
 
