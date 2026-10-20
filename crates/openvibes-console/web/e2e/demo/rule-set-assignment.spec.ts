@@ -47,9 +47,9 @@ test("L2 is switched on for Lab from the panel, by keyboard too", async ({ page 
   await expect(labSwitch).toHaveAttribute("aria-checked", "true");
   await expect(row(page, "hardening-linux-l2")).toContainText("Off · 1 group on");
   // The host follows: a Lab host waits until L2 is published.
-  await page.goto("/agents?open=agent%3Aagent-00004");
+  await page.goto("/hosts/agent-00004");
   await page.getByRole("tab", { name: "Details" }).click();
-  await expect(page.locator(".inspector dt", { hasText: "Hardening" }).locator("xpath=following-sibling::dd[1]")).toHaveText("L1 on · L2 on (Lab) · waits until published");
+  await expect(page.locator(".host-page dt", { hasText: "Hardening" }).locator("xpath=following-sibling::dd[1]")).toHaveText("L1 on · L2 on (Lab) · waits until published");
   // Space on the focused switch turns it off again.
   await page.goto("/settings?tab=rule-sets&open=rule-set%3Ahardening-linux-l2");
   await labSwitch.focus();
@@ -61,23 +61,23 @@ test("L2 is switched on for Lab from the panel, by keyboard too", async ({ page 
 });
 
 test("hosts: a group switched L1 off, one host pending, one without root facts", async ({ page }) => {
-  await page.goto("/agents?open=agent%3Aagent-00003");
+  await page.goto("/hosts/agent-00003");
   await page.getByRole("tab", { name: "Details" }).click();
-  const hardening = page.locator(".inspector dt", { hasText: "Hardening" }).locator("xpath=following-sibling::dd[1]");
+  const hardening = page.locator(".host-page dt", { hasText: "Hardening" }).locator("xpath=following-sibling::dd[1]");
   await expect(hardening).toHaveText("L1 off (Production) · L2 off");
   const l1 = page.getByRole("list", { name: "Rule sets on this host" }).locator("li").filter({ hasText: "hardening-linux-l1" });
   await expect(l1).toContainText("Not assigned");
   await expect(l1).toContainText("off for Production");
-  await page.goto("/agents?open=agent%3Aagent-00040");
+  await page.goto("/hosts/agent-00040");
   await page.getByRole("tab", { name: "Details" }).click();
   await expect(hardening).toHaveText("L1 on · pending · L2 off");
-  await page.goto("/agents?open=agent%3Aagent-00017");
+  await page.goto("/hosts/agent-00017");
   await page.getByRole("tab", { name: "Details" }).click();
-  await expect(page.locator(".inspector").getByText("Hardening facts unavailable")).toBeVisible();
-  await expect(page.locator(".inspector")).toContainText("has not reported for 3 days (openvibes-agent-facts.timer)");
-  await page.goto("/agents?open=agent%3Aagent-00034");
+  await expect(page.locator(".host-page").getByText("Hardening facts unavailable")).toBeVisible();
+  await expect(page.locator(".host-page")).toContainText("has not reported for 3 days (openvibes-agent-facts.timer)");
+  await page.goto("/hosts/agent-00034");
   await page.getByRole("tab", { name: "Details" }).click();
-  await expect(page.locator(".inspector")).toContainText("has not reported since enrollment (openvibes-agent-facts.timer)");
+  await expect(page.locator(".host-page")).toContainText("has not reported since enrollment (openvibes-agent-facts.timer)");
 });
 
 test("a viewer reads the rule list without its switches, an operator reads the rule list and changes switches", async ({ page }) => {

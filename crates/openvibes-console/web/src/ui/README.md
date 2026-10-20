@@ -4,7 +4,7 @@ Shared building blocks used by views, panels and dashboards. They know nothing a
 
 | File | What it does |
 |---|---|
-| `DataTable.tsx` | The one table every view uses: sort, keyboard, selection, open-in-inspector. |
+| `DataTable.tsx` | The one table every view uses: sort (or the server's, `serverSort`), keyboard, selection, open-in-inspector. |
 | `table.ts` | Logic for DataTable.tsx: stable sort and text filter. |
 | `selection.ts` | Row selection for bulk actions: ranges, all on screen, all matching. |
 | `ViewHeader.tsx` | Header of a list view: title, count, text filter, quick filters, saved views (in the browser; pages move to `list/`). |

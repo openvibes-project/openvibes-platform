@@ -12,7 +12,7 @@ import { Icon } from "../Icon";
 import { Select } from "../Select";
 import { toast } from "../toast";
 import { ColumnsMenu, type ListColumn } from "./ColumnsMenu";
-import { type ListFilter, applyViewChanges, chosenFilters, clearAllChanges, debounce, hasFilters, valueOptions, viewQuery } from "./filters";
+import { type ListFilter, PAGE, applyViewChanges, chosenFilters, clearAllChanges, debounce, hasFilters, valueOptions, viewQuery } from "./filters";
 import { deleteView, saveView, useHiddenColumns, useSavedViews } from "./savedViews";
 
 type Props = {
@@ -81,14 +81,19 @@ export function FilterBarBody({ page, label, placeholder = "Search…", filters,
   const [error, setError] = useState<string>();
   const [confirming, setConfirming] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  // The search reaches the URL 250 ms after the last key (at once on Enter,
-  // leaving the field or the page); until then the field shows what was typed.
+  // The search reaches the URL 250 ms after the last key (at once on Enter
+  // or leaving the field); until then the field shows what was typed. Only
+  // onto this list's own URL: leaving the page drops a search not yet sent.
   const [typed, setTyped] = useState<string>();
-  const [search] = useState(() => debounce((q: string) => {
-    nav.setParams({ q });
-    setTyped((t) => (t === q ? undefined : t));
-  }, 250));
-  useEffect(() => () => search.flush(), [search]);
+  const [search] = useState(() => {
+    const view = nav.location.view;
+    return debounce((q: string) => {
+      if (nav.location.view !== view) return;
+      nav.setParams({ q, [PAGE]: null });
+      setTyped((t) => (t === q ? undefined : t));
+    }, 250);
+  });
+  useEffect(() => () => search.cancel(), [search]);
   // What gets focus once the chip it names is drawn again (a chip turns into its chosen form and back).
   const refocus = useRef<string | null>(null);
   const focusIn = (key: string, selector: string) => (el: HTMLElement | null) => {
@@ -108,7 +113,7 @@ export function FilterBarBody({ page, label, placeholder = "Search…", filters,
   const current = viewQuery(params);
   const filtered = hasFilters(params);
   const chosen = new Map(chosenFilters(filters, params).map((c) => [c.param, c.text]));
-  const set = (param: string, value: string | null) => { refocus.current = param; nav.setParams({ [param]: value }); };
+  const set = (param: string, value: string | null) => { refocus.current = param; nav.setParams({ [param]: value, [PAGE]: null }); };
   const replace = (changes: Record<string, string | null>) => { search.cancel(); setTyped(undefined); nav.setParams(changes); };
   const stopNaming = () => { setNaming(false); setError(undefined); refocus.current = "save"; };
   const save = (name: string) => {

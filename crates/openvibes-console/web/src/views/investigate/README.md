@@ -4,7 +4,7 @@ The lists you investigate from. A row opens its panel from `panels/` in the insp
 
 | File | What it does |
 |---|---|
-| `Agents.tsx` | Hosts (agents): status, version and last report. |
+| `Hosts.tsx` | The Hosts list (screen 16): server filters with counts, saved views, columns, summary line and paging; `/hosts/{id}` shows the host's panel full width until its page is built. |
 | `Alarms.tsx` | Threat alarms, newest first. |
 | `Findings.tsx` | Compliance findings by rule. |
 | `Vulnerabilities.tsx` | Vulnerabilities by advisory. |

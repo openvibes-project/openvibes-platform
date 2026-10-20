@@ -56,7 +56,7 @@ test("number tiles sit two to a row", async ({ page }) => {
 });
 
 test("an agent's host name wraps instead of being cut", async ({ page }) => {
-  await page.goto("/agents");
+  await page.goto("/hosts");
   const host = page.locator("tbody tr").first().locator(".cell-two > span").first();
   await expect(host).toBeVisible();
   expect(await host.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);

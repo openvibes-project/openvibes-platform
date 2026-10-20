@@ -100,3 +100,5 @@ export type SettingChangeView = S["SettingChangeView"];
 export type SavedView = S["SavedViewView"];
 export type SavedViewList = S["SavedViewList"];
 export type ListColumns = S["ListColumnsView"];
+export type HostList = S["HostListView"];
+export type HostRow = S["HostRowView"];

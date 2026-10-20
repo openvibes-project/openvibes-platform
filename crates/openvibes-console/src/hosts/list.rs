@@ -13,7 +13,7 @@ use platform_store::host_list::{
 use serde::Deserialize;
 use utoipa::IntoParams;
 
-use super::list_types::HostListView;
+use super::list_types::{HostListView, problems_value};
 use crate::{
     Permission,
     access::guard::{authenticated_capabilities, permission_denied, scope_of, unavailable_auth},
@@ -164,11 +164,11 @@ pub(crate) async fn list_hosts(
             os,
             descending,
             pick(p.status.as_deref(), "status", HostStatus::parse)?,
-            pick(p.problems.as_deref(), "problems", |v| match v {
-                "critical" => Some(Problems::Critical),
-                "alarms" => Some(Problems::OpenAlarms),
-                "none" => Some(Problems::NoneOpen),
-                _ => None,
+            pick(p.problems.as_deref(), "problems", |v| {
+                Problems::ALL
+                    .iter()
+                    .copied()
+                    .find(|p| problems_value(*p) == v)
             })?,
             pick(p.agent.as_deref(), "agent", AgentAge::parse)?,
             pick(p.sort.as_deref(), "sort", HostSort::parse)?.unwrap_or(HostSort::Host),

@@ -56,45 +56,7 @@ export function selectFindings(all: readonly FindingGroup[], params: URLSearchPa
     && (!ruleSet || g.rule_set_id === ruleSet) && matches([g.latest_message, g.rule_id, g.rule_set_id], q));
 }
 
-/** Newest first: by number ("0.10.0" before "0.9.0"), a release before
- * its pre-release ("0.10.0" before "0.10.0-rc.1"), build metadata ignored. */
-function versionOrder(a: string, b: string): number {
-  const [aCore, aPre] = versionParts(a);
-  const [bCore, bPre] = versionParts(b);
-  return bCore.localeCompare(aCore, "en", { numeric: true })
-    || (aPre === "" ? -1 : 0) - (bPre === "" ? -1 : 0)
-    || bPre.localeCompare(aPre, "en", { numeric: true });
-}
-
-/** "1.2.3-rc.1+build" → ["1.2.3", "rc.1"]. */
-function versionParts(version: string): [string, string] {
-  const plus = version.indexOf("+");
-  const plain = plus < 0 ? version : version.slice(0, plus);
-  const dash = plain.indexOf("-");
-  return dash < 0 ? [plain, ""] : [plain.slice(0, dash), plain.slice(dash + 1)];
-}
-
-/** Whether an agent's `version` is older than `latest` (board #54):
- * one agent claiming a far newer version flags nothing. */
-export function olderThan(version: string, latest: string): boolean {
-  return versionOrder(version, latest) > 0;
-}
-
-/** The Hosts list's agent version cell. Agent and platform are released on
- * their own, so an agent is judged against the latest agent release, never
- * the platform's version; unknown (update check off or offline) marks none. */
-export function agentVersionNote(version: string, latest: string | null | undefined): { older: boolean; title: string } {
-  if (!latest) return { older: false, title: "The latest agent release is not known: the update check is off or offline" };
-  if (olderThan(version, latest)) return { older: true, title: `Older than the latest agent release (${latest})` };
-  return { older: false, title: versionOrder(version, latest) === 0 ? `The latest agent release (${latest})` : `Not older than the latest agent release (${latest})` };
-}
-
-/** The Hosts list badges an online host whose threat alarms are off by a
- * fault; off by choice (process events not enabled) stays quiet. */
-export function alarmsOff(agent: { status: string; alarms?: { state: string; fault: boolean } | null }): boolean {
-  return agent.status === "active" && agent.alarms?.state === "off" && agent.alarms.fault;
-}
-
+/** The dashboard List widget's Hosts rows; the Hosts list itself filters on the server. */
 export function selectAgents(all: readonly Agent[], params: URLSearchParams): Agent[] {
   const status = params.get("status");
   const q = params.get("q") ?? "";

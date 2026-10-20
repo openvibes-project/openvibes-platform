@@ -8,6 +8,8 @@ export type ListFilter = { param: string; label: string; values: readonly { valu
 
 /** Parameters that order the list rather than filter it: Clear all keeps them. */
 const ORDER = new Set(["sort", "dir"]);
+/** The page shown (`offset`): not a filter, not saved in a view; any change of filter or order starts again at the first page. */
+export const PAGE = "offset";
 
 /** The values of a filter as Select options, the count beside each label. */
 export const valueOptions = (filter: ListFilter): SelectOption[] =>
@@ -23,15 +25,16 @@ export function chosenFilters(filters: readonly ListFilter[], params: URLSearchP
 }
 
 /** Whether anything but the order is set: what Clear all and Save view act on. */
-export const hasFilters = (params: URLSearchParams) => [...params.keys()].some((k) => !ORDER.has(k));
+export const hasFilters = (params: URLSearchParams) => [...params.keys()].some((k) => !ORDER.has(k) && k !== PAGE);
 
 /** Clear all: every parameter but the order. */
 export const clearAllChanges = (params: URLSearchParams): Record<string, null> =>
   Object.fromEntries([...params.keys()].filter((k) => !ORDER.has(k)).map((k) => [k, null]));
 
-/** The query a saved view stores: every parameter, sorted, so equal views compare equal. */
+/** The query a saved view stores: every parameter but the page, sorted, so equal views compare equal. */
 export function viewQuery(params: URLSearchParams): string {
   const sorted = new URLSearchParams(params);
+  sorted.delete(PAGE);
   sorted.sort();
   return sorted.toString();
 }

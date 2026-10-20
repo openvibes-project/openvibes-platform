@@ -13,6 +13,7 @@ An in-browser implementation of /api/v1 over invented data, for the GitHub Pages
 | `history.ts` | Synthetic daily history for the metrics history route. |
 | `attack.ts` | A small ATT&CK catalog for the demo. |
 | `hostGroups.ts` | Host-group membership as the store decides it (console_host_in_group), the rule checks and the membership sentence. |
+| `versionOrder.ts` | Agent version order, the twin of the store's version_order.rs (same table test). |
 | `assignments.ts` | The demo's rule-set assignment API, with real status codes. |
 | `cases.ts` | The demo's cases store and its rules. |
 | `suppressions.ts` | Alarm suppressions with approval, as the store decides them, kept in browser storage. |

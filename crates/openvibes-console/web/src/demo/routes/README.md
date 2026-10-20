@@ -12,6 +12,7 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 | `dashboards.ts` | Dashboards and each user's home dashboard. |
 | `findings.ts` | Compliance findings: groups by rule, host matches, history and triage. |
 | `groups.ts` | Host groups: list, page, hosts, preview, create, edit and delete, with the server's refusals. |
+| `hostList.ts` | The Hosts list (`GET /api/v1/hosts`): filters, per-value counts, summary, sort and paging inside the persona's reach. |
 | `hosts.ts` | Hosts (agents), their labels and enrolling new ones. |
 | `lists.ts` | Each person's saved views and hidden columns per list page, kept in the browser and checked on load. |
 | `metrics.ts` | Counts, their history and the ranked-hosts list. |

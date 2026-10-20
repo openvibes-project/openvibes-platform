@@ -1,6 +1,6 @@
 //! The Hosts list answer (`GET /v1/hosts`).
 
-use platform_store::host_list::{HostListPage, HostRow};
+use platform_store::host_list::{HostListPage, HostRow, Problems};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -182,6 +182,15 @@ impl From<HostRow> for HostRowView {
     }
 }
 
+/// The Problems filter's URL spelling (`?problems=`), which its counts use too.
+pub(crate) fn problems_value(p: Problems) -> &'static str {
+    match p {
+        Problems::Critical => "critical",
+        Problems::OpenAlarms => "alarms",
+        Problems::NoneOpen => "none",
+    }
+}
+
 fn counts<T>(rows: Vec<(T, i64)>, name: impl Fn(T) -> String) -> Vec<CountView> {
     rows.into_iter()
         .map(|(v, count)| CountView {
@@ -215,7 +224,7 @@ impl HostListView {
                     })
                     .collect(),
                 label: counts(c.labels, |v| v),
-                problems: counts(c.problems, |v| v.as_str().into()),
+                problems: counts(c.problems, |v| problems_value(v).into()),
                 agent: counts(c.agent, |v| v.as_str().into()),
             },
             summary: HostSummaryLineView {

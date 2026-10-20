@@ -36,7 +36,7 @@ test("sign-in, every view, and no CSP violations or third-party requests", async
   for (const view of [
     "/compliance",
     "/vulnerabilities",
-    "/agents",
+    "/hosts",
     "/settings?tab=enrollment",
     "/settings?tab=rule-sets",
     "/settings?tab=people",

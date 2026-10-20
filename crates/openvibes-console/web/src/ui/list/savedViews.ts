@@ -103,7 +103,9 @@ export function columnSaver(page: string, onChange: (pending: string[] | undefin
     pending = next;
     inFlight += 1;
     onChange(next);
-    chain = chain.then(() => put(page, next)).catch((error: unknown) => { pending = undefined; onError(error); })
+    // A failure keeps the queue's set, so a toggle made meanwhile builds on it;
+    // the server's copy shows again once the queue has drained.
+    chain = chain.then(() => put(page, next)).catch(onError)
       .finally(() => { inFlight -= 1; if (inFlight === 0) { pending = undefined; onChange(undefined); } });
   };
 }

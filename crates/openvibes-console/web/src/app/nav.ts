@@ -2,14 +2,18 @@
 // browser's back button closes panels and returns to earlier views.
 import { useSyncExternalStore } from "react";
 
-import { type AppLocation, type PanelRef, formatLocation, parseLocation, popPanel, pushPanel } from "./location";
+import { type AppLocation, type PanelRef, formatLocation, parseLocation, popPanel, pushPanel, redirect } from "./location";
 
 const base = import.meta.env.BASE_URL;
 const listeners = new Set<() => void>();
 let snapshot: AppLocation = read();
 let snapshotKey = window.location.pathname + window.location.search;
-// An old /findings link: show the URL of the page it now opens.
-if (window.location.pathname.endsWith("/findings")) {
+settle();
+
+/** An old /findings or /agents address: show the URL of the page it now
+ * opens, in place, so history keeps no dead entry (plan ruling 1). */
+function settle() {
+  if (!/\/(findings|agents)$/.test(window.location.pathname)) return;
   snapshotKey = formatLocation(snapshot, base);
   window.history.replaceState(null, "", snapshotKey);
 }
@@ -37,9 +41,11 @@ window.addEventListener("popstate", () => {
     return;
   }
   notify();
+  settle();
 });
 
-function go(next: AppLocation, replace = false) {
+function go(to: AppLocation, replace = false) {
+  const next = redirect(to);
   const url = formatLocation(next, base);
   if (url === window.location.pathname + window.location.search) return;
   if (replace) window.history.replaceState(null, "", url);
@@ -102,5 +108,5 @@ export function useLocation(): AppLocation {
   return useSyncExternalStore((listener) => {
     listeners.add(listener);
     return () => listeners.delete(listener);
-  }, () => snapshot);
+  }, () => snapshot, () => snapshot);
 }

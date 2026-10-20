@@ -13,6 +13,7 @@ import { registerCaseRoutes } from "./routes/cases";
 import { registerDashboardRoutes } from "./routes/dashboards";
 import { registerFindingRoutes } from "./routes/findings";
 import { registerGroupRoutes } from "./routes/groups";
+import { registerHostListRoutes } from "./routes/hostList";
 import { registerHostRoutes } from "./routes/hosts";
 import { registerListRoutes } from "./routes/lists";
 import { registerMetricRoutes } from "./routes/metrics";
@@ -32,6 +33,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   const { permissions, routes } = ctx;
   registerSessionRoutes(ctx);
   registerHostRoutes(ctx);
+  registerHostListRoutes(ctx);
   registerListRoutes(ctx);
   registerFindingRoutes(ctx);
   const settings = registerSettingsRoutes(ctx);

@@ -48,7 +48,7 @@ test("software shows advisories per package and filters to packages in several v
 test("a host page shows its installed software, filterable", async ({ page }) => {
   await page.getByRole("link", { name: "Hosts", exact: true }).click();
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
-  const inspector = page.locator(".inspector");
+  const inspector = page.locator(".host-page");
   await expect(inspector.locator(".panel-header__kind")).toContainText("Host");
   await inspector.getByRole("tab", { name: "Software" }).click();
   const list = inspector.getByRole("list", { name: "Installed software" });
@@ -60,7 +60,7 @@ test("a host page shows its installed software, filterable", async ({ page }) =>
 test("a host page shows its open ports and services; the fleet lists them (Assets v2)", async ({ page }) => {
   await page.getByRole("link", { name: "Hosts", exact: true }).click();
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
-  const inspector = page.locator(".inspector");
+  const inspector = page.locator(".host-page");
   await inspector.getByRole("tab", { name: "Ports" }).click();
   const ports = inspector.getByRole("table", { name: "Open ports" });
   await expect(ports.locator("tr").filter({ hasText: "22/tcp" })).toContainText("sshd.service");
@@ -108,20 +108,20 @@ test("the fleet Ports and Services views work from the keyboard: j moves, Enter 
 });
 
 test("wider than a phone every Host tab is visible: the strip wraps (reviewer, #148)", async ({ page }) => {
-  await page.goto("/agents");
-  await page.getByPlaceholder("Filter by host name, ID or version…").fill("web-");
+  await page.goto("/hosts");
+  await page.getByPlaceholder("Search by host name, IP or range…").fill("web-");
   await page.locator(".view tbody tr").filter({ hasText: "web-" }).first().click();
-  const tabs = page.locator(".inspector").getByRole("tab");
+  const tabs = page.locator(".host-page").getByRole("tab");
   await expect(tabs).toHaveCount(7);
   for (const tab of await tabs.all()) await expect(tab).toBeInViewport({ ratio: 1 });
 });
 
 test("on a phone the Host page's tab strip scrolls itself, never the page", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/agents");
-  await page.getByPlaceholder("Filter by host name, ID or version…").fill("web-");
+  await page.goto("/hosts");
+  await page.getByPlaceholder("Search by host name, IP or range…").fill("web-");
   await page.locator(".view tbody tr, .view .list li").filter({ hasText: "web-" }).first().click();
-  const inspector = page.locator(".inspector");
+  const inspector = page.locator(".host-page");
   await inspector.getByRole("tab", { name: "Services" }).click();
   // Selecting a far tab must not scroll the panel sideways.
   const shifted = await inspector.evaluate((panel) => [...panel.querySelectorAll("*")].some((el) => el.scrollLeft > 0 && !el.classList.contains("tabs") && !el.classList.contains("table-wrap")));
@@ -156,15 +156,15 @@ test("panels load the hosts after the first page with Show more (#104)", async (
 test("a host whose lists were cut says some ports are not listed", async ({ page }) => {
   await page.getByRole("link", { name: "Hosts", exact: true }).click();
   await page.locator(".view tbody tr").filter({ hasText: "build-" }).first().locator("td").nth(1).click();
-  const inspector = page.locator(".inspector");
+  const inspector = page.locator(".host-page");
   await inspector.getByRole("tab", { name: "Ports" }).click();
   await expect(inspector.getByText("some ports not listed")).toBeVisible();
 });
 
 test("a host whose last services report was refused says so above its old lists", async ({ page }) => {
-  await page.getByRole("link", { name: "Hosts", exact: true }).click();
+  await page.goto("/hosts?q=mail-");
   await page.locator(".view tbody tr").filter({ hasText: "mail-" }).first().locator("td").nth(1).click();
-  const inspector = page.locator(".inspector");
+  const inspector = page.locator(".host-page");
   await inspector.getByRole("tab", { name: "Ports" }).click();
   await expect(inspector.getByRole("status").filter({ hasText: "Last report refused" })).toContainText("over 512 KiB");
   await expect(inspector.getByRole("table", { name: "Open ports" })).toBeVisible();
@@ -175,7 +175,7 @@ test("the Host page's tabs follow the left menu's order (#118)", async ({ page }
   const menu = (await page.locator(".rail .rail__label").allTextContents()).map((t) => t.trim());
   await page.getByRole("link", { name: "Hosts", exact: true }).click();
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
-  const tabs = (await page.locator(".inspector").getByRole("tab").allTextContents()).map((t) => t.replace(/\d+$/, "").trim());
+  const tabs = (await page.locator(".host-page").getByRole("tab").allTextContents()).map((t) => t.replace(/\d+$/, "").trim());
   const shared = tabs.filter((t) => menu.includes(t));
   expect(shared).toEqual(menu.filter((m) => shared.includes(m)));
   expect(shared.slice(0, 3)).toEqual(["Alarms", "Compliance", "Vulnerabilities"]);
@@ -183,10 +183,10 @@ test("the Host page's tabs follow the left menu's order (#118)", async ({ page }
 });
 
 test("two hosts compare to only what differs (#120)", async ({ page }) => {
-  await page.goto("/agents?q=web-");
+  await page.goto("/hosts?q=web-");
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  await page.locator(".host-page").getByRole("button", { name: "Compare" }).click();
   const inspector = page.locator(".inspector");
-  await inspector.getByRole("button", { name: "Compare" }).click();
   await inspector.getByRole("list", { name: "Hosts to compare with" }).getByRole("button").filter({ hasText: "db-" }).first().click();
   await expect(inspector.locator(".panel-header")).toContainText("↔");
   const ports = inspector.getByRole("table", { name: "Open ports differences" });
@@ -198,7 +198,7 @@ test("two hosts compare to only what differs (#120)", async ({ page }) => {
 test("a host exports the chosen sections to one CSV (#119)", async ({ page }) => {
   await page.getByRole("link", { name: "Hosts", exact: true }).click();
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
-  const inspector = page.locator(".inspector");
+  const inspector = page.locator(".host-page");
   await inspector.getByRole("button", { name: "Export" }).click();
   const picker = inspector.getByRole("group", { name: "Export this host" });
   await picker.getByLabel("Compliance").uncheck();

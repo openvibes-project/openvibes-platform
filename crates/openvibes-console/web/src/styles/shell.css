@@ -119,6 +119,7 @@
 .cell-two > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-two > :last-child { font-size: 12px; }
 .warn-text { color: var(--warn); }
+.bad-text { color: var(--bad); }
 .link-button { all: unset; cursor: pointer; color: var(--accent); font-weight: 500; }
 .link-button:hover { text-decoration: underline; }
 .link-button:focus-visible { outline: 2px solid var(--focus); border-radius: 3px; }
@@ -310,6 +311,8 @@
 .columns-menu__row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: var(--r-1); font-size: 13px; cursor: pointer; }
 .columns-menu__row:hover { background: var(--surface-2); }
 .summary-line { margin: 0; font-size: 13px; min-height: 1.4em; }
+.host-summary { padding-bottom: 0; }
+.pager { justify-content: flex-end; gap: 8px; }
 .detail-page__icon { display: grid; place-items: center; width: 48px; height: 48px; flex: none; border-radius: var(--r-2); background: var(--surface-2); }
 .detail-page__facts { overflow-wrap: anywhere; }
 .detail-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; padding: 0 24px 24px; }

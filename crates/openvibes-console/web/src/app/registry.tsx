@@ -29,7 +29,7 @@ import { Settings, settingsAccess } from "../views/admin/settings/Settings";
 import { Coverage } from "../views/operate/Coverage";
 import { SiteRules } from "../views/operate/SiteRules";
 import { About } from "../views/help/About";
-import { Agents } from "../views/investigate/Agents";
+import { Hosts } from "../views/investigate/Hosts";
 import { Alarms } from "../views/investigate/Alarms";
 import { AlarmSuppressions } from "../views/operate/AlarmSuppressions";
 import { Ports, Services } from "../views/investigate/Ports";
@@ -60,7 +60,7 @@ export const views: readonly ViewDef[] = [
   { path: "/alarms", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
   { path: "/compliance", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "compliance.read" }], render: () => <Findings /> },
   { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
-  { path: "/agents", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "hosts.read" }], render: () => <Agents /> },
+  { path: "/hosts", prefix: "/hosts/", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "hosts.read" }], render: () => <Hosts /> },
   { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "hosts.read" }], render: () => <Software /> },
   { path: "/ports", label: "Ports", icon: "activity", group: "Investigate", phoneMore: true, keys: "g o", access: [{ permission: "hosts.read" }], render: () => <Ports /> },
   { path: "/services", label: "Services", icon: "layers", group: "Investigate", phoneMore: true, keys: "g u", access: [{ permission: "hosts.read" }], render: () => <Services /> },

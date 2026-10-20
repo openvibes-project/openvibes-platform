@@ -27,8 +27,8 @@ export function ConfidenceBar({ value, wide }: { value: number; wide?: boolean }
   );
 }
 
-const statusTone: Record<string, string> = { active: "ok", stale: "warn", revoked: "bad", imported: "info" };
-const statusText: Record<string, string> = { active: "Online", stale: "Stale", revoked: "Revoked", imported: "Imported" };
+const statusTone: Record<string, string> = { active: "ok", online: "ok", stale: "warn", offline: "warn", revoked: "bad", imported: "info" };
+const statusText: Record<string, string> = { active: "Online", online: "Online", stale: "Stale", offline: "Offline", revoked: "Revoked", imported: "Imported" };
 
 export function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge--${statusTone[status] ?? "plain"}`}>{statusText[status] ?? status}</span>;

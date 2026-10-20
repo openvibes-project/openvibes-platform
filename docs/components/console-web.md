@@ -179,8 +179,8 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   and editing is hidden, "Edit" and "Duplicate to edit" included (the
   dashboard menu says "Editing needs a wider screen"). Below 720px the rail is a bottom bar in which every
   destination fits (icons only, each link keeps its name for screen
-  readers); tables wrap long names, and Agents drops Last heartbeat below
-  480px so host names fit.
+  readers); tables wrap long names, and Hosts keeps only Host and Last
+  heartbeat below 600px so host names fit.
 - **Menu:**
   - Duplicate, Rename and Delete;
   - Share with role (owner with `dashboards.share`): only the roles the
@@ -437,8 +437,36 @@ triage on alarms and findings stays as it is.
 
 ## Assets v1 (hosts and software)
 
-- **Hosts** (`/agents`, the former Agents view): a row opens the **Host
-  page** (the `agent` panel): Findings, Vulnerabilities, **Alarms** (active
+- **Hosts** (`/hosts`, `g a`; approved screen 16): `views/investigate/Hosts.tsx`
+  over `GET /api/v1/hosts`, filtered, counted, sorted and paged on the
+  server. The FilterBar's chips are Status (online, offline, revoked,
+  imported), OS, Group, Label, Problems (has critical, has open alarms,
+  none open) and Agent (older than the latest, the latest), each value with
+  the server's count under the other filters; saved views and columns are
+  the page `hosts`. Columns: Host and IP; OS (distribution, family); Groups
+  (two, then "+n"); Labels; Open problems (alarms, critical, failing, "—"
+  where the viewer may not read that kind on the host); Last heartbeat with
+  the status; Agent version (amber, with a title, when older than the
+  latest agent release; never amber while that release is unknown). The
+  summary line reads "9 online · 4 with an older agent · 4 with critical
+  vulnerabilities" (the older part left out while the latest release is
+  unknown). Sorting (Host, Open problems, Last heartbeat, Agent) is the
+  server's (`DataTable serverSort`; the URL keeps the column key, `agent`
+  sent as `version`); 50 rows a page, Previous and Next, `offset` in the URL
+  (not a filter, not saved in a view; a filter, search or sort change starts
+  again at the first page). The last page stays on screen while the next
+  loads. On first visit, views kept in the browser under
+  `openvibes.v2.views./agents` are imported (`hostsQuery` maps their
+  status values).
+- **Old addresses** (`app/location.ts` `redirect`, plan ruling 1):
+  `/agents?…` reads as `/hosts?…` with `status=active` → `online` and
+  `stale` → `offline`; `/agents?open=agent:ID` and the assistant's
+  `/agents?agent=ID` read as `/hosts/ID`. `app/nav.ts` replaces the URL in
+  place (no dead history entry) on load, Back/Forward, and any in-app
+  navigation to `/agents` (the dashboard List widget's "Open list").
+- **Host page** (`/hosts/{id}`): a row opens it. Until the page of screen
+  17 is built it shows the `agent` panel's content at full width
+  (`.host-page`). The panel itself (still opened from other objects): Findings, Vulnerabilities, **Alarms** (active
   ones), **Software** (the host's packages, filtered on the server by name
   and "Fix available", 200 at a time) and Details (identity, system and
   running kernel, "software as of", threat alarms, groups and labels, certificates).
@@ -449,9 +477,7 @@ triage on alarms and findings stays as it is.
   **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why", "To
   fix: …", and, when there is one, the command in a wrapped code block with
   a copy button; an off host also shows
-  that line at the top of its Alarms tab. The Hosts list adds an "Alarms off"
-  badge beside Online only when the alarms are off by a fault (not when
-  process events were simply not enabled). The list, panel and
+  that line at the top of its Alarms tab. The list, panel and
   host export call `last_seen_at` **Last heartbeat**. Its hover text
   says agents send one about every minute and a host is online within three
   minutes of the last. Online and offline changes show up without a reload:
@@ -478,8 +504,8 @@ other list pages move to them in step 5. `ui/ViewHeader.tsx` keeps working
 for the pages not yet moved; its saved views stay in the browser.
 
 - **FilterBar** (`ui/list/FilterBar.tsx`): the search box (`q` in the URL
-  250 ms after the last key, at once on Enter, blur or leaving the page;
-  "/" focuses it) and one chip per `ListFilter`
+  250 ms after the last key, at once on Enter or blur, and only onto the
+  list's own URL: leaving the page drops a search not yet sent; "/" focuses it) and one chip per `ListFilter`
   (`{ param, label, values: {value, label, count}[] }`, `ui/list/filters.ts`).
   A chip is a Select drawn as a button (`aria-haspopup="listbox"`,
   `aria-expanded`, the Select's keyboard and search); its options show each
@@ -498,7 +524,9 @@ for the pages not yet moved; its saved views stay in the browser.
   disabled until the person's columns have loaded. Each change is a
   `PUT /api/v1/list-columns/{page}` carrying the full set after every
   toggle so far (`columnSaver` queues them, so quick toggles never undo
-  each other); a refusal is a toast.
+  each other); a refusal is a toast, and the queued set stays until the
+  queue drains (a toggle made meanwhile builds on it), then the server's
+  copy shows again.
 - **Saved views** (`ui/list/savedViews.ts`): `useSavedViews(page)` and
   `useHiddenColumns(page)` (undefined until loaded) over `GET /api/v1/saved-views?page=` and
   `GET /api/v1/list-columns/{page}`; `saveView`, `deleteView` and
@@ -526,10 +554,20 @@ for the pages not yet moved; its saved views stay in the browser.
   characters, 1000-character query, 50 views per page, case-blind names, no
   Host column) and messages as `src/lists/saved_views.rs`, kept per person
   in the browser (`openvibes.v2.demo.lists.<user>`) and checked on load.
+- **Demo Hosts list** (`demo/routes/hostList.ts`): `GET /api/v1/hosts`
+  with the same filters, per-value counts, summary, sort and paging, rows
+  inside the persona's `hosts.read` reach and each problem count only where
+  its permission `reaches`; groups from `demo/hostGroups.ts`, labels from
+  the demo data, versions by `demo/versionOrder.ts` (the twin of
+  `version_order.rs`, tested on the same table) against the about/update
+  route's `LATEST_AGENT_VERSION`.
 - **Tests:** `ui/list/FilterBar.test.tsx`, `ui/list/savedViews.test.ts`,
-  `ui/detail/DetailPage.test.tsx`, `demo/routes/lists.test.ts`. Vitest has
-  no DOM: the bar is checked as markup and its actions as the helpers it
-  calls; click and key flows are in the Hosts e2e.
+  `ui/detail/DetailPage.test.tsx`, `demo/routes/lists.test.ts`,
+  `views/investigate/Hosts.test.tsx`, `demo/versionOrder.test.ts`,
+  `app/location.test.ts` (the redirects). Vitest has no DOM: the bar is
+  checked as markup and its actions as the helpers it calls; click and key
+  flows (the chip menu from the keyboard, focus on the new chip's ×,
+  Escape) are in `e2e/demo/hosts.spec.ts`.
 
 ## Interfaces
 

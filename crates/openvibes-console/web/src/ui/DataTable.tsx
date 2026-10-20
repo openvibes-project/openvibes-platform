@@ -6,6 +6,7 @@ import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useStat
 
 import { nav, useLocation } from "../app/nav";
 import { Icon } from "./Icon";
+import { PAGE } from "./list/filters";
 import { MAX_SELECTION, selectAll, selectRange } from "./selection";
 import { type Direction, type SortValue, sortRows } from "./table";
 
@@ -29,16 +30,18 @@ type Props<T> = {
   selection?: { selected: ReadonlySet<string>; onChange: (next: Set<string>) => void };
   label: string;
   compact?: boolean;
+  /** The rows come sorted by the server (the sort is still set in the URL). */
+  serverSort?: boolean;
 };
 
 const STEP = 150;
 
-export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSort, selection, label, compact }: Props<T>) {
+export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSort, selection, label, compact, serverSort }: Props<T>) {
   const { params } = useLocation();
   const sortKey = params.get("sort") ?? defaultSort?.key;
   const direction: Direction = (params.get("dir") as Direction | null) ?? defaultSort?.direction ?? "asc";
   const column = columns.find((candidate) => candidate.key === sortKey && candidate.sort);
-  const sorted = useMemo(() => (column?.sort ? sortRows(rows, column.sort, direction) : [...rows]), [rows, column, direction]);
+  const sorted = useMemo(() => (column?.sort && !serverSort ? sortRows(rows, column.sort, direction) : [...rows]), [rows, column, direction, serverSort]);
   const [shown, setShown] = useState(STEP);
   const [cursor, setCursor] = useState(-1);
   const keyboard = useRef(false);
@@ -62,7 +65,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
   const visibleColumns = columns.filter((candidate) => !candidate.hideBelow || width >= candidate.hideBelow);
   const setSort = (key: string) => {
     const nextDirection = key === sortKey ? (direction === "asc" ? "desc" : "asc") : "asc";
-    nav.setParams({ sort: key, dir: nextDirection });
+    nav.setParams({ sort: key, dir: nextDirection, [PAGE]: null });
   };
   const last = useRef(-1);
   const toggle = (key: string, index: number, shift = false) => {

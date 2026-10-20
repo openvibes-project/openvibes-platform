@@ -163,6 +163,14 @@ async fn an_administrator_sees_rows_counts_and_a_summary() {
         (status_count("online"), status_count("offline")),
         (2.into(), 1.into())
     );
+    // Count values are the URL's spelling, so a chosen value filters.
+    let problems: Vec<(&str, i64)> = body["counts"]["problems"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| (c["value"].as_str().unwrap(), c["count"].as_i64().unwrap()))
+        .collect();
+    assert_eq!(problems, [("critical", 1), ("alarms", 1), ("none", 2)]);
     let groups = body["counts"]["group"].as_array().unwrap();
     assert!(
         groups
@@ -177,6 +185,10 @@ async fn an_administrator_sees_rows_counts_and_a_summary() {
             &format!("{URL}?os=windows&problems=critical"),
             None,
         )
+        .await;
+    assert_eq!(ids(&body), [W1]);
+    let (_, body) = fx
+        .call(&fx.admin, "GET", &format!("{URL}?problems=alarms"), None)
         .await;
     assert_eq!(ids(&body), [W1]);
     let (_, body) = fx

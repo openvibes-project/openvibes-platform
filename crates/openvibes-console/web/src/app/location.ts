@@ -24,7 +24,32 @@ export function parseLocation(pathname: string, search: string, base: string): A
     return [{ kind: value.slice(0, split), id: value.slice(split + 1) }];
   });
   params.delete("open");
-  return { view, panels, params };
+  return redirect({ view, panels, params });
+}
+
+/** An old Hosts query as today's: status active → online, stale → offline;
+ * the sort by seen or version is now by heartbeat or agent, and the old
+ * status and enrolled sorts are gone. */
+export function hostsQuery(query: string): string {
+  const params = new URLSearchParams(query);
+  const status = { active: "online", stale: "offline" }[params.get("status") ?? ""];
+  if (status) params.set("status", status);
+  const sort = params.get("sort");
+  if (sort === "seen" || sort === "version") params.set("sort", sort === "seen" ? "heartbeat" : "agent");
+  else if (sort === "status" || sort === "enrolled") { params.delete("sort"); params.delete("dir"); }
+  return params.toString();
+}
+
+/**
+ * Old addresses as today's (plan ruling 1): `/agents?…` is the Hosts list,
+ * and a host opened there (`?open=agent:ID`, the assistant's `?agent=ID`)
+ * is that host's page.
+ */
+export function redirect(location: AppLocation): AppLocation {
+  if (location.view !== "/agents") return location;
+  const host = location.panels.find((p) => p.kind === "agent")?.id ?? location.params.get("agent");
+  if (host) return { view: `/hosts/${encodeURIComponent(host)}`, panels: location.panels.filter((p) => p.kind !== "agent"), params: new URLSearchParams() };
+  return { ...location, view: "/hosts", params: new URLSearchParams(hostsQuery(location.params.toString())) };
 }
 
 export function formatLocation(location: AppLocation, base: string): string {

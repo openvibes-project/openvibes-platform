@@ -897,7 +897,9 @@ list. Filters `q`, `status`, `os`, `group`, `label`, `problems`
 AND together; `sort` (`host|heartbeat|version|problems`), `dir`, `offset`
 (0..=100000) and `limit` (1..=100, default 50). An invalid value or an
 unknown parameter is 400 `invalid_query` naming the parameter; an unknown
-`group` is an empty result. Rows, per-filter `counts` and the `summary` line
+`group` is an empty result. Each `counts` value is spelled as its URL
+parameter takes it (`problems` counts are `critical`, `alarms`, `none`), so
+a chosen value filters. Rows, per-filter `counts` and the `summary` line
 are inside the caller's `hosts.read` reach; open-alarm, critical and failing
 counts are null for hosts outside the caller's `alarms.read`,
 `vulnerabilities.read` or `compliance.read` reach. `latest_agent_version` is

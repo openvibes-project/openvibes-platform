@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activeCount, agentVersionNote, alarmsOff, olderThan, selectAgents, selectAudit, selectFindings, severityBadge } from "./rows";
+import { activeCount, selectAgents, selectAudit, selectFindings, severityBadge } from "./rows";
 
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
@@ -29,43 +29,9 @@ describe("list selection matches the views", () => {
     expect(selectAgents(all, new URLSearchParams("q=web")).map((a) => a.id)).toEqual(["web"]);
   });
 
-  it("agents: the Hosts list badges only online hosts whose alarms are off by a fault", () => {
-    const base = { id: "h", hostname: "h", enrolled_at: "", capabilities: [], rule_sets: [] };
-    const off = (fault: boolean) => ({ state: "off", fault });
-    expect(alarmsOff({ ...base, status: "active", alarms: off(true) })).toBe(true);
-    expect(alarmsOff({ ...base, status: "active", alarms: off(false) })).toBe(false);
-    expect(alarmsOff({ ...base, status: "stale", alarms: off(true) })).toBe(false);
-    expect(alarmsOff({ ...base, status: "active", alarms: { state: "on", fault: false } })).toBe(false);
-    expect(alarmsOff({ ...base, status: "active" })).toBe(false);
-  });
-
   it("audit: failures filter", () => {
     const event = (id: string, result: string) => ({ id, action: "user.login", actor: "a", at: "2026-09-01T00:00:00Z", result });
     expect(selectAudit([event("1", "success"), event("2", "failure")], new URLSearchParams("result=failure")).map((e) => e.id)).toEqual(["2"]);
-  });
-});
-
-describe("agent versions", () => {
-  it("an agent is older than the platform by number, not as text", () => {
-    expect(olderThan("0.9.0", "0.10.0")).toBe(true);
-    expect(olderThan("0.10.0", "0.9.0")).toBe(false);
-    expect(olderThan("0.1.2", "0.1.2")).toBe(false);
-  });
-  it("a pre-release is older than its release; build metadata is ignored", () => {
-    expect(olderThan("0.10.0-rc.1", "0.10.0")).toBe(true);
-    expect(olderThan("0.10.0", "0.10.0-rc.1")).toBe(false);
-    expect(olderThan("0.1.2+build", "0.1.2")).toBe(false);
-  });
-  it("an agent claiming a far newer version flags nothing (board #54)", () => {
-    expect(olderThan("999.0.0", "0.1.2")).toBe(false);
-  });
-  it("an agent is judged against the latest agent release, not the platform's version", () => {
-    // Platform 0.2.9 and agent 0.2.7 can both be the latest of their kind.
-    expect(agentVersionNote("0.2.7", "0.2.7")).toEqual({ older: false, title: "The latest agent release (0.2.7)" });
-    expect(agentVersionNote("0.2.6", "0.2.7")).toEqual({ older: true, title: "Older than the latest agent release (0.2.7)" });
-  });
-  it("with the latest agent release unknown, no agent is marked", () => {
-    expect(agentVersionNote("0.2.6", null)).toEqual({ older: false, title: "The latest agent release is not known: the update check is off or offline" });
   });
 });
 

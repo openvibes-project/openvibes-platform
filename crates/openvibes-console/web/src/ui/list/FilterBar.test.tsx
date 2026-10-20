@@ -15,7 +15,7 @@ import type { SavedView } from "../../api/types";
 import { nav } from "../../app/nav";
 import { ColumnList } from "./ColumnsMenu";
 import { FilterBarBody, SavedViewChip, SaveViewForm } from "./FilterBar";
-import { type ListFilter, applyViewChanges, chosenFilters, clearAllChanges, debounce, valueOptions, viewQuery } from "./filters";
+import { type ListFilter, applyViewChanges, chosenFilters, clearAllChanges, debounce, hasFilters, valueOptions, viewQuery } from "./filters";
 import { columnSaver, toggleHidden } from "./savedViews";
 
 const status: ListFilter = { param: "status", label: "Status", values: [{ value: "online", label: "Online", count: 9 }, { value: "offline", label: "Offline", count: 1234 }] };
@@ -114,6 +114,13 @@ describe("FilterBar", () => {
     expect(toggleHidden(["labels", "os"], "labels")).toEqual(["os"]);
   });
 
+  it("treats the page offset as neither a filter nor part of a view, and Clear all resets it", () => {
+    const params = new URLSearchParams("status=online&offset=50&sort=host");
+    expect(viewQuery(params)).toBe("sort=host&status=online");
+    expect(hasFilters(new URLSearchParams("offset=50&sort=host"))).toBe(false);
+    expect(clearAllChanges(params)).toEqual({ status: null, offset: null });
+  });
+
   it("sends the search to the URL 250 ms after the last key, or at once on flush", () => {
     vi.useFakeTimers();
     const sent: string[] = [];
@@ -153,5 +160,33 @@ describe("FilterBar", () => {
     release();
     await new Promise((r) => setTimeout(r, 0));
     expect(shown).toEqual([["labels", "os"], ["labels", "os", "agent"], undefined]);
+  });
+
+  it("keeps queued toggles when an earlier save fails, reverting only once the queue drains", async () => {
+    const puts: string[][] = [];
+    const errors: unknown[] = [];
+    const replies: { resolve: () => void; reject: (e: unknown) => void }[] = [];
+    const shown: (string[] | undefined)[] = [];
+    const save = columnSaver("hosts", (p) => shown.push(p), (e) => errors.push(e), (_, hidden) => {
+      puts.push(hidden);
+      return new Promise<void>((resolve, reject) => { replies.push({ resolve, reject }); });
+    });
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+    save(["labels"], "os");
+    save(["labels"], "agent");
+    await tick();
+    replies[0]?.reject(new Error("offline"));
+    await tick();
+    expect(errors).toHaveLength(1);
+    // A toggle made now builds on the queued ones, not on the server's copy.
+    save(["labels"], "groups");
+    expect(shown.at(-1)).toEqual(["labels", "os", "agent", "groups"]);
+    replies[1]?.resolve();
+    await tick();
+    replies[2]?.resolve();
+    await tick();
+    expect(puts).toEqual([["labels", "os"], ["labels", "os", "agent"], ["labels", "os", "agent", "groups"]]);
+    expect(shown.at(-1)).toBeUndefined();
+    expect(shown.filter((p) => p === undefined)).toHaveLength(1);
   });
 });
