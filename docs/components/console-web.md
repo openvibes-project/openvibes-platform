@@ -501,7 +501,7 @@ for the pages not yet moved; its saved views stay in the browser.
   and a wide right column (one column fills the width). An empty slot draws
   nothing. `Card` (a card of either column) lives here too; the person,
   group and settings pages use it. **Tile**
-  (`ui/detail/Tile.tsx`): a link to the full list, named "Open alarms: 3".
+  (`ui/detail/Tile.tsx`): a link to the full list, named "Open alarms: 3". **FactTile** (`ui/detail/FactTile.tsx`): the same look for a fact, no link. **HourlyBars** (`ui/charts/HourlyBars.tsx`): 24 bars, a `<title>` each, with a hidden table. **BulkBar** on a server-paged list: it acts on the ids it is given (this page); the bulk route takes no filter, so there is no "select all n matching".
   Tiles and the settings pages' links use `viewLink` (`app/nav.ts`): a
   plain left click navigates in place, a modified or middle click is left
   to the browser.

@@ -401,3 +401,4 @@
 .suppression-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .suppression-row__chips, .suppression-row__actions { gap: 6px; flex-wrap: wrap; }
 .suppression-row__reject { gap: 8px; max-width: 60ch; }
+.hourly-bars { margin: 0; }
