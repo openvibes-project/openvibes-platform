@@ -889,6 +889,12 @@ Also renamed: the cases API's item kind `finding` is now `compliance_finding`
 `compliance_finding_not_found`; the page `/findings` is now `/compliance`
 (old links and saved views carry over).
 
+## Saved views and list columns
+
+`GET/POST /api/v1/saved-views`, `DELETE /api/v1/saved-views/{id}` and
+`GET/PUT /api/v1/list-columns/{page}` (signed-in session, own data only);
+see [saved-views.md](saved-views.md).
+
 ## General settings
 
 `GET /api/v1/settings` and `PATCH /api/v1/settings/{key}` (both need

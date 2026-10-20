@@ -5488,6 +5488,126 @@
         }
       }
     },
+    "/api/v1/list-columns/{page}": {
+      "get": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "The columns the person hid on a page.",
+        "operationId": "get_columns",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hidden columns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListColumnsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "list_page_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Sets the columns the person hides on a page.",
+        "operationId": "put_columns",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListColumnsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListColumnsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "list_page_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_columns",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/home": {
       "get": {
         "tags": [
@@ -7235,6 +7355,171 @@
           },
           "403": {
             "description": "Global rules.coverage.read needed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/saved-views": {
+      "get": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "The person's saved views on a page.",
+        "operationId": "list_views",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "path",
+            "description": "The list page, such as `hosts`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Views by name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "list_page_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Saves a view.",
+        "operationId": "create_view",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveViewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "list_page_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "view_name_taken or too_many_views",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_saved_view",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/saved-views/{id}": {
+      "delete": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Deletes one of the person's own views.",
+        "operationId": "delete_view",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "saved_view_not_found",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13830,6 +14115,38 @@
           }
         }
       },
+      "ListColumnsRequest": {
+        "type": "object",
+        "description": "The columns to hide on a page.",
+        "required": [
+          "hidden"
+        ],
+        "properties": {
+          "hidden": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Column keys, at most 32, none twice; never `host`."
+          }
+        }
+      },
+      "ListColumnsView": {
+        "type": "object",
+        "description": "The columns a person hid on a page.",
+        "required": [
+          "hidden"
+        ],
+        "properties": {
+          "hidden": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Hidden column keys."
+          }
+        }
+      },
       "ListenerView": {
         "type": "object",
         "description": "One listening socket on a host.",
@@ -15326,6 +15643,78 @@
           }
         },
         "additionalProperties": false
+      },
+      "SaveViewRequest": {
+        "type": "object",
+        "description": "A view to save.",
+        "required": [
+          "page",
+          "name",
+          "query"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1–60 characters, unique per person and page regardless of case."
+          },
+          "page": {
+            "type": "string",
+            "description": "The list page, such as `hosts`."
+          },
+          "query": {
+            "type": "string",
+            "description": "The URL query string, at most 1000 characters."
+          }
+        }
+      },
+      "SavedViewList": {
+        "type": "object",
+        "description": "The person's views on a page, by name.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SavedViewView"
+            },
+            "description": "The views."
+          }
+        }
+      },
+      "SavedViewView": {
+        "type": "object",
+        "description": "One saved view.",
+        "required": [
+          "id",
+          "page",
+          "name",
+          "query",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339 creation time."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable UUID."
+          },
+          "name": {
+            "type": "string",
+            "description": "1–60 characters."
+          },
+          "page": {
+            "type": "string",
+            "description": "The list page."
+          },
+          "query": {
+            "type": "string",
+            "description": "The URL query string (at most 1000 characters)."
+          }
+        }
       },
       "ServiceAccountPage": {
         "type": "object",
@@ -17284,6 +17673,10 @@
     {
       "name": "audit",
       "description": "Audit policy and event access"
+    },
+    {
+      "name": "lists",
+      "description": "Saved views and hidden columns of the list pages, per person"
     }
   ]
 }

@@ -551,6 +551,17 @@ with `{key, old, new}`; returns the old value), `recent` (newest change
 audits) and `require_approval(&impl GenericClient)` (false when the row is
 absent or not a bool). Tests: `tests/console_settings.rs`.
 
+## Saved views and list columns (`saved_views::…`, schema 56)
+
+Tables `console_saved_views` (name unique per person and page regardless of
+case, query at most 1000 characters) and `console_list_columns` (hidden keys
+per person and page, at most 32), both `ON DELETE CASCADE` from the person.
+`list` (by name), `create` (one transaction under a row lock on the person:
+count, then insert; returns `Saved`, `NameTaken` or `TooMany` at 50),
+`delete` (own views only; false when none), `hidden_columns` and
+`set_hidden_columns`. Page and column keys are validated by the console.
+Tests: `tests/saved_views.rs`. See [saved-views.md](saved-views.md).
+
 ## Suppressions with approval (`alarm_suppressions::…`, schema 55)
 
 `0055_suppression_approval.sql` (needs a backup) gives `alarm_suppressions`

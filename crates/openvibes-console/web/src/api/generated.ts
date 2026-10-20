@@ -1070,6 +1070,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/list-columns/{page}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The columns the person hid on a page. */
+        get: operations["get_columns"];
+        /** Sets the columns the person hides on a page. */
+        put: operations["put_columns"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/home": {
         parameters: {
             query?: never;
@@ -1452,6 +1470,41 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's saved views on a page. */
+        get: operations["list_views"];
+        put?: never;
+        /** Saves a view. */
+        post: operations["create_view"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-views/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Deletes one of the person's own views. */
+        delete: operations["delete_view"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3820,6 +3873,16 @@ export interface components {
             /** @description Latest test finding observation (RFC 3339). */
             finding_at?: string | null;
         };
+        /** @description The columns to hide on a page. */
+        ListColumnsRequest: {
+            /** @description Column keys, at most 32, none twice; never `host`. */
+            hidden: string[];
+        };
+        /** @description The columns a person hid on a page. */
+        ListColumnsView: {
+            /** @description Hidden column keys. */
+            hidden: string[];
+        };
         /** @description One listening socket on a host. */
         ListenerView: {
             /** @description The bound address (`0.0.0.0` or `::` for any). */
@@ -4379,6 +4442,33 @@ export interface components {
              * @description The version read; required when editing, ignored when creating.
              */
             version?: number | null;
+        };
+        /** @description A view to save. */
+        SaveViewRequest: {
+            /** @description 1–60 characters, unique per person and page regardless of case. */
+            name: string;
+            /** @description The list page, such as `hosts`. */
+            page: string;
+            /** @description The URL query string, at most 1000 characters. */
+            query: string;
+        };
+        /** @description The person's views on a page, by name. */
+        SavedViewList: {
+            /** @description The views. */
+            items: components["schemas"]["SavedViewView"][];
+        };
+        /** @description One saved view. */
+        SavedViewView: {
+            /** @description RFC 3339 creation time. */
+            created_at: string;
+            /** @description Stable UUID. */
+            id: string;
+            /** @description 1–60 characters. */
+            name: string;
+            /** @description The list page. */
+            page: string;
+            /** @description The URL query string (at most 1000 characters). */
+            query: string;
         };
         /** @description Bounded service-account inventory. */
         ServiceAccountPage: {
@@ -9283,6 +9373,99 @@ export interface operations {
             };
         };
     };
+    get_columns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Hidden columns */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListColumnsView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description list_page_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    put_columns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListColumnsRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListColumnsView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description list_page_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_columns */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_home: {
         parameters: {
             query?: never;
@@ -10612,6 +10795,145 @@ export interface operations {
             };
             /** @description Global rules.coverage.read needed */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_views: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The list page, such as `hosts`. */
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Views by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewList"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description list_page_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveViewRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description list_page_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description view_name_taken or too_many_views */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_saved_view */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description saved_view_not_found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

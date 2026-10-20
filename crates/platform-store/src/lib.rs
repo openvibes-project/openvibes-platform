@@ -82,6 +82,8 @@ pub mod rule_assignment;
 pub mod rule_drafts;
 /// Rule sets, trust keys, and published bundles.
 pub mod rules;
+/// Saved views and hidden list columns per person and page (schema 56).
+pub mod saved_views;
 pub mod signer;
 mod status;
 /// Enrollment tokens (stored only as hashes).

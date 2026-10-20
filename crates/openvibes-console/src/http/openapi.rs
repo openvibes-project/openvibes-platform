@@ -82,6 +82,11 @@ use crate::{
         crate::hosts::groups::preview_new_group,
         crate::settings::handlers::list_settings,
         crate::settings::handlers::update_setting,
+        crate::lists::saved_views::list_views,
+        crate::lists::saved_views::create_view,
+        crate::lists::saved_views::delete_view,
+        crate::lists::saved_views::get_columns,
+        crate::lists::saved_views::put_columns,
         crate::hosts::labels::host_labels,
         crate::hosts::labels::add_label,
         crate::hosts::labels::remove_label,
@@ -197,6 +202,11 @@ use crate::{
         crate::settings::SettingChangeView,
         crate::settings::SettingsView,
         crate::settings::UpdateSetting,
+        crate::lists::saved_views::SavedViewView,
+        crate::lists::saved_views::SavedViewList,
+        crate::lists::saved_views::SaveViewRequest,
+        crate::lists::saved_views::ListColumnsView,
+        crate::lists::saved_views::ListColumnsRequest,
         crate::hosts::groups_types::HostGroupKind,
         crate::hosts::groups_types::GroupCondition,
         crate::hosts::groups_types::GroupRoleRef,
@@ -396,7 +406,8 @@ use crate::{
         (name = "compliance", description = "Scope-filtered compliance finding reads"),
         (name = "vulnerabilities", description = "Scope-filtered vulnerability review"),
         (name = "assistant", description = "Read-only local assistant"),
-        (name = "audit", description = "Audit policy and event access")
+        (name = "audit", description = "Audit policy and event access"),
+        (name = "lists", description = "Saved views and hidden columns of the list pages, per person")
     )
 )]
 struct ConsoleApi;

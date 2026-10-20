@@ -17,6 +17,7 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `compliance/` | Findings, finding groups, history, triage, bulk triage, triage detail. |
 | `bin/` | Tools built with the crate. |
 | `dashboards/` | Dashboards and the count history behind their widgets. |
+| `lists/` | Saved views and hidden columns of the list pages, per person. |
 | `hosts/` | Hosts: agents, certificates, enrollment tokens, install package, software, ports, presence, fleet. |
 | `http/` | Router assembly, route table, middleware, web app files, problems, OpenAPI. |
 | `rules/` | Rule sets and bundles, assignment, draft rules, rule tests, ATT&CK coverage. |
