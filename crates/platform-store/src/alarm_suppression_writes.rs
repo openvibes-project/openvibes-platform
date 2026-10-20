@@ -1,8 +1,12 @@
 //! Suppression writes (roles spec §8): request, decide, withdraw and
-//! remove, each in one transaction with its audit line. Types and reads
-//! live in `alarm_suppressions.rs`.
+//! remove, each in one transaction with its audit line, and [`facts`],
+//! what the console shows beside a row it lists or writes. Types and
+//! reads live in `alarm_suppressions.rs`.
+
+use std::collections::HashMap;
 
 use chrono::{DateTime, NaiveDate, Utc};
+use deadpool_postgres::GenericClient;
 
 use crate::{
     Client, StoreError,
@@ -151,7 +155,7 @@ pub async fn decide(
                         WHERE g.asset_group_id = s.host_group_id)
                  FROM alarm_suppressions s
                  WHERE s.id = $3 AND {} FOR UPDATE OF s",
-                in_reach(false)
+                in_reach(false, "$1", "$2")
             ),
             &[&global, &groups, &id],
         )
@@ -245,7 +249,7 @@ pub async fn remove(
             &format!(
                 "SELECT 1 FROM alarm_suppressions s
                  WHERE s.id = $3 AND s.state = 'active' AND {} FOR UPDATE OF s",
-                in_reach(false)
+                in_reach(false, "$1", "$2")
             ),
             &[&global, &groups, &id],
         )
@@ -304,4 +308,71 @@ async fn close_source(
         actor,
     )
     .await
+}
+
+/// What the console shows beside one suppression for one caller.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Facts {
+    /// The host's name, for a row on one host.
+    pub hostname: Option<String>,
+    /// The requester's display name (the stored id when not a person).
+    pub requested_by: String,
+    /// The decider's display name, likewise.
+    pub decided_by: Option<String>,
+    /// Within the caller's `alarms.suppressions.approve` reach.
+    pub approvable: bool,
+    /// Within the caller's `alarms.suppress` reach (ruling 6).
+    pub removable: bool,
+}
+
+/// [`Facts`] of suppressions `ids` for a caller whose approve and
+/// suppress reaches are `approve` and `suppress` (`None` when not held),
+/// with the predicate [`decide`] and [`remove`] use.
+pub async fn facts(
+    client: &impl GenericClient,
+    ids: &[i64],
+    approve: Option<&AgentScope>,
+    suppress: Option<&AgentScope>,
+) -> Result<HashMap<i64, Facts>, StoreError> {
+    let none = (false, Vec::new());
+    let (approve_all, approve_groups) = approve.map_or_else(|| none.clone(), params);
+    let (suppress_all, suppress_groups) = suppress.map_or(none, params);
+    let query = format!(
+        "SELECT s.id, h.hostname,
+            COALESCE(NULLIF(ru.display_name, ''), ru.username, s.created_by),
+            COALESCE(NULLIF(du.display_name, ''), du.username, s.decided_by),
+            {}, {}
+         FROM alarm_suppressions s
+         LEFT JOIN agents h ON h.agent_id = s.agent_id
+         LEFT JOIN console_users ru ON ru.user_id::text = s.created_by
+         LEFT JOIN console_users du ON du.user_id::text = s.decided_by
+         WHERE s.id = ANY($1)",
+        in_reach(false, "$2", "$3"),
+        in_reach(false, "$4", "$5")
+    );
+    let rows = client
+        .query(
+            &query,
+            &[
+                &ids,
+                &approve_all,
+                &approve_groups,
+                &suppress_all,
+                &suppress_groups,
+            ],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|row| {
+            let facts = Facts {
+                hostname: row.get(1),
+                requested_by: row.get(2),
+                decided_by: row.get(3),
+                approvable: row.get(4),
+                removable: row.get(5),
+            };
+            (row.get(0), facts)
+        })
+        .collect())
 }

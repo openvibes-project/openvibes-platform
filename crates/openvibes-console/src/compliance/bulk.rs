@@ -14,7 +14,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use platform_store::{
-    alarm_suppressions::{self, Change, Request, What, Where},
+    alarm_suppressions::{self, Change, Request, State as SuppressionState, What, Where},
     bulk_triage::{self as store, BulkChange, BulkRefusal, BulkResult, MAX_ITEMS},
     console_cases::{self, NewCase, Refusal},
     console_read::AgentScope,
@@ -440,7 +440,8 @@ async fn add_to_case(
 
 /// One `program` suppression per distinct rule and program among the
 /// selected alarms. Activation closes only each representative alarm;
-/// new matching alarms are closed as they arrive.
+/// new matching alarms are closed as they arrive. With approval on, each
+/// waits and is listed as requested, not changed.
 async fn suppress(
     client: &mut platform_store::Client,
     scope: &AgentScope,
@@ -473,6 +474,13 @@ async fn suppress(
             reason: note,
         };
         match alarm_suppressions::request(client, scope, &request, user_id, now).await {
+            // Approval on: requested, not yet quieting anything.
+            Ok(Change::Done(made)) if made.state == SuppressionState::Waiting => {
+                result.skipped.push((
+                    id.to_string(),
+                    "Suppression requested, waiting for approval",
+                ));
+            }
             Ok(Change::Done(_)) => result.changed += 1,
             Ok(Change::NeedsGlobalScope) => {
                 result

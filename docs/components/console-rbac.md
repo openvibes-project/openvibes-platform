@@ -73,7 +73,12 @@ contents `rules.contents.read`; draft list, fleet and publish preview
 and delete `site_rules.write`; test on a host `site_rules.test` plus
 `hosts.read` reaching that host (else 404 `host_not_found`); publishing drafts `site_rules.publish` (the signer
 checks the same id); signed bundle preview and publish `rules.publish`;
-alarm suppression list `alarms.suppressions.read`; creating or editing a
+alarm suppression list `alarms.suppressions.read`; requesting, withdrawing
+and removing a suppression `alarms.suppress` on its where (a host in reach,
+a group in the role, all hosts only with a role reaching all hosts);
+approving or rejecting one `alarms.suppressions.approve` on its where, never
+by its requester, and a row outside the approver's reach answers the same
+404 as a missing one; creating or editing a
 case `cases.write`, and setting or changing its assignee (and the assignee
 list) `cases.assign`; enrollment tokens `tokens.manage`, the agent installer
 `tokens.installer`; creating users `access.users`; bindings `access.grant`;

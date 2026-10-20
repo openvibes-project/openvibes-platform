@@ -758,13 +758,43 @@
           "alarms"
         ],
         "operationId": "list_suppressions",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "description": "`waiting`, `active` (with expired) or `rejected`; all three when absent.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "alarm_id",
+            "in": "query",
+            "description": "Only those made from this alarm.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Active suppressions the caller may see",
+            "description": "Suppressions the caller may read",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AlarmSuppressionList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown state or alarm id",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -788,7 +818,7 @@
         },
         "responses": {
           "201": {
-            "description": "Created; applies to alarms stored from now on",
+            "description": "Created: active at once, or waiting when approval is on",
             "content": {
               "application/json": {
                 "schema": {
@@ -797,18 +827,8 @@
               }
             }
           },
-          "400": {
-            "description": "Invalid scope or note",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
           "403": {
-            "description": "Permission denied, or program/command without global scope",
+            "description": "Permission denied, a group outside reach, or all hosts without global scope (global_scope_required)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -818,11 +838,41 @@
             }
           },
           "404": {
-            "description": "Alarm absent or outside the caller's scope",
+            "description": "Alarm absent or outside the caller's reach",
             "content": {
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid field (reason, for, group, command or body)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarm-suppressions/options": {
+      "get": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "suppression_options",
+        "responses": {
+          "200": {
+            "description": "What the suppress form may offer the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmSuppressionOptions"
                 }
               }
             }
@@ -847,8 +897,41 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Removed (kept as history in the audit log)"
+          },
+          "404": {
+            "description": "Absent, not active, or outside the caller's suppress reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarm-suppressions/{suppression_id}/approve": {
+      "post": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "approve_suppression",
+        "parameters": [
+          {
+            "name": "suppression_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
           "200": {
-            "description": "Removed (kept as history)",
+            "description": "Approved: active from now, its source alarm closed",
             "content": {
               "application/json": {
                 "schema": {
@@ -858,7 +941,147 @@
             }
           },
           "404": {
-            "description": "Absent, already removed, or outside the caller's scope",
+            "description": "Absent or outside the caller's approve reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller's own request (own_request), or not waiting (suppression_not_waiting)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Its group no longer exists",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarm-suppressions/{suppression_id}/reject": {
+      "post": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "reject_suppression",
+        "parameters": [
+          {
+            "name": "suppression_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectAlarmSuppressionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmSuppressionView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or outside the caller's approve reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller's own request (own_request), or not waiting (suppression_not_waiting)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A reason of 1 to 4,000 characters is required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarm-suppressions/{suppression_id}/withdraw": {
+      "post": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "withdraw_suppression",
+        "parameters": [
+          {
+            "name": "suppression_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Withdrawn (it leaves the list)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmSuppressionView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or not the caller's request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No longer waiting",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9818,9 +10041,27 @@
           }
         }
       },
+      "AlarmSuppressionGroup": {
+        "type": "object",
+        "description": "A host group the suppress form offers.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The group id."
+          },
+          "name": {
+            "type": "string",
+            "description": "Its name."
+          }
+        }
+      },
       "AlarmSuppressionList": {
         "type": "object",
-        "description": "Active suppressions the caller may see.",
+        "description": "Waiting, active (with expired) and rejected suppressions the caller\nmay read.",
         "required": [
           "items"
         ],
@@ -9830,29 +10071,68 @@
             "items": {
               "$ref": "#/components/schemas/AlarmSuppressionView"
             },
-            "description": "Newest first."
+            "description": "Waiting oldest first, then active and rejected newest first."
+          }
+        }
+      },
+      "AlarmSuppressionOptions": {
+        "type": "object",
+        "description": "What the suppress form may offer the caller.",
+        "required": [
+          "require_approval",
+          "all_hosts",
+          "groups"
+        ],
+        "properties": {
+          "all_hosts": {
+            "type": "boolean",
+            "description": "The caller may suppress on all hosts."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlarmSuppressionGroup"
+            },
+            "description": "The groups the caller's `alarms.suppress` reaches."
+          },
+          "require_approval": {
+            "type": "boolean",
+            "description": "New suppressions wait for someone else's approval."
           }
         }
       },
       "AlarmSuppressionView": {
         "type": "object",
-        "description": "One active suppression.",
+        "description": "One suppression as the caller sees it.",
         "required": [
           "id",
           "rule_set_id",
           "rule_id",
-          "scope",
-          "note",
-          "created_by",
-          "created_at"
+          "what",
+          "where",
+          "status",
+          "reason",
+          "requested_by",
+          "requested_at",
+          "would_close_capped",
+          "can_decide",
+          "can_withdraw",
+          "can_remove"
         ],
         "properties": {
-          "agent_id": {
+          "activated_at": {
             "type": [
               "string",
               "null"
             ],
-            "description": "The agent, for `host`."
+            "description": "When it became active (RFC 3339)."
+          },
+          "alarm_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The source alarm; null for rows made before approvals."
           },
           "args_sha256": {
             "type": [
@@ -9861,13 +10141,38 @@
             ],
             "description": "SHA-256 of the masked args' JSON array, for `command`."
           },
-          "created_at": {
-            "type": "string",
+          "can_decide": {
+            "type": "boolean",
+            "description": "The caller may approve or reject it."
+          },
+          "can_remove": {
+            "type": "boolean",
+            "description": "The caller may remove it."
+          },
+          "can_withdraw": {
+            "type": "boolean",
+            "description": "The caller may withdraw it (their own waiting request)."
+          },
+          "decided_at": {
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "When (RFC 3339)."
           },
-          "created_by": {
-            "type": "string",
-            "description": "Who created it."
+          "decided_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who approved, rejected or withdrew it."
+          },
+          "decision_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The approver's reason (always given to reject)."
           },
           "exe": {
             "type": [
@@ -9876,13 +10181,36 @@
             ],
             "description": "The program, for `program` and `command`."
           },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it stops applying (RFC 3339)."
+          },
+          "for_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "7, 30, or null (until removed)."
+          },
           "id": {
             "type": "string",
             "description": "Its id; closed alarms say \"suppressed by #id\"."
           },
-          "note": {
+          "reason": {
             "type": "string",
-            "description": "Why."
+            "description": "The requester's reason."
+          },
+          "requested_at": {
+            "type": "string",
+            "description": "When (RFC 3339)."
+          },
+          "requested_by": {
+            "type": "string",
+            "description": "The requester's display name."
           },
           "rule_id": {
             "type": "string",
@@ -9892,9 +10220,70 @@
             "type": "string",
             "description": "Rule set of the rule."
           },
-          "scope": {
+          "status": {
             "type": "string",
-            "description": "`host`, `program` or `command`."
+            "description": "`waiting`, `active`, `expired`, `rejected`, `withdrawn` or `removed`."
+          },
+          "what": {
+            "type": "string",
+            "description": "`program`, `command`, or the legacy `host`, `device` or `signature`."
+          },
+          "where": {
+            "$ref": "#/components/schemas/AlarmSuppressionWhereView",
+            "description": "Its host, group or all hosts."
+          },
+          "would_close": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "For a waiting row in a list: alarms of the last 7 days on hosts\nthe caller reaches it would have closed."
+          },
+          "would_close_capped": {
+            "type": "boolean",
+            "description": "`would_close` stopped at 10,000: there may be more."
+          }
+        }
+      },
+      "AlarmSuppressionWhereView": {
+        "type": "object",
+        "description": "Where a suppression applies.",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The host, for `host`."
+          },
+          "group_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The group, for `group`."
+          },
+          "group_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its name, while the group exists."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its name, for `host`."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`host`, `group`, `all` or `device`."
           }
         }
       },
@@ -11323,21 +11712,34 @@
         "description": "\"Don't alarm on this again\", derived from one alarm.",
         "required": [
           "alarm_id",
-          "scope",
-          "note"
+          "what",
+          "where",
+          "reason"
         ],
         "properties": {
           "alarm_id": {
             "type": "string",
             "description": "The platform's id of the alarm to derive it from."
           },
-          "note": {
+          "for_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "7, 30, or null (until removed), counted from activation."
+          },
+          "reason": {
             "type": "string",
             "description": "Why, 1 to 4,000 characters."
           },
-          "scope": {
-            "type": "string",
-            "description": "`host` (this alarm's host), `program` (this program on any host) or\n`command` (this exact command line on any host)."
+          "what": {
+            "$ref": "#/components/schemas/SuppressWhat",
+            "description": "Program or command."
+          },
+          "where": {
+            "$ref": "#/components/schemas/SuppressWhere",
+            "description": "Its host, a group, or all hosts."
           }
         },
         "additionalProperties": false
@@ -14220,6 +14622,20 @@
         ],
         "description": "The hosts a role reaches, with group names."
       },
+      "RejectAlarmSuppressionRequest": {
+        "type": "object",
+        "description": "Rejecting a waiting request.",
+        "properties": {
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why, 1 to 4,000 characters (required)."
+          }
+        },
+        "additionalProperties": false
+      },
       "RevokeAgentRequest": {
         "type": "object",
         "description": "Reason supplied by an operator when revoking an agent.",
@@ -15818,6 +16234,69 @@
             "description": "Original result."
           }
         }
+      },
+      "SuppressWhat": {
+        "type": "string",
+        "description": "What to quiet.",
+        "enum": [
+          "program",
+          "command"
+        ]
+      },
+      "SuppressWhere": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The alarm's host.",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "host"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "One host group.",
+            "required": [
+              "group_id",
+              "kind"
+            ],
+            "properties": {
+              "group_id": {
+                "type": "string",
+                "description": "The group id."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "group"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Every host (needs `alarms.suppress` on all hosts).",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "all"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Where to quiet it."
       },
       "TacticView": {
         "type": "object",

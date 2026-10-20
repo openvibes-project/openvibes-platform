@@ -313,16 +313,43 @@ stay in the low thousands.
   need a note, accepted risk a future expiry; 412 stale, 409 for a retired
   state, 428 without `If-Match`. Audited as `alarm.triage.changed` with a
   history row.
-- `GET /api/v1/alarm-suppressions` (`alarms.read`): active suppressions
-  the caller may see: `host` ones on agents in scope; `program` and
-  `command` ones (they apply on every host) only with global scope.
-- `POST /api/v1/alarm-suppressions` (`alarms.suppress`, CSRF): `{alarm_id,
-  scope, note}`; the rule, agent, program and args hash are derived from
-  that alarm, never typed in. `program`/`command` need global scope (403
-  `global_scope_required`). It applies to alarms stored from now on.
-- `DELETE /api/v1/alarm-suppressions/{id}` (`alarms.suppress`, CSRF): sets
-  `removed_at`; the row stays as history. Both changes are audited
-  (`alarm.suppression.created` / `.removed`).
+- Alarm suppressions (roles spec §8; `alarms/suppressions.rs`,
+  `suppression_decisions.rs`, `suppression_types.rs`). Every write needs a
+  browser session with CSRF: bearer tokens are refused.
+  - `GET /api/v1/alarm-suppressions?state=waiting|active|rejected&alarm_id=`
+    (`alarms.suppressions.read`): waiting, active (with expired) and
+    rejected rows the caller may read: a host row if the host is in
+    reach, a group row if the group is in the role (or the role reaches
+    all hosts), an all-hosts row for everyone. Each row carries
+    `status`, `where {kind, agent_id, hostname, group_id, group_name}`,
+    names (`requested_by`, `decided_by`: display name, else the stored
+    id), `would_close` for waiting rows, and the caller's `can_decide`
+    (waiting, not their own, within their approve reach), `can_withdraw`
+    (their own waiting request) and `can_remove` (active, within their
+    suppress reach).
+  - `GET /api/v1/alarm-suppressions/options` (`alarms.suppress`):
+    `{require_approval, all_hosts, groups[{id, name}]}`, the groups the
+    caller's suppress reach covers (all when global).
+  - `POST /api/v1/alarm-suppressions` (`alarms.suppress`): `{alarm_id,
+    what: program|command, where: {kind: host}|{kind: group, group_id}|{kind:
+    all}, for_days: 7|30|null, reason}`, derived from that alarm. 201 with
+    the view: `waiting` when `suppressions.require_approval` is on, else
+    `active` (it closes the source alarm). 404 `alarm_not_found`; 403
+    `global_scope_required` (all hosts) or `permission_denied` (a group
+    outside reach); 422 `invalid_suppression` naming `reason`, `for`,
+    `group` or `command` in `field_errors`.
+  - `POST …/{id}/approve` and `POST …/{id}/reject {reason}`
+    (`alarms.suppressions.approve`): 200 with the view. Approving starts
+    the For period and closes the source alarm; rejecting needs a reason
+    (422). 404 `suppression_not_found` for a missing row and for one
+    outside the approver's reach alike; 409 `own_request` (never the
+    requester, whatever they hold) or `suppression_not_waiting`.
+  - `POST …/{id}/withdraw` (`alarms.suppress`): the requester's own waiting
+    request, else 404; it leaves the list.
+  - `DELETE …/{id}` (`alarms.suppress` on the row's where): 204; the row
+    stays as `removed` history. Every transition is audited
+    (`alarm.suppression.requested`, `.created`, `.approved`, `.rejected`,
+    `.withdrawn`, `.removed`).
 - Alarms are not offered to the assistant in P14.
 
 Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; list, fleet and changes need `site_rules.read`, check, save and delete `site_rules.write`, test `site_rules.test`, all global; the
@@ -521,7 +548,9 @@ Spec `docs/specs/2026-10-10-bulk-triage-design.md` (#237, #239, #240).
   those already closed, so their decision stays), `assign`, `case` (an
   open case or a new one; an item in another open case is skipped, and no
   new case opens when nothing is left) and, for alarms, `suppress` (one `program`
-  suppression per distinct rule and program). Needs the kind's triage
+  suppression on all hosts per distinct rule and program; with approval
+  on, each waits and is listed in `skipped` as "Suppression requested,
+  waiting for approval"). Needs the kind's triage
   permission (`alarms.triage`, `compliance.triage`,
   `vulnerabilities.triage`), plus `cases.write` for `case` and
   `alarms.suppress` for `suppress`. Answers `{changed, skipped[{id,

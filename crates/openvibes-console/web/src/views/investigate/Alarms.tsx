@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 
 import { invalidate, request, useAllPages, useResource } from "../../api/client";
-import type { AlarmDetail, AlarmPage, AlarmSummary } from "../../api/types";
+import type { AlarmPage, AlarmSummary, AlarmSuppression } from "../../api/types";
 import { nav, useLocation } from "../../app/nav";
 import { useSession } from "../../app/session";
 import { BulkBar } from "../../panels/triage/BulkBar";
@@ -50,23 +50,14 @@ const quietScopes = [
   { scope: "command", label: "For this exact command, any host", everywhere: true },
 ] as const;
 
-/** Creates a suppression derived from one alarm ("don't alarm on this again"). */
+/** Creates a suppression derived from one alarm ("don't alarm on this
+ * again"). The server closes the alarm when it becomes active; with
+ * approval on it waits. Task 6 replaces this with the suppress form. */
 async function quiet(alarmId: string, scope: string, note: string): Promise<void> {
-  await request("POST", "/api/v1/alarm-suppressions", { alarm_id: alarmId, scope, note });
+  const body = { alarm_id: alarmId, what: scope === "command" ? "command" : "program", where: { kind: scope === "host" ? "host" : "all" }, for_days: null, reason: note };
+  const made = await request<AlarmSuppression>("POST", "/api/v1/alarm-suppressions", body);
   invalidate("/api/v1/alarm");
-  toast("Quieted: new matches are closed as false positives");
-}
-
-/** From the list: closes this alarm as a false positive and then quiets
- * new ones, both with the user's note. */
-async function closeAndQuiet(alarmId: string, scope: string, note: string): Promise<void> {
-  const path = `/api/v1/alarms/${encodeURIComponent(alarmId)}`;
-  const alarm = await request<AlarmDetail>("GET", path);
-  if (alarm.triage.state !== "false_positive") {
-    await request("PUT", `${path}/triage`, { state: "false_positive", note, assigned_to: alarm.triage.assigned_to ?? null, accepted_until: null },
-      { "if-match": `"${alarm.triage.version}"` });
-  }
-  await quiet(alarmId, scope, note);
+  toast(made.status === "waiting" ? "Requested: it waits for approval" : "Quieted: new matches are closed as false positives");
 }
 
 export function QuietMenu({ alarm }: Readonly<{ alarm: AlarmSummary }>) {
@@ -88,7 +79,7 @@ export function QuietMenu({ alarm }: Readonly<{ alarm: AlarmSummary }>) {
         options={[{ value: "", label: "Quiet…" }, ...scopes.map((s) => ({ value: s.scope, label: s.label }))]} />
       {chosen && (
         <Confirm danger label={`Close this alarm as a false positive and quiet ${what}?`} reason="Why (saved as the note)"
-          onConfirm={async (note) => { await closeAndQuiet(alarm.id, scope, note); setScope(""); }}>Quiet</Confirm>
+          onConfirm={async (note) => { await quiet(alarm.id, scope, note); setScope(""); }}>Quiet</Confirm>
       )}
     </div>
   );

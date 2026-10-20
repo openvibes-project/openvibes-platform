@@ -10,7 +10,7 @@
 use chrono::{DateTime, Utc};
 use deadpool_postgres::GenericClient;
 
-pub use crate::alarm_suppression_writes::{decide, remove, request, withdraw};
+pub use crate::alarm_suppression_writes::{Facts, decide, facts, remove, request, withdraw};
 use crate::{
     Client, StoreError,
     alarms::{args_sha256, suppression_matches},
@@ -239,19 +239,24 @@ pub(crate) fn params(scope: &AgentScope) -> (bool, Vec<String>) {
     (scope.is_global(), scope.group_ids())
 }
 
-/// SQL: suppression `s` is within the reach of `$1`/`$2`. A host row if
+/// SQL: suppression `s` is within the reach of `global`/`groups` (the
+/// placeholders, as [`params`] gives them). A host row if
 /// the host is in reach; a group row if the group is in the scope; an
 /// all-hosts row for every reader (`all_rows`, ruling 5) but only a
 /// global caller otherwise; a device or signature row only for a global
 /// caller.
-pub(crate) fn in_reach(all_rows: bool) -> String {
-    let agent = agent_visibility("a.agent_id", "$1", "$2");
-    let all_rows = if all_rows { "true" } else { "$1::boolean" };
+pub(crate) fn in_reach(all_rows: bool, global: &str, groups: &str) -> String {
+    let agent = agent_visibility("a.agent_id", global, groups);
+    let all_rows = if all_rows {
+        "true".to_owned()
+    } else {
+        format!("{global}::boolean")
+    };
     format!(
-        "($1::boolean
+        "({global}::boolean
           OR (s.agent_id IS NOT NULL AND EXISTS (
                 SELECT 1 FROM agents a WHERE a.agent_id = s.agent_id AND {agent}))
-          OR (s.host_group_id IS NOT NULL AND s.host_group_id::text = ANY($2::text[]))
+          OR (s.host_group_id IS NOT NULL AND s.host_group_id::text = ANY({groups}::text[]))
           OR (s.agent_id IS NULL AND s.host_group_id IS NULL AND s.device_id IS NULL
               AND s.scope <> 'signature' AND {all_rows}))"
     )
@@ -278,7 +283,7 @@ pub async fn list(
          WHERE n <= $6
          ORDER BY array_position(ARRAY['waiting', 'active', 'rejected'], state), {order}",
         select("$3"),
-        in_reach(true)
+        in_reach(true, "$1", "$2")
     );
     let rows = client
         .query(

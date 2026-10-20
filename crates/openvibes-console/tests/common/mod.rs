@@ -4,6 +4,7 @@
 
 pub mod http;
 pub mod people;
+pub mod suppressions;
 
 use chrono::Utc;
 use platform_store::{
