@@ -338,7 +338,8 @@ an existing agent's `agent.toml`.
   shared layout. Left: By status (Waiting / Active with expired / Rejected,
   counts linking to their cards) and Recent changes: the newest eight
   `alarm.suppression.*` audit lines of 30 days (`action_prefix`), each
-  with its suppression number, shown with `audit.read` only; while loading,
+  with its suppression number and who (named from `/api/v1/users` with
+  `access.read`, else the id), shown with `audit.read` only; while loading,
   empty or failed the card says so in words. Right: one card per
   status; each row shows the program, What/Where/For chips, the quoted
   reason, "asked by … · when", "Would have closed N alarms in the last 7
@@ -363,7 +364,8 @@ an existing agent's `agent.toml`.
   (`demo/suppressions.ts`): the approval setting from Settings › General,
   waiting/active/rejected/withdrawn/removed states, every refusal code,
   the per-row flags, options, `would_close` over the reader's reach,
-  For counted from activation, close-on-activation of the source alarm,
+  For counted from activation, close-on-activation of the source alarm
+  when the where covers it,
   group rows matched with `demo/hostGroups.ts`, and a group's delete
   withdrawing its waiting rows and removing its active ones (counted in
   the delete preview's `suppressions_ended`). Rows are kept in browser
@@ -686,7 +688,10 @@ triage on alarms and findings stays as it is.
   manual ones (Production, upgraded from tags; Pilot hosts). Triage assignees follow the server: holders of the area's
   `*.triage` through a role that reaches some host, or an Administrator;
   bulk program suppressions are skipped without `alarms.suppress` on all
-  hosts, and listed as requested while approval is on. Tested. Its compliance findings use only the
+  hosts, close every selected alarm of their rule and program (kept on the
+  row as `closed` and replayed on load), and list all of them as requested
+  while approval is on; a group's delete writes one audit line per ended
+  suppression. Tested. Its compliance findings use only the
   rules OpenVIBES ships (openvibes-rules `baseline/rules.json`: ids,
   severities, messages and expressions as they are), so the public demo and
   the website's screenshots never show a check the product lacks; a test

@@ -29,11 +29,11 @@ const items: AlarmSuppression[] = [
   row("6", { status: "rejected", decided_by: "Lee", decision_reason: "too broad", alarm_id: "9002" }),
 ];
 const recent: AuditEvent[] = [
-  { id: "a1", at: hoursAgo(1), actor: "lee", action: "alarm.suppression.rejected", result: "success", target: "alarm_suppression", target_id: "6" },
+  { id: "a1", at: hoursAgo(1), actor: "u-lee", actor_id: "u-lee", action: "alarm.suppression.rejected", result: "success", target: "alarm_suppression", target_id: "6" },
 ];
 const html = (can: (p: string) => boolean = () => true, audit: AuditEvent[] | "loading" | "failed" | null = recent) => renderToStaticMarkup(
   <SessionContext.Provider value={{ session: undefined, demo: false, can, canEverywhere: can }}>
-    <AlarmSuppressionsBody items={items} recent={audit ?? undefined} />
+    <AlarmSuppressionsBody items={items} recent={audit ?? undefined} names={new Map([["u-lee", "Lee Park"]])} />
   </SessionContext.Provider>,
 );
 const cardOf = (out: string, title: string) => out.slice(out.indexOf(`>${title}</h2>`)).split('class="card person-card"')[0] ?? "";
@@ -52,6 +52,8 @@ describe("AlarmSuppressions", () => {
     expect(out).toMatch(/href="#suppressions-rejected"[^>]*>Rejected<\/a><span[^>]*>1</);
     expect(out.indexOf("By status")).toBeLessThan(out.indexOf("Recent changes"));
     expect(out).toContain("Rejected a suppression #6");
+    expect(out).toContain("Lee Park ·");
+    expect(out).not.toContain("u-lee");
     expect(out).not.toContain("#alarm_suppression");
   });
   it("says what an empty, loading or failed Recent changes means", () => {

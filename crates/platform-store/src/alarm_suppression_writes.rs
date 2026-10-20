@@ -121,7 +121,8 @@ pub async fn request(
         .await?
         .get(0);
     let action = if state == State::Active {
-        close_source(&tx, id, req.alarm_row_id, actor, now).await?;
+        let reach = (global, groups);
+        close_source(&tx, id, &[req.alarm_row_id], reach, actor, now).await?;
         "alarm.suppression.created"
     } else {
         "alarm.suppression.requested"
@@ -192,7 +193,8 @@ pub async fn decide(
     )
     .await?;
     if let (true, Some(alarm)) = (approve_it, row.get::<_, Option<i64>>(2)) {
-        close_source(&tx, id, alarm, actor, now).await?;
+        // The requester reached the source alarm; the where still must cover it.
+        close_source(&tx, id, &[alarm], (true, Vec::new()), actor, now).await?;
     }
     let decided = fetch(&tx, id, now).await?;
     audit(&tx, actor, action, &decided).await?;
@@ -269,45 +271,87 @@ pub async fn remove(
     Ok(Change::Done(removed))
 }
 
-/// Closes source alarm `alarm_row_id` as ingest closes a matched one, if
-/// it is still open or investigating: false positive, suppressed by `id`,
-/// with a triage history line.
+/// Closes, after [`request`] made suppression `id` active, the other
+/// selected alarms `alarm_ids` it covers (bulk suppress); each must be
+/// within `suppress`. Returns those of `alarm_ids` now closed by `id`.
+pub async fn close_covered(
+    client: &mut Client,
+    suppress: &AgentScope,
+    id: i64,
+    alarm_ids: &[i64],
+    actor: &str,
+    now: DateTime<Utc>,
+) -> Result<Vec<i64>, StoreError> {
+    let tx = client.transaction().await?;
+    close_source(&tx, id, alarm_ids, params(suppress), actor, now).await?;
+    let closed = tx
+        .query(
+            "SELECT id FROM alarms WHERE id = ANY($1) AND suppressed_by = $2",
+            &[&alarm_ids, &id],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    tx.commit().await?;
+    Ok(closed)
+}
+
+/// Closes alarms `alarm_row_ids` as ingest closes a matched one, if
+/// active suppression `id` covers them (rule, program, command, host or
+/// group), they are within `reach` (as [`params`] gives it) and still open
+/// or investigating: false positive, suppressed by `id`, with a triage
+/// history line.
 async fn close_source(
     tx: &deadpool_postgres::Transaction<'_>,
     id: i64,
-    alarm_row_id: i64,
+    alarm_row_ids: &[i64],
+    (global, groups): (bool, Vec<String>),
     actor: &str,
     now: DateTime<Utc>,
 ) -> Result<(), StoreError> {
     let note = format!("suppressed by #{id}");
-    let Some(row) = tx
-        .query_opt(
-            "WITH old AS (
-                SELECT id, first_seen_day, state FROM alarms
-                WHERE id = $1 AND state IN ('open', 'investigating') FOR UPDATE)
-             UPDATE alarms al SET state = 'false_positive', suppressed_by = $2, note = $3,
-                triage_updated_at = $4, triage_updated_by = $5,
-                triage_version = al.triage_version + 1
-             FROM old WHERE al.id = old.id AND al.first_seen_day = old.first_seen_day
-             RETURNING old.first_seen_day, old.state",
-            &[&alarm_row_id, &id, &note, &now, &actor],
+    let rows = tx
+        .query(
+            &format!(
+                "WITH old AS (
+                    SELECT al.id, al.first_seen_day, al.state FROM alarms al
+                    JOIN agents a ON a.agent_id = al.agent_id
+                    JOIN alarm_suppressions s ON s.id = $2 AND s.state = 'active'
+                    WHERE al.id = ANY($1) AND al.state IN ('open', 'investigating')
+                      AND al.rule_set_id = s.rule_set_id AND al.rule_id = s.rule_id
+                      AND al.process->>'exe' IS NOT DISTINCT FROM s.exe
+                      AND (s.scope = 'program' OR al.id = s.alarm_id)
+                      AND (s.agent_id IS NULL OR al.agent_id = s.agent_id)
+                      AND (s.host_group_id IS NULL
+                           OR console_host_in_group(al.agent_id, s.host_group_id))
+                      AND {}
+                    FOR UPDATE OF al)
+                 UPDATE alarms al SET state = 'false_positive', suppressed_by = $2, note = $3,
+                    triage_updated_at = $4, triage_updated_by = $5,
+                    triage_version = al.triage_version + 1
+                 FROM old WHERE al.id = old.id AND al.first_seen_day = old.first_seen_day
+                 RETURNING al.id, old.first_seen_day, old.state",
+                agent_visibility("al.agent_id", "$6", "$7")
+            ),
+            &[&alarm_row_ids, &id, &note, &now, &actor, &global, &groups],
         )
-        .await?
-    else {
-        return Ok(());
-    };
-    let (day, from): (NaiveDate, String) = (row.get(0), row.get(1));
-    alarms::history(
-        tx,
-        alarm_row_id,
-        day,
-        Some(&from),
-        "false_positive",
-        &note,
-        now,
-        actor,
-    )
-    .await
+        .await?;
+    for row in rows {
+        let (alarm, day, from): (i64, NaiveDate, String) = (row.get(0), row.get(1), row.get(2));
+        alarms::history(
+            tx,
+            alarm,
+            day,
+            Some(&from),
+            "false_positive",
+            &note,
+            now,
+            actor,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 /// What the console shows beside one suppression for one caller.

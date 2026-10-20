@@ -14,7 +14,7 @@ use super::{
     people::Fx,
 };
 
-const LINUX_HOST: &str = "agent.00000000-0000-4000-8000-000000000401";
+pub const LINUX_HOST: &str = "agent.00000000-0000-4000-8000-000000000401";
 const WIN_HOST: &str = "agent.00000000-0000-4000-8000-000000000402";
 pub const LIST: &str = "/api/v1/alarm-suppressions";
 
@@ -110,7 +110,7 @@ pub async fn setup() -> Option<S> {
 }
 
 /// Stores alarm `n` on `agent`; returns its platform id.
-async fn alarm(
+pub async fn alarm(
     client: &mut platform_store::Client,
     agent: &str,
     n: u32,
@@ -156,7 +156,7 @@ async fn alarm(
         .await
         .unwrap();
     let id: i64 = client
-        .query_one("SELECT id FROM alarms WHERE agent_id = $1", &[&agent])
+        .query_one("SELECT max(id) FROM alarms WHERE agent_id = $1", &[&agent])
         .await
         .unwrap()
         .get(0);

@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use tokio_postgres::error::SqlState;
 
 use crate::{
-    Client, StoreError,
+    Client, StoreError, alarm_suppressions,
     console_auth::ACCESS_BINDING_LOCK,
     console_read::AgentScope,
     host_groups::{Condition, GroupKind, GroupSummary, summaries},
@@ -396,20 +396,28 @@ pub async fn delete(
         .pop()
         .ok_or(StoreError::Query)?;
     let overrides = overrides(&tx, id).await?;
-    // Plan ruling 4: waiting requests are withdrawn, active ones removed.
-    let ended = tx
-        .execute(
+    // Plan ruling 4: waiting requests are withdrawn, active ones removed,
+    // each with its audit line.
+    let mut ended = 0;
+    for (sql, action) in [
+        (
             "UPDATE alarm_suppressions SET state = 'withdrawn', decided_by = $2, decided_at = $3
-             WHERE host_group_id::text = $1 AND state = 'waiting'",
-            &[&id, &actor, &now],
-        )
-        .await?
-        + tx.execute(
+             WHERE host_group_id::text = $1 AND state = 'waiting' RETURNING id",
+            "alarm.suppression.withdrawn",
+        ),
+        (
             "UPDATE alarm_suppressions SET state = 'removed', removed_by = $2, removed_at = $3
-             WHERE host_group_id::text = $1 AND state = 'active'",
-            &[&id, &actor, &now],
-        )
-        .await?;
+             WHERE host_group_id::text = $1 AND state = 'active' RETURNING id",
+            "alarm.suppression.removed",
+        ),
+    ] {
+        for row in tx.query(sql, &[&id, &actor, &now]).await? {
+            let ended_row = alarm_suppressions::fetch(&tx, row.get(0), now).await?;
+            alarm_suppressions::audit_because(&tx, actor, action, &ended_row, "group deleted")
+                .await?;
+            ended += 1;
+        }
+    }
     tx.execute(
         "INSERT INTO console_host_group_dismissed (auto_key, dismissed_at, dismissed_by)
          SELECT auto_key, $2, $3 FROM console_asset_groups

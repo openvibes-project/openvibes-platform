@@ -10,7 +10,9 @@
 use chrono::{DateTime, Utc};
 use deadpool_postgres::GenericClient;
 
-pub use crate::alarm_suppression_writes::{Facts, decide, facts, remove, request, withdraw};
+pub use crate::alarm_suppression_writes::{
+    Facts, close_covered, decide, facts, remove, request, withdraw,
+};
 use crate::{
     Client, StoreError,
     alarms::{args_sha256, suppression_matches},
@@ -394,6 +396,18 @@ pub(crate) async fn audit(
     action: &str,
     suppression: &Suppression,
 ) -> Result<(), StoreError> {
+    audit_because(tx, actor, action, suppression, &suppression.note).await
+}
+
+/// [`audit`] with `reason` in place of the suppression's note, for a row
+/// a person ended by another change (a deleted group).
+pub(crate) async fn audit_because(
+    tx: &deadpool_postgres::Transaction<'_>,
+    actor: &str,
+    action: &str,
+    suppression: &Suppression,
+    reason: &str,
+) -> Result<(), StoreError> {
     let detail = serde_json::json!({
         "rule_set_id": suppression.rule_set_id,
         "rule_id": suppression.rule_id,
@@ -404,7 +418,7 @@ pub(crate) async fn audit(
         "exe": suppression.exe,
         "device_id": suppression.device_id,
         "for_days": suppression.for_days,
-        "reason": suppression.note,
+        "reason": reason,
         "decision_reason": suppression.decision_reason,
         "state": suppression.state.as_str(),
     });

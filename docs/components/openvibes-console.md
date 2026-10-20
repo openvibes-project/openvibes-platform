@@ -336,7 +336,7 @@ stay in the low thousands.
     what: program|command, where: {kind: host}|{kind: group, group_id}|{kind:
     all}, for_days: 7|30|null, reason}`, derived from that alarm. 201 with
     the view: `waiting` when `suppressions.require_approval` is on, else
-    `active` (it closes the source alarm). 404 `alarm_not_found`; 403
+    `active` (it closes the source alarm when the where covers its host). 404 `alarm_not_found`; 403
     `global_scope_required` (all hosts) or `permission_denied` (a group
     outside reach); 422 `invalid_suppression` naming `reason`, `for`,
     `group` or `command` in `field_errors`.
@@ -552,9 +552,11 @@ Spec `docs/specs/2026-10-10-bulk-triage-design.md` (#237, #239, #240).
   those already closed, so their decision stays), `assign`, `case` (an
   open case or a new one; an item in another open case is skipped, and no
   new case opens when nothing is left) and, for alarms, `suppress` (one `program`
-  suppression on all hosts per distinct rule and program; with approval
-  on, each waits and is listed in `skipped` as "Suppression requested,
-  waiting for approval"; other refusals are skipped with their own reason:
+  suppression on all hosts per distinct rule and program; activating it
+  closes every selected alarm of that rule and program, counted in
+  `changed`, the rest skipped as "not open, or out of scope"; with approval
+  on, each waits and all its selected alarms are listed in `skipped` as
+  "Suppression requested, waiting for approval"; other refusals are skipped with their own reason:
   "program suppressions need global scope", "outside your suppress
   reach", "the note must be 1 to 4,000 characters", "this alarm can't be
   suppressed", or "not found or out of scope"). Needs the kind's triage

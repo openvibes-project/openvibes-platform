@@ -569,12 +569,17 @@ caller's rights).
   `suppress` scope; all hosts needs a global scope, a group must be in the
   scope. Waiting when `console_settings::require_approval`, else active at
   once: `expires_at = activated_at + for_days`, and the source alarm, if
-  open or investigating, is closed as ingest closes a matched one
+  open or investigating and covered by the where (its host, or a group
+  holding its host), is closed as ingest closes a matched one
   (`false_positive`, `suppressed_by`, triage history).
 - `decide(client, approve, id, approve_it, reason, actor, now)`: waiting
   rows in the approver's reach only; never the requester's own
   (`OwnRequest`); rejecting needs a reason. Approving starts the period and
-  closes the source alarm.
+  closes the source alarm (if covered, as above).
+- `close_covered(client, suppress, id, alarm_ids, actor, now)`: after bulk
+  Suppress made `id` active, closes the other selected alarms it covers
+  (same rule, program and where), each within `suppress`, the same way;
+  returns the ids of `alarm_ids` now closed by `id`.
 - `withdraw(client, id, actor, now)`: the requester's own waiting row;
   another person's is `NotFound`.
 - `remove(client, suppress, id, actor, now)`: an active row in reach.
@@ -1056,7 +1061,9 @@ Test: `tests/host_group_facts.rs`.
   while roles reach the group (`InUse` with their names), remembers an
   automatic key in `console_host_group_dismissed`, cascades rule-set
   switches, and ends the group's suppressions (waiting → `withdrawn`,
-  active → `removed`, by the deleter). Audit: `host_group.created` / `updated` (`{name, kind,
+  active → `removed`, by the deleter), each with its
+  `alarm.suppression.withdrawn` / `.removed` audit line (detail `reason`
+  "group deleted") in the same transaction. Audit: `host_group.created` / `updated` (`{name, kind,
   conditions | picked}`), `host_group.deleted` (`{name, kind,
   overrides_removed, suppressions_ended}`).
 - `host_group_writes::preview(id, proposed)` (module `host_group_preview`)

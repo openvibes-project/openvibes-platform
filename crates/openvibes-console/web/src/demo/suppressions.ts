@@ -19,6 +19,8 @@ type Stored = {
   agent_id: string | null; group_id: string | null; for_days: number | null; state: State; reason: string;
   created_by: string; created_at: string; decided_by: string | null; decided_at: string | null; decision_reason: string | null;
   activated_at: string | null; expires_at: string | null; alarm_id: string | null;
+  /** Other selected alarms a bulk Suppress closed with it, replayed on load. */
+  closed?: string[];
 };
 /** A store refusal: the route's status, code and (422) field. */
 export type Refusal = { status: number; code: string; field?: string };
@@ -39,7 +41,8 @@ export function validRow(value: unknown): value is Stored {
     && ["exe", "rule_set_id", "rule_id", "reason", "created_by", "created_at"].every(text)
     && ["agent_id", "group_id", "alarm_id", "decided_by", "decided_at", "decision_reason", "activated_at", "expires_at"].every(textOrNull)
     && (r.for_days === null || r.for_days === 7 || r.for_days === 30)
-    && (r.args === null || (Array.isArray(r.args) && r.args.every((a) => typeof a === "string")));
+    && (r.args === null || (Array.isArray(r.args) && r.args.every((a) => typeof a === "string")))
+    && (r.closed === undefined || (Array.isArray(r.closed) && r.closed.every((a) => typeof a === "string")));
 }
 
 export function createSuppressions(ctx: DemoContext, requireApproval: () => boolean) {
@@ -94,10 +97,10 @@ export function createSuppressions(ctx: DemoContext, requireApproval: () => bool
     };
   };
 
-  /** close_source: false positive, suppressed by `s`, if still open or investigating. */
-  const closeSource = (s: Stored) => {
-    const alarm = data.alarms.find((a) => a.id === s.alarm_id);
-    if (!alarm || !["open", "investigating"].includes(alarm.state)) return;
+  /** close_source: false positive, suppressed by `s`, if `s` covers it and it is still open or investigating. */
+  const closeSource = (s: Stored, alarmId: string | null) => {
+    const alarm = data.alarms.find((a) => a.id === alarmId);
+    if (!alarm || !["open", "investigating"].includes(alarm.state) || !covers(s, alarm)) return;
     const note = `suppressed by #${s.id}`;
     alarm.state = "false_positive";
     alarm.suppressed_by = s.id;
@@ -105,12 +108,12 @@ export function createSuppressions(ctx: DemoContext, requireApproval: () => bool
       updated_at: s.activated_at, updated_by: data.access.users.find((u) => u.user_id === (s.decided_by ?? s.created_by))?.username ?? actor };
   };
   // This persona's alarms were made fresh: close those active rows closed before.
-  for (const s of rows) if (s.activated_at) closeSource(s);
+  for (const s of rows) if (s.activated_at) for (const a of [s.alarm_id, ...(s.closed ?? [])]) closeSource(s, a);
   const activate = (s: Stored, at: string) => {
     s.state = "active";
     s.activated_at = at;
     s.expires_at = s.for_days === null ? null : new Date(Date.parse(at) + s.for_days * DAY).toISOString();
-    closeSource(s);
+    closeSource(s, s.alarm_id);
   };
   const done = (s: Stored, action: string) => { save(); audit(action, s.id, "alarm_suppression"); return view(s); };
 
@@ -187,12 +190,29 @@ export function createSuppressions(ctx: DemoContext, requireApproval: () => bool
       s.state = "removed";
       return done(s, "alarm.suppression.removed");
     },
+    /** close_covered: after bulk Suppress made `id` active, closes the selected alarms it covers in the suppress reach; returns those closed by it. */
+    closeCovered(id: string, alarmIds: readonly string[]) {
+      const s = rows.find((r) => r.id === id && r.state === "active");
+      if (!s) return [];
+      for (const alarmId of alarmIds) {
+        const alarm = data.alarms.find((a) => a.id === alarmId);
+        if (alarm && reaches("alarms.suppress", alarm.agent_id)) closeSource(s, alarmId);
+      }
+      const closed = alarmIds.filter((a) => data.alarms.find((x) => x.id === a)?.suppressed_by === id);
+      s.closed = closed.filter((a) => a !== s.alarm_id);
+      save();
+      return closed;
+    },
     /** Waiting and active rows on a group, which deleting it ends. */
     onGroup: (groupId: string) => rows.filter((s) => s.group_id === groupId && (s.state === "waiting" || s.state === "active")).length,
     /** A group's delete: waiting rows are withdrawn, active ones removed; returns how many. */
     endGroup(groupId: string) {
       const ended = rows.filter((s) => s.group_id === groupId && (s.state === "waiting" || s.state === "active"));
-      for (const s of ended) Object.assign(s, s.state === "waiting" ? { state: "withdrawn", decided_by: me, decided_at: iso() } : { state: "removed" });
+      for (const s of ended) {
+        const waiting = s.state === "waiting";
+        Object.assign(s, waiting ? { state: "withdrawn", decided_by: me, decided_at: iso() } : { state: "removed" });
+        audit(waiting ? "alarm.suppression.withdrawn" : "alarm.suppression.removed", s.id, "alarm_suppression");
+      }
       save();
       return ended.length;
     },

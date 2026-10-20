@@ -4,8 +4,6 @@
 //! browser sends exactly the rows it shows; each item goes through its
 //! single-item rules, and skipped items come back with a reason.
 
-use std::collections::HashSet;
-
 use axum::{
     Json,
     extract::{State, rejection::JsonRejection},
@@ -14,13 +12,15 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use platform_store::{
-    alarm_suppressions::{self, Change, Request, State as SuppressionState, What, Where},
     bulk_triage::{self as store, BulkChange, BulkRefusal, BulkResult, MAX_ITEMS},
     console_cases::{self, NewCase, Refusal},
     console_read::AgentScope,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+mod suppress;
+use suppress::suppress;
 
 use crate::{
     Permission, ProblemDetails, access::guard::unavailable_auth, cases::authorize,
@@ -436,64 +436,4 @@ async fn add_to_case(
         number = Some(detail.summary.number);
     }
     respond(result, number.map(|n| (case.clone(), n)))
-}
-
-/// One `program` suppression per distinct rule and program among the
-/// selected alarms; activation closes each representative alarm, later
-/// ones close as they arrive. With approval on each waits (skipped).
-async fn suppress(
-    client: &mut platform_store::Client,
-    scope: &AgentScope,
-    user_id: &str,
-    ids: &[i64],
-    note: &str,
-    now: DateTime<Utc>,
-) -> Response {
-    let Ok(rows) = client
-        .query(
-            "SELECT DISTINCT ON (rule_set_id, rule_id, process->>'exe') id
-             FROM alarms WHERE id = ANY($1) AND source = 'agent' ORDER BY rule_set_id, rule_id, process->>'exe', id",
-            &[&ids],
-        )
-        .await
-    else {
-        return unavailable_auth();
-    };
-    let representatives: HashSet<i64> = rows.iter().map(|r| r.get(0)).collect();
-    let mut result = BulkResult::default();
-    for id in ids {
-        if !representatives.contains(id) {
-            continue;
-        }
-        let request = Request {
-            alarm_row_id: *id,
-            what: What::Program,
-            place: Where::All,
-            for_days: None,
-            reason: note,
-        };
-        let made = alarm_suppressions::request(client, scope, &request, user_id, now).await;
-        let skipped = match made {
-            Err(_) => return unavailable_auth(),
-            // Approval on: requested, not yet quieting anything.
-            Ok(Change::Done(made)) if made.state == SuppressionState::Waiting => {
-                "Suppression requested, waiting for approval"
-            }
-            Ok(Change::Done(_)) => {
-                result.changed += 1;
-                continue;
-            }
-            Ok(Change::NeedsGlobalScope) => "program suppressions need global scope",
-            Ok(Change::NotInReach) => "outside your suppress reach",
-            Ok(Change::Invalid(field)) if field == "reason" => {
-                "the note must be 1 to 4,000 characters"
-            }
-            Ok(Change::Invalid(_)) => "this alarm can't be suppressed",
-            Ok(Change::NotFound | Change::WrongState | Change::OwnRequest) => {
-                "not found or out of scope"
-            }
-        };
-        result.skipped.push((id.to_string(), skipped));
-    }
-    respond(result, None)
 }

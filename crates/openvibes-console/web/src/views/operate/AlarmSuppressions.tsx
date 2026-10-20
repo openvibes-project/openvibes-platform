@@ -5,7 +5,7 @@
 import { useState } from "react";
 
 import { useResource } from "../../api/client";
-import type { AlarmSuppression, AuditEvent } from "../../api/types";
+import type { AlarmSuppression, AuditEvent, PersonRow } from "../../api/types";
 import { useSession } from "../../app/session";
 import { auditActionLabel } from "../../ui/auditActions";
 import { ErrorBox, Loading } from "../../ui/bits";
@@ -25,7 +25,7 @@ const PREFIX = "alarm.suppression.";
 /** `loading` and `failed` say so in the card instead of looking empty. */
 type RecentLines = readonly AuditEvent[] | "loading" | "failed";
 
-function Recent({ lines }: { lines: RecentLines }) {
+function Recent({ lines, names }: { lines: RecentLines; names: ReadonlyMap<string, string> }) {
   const none = lines === "loading" ? "Loading recent changes…" : lines === "failed" ? "Recent changes could not be loaded; the audit log has them." : "No suppression changes in the last 30 days.";
   return (
     <Card title="Recent changes" aside={<a {...link("/audit", { q: PREFIX })}>Audit log</a>}>
@@ -34,7 +34,7 @@ function Recent({ lines }: { lines: RecentLines }) {
           {lines.map((e) => (
             <li key={e.id}>
               <span>{auditActionLabel(e.action)}{e.target_id ? ` #${e.target_id}` : ""}</span>
-              <span className="subtle">{e.actor} · {ago(e.at)}</span>
+              <span className="subtle">{names.get(e.actor_id ?? e.actor) ?? e.actor} · {ago(e.at)}</span>
             </li>
           ))}
         </ul>
@@ -43,8 +43,8 @@ function Recent({ lines }: { lines: RecentLines }) {
   );
 }
 
-/** The screen from the list; `recent` is undefined without audit access (the card is hidden). */
-export function AlarmSuppressionsBody({ items, recent }: { items: readonly AlarmSuppression[]; recent?: RecentLines | undefined }) {
+/** The screen from the list; `recent` is undefined without audit access (the card is hidden); `names` maps user ids to names. */
+export function AlarmSuppressionsBody({ items, recent, names = new Map() }: { items: readonly AlarmSuppression[]; recent?: RecentLines | undefined; names?: ReadonlyMap<string, string> }) {
   // The row that moved to another card keeps focus there.
   const [focus, setFocus] = useState<string>();
   const done = (card: string) => (id: string, gone: boolean) => {
@@ -68,7 +68,7 @@ export function AlarmSuppressionsBody({ items, recent }: { items: readonly Alarm
               ))}
             </ul>
           </Card>
-          {recent && <Recent lines={recent} />}
+          {recent && <Recent lines={recent} names={names} />}
         </div>
         <div className="stack person-page__col">
           {CARDS.map((c) => {
@@ -96,8 +96,9 @@ export function AlarmSuppressions() {
   const [since] = useState(() => new Date(Date.now() - 30 * 86_400_000).toISOString());
   const list = useResource<{ items: AlarmSuppression[] }>("/api/v1/alarm-suppressions");
   const audit = useResource<{ items: AuditEvent[] }>(can("audit.read") ? `/api/v1/audit-events?since=${encodeURIComponent(since)}&action_prefix=${PREFIX}&limit=8` : null);
+  const people = useResource<PersonRow[]>(can("audit.read") && can("access.read") ? "/api/v1/users" : null);
   if (list.error) return <div className="view-pad"><ErrorBox error={list.error} /></div>;
   if (!list.data) return <Loading />;
   const recent = !can("audit.read") ? undefined : audit.error ? "failed" : audit.data?.items ?? "loading";
-  return <AlarmSuppressionsBody items={list.data.items} recent={recent} />;
+  return <AlarmSuppressionsBody items={list.data.items} recent={recent} names={new Map((people.data ?? []).map((p) => [p.user_id, p.display_name]))} />;
 }

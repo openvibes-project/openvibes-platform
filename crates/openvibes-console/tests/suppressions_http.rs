@@ -13,7 +13,7 @@ use tower::ServiceExt;
 mod common;
 use common::{
     http::sign_in,
-    suppressions::{LIST, setup},
+    suppressions::{LINUX_HOST, LIST, alarm, setup},
 };
 
 #[tokio::test]
@@ -384,5 +384,63 @@ async fn bulk_suppress_names_an_invalid_note() {
         answer["skipped"][0]["reason"],
         "the note must be 1 to 4,000 characters"
     );
+    s.done().await;
+}
+
+/// Three selected alarms of one rule and program: one suppression closes
+/// all three; with approval on none closes and each says requested.
+#[tokio::test]
+async fn bulk_suppress_closes_every_selected_alarm() {
+    for approval in [false, true] {
+        let Some(s) = setup().await else { return };
+        s.approval(approval).await;
+        let mut client = s.fx.db.pool.get().await.unwrap();
+        let third = alarm(&mut client, LINUX_HOST, 3, Utc::now()).await;
+        drop(client);
+        let ids = [&s.linux_alarm, &s.win_alarm, &third];
+        let items: Vec<Value> = ids.iter().map(|id| json!({"id": id})).collect();
+        let body = json!({"action": "suppress", "note": "noise", "items": items});
+        let (status, answer) = s
+            .call(&s.fx.admin, "POST", "/api/v1/alarms/bulk", Some(body))
+            .await;
+        assert_eq!(status, StatusCode::OK, "{answer}");
+        assert_eq!(s.rows(&s.fx.admin).await.len(), 1, "one suppression");
+        let want = if approval { "open" } else { "false_positive" };
+        for id in ids {
+            assert_eq!(s.alarm_state(id).await, want, "{id} {answer}");
+        }
+        if approval {
+            assert_eq!(answer["changed"], 0, "{answer}");
+            let skipped = answer["skipped"].as_array().unwrap();
+            assert_eq!(skipped.len(), 3, "{answer}");
+            assert!(
+                skipped
+                    .iter()
+                    .all(|row| row["reason"] == "Suppression requested, waiting for approval")
+            );
+        } else {
+            assert_eq!(answer["changed"], 3, "{answer}");
+            assert_eq!(answer["skipped"], json!([]), "{answer}");
+        }
+        s.done().await;
+    }
+}
+
+/// The source alarm closes only when the suppression's where covers it.
+#[tokio::test]
+async fn source_alarm_closes_only_when_covered() {
+    let Some(s) = setup().await else { return };
+    let (status, made) = s
+        .ask(&s.fx.admin, &s.linux_alarm, s.group(&s.windows))
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{made}");
+    assert_eq!(
+        s.alarm_state(&s.linux_alarm).await,
+        "open",
+        "not in windows"
+    );
+    let (status, made) = s.ask(&s.fx.admin, &s.linux_alarm, s.group(&s.linux)).await;
+    assert_eq!(status, StatusCode::CREATED, "{made}");
+    assert_eq!(s.alarm_state(&s.linux_alarm).await, "false_positive");
     s.done().await;
 }

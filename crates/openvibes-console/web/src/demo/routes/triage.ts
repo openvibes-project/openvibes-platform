@@ -113,24 +113,31 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     }
     return { changed, caseId };
   };
-  // One program suppression on all hosts per rule and program (bulk.rs
-  // `suppress`); with approval on each waits and is skipped as requested.
+  // One program suppression on all hosts per rule and program (bulk/suppress.rs);
+  // activation closes every selected alarm of it, with approval on each waits
+  // and its alarms are skipped as requested.
   const SUPPRESS_SKIPS: Record<string, string> = {
     global_scope_required: "program suppressions need global scope", permission_denied: "outside your suppress reach",
     reason: "the note must be 1 to 4,000 characters", for: "this alarm can't be suppressed", group: "this alarm can't be suppressed",
   };
   const bulkSuppress = (picked: Picked, note: string, skipped: Skip[]): number => {
-    const seen = new Set<string>();
-    let changed = 0;
-    for (const t of picked.found) {
+    const groups = new Map<string, string[]>();
+    for (const t of [...picked.found].sort((a, b) => Number(a.id) - Number(b.id))) {
       const alarm = alarmList().find((a) => a.id === t.id);
-      const key = `${alarm?.rule_set_id}|${alarm?.rule_id}|${alarm?.exe}`;
-      if (!alarm || seen.has(key)) continue;
-      seen.add(key);
-      const made = suppressions.request({ alarmId: alarm.id, what: "program", where: { kind: "all" }, forDays: null, reason: note });
-      if ("code" in made) skipped.push({ id: alarm.id, reason: SUPPRESS_SKIPS[made.field ?? made.code] ?? "not found or out of scope" });
-      else if (made.status === "waiting") skipped.push({ id: alarm.id, reason: "Suppression requested, waiting for approval" });
-      else changed += 1;
+      if (!alarm) continue;
+      const key = `${alarm.rule_set_id}|${alarm.rule_id}|${alarm.exe}`;
+      groups.set(key, [...(groups.get(key) ?? []), alarm.id]);
+    }
+    let changed = 0;
+    for (const members of groups.values()) {
+      const made = suppressions.request({ alarmId: members[0] ?? "", what: "program", where: { kind: "all" }, forDays: null, reason: note });
+      const why = "code" in made ? SUPPRESS_SKIPS[made.field ?? made.code] ?? "not found or out of scope"
+        : made.status === "waiting" ? "Suppression requested, waiting for approval" : null;
+      if (why) { for (const id of members) skipped.push({ id, reason: why }); continue; }
+      if ("code" in made) continue;
+      const closed = suppressions.closeCovered(made.id, members);
+      changed += closed.length;
+      for (const id of members) if (!closed.includes(id)) skipped.push({ id, reason: "not open, or out of scope" });
     }
     return changed;
   };

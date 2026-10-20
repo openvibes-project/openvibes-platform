@@ -301,6 +301,29 @@ async fn deleting_a_group_ends_its_suppressions() {
         .unwrap()
         .get(0);
     assert_eq!(detail, 2);
+    let lines = c
+        .query(
+            "SELECT action, target_id, detail->>'reason', detail->>'state' FROM audit_log
+             WHERE target_kind = 'alarm_suppression' ORDER BY target_id::bigint",
+            &[],
+        )
+        .await
+        .unwrap();
+    let lines: Vec<(String, String, String, String)> = lines
+        .iter()
+        .map(|r| (r.get(0), r.get(1), r.get(2), r.get(3)))
+        .collect();
+    let line = |action: &str, id: i64, state: &str| {
+        let reason = "group deleted".to_owned();
+        (action.to_owned(), id.to_string(), reason, state.to_owned())
+    };
+    assert_eq!(
+        lines,
+        [
+            line("alarm.suppression.withdrawn", waiting, "withdrawn"),
+            line("alarm.suppression.removed", active, "removed"),
+        ]
+    );
     db.drop().await;
 }
 

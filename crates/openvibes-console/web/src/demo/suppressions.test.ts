@@ -122,4 +122,36 @@ describe("demo suppressions", () => {
     expect((await call(admin, "DELETE", `/api/v1/host-groups/${id}?version=1`)).status).toBe(204);
     expect((await rows(admin)).filter((r) => r.where.group_id === id)).toEqual([]);
   });
+
+  it("bulk Suppress closes every selected alarm of one rule and program, none while approval is on", async () => {
+    type Row = { id: string; rule_set_id: string; rule_id: string; exe: string | null; state: string };
+    // The demo's two nginx health-check alarms share rule and program.
+    const pick = async () => {
+      const items = (await call<{ items: Row[] }>(as("admin"), "GET", "/api/v1/alarms?limit=100")).body.items;
+      return items.filter((a) => a.rule_id === "web-server-spawns-shell" && a.exe === "/usr/bin/sh").map((a) => a.id);
+    };
+    const bulk = async (ids: string[]) =>
+      (await call<{ changed: number; skipped: { reason: string }[] }>(as("admin"), "POST", "/api/v1/alarms/bulk", { action: "suppress", note: "noise", items: ids.map((id) => ({ id })) })).body;
+    await approval(true);
+    const ids = await pick();
+    expect(ids).toHaveLength(2);
+    const waiting = await bulk(ids);
+    expect(waiting.changed).toBe(0);
+    expect(waiting.skipped.map((s) => s.reason)).toEqual(Array(2).fill("Suppression requested, waiting for approval"));
+    for (const id of ids) expect((await alarm(as("admin"), id)).state).toBe("open");
+    await approval(false);
+    const done = await bulk(ids);
+    expect(done).toMatchObject({ changed: 2, skipped: [] });
+    for (const id of ids) expect((await alarm(as("admin"), id)).state).toBe("false_positive");
+  });
+
+  it("closes the source alarm only when the where covers its host", async () => {
+    const admin = as("admin");
+    const made = (await call<{ asset_group_id: string }>(admin, "POST", "/api/v1/host-groups", { name: "Elsewhere", kind: "manual", agent_ids: ["agent-00003"] })).body;
+    const elsewhere = (await ask(admin, { where: { kind: "group", group_id: made.asset_group_id } })).body;
+    expect(elsewhere.status).toBe("active");
+    expect((await alarm(admin)).state).toBe("open");
+    await ask(admin, { where: { kind: "group", group_id: "grp-pilot" } });
+    expect((await alarm(admin)).state).toBe("false_positive");
+  });
 });
