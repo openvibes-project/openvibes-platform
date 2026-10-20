@@ -5683,6 +5683,78 @@
         }
       }
     },
+    "/api/v1/hosts/{agent_id}/summary": {
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "The host page's summary.",
+        "operationId": "host_summary",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "description": "Agent id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The host page above the fold",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSummaryView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "host_not_found: missing or outside reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/list-columns/{page}": {
       "get": {
         "tags": [
@@ -13833,6 +13905,39 @@
         },
         "additionalProperties": false
       },
+      "HostActionsView": {
+        "type": "object",
+        "description": "What the caller may do on this host.",
+        "required": [
+          "label",
+          "revoke",
+          "export",
+          "add_to_case",
+          "ask"
+        ],
+        "properties": {
+          "add_to_case": {
+            "type": "boolean",
+            "description": "Add to a case (`cases.write`)."
+          },
+          "ask": {
+            "type": "boolean",
+            "description": "Ask the assistant (`assistant.use`)."
+          },
+          "export": {
+            "type": "boolean",
+            "description": "Export (`hosts.export`)."
+          },
+          "label": {
+            "type": "boolean",
+            "description": "Add and remove labels (`hosts.label`, not on a revoked or imported host)."
+          },
+          "revoke": {
+            "type": "boolean",
+            "description": "Revoke (`hosts.revoke`, not on a revoked or imported host)."
+          }
+        }
+      },
       "HostAgentView": {
         "type": "object",
         "description": "The host's agent.",
@@ -13906,6 +14011,98 @@
               "$ref": "#/components/schemas/CountView"
             },
             "description": "By status."
+          }
+        }
+      },
+      "HostFactsView": {
+        "type": "object",
+        "description": "The header and Details facts.",
+        "required": [
+          "id",
+          "status",
+          "os",
+          "enrolled_at",
+          "capabilities"
+        ],
+        "properties": {
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Address of the last connection."
+          },
+          "agent_older": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Older than the latest agent release; absent when unknown."
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Reported agent capabilities."
+          },
+          "enrolled_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name."
+          },
+          "id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "inventory_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last inventory, RFC 3339."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last heartbeat, RFC 3339."
+          },
+          "os": {
+            "$ref": "#/components/schemas/HostOsView",
+            "description": "Operating system."
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339."
+          },
+          "running_kernel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Running kernel."
+          },
+          "scanner_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent version."
+          },
+          "status": {
+            "type": "string",
+            "description": "`online`, `offline`, `revoked` or `imported`."
           }
         }
       },
@@ -14131,6 +14328,38 @@
           }
         }
       },
+      "HostInventoryView": {
+        "type": "object",
+        "description": "Software, ports and services counts.",
+        "required": [
+          "packages",
+          "listening_ports",
+          "exposed_ports",
+          "services"
+        ],
+        "properties": {
+          "exposed_ports": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Listening ports reachable from outside the host."
+          },
+          "listening_ports": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Listening ports."
+          },
+          "packages": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Installed packages."
+          },
+          "services": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Running services."
+          }
+        }
+      },
       "HostLabelsView": {
         "type": "object",
         "description": "A host's labels and the groups it is in.",
@@ -14189,7 +14418,7 @@
             "description": "Latest agent release, when known."
           },
           "summary": {
-            "$ref": "#/components/schemas/HostSummaryView",
+            "$ref": "#/components/schemas/HostSummaryLineView",
             "description": "Summary over the matching hosts."
           },
           "total": {
@@ -14327,6 +14556,30 @@
             ],
             "format": "int64",
             "description": "Open agent alarms."
+          }
+        }
+      },
+      "HostProtectionView": {
+        "type": "object",
+        "description": "Protection: threat alarms and the latest test.",
+        "required": [
+          "last_test"
+        ],
+        "properties": {
+          "last_test": {
+            "$ref": "#/components/schemas/LastTest",
+            "description": "The latest test alarm and finding."
+          },
+          "threat_alarms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentAlarmsView",
+                "description": "Threat alarms on or off; absent before the first health report."
+              }
+            ]
           }
         }
       },
@@ -14528,7 +14781,7 @@
           }
         }
       },
-      "HostSummaryView": {
+      "HostSummaryLineView": {
         "type": "object",
         "description": "The line above the list.",
         "required": [
@@ -14551,6 +14804,140 @@
             "type": "integer",
             "format": "int64",
             "description": "Online hosts."
+          }
+        }
+      },
+      "HostSummaryView": {
+        "type": "object",
+        "description": "Everything above the fold on a host's page.",
+        "required": [
+          "host",
+          "tiles",
+          "protection",
+          "groups",
+          "labels",
+          "certificates",
+          "certificate_count",
+          "inventory",
+          "can"
+        ],
+        "properties": {
+          "can": {
+            "$ref": "#/components/schemas/HostActionsView",
+            "description": "Allowed actions."
+          },
+          "certificate_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All its certificates."
+          },
+          "certificates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CertificateView"
+            },
+            "description": "The five newest certificates."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostGroupRef"
+            },
+            "description": "Groups holding the host, by name."
+          },
+          "host": {
+            "$ref": "#/components/schemas/HostFactsView",
+            "description": "Header and Details facts."
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/HostInventoryView",
+            "description": "Counts behind the software, ports and services sub-pages."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels."
+          },
+          "protection": {
+            "$ref": "#/components/schemas/HostProtectionView",
+            "description": "Protection."
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/HostTilesView",
+            "description": "Tiles."
+          },
+          "top_alarms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TopAlarmsView",
+                "description": "Top three open alarms (`alarms.read`)."
+              }
+            ]
+          },
+          "top_failing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TopFailingListView",
+                "description": "Top three failing checks (`compliance.read`)."
+              }
+            ]
+          },
+          "top_vulnerabilities": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TopVulnerabilitiesView",
+                "description": "Top three open vulnerabilities (`vulnerabilities.read`)."
+              }
+            ]
+          }
+        }
+      },
+      "HostTilesView": {
+        "type": "object",
+        "description": "The four tiles; each absent without its permission on this host.",
+        "properties": {
+          "compliance_failing": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Failing compliance checks (`compliance.read`)."
+          },
+          "open_alarms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Open agent alarms (`alarms.read`)."
+          },
+          "software": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Installed packages (`hosts.read`)."
+          },
+          "vulnerabilities": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Open vulnerabilities (`vulnerabilities.read`)."
           }
         }
       },
@@ -17274,6 +17661,112 @@
           }
         }
       },
+      "TopAlarmView": {
+        "type": "object",
+        "description": "An open alarm in the top three.",
+        "required": [
+          "id",
+          "rule_id",
+          "message",
+          "severity",
+          "last_seen"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Alarm id."
+          },
+          "last_seen": {
+            "type": "string",
+            "description": "Latest match, RFC 3339."
+          },
+          "message": {
+            "type": "string",
+            "description": "Message."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity."
+          }
+        }
+      },
+      "TopAlarmsView": {
+        "type": "object",
+        "description": "Open alarms, most severe then newest first.",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopAlarmView"
+            },
+            "description": "Up to three."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All of them."
+          }
+        }
+      },
+      "TopFailingListView": {
+        "type": "object",
+        "description": "Failing checks, most severe then newest first.",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopFailingView"
+            },
+            "description": "Up to three."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All of them."
+          }
+        }
+      },
+      "TopFailingView": {
+        "type": "object",
+        "description": "A failing check in the top three.",
+        "required": [
+          "rule_set_id",
+          "rule_id",
+          "severity",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity."
+          }
+        }
+      },
       "TopHostItem": {
         "type": "object",
         "description": "One host in the ranking.",
@@ -17321,6 +17814,51 @@
               "$ref": "#/components/schemas/TopHostItem"
             },
             "description": "Most exposed first."
+          }
+        }
+      },
+      "TopVulnerabilitiesView": {
+        "type": "object",
+        "description": "Open vulnerabilities, in the Vulnerabilities list's priority order.",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopVulnerabilityView"
+            },
+            "description": "Up to three."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All of them."
+          }
+        }
+      },
+      "TopVulnerabilityView": {
+        "type": "object",
+        "description": "An open vulnerability in the top three.",
+        "required": [
+          "advisory",
+          "severity",
+          "kev"
+        ],
+        "properties": {
+          "advisory": {
+            "type": "string",
+            "description": "Advisory id."
+          },
+          "kev": {
+            "type": "boolean",
+            "description": "On the known-exploited list."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity."
           }
         }
       },

@@ -118,7 +118,7 @@ pub(crate) struct HostCountsView {
 
 /// The line above the list.
 #[derive(Serialize, ToSchema)]
-pub(crate) struct HostSummaryView {
+pub(crate) struct HostSummaryLineView {
     /// Online hosts.
     pub online: i64,
     /// Hosts with an older agent.
@@ -137,7 +137,7 @@ pub(crate) struct HostListView {
     /// Per-value counts.
     pub counts: HostCountsView,
     /// Summary over the matching hosts.
-    pub summary: HostSummaryView,
+    pub summary: HostSummaryLineView,
     /// Latest agent release, when known.
     pub latest_agent_version: Option<String>,
     /// RFC 3339.
@@ -218,7 +218,7 @@ impl HostListView {
                 problems: counts(c.problems, |v| v.as_str().into()),
                 agent: counts(c.agent, |v| v.as_str().into()),
             },
-            summary: HostSummaryView {
+            summary: HostSummaryLineView {
                 online: page.summary.online,
                 older_agent: page.summary.older_agent,
                 critical: page.summary.critical,

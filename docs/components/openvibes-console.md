@@ -905,6 +905,28 @@ the update checker's last-known agent release (null when the checker is off
 or has not found one yet); it is looked up in the background at start, so it
 fills a few seconds after start, and the route never waits on the network. A store failure is 503.
 
+## Host page summary
+
+`GET /api/v1/hosts/{agent_id}/summary` (needs `hosts.read`; session or
+bearer) answers everything above the fold on the host page (plan ruling
+10): `host` (header and Details facts), `tiles` (`open_alarms`,
+`compliance_failing`, `vulnerabilities`, `software`), `protection` (threat
+alarms and the last test), `groups`, `labels`, the five newest
+`certificates` with `certificate_count`, the `top_alarms`,
+`top_vulnerabilities` and `top_failing` lists (three items and a `total`;
+alarms and checks most severe then newest first, vulnerabilities in the
+Vulnerabilities list's priority order), `inventory` (packages, listening
+and exposed ports, services) and `can` (`label`, `revoke`, `export`,
+`add_to_case`, `ask`). The alarms, compliance and vulnerability tiles and
+lists are null unless `alarms.read`, `compliance.read` or
+`vulnerabilities.read` reaches this host; each `can` flag needs its
+permission (`hosts.label`, `hosts.revoke`, `hosts.export`, `cases.write`,
+`assistant.use`) reaching this host, and `label` and `revoke` also need an
+enrolled, unrevoked host. A missing host and one outside the caller's
+`hosts.read` reach are the same 404 `host_not_found`; a revoked host still
+answers. A store failure is 503. The list's summary line schema is
+`HostSummaryLineView`. Tests: `tests/host_summary_http.rs`.
+
 ## Saved views and list columns
 
 `GET/POST /api/v1/saved-views`, `DELETE /api/v1/saved-views/{id}` (a name or query with control characters is 422 `invalid_saved_view`) and

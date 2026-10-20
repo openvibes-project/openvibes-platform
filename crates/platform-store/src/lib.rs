@@ -73,6 +73,8 @@ pub mod host_list;
 mod host_list_sql;
 /// Open ports and running services per host (P15, Assets v2).
 pub mod host_services;
+/// The host page's summary: header, tiles, top-three lists and counts.
+pub mod host_summary;
 /// Queries the ingest service runs.
 pub mod imports;
 pub mod ingest;

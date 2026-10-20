@@ -595,6 +595,23 @@ inlinable form of the group rule check. `console_condition_holds` keeps its
 answers and now calls the prepared form. Tests: `tests/host_list.rs`,
 `tests/version_order.rs`; the 20,000-host timing (`tests/host_list_timing.rs`) is in console-read.md.
 
+## The host page summary (`host_summary::summary`)
+
+`summary(client, agent_id, &HostScopes, latest, now) -> Option<HostSummary>`:
+`None` when `scopes.hosts` does not reach the host (missing and out of
+reach look the same). A few small queries on one host: `agent_in_scope`,
+one facts row (address, distribution, OS family, status, agent age, and the
+package, listening and exposed port, service and certificate counts),
+`host_labels` (groups and labels; a revoked host keeps its labels and is in
+no group), the five newest certificates, `rules::last_tests`, and the top
+three of each problem kind with its total: open agent alarms and failing
+checks most severe then newest first, and open vulnerabilities through
+`vulns::list_in_scope` with the host as its filter, so the tile matches
+`/vulnerabilities?host=`. Each problem list is `None` unless its scope
+reaches the host. `HostSummary::reaches(scope)` applies the
+`agent_visibility` rule from the groups already read; the console uses it
+for its `can` flags. Tests: `tests/host_summary.rs`.
+
 ## Suppressions with approval (`alarm_suppressions::…`, schema 55)
 
 `0055_suppression_approval.sql` (needs a backup) gives `alarm_suppressions`
