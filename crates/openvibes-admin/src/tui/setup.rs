@@ -304,16 +304,32 @@ impl<H: Host> App<H> {
 
     fn setup_status_key(&mut self, key: Key) {
         match key {
-            Key::Char('m') => self.change_components(),
-            Key::Char('p') => self.change_ports(),
+            Key::Char('m') if self.may_change_setup() => self.change_components(),
+            Key::Char('p') if self.may_change_setup() => self.change_ports(),
+            // Finished on a set-up host: Maintenance has the changes.
+            Key::Enter if self.setup.phase == Phase::Finished && self.setup_done() => self.back(),
             Key::Char('q') => self.quit = true,
             _ => {}
         }
     }
 
+    /// `m` and `p`: only before the host is set up, or after a first
+    /// install that stopped before its CA (#87). A set-up host changes
+    /// parts and ports in Maintenance, which asks before removing.
+    pub(super) fn may_change_setup(&self) -> bool {
+        !self.setup_done() || !self.ca_exists()
+    }
+
+    fn ca_exists(&self) -> bool {
+        self.host
+            .certificates()
+            .iter()
+            .any(|(path, _)| *path == "/etc/openvibes/pki/intermediate.crt")
+    }
+
     /// Back to the form, filled from `setup.toml`; what is unticked is
     /// removed (keep data) after the install run.
-    fn change_components(&mut self) {
+    pub(super) fn change_components(&mut self) {
         let plan = match self
             .host
             .setup_plan()
@@ -333,12 +349,7 @@ impl<H: Host> App<H> {
         // #87: a plan from a first install that stopped before the CA is
         // not a set-up host: run the install again (new CA, free key name)
         // instead of a Repair that refuses to make a CA.
-        let ca_exists = self
-            .host
-            .certificates()
-            .iter()
-            .any(|(path, _)| *path == "/etc/openvibes/pki/intermediate.crt");
-        if ca_exists {
+        if self.ca_exists() {
             self.setup.previous = Some(self.setup.components.clone());
             self.setup.ca = plan.ca;
             self.setup.root_key_out.clear(); // the CA exists; no new root key
@@ -360,7 +371,7 @@ impl<H: Host> App<H> {
     }
 
     /// Change ports (#69): the same form, on the port rows.
-    fn change_ports(&mut self) {
+    pub(super) fn change_ports(&mut self) {
         self.change_components();
         if self.setup.phase == Phase::Form {
             self.setup.row = PORT_ROW;

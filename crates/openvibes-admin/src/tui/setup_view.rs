@@ -35,6 +35,15 @@ fn leave<H: Host>(app: &App<H>) -> &'static str {
     }
 }
 
+/// `m` and `p` only where they still work (`may_change_setup`).
+fn done_keys<H: Host>(app: &App<H>) -> String {
+    if app.may_change_setup() {
+        format!("{DONE_KEYS}  {}", leave(app))
+    } else {
+        leave(app).into()
+    }
+}
+
 pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     let [body, status, keys] = Layout::vertical([
         Constraint::Min(3),
@@ -63,15 +72,17 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
         Phase::Model => (model_prompt(), "Y download  N skip  Esc back".into()),
         Phase::Running(_) | Phase::Stopped(_) | Phase::Status => (
             checklist(app, usize::from(body.width.saturating_sub(2))),
-            if matches!(setup.phase, Phase::Stopped(_)) {
+            if matches!(setup.phase, Phase::Stopped(_)) && !app.may_change_setup() {
+                format!("r retry  {}", leave(app))
+            } else if matches!(setup.phase, Phase::Stopped(_)) {
                 format!("{RUN_KEYS}  {}", leave(app))
             } else if matches!(setup.phase, Phase::Running(_)) {
                 RUNNING_KEYS.into()
             } else {
-                format!("{DONE_KEYS}  {}", leave(app))
+                done_keys(app)
             },
         ),
-        Phase::Finished => (finished(app), format!("{DONE_KEYS}  {}", leave(app))),
+        Phase::Finished => (finished(app), done_keys(app)),
     };
     frame.render_widget(
         Paragraph::new(lines)
