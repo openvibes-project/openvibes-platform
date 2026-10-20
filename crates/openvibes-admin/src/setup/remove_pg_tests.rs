@@ -408,3 +408,22 @@ fn abandoning_an_update_between_stop_and_start_starts_only_the_agent() {
     assert!(!fake.called(&["/usr/bin/systemctl", "start", "openvibes-ingest.service"]));
     assert!(!fake.root.join("run/openvibes-admin/update-active").exists());
 }
+
+#[test]
+fn abandoning_an_update_does_not_start_an_agent_this_uninstall_removes() {
+    let fake = Fake::new("remove-after-update-agent-removed");
+    update_mark(&fake);
+    fake.file(
+        "/run/openvibes-admin/update-active",
+        "openvibes-agent.service\nopenvibes-ingest.service\n",
+    );
+    let plan = plan(&[Ingest, Agent]);
+    let stop = run(
+        &fake.ctx(&plan),
+        RemoveStep::Stop,
+        &args(&[Ingest, Agent], None),
+    );
+    assert!(matches!(stop, StepState::Done(_)), "{stop:?}");
+    assert!(!fake.called(&["/usr/bin/systemctl", "start"]));
+    assert!(!fake.root.join("run/openvibes-admin/update-active").exists());
+}

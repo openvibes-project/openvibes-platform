@@ -136,11 +136,14 @@ fn row<H: Host>(app: &App<H>, choice: Choice) -> Row {
 
 /// What PostgreSQL does (approved.md 46): only Remove everything takes
 /// it, and only when Setup installed it and nothing else uses it.
-fn postgres(everything: bool, recorded: bool) -> &'static str {
-    match (everything, recorded) {
-        (false, _) => "PostgreSQL stays installed: keeping the data keeps it.",
-        (true, true) => "PostgreSQL goes too if nothing else uses it: Setup installed it.",
-        (true, false) => "PostgreSQL stays: Setup did not install it.",
+fn postgres(everything: bool, recorded: bool, installed: bool) -> &'static str {
+    match (everything, recorded, installed) {
+        (false, ..) => "PostgreSQL stays installed: keeping the data keeps it.",
+        (true, true, false) => {
+            "PostgreSQL is not installed: the database is not dropped and /var/lib/pgsql stays."
+        }
+        (true, true, true) => "PostgreSQL goes too if nothing else uses it: Setup installed it.",
+        (true, false, _) => "PostgreSQL stays: Setup did not install it.",
     }
 }
 
@@ -164,9 +167,9 @@ fn help<H: Host>(app: &App<H>, choice: Choice) -> Vec<Line<'static>> {
         )),
         _ if app.maint.everything => dim(format!(
             "Nothing is left behind: every account, file and firewall change goes. {}",
-            postgres(true, app.maint.pg_recorded)
+            postgres(true, app.maint.pg_recorded, app.maint.pg_installed)
         )),
-        _ => dim(postgres(false, false).into()),
+        _ => dim(postgres(false, false, false).into()),
     }
 }
 
@@ -354,6 +357,7 @@ impl<H: Host> App<H> {
         self.maint.typing = false;
         self.maint.plan_error = None;
         self.maint.pg_recorded = self.root.join(PG_RECORD.trim_start_matches('/')).exists();
+        self.maint.pg_installed = self.root.join("usr/bin/postgres").exists();
         self.maint.plan = match self
             .host
             .setup_plan()

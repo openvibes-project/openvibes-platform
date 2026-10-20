@@ -428,7 +428,7 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
         }
         // Always called: a no-op unless an Update left its records.
         RemoveStep::Stop => {
-            super::update::abandon(ctx);
+            super::update::abandon(ctx, args.components.contains(&Component::Agent));
             ctx.job_begin(match args.confirm {
                 Some(_) => "uninstall\neverything",
                 None => "uninstall",

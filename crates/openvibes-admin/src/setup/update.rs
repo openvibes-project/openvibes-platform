@@ -210,11 +210,15 @@ pub(super) fn resume_agent<R: Runner>(ctx: &Ctx<R>) {
 /// started (Stop lists it, but only Start leaves AGENT_PENDING, so an update
 /// quit in between would leave it off for good); the platform units in the
 /// record stay stopped: they would run on a half-migrated database.
-pub(super) fn abandon<R: Runner>(ctx: &Ctx<R>) {
-    resume_agent(ctx);
-    if ctx
-        .read(ACTIVE)
-        .is_ok_and(|t| t.lines().any(|l| l == AGENT))
+/// `keep_agent_off`: the uninstall removes the agent, so it is not started.
+pub(super) fn abandon<R: Runner>(ctx: &Ctx<R>, keep_agent_off: bool) {
+    if !keep_agent_off {
+        resume_agent(ctx);
+    }
+    if !keep_agent_off
+        && ctx
+            .read(ACTIVE)
+            .is_ok_and(|t| t.lines().any(|l| l == AGENT))
     {
         let _ = ctx.ok(Systemctl, &["start", AGENT]);
     }
@@ -286,7 +290,9 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: UpdateStep, args: &UpdateArgs) -> Step
             };
             match &args.backup {
                 None => Ok(StepState::Skipped(join("no backup chosen".into()))),
-                Some(path) => backup::dump(ctx, path).map(|done| StepState::Done(join(done))),
+                Some(path) => backup::dump(ctx, path)
+                    .map(|done| StepState::Done(join(done)))
+                    .map_err(join),
             }
         }
         UpdateStep::Stop => stop(ctx),

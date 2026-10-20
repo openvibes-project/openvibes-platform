@@ -106,6 +106,8 @@ pub struct Maint {
     pub plan: Option<crate::setup::plan::Plan>,
     /// Setup recorded installing PostgreSQL (read when Uninstall opens).
     pub pg_recorded: bool,
+    /// The server package is still installed (its `/usr/bin/postgres` is there).
+    pub pg_installed: bool,
     /// Why `plan` could not be read; the page says so until it reopens.
     pub plan_error: Option<String>,
 }

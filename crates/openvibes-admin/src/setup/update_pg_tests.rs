@@ -88,3 +88,19 @@ fn an_enabled_unit_that_was_down_starts_again() {
         ["/usr/bin/systemctl", "start", "openvibes-ingest.service"]
     );
 }
+
+#[test]
+fn a_failed_backup_still_says_postgresql_was_put_back() {
+    let fake = Fake::new("update-pg-backup-fails");
+    server_removed(&fake);
+    let plan = plan(&[Ingest]);
+    let args = UpdateArgs {
+        backup: Some("/home/nobody/none/b.dump".into()),
+        ..UpdateArgs::default()
+    };
+    let state = run(&fake.ctx(&plan), UpdateStep::Backup, &args);
+    assert!(
+        matches!(&state, StepState::Failed(text) if text.starts_with("PostgreSQL was missing or stopped") && text.contains("is not a folder")),
+        "{state:?}"
+    );
+}
