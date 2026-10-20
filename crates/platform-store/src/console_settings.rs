@@ -51,6 +51,9 @@ pub async fn set(
     now: DateTime<Utc>,
 ) -> Result<Option<Value>, StoreError> {
     let tx = client.transaction().await?;
+    // serializes first writes of a key (no row to lock yet), so `old` is right
+    tx.execute("SELECT pg_advisory_xact_lock(hashtext($1))", &[&key])
+        .await?;
     let old: Option<Value> = tx
         .query_opt(
             "SELECT value FROM console_settings WHERE key = $1 FOR UPDATE",

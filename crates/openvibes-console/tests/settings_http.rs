@@ -51,6 +51,26 @@ async fn settings_are_typed_guarded_and_audited() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["value"], json!(30));
 
+    // a missing value is refused too
+    let (status, body) = fx.call(a, "PATCH", INACTIVE, Some(json!({}))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["code"], "invalid_setting");
+
+    // no CSRF header: refused
+    let request = axum::http::Request::builder()
+        .method("PATCH")
+        .uri(REQUIRE)
+        .header(axum::http::header::COOKIE, &a.0)
+        .header(axum::http::header::ORIGIN, common::http::ORIGIN)
+        .header("sec-fetch-site", "same-origin")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(axum::body::Body::from(json!({"value": true}).to_string()))
+        .unwrap();
+    let response = tower::ServiceExt::oneshot(fx.router.clone(), request)
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
     let (status, _) = fx
         .call(a, "PATCH", REQUIRE, Some(json!({"value": 1})))
         .await;
