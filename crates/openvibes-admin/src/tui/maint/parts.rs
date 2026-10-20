@@ -185,9 +185,15 @@ impl Parts {
         if !remove.is_empty() {
             doing.push(format!("removing {}", names(&remove)));
         }
+        let said: Vec<(Part, bool)> = remove
+            .iter()
+            .map(|p| (*p, false))
+            .chain(add.iter().map(|p| (*p, true)))
+            .collect();
         Some(Work::grouped(
             Kind::Parts {
                 what: cap(&doing.join(" and ")),
+                done: done_text(&said),
             },
             groups,
         ))
@@ -200,24 +206,9 @@ fn parts_run<H: Host>(app: &App<H>) -> Option<&Run> {
         .filter(|r| matches!(r.work.kind, Kind::Parts { .. }))
 }
 
-/// The result line, read back from the step titles: "Assistant installed ·
-/// ask it in the console".
-fn done_line(run: &Run) -> String {
-    let mut said: Vec<(Part, bool)> = Vec::new();
-    for (title, _) in &run.work.labels {
-        let add = if title.starts_with("Install the") {
-            true
-        } else if title.starts_with("Remove the") {
-            false
-        } else {
-            continue;
-        };
-        for part in [Part::Agent, Part::Assistant] {
-            if title.contains(part.name()) {
-                said.push((part, add));
-            }
-        }
-    }
+/// The result line (without the time) for these changes: "Assistant
+/// installed · ask it in the console".
+fn done_text(said: &[(Part, bool)]) -> String {
     let heads: Vec<String> = said
         .iter()
         .enumerate()
@@ -230,7 +221,7 @@ fn done_line(run: &Run) -> String {
             if i == 0 { cap(&head) } else { head }
         })
         .collect();
-    let tail = match said.as_slice() {
+    let tail = match said {
         [(Part::Assistant, true)] => " · ask it in the console",
         [(Part::Agent, true)] => " · this host reports to the console",
         [(_, false)] => " · nothing of it is left on this host",
@@ -288,7 +279,11 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     }
     let t = &app.theme;
     let parts = &app.maint.parts;
-    let bar = Bar::keys(&[("Space", "Select/deselect"), ("Enter", "Confirm")]);
+    let bar = if parts.error.is_some() {
+        Bar::act(&[])
+    } else {
+        Bar::keys(&[("Space", "Select/deselect"), ("Enter", "Confirm")])
+    };
     let area = frame::draw(frame, t, head, Some("Optional parts"), &app.bar(bar));
     let mut lines = Vec::new();
     if let Some(error) = &parts.error {
@@ -314,7 +309,8 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
     let running = run
         .current()
         .and_then(|c| run.work.labels.iter().position(|(_, r)| r.contains(&c)));
-    // The optional model never stops the run: its own state is a note.
+    // The optional model never stops the run: its own row shows its
+    // state as a note (label_states keeps it out of the other rows).
     let states: Vec<Option<StepState>> = label_states(run)
         .into_iter()
         .zip(&titles)
@@ -328,6 +324,17 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
                 Some(StepState::Skipped(why.to_owned()))
             }
             other => other,
+        })
+        .collect();
+    // No progress is read while it downloads.
+    let titles: Vec<String> = titles
+        .into_iter()
+        .map(|t| {
+            if t == MODEL && running.is_some_and(|i| run.work.labels[i].0 == MODEL) {
+                format!("{t}  about 2.7 GB")
+            } else {
+                t
+            }
         })
         .collect();
     let bar = match running {
@@ -354,8 +361,11 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
     ));
     lines.push(Line::raw(""));
     if run.ok() {
+        let Kind::Parts { done, .. } = &run.work.kind else {
+            return;
+        };
         lines.push(Line::styled(
-            format!("    ✓ {} ({})", done_line(run), run.took()),
+            format!("    ✓ {} ({})", done, run.took()),
             t.green(),
         ));
     } else if let Some(at) = run.stopped_at() {
@@ -377,11 +387,12 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
 impl<H: Host> App<H> {
     pub(super) fn open_parts(&mut self) {
         self.nav.row = 0;
-        // A finished run's result is not news the next time.
+        // A successful run's result is not news the next time; a failed one
+        // stays, with its Try again.
         if self
             .run
             .as_ref()
-            .is_some_and(|r| !r.running() && matches!(r.work.kind, Kind::Parts { .. }))
+            .is_some_and(|r| r.ok() && matches!(r.work.kind, Kind::Parts { .. }))
         {
             self.run = None;
         }

@@ -52,6 +52,8 @@ pub enum Kind {
     /// Optional parts added or removed; `what` is the title.
     Parts {
         what: String,
+        /// The result line, without how long it took.
+        done: String,
     },
     #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
     Ports,
@@ -75,7 +77,7 @@ impl Kind {
             Kind::Fix => "Repairing".into(),
             Kind::Uninstall { .. } => "Uninstalling".into(),
             Kind::Report => "Reading the database".into(),
-            Kind::Parts { what } => what.clone(),
+            Kind::Parts { what, .. } => what.clone(),
             Kind::Ports => "Moving agent connections".into(),
             Kind::Names => "New certificates".into(),
         }
@@ -91,7 +93,7 @@ impl Kind {
             Kind::Fix => "Repaired".into(),
             Kind::Uninstall { .. } => "OpenVIBES is removed".into(),
             Kind::Report => "Read".into(),
-            Kind::Parts { .. } => "Changed".into(),
+            Kind::Parts { done, .. } => done.clone(),
             Kind::Ports => "Moved".into(),
             Kind::Names => "New certificates made".into(),
         }
@@ -370,24 +372,32 @@ impl Run {
 }
 
 /// Each label's state: the last call's when all its calls finished, the
-/// first that did not finish, `None` before it is reached.
+/// first that did not finish, `None` before it is reached. The optional
+/// model's call is left out of a label that holds other calls: it never
+/// stops a run, so it must not turn them red.
 pub fn label_states(run: &Run) -> Vec<Option<StepState>> {
+    let model = Call::Repair(Step::AssistantModel);
     run.work
         .labels
         .iter()
         .map(|(_, calls)| {
-            let states = &run.states[calls.clone()];
-            states
-                .iter()
+            let mut own: Vec<&Option<StepState>> = calls
+                .clone()
+                .filter(|i| run.work.calls[*i] != model)
+                .map(|i| &run.states[i])
+                .collect();
+            if own.is_empty() {
+                own = run.states[calls.clone()].iter().collect();
+            }
+            own.iter()
+                .copied()
                 .flatten()
                 .find(|s| !s.finished())
                 .or_else(|| {
-                    states
-                        .iter()
-                        .all(Option::is_some)
-                        .then(|| states.last())
+                    own.iter()
+                        .all(|s| s.is_some())
+                        .then(|| own.last().copied().and_then(Option::as_ref))
                         .flatten()
-                        .and_then(Option::as_ref)
                 })
                 .cloned()
         })

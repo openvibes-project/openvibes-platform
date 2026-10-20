@@ -165,7 +165,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
             None => "up to date".into(),
         },
         Entry::Page(Page::Repair) => "check every step, fix what is wrong".into(),
-        Entry::Page(Page::Parts) => "agent on this host, assistant".into(),
+        Entry::Page(Page::Parts) => "agent on this host · assistant".into(),
         Entry::Page(Page::Database) => "schema, size, automatic clean-up".into(),
         Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
         Entry::Page(Page::Uninstall) => "remove OpenVIBES from this host".into(),

@@ -137,3 +137,23 @@ fn a_part_removal_clears_the_job_mark() {
     }
     assert!(!fake.root.join("run/openvibes-admin/job").exists());
 }
+
+#[test]
+fn a_part_removal_leaves_no_half_done_mark_but_a_whole_uninstall_does() {
+    let fake = Fake::new("part-no-mark");
+    seed(&fake);
+    run(
+        &fake.ctx(&plan(&[Ingest])),
+        RemoveStep::Stop,
+        &args(&[Agent], None),
+    );
+    assert!(!fake.root.join("run/openvibes-admin/job").exists());
+    let whole = Fake::new("whole-mark");
+    seed(&whole);
+    run(
+        &whole.ctx(&plan(&[Ingest])),
+        RemoveStep::Stop,
+        &args(&[Ingest], None),
+    );
+    assert!(whole.root.join("run/openvibes-admin/job").exists());
+}

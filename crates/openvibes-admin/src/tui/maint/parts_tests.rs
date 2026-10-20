@@ -60,6 +60,22 @@ fn calls(app: &App<SetupHost>) -> Vec<String> {
         .collect()
 }
 
+/// The `setup-step` calls made, sorted, and every step's, sorted.
+fn repairs(calls: &[String]) -> (Vec<String>, Vec<String>) {
+    let mut made: Vec<String> = calls
+        .iter()
+        .filter(|c| c.starts_with("setup-step"))
+        .cloned()
+        .collect();
+    let mut all: Vec<String> = Step::ALL
+        .iter()
+        .map(|s| format!("setup-step {} --repair", s.name()))
+        .collect();
+    made.sort();
+    all.sort();
+    (made, all)
+}
+
 /// `setup-plan` as the page must send it: the plan with the assistant added.
 fn plan_with_assistant() -> String {
     let mut plan = plan_of(PLAN).unwrap();
@@ -229,10 +245,8 @@ fn removing_the_agent_runs_remove_steps_for_the_agent_only() {
     }
     assert!(!calls.iter().any(|c| c.contains("--backup")));
     // Removal only: every Repair step exactly once, then the status.
-    assert_eq!(
-        calls.iter().filter(|c| c.starts_with("setup-step")).count(),
-        Step::ALL.len()
-    );
+    let (made, all) = repairs(&calls);
+    assert_eq!(made, all);
     let text = screen(&app);
     for want in [
         "Removing the agent",
@@ -345,4 +359,110 @@ fn every_question_fits_the_bar_with_its_buttons() {
             assert!(bar.contains(want), "missing {want:?} in\n{bar}");
         }
     }
+}
+
+#[test]
+fn a_model_that_is_not_downloaded_does_not_turn_ready_red() {
+    // Removing the agent: the plan, 6 remove steps, 13 repairs, then the model.
+    let mut answers: Vec<Result<String, HostError>> =
+        (0..20).map(|_| Ok("done\tok".to_owned())).collect();
+    answers.push(Ok("waiting\tdownload it by hand".into()));
+    let mut app = page(answers);
+    tick(&mut app, 0);
+    apply(&mut app);
+    yes_and_password(&mut app);
+    let text = screen(&app);
+    assert!(!text.contains('✗'), "{text}");
+    assert!(text.contains("✓ Ready"), "{text}");
+    assert!(
+        text.contains("Agent removed · nothing of it is left"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_failed_run_keeps_its_try_again_after_leaving_the_page() {
+    // The plan and four remove steps pass; purge fails.
+    let mut answers: Vec<Result<String, HostError>> =
+        (0..5).map(|_| Ok("done\tok".to_owned())).collect();
+    answers.push(Ok("failed\tboom".into()));
+    let mut app = page(answers);
+    tick(&mut app, 0);
+    apply(&mut app);
+    yes_and_password(&mut app);
+    assert!(screen(&app).contains("Try again"));
+    app.key(Key::Esc);
+    app.open_page(Page::Parts);
+    assert!(screen(&app).contains("Try again"));
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let calls = calls(&app);
+    assert_eq!(
+        calls[6], "remove-step purge --components agent",
+        "{calls:?}"
+    );
+    assert!(screen(&app).contains("Agent removed"));
+}
+
+#[test]
+fn the_model_row_says_the_size_while_it_downloads() {
+    let mut app = page(vec![]);
+    tick(&mut app, 1);
+    apply(&mut app);
+    yes_and_password(&mut app);
+    // Back to the moment the model starts (call 13).
+    let run = app.run.as_mut().unwrap();
+    for state in &mut run.states[13..] {
+        *state = None;
+    }
+    run.ended = None;
+    let text = screen(&app);
+    assert!(text.contains("Download the model  about 2.7 GB"), "{text}");
+    assert!(text.contains("Step 3 of 4: Download the model"), "{text}");
+}
+
+#[test]
+fn removing_one_part_and_adding_the_other() {
+    let mut app = page(vec![]);
+    tick(&mut app, 0);
+    tick(&mut app, 1);
+    assert!(screen(&app).contains("remove the agent and install the assistant"));
+    apply(&mut app);
+    assert!(screen(&app).contains("Remove the agent?"));
+    assert_eq!(detail(&app), "its data goes too");
+    yes_and_password(&mut app);
+    let calls = calls(&app);
+    assert!(
+        calls[0].starts_with(
+            "setup-plan --components ingest,console,distribution,vulns,rules,assistant "
+        ),
+        "{}",
+        calls[0]
+    );
+    let steps = ["backup", "stop", "firewall", "packages", "purge", "admin"];
+    for (i, step) in steps.iter().enumerate() {
+        assert_eq!(
+            calls[1 + i],
+            format!("remove-step {step} --components agent")
+        );
+    }
+    assert_eq!(calls[7], "setup-step packages --repair");
+    let (made, all) = repairs(&calls);
+    assert_eq!(made, all);
+    let text = screen(&app);
+    assert!(
+        text.contains("Agent removed and assistant installed ("),
+        "{text}"
+    );
+}
+
+#[test]
+fn an_unreadable_plan_offers_no_choices() {
+    let mut app = set_up(vec![]);
+    app.host.plan = "not a plan".into();
+    app.open_page(Page::Parts);
+    let text = screen(&app);
+    assert!(text.contains("The plan cannot be read"), "{text}");
+    assert!(!text.contains("Space"), "{text}");
 }

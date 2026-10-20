@@ -432,17 +432,27 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
         // Always called: a no-op unless an Update left its records.
         RemoveStep::Stop => {
             super::update::abandon(ctx, args.components.contains(&Component::Agent));
-            ctx.job_begin(match args.confirm {
-                Some(_) => "uninstall\neverything",
-                None => "uninstall",
-            })
-            .and_then(|()| stop(ctx, args))
+            // A part removal is not a half-done whole uninstall: no mark.
+            if part::is_part_removal(ctx.plan, &args.components) {
+                stop(ctx, args)
+            } else {
+                ctx.job_begin(match args.confirm {
+                    Some(_) => "uninstall\neverything",
+                    None => "uninstall",
+                })
+                .and_then(|()| stop(ctx, args))
+            }
         }
         RemoveStep::Firewall => firewall(ctx, args),
         RemoveStep::Packages => remove_packages(ctx, args),
         RemoveStep::Purge => purge(ctx, args),
         RemoveStep::Admin => {
-            admin::remove_admin(ctx, args).inspect(|state| admin::finish(ctx, state))
+            let whole = !part::is_part_removal(ctx.plan, &args.components);
+            admin::remove_admin(ctx, args).inspect(|state| {
+                if whole {
+                    admin::finish(ctx, state);
+                }
+            })
         }
     };
     result.unwrap_or_else(StepState::Failed)
