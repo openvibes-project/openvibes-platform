@@ -190,3 +190,27 @@ fn read_model_dtos_have_stable_wire_names() {
     assert_eq!(finding_page["items"][0]["authenticated"], true);
     assert_eq!(finding_page["next_cursor"], "opaque");
 }
+
+/// utoipa names a schema by its type's last path segment, so two types
+/// with the same name collapse into one and the later silently wins (the
+/// generated client then types one of them wrongly). Every registered
+/// schema name must belong to one type, and each appears once.
+#[test]
+fn registered_schema_names_are_unique() {
+    let source = include_str!("../src/http/openapi.rs");
+    let start = source.find("components(schemas(").unwrap();
+    let block = &source[start..];
+    let block = &block[..block.find("\n    )),").unwrap()];
+    let mut seen = std::collections::HashMap::new();
+    for path in block
+        .lines()
+        .skip(1)
+        .map(|l| l.trim().trim_end_matches(','))
+    {
+        let name = path.rsplit("::").next().unwrap();
+        if let Some(other) = seen.insert(name, path) {
+            panic!("schema {name} is registered twice: {other} and {path}");
+        }
+    }
+    assert!(seen.len() > 100, "parsed {} schemas", seen.len());
+}

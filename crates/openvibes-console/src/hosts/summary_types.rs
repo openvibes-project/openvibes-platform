@@ -4,7 +4,7 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 use super::LastTest;
-use super::list_types::{HostGroupRef, HostOsView};
+use super::list_types::{HostListGroupView, HostOsView};
 use crate::{AgentAlarmsView, CertificateView};
 
 /// The header and Details facts.
@@ -164,7 +164,7 @@ pub(crate) struct HostSummaryView {
     /// Protection.
     pub protection: HostProtectionView,
     /// Groups holding the host, by name.
-    pub groups: Vec<HostGroupRef>,
+    pub groups: Vec<HostListGroupView>,
     /// Labels.
     pub labels: Vec<String>,
     /// The five newest certificates.

@@ -75,6 +75,7 @@ async fn an_administrator_sees_every_section() {
     assert_eq!(body["top_failing"]["items"][0]["rule_set_id"], "set");
     assert_eq!(body["top_vulnerabilities"]["total"], 0);
     assert_eq!(body["groups"][0]["name"], "win");
+    assert_eq!(body["groups"][0]["id"], WIN);
     assert_eq!(body["labels"], serde_json::json!(["prod"]));
     assert_eq!(body["certificate_count"], 0);
     assert_eq!(body["inventory"]["packages"], 0);
@@ -158,5 +159,62 @@ async fn a_revoked_host_still_answers_and_cannot_be_revoked_again() {
     assert_eq!(body["can"]["revoke"], false);
     assert_eq!(body["can"]["label"], false);
     assert_eq!(body["can"]["export"], true);
+    fx.db.drop().await;
+}
+
+#[tokio::test]
+async fn actions_need_their_permission_on_this_host() {
+    let Some(fx) = Fx::new().await else { return };
+    seed(&fx).await;
+    let other = {
+        let client = fx.db.pool.get().await.unwrap();
+        common::manual_group(&client, "Other", &[L1]).await
+    };
+    let readers = fx
+        .role(
+            "Win readers",
+            &["hosts.read"],
+            Reach::Groups(vec![WIN.into()]),
+        )
+        .await;
+    let changers = fx
+        .role(
+            "Other changers",
+            &["hosts.read", "hosts.label", "hosts.revoke"],
+            Reach::Groups(vec![other]),
+        )
+        .await;
+    fx.db.user("mixed", &readers, 5).await;
+    fx.db
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .execute(
+            "INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+             VALUES (gen_random_uuid(), $1::text::uuid, $2, now(), 'test')",
+            &[&common::people::uid(5), &changers],
+        )
+        .await
+        .unwrap();
+    let mixed = common::http::sign_in(&fx.router, "mixed").await;
+    let (status, body) = fx.call(&mixed, "GET", &url(W1), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["can"]["revoke"], false);
+    assert_eq!(body["can"]["label"], false);
+    let (status, body) = fx.call(&mixed, "GET", &url(L1), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["can"]["revoke"], true);
+    assert_eq!(body["can"]["label"], true);
+
+    // The list sends the group's `id` too.
+    let (_, list) = fx.call(&fx.admin, "GET", "/api/v1/hosts", None).await;
+    let w1 = list["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == W1)
+        .unwrap();
+    assert_eq!(w1["groups"][0]["id"], WIN);
     fx.db.drop().await;
 }

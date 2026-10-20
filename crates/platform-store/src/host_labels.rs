@@ -72,6 +72,12 @@ pub async fn host_labels(
     if !reachable(client, scope, agent_id).await? {
         return Ok(None);
     }
+    Ok(Some(of_host(client, agent_id).await?))
+}
+
+/// The labels and groups of a host whose reach the caller already checked
+/// (a revoked host is in no group and keeps its labels).
+pub async fn of_host(client: &Client, agent_id: &str) -> Result<HostLabels, StoreError> {
     let groups = client
         .query(
             "SELECT g.asset_group_id::text, g.name, g.kind FROM console_asset_groups g
@@ -82,10 +88,10 @@ pub async fn host_labels(
         .iter()
         .map(|row| (row.get(0), row.get(1), GroupKind::parse(row.get(2))))
         .collect();
-    Ok(Some(HostLabels {
+    Ok(HostLabels {
         labels: labels(client, agent_id).await?,
         groups,
-    }))
+    })
 }
 
 /// A host's labels, in byte order.

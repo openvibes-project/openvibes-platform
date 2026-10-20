@@ -14384,6 +14384,29 @@
           }
         }
       },
+      "HostListGroupView": {
+        "type": "object",
+        "description": "A group a host belongs to.",
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Group id."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind",
+            "description": "How the group gets its hosts."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group name."
+          }
+        }
+      },
       "HostListView": {
         "type": "object",
         "description": "One page of the Hosts list.",
@@ -14616,7 +14639,7 @@
           "groups": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/HostGroupRef"
+              "$ref": "#/components/schemas/HostListGroupView"
             },
             "description": "The first two groups by name."
           },
@@ -14841,7 +14864,7 @@
           "groups": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/HostGroupRef"
+              "$ref": "#/components/schemas/HostListGroupView"
             },
             "description": "Groups holding the host, by name."
           },

@@ -18,7 +18,7 @@ use super::LastTest;
 use super::{
     agents::alarms_view,
     certificates::certificate_view,
-    list_types::{HostGroupRef, HostOsView},
+    list_types::{HostListGroupView, HostOsView},
     summary_types::{
         HostActionsView, HostFactsView, HostInventoryView, HostProtectionView, HostSummaryView,
         HostTilesView, TopAlarmView, TopAlarmsView, TopFailingListView, TopFailingView,
@@ -142,7 +142,7 @@ fn view(s: HostSummary, can: HostActionsView) -> HostSummaryView {
         groups: s
             .groups
             .into_iter()
-            .map(|(id, name, kind)| HostGroupRef {
+            .map(|(id, name, kind)| HostListGroupView {
                 id,
                 name,
                 kind: kind.into(),

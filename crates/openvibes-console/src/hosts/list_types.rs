@@ -21,7 +21,7 @@ pub(crate) struct HostOsView {
 
 /// A group a host belongs to.
 #[derive(Serialize, ToSchema)]
-pub(crate) struct HostGroupRef {
+pub(crate) struct HostListGroupView {
     /// Group id.
     pub id: String,
     /// Group name.
@@ -66,7 +66,7 @@ pub(crate) struct HostRowView {
     /// Last heartbeat, RFC 3339.
     pub last_seen_at: Option<String>,
     /// The first two groups by name.
-    pub groups: Vec<HostGroupRef>,
+    pub groups: Vec<HostListGroupView>,
     /// All its groups.
     pub group_count: i64,
     /// Labels.
@@ -161,7 +161,7 @@ impl From<HostRow> for HostRowView {
             groups: r
                 .groups
                 .into_iter()
-                .map(|(id, name, kind)| HostGroupRef {
+                .map(|(id, name, kind)| HostListGroupView {
                     id,
                     name,
                     kind: kind.into(),

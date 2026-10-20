@@ -121,7 +121,12 @@ async fn top_three_are_most_severe_then_newest_and_total_counts_all() {
          INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, last_evaluated_at, fixed_at)
          VALUES ('{host}', 'ADV-LOW', '[]', now(), now(), NULL), ('{host}', 'ADV-CRIT', '[]', now(), now(), NULL),
                 ('{host}', 'ADV-MOD', '[]', now(), now(), NULL), ('{host}', 'ADV-IMP', '[]', now(), now(), NULL),
-                ('{host}', 'ADV-FIXED', '[]', now(), now(), now());"
+                ('{host}', 'ADV-FIXED', '[]', now(), now(), now());
+         -- ADV-CRIT again, through a package version without a fix: one advisory.
+         INSERT INTO package_versions (manager, name, version) VALUES ('rpm', 'openssl', '3');
+         INSERT INTO host_packages (agent_id, package_version_id) SELECT '{host}', id FROM package_versions;
+         INSERT INTO version_vulnerabilities (package_version_id, advisory_id, package, first_seen_at)
+         SELECT id, 'ADV-CRIT', 'openssl', now() FROM package_versions;"
     ))
     .await
     .unwrap();

@@ -924,8 +924,13 @@ permission (`hosts.label`, `hosts.revoke`, `hosts.export`, `cases.write`,
 `assistant.use`) reaching this host, and `label` and `revoke` also need an
 enrolled, unrevoked host. A missing host and one outside the caller's
 `hosts.read` reach are the same 404 `host_not_found`; a revoked host still
-answers. A store failure is 503. The list's summary line schema is
-`HostSummaryLineView`. Tests: `tests/host_summary_http.rs`.
+answers. A store failure is 503. The vulnerability tile and list count
+open advisories, one per advisory, so the tile can be lower than the
+number of rows on `/vulnerabilities?host=` when an advisory reaches the
+host both as a fixable row and through a package without a fix. The
+list's summary line schema is `HostSummaryLineView`, and its group items
+are `HostListGroupView` (`id`, `name`, `kind`); `api_contract` fails when
+two registered schemas share a name. Tests: `tests/host_summary_http.rs`.
 
 ## Saved views and list columns
 

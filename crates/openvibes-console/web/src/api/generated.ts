@@ -3895,6 +3895,15 @@ export interface components {
             /** @description In byte order. */
             labels: string[];
         };
+        /** @description A group a host belongs to. */
+        HostListGroupView: {
+            /** @description Group id. */
+            id: string;
+            /** @description How the group gets its hosts. */
+            kind: components["schemas"]["HostGroupKind"];
+            /** @description Group name. */
+            name: string;
+        };
         /** @description One page of the Hosts list. */
         HostListView: {
             /** @description Per-value counts. */
@@ -3987,7 +3996,7 @@ export interface components {
              */
             group_count: number;
             /** @description The first two groups by name. */
-            groups: components["schemas"]["HostGroupRef"][];
+            groups: components["schemas"]["HostListGroupView"][];
             /** @description Host name. */
             hostname?: string | null;
             /** @description Agent id. */
@@ -4091,7 +4100,7 @@ export interface components {
             /** @description The five newest certificates. */
             certificates: components["schemas"]["CertificateView"][];
             /** @description Groups holding the host, by name. */
-            groups: components["schemas"]["HostGroupRef"][];
+            groups: components["schemas"]["HostListGroupView"][];
             /** @description Header and Details facts. */
             host: components["schemas"]["HostFactsView"];
             /** @description Counts behind the software, ports and services sub-pages. */

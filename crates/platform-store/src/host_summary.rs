@@ -81,8 +81,8 @@ pub struct HostSummary {
     pub labels: Vec<String>,
     /// Open agent alarms, with `alarms.read` here.
     pub top_alarms: Option<Top<TopAlarm>>,
-    /// Open vulnerabilities, with `vulnerabilities.read` here; in the
-    /// Vulnerabilities list's priority order.
+    /// Open advisories (one item each), with `vulnerabilities.read` here;
+    /// in the Vulnerabilities list's priority order.
     pub top_vulnerabilities: Option<Top<VulnRow>>,
     /// Failing checks, with `compliance.read` here.
     pub top_failing: Option<Top<TopFailing>>,
@@ -150,15 +150,8 @@ pub async fn summary(
             &[&agent_id, &threshold, &latest],
         )
         .await?;
-    // `host_labels` answers for hosts that can carry labels; a revoked one
-    // is in no group and keeps the labels it had.
-    let labels = match host_labels::host_labels(client, &AgentScope::Global, agent_id).await? {
-        Some(l) => l,
-        None => host_labels::HostLabels {
-            labels: host_labels::labels(client, agent_id).await?,
-            groups: Vec::new(),
-        },
-    };
+    // Reach was checked by `agent_in_scope` above.
+    let labels = host_labels::of_host(client, agent_id).await?;
     let certificates = certificates_in_scope(
         client,
         agent_id,
@@ -265,7 +258,12 @@ async fn top_vulnerabilities(
         reboot_needed: None,
         min_confidence: None,
     };
+    // One row per advisory: a host can hold an advisory both as a fixable
+    // row and through a package version without a fix. Rows come in
+    // priority order, so the first of each advisory stays.
+    let mut seen = std::collections::HashSet::new();
     let mut rows = list_in_scope(client, &filter, scope).await?;
+    rows.retain(|r| seen.insert(r.advisory_id.clone()));
     let total = i64::try_from(rows.len()).unwrap_or(i64::MAX);
     rows.truncate(TOP);
     Ok(Top { items: rows, total })
