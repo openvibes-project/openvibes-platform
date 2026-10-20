@@ -1169,3 +1169,24 @@ Test: `tests/host_group_facts.rs`.
 
 Tests: `tests/host_group_reads.rs`, `tests/host_group_writes.rs`,
 `tests/host_labels.rs` (fixtures in `tests/common/groups.rs`).
+
+## Rule metadata (`rule_meta::…`, schema 59)
+
+`console_rule_meta` holds one row per rule of each stored rule bundle
+(primary key `rule_set_id, rule_set_version, rule_id`; `rule_version`,
+`title`, `message`, optional `explain` and `"check"` of at most 600
+characters each, `attack` as `[{tactic, technique}]` and `techniques`, the
+distinct technique ids). Rows go with their bundle (`ON DELETE CASCADE`).
+The console reads and writes it (SELECT, INSERT, UPDATE); the admin CLI
+writes as the owner. `check` is a reserved word: quote it in SQL.
+
+- `upsert_from_bundle(set, version, rows)` indexes one bundle in one
+  statement; storing it again rewrites its rows. The caller verifies the
+  bundle first (the console's `rules/meta.rs`); this module verifies nothing.
+- `get(set, set_version, rule_id, rule_version)` returns `RuleMeta`, or
+  `None` for a rule that was never indexed (old data, an unverifiable
+  bundle): the caller falls back to resolving the bundle.
+- `missing_bundles(limit)` lists stored bundles without a row, for the
+  console's start-up backfill. Unverifiable bundles stay listed.
+
+Tests: `tests/rule_meta.rs`.

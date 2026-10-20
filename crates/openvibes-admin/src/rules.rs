@@ -437,6 +437,8 @@ async fn verify_and_store(
             return Err("untrusted issuer".into());
         }
     };
+    // For the console's alarm pages; its next start retries a failure.
+    let _ = openvibes_console::index_rule_bundle(client, set, stored_version).await;
     if envelope.expires_at_unix_ms - now < WARN_MS {
         eprintln!("openvibes-admin: warning: bundle expires in less than 7 days");
     }

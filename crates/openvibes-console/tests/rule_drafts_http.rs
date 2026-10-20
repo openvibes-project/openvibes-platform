@@ -637,6 +637,16 @@ async fn drafts_publish_through_the_signer_and_show_what_changed() {
         .unwrap()
         .get(0);
     assert!(published >= 2, "each publish is audited");
+    // Each published bundle is indexed for the alarm pages.
+    let indexed: i64 = client
+        .query_one(
+            "SELECT count(*) FROM console_rule_meta WHERE rule_set_id = 'site' AND rule_id = 'port.redis.exposed'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(indexed, 2);
     drop(client);
     db.drop().await;
     let _ = std::fs::remove_dir_all(dir);

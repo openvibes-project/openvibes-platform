@@ -86,6 +86,8 @@ mod migrate;
 pub mod rule_assignment;
 /// Draft rules for the site's own rule sets.
 pub mod rule_drafts;
+/// The rule-metadata index of stored bundles (schema 59).
+pub mod rule_meta;
 /// Rule sets, trust keys, and published bundles.
 pub mod rules;
 /// Saved views and hidden list columns per person and page (schema 56).

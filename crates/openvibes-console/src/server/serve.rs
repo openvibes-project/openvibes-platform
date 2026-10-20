@@ -59,6 +59,8 @@ pub async fn serve(
                 });
             }
             drop(client);
+            // One-time, bounded: index stored rule bundles not yet indexed.
+            tokio::spawn(crate::rules::meta::backfill_on_start(pool.clone()));
             let assistant_runtime = config
                 .assistant
                 .as_ref()

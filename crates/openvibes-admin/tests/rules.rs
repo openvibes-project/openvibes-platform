@@ -125,6 +125,13 @@ async fn publish_stores_the_exact_bytes() {
         .await
         .unwrap();
     assert_eq!(row.get::<_, Vec<u8>>(0), bytes);
+    // Indexed for the console's alarm pages.
+    assert_eq!(
+        fixture
+            .count("SELECT count(*) FROM console_rule_meta WHERE rule_set_version = 1")
+            .await,
+        1
+    );
     let digest: String = Sha256::digest(&bytes)
         .iter()
         .map(|b| format!("{b:02x}"))

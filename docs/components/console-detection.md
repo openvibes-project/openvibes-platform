@@ -18,6 +18,17 @@ true, and the exact historical rule definition.
   expired bundles, retired sets, and keys removed from the active trust list.
   Legacy observations without a hash are resolved only if retained bundles
   agree on the rule definition.
+- The rule-metadata index (`src/rules/meta.rs`, table `console_rule_meta`)
+  keeps each stored bundle's rules: title, message, ATT&CK pairs, and the
+  optional `explain` and `check` text (protocol rule fields the agent
+  ignores), read from the verified payload's JSON and cut to 600
+  characters. Bundles are verified as the historical read does
+  (`stored_loader`, `verify_stored`: every stored key, at the bundle's
+  creation time). A bundle is indexed when it is stored: console upload,
+  draft publishing, and `openvibes-admin rules publish`. On start the
+  console indexes, once and in the background, stored bundles without rows
+  (at most 10,000 per start) and logs how many it indexed and how many did
+  not verify. YAML payloads get no `explain`/`check`.
 - Each rule lookup first authorizes access to the referenced finding or alarm
   with the same permission and asset scope as the parent observation.
 
@@ -26,12 +37,15 @@ true, and the exact historical rule definition.
 No new configuration. Missing or unverifiable historical bundle content is
 returned as unavailable while the stored explanation remains readable. A
 hidden or unknown observation returns 404. The handler does not grant global
-rule-list access.
+rule-list access. A bundle that fails to index is logged and left out; its
+alarms fall back to `GET /api/v1/alarms/{id}/rule`, and the next start's
+backfill tries again.
 
 ## How to test
 
 ```sh
-cargo test --locked -p openvibes-console --test alarms_http
+cargo test --locked -p openvibes-console --test alarms_http --test rule_meta
+cargo test --locked -p platform-store --test rule_meta
 npm --prefix crates/openvibes-console/web run test
 npm --prefix crates/openvibes-console/web run test:e2e:demo
 ```

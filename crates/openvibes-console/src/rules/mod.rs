@@ -18,6 +18,7 @@ pub(crate) mod draft_publish;
 mod draft_types;
 pub(crate) mod drafts;
 mod envelope;
+pub(crate) mod meta;
 pub(crate) mod test_on_host;
 
 pub(crate) use draft_types::{

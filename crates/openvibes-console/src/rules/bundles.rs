@@ -302,5 +302,6 @@ pub(crate) async fn publish_authenticated_rule_bundle(
             ));
         }
     };
+    super::meta::index_published(&client, &set, version).await;
     no_store(status.into_response())
 }
