@@ -35,6 +35,14 @@ pub async fn index_bundle(client: &Client, set: &str, version: i64) -> Result<bo
     let Some((envelope, bundle)) = verify_stored(&loader, &set_id, &bytes) else {
         return Ok(false);
     };
+    if i64::try_from(envelope.rule_set_version) != Ok(version) {
+        tracing::warn!(
+            set,
+            version,
+            "stored bundle's version differs from its envelope"
+        );
+        return Ok(false);
+    }
     // ponytail: YAML payloads get no explain/check (no YAML parser here); add
     // one when a YAML rule set carries the text.
     let raw: Vec<Value> = if envelope.payload_encoding == PayloadEncoding::Json {
@@ -49,15 +57,15 @@ pub async fn index_bundle(client: &Client, set: &str, version: i64) -> Result<bo
         .rules()
         .rules
         .iter()
-        .map(|rule| {
+        .filter_map(|rule| {
             let raw = raw.iter().find(|raw| raw["id"] == rule.id.as_str());
             let text = |field: &str| {
                 raw.and_then(|raw| raw[field].as_str())
                     .map(|text| text.chars().take(TEXT_CHARS).collect())
             };
-            RuleMetaRow {
+            Some(RuleMetaRow {
                 rule_id: rule.id.as_str().into(),
-                rule_version: i64::try_from(rule.version).unwrap_or(i64::MAX),
+                rule_version: i64::try_from(rule.version).ok()?,
                 title: rule.title.clone(),
                 message: rule.finding_message.clone(),
                 explain: text("explain"),
@@ -68,7 +76,7 @@ pub async fn index_bundle(client: &Client, set: &str, version: i64) -> Result<bo
                     .flatten()
                     .map(|pair| (pair.tactic.clone(), pair.technique.clone()))
                     .collect(),
-            }
+            })
         })
         .collect();
     rule_meta::upsert_from_bundle(client, set, version, &rows).await?;

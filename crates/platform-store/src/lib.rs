@@ -113,6 +113,7 @@ use tokio_postgres::NoTls;
 pub use deadpool_postgres::{Client, Pool};
 pub use maintenance::{
     drop_partitions_before, ensure_partitions, partition_days, partition_days_of,
+    prune_alarm_hourly,
 };
 pub use migrate::{
     NEEDS_BACKUP, SCHEMA_VERSION, migrate, migrate_additive, needs_backup_after, schema_version,

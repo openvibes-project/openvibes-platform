@@ -433,6 +433,17 @@ The `detail` column is never given secrets.
   partition" check); `partition_days_of(&client, table)` any of the three.
 - Partition names come only from table constants and dates, never from input.
 
+## Alarm hourly starts (schema 60)
+
+`0060_alarm_hourly_starts.sql`: `alarm_hourly_starts (alarm_row_id, hour,
+starts)`, PK `(alarm_row_id, hour)`, for the alarm page's "Last 24 hours"
+timeline. Not partitioned and no FK (the `alarms` key includes the partition
+day). `alarms::insert_batch` adds a new alarm's whole count, or a grown
+count's difference, to `date_trunc('hour', now)` in the same transaction; a
+repeated or shrinking count adds nothing. `prune_alarm_hourly(client, now)`
+(run by `openvibes-admin` maintenance) deletes hours older than 7 days.
+Grants: ingest SELECT/INSERT/UPDATE, console SELECT.
+
 ## Threat alarms (schema 29)
 
 `0029_alarms.sql` (additive; protocol P14, plan

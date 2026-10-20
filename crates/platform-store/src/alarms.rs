@@ -271,6 +271,9 @@ pub async fn insert_batch(
                     ],
                 )
                 .await?;
+            if alarm.count > count {
+                hourly(&transaction, id, now, alarm.count - count).await?;
+            }
             // Recurrence reopens a mitigated alarm, or one whose accepted
             // risk has expired, as findings do; a false positive or an
             // unexpired accepted risk stays closed.
@@ -353,6 +356,7 @@ pub async fn insert_batch(
             )
             .await?
             .get(0);
+        hourly(&transaction, id, now, alarm.count).await?;
         done.stored += 1;
         if let Some(note) = &note {
             let day = alarm.first_seen.date_naive();
@@ -364,6 +368,26 @@ pub async fn insert_batch(
     }
     transaction.commit().await?;
     Ok(done)
+}
+
+/// Adds `starts` to the hour of `now` for the alarm (the "Last 24 hours" timeline).
+async fn hourly(
+    transaction: &deadpool_postgres::Transaction<'_>,
+    alarm_row_id: i64,
+    now: DateTime<Utc>,
+    starts: i64,
+) -> Result<(), StoreError> {
+    let starts = i32::try_from(starts).unwrap_or(i32::MAX);
+    transaction
+        .execute(
+            "INSERT INTO alarm_hourly_starts (alarm_row_id, hour, starts)
+             VALUES ($1, date_trunc('hour', $2::timestamptz), $3)
+             ON CONFLICT (alarm_row_id, hour)
+             DO UPDATE SET starts = alarm_hourly_starts.starts + EXCLUDED.starts",
+            &[&alarm_row_id, &now, &starts],
+        )
+        .await?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments, reason = "one history row's columns")]

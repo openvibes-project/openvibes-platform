@@ -6,15 +6,15 @@ use std::{io::Read, path::PathBuf};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::Subcommand;
-use openvibes_core::{Identifier, ResourceLimits, SignedRuleEnvelope};
-use openvibes_rules::{LoadContext, LoadError, RuleLoader, TrustedRuleKey};
-use platform_store::rules::{self, NewBundle, Published, TrustAdded};
+use openvibes_core::{Identifier, SignedRuleEnvelope};
+use openvibes_rules::LoadError;
+use platform_store::rules::{self, TrustAdded};
 use sha2::{Digest, Sha256};
 
 /// Largest envelope accepted: the V1 document limit.
 const MAX_ENVELOPE: u64 = 1_048_576;
 /// Publishing warns when the bundle expires sooner than this.
-const WARN_MS: i64 = 7 * 24 * 3_600_000;
+pub(super) const WARN_MS: i64 = 7 * 24 * 3_600_000;
 
 #[derive(Subcommand)]
 pub enum RulesCommand {
@@ -211,7 +211,7 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn identifier(value: &str) -> Result<Identifier, String> {
+pub(super) fn identifier(value: &str) -> Result<Identifier, String> {
     Identifier::new(value).map_err(|_| "invalid identifier".to_owned())
 }
 
@@ -225,7 +225,7 @@ fn public_key(value: &str) -> Result<[u8; 32], String> {
     }
 }
 
-fn store(error: platform_store::StoreError) -> String {
+pub(super) fn store(error: platform_store::StoreError) -> String {
     error.to_string()
 }
 
@@ -339,7 +339,7 @@ fn read_envelope(file: &PathBuf) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn load_error(error: LoadError) -> String {
+pub(super) fn load_error(error: LoadError) -> String {
     match error {
         LoadError::UntrustedIssuer => "untrusted issuer".into(),
         LoadError::InvalidSignature | LoadError::DigestMismatch => "invalid signature".into(),
@@ -372,77 +372,9 @@ async fn publish_bytes(
     let set = envelope.rule_set_id.as_str().to_owned();
     let version = envelope.rule_set_version;
     let target = Some(format!("{set} v{version} sha256:{}", hex(&digest)));
-    let result = verify_and_store(client, actor, bytes, &envelope, digest).await;
+    let result =
+        super::rules_store::verify_and_store(client, actor, bytes, &envelope, digest).await;
     (result, target)
-}
-
-async fn verify_and_store(
-    client: &mut platform_store::Client,
-    actor: &str,
-    bytes: &[u8],
-    envelope: &SignedRuleEnvelope,
-    digest: [u8; 32],
-) -> Result<String, String> {
-    let set = envelope.rule_set_id.as_str();
-    let version = envelope.rule_set_version;
-    let mut keys = Vec::new();
-    for (key, issuer) in rules::active_trust_keys(client, set).await.map_err(store)? {
-        let trusted = TrustedRuleKey::new(envelope.rule_set_id.clone(), identifier(&issuer)?, key)
-            .map_err(load_error)?;
-        keys.push(trusted);
-    }
-    let now = Utc::now().timestamp_millis();
-    // The rollback floor is the stored current version, checked by the
-    // store; the loader checks trust, signature, and time.
-    RuleLoader::new(keys, ResourceLimits::V1)
-        .and_then(|loader| {
-            loader.load_json(
-                bytes,
-                LoadContext {
-                    expected_rule_set_id: &envelope.rule_set_id,
-                    now_unix_ms: now,
-                    last_accepted: None,
-                },
-            )
-        })
-        .map_err(load_error)?;
-    let stored_version = i64::try_from(version).map_err(|_| "version out of range")?;
-    let bundle = NewBundle {
-        rule_set_id: set,
-        version: stored_version,
-        envelope: bytes,
-        envelope_sha256: digest,
-        issuer_key_id: envelope.issuer_key_id.as_str(),
-        created_at_ms: envelope.created_at_unix_ms,
-        expires_at_ms: envelope.expires_at_unix_ms,
-        published_by: actor,
-    };
-    let output = match rules::publish(client, &bundle).await.map_err(store)? {
-        Published::Stored => format!("published {set} v{version}\n"),
-        Published::Unchanged => format!("unchanged: {set} v{version} already published\n"),
-        Published::VersionConflict => {
-            return Err(format!(
-                "version {version} already published with different content"
-            ));
-        }
-        Published::NotAboveCurrent(current) => {
-            return Err(format!(
-                "version {version} is not above current version {current}"
-            ));
-        }
-        Published::Retired => return Err("rule set is retired".into()),
-        // No keys means the loader already refused it; UntrustedIssuer means
-        // the key was removed after verification.
-        Published::UnknownSet | Published::UntrustedIssuer => {
-            return Err("untrusted issuer".into());
-        }
-    };
-    // For the console's alarm pages; its next start retries a failure.
-    let _ = openvibes_console::index_rule_bundle(client, set, stored_version).await;
-    if envelope.expires_at_unix_ms - now < WARN_MS {
-        eprintln!("openvibes-admin: warning: bundle expires in less than 7 days");
-    }
-    Ok(output)
 }
 
 async fn list(client: &platform_store::Client) -> Result<String, String> {

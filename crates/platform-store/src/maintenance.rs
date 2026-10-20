@@ -128,3 +128,17 @@ async fn drop_partitions(client: &Client, cutoff: NaiveDate) -> Result<u32, Stor
     }
     Ok(dropped)
 }
+
+/// Deletes per-hour alarm starts older than 7 days before `now`; returns how
+/// many rows went.
+pub async fn prune_alarm_hourly(
+    client: &Client,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<u64, StoreError> {
+    Ok(client
+        .execute(
+            "DELETE FROM alarm_hourly_starts WHERE hour < $1",
+            &[&(now - Duration::days(7))],
+        )
+        .await?)
+}
