@@ -250,6 +250,9 @@ fn packages_to_remove<'a, R: Runner>(ctx: &Ctx<R>, record: &'a str) -> Vec<&'a s
 }
 
 fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String> {
+    if part::is_part_removal(ctx.plan, &args.components) {
+        return part::purge(ctx, &args.components);
+    }
     let Some(confirm) = &args.confirm else {
         return Ok(StepState::Skipped("data kept".into()));
     };
@@ -447,7 +450,12 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
 
 #[path = "remove_admin.rs"]
 mod admin;
+#[path = "remove_part.rs"]
+mod part;
 
+#[cfg(test)]
+#[path = "remove_part_tests.rs"]
+mod part_tests;
 #[cfg(test)]
 #[path = "remove_tests.rs"]
 mod tests;

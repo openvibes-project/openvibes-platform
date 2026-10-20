@@ -89,6 +89,30 @@ pub fn configure(
     Ok(doc.to_string())
 }
 
+/// The console configuration without `[assistant]` when it points at the
+/// local model (the shape `configure` writes); `None` when there is no
+/// section or the backend is a foreign one, which stays.
+pub(crate) fn unconfigure(console: &str) -> Result<Option<String>, String> {
+    let mut doc: DocumentMut = console
+        .parse()
+        .map_err(|error| format!("console.toml: {error}"))?;
+    let local = doc
+        .get("assistant")
+        .and_then(|assistant| assistant.get("backend"))
+        .is_some_and(|backend| {
+            backend
+                .get("url")
+                .and_then(Item::as_str)
+                .is_some_and(|url| url.starts_with("http://127.0.0.1:"))
+                && backend.get("api_key_file").and_then(Item::as_str) == Some(API_KEY)
+        });
+    if !local {
+        return Ok(None);
+    }
+    doc.remove("assistant");
+    Ok(Some(doc.to_string()))
+}
+
 /// The numeric ids of `name` in `/etc/passwd`.
 fn account(name: &str) -> Result<(u32, u32), String> {
     let passwd =
@@ -289,6 +313,16 @@ mod tests {
             forced.contains("profile = \"large\""),
             "keeps the chosen profile"
         );
+    }
+
+    #[test]
+    fn unconfigure_drops_only_the_local_section() {
+        let local = configure("# mine\nx = 1\n", &env(&[]), false).unwrap();
+        let out = unconfigure(&local).unwrap().unwrap();
+        assert_eq!(out, "# mine\nx = 1\n");
+        let foreign = "[assistant]\nenabled = true\n[assistant.backend]\nurl = \"https://gpu.lan/v1\"\nmodel = \"m\"\n";
+        assert_eq!(unconfigure(foreign).unwrap(), None);
+        assert_eq!(unconfigure("x = 1\n").unwrap(), None);
     }
 
     fn setup(name: &str) -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
