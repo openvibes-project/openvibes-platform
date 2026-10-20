@@ -128,7 +128,7 @@ own share); `people_total` still counts everyone.
 
 | Route | Answer |
 |---|---|
-| `GET /api/v1/host-groups` | `[HostGroupView]`: summary, `conditions`, `membership` sentence, `picked`, `hosts`, `online`, `open_alarms`, `critical`, `roles` (names), `people`, `version` |
+| `GET /api/v1/host-groups` | `[HostGroupView]`: summary, `conditions`, `membership` sentence, `picked`, `hosts`, `online`, `open_alarms`, `critical` (as the Hosts list counts it), `roles` (names), `people`, `version` |
 | `POST /api/v1/host-groups` | `{name, description?, kind: "rule"\|"manual", conditions?, agent_ids?}` → 201 `HostGroupView` |
 | `GET /api/v1/host-groups/{id}` | `HostGroupView` plus `recent` (newest 10 audit changes; no host lists or counts for a caller without global `hosts.read`) |
 | `GET /api/v1/host-groups/{id}/hosts?after=&limit=` | `[GroupHostView]`, by hostname, 1–100 (50) |

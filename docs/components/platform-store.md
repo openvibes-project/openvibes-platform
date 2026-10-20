@@ -578,13 +578,16 @@ sorts (host, heartbeat, version, problems) break ties by agent ID.
 
 Failing checks are those whose triage is open. Critical is
 `host_listed_critical` (migration 58, a derived table; no row is 0),
-recounted by `refresh_counts` with the matcher and after each triage change: critical
+recounted by `refresh_counts` with the matcher and after each triage change
+(one upsert per call that writes 0 rather than deleting, so two recounts of
+one host at once never collide): critical
 advisories as the Vulnerabilities list and the host page show them by
 default, one per advisory, fixable or without a fix, reboot pending or
 not, mapped at confidence 80 or more (a known distribution's advisory or a
 package without a fix, as `vulns/confidence.rs`) and triage open. The
+group pages (`host_groups` list, detail and hosts) count it too. The
 older `critical` column (fixable, no reboot pending) still feeds the fleet
-summary, its history and the group pages.
+summary and its history.
 
 Scope (spec §6): rows, total, counts and summary come only from hosts in
 `HostScopes.hosts`. Open alarms, critical vulnerabilities and failing
