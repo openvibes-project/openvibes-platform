@@ -333,10 +333,27 @@ an existing agent's `agent.toml`.
 - Rule panels show a rule's ATT&CK pairs as chips that open Coverage
   filtered to them; the site-rule editor adds pairs with a searchable
   picker (one option per technique and tactic).
-- **Alarm suppressions** (`/alarm-suppressions`, `g q`): who, status, when
-  and why, Approve (`can_decide`, interim until the screen-14 page) and
-  Remove (`can_remove`; kept as history on the server); a row opens the
-  matching alarms.
+- **Alarm suppressions** (`/alarm-suppressions`, `g q`; approved screen 14,
+  `views/operate/AlarmSuppressions.tsx` and `SuppressionRow.tsx`), in the
+  shared layout. Left: By status (Waiting / Active with expired / Rejected,
+  counts linking to their cards) and Recent changes: the newest
+  `alarm.suppression.*` audit lines, shown with `audit.read` only. The
+  audit API filters by exact action, so the page reads the newest 100
+  events of 30 days and filters them in the browser. Right: one card per
+  status; each row shows the program, What/Where/For chips, the quoted
+  reason, "asked by … · when", "Would have closed N alarms in the last 7
+  days" on waiting rows ("at least N" when capped), the status badge (a
+  rejection with its reason) and Open alarm. Actions by flag: Approve and
+  Reject… with an inline required reason (`can_decide`), Withdraw
+  (`can_withdraw`), Remove… with a confirm (`can_remove`), and Ask again…
+  (rejected rows with an alarm, for `alarms.suppress`) opening the
+  suppress form prefilled from the row. Each action is busy until it
+  returns, shows errors in `role=alert`, reloads the list, the menu count
+  and recent changes, and toasts "Saved · recorded in the audit log"; a
+  row that moves to another card keeps focus, and a row that leaves
+  hands focus to its card. The menu item counts the waiting requests the
+  viewer can decide (`GET /api/v1/alarm-suppressions?state=waiting`,
+  fetched only with `alarms.suppressions.approve`; `app/menuCount.ts`).
 - Alarms are not offered to the assistant (no "Ask about" on the panel).
 - The demo serves alarms and suppressions with the server's rules
   (`demo/suppressions.ts`): the approval setting from Settings › General,

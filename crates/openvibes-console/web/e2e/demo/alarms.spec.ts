@@ -42,7 +42,7 @@ test("an alarm shows its process tree and is triaged and suppressed", async ({ p
   await expect(page.locator(".toast").last()).toContainText("Suppressed · recorded in the audit log");
 
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
-  await expect(page.locator(".view tbody tr").filter({ hasText: "shell-from-database" })).toContainText("our backup job");
+  await expect(page.locator("#suppressions-active [data-id]").filter({ hasText: "/usr/bin/bash" })).toContainText("our backup job");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
@@ -85,9 +85,9 @@ test("suppressing from the list with approval off closes the alarm and lists it 
   // (The demo keeps its data in memory, so this test never reloads.)
   await expect(page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" })).toHaveCount(0);
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
-  const listed = page.locator(".view tbody tr").filter({ hasText: "download-and-run" });
+  const listed = page.locator("#suppressions-active [data-id]").filter({ hasText: "/usr/bin/curl" });
   await expect(listed).toContainText("admin's install script");
-  await expect(listed).toContainText("active");
+  await expect(listed).toContainText("Active");
 });
 
 test("with approval on, a request waits on its alarm, is withdrawn, asked again and approved by someone else", async ({ page }) => {
@@ -128,10 +128,9 @@ test("with approval on, a request waits on its alarm, is withdrawn, asked again 
   await expect(theirs).toContainText("Waiting for approval");
   await expect(theirs.getByRole("button", { name: /^Suppress…/ })).toHaveCount(0);
   await page.goto("/alarm-suppressions");
-  const listed = page.locator(".view tbody tr").filter({ hasText: "nightly vacuum script" });
-  await expect(listed).toContainText("waiting");
-  await listed.getByRole("button", { name: "Approve" }).click();
-  await expect(listed).toContainText("active");
+  await expect(page.locator("#suppressions-waiting [data-id]").filter({ hasText: "nightly vacuum script" })).toContainText("Waiting");
+  await page.locator("#suppressions-waiting [data-id]").filter({ hasText: "nightly vacuum script" }).getByRole("button", { name: "Approve" }).click();
+  await expect(page.locator("#suppressions-active [data-id]").filter({ hasText: "nightly vacuum script" })).toContainText("Active");
   await page.goto("/alarms");
   await expect(page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" })).toHaveCount(0);
 });

@@ -1,55 +1,101 @@
-// Alarm suppressions: the program and command rules that quiet new alarms.
+// Alarm suppressions (approved screen 14) in the shared layout: By status and
+// Recent changes on the left, one card per status on the right. Approvals
+// live here: Approve and Reject… on waiting rows, Withdraw, Remove… and
+// Ask again….
 import { useState } from "react";
 
-import { apiMessage, invalidate, request, useResource } from "../../api/client";
-import type { AlarmSuppression } from "../../api/types";
-import { nav } from "../../app/nav";
-import { DataTable } from "../../ui/DataTable";
-import { ViewHeader } from "../../ui/ViewHeader";
-import { Ago, Empty, ErrorBox, Loading } from "../../ui/bits";
-import { Confirm } from "../../ui/panel";
-import { toast } from "../../ui/toast";
+import { useResource } from "../../api/client";
+import type { AlarmSuppression, AuditEvent } from "../../api/types";
+import { useSession } from "../../app/session";
+import { auditActionLabel } from "../../ui/auditActions";
+import { ErrorBox, Loading } from "../../ui/bits";
+import { ago } from "../../ui/format";
+import { link } from "../admin/groups/groupApi";
+import { Card } from "../admin/people/PersonPage";
+import { SuppressionRow } from "./SuppressionRow";
 
-// ponytail: interim Approve until Task 7's Waiting card with Reject….
-function ApproveButton({ id }: { id: string }) {
-  const [busy, setBusy] = useState(false);
-  const approve = () => {
-    setBusy(true);
-    request("POST", `/api/v1/alarm-suppressions/${encodeURIComponent(id)}/approve`)
-      .then(() => { invalidate("/api/v1/alarm"); toast("Saved · recorded in the audit log"); }, (e: unknown) => toast(apiMessage(e, "Approve failed"), true))
-      .finally(() => setBusy(false));
+const CARDS = [
+  { key: "waiting", title: "Waiting", has: (s: AlarmSuppression) => s.status === "waiting", none: "No requests are waiting." },
+  { key: "active", title: "Active", has: (s: AlarmSuppression) => s.status === "active" || s.status === "expired", none: "No suppression is active." },
+  { key: "rejected", title: "Rejected", has: (s: AlarmSuppression) => s.status === "rejected", none: "Nothing rejected." },
+] as const;
+const anchor = (key: string) => `suppressions-${key}`;
+const PREFIX = "alarm.suppression.";
+
+function Recent({ lines }: { lines: readonly AuditEvent[] }) {
+  return (
+    <Card title="Recent changes" aside={<a {...link("/audit", { q: PREFIX })}>Audit log</a>}>
+      {lines.length === 0 ? <p className="subtle person-page__none">Nothing recorded yet.</p> : (
+        <ul className="person-page__activity">
+          {lines.map((e) => (
+            <li key={e.id}>
+              <span>{auditActionLabel(e.action)}{e.target ? ` #${e.target}` : ""}</span>
+              <span className="subtle">{e.actor} · {ago(e.at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/** The screen from the list; `recent` is undefined without audit access (the card is hidden). */
+export function AlarmSuppressionsBody({ items, recent }: { items: readonly AlarmSuppression[]; recent?: readonly AuditEvent[] | undefined }) {
+  // The row that moved to another card keeps focus there.
+  const [focus, setFocus] = useState<string>();
+  const done = (card: string) => (id: string, gone: boolean) => {
+    if (gone) document.getElementById(anchor(card))?.focus();
+    else setFocus(id);
   };
-  return <button type="button" className="button button--small" disabled={busy} onClick={approve}>Approve</button>;
+  return (
+    <div className="view person-page">
+      <header className="person-page__head">
+        <div className="stack grow person-page__title"><h2>Alarm suppressions</h2><span className="subtle">Alarms that are closed as they arrive, and requests waiting for approval.</span></div>
+      </header>
+      <div className="person-page__cols">
+        <div className="stack person-page__col">
+          <Card title="By status">
+            <ul className="person-page__activity">
+              {CARDS.map((c) => (
+                <li key={c.key}>
+                  <a href={`#${anchor(c.key)}`} onClick={(e) => { e.preventDefault(); document.getElementById(anchor(c.key))?.scrollIntoView(); }}>{c.title}</a>
+                  <span className="subtle num">{items.filter(c.has).length}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+          {recent && <Recent lines={recent} />}
+        </div>
+        <div className="stack person-page__col">
+          {CARDS.map((c) => {
+            const rows = items.filter(c.has);
+            return (
+              <div key={c.key} id={anchor(c.key)} tabIndex={-1} className="suppressions__card">
+                <Card title={c.title}>
+                  {rows.length === 0 ? <p className="subtle person-page__none">{c.none}</p> : (
+                    <ul className="suppressions__rows">
+                      {rows.map((s) => <SuppressionRow key={s.id} s={s} focus={focus === s.id} onDone={done(c.key)} />)}
+                    </ul>
+                  )}
+                </Card>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function AlarmSuppressions() {
+  const { can } = useSession();
+  const [since] = useState(() => new Date(Date.now() - 30 * 86_400_000).toISOString());
   const list = useResource<{ items: AlarmSuppression[] }>("/api/v1/alarm-suppressions");
-  const items = list.data?.items ?? [];
-  // ponytail: interim rows until Task 7 builds screen 14 with approvals.
-  const where = (s: AlarmSuppression) => s.where.kind === "host" ? `on ${s.where.hostname ?? s.where.agent_id ?? "?"}` : s.where.kind === "group" ? `on ${s.where.group_name ?? "a deleted group"}` : "any host";
-  const what = (s: AlarmSuppression) => s.what === "host" ? where(s) : s.what === "command" ? `${s.exe ?? "?"} with one command line, ${where(s)}` : `${s.exe ?? "?"}, ${where(s)}`;
-  return (
-    <div className="view">
-      <ViewHeader title="Alarm suppressions" count={items.length} total={items.length} refresh="/api/v1/alarm-suppressions" />
-      {list.error ? <div className="view-pad"><ErrorBox error={list.error} /></div> : list.loading && !list.data ? <Loading /> : items.length === 0 ? (
-        <Empty icon="alarm" title="No suppressions">Use Suppress… on a noisy alarm, in its panel or the alarm list; new matches are then closed as false positives.</Empty>
-      ) : (
-        <DataTable label="Alarm suppressions" rows={items} rowKey={(s) => s.id} defaultSort={{ key: "created", direction: "desc" }}
-          onOpen={(s) => nav.view("/alarms", { q: s.rule_id, state: "all", suppressed: "true" })}
-          columns={[
-            { key: "rule", header: "Rule", sort: (s) => s.rule_id, render: (s) => <div className="cell-two"><span className="mono">{s.rule_id}</span><span className="subtle">{what(s)}</span></div> },
-            { key: "note", header: "Why", hideBelow: 560, render: (s) => <span className="truncate">{s.reason}</span> },
-            { key: "created", header: "By", width: "180px", hideBelow: 760, sort: (s) => s.requested_at, render: (s) => <span className="subtle">{s.requested_by}, {s.status}, <Ago value={s.requested_at} /></span> },
-            { key: "approve", header: "Approve", width: "120px", render: (s) => s.can_decide && <ApproveButton id={s.id} /> },
-            { key: "remove", header: "Remove", width: "120px", render: (s) => s.can_remove && (
-              <Confirm danger label={`Remove? Matching alarms raise again from now on.`} onConfirm={async () => {
-                await request("DELETE", `/api/v1/alarm-suppressions/${encodeURIComponent(s.id)}`);
-                invalidate("/api/v1/alarm");
-                toast("Suppression removed");
-              }}>Remove</Confirm>
-            ) },
-          ]} />
-      )}
-    </div>
-  );
+  // ponytail: the audit API filters by exact action only, so the newest 100
+  // events of 30 days are filtered here; a prefix filter if this misses lines.
+  const audit = useResource<{ items: AuditEvent[] }>(can("audit.read") ? `/api/v1/audit-events?since=${encodeURIComponent(since)}&limit=100` : null);
+  if (list.error) return <div className="view-pad"><ErrorBox error={list.error} /></div>;
+  if (!list.data) return <Loading />;
+  const recent = audit.data?.items.filter((e) => e.action.startsWith(PREFIX)).slice(0, 8);
+  return <AlarmSuppressionsBody items={list.data.items} recent={recent} />;
 }

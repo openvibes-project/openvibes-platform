@@ -38,7 +38,7 @@ export function bodyOf(alarmId: string, f: SuppressFields) {
 const FOR = [{ value: "7", label: "7 days" }, { value: "30", label: "30 days" }, { value: "", label: "Until removed" }];
 
 export function SuppressForm({ source, options, initial, onClose }: {
-  source: SuppressSource; options: AlarmSuppressionOptions; initial?: Partial<SuppressFields>; onClose: () => void;
+  source: SuppressSource; options: AlarmSuppressionOptions; initial?: Partial<SuppressFields> | undefined; onClose: () => void;
 }) {
   const [fields, setFields] = useState<SuppressFields>({ what: "program", where: "host", forDays: 7, reason: "", ...initial });
   const [busy, setBusy] = useState(false);
@@ -92,8 +92,8 @@ export function SuppressForm({ source, options, initial, onClose }: {
   );
 }
 
-/** Loads the alarm's command line and the caller's options, then the form. */
-function SuppressDialog({ alarmId, onClose }: { alarmId: string; onClose: () => void }) {
+/** Loads the alarm's command line and the caller's options, then the form (`initial` for "Ask again…"). */
+export function SuppressDialog({ alarmId, initial, onClose }: { alarmId: string; initial?: Partial<SuppressFields> | undefined; onClose: () => void }) {
   const options = useResource<AlarmSuppressionOptions>("/api/v1/alarm-suppressions/options");
   const alarm = useResource<AlarmDetail>(`/api/v1/alarms/${encodeURIComponent(alarmId)}`);
   const failed = options.error ?? alarm.error;
@@ -101,7 +101,7 @@ function SuppressDialog({ alarmId, onClose }: { alarmId: string; onClose: () => 
   if (!options.data || !alarm.data) return null;
   const process = alarm.data.process as unknown as AlarmProcess;
   const source = { id: alarmId, host: alarm.data.hostname ?? alarm.data.agent_id, exe: process.exe, args: process.args };
-  return <SuppressForm source={source} options={options.data} onClose={onClose} />;
+  return <SuppressForm source={source} options={options.data} initial={initial} onClose={onClose} />;
 }
 
 /** "Suppress…" for one alarm, for whoever holds alarms.suppress; `label` names the alarm where many are listed. */
