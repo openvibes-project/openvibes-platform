@@ -277,11 +277,13 @@ describe("demo alarms (P14)", () => {
     expect(retired.status).toBe(409);
     const closed = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "false_positive", note: "x" }, { "if-match": "\"1\"" });
     expect(closed.status).toBe(200);
-    const created = await analyst.handle("POST", "/api/v1/alarm-suppressions", { alarm_id: id, scope: "program", note: "noisy" });
+    const body = { alarm_id: id, what: "program", where: { kind: "host" }, for_days: null, reason: "noisy" };
+    const created = await analyst.handle("POST", "/api/v1/alarm-suppressions", body);
     expect(created.status).toBe(201);
+    expect((await analyst.handle("POST", "/api/v1/alarm-suppressions", { ...body, scope: "program" })).status).toBe(422);
+    // Operators hold no alarms.suppress (src/demo/suppressions.test.ts covers the rest).
     const scoped = createDemoServer({ persona: "scoped_operator" });
-    const refused = await scoped.handle("POST", "/api/v1/alarm-suppressions", { alarm_id: id, scope: "program", note: "noisy" });
-    expect(refused.status).toBe(403);
+    expect((await scoped.handle("POST", "/api/v1/alarm-suppressions", body)).status).toBe(403);
   });
 });
 

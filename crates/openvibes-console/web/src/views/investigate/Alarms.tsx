@@ -1,22 +1,19 @@
 // Threat alarms (P14): process starts that matched a rule, newest first.
 import { useMemo, useState } from "react";
 
-import { invalidate, request, useAllPages, useResource } from "../../api/client";
-import type { AlarmPage, AlarmSummary, AlarmSuppression } from "../../api/types";
+import { useAllPages, useResource } from "../../api/client";
+import type { AlarmPage, AlarmSummary } from "../../api/types";
 import { nav, useLocation } from "../../app/nav";
-import { useSession } from "../../app/session";
+import { SuppressButton } from "../../panels/alarms/SuppressForm";
 import { BulkBar } from "../../panels/triage/BulkBar";
 import { CaseBadge, useCaseBadges } from "../../panels/cases/CaseBadge";
 import { highest } from "../../panels/triage/bulk";
 import { DataTable } from "../../ui/DataTable";
-import { Select } from "../../ui/Select";
 import { ViewHeader } from "../../ui/ViewHeader";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../../ui/bits";
 import { severityOrder } from "../../ui/format";
-import { Confirm } from "../../ui/panel";
 import { filterKey, useSelection } from "../../ui/selection";
 import { matches } from "../../ui/table";
-import { toast } from "../../ui/toast";
 import { isTest } from "../lists/testRules";
 
 /** Alarms fetched per "Load more" (the API's page size). */
@@ -42,47 +39,6 @@ function alarmQuery(params: URLSearchParams): string {
 function selectAlarms(loaded: readonly AlarmSummary[], params: URLSearchParams): AlarmSummary[] {
   const q = params.get("q") ?? "";
   return loaded.filter((a) => matches([a.message, a.rule_id, a.hostname ?? a.agent_id, a.exe, a.parent_exe ?? ""], q));
-}
-
-const quietScopes = [
-  { scope: "host", label: "On this host", everywhere: false },
-  { scope: "program", label: "For this program, any host", everywhere: true },
-  { scope: "command", label: "For this exact command, any host", everywhere: true },
-] as const;
-
-/** Creates a suppression derived from one alarm ("don't alarm on this
- * again"). The server closes the alarm when it becomes active; with
- * approval on it waits. Task 6 replaces this with the suppress form. */
-async function quiet(alarmId: string, scope: string, note: string): Promise<void> {
-  const body = { alarm_id: alarmId, what: scope === "command" ? "command" : "program", where: { kind: scope === "host" ? "host" : "all" }, for_days: null, reason: note };
-  const made = await request<AlarmSuppression>("POST", "/api/v1/alarm-suppressions", body);
-  invalidate("/api/v1/alarm");
-  toast(made.status === "waiting" ? "Requested: it waits for approval" : "Quieted: new matches are closed as false positives");
-}
-
-export function QuietMenu({ alarm }: Readonly<{ alarm: AlarmSummary }>) {
-  const { can, canEverywhere } = useSession();
-  const [scope, setScope] = useState("");
-  const scopes = quietScopes.filter((s) => (s.everywhere ? canEverywhere("alarms.suppress") : can("alarms.suppress")));
-  if (scopes.length === 0 || alarm.suppressed_by) return null;
-  const chosen = quietScopes.find((s) => s.scope === scope);
-  const what = {
-    host: `on ${alarm.hostname ?? alarm.agent_id}`,
-    program: `${alarm.exe} on every host`,
-    command: `this exact ${alarm.exe} command on every host`,
-  }[scope] ?? "";
-  // Choosing a scope does nothing by itself (arrow keys change a closed
-  // select); only the confirmation acts, and it names what it quiets.
-  return (
-    <div className="row">
-      <Select small label={`Quiet ${alarm.message}`} value={scope} onChange={setScope}
-        options={[{ value: "", label: "Quiet…" }, ...scopes.map((s) => ({ value: s.scope, label: s.label }))]} />
-      {chosen && (
-        <Confirm danger label={`Close this alarm as a false positive and quiet ${what}?`} reason="Why (saved as the note)"
-          onConfirm={async (note) => { await quiet(alarm.id, scope, note); setScope(""); }}>Quiet</Confirm>
-      )}
-    </div>
-  );
 }
 
 export function Alarms() {
@@ -131,7 +87,7 @@ export function Alarms() {
             { key: "count", header: "Count", numeric: true, width: "80px", sort: (a) => a.count, render: (a) => <span className="num">{a.count}</span> },
             { key: "state", header: "Triage", width: "130px", hideBelow: 760, sort: (a) => a.state, render: (a) => <TriageBadge state={a.state} /> },
             { key: "last", header: "Last seen", width: "120px", hideBelow: 900, sort: (a) => a.last_seen, render: (a) => <span className="subtle"><Ago value={a.last_seen} /></span> },
-            { key: "quiet", header: "Quiet", width: "200px", hideBelow: 900, render: (a) => <QuietMenu alarm={a} /> },
+            { key: "suppress", header: "Suppress", width: "120px", hideBelow: 900, render: (a) => <SuppressButton alarm={a} /> },
           ]} />
       )}
       <BulkBar kind="alarms" noun={selected.size === 1 ? "alarm" : "alarms"} count={selected.size} onClear={() => setSelected(new Set())}

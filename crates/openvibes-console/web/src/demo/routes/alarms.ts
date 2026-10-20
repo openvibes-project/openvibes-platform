@@ -1,14 +1,15 @@
+import type { AlarmSuppression } from "../../api/types";
 import { allowedStates, noteRequired } from "../../panels/triage/triage";
 import { demoMappings, pairView } from "../attack";
 import type { DemoContext } from "../context";
 import { json, page, problem } from "../http";
+import type { Refusal, Request, Suppressions } from "../suppressions";
 
-export function registerAlarmRoutes(ctx: DemoContext) {
-  const { data, iso, actor, capabilities, visible, alarmList, addSuppression, triageProblem, audit, route } = ctx;
+export function registerAlarmRoutes(ctx: DemoContext & { suppressions: Suppressions }) {
+  const { iso, actor, alarmList, triageProblem, audit, route, suppressions } = ctx;
   // Threat alarms (P14), with the server's rules: scoped like findings,
-  // the findings workflow for triage, program/command suppressions only
-  // for a global caller, applied to new alarms only.
-  const summary = (alarm: (typeof data.alarms)[number]) => ({
+  // the findings workflow for triage.
+  const summary = (alarm: ReturnType<typeof alarmList>[number]) => ({
     id: alarm.id, agent_id: alarm.agent_id, hostname: alarm.hostname, rule_set_id: alarm.rule_set_id, rule_id: alarm.rule_id,
     severity: alarm.severity, message: alarm.message, exe: alarm.exe, parent_exe: alarm.parent_exe, count: alarm.count,
     first_seen: alarm.first_seen, last_seen: alarm.last_seen, state: alarm.state, suppressed_by: alarm.suppressed_by,
@@ -51,23 +52,54 @@ export function registerAlarmRoutes(ctx: DemoContext) {
     audit("alarm.triage.changed", id, "alarm");
     return json(alarm.triage);
   });
-  const globalSuppress = capabilities.some((c) => c.permission === "alarms.suppress" && c.scope.kind === "global");
-  const suppressionVisible = (s: (typeof data.alarmSuppressions)[number]) => globalSuppress || (s.scope === "host" && !!s.agent_id && visible(s.agent_id));
-  route("GET", "/api/v1/alarm-suppressions", "alarms.suppressions.read", () => json({ items: data.alarmSuppressions.filter(suppressionVisible) }));
+  // Suppressions with approval (alarms/suppressions.rs, suppression_decisions.rs).
+  const answer = (made: AlarmSuppression | Refusal, status = 200) => ("code" in made ? refusal(made) : json(made, status));
+  route("GET", "/api/v1/alarm-suppressions", "alarms.suppressions.read", (_, query) => {
+    const state = query.get("state");
+    const alarmId = query.get("alarm_id");
+    if (state !== null && !["waiting", "active", "rejected"].includes(state)) return invalidField("state");
+    if (alarmId !== null && !/^-?\d+$/.test(alarmId)) return invalidField("alarm_id");
+    return json({ items: suppressions.list(state, alarmId) });
+  });
+  route("GET", "/api/v1/alarm-suppressions/options", "alarms.suppress", () => json(suppressions.options()));
   route("POST", "/api/v1/alarm-suppressions", "alarms.suppress", (_, __, body) => {
-    const scope = String(body.scope ?? "");
-    const note = typeof body.note === "string" ? body.note.trim() : "";
-    if (!["host", "program", "command"].includes(scope) || !note) return problem(400, "invalid_suppression", "Scope must be host, program or command, with a note");
-    if (scope !== "host" && !globalSuppress) return problem(403, "global_scope_required", "Only a user with access to every host may suppress on every host");
-    const alarm = alarmList().find((candidate) => candidate.id === String(body.alarm_id ?? ""));
-    if (!alarm) return problem(404, "alarm_not_found", "Alarm or suppression not found");
-    return json(addSuppression(alarm, scope, note), 201);
+    const request = requestOf(body);
+    return request ? answer(suppressions.request(request), 201) : invalidField("body");
   });
+  route("POST", "/api/v1/alarm-suppressions/{id}/approve", "alarms.suppressions.approve", ({ id = "" }) => answer(suppressions.decide(id, true, null)));
+  route("POST", "/api/v1/alarm-suppressions/{id}/reject", "alarms.suppressions.approve", ({ id = "" }, _, body) =>
+    answer(suppressions.decide(id, false, typeof body.reason === "string" ? body.reason : null)));
+  route("POST", "/api/v1/alarm-suppressions/{id}/withdraw", "alarms.suppress", ({ id = "" }) => answer(suppressions.withdraw(id)));
   route("DELETE", "/api/v1/alarm-suppressions/{id}", "alarms.suppress", ({ id = "" }) => {
-    const index = data.alarmSuppressions.findIndex((s) => s.id === id && suppressionVisible(s));
-    const [removed] = index < 0 ? [] : data.alarmSuppressions.splice(index, 1);
-    if (!removed) return problem(404, "alarm_not_found", "Alarm or suppression not found");
-    audit("alarm.suppression.removed", id, "alarm_suppression");
-    return json(removed);
+    const removed = suppressions.remove(id);
+    return "code" in removed ? refusal(removed) : new Response(null, { status: 204 });
   });
+}
+
+const TITLES: Record<string, string> = {
+  alarm_not_found: "Alarm or suppression not found", suppression_not_found: "Alarm or suppression not found",
+  global_scope_required: "Only someone who reaches every host may suppress on all hosts", permission_denied: "Access is not available",
+  suppression_not_waiting: "This suppression is no longer waiting", own_request: "You can't approve or reject your own request",
+};
+const FIELD_MESSAGES: Record<string, string> = {
+  reason: "Give a reason of 1 to 4,000 characters", for: "Choose 7 days, 30 days or until removed",
+  group: "The group no longer exists", command: "This alarm's command line can't be matched",
+};
+/** 422 naming the invalid field, as suppression_types.rs `invalid`. */
+const invalidField = (field: string) => problem(422, "invalid_suppression", "Check the suppression's fields",
+  { field_errors: [{ field, code: "invalid", message: FIELD_MESSAGES[field] ?? "Send alarm_id, what, where, for_days and reason" }] });
+const refusal = (r: Refusal) => (r.field ? invalidField(r.field) : problem(r.status, r.code, TITLES[r.code] ?? r.code));
+
+/** The POST body (serde, deny_unknown_fields), or null when it does not parse. */
+function requestOf(body: Record<string, unknown>): Request | null {
+  const keys = (o: object, allowed: string[]) => Object.keys(o).every((k) => allowed.includes(k));
+  const where = body.where as Record<string, unknown> | null | undefined;
+  const forDays = body.for_days ?? null;
+  if (!keys(body, ["alarm_id", "what", "where", "for_days", "reason"]) || typeof body.alarm_id !== "string" || typeof body.reason !== "string"
+    || (body.what !== "program" && body.what !== "command") || (forDays !== null && !Number.isInteger(forDays))
+    || typeof where !== "object" || where === null) return null;
+  const place = where.kind === "host" && keys(where, ["kind"]) ? { kind: "host" as const }
+    : where.kind === "all" && keys(where, ["kind"]) ? { kind: "all" as const }
+      : where.kind === "group" && typeof where.group_id === "string" && keys(where, ["kind", "group_id"]) ? { kind: "group" as const, group_id: where.group_id } : null;
+  return place && { alarmId: body.alarm_id, what: body.what, where: place, forDays: forDays as number | null, reason: body.reason };
 }

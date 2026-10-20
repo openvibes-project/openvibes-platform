@@ -9,6 +9,7 @@ import type { DemoContext } from "../context";
 import { type Condition, type StoredGroup, distribution, distributionName, hasControl, inGroup, isActive, invalidRule, membershipSentence, ruleHolds } from "../hostGroups";
 import { json, problem } from "../http";
 import { ADMIN_ROLE, hostScoped, shareRefusal } from "../share";
+import type { Suppressions } from "../suppressions";
 import type { RoleHelpers } from "./roles";
 
 const ONLINE_MS = 3 * 60_000; // status.rs OFFLINE_AFTER_MINUTES
@@ -50,8 +51,8 @@ function checked(content: Content): Content | Response {
   return content;
 }
 
-export function registerGroupRoutes(ctx: DemoContext & { roles: RoleHelpers; overridesOf: (groupId: string) => number; dropGroup: (groupId: string) => void }) {
-  const { data, capabilities, permissions, me, audit, route, visible, facts, rolesOf, roles: { rolesFit, admin }, overridesOf, dropGroup } = ctx;
+export function registerGroupRoutes(ctx: DemoContext & { roles: RoleHelpers; overridesOf: (groupId: string) => number; dropGroup: (groupId: string) => void; suppressions: Suppressions }) {
+  const { data, capabilities, permissions, me, audit, route, visible, facts, rolesOf, roles: { rolesFit, admin }, overridesOf, dropGroup, suppressions } = ctx;
   const groups = () => data.access.host_groups;
   const byId = (id: string) => groups().find((g) => g.asset_group_id === id);
   const members = (g: StoredGroup) => data.agents.filter((a) => inGroup(facts(a), g));
@@ -132,8 +133,7 @@ export function registerGroupRoutes(ctx: DemoContext & { roles: RoleHelpers; ove
       joins: joins.slice(0, PREVIEW_CAP), leaves: leaves.slice(0, PREVIEW_CAP), gains: joins.length ? shown : [], loses: leaves.length ? shown : [],
       joins_total: joins.length, leaves_total: leaves.length, people_total: people.length,
       overrides_removed: g && !content ? overridesOf(g.asset_group_id) : 0,
-      // The demo holds no group suppressions yet, so a delete ends none.
-      suppressions_ended: 0,
+      suppressions_ended: g && !content ? suppressions.onGroup(g.asset_group_id) : 0,
     };
   };
   const previewRoute = (id: string | undefined, body: Record<string, unknown>) => {
@@ -228,7 +228,8 @@ export function registerGroupRoutes(ctx: DemoContext & { roles: RoleHelpers; ove
     const overrides = overridesOf(id);
     data.access.host_groups = groups().filter((x) => x !== g);
     dropGroup(id);
-    record(g, "host_group.deleted", { name: g.name, kind: g.kind, overrides_removed: overrides, suppressions_ended: 0 });
+    const ended = suppressions.endGroup(id);
+    record(g, "host_group.deleted", { name: g.name, kind: g.kind, overrides_removed: overrides, suppressions_ended: ended });
     return new Response(null, { status: 204 });
   });
 }

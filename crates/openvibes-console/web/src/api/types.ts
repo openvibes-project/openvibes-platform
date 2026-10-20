@@ -24,6 +24,7 @@ export type MetricHistory = S["MetricHistory"];
 export type TopHosts = S["TopHosts"];
 export type AlarmDetail = S["AlarmDetailView"];
 export type AlarmSuppression = S["AlarmSuppressionView"];
+export type AlarmSuppressionOptions = S["AlarmSuppressionOptions"];
 /** One process in an alarm, as the agent sent it (masked args). */
 export type AlarmProcess = { pid: number; exe: string; args: string[]; cwd?: string; uid: number; euid: number; truncated: boolean; seeded?: boolean };
 export type GroupEndpoint = S["FindingGroupEndpointView"];

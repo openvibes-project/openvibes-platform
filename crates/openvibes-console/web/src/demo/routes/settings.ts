@@ -84,4 +84,6 @@ export function registerSettingsRoutes(ctx: DemoContext) {
     audit("audit.retention.update", "audit", "retention");
     return json(data.retention);
   });
+  /** A setting's value, for the areas it governs (console_settings). */
+  return { value: (key: (typeof DEFINITIONS)[number]["key"]) => view(DEFINITIONS.find((d) => d.key === key) ?? DEFINITIONS[0]).value };
 }

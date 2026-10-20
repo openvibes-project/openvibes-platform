@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex");
 });
 
-test("an alarm shows its process tree and is triaged and quieted", async ({ page }) => {
+test("an alarm shows its process tree and is triaged and suppressed", async ({ page }) => {
   await page.getByRole("link", { name: "Alarms", exact: true }).click();
   const badge = page.locator(".rail .rail__item").filter({ hasText: "Alarms" }).first().locator(".rail__count");
   await expect(badge).toHaveText(/\d/);
@@ -33,12 +33,13 @@ test("an alarm shows its process tree and is triaged and quieted", async ({ page
   await expect(inspector.locator(".panel-header")).toContainText("False positive");
   // Closing an alarm that isn't the newest still lowers the menu count (#164).
   if (before < 99) await expect(badge).toHaveText(String(before - 1));
-  // Then quiet it on this host, from the panel.
-  await inspector.getByRole("combobox", { name: /Quiet/ }).click();
-  await page.getByRole("option", { name: /On this host/i }).click();
-  await inspector.getByRole("button", { name: "Quiet" }).click();
-  await inspector.getByRole("textbox", { name: "Why (saved as the note)" }).fill("our backup job");
-  await inspector.getByRole("button", { name: "Confirm" }).click();
+  // Then suppress it on this host, from the panel (screen 12).
+  await inspector.getByRole("button", { name: "Suppress…" }).click();
+  const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
+  await expect(form.getByRole("button", { name: "Suppress", exact: true })).toBeDisabled();
+  await form.getByRole("textbox", { name: "Reason (required)" }).fill("our backup job");
+  await form.getByRole("button", { name: "Suppress", exact: true }).click();
+  await expect(page.locator(".toast").last()).toContainText("Suppressed · recorded in the audit log");
 
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
   await expect(page.locator(".view tbody tr").filter({ hasText: "shell-from-database" })).toContainText("our backup job");
@@ -50,35 +51,78 @@ test("resolved alarms are hidden by default and counted in the empty state", asy
   await expect(page.getByText("Nothing matches these filters")).toBeVisible();
 });
 
-test("Enter in a row's Select picks, never opens the inspector or moves the table cursor", async ({ page }) => {
+test("typing in a row's suppress form never moves the table or opens the inspector", async ({ page }) => {
   await page.goto("/alarms");
   const row = page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" });
-  const quiet = row.getByRole("combobox", { name: /Quiet/ });
-  await quiet.focus();
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Enter");
-  await expect(quiet).toContainText("On this host");
+  await row.getByRole("button", { name: "Suppress…" }).click();
+  const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
+  // j, k, x and Enter are the table's keys; in the form they are text.
+  await form.getByRole("textbox", { name: "Reason (required)" }).pressSequentially("jkx");
+  await form.getByRole("textbox", { name: "Reason (required)" }).press("Enter");
+  await expect(form.getByRole("textbox", { name: "Reason (required)" })).toHaveValue("jkx\n");
+  expect((await new AxeBuilder({ page }).include("dialog").analyze()).violations).toEqual([]);
+  await form.getByRole("button", { name: "Cancel" }).click();
   await expect(page.locator(".inspector .panel-header")).toHaveCount(0);
 });
 
-test("quieting from the list asks first, closes the alarm and records why", async ({ page }) => {
+test("suppressing from the list with approval off closes the alarm and lists it as active", async ({ page }) => {
   await page.goto("/alarms");
   const row = page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" });
-  // Choosing a scope (as arrow keys on a closed select do) changes nothing yet.
-  // (The demo keeps its data in memory, so this test never reloads.)
-  await row.getByRole("combobox", { name: /Quiet/ }).click();
-  await page.getByRole("option", { name: "For this program, any host" }).click();
-  await expect(page.locator(".toast")).toHaveCount(0);
-  await expect(row.getByRole("button", { name: "Confirm" })).toHaveCount(0);
-  await row.getByRole("button", { name: "Quiet" }).click();
-  await expect(row).toContainText("/usr/bin/curl on every host?");
-  await row.getByRole("textbox", { name: "Why (saved as the note)" }).fill("admin's install script");
-  await row.getByRole("button", { name: "Confirm" }).click();
+  await row.getByRole("button", { name: "Suppress…" }).click();
+  const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
+  await expect(form).toContainText("/usr/bin/curl, with any arguments");
+  await form.getByRole("radio", { name: "This exact command" }).click();
+  await expect(form).toContainText("/usr/bin/curl curl -o x https://203.0.113.9/x");
+  await form.getByRole("combobox", { name: "Where" }).click();
+  await page.getByRole("option", { name: "All hosts" }).click();
+  await form.getByRole("radio", { name: "Until removed" }).click();
+  await expect(form).not.toContainText("Someone who can approve");
+  await form.getByRole("textbox", { name: "Reason (required)" }).fill("admin's install script");
+  await form.getByRole("button", { name: "Suppress", exact: true }).click();
   // Closed as a false positive: it leaves the default (active) list.
+  // (The demo keeps its data in memory, so this test never reloads.)
   await expect(page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" })).toHaveCount(0);
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
-  await expect(page.locator(".view tbody tr").filter({ hasText: "download-and-run" })).toContainText("admin's install script");
+  const listed = page.locator(".view tbody tr").filter({ hasText: "download-and-run" });
+  await expect(listed).toContainText("admin's install script");
+  await expect(listed).toContainText("active");
+});
+
+test("with approval on, a request waits on its alarm, is withdrawn, asked again and approved by someone else", async ({ page }) => {
+  await page.goto("/settings?tab=general");
+  await page.getByRole("switch", { name: "Suppressions need approval" }).click();
+  await expect(page.getByText("Saved · recorded in the audit log").first()).toBeVisible();
+  const persona = async (name: string) => {
+    await page.getByRole("button", { name: "Account" }).click();
+    await page.getByRole("menuitemradio", { name, exact: true }).click();
+  };
+  await persona("analyst");
+  await page.goto("/alarms");
+  await page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" }).locator("td").nth(2).click();
+  const inspector = page.locator(".inspector");
+  const ask = async () => {
+    await inspector.getByRole("button", { name: "Suppress…" }).click();
+    const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
+    await expect(form).toContainText("Someone who can approve on those hosts must accept it. Until then these alarms keep arriving.");
+    await form.getByRole("textbox", { name: "Reason (required)" }).fill("nightly vacuum script");
+    await form.getByRole("button", { name: "Request" }).click();
+    await expect(inspector).toContainText("Suppression requested, waiting for approval… these alarms keep arriving");
+  };
+  await ask();
+  await inspector.getByRole("button", { name: "Withdraw request" }).click();
+  await expect(inspector.getByRole("button", { name: "Suppress…" })).toBeVisible();
+  await ask();
+  await expect(inspector.locator(".panel-header")).toContainText("Open");
+
+  // An approver on the same hosts (the administrator) sees it waiting and approves.
+  await persona("admin");
+  await page.goto("/alarm-suppressions");
+  const listed = page.locator(".view tbody tr").filter({ hasText: "nightly vacuum script" });
+  await expect(listed).toContainText("waiting");
+  await listed.getByRole("button", { name: "Approve" }).click();
+  await expect(listed).toContainText("active");
+  await page.goto("/alarms");
+  await expect(page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" })).toHaveCount(0);
 });
 
 test("with alarms present, an empty filter result hints at the filters, not setup", async ({ page }) => {

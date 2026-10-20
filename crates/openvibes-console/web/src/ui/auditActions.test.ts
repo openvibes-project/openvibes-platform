@@ -9,6 +9,11 @@ describe("audit action labels", () => {
     expect(auditActionLabel("settings.changed")).toBe("Changed a setting");
     expect(auditActionLabel("rbac.role.created")).toBe("Created a role");
     expect(auditActionLabel("alarm.suppression.created")).toBe("Suppressed alarms");
+    expect(auditActionLabel("alarm.suppression.requested")).toBe("Requested a suppression");
+    expect(auditActionLabel("alarm.suppression.approved")).toBe("Approved a suppression");
+    expect(auditActionLabel("alarm.suppression.rejected")).toBe("Rejected a suppression");
+    expect(auditActionLabel("alarm.suppression.withdrawn")).toBe("Withdrew a suppression request");
+    expect(auditActionLabel("alarm.suppression.removed")).toBe("Removed a suppression");
     expect(auditActionLabel("alarm.triage.changed")).toBe("Triaged an alarm");
   });
   it("reads an unknown id as words", () => {

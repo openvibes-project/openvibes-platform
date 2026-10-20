@@ -14,7 +14,7 @@ type Route = { method: string; pattern: RegExp; keys: string[]; permission: Perm
 export type DemoContext = ReturnType<typeof createDemoContext>;
 
 // Who each persona signs in as; what they may do comes from that person's roles.
-const PERSON: Record<Persona, string> = { admin: "u-admin", analyst: "u-sam", operator: "u-ola", scoped_operator: "u-pia", viewer: "u-vic" };
+const PERSON: Record<Persona, string> = { admin: "u-admin", analyst: "u-sam", operator: "u-ola", scoped_operator: "u-pia", team_lead: "u-lee", viewer: "u-vic" };
 
 export function createDemoContext({ persona, now }: { persona: Persona; now: number }) {
   const data = buildDemoData(now);
@@ -114,16 +114,6 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
   };
 
   const alarmList = () => data.alarms.filter((alarm) => visible(alarm.agent_id));
-  const addSuppression = (alarm: ReturnType<typeof alarmList>[number], scope: string, note: string) => {
-    const created = {
-      id: String(data.alarmSuppressions.length + 1), rule_set_id: alarm.rule_set_id, rule_id: alarm.rule_id, scope,
-      agent_id: scope === "host" ? alarm.agent_id : null, exe: scope === "host" ? null : alarm.exe,
-      args_sha256: scope === "command" ? "demo" : null, note, created_by: actor, created_at: iso(),
-    };
-    data.alarmSuppressions.unshift(created);
-    audit("alarm.suppression.created", created.id, "alarm_suppression");
-    return created;
-  };
 
   // Assets v1: each host's packages. A base set every host has, a few by
   // role (from the host name), plus the packages its open vulnerabilities
@@ -167,6 +157,6 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
 
   return {
     now, data, iso, rolesOf, permissions, scoped, capabilities, readsRules, actor, me, visible, reaches, facts, agentById, audit, triageKey,
-    findings, vulnerabilities, groups, setTriage, triageProblem, alarmList, addSuppression, hostPackages, hosts, routes, route, send,
+    findings, vulnerabilities, groups, setTriage, triageProblem, alarmList, hostPackages, hosts, routes, route, send,
   };
 }
