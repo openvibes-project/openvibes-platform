@@ -63,7 +63,7 @@ fn except(skip: &[Facet]) -> String {
 }
 
 /// CTEs `hosts` (agents in the scope `$1`,`$2`, with `alarms_health` set
-/// when online at `$3` and reported) and `base`: their agent alarms matching
+/// when online at `$3`, reported, and in the `hosts.read` scope `$16`,`$17`) and `base`: their agent alarms matching
 /// the search `$4`, narrowed to what the filters and sorts need. The
 /// technique ids come from the rule-metadata index; `in_case`: an open case
 /// holds the alarm (at most one does).
@@ -76,7 +76,10 @@ fn base() -> &'static str {
     "hosts AS MATERIALIZED (
   SELECT a.agent_id, a.hostname,
          CASE WHEN a.status = 'active' AND a.health_at IS NOT NULL
-                   AND agent_seen_at(a.agent_id, a.last_seen_at) >= $3 THEN a.health -> 'alarms' END AS alarms_health
+                   AND agent_seen_at(a.agent_id, a.last_seen_at) >= $3
+                   AND ($16::boolean OR EXISTS (
+                        SELECT 1 FROM members m WHERE m.agent_id = a.agent_id AND m.gid = ANY($17::text[])))
+              THEN a.health -> 'alarms' END AS alarms_health
   FROM agents a
   WHERE $1::boolean OR (a.status <> 'imported' AND EXISTS (
           SELECT 1 FROM members m WHERE m.agent_id = a.agent_id AND m.gid = ANY($2::text[])))),

@@ -185,7 +185,8 @@ pub struct AlarmSummaryLine {
     /// Open and critical or high.
     pub critical_or_high: i64,
     /// Open, on hosts online with threat alarms off by a fault (the Hosts
-    /// list's `alarms_off`). The console shows it only with `hosts.read`.
+    /// list's `alarms_off`) inside the `hosts.read` reach too. The console
+    /// shows it only with `hosts.read`.
     pub on_alarms_off_hosts: i64,
 }
 
@@ -225,11 +226,13 @@ struct Meta {
 }
 
 /// One page of the Alarms list for `actor_id` (a console user id) within
-/// `scope` (`alarms.read`).
+/// `scope` (`alarms.read`). The summary's alarms-off part counts only hosts
+/// also inside `hosts_read` (none without `hosts.read`).
 pub async fn alarm_list(
     client: &Client,
     query: &AlarmQuery<'_>,
     scope: &AgentScope,
+    hosts_read: Option<&AgentScope>,
     actor_id: &str,
     now: DateTime<Utc>,
 ) -> Result<AlarmListPage, StoreError> {
@@ -262,6 +265,8 @@ pub async fn alarm_list(
                 &query.limit.clamp(1, i64::from(MAX_PAGE_SIZE)),
                 &query.offset.clamp(0, 100_000),
                 &unassigned,
+                &hosts_read.is_some_and(AgentScope::is_global),
+                &hosts_read.map(AgentScope::group_ids).unwrap_or_default(),
             ],
         )
         .await?;

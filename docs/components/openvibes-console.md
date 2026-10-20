@@ -933,7 +933,8 @@ parameter is 400 `invalid_query` naming the parameter. Rows, per-value
 values come only from alarms in reach) and the `summary` are inside the
 caller's `alarms.read` reach. The summary counts OPEN alarms under every
 filter except state, so `state=mitigated` still shows the open count;
-`on_alarms_off_hosts` is null without `hosts.read`. Saved views and hidden
+`on_alarms_off_hosts` is null without `hosts.read` and counts only hosts
+inside both the `alarms.read` and `hosts.read` reach. Saved views and hidden
 columns accept the page `alarms` (hideable: `alarm`, `host`, `count`, `seen`,
 `state`, `assignee`, `case`; severity is the first column and never hidden).
 Tests: `tests/alarm_list_http.rs`; demo: `web/src/demo/routes/alarmList.ts`.

@@ -65,11 +65,14 @@ test("a team lead's Alarms list holds only their host's alarms, and an alarm's p
     await expect(commands.nth(2)).toContainText("--nightly");
     await expect(commands.nth(2)).toHaveClass(/cmd-once/);
 
-    // 4. The last 24 hours: 24 bars, this hour's 8 starts in the table.
+    // 4. The last 24 hours: 24 bars, the 8 starts in the table's last two
+    // hours (the seeding may straddle the turn of the hour).
     const timeline = card(lead, /^Last 24 hours$/);
     await expect(timeline.locator("svg rect")).toHaveCount(24);
     await expect(timeline.locator("table tbody tr")).toHaveCount(24);
-    await expect(timeline.locator("table tbody tr").last()).toHaveText(/this hour\s*8/);
+    await expect(timeline.locator("table tbody tr").last()).toContainText("this hour");
+    const hourly = await timeline.locator("table tbody tr td").allTextContents();
+    expect(hourly.slice(-2).reduce((sum, v) => sum + Number(v.replace(/\D/g, "")), 0)).toBe(8);
   } finally {
     await lead.context().close();
   }

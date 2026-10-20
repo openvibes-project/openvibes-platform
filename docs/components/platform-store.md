@@ -632,7 +632,7 @@ answers and now calls the prepared form. Tests: `tests/host_list.rs`,
 
 ## The Alarms list (`alarm_list::alarm_list`, schema 60)
 
-`alarm_list(client, &AlarmQuery, &AgentScope, actor_id, now) -> AlarmListPage`:
+`alarm_list(client, &AlarmQuery, &AgentScope, hosts_read: Option<&AgentScope>, actor_id, now) -> AlarmListPage`:
 one statement returns the page rows, the total, the count for every value
 of every filter with the other filters applied, and the summary line, so
 the numbers always agree (roles spec §10.3; plan rulings 2–5). Only agent
@@ -656,8 +656,9 @@ The summary counts, over the alarms matching every filter: open; open and
 critical or high; open on hosts that are online with threat alarms off by
 a fault (the Hosts list's `alarms_off` rule: the statement returns each
 host's `health -> 'alarms'` with its counters zeroed, grouped, and
-`alarms_status` decides). The console shows the last part only with
-`hosts.read`.
+`alarms_status` decides), counting only hosts also inside `hosts_read`
+(none when it is `None`). The console passes its `hosts.read` scope and
+shows the last part only with `hosts.read`.
 
 Scope (spec §6): the hosts are `agent_visibility`'s rule read from the
 one-pass group membership (`host_list_sql::members`, over every agent;

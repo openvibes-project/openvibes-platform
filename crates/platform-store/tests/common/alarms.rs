@@ -156,8 +156,21 @@ pub fn query() -> AlarmQuery<'static> {
     }
 }
 
+/// The list for a caller with `hosts.read` over the same reach as `alarms.read`.
 pub async fn run(c: &Client, q: &AlarmQuery<'_>, scope: &AgentScope) -> AlarmListPage {
-    alarm_list(c, q, scope, ANN, Utc::now()).await.unwrap()
+    run_hosts(c, q, scope, Some(scope)).await
+}
+
+/// The list with `hosts.read` over `hosts` (`None`: without it).
+pub async fn run_hosts(
+    c: &Client,
+    q: &AlarmQuery<'_>,
+    scope: &AgentScope,
+    hosts: Option<&AgentScope>,
+) -> AlarmListPage {
+    alarm_list(c, q, scope, hosts, ANN, Utc::now())
+        .await
+        .unwrap()
 }
 
 /// The page's messages, which the fixture makes the alarms' names.

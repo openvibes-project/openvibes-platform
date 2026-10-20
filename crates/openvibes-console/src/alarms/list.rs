@@ -238,11 +238,18 @@ pub(crate) async fn list_alarm_page(
         return unavailable_auth();
     };
     let now = Utc::now();
-    match alarm_list(&client, &alarm_query, &scope, &actor_id, now).await {
-        Ok(page) => {
-            let show_off = scope_of(&capabilities, Permission::HostsRead).is_some();
-            axum::Json(AlarmListView::new(page, show_off, now)).into_response()
-        }
+    let hosts_read = scope_of(&capabilities, Permission::HostsRead);
+    match alarm_list(
+        &client,
+        &alarm_query,
+        &scope,
+        hosts_read.as_ref(),
+        &actor_id,
+        now,
+    )
+    .await
+    {
+        Ok(page) => axum::Json(AlarmListView::new(page, hosts_read.is_some(), now)).into_response(),
         Err(_) => unavailable_auth(),
     }
 }

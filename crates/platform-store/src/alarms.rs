@@ -377,7 +377,6 @@ async fn hourly(
     now: DateTime<Utc>,
     starts: i64,
 ) -> Result<(), StoreError> {
-    let starts = i32::try_from(starts).unwrap_or(i32::MAX);
     transaction
         .execute(
             "INSERT INTO alarm_hourly_starts (alarm_row_id, hour, starts)

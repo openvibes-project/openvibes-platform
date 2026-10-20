@@ -118,7 +118,7 @@ describe("alarm page", () => {
     expect(html.match(/<rect /g)).toHaveLength(24);
     expect(text(html)).toContain("A database server started a shell");
     expect(text(html)).toContain("DSA-5501-1");
-    expect(html).toMatch(/href="\/alarms\?q=web-server-spawns-shell"/);
+    expect(html).toMatch(/<a [^>]*href="\/alarms\?q=web-server-spawns-shell"[^>]*>Show alarms from this rule<\/a>/);
     expect(text(html)).toContain("3 open on 2 other hosts");
   });
 

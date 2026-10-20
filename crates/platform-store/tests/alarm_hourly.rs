@@ -68,7 +68,7 @@ async fn report(admin: &mut Client, count: u32, now: DateTime<Utc>) {
         .unwrap();
 }
 
-async fn hours(admin: &Client) -> Vec<(DateTime<Utc>, i32)> {
+async fn hours(admin: &Client) -> Vec<(DateTime<Utc>, i64)> {
     admin
         .query(
             "SELECT hour, starts FROM alarm_hourly_starts ORDER BY hour",
@@ -104,6 +104,16 @@ async fn only_count_growth_is_recorded() {
     report(&mut admin, 5, now).await;
     report(&mut admin, 4, now).await;
     assert_eq!(hours(&admin).await, vec![(hour(now), 5)]);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn near_limit_growth_does_not_overflow_the_hour() {
+    let (db, mut admin) = setup().await;
+    let now = Utc::now();
+    report(&mut admin, 2_000_000_000, now).await;
+    report(&mut admin, 4_000_000_000, now).await;
+    assert_eq!(hours(&admin).await, vec![(hour(now), 4_000_000_000)]);
     db.drop().await;
 }
 

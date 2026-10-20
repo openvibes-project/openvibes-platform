@@ -117,7 +117,8 @@ export function registerAlarmListRoute(ctx: DemoContext & { cases: ReturnType<ty
       },
       summary: {
         open: summarised.length, critical_or_high: summarised.filter((r) => r.severe).length,
-        on_alarms_off_hosts: hostsRead ? summarised.filter((r) => r.alarmsOff).length : null,
+        // Hosts inside the hosts.read reach too (alarm_list.rs).
+        on_alarms_off_hosts: hostsRead ? summarised.filter((r) => r.alarmsOff && ctx.reaches("hosts.read", r.row.host.id)).length : null,
       },
       generated_at: ctx.iso(),
     };

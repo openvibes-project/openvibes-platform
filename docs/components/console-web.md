@@ -719,6 +719,10 @@ for the pages not yet moved; its saved views stay in the browser.
   hours timeline starts filling after the upgrade (ingest records hourly
   starts from then on). Rules without `explain` and `check` text show their
   title and message. The list no longer sorts by message, host or state.
+  List rows lost their own Suppress… and "Requested / Waiting for
+  approval" badge (both are on the alarm's page now), search no longer
+  matches the agent id, popped-out alarm windows are dropped, and "Load
+  more" became paging (Previous and Next).
   Alarm views saved in the browser are moved to the person's account the
   first time they open Alarms; see [console-alarms.md](console-alarms.md).
 

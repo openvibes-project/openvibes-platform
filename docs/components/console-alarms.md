@@ -62,7 +62,9 @@ Hosts pages ([console-hosts.md](console-hosts.md)).
   seen, count or severity. In the URL, `seen` is the API's `last_seen` and
   `first` is its `first_seen`.
 - **Summary line:** "N open · N critical or high · N on hosts with alarms
-  off". The last part shows only when the server sends it (`hosts.read`).
+  off". The last part shows only when the server sends it (`hosts.read`),
+  and counts only hosts inside both the `alarms.read` and `hosts.read`
+  reach.
 - **Paging:** by offset, 50 a page, with Previous and Next (`Pager` from
   `Hosts.tsx`). The last page stays on screen while the next loads.
 - **Selection:**
@@ -88,8 +90,11 @@ Hosts pages ([console-hosts.md](console-hosts.md)).
 - **Freshness:**
   - a change from the bulk bar, the suppress form, Add to case on an alarm or the alarm's page
     invalidates the prefix `/api/v1/alarm` (`ALARMS_PREFIX`, `app/liveAlarms.ts`);
-  - so does a new alarm seen by the live poll;
-  - that prefix covers `/alarm-list`, `/alarms` and `/alarm-suppressions`.
+  - that prefix covers `/alarm-list`, `/alarms` and `/alarm-suppressions`;
+  - a change seen by the live poll refreshes `/alarms` and
+    `/alarm-suppressions` at once (the alarm's page, the old list), but the
+    heavier `/alarm-list` at most every 30 s and only while the tab is
+    visible (`listRefresh`).
 
   The menu's count stays on `app/liveAlarms.ts`.
 - **Old links:** `?suppressed=true` is rewritten in place to
@@ -187,7 +192,10 @@ offered, so nobody asks twice.
 The alarm panel became this page and old links redirect; the timeline
 starts filling after the upgrade; rules without text show their title;
 sorting by message, host or state is gone; alarm views saved in the
-browser move to the account. See [console-web.md](console-web.md#upgrading).
+browser move to the account. List rows no longer carry their own
+Suppress… or "Requested / Waiting for approval" badge (both are on the
+alarm's page), search no longer matches the agent id, popped-out alarm
+windows are dropped, and "Load more" became paging. See [console-web.md](console-web.md#upgrading).
 
 ## Failure behaviour
 
@@ -214,7 +222,7 @@ browser move to the account. See [console-web.md](console-web.md#upgrading).
     Suppress…, hidden columns, the summary line, filters and the id;
   - `ui/DataTable.test.tsx`: the server-paged selection bar;
   - `ui/list/FilterBar.test.tsx`: chip-only filters;
-  - `app/liveAlarms.test.ts`: the prefix;
+  - `app/liveAlarms.test.ts`: the prefixes and the list's 30 s throttle;
   - `demo/routes/alarmList.test.ts`, `demo/routes/alarmSummary.test.ts`;
   - `views/investigate/alarm/AlarmPage.test.tsx`: tiles, rule text and its
     fallback, Commands seen, actions by permission, suppression, Related,

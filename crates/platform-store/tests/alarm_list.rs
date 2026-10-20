@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::alarms::{ANN, BOB, CID, alarm_fleet, names, query, run};
+use common::alarms::{ANN, BOB, CID, alarm_fleet, names, query, run, run_hosts};
 use common::hosts::id;
 use platform_store::{
     alarm_list::{AlarmQuery, AlarmSeverity, AlarmSort, AlarmState, Assignee},
@@ -367,12 +367,24 @@ async fn rows_carry_host_techniques_case_and_assignee() {
 #[tokio::test]
 async fn summary_counts_open_severe_and_alarms_off_hosts() {
     let (db, mut c) = common::migrated().await;
-    alarm_fleet(&mut c).await;
+    let groups = alarm_fleet(&mut c).await;
     let page = run(&c, &query(), &ALL).await;
     assert_eq!(page.summary.open, 3);
     assert_eq!(page.summary.critical_or_high, 1);
     // a4 on win-01, online with alarms off by a fault
     assert_eq!(page.summary.on_alarms_off_hosts, 1);
+    // only hosts inside hosts.read too (win-01 is in Windows box)
+    let web = AgentScope::AssetGroups(vec![groups.web.clone()]);
+    let windows = AgentScope::AssetGroups(vec![groups.windows.clone()]);
+    for (alarms, hosts, off) in [
+        (&ALL, Some(&windows), 1),
+        (&ALL, Some(&web), 0),
+        (&ALL, None, 0),
+        (&web, Some(&ALL), 0),
+    ] {
+        let s = run_hosts(&c, &query(), alarms, hosts).await.summary;
+        assert_eq!(s.on_alarms_off_hosts, off, "{alarms:?} {hosts:?}");
+    }
     let page = run(
         &c,
         &AlarmQuery {

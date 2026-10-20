@@ -7,7 +7,7 @@
 CREATE TABLE alarm_hourly_starts (
     alarm_row_id bigint NOT NULL,
     hour timestamptz NOT NULL,
-    starts integer NOT NULL CHECK (starts > 0),
+    starts bigint NOT NULL CHECK (starts > 0),
     PRIMARY KEY (alarm_row_id, hour)
 );
 GRANT SELECT, INSERT, UPDATE ON alarm_hourly_starts TO "openvibes-ingest";

@@ -254,7 +254,10 @@ export function RelatedCard({ page }: { page: Page }) {
         </>}
         <h3 className="section-title">Same rule elsewhere</h3>
         {elsewhere.hosts === 0 ? <p className="subtle">No other host has an open alarm from this rule.</p>
-          : <a {...viewLink("/alarms", { q: page.alarm.rule_id })}>{elsewhere.open.toLocaleString()} open on {elsewhere.hosts.toLocaleString()} other {elsewhere.hosts === 1 ? "host" : "hosts"}</a>}
+          : <>
+            <p>{elsewhere.open.toLocaleString()} open on {elsewhere.hosts.toLocaleString()} other {elsewhere.hosts === 1 ? "host" : "hosts"}</p>
+            <a className="detail-more" {...viewLink("/alarms", { q: page.alarm.rule_id })}>Show alarms from this rule</a>
+          </>}
       </div>
     </Card>
   );
