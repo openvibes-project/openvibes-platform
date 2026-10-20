@@ -15,6 +15,7 @@ An in-browser implementation of /api/v1 over invented data, for the GitHub Pages
 | `hostGroups.ts` | Host-group membership as the store decides it (console_host_in_group), the rule checks and the membership sentence. |
 | `assignments.ts` | The demo's rule-set assignment API, with real status codes. |
 | `cases.ts` | The demo's cases store and its rules. |
+| `suppressions.ts` | Alarm suppressions with approval, as the store decides them, kept in browser storage. |
 | `caseSeed.ts` | The cases the demo starts with. |
 | `dashboards.ts` | The demo's dashboard store, kept in browser storage. |
 | `routes/` | One file per API area, registered by server.ts. |

@@ -43,7 +43,7 @@ describe("demo host groups", () => {
     const preview = (await call<HostGroupPreview>(server, "POST", "/api/v1/host-groups/preview", { conditions: [webInHq, hq] })).body;
     expect(preview.joins_total).toBeGreaterThan(0);
     expect(preview.joins.every((h) => /web/.test(h.hostname ?? ""))).toBe(true);
-    expect(preview).toMatchObject({ leaves_total: 0, gains: [], loses: [], overrides_removed: 0 });
+    expect(preview).toMatchObject({ leaves_total: 0, gains: [], loses: [], overrides_removed: 0, suppressions_ended: 0 });
     const created = await call<HostGroup>(server, "POST", "/api/v1/host-groups", { name: "Web at HQ", kind: "rule", conditions: [webInHq, hq] });
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({ kind: "rule", hosts: preview.joins_total, version: 1, changed_by: "u-admin" });

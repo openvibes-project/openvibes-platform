@@ -164,8 +164,8 @@ echo "ok: the alarm reads back from GET /api/v1/alarms/{id} with its process tre
 # "Don't alarm on this program again", then the same program with another
 # command line: stored, and closed by the suppression.
 SUPPRESSION=$(api POST /api/v1/alarm-suppressions \
-    "{\"alarm_id\":\"$ID\",\"scope\":\"program\",\"note\":\"alarms e2e\"}")
-jq -e '.scope == "program"' <<<"$SUPPRESSION" >/dev/null ||
+    "{\"alarm_id\":\"$ID\",\"what\":\"program\",\"where\":{\"kind\":\"all\"},\"for_days\":null,\"reason\":\"alarms e2e\"}")
+jq -e '.what == "program" and .status == "active"' <<<"$SUPPRESSION" >/dev/null ||
     { echo "$SUPPRESSION" >&2; fail "creating a program suppression"; }
 /tmp/fake-nginx -c 'sh -c "id -u" >/dev/null'
 suppressed() {

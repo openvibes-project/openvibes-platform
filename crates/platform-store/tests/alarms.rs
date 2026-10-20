@@ -253,8 +253,9 @@ async fn suppress(
     admin
         .query_one(
             "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, agent_id, exe,
-                args_sha256, note, created_by, created_at)
-             VALUES ('baseline', 'web-server-spawns-shell', $1, $2, $3, $4, 'noisy', 'alice', now())
+                args_sha256, note, created_by, created_at, state, activated_at)
+             VALUES ('baseline', 'web-server-spawns-shell', $1, $2, $3, $4, 'noisy', 'alice', now(),
+                'active', now())
              RETURNING id",
             &[&scope, &agent, &exe, &hash],
         )
@@ -348,7 +349,7 @@ async fn each_suppression_scope_closes_matching_alarms_only() {
             .await
             .unwrap()
             .execute(
-                "UPDATE alarm_suppressions SET removed_at = now(), removed_by = 'alice'",
+                "UPDATE alarm_suppressions SET removed_at = now(), removed_by = 'alice', state = 'removed'",
                 &[],
             )
             .await

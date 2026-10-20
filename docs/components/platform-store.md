@@ -465,7 +465,9 @@ Code over these tables:
 
 - `alarms` (ingest): `row` checks one alarm (time, skew, retention,
   partition); `insert_batch` upserts with `GREATEST` on count and last
-  seen, applies active suppressions, reopens a mitigated alarm or an
+  seen, applies active, unexpired suppressions of the batch's rules on the
+  alarm's host, group or all hosts (`suppression_matches`, first by id),
+  reopens a mitigated alarm or an
   expired accepted risk on recurrence, and keeps `alarms_dropped_total`.
   `args_sha256` is the `command` suppression hash (SHA-256 of the args'
   JSON array).
@@ -485,9 +487,7 @@ Code over these tables:
 - `console_alarms` (console): scoped `list` (filters, keyset `(last_seen,
   id)`), `detail`, and `update_triage` with the findings workflow, history
   and audit.
-- `alarm_suppressions` (console): `list`, `create` (derived from a visible
-  alarm; `program`/`command` need global scope) and `remove` (kept as
-  history), audited.
+- `alarm_suppressions` (console): see "Suppressions with approval" below.
 - `rule_drafts` (schema 42): one row per draft rule of `site` or
   `site-alarms`; `list`, `get`, `put` (upsert) and `delete`. The console
   validates before `put`; the table holds only rules the agent would accept.
@@ -541,6 +541,71 @@ the throttled write, so its own freshness limit is the separate
 `console_read::online_fingerprint(&client, now) -> (count, id sum)` is a cheap
 "did the online set change" check for the console's event stream (not scoped,
 carries no agent identity).
+
+## General settings (`console_settings::…`, schema 54)
+
+Table `console_settings (key, value jsonb, changed_at, changed_by)`: one row
+per changed key; a key with no row has its default (kept in the console).
+`all`, `set` (one transaction: lock the row, upsert, audit `settings.changed`
+with `{key, old, new}`; returns the old value), `recent` (newest change
+audits) and `require_approval(&impl GenericClient)` (false when the row is
+absent or not a bool). Tests: `tests/console_settings.rs`.
+
+## Suppressions with approval (`alarm_suppressions::…`, schema 55)
+
+`0055_suppression_approval.sql` (needs a backup) gives `alarm_suppressions`
+a `state` (`waiting`, `active`, `rejected`, `withdrawn`, `removed`), a
+where (`agent_id` for one host, `host_group_id` for one group, neither for
+all hosts), `for_days` (7, 30 or null), `activated_at`, `expires_at`,
+`decided_by/at`, `decision_reason` and the source `alarm_id` (no foreign
+key: `alarms` is partitioned). Old rows become `active` from `created_at`,
+removed ones `removed`; `removed_at` stays in step with `state = 'removed'`.
+The console may now UPDATE `alarms.suppressed_by`; ingest may SELECT
+`console_host_group_members` (`console_host_in_group` runs with the
+caller's rights).
+
+- `request(client, suppress, &Request { alarm_row_id, what, place,
+  for_days, reason }, actor, now)`: derived from an alarm within the
+  `suppress` scope; all hosts needs a global scope, a group must be in the
+  scope. Waiting when `console_settings::require_approval`, else active at
+  once: `expires_at = activated_at + for_days`, and the source alarm, if
+  open or investigating and covered by the where (its host, or a group
+  holding its host), is closed as ingest closes a matched one
+  (`false_positive`, `suppressed_by`, triage history).
+- `decide(client, approve, id, approve_it, reason, actor, now)`: waiting
+  rows in the approver's reach only; never the requester's own
+  (`OwnRequest`); rejecting needs a reason. Approving starts the period and
+  closes the source alarm (if covered, as above).
+- `close_covered(client, suppress, id, alarm_ids, actor, now)`: after bulk
+  Suppress made `id` active, closes the other selected alarms it covers
+  (same rule, program and where), each within `suppress`, the same way;
+  returns the ids of `alarm_ids` now closed by `id`.
+- `withdraw(client, id, actor, now)`: the requester's own waiting row;
+  another person's is `NotFound`.
+- `remove(client, suppress, id, actor, now)`: an active row in reach.
+- `list(client, read, &ListFilter { state, alarm_id }, now)`: waiting
+  (oldest first), active including expired (`expired` is derived at `now`)
+  and rejected rows, at most 500 each. A waiting row carries
+  `would_close`: the alarms on hosts the reader reaches, last seen in the
+  7 days before `now`, it would have closed, counted with ingest's matcher
+  over the newest 10,000 of the same rule and program
+  (`would_close_capped` when there were more, so the page says "at
+  least"). Args that are not a list of strings never match. Reach (`in_reach`): a host row if
+  the host is visible, a group row if the group is in the scope, an
+  all-hosts row for every reader but only a global caller for decide and
+  remove, a device or signature row for a global caller only. Approving a
+  group row whose group is gone is refused (`Invalid("group")`).
+- `create_for_device` (`openvibes-admin`): device and signature rows are
+  always active.
+
+Every transition is audited: `alarm.suppression.requested`, `.created`,
+`.approved`, `.rejected`, `.withdrawn`, `.removed`. Ingest applies only
+active rows not past `expires_at` (checked at the batch's `now`; there is
+no expiry job), and a group row through `console_host_in_group`, so a host
+is covered from the moment it joins. Deleting a host group withdraws its
+waiting rows and removes its active ones (plan ruling 4). Tests:
+`tests/alarm_suppressions.rs`, `tests/alarm_suppression_states.rs` and
+`tests/suppression_upgrade.rs` and `tests/suppression_matching.rs`.
 
 ## Status
 
@@ -994,16 +1059,20 @@ Test: `tests/host_group_facts.rs`.
   the person's (the next inventory does not make it again).
   Manual members keep their `added_at` across updates. A delete refuses
   while roles reach the group (`InUse` with their names), remembers an
-  automatic key in `console_host_group_dismissed`, and cascades rule-set
-  switches. Audit: `host_group.created` / `updated` (`{name, kind,
+  automatic key in `console_host_group_dismissed`, cascades rule-set
+  switches, and ends the group's suppressions (waiting → `withdrawn`,
+  active → `removed`, by the deleter), each with its
+  `alarm.suppression.withdrawn` / `.removed` audit line (detail `reason`
+  "group deleted") in the same transaction. Audit: `host_group.created` / `updated` (`{name, kind,
   conditions | picked}`), `host_group.deleted` (`{name, kind,
-  overrides_removed}`).
+  overrides_removed, suppressions_ended}`).
 - `host_group_writes::preview(id, proposed)` (module `host_group_preview`)
   returns `PreviewOutcome::Invalid(part)` for a malformed rule
   (`invalid_content`, the checks writes use) and `NotFound` for a missing
   group; otherwise `Ready(Preview)`. It compares today's membership with the proposed rule (evaluated with
   `console_condition_holds` over active hosts) or picked list; `proposed`
-  None previews a delete and counts `overrides_removed`. `gains` / `loses`
+  None previews a delete and counts `overrides_removed` and
+  `suppressions_ended`. `gains` / `loses`
   are the enabled people bound to roles reaching the group who get the
   joining / lose the leaving hosts, except those holding a role on all
   hosts (simplified: their other groups are not checked). Lists hold at

@@ -3,20 +3,26 @@
 
 use axum::{
     Router,
-    routing::{delete, get, put},
+    routing::{delete, get, post, put},
 };
 
 use crate::http::AuthHttpState;
 
 pub(crate) mod alarm;
 pub(crate) mod detection;
+pub(crate) mod suppression_decisions;
+pub(crate) mod suppression_types;
 pub(crate) mod suppressions;
 
 pub use alarm::{
     AlarmDetailView, AlarmPage, AlarmSummaryView, AlarmTriageView, UpdateAlarmTriageRequest,
 };
 pub use detection::DetectionView;
-pub use suppressions::{AlarmSuppressionList, AlarmSuppressionView, CreateAlarmSuppressionRequest};
+pub use suppression_types::{
+    AlarmSuppressionGroup, AlarmSuppressionList, AlarmSuppressionOptions, AlarmSuppressionView,
+    AlarmSuppressionWhereView, CreateAlarmSuppressionRequest, RejectAlarmSuppressionRequest,
+    SuppressWhat, SuppressWhere,
+};
 
 /// Alarms and their triage, suppressions, and the rule behind a finding or
 /// an alarm.
@@ -38,7 +44,23 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
             get(suppressions::list_suppressions).post(suppressions::create_suppression),
         )
         .route(
+            "/v1/alarm-suppressions/options",
+            get(suppressions::suppression_options),
+        )
+        .route(
             "/v1/alarm-suppressions/{suppression_id}",
-            delete(suppressions::remove_suppression),
+            delete(suppression_decisions::remove_suppression),
+        )
+        .route(
+            "/v1/alarm-suppressions/{suppression_id}/approve",
+            post(suppression_decisions::approve_suppression),
+        )
+        .route(
+            "/v1/alarm-suppressions/{suppression_id}/reject",
+            post(suppression_decisions::reject_suppression),
+        )
+        .route(
+            "/v1/alarm-suppressions/{suppression_id}/withdraw",
+            post(suppression_decisions::withdraw_suppression),
         )
 }

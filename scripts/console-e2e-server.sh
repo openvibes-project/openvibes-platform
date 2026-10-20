@@ -3,7 +3,7 @@
 # TLS 1.3 with a throwaway self-signed certificate) on a fresh throwaway
 # database for the browser tests: schema migrated, users
 # alex (admin) and sam (analyst), imported findings for six hosts, and
-# four enrolled hosts with their facts (OS, version, hostname, address), one
+# seven enrolled hosts with their facts (OS, version, hostname, address), one
 # finding and one alarm each. Needs
 # OPENVIBES_TEST_DATABASE_URL (scripts/test-db.sh locally; the CI job sets it)
 # and the binaries built by scripts/test-console-e2e.sh.
@@ -83,14 +83,17 @@ admin import "${work}/exports" >/dev/null
 # Two Linux and two Windows enrolled hosts for the two-team journey (a role
 # limited to host groups never reaches imported hosts), each with one low
 # finding and one low alarm of their own rules, so the other tests' findings
-# stay as they are.
-# The journey makes its rule groups through the host-group API.
+# stay as they are. lin-sup-1/2/3 carry one alarm per browser for the
+# suppression approval journey (suppressions.spec.ts), outside both teams.
+# The journeys make their rule groups through the host-group API.
 psql -qX -v ON_ERROR_STOP=1 "${database_url}" >/dev/null <<'SQL'
 INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version, hostname, os_id, os_version, last_address)
 SELECT 'agent.00000000-0000-4000-8000-00000000000' || n, 'active', now() - interval '1 day', now(), '0.4.2', name, os, version,
     ('192.0.2.' || n)::inet
 FROM (VALUES (1, 'linux-1.example.test', 'debian', '12'), (2, 'linux-2.example.test', 'debian', '12'),
-             (3, 'windows-1.example.test', 'windows', '11'), (4, 'windows-2.example.test', 'windows', '11'))
+             (3, 'windows-1.example.test', 'windows', '11'), (4, 'windows-2.example.test', 'windows', '11'),
+             (5, 'lin-sup-1.example.test', 'debian', '12'), (6, 'lin-sup-2.example.test', 'debian', '12'),
+             (7, 'lin-sup-3.example.test', 'debian', '12'))
      AS hosts (n, name, os, version);
 INSERT INTO current_findings
 SELECT (jsonb_populate_record(c, jsonb_build_object('agent_id', a.agent_id, 'origin', 'online', 'authenticated', true,
@@ -100,7 +103,8 @@ WHERE c.agent_id = 'import.00000000000000000000000000000000' AND c.rule_id = 'ti
 INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version, rule_id, rule_version,
     severity, confidence, message, first_seen, last_seen, count, process, ancestors, received_at, state)
 SELECT (now() AT TIME ZONE 'UTC')::date, agent_id, md5(agent_id), 'e2e', 1, 'e2e.team_alarm', 1, 'low', 50,
-    'Team alarm on ' || split_part(hostname, '.', 1), now(), now(), 1, '{}', '[]', now(), 'open'
+    'Team alarm on ' || split_part(hostname, '.', 1), now(), now(), 1,
+    '{"exe": "/usr/local/bin/backup-job", "args": ["backup-job", "--nightly"]}', '[]', now(), 'open'
 FROM agents WHERE status = 'active';
 SQL
 

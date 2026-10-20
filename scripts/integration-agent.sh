@@ -99,8 +99,8 @@ for count in 1 1 3; do
 done
 [[ "$(sql "SELECT count(*) || ' ' || max(count) FROM alarms")" == "1 3" ]] ||
     { echo "FAIL: expected one alarm raised to count 3"; exit 1; }
-sql "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, exe, note, created_by, created_at)
-     VALUES ('integration', 'web-shell', 'program', '/usr/bin/sh', 'test', 'test', now())" >/dev/null
+sql "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, exe, note, created_by, created_at, state, activated_at)
+     VALUES ('integration', 'web-shell', 'program', '/usr/bin/sh', 'test', 'test', now(), 'active', now())" >/dev/null
 [[ "$(post_alarm 2 1)" == 204 ]] || { echo "FAIL: POST /v1/alarms (suppressed)"; exit 1; }
 [[ "$(sql "SELECT state FROM alarms WHERE alarm_id = '$(printf 'alarm.%032x' 2)'")" == false_positive ]] ||
     { echo "FAIL: a suppressed alarm is not closed"; exit 1; }

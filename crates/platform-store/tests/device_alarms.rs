@@ -96,8 +96,8 @@ async fn a_device_suppression_closes_a_new_alarm_once() {
     for (scope, dev) in [("device", Some(device)), ("signature", None)] {
         admin
             .execute(
-                "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, device_id, note, created_by, created_at)
-                 VALUES ('device-unifi', 'ips.2402000', $1, $2, 'n', 't', now())",
+                "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, device_id, note, created_by, created_at, state, activated_at)
+                 VALUES ('device-unifi', 'ips.2402000', $1, $2, 'n', 't', now(), 'active', now())",
                 &[&scope, &dev],
             )
             .await
@@ -195,7 +195,7 @@ async fn console_alarm_reads_do_not_see_device_alarms() {
 #[tokio::test]
 async fn a_suppression_made_from_a_device_alarm_closes_the_next_ones() {
     use platform_store::{
-        alarm_suppressions::{self, Change},
+        alarm_suppressions::{self, Change, ListFilter},
         console_read::AgentScope,
     };
     let (db, device) = setup().await;
@@ -214,7 +214,7 @@ async fn a_suppression_made_from_a_device_alarm_closes_the_next_ones() {
             alarm_suppressions::create_for_device(&mut admin, id, bad, "n", "t", Utc::now())
                 .await
                 .unwrap();
-        assert_eq!(refused, Change::Invalid, "{bad}");
+        assert_eq!(refused, Change::Invalid("scope".into()), "{bad}");
     }
     let Change::Done(made) = alarm_suppressions::create_for_device(
         &mut admin,
@@ -239,9 +239,14 @@ async fn a_suppression_made_from_a_device_alarm_closes_the_next_ones() {
         .await
         .unwrap();
     assert_eq!(done.suppressed, 1);
-    let listed = alarm_suppressions::list(&admin, &AgentScope::Global)
-        .await
-        .unwrap();
+    let listed = alarm_suppressions::list(
+        &admin,
+        &AgentScope::Global,
+        &ListFilter::default(),
+        Utc::now(),
+    )
+    .await
+    .unwrap();
     assert!(
         listed
             .iter()

@@ -1,14 +1,58 @@
-// Settings: the audit log and its retention, and the assistant's internet access.
+// Settings: the general settings (settings/ in the console), the audit log and its retention, and the assistant's internet access.
 import { validDomain, validSearxngUrl } from "../../views/admin/settings/assistantRules";
 import type { DemoContext } from "../context";
-import { json, page, problem } from "../http";
+import type { SettingChangeView, SettingView } from "../../api/types";
+import { browserPersistence, json, page, problem } from "../http";
+
+// The typed general settings, as settings/definitions.rs lists them.
+const DEFINITIONS = [
+  { key: "suppressions.require_approval", section: "Alarm suppressions", label: "Suppressions need approval", kind: "bool", default: false,
+    help: "A new suppression waits until someone else who can approve on those hosts accepts it. Matching alarms keep arriving while it waits." },
+  { key: "sso.remove_inactive_days", section: "Single sign-on", label: "Remove inactive single sign-on users", kind: "int", min: 1, max: 3650, default: 90,
+    help: "Days without a sign-in before a single sign-on user is removed. Takes effect once single sign-on is set up." },
+] as const;
+type Stored = { value: unknown; changed_at: string; changed_by: string };
+type State = { values: Record<string, Stored>; recent: SettingChangeView[] };
 
 export function registerSettingsRoutes(ctx: DemoContext) {
   const { data, iso, actor, audit, route } = ctx;
+  // Values are kept in the browser, so a reload keeps a change; what it holds is checked, as it could be anything.
+  const store = browserPersistence("openvibes.v2.demo.settings");
+  const fits = (def: (typeof DEFINITIONS)[number], v: unknown) =>
+    def.kind === "bool" ? typeof v === "boolean" : typeof v === "number" && Number.isInteger(v) && v >= def.min && v <= def.max;
+  const loaded = store?.load() as { values?: Record<string, Partial<Stored>> } | null | undefined;
+  const state: State = { values: {}, recent: [] }; // Recent changes stay in memory: the audit lines they link to do too.
+  for (const def of DEFINITIONS) {
+    const v = loaded?.values && typeof loaded.values === "object" ? loaded.values[def.key] : undefined;
+    if (v && typeof v === "object" && fits(def, v.value) && typeof v.changed_at === "string" && typeof v.changed_by === "string") state.values[def.key] = v as Stored;
+  }
+  const view = (def: (typeof DEFINITIONS)[number]): SettingView => {
+    const stored = state.values[def.key];
+    return { ...def, min: "min" in def ? def.min : null, max: "max" in def ? def.max : null, value: stored?.value ?? def.default,
+      changed_at: stored?.changed_at ?? null, changed_by: stored?.changed_by ?? null };
+  };
+  route("GET", "/api/v1/settings", "settings.manage", () => json({ items: DEFINITIONS.map(view), recent: state.recent.slice(0, 5) }));
+  route("PATCH", "/api/v1/settings/{key}", "settings.manage", (params, _, body) => {
+    const def = DEFINITIONS.find((d) => d.key === params.key);
+    if (!def) return problem(404, "setting_not_found", "No such setting");
+    const v = body.value;
+    if (!fits(def, v)) {
+      const message = def.kind === "bool" ? "Use true or false" : `Use a whole number from ${def.min} to ${def.max}`;
+      return problem(422, "invalid_setting", "The setting value is invalid", { field_errors: [{ field: "value", code: "invalid", message }] });
+    }
+    const old = state.values[def.key]?.value ?? null;
+    state.values[def.key] = { value: v, changed_at: iso(), changed_by: actor };
+    state.recent.unshift({ at: iso(), actor, key: def.key, old, new: v });
+    state.recent.length = Math.min(state.recent.length, 5);
+    store?.save({ values: state.values });
+    audit("settings.changed", def.key, "setting");
+    return json(view(def));
+  });
   route("GET", "/api/v1/audit-events", "audit.read", (_, query) => {
     const since = Date.parse(query.get("since") ?? "");
-    if (Number.isNaN(since) || since > Date.now()) return problem(400, "invalid_query", "Audit event query parameters are invalid");
-    return json(page(data.audit.filter((event) => Date.parse(event.at) >= since), query));
+    const prefix = query.get("action_prefix");
+    if (Number.isNaN(since) || since > Date.now() || (prefix !== null && !/^[a-z_.]{1,64}$/.test(prefix))) return problem(400, "invalid_query", "Audit event query parameters are invalid");
+    return json(page(data.audit.filter((event) => Date.parse(event.at) >= since && event.action.startsWith(prefix ?? "")), query));
   });
   route("GET", "/api/v1/assistant-internet", "assistant.admin", () => json(data.assistantInternet));
   route("PUT", "/api/v1/assistant-internet", "assistant.admin", (_, __, body, headers) => {
@@ -41,4 +85,6 @@ export function registerSettingsRoutes(ctx: DemoContext) {
     audit("audit.retention.update", "audit", "retention");
     return json(data.retention);
   });
+  /** A setting's value, for the areas it governs (console_settings). */
+  return { value: (key: (typeof DEFINITIONS)[number]["key"]) => view(DEFINITIONS.find((d) => d.key === key) ?? DEFINITIONS[0]).value };
 }

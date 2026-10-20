@@ -459,6 +459,25 @@ measurements call for it.)
 - **The alarm panel** shows a waiting request's state with Withdraw.
 - **Audit:** every transition is audited, with who and why.
 
+### Plan rulings, 2026-10-20
+
+These fill gaps in §7 and §8.
+
+1. **`GET /v1/settings` needs `settings.manage`.** The suppress form learns whether approval is on from `GET /v1/alarm-suppressions/options` (Task 5), so no one else needs the settings list.
+2. **A suppression remembers its source alarm** (`alarm_id`, the platform row id). The alarm panel finds a waiting request through it, screen 14's "Open alarm" uses it, and "Ask again…" sends it again. Rows made before this step have none, so they show no "Open alarm" and no "Ask again…".
+3. **Activation closes the source alarm.** This happens at create-when-active and at approval: if the source alarm is still open or investigating, it becomes `false_positive` with `suppressed_by` set. This is the close the web used to do itself before quieting. A waiting request closes nothing, so "these alarms keep arriving".
+4. **Deleting a host group ends its suppressions.** Its waiting requests become `withdrawn` and its active ones `removed`. The delete preview counts them ("Ends N alarm suppressions"). There is no foreign key: a suppression whose group is gone matches nothing, because `console_host_in_group` needs the group row.
+5. **Who sees which suppression** (with `alarms.suppressions.read`):
+   - a host row, if the host is in reach;
+   - a group row, if the group is in the viewer's role, or the viewer reaches all hosts;
+   - an all-hosts row, for every reader, because it closes alarms on their hosts too.
+
+   Before this step, program and command rows were global-only.
+6. **Remove needs `alarms.suppress` on the row's where**, with the same rule as creating it.
+7. **The list returns** waiting, active (including expired, shown with an Expired badge) and rejected rows. Withdrawn and removed rows live in the audit log.
+8. **Bulk "suppress"** (compliance bulk, program and all hosts, global callers only) goes through the same store function, so it waits when approval is on. Its result says "requested" for waiting ones.
+9. **Device and signature suppressions** (made by `openvibes-admin`) are always active, and netlog's matcher is unchanged. `removed_at` stays in step with `state = 'removed'`.
+
 ## 9. People and profile pictures
 
 ### 9.1 People and a person's page

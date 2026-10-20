@@ -6,9 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { isDemo } from "../api/client";
 import { assistant, useAssistant } from "../app/assistant";
 import { useActiveAlarms } from "../app/liveAlarms";
-import { menuCount } from "../app/menuCount";
+import { menuCount, waitingToDecide } from "../app/menuCount";
 import { useResource } from "../api/client";
-import type { FindingSummary, VulnerabilitySummary } from "../api/types";
+import type { AlarmSuppression, FindingSummary, VulnerabilitySummary } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
 import { useSession } from "../app/session";
@@ -19,14 +19,16 @@ import { setDensity, setTheme, useDensity, useTheme } from "./theme";
 const pinKey = "openvibes.v2.rail.pinned";
 
 
-/** Counts beside Compliance, Alarms and Vulnerabilities, for what the user may see. */
+/** Counts beside Compliance, Alarms, Alarm suppressions and Vulnerabilities, for what the user may see. */
 function useMenuCounts(): Partial<Record<string, string>> {
   const { can } = useSession();
   const alarms = useActiveAlarms();
   const findings = useResource<FindingSummary>(can("compliance.read") ? "/api/v1/compliance/summary" : null);
   const vulns = useResource<VulnerabilitySummary>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
+  const waiting = useResource<{ items: AlarmSuppression[] }>(can("alarms.suppressions.approve") ? "/api/v1/alarm-suppressions?state=waiting" : null);
   const f = findings.data;
   return {
+    "/alarm-suppressions": waitingToDecide(waiting.data?.items),
     "/alarms": can("alarms.read") ? menuCount(alarms?.count, alarms?.more) : undefined,
     "/compliance": f ? menuCount(f.critical + f.high + f.medium + f.low) : undefined,
     "/vulnerabilities": menuCount(vulns.data?.by_severity.reduce((sum, row) => sum + row.count, 0)),

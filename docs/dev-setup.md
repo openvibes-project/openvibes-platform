@@ -86,6 +86,10 @@ to the dev URL to switch that browser tab from demo to live data
    psql "$OPENVIBES_TEST_DATABASE_URL" -c "CREATE DATABASE ov_dev"
    ```
 
+   It runs with `max_locks_per_transaction=256` (the parallel test
+   databases' migrations ran out of lock slots); a cluster started before
+   that needs `scripts/test-db.sh stop` and a fresh start to pick it up.
+
 2. Files for the console, in a directory you own (for example
    `target/dev/`; `target/` is ignored by git). Use your own database URL:
    the same URL as step 1 with the database name changed to `ov_dev`.

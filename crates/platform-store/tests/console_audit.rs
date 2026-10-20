@@ -90,6 +90,7 @@ async fn audit_event_reads_are_filtered_keyset_paged_and_safe() {
         actor: Some("alice".into()),
         action: None,
         result: Some("success".into()),
+        action_prefix: None,
         after: None,
         limit: PageLimit::new(1).unwrap(),
     };
@@ -103,6 +104,26 @@ async fn audit_event_reads_are_filtered_keyset_paged_and_safe() {
     assert!(second.next.is_none());
     assert_eq!(first.items[0].actor, "alice");
     assert!(first.items[0].action == "logout" || first.items[0].action == "login.success");
+    let prefixed = |prefix: &str| AuditQuery {
+        actor: None,
+        action_prefix: Some(prefix.into()),
+        limit: PageLimit::new(10).unwrap(),
+        ..query.clone()
+    };
+    let login = events(&client, &prefixed("login.")).await.unwrap();
+    assert_eq!(login.items.len(), 1);
+    assert_eq!(login.items[0].action, "login.success");
+    assert_eq!(
+        events(&client, &prefixed("log")).await.unwrap().items.len(),
+        2
+    );
+    assert!(
+        events(&client, &prefixed("alarm."))
+            .await
+            .unwrap()
+            .items
+            .is_empty()
+    );
     let export_query = AuditExportQuery {
         since,
         until: None,

@@ -217,7 +217,8 @@ async fn deleting_an_automatic_group_is_remembered() {
         .get(0);
     assert_eq!(
         detail,
-        serde_json::json!({"name": "Linux", "kind": "automatic", "overrides_removed": 0})
+        serde_json::json!({"name": "Linux", "kind": "automatic", "overrides_removed": 0,
+            "suppressions_ended": 0})
     );
     db.drop().await;
 }

@@ -150,7 +150,9 @@ The usual request limits apply. Test: `tests/ca.rs`.
   stored, then 204: a batch queued through a long outage never stalls the
   agent. Storing is `platform_store::alarms::insert_batch`: a resend raises
   `count` and `last_seen` only, active suppressions close a new alarm as a
-  false positive, a recurrence reopens a mitigated one (or one whose
+  false positive (only `active` rows not past `expires_at` at the batch's
+  `now`, on the alarm's host, its group through `console_host_in_group`
+  as membership is at that moment, or all hosts), a recurrence reopens a mitigated one (or one whose
   accepted risk has expired), and the agent's
   largest `dropped_total` is kept.
 - `POST /v1/services` (authenticated, protocol P15): a `HostServices`,

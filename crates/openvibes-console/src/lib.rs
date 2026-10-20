@@ -24,6 +24,7 @@ mod rules;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;
+mod settings;
 mod vulnerabilities;
 
 pub use access::auth::{

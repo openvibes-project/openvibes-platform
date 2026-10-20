@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildDemoData } from "./data";
 import { createDemoServer } from "./server";
@@ -182,6 +182,20 @@ describe("demo server", () => {
     expect((recent.items as { at: string }[]).every((e) => Date.parse(e.at) >= Date.now() - 3_600_000 - 1000)).toBe(true);
   });
 
+  it("filters audit events by action prefix, validated like the real API", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    expect((await server.handle("PATCH", "/api/v1/settings/suppressions.require_approval", { value: true })).status).toBe(200);
+    const since = `since=${new Date(Date.now() - 30 * 86_400_000).toISOString()}`;
+    const all = (await json(await server.handle("GET", `/api/v1/audit-events?limit=100&${since}`))).items as { action: string }[];
+    const prefixed = (await json(await server.handle("GET", `/api/v1/audit-events?limit=100&${since}&action_prefix=settings.`))).items as { action: string }[];
+    expect(prefixed.length).toBeGreaterThan(0);
+    expect(prefixed.every((e) => e.action.startsWith("settings."))).toBe(true);
+    expect(prefixed.length).toBeLessThan(all.length);
+    for (const bad of ["", "Alarm.", "a%25", "a".repeat(65)]) {
+      expect((await server.handle("GET", `/api/v1/audit-events?${since}&action_prefix=${bad}`)).status).toBe(400);
+    }
+  });
+
   it("needs an Idempotency-Key to create an enrollment token, and a replay never returns the secret", async () => {
     const server = createDemoServer({ persona: "admin" });
     const body = { label: "x", max_uses: 1, expires_in_hours: 1 };
@@ -277,11 +291,13 @@ describe("demo alarms (P14)", () => {
     expect(retired.status).toBe(409);
     const closed = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "false_positive", note: "x" }, { "if-match": "\"1\"" });
     expect(closed.status).toBe(200);
-    const created = await analyst.handle("POST", "/api/v1/alarm-suppressions", { alarm_id: id, scope: "program", note: "noisy" });
+    const body = { alarm_id: id, what: "program", where: { kind: "host" }, for_days: null, reason: "noisy" };
+    const created = await analyst.handle("POST", "/api/v1/alarm-suppressions", body);
     expect(created.status).toBe(201);
+    expect((await analyst.handle("POST", "/api/v1/alarm-suppressions", { ...body, scope: "program" })).status).toBe(422);
+    // Operators hold no alarms.suppress (src/demo/suppressions.test.ts covers the rest).
     const scoped = createDemoServer({ persona: "scoped_operator" });
-    const refused = await scoped.handle("POST", "/api/v1/alarm-suppressions", { alarm_id: id, scope: "program", note: "noisy" });
-    expect(refused.status).toBe(403);
+    expect((await scoped.handle("POST", "/api/v1/alarm-suppressions", body)).status).toBe(403);
   });
 });
 
@@ -313,5 +329,40 @@ describe("demo bulk triage (triage v2)", () => {
     expect((await post("vulnerabilities", { action: "state", state: "false_positive", note: "not affected", items: [{ advisory_id: advisory }] })).body.changed).toBe(hosts);
     const after = await json(await analyst.handle("GET", "/api/v1/vulnerabilities"));
     expect((after.items as { advisory_id: string; triage_state: string }[]).filter((v) => v.advisory_id === advisory).every((v) => v.triage_state === "false_positive")).toBe(true);
+  });
+});
+
+describe("demo general settings", () => {
+  it("lists, saves with an audit line, and refuses like the server", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const first = await json(await server.handle("GET", "/api/v1/settings"));
+    expect((first.items as { key: string; value: unknown }[]).map((i) => [i.key, i.value])).toEqual([["suppressions.require_approval", false], ["sso.remove_inactive_days", 90]]);
+    const saved = await server.handle("PATCH", "/api/v1/settings/suppressions.require_approval", { value: true });
+    expect(saved.status).toBe(200);
+    const after = await json(await server.handle("GET", "/api/v1/settings"));
+    expect(after.recent).toMatchObject([{ key: "suppressions.require_approval", old: null, new: true }]);
+    const audit = await json(await server.handle("GET", `/api/v1/audit-events?limit=1&since=${new Date(Date.now() - 86_400_000).toISOString()}`));
+    expect((audit.items as { action: string }[])[0]?.action).toBe("settings.changed");
+    const bad = await server.handle("PATCH", "/api/v1/settings/sso.remove_inactive_days", { value: 0 });
+    expect(bad.status).toBe(422);
+    expect(await json(bad)).toMatchObject({ code: "invalid_setting", field_errors: [{ field: "value", message: "Use a whole number from 1 to 3650" }] });
+    expect((await server.handle("PATCH", "/api/v1/settings/nope", { value: 1 })).status).toBe(404);
+    const viewer = createDemoServer({ persona: "viewer" });
+    expect((await viewer.handle("GET", "/api/v1/settings")).status).toBe(403);
+    expect((await viewer.handle("PATCH", "/api/v1/settings/sso.remove_inactive_days", { value: 5 })).status).toBe(403);
+  });
+
+  it("ignores stored state that does not fit (a hand-edited or old localStorage)", async () => {
+    const store = new Map([["openvibes.v2.demo.settings", JSON.stringify({
+      recent: "x", values: { "sso.remove_inactive_days": { value: "90", changed_at: "t", changed_by: "a" }, "suppressions.require_approval": { value: 1, changed_at: "t", changed_by: "a" } },
+    })]]);
+    vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } });
+    try {
+      const response = await createDemoServer({ persona: "admin" }).handle("GET", "/api/v1/settings");
+      expect(response.status).toBe(200);
+      const body = await json(response);
+      expect((body.items as { value: unknown }[]).map((i) => i.value)).toEqual([false, 90]);
+      expect(body.recent).toEqual([]);
+    } finally { vi.unstubAllGlobals(); }
   });
 });

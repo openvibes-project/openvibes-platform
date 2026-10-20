@@ -112,8 +112,8 @@ describe("demo cases: permissions and the seed", () => {
     expect((await call(createDemoServer({ persona: "analyst" }), "GET", "/api/v1/cases/assignees")).status).toBe(403);
     const server = createDemoServer({ persona: "admin" });
     const users = (await call<{ items: { username: string }[] }>(server, "GET", "/api/v1/cases/assignees")).body.items.map((u) => u.username);
-    // Vic (Viewer) and Wen (Windows lead) read cases too; Ola and Pia (operators) do not.
-    expect(users.sort()).toEqual(["admin", "sam", "vic", "wen"]);
+    // Vic (Viewer), Wen and Lee (team leads) read cases too; Ola and Pia (operators) do not.
+    expect(users.sort()).toEqual(["admin", "lee", "sam", "vic", "wen"]);
   });
 });
 

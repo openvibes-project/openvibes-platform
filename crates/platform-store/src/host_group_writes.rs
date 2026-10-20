@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use tokio_postgres::error::SqlState;
 
 use crate::{
-    Client, StoreError,
+    Client, StoreError, alarm_suppressions,
     console_auth::ACCESS_BINDING_LOCK,
     console_read::AgentScope,
     host_groups::{Condition, GroupKind, GroupSummary, summaries},
@@ -355,7 +355,8 @@ pub async fn update(
     .await
 }
 
-/// Deletes a group no role reaches, with its rule-set switches; a deleted
+/// Deletes a group no role reaches, with its rule-set switches, ending its
+/// suppressions; a deleted
 /// automatic group's key is remembered so ingest does not make it again.
 pub async fn delete(
     client: &mut Client,
@@ -395,6 +396,28 @@ pub async fn delete(
         .pop()
         .ok_or(StoreError::Query)?;
     let overrides = overrides(&tx, id).await?;
+    // Plan ruling 4: waiting requests are withdrawn, active ones removed,
+    // each with its audit line.
+    let mut ended = 0;
+    for (sql, action) in [
+        (
+            "UPDATE alarm_suppressions SET state = 'withdrawn', decided_by = $2, decided_at = $3
+             WHERE host_group_id::text = $1 AND state = 'waiting' RETURNING id",
+            "alarm.suppression.withdrawn",
+        ),
+        (
+            "UPDATE alarm_suppressions SET state = 'removed', removed_by = $2, removed_at = $3
+             WHERE host_group_id::text = $1 AND state = 'active' RETURNING id",
+            "alarm.suppression.removed",
+        ),
+    ] {
+        for row in tx.query(sql, &[&id, &actor, &now]).await? {
+            let ended_row = alarm_suppressions::fetch(&tx, row.get(0), now).await?;
+            alarm_suppressions::audit_because(&tx, actor, action, &ended_row, "group deleted")
+                .await?;
+            ended += 1;
+        }
+    }
     tx.execute(
         "INSERT INTO console_host_group_dismissed (auto_key, dismissed_at, dismissed_by)
          SELECT auto_key, $2, $3 FROM console_asset_groups
@@ -409,6 +432,7 @@ pub async fn delete(
     .await?;
     let detail = serde_json::json!({
         "name": group.name, "kind": group.kind.as_str(), "overrides_removed": overrides,
+        "suppressions_ended": ended,
     });
     audit(&tx, "host_group.deleted", actor, now, id, &detail).await?;
     tx.commit().await?;
@@ -422,6 +446,21 @@ pub(crate) async fn overrides(
     Ok(client
         .query_one(
             "SELECT count(*) FROM rule_set_group_assignment WHERE asset_group_id::text = $1",
+            &[&id],
+        )
+        .await?
+        .get(0))
+}
+
+/// Waiting and active suppressions on group `id`, which deleting it ends.
+pub(crate) async fn suppressions_ended(
+    client: &impl deadpool_postgres::GenericClient,
+    id: &str,
+) -> Result<i64, StoreError> {
+    Ok(client
+        .query_one(
+            "SELECT count(*) FROM alarm_suppressions
+             WHERE host_group_id::text = $1 AND state IN ('waiting', 'active')",
             &[&id],
         )
         .await?

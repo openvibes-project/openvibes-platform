@@ -3,7 +3,7 @@
 
 use crate::{
     Client, StoreError,
-    host_group_writes::{GroupContent, invalid_content, overrides},
+    host_group_writes::{GroupContent, invalid_content, overrides, suppressions_ended},
 };
 
 /// Most entries in each preview list.
@@ -60,6 +60,8 @@ pub struct Preview {
     pub people_total: i64,
     /// Rule-set switches a delete removes.
     pub overrides_removed: i64,
+    /// Waiting and active suppressions a delete ends (plan ruling 4).
+    pub suppressions_ended: i64,
 }
 
 /// Hosts joining and leaving, newest membership `prop` against today's.
@@ -141,6 +143,7 @@ pub async fn preview(
         leaves_total: 0,
         people_total: 0,
         overrides_removed: 0,
+        suppressions_ended: 0,
     };
     for row in &rows {
         let host = HostRef {
@@ -174,6 +177,7 @@ pub async fn preview(
         }
         if proposed.is_none() {
             preview.overrides_removed = overrides(client, id).await?;
+            preview.suppressions_ended = suppressions_ended(client, id).await?;
         }
     }
     Ok(PreviewOutcome::Ready(preview))

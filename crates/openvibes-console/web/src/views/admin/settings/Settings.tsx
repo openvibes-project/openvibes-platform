@@ -12,6 +12,7 @@ import { NewGroup } from "../groups/NewGroup";
 import { PersonPage } from "../people/PersonPage";
 import { RolePage } from "../roles/RolePage";
 import { AssistantSettings } from "./AssistantSettings";
+import { General } from "./General";
 import { Enrollment } from "./Enrollment";
 import { HostGroups } from "./HostGroups";
 import { People } from "./People";
@@ -22,6 +23,7 @@ import { ServiceAccounts } from "./ServiceAccounts";
 type Tab = { id: string; label: string; access: readonly Access[]; render: () => ReactNode };
 
 const tabs: readonly Tab[] = [
+  { id: "general", label: "General", access: [{ permission: "settings.manage" }], render: () => <General /> },
   { id: "people", label: "People", access: [{ permission: "access.read" }], render: () => <People /> },
   { id: "roles", label: "Roles", access: [{ permission: "access.read" }], render: () => <Roles /> },
   { id: "host-groups", label: "Host groups", access: [{ permission: "access.read" }, { permission: "host_groups.manage" }], render: () => <HostGroups /> },

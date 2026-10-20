@@ -20,6 +20,7 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `hosts/` | Hosts: agents, certificates, enrollment tokens, install package, software, ports, presence, fleet. |
 | `http/` | Router assembly, route table, middleware, web app files, problems, OpenAPI. |
 | `rules/` | Rule sets and bundles, assignment, draft rules, rule tests, ATT&CK coverage. |
+| `settings/` | General settings: the typed list and changing one value. |
 | `server/` | The listeners: TLS, trusted peers, and serving the routers. |
 | `seeded/` | Fixed demo data for the loopback development listener (`dev-seed`). |
 | `vulnerabilities/` | Vulnerability summary, list and advisory detail. |

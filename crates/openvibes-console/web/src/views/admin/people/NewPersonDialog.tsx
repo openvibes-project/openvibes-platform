@@ -13,10 +13,20 @@ import { toast } from "../../../ui/toast";
 import { fitsShare, refreshPeople } from "./people";
 import { hostsSummary } from "../roles/roleState";
 
-/** A native modal dialog: focus trapped, Escape closes it (onClose). */
+/** A native modal dialog: focus trapped, Escape closes it (onClose); once
+ * unmounted it gives focus back to what opened it. It never calls close()
+ * itself: that would fire onClose again, and close it under StrictMode's
+ * dev remount. */
 export function Modal({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => { if (!dialog.current?.open) dialog.current?.showModal(); }, []);
+  // Read while rendering, before showModal moves focus (a StrictMode remount would see the dialog's own focus).
+  const [opener] = useState(() => (typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null));
+  useEffect(() => {
+    const d = dialog.current;
+    if (d && !d.open) d.showModal();
+    // After the commit: a remount keeps the dialog in the page, and focus with it.
+    return () => queueMicrotask(() => { if (!d?.isConnected) opener?.focus(); });
+  }, [opener]);
   return <dialog ref={dialog} className="palette bulk-modal" aria-label={label} onClose={onClose}>{children}</dialog>;
 }
 

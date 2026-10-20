@@ -6,7 +6,9 @@
 
 /// Agent listing, inspection, and revocation.
 pub mod agents;
-/// Alarm suppressions (P14) as the console manages them.
+mod alarm_suppression_writes;
+/// Alarm suppressions (P14) as the console manages them: states, where
+/// and duration (roles spec §8).
 pub mod alarm_suppressions;
 /// Threat alarms (P14): insert with suppression.
 pub mod alarms;
@@ -37,6 +39,8 @@ pub mod console_people;
 pub mod console_read;
 /// Console roles with a host reach, and what a principal holds (schema 52).
 pub mod console_roles;
+/// General console settings: typed values, audited changes.
+pub mod console_settings;
 /// Versioned analyst workflow state and history for current findings.
 pub mod console_triage;
 /// CPE matching: NVD applicability ranges and lower-confidence findings (schema 39).

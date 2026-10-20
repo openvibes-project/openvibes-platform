@@ -8,7 +8,7 @@ import { assistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
 import { SessionContext, allows, holdsEverywhere } from "../app/session";
-import type { Persona } from "../demo/personas";
+import { type Persona, personas } from "../demo/personas";
 import { Empty } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { Toasts, toast } from "../ui/toast";
@@ -23,7 +23,7 @@ const personaKey = "openvibes.v2.persona";
 function readPersona(): Persona {
   try {
     const value = localStorage.getItem(personaKey);
-    return value === "viewer" || value === "analyst" || value === "operator" || value === "scoped_operator" ? value : "admin";
+    return personas.find((p) => p === value) ?? "admin";
   } catch {
     return "admin";
   }

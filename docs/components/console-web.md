@@ -34,7 +34,9 @@ Show everything, without page changes for details:
   - agents, with labels, host groups and revocation;
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
-  - settings: people, roles and host groups;
+  - settings: General (typed settings that save as they change, with the
+    approvers named and Recent changes; needs `settings.manage`), people,
+    roles and host groups;
   - service accounts, with tokens issued once; roles are shown by name, and
     the new-account picker offers only roles inside the creator's own access
     (`fitsShare`, as for people);
@@ -73,7 +75,7 @@ Show everything, without page changes for details:
   filter, selection and the bulk bar, never cut off), Evidence, History.
   Alarms: Process, Evidence, History; a closed alarm shows its decision
   (note, who, when) with Reopen, and the case button names the open case
-  holding it; plus the Quiet choice. The Hosts table shows each
+  holding it; plus Suppress… (or the waiting request). The Hosts table shows each
   host's assignee and, for accepted risk, the date it is accepted until
   (marked expired once past), and a `fixed <date>` badge (`about` when
   approximate) for a host whose agent reported the match ended (P13).
@@ -268,11 +270,30 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
   state says agents report process starts by themselves and each host's page says whether its alarms are on. The list loads
   the newest 100 with the filters sent to the API (`state=active` by
   default) and **Load 100 more**; the text filter applies to what is
-  loaded. Each row has a **Quiet…** choice (with `alarms.suppress`): this
-  host, or (global scope only) this program or this exact command on any
-  host. Choosing does nothing until the inline confirmation, which names
-  what it quiets and asks why; confirming closes that alarm as a false
-  positive and creates the suppression.
+  loaded. Each row has **Suppress…** (with `alarms.suppress`), which opens
+  the suppress form (approved screen 12, `panels/alarms/SuppressForm.tsx`):
+  - **What:** this program (its path) or this exact command (path and
+    masked arguments, shown).
+  - **Where:** this host, each group from
+    `GET /api/v1/alarm-suppressions/options`, then All hosts when the
+    caller's suppress reach is global.
+  - **For:** 7 days (the default), 30 days or until removed.
+  - **Reason:** required; the button stays off until it is filled.
+  With approval on, the note reads "Someone who can approve on those hosts
+  must accept it. Until then these alarms keep arriving." and the button
+  says Request; otherwise Suppress. An active result toasts "Suppressed ·
+  recorded in the audit log" (the server has closed the alarm); a waiting
+  one toasts "Requested · waiting for approval". Refusals show the
+  server's field message in `role="alert"`; the controls are disabled
+  while it sends. `bodyOf` (the POST body) and `whereChoices` are pure and
+  tested. Keys typed in a dialog opened from a row (or in any textarea)
+  never move the table cursor or open a row; closing the form returns
+  focus to the button that opened it (the shared `Modal`). A row's button
+  is labelled with the alarm and host. A row whose alarm has a waiting
+  request shows "Requested" (the viewer's own) or "Waiting for approval"
+  (someone else's) instead, like the panel; until the waiting list has
+  loaded, or if it fails, no row offers Suppress…, so the list never asks
+  twice.
 
 **Site rules** (`/site-rules`, with `site_rules.read`) lists the site's own
 compliance rules and alarm rules (drafts) with New rule. A rule opens in
@@ -295,7 +316,13 @@ an existing agent's `agent.toml`.
   process: program, masked command line, uid and euid when they differ,
   working directory, pid), rule and versions, first/last seen, count, in
   the detail template (Process, Evidence, History tabs); the summary has
-  the triage actions and Quiet… with the same scopes.
+  the triage actions and Suppress…. It fetches
+  `GET /api/v1/alarm-suppressions?alarm_id=<id>&state=waiting`; while a
+  request from this alarm waits, the summary shows "Suppression requested,
+  waiting for approval… these alarms keep arriving" instead, with
+  **Withdraw request** for the requester (`can_withdraw`, disabled while
+  it sends). If that fetch fails the panel shows the error, not
+  Suppress….
 - **Coverage** (`/coverage`, `g t`, global `rules.coverage.read`): an ATT&CK
   matrix (tactics as columns, covered techniques with rule counts; empty
   tactics stay as visible gaps) above the rule list. Chips: Kill chain
@@ -306,12 +333,44 @@ an existing agent's `agent.toml`.
 - Rule panels show a rule's ATT&CK pairs as chips that open Coverage
   filtered to them; the site-rule editor adds pairs with a searchable
   picker (one option per technique and tactic).
-- **Alarm suppressions** (`/alarm-suppressions`, `g q`): who, when and
-  why, Remove (kept as history on the server); a row opens the matching
-  alarms.
+- **Alarm suppressions** (`/alarm-suppressions`, `g q`; approved screen 14,
+  `views/operate/AlarmSuppressions.tsx` and `SuppressionRow.tsx`), in the
+  shared layout. Left: By status (Waiting / Active with expired / Rejected,
+  counts linking to their cards) and Recent changes: the newest eight
+  `alarm.suppression.*` audit lines of 30 days (`action_prefix`), each
+  with its suppression number and who (named from `/api/v1/users` with
+  `access.read`, else the id), shown with `audit.read` only; while loading,
+  empty or failed the card says so in words. Right: one card per
+  status; each row shows the program, What/Where/For chips, the quoted
+  reason, "asked by … · when", "Would have closed N alarms in the last 7
+  days" on waiting rows ("at least N" when capped), the status badge (a
+  rejection with its reason) and Open alarm. Actions by flag: Approve and
+  Reject… with an inline required reason (`can_decide`), Withdraw
+  (`can_withdraw`), Remove… with a confirm (`can_remove`), and Ask again…
+  (rejected rows with an alarm, for `alarms.suppress`) opening the
+  suppress form prefilled from the row (alarm, what, where, for, reason);
+  when the row's group is gone or outside the asker's reach (or all hosts
+  is), the form starts at this host and says "The group this was for
+  isn't one you can choose; pick where it applies." Every action button's
+  accessible name names the row's program ("Approve /usr/bin/sh"). Each action is busy until it
+  returns, shows errors in `role=alert`, reloads the list, the menu count
+  and recent changes, and toasts "Saved · recorded in the audit log"; a
+  row that moves to another card keeps focus, and a row that leaves
+  hands focus to its card. The menu item counts the waiting requests the
+  viewer can decide (`GET /api/v1/alarm-suppressions?state=waiting`,
+  fetched only with `alarms.suppressions.approve`; `app/menuCount.ts`).
 - Alarms are not offered to the assistant (no "Ask about" on the panel).
 - The demo serves alarms and suppressions with the server's rules
-  (scoped persona, workflow, global-only program/command).
+  (`demo/suppressions.ts`): the approval setting from Settings › General,
+  waiting/active/rejected/withdrawn/removed states, every refusal code,
+  the per-row flags, options, `would_close` over the reader's reach,
+  For counted from activation, close-on-activation of the source alarm
+  when the where covers it,
+  group rows matched with `demo/hostGroups.ts`, and a group's delete
+  withdrawing its waiting rows and removing its active ones (counted in
+  the delete preview's `suppressions_ended`). Rows are kept in browser
+  storage, so a request made as one persona waits for another; rows read
+  back are checked field by field (`validRow`) and malformed ones dropped.
 
 ## Cases
 
@@ -427,7 +486,7 @@ triage on alarms and findings stays as it is.
     `investigate/` (Alarms, Compliance, Vulnerabilities, Hosts, Software,
     Ports and Services, Cases), `operate/` (Alarm suppressions, Site rules,
     Coverage), `admin/` (`Audit.tsx`, `settings/`: `Settings.tsx` plus
-    one file per tab, `roles/`: the role page, `people/`: a person's
+    one file per tab (`General.tsx`: the General tab), `roles/`: the role page, `people/`: a person's
     page, and `groups/`: a host group's page) and `help/` (About). `views/lists/` holds what the
     lists share: filter catalogues (`filters.ts`), row selection and
     sorting (`rows.ts`) and the test-trigger rules (`testRules.ts`).
@@ -538,7 +597,8 @@ triage on alarms and findings stays as it is.
     (`e2e/live/teams.spec.ts`, helpers in `e2e/live/helpers.ts`) runs two
     teams against the real server: each sees and changes only its hosts,
     and a team lead gives only roles inside their access (see
-    console-rbac.md, Live check).
+    console-rbac.md, Live check). `e2e/live/suppressions.spec.ts` runs
+    a suppression through approval by the other team lead (same section).
 - **Host groups (`views/admin/settings/HostGroups.tsx`, `views/admin/groups/`):**
   - **Purpose:** Settings › Host groups (approved screen 9) lists the
     groups, automatic first, then rule, then manual: Group (name, kind
@@ -600,12 +660,13 @@ triage on alarms and findings stays as it is.
   holds the state every area shares; each area's routes are in
   `demo/routes/` (hosts, findings, alarms, rules, cases, …). It follows the wire
   types and the permission model, with personas viewer, analyst, operator,
-  scoped operator and admin. Each persona signs in as a seeded person
-  (Vic, Sam, Ola, Pia, Alex) whose demo roles give its capabilities through
+  scoped operator, team lead and admin. Each persona signs in as a seeded
+  person (Vic, Sam, Ola, Pia, Lee, Alex) whose demo roles give its capabilities through
   `resolveCapabilities` in `demo/share.ts` (the port of `access/rbac.rs`);
   roles are Administrator, Viewer, Analyst and Operator on all hosts,
-  "Windows lead" (Team lead on WindowsServers, held by Wen) and
-  "Operator (Prod)" (the scoped operator). `routes/roles.ts` and
+  "Windows lead" (Team lead on WindowsServers, held by Wen), "Pilot lead"
+  (Team lead on Pilot hosts, the team lead persona) and "Operator (Prod)"
+  (the scoped operator). `routes/roles.ts` and
   `routes/access.ts` mirror the roles, people and service-account routes
   with their refusal codes (`stale_role`, `role_name_taken`, `role_in_use`
   with `holders`, `protected_role`, `missing_needs`, `unknown_group`,
@@ -627,7 +688,10 @@ triage on alarms and findings stays as it is.
   manual ones (Production, upgraded from tags; Pilot hosts). Triage assignees follow the server: holders of the area's
   `*.triage` through a role that reaches some host, or an Administrator;
   bulk program suppressions are skipped without `alarms.suppress` on all
-  hosts. Tested. Its compliance findings use only the
+  hosts, close every selected alarm of their rule and program (kept on the
+  row as `closed` and replayed on load), and list all of them as requested
+  while approval is on; a group's delete writes one audit line per ended
+  suppression. Tested. Its compliance findings use only the
   rules OpenVIBES ships (openvibes-rules `baseline/rules.json`: ids,
   severities, messages and expressions as they are), so the public demo and
   the website's screenshots never show a check the product lacks; a test
@@ -653,7 +717,7 @@ correctness:
 - windows;
 - recent objects;
 - assistant open state;
-- demo persona.
+- demo persona, the demo's general settings and its alarm suppressions.
 
 ## Failure behaviour
 

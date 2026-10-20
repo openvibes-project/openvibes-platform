@@ -71,8 +71,10 @@ export function Tabs<T extends string>({ tabs, children, active: shown, onActive
 }
 
 /** An inline confirmation (with an optional reason) instead of a modal dialog. */
-export function Confirm({ label, danger, reason, onConfirm, children }: {
+export function Confirm({ label, danger, reason, buttonLabel, onConfirm, children }: {
   label: string;
+  /** The opening button's accessible name, when its text alone is ambiguous. */
+  buttonLabel?: string;
   danger?: boolean;
   reason?: string;
   onConfirm: (reason: string) => Promise<void>;
@@ -83,7 +85,7 @@ export function Confirm({ label, danger, reason, onConfirm, children }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   if (!open) {
-    return <button type="button" className={`button button--small${danger ? " button--danger" : ""}`} onClick={() => setOpen(true)}>{children}</button>;
+    return <button type="button" className={`button button--small${danger ? " button--danger" : ""}`} aria-label={buttonLabel} onClick={() => setOpen(true)}>{children}</button>;
   }
   return (
     <form className="confirm" onSubmit={(event) => {

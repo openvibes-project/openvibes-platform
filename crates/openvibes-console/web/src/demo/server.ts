@@ -21,6 +21,7 @@ import { registerSessionRoutes } from "./routes/session";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerTriageRoutes } from "./routes/triage";
 import { registerVulnerabilityRoutes } from "./routes/vulnerabilities";
+import { createSuppressions } from "./suppressions";
 
 // Each area registers its routes on the shared context. A request takes the
 // first route that matches, so within an area a fixed path such as
@@ -31,18 +32,19 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   registerSessionRoutes(ctx);
   registerHostRoutes(ctx);
   registerFindingRoutes(ctx);
-  registerAlarmRoutes(ctx);
+  const settings = registerSettingsRoutes(ctx);
+  const suppressions = createSuppressions(ctx, () => settings.value("suppressions.require_approval") === true);
+  registerAlarmRoutes({ ...ctx, suppressions });
   registerAssetRoutes(ctx);
   registerVulnerabilityRoutes(ctx);
   registerMetricRoutes(ctx);
-  registerSettingsRoutes(ctx);
   const roles = registerRoleRoutes(ctx);
   registerAccessRoutes({ ...ctx, roles });
-  registerGroupRoutes({ ...ctx, roles, ...registerRuleRoutes(ctx) });
+  registerGroupRoutes({ ...ctx, roles, suppressions, ...registerRuleRoutes(ctx) });
   registerAssistantRoutes(ctx);
   registerDashboardRoutes(ctx);
   const cases = registerCaseRoutes(ctx);
-  registerTriageRoutes({ ...ctx, cases });
+  registerTriageRoutes({ ...ctx, cases, suppressions });
 
   return {
     persona,

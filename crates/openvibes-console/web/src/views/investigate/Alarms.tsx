@@ -1,22 +1,20 @@
 // Threat alarms (P14): process starts that matched a rule, newest first.
 import { useMemo, useState } from "react";
 
-import { invalidate, request, useAllPages, useResource } from "../../api/client";
-import type { AlarmDetail, AlarmPage, AlarmSummary } from "../../api/types";
+import { useAllPages, useResource } from "../../api/client";
+import type { AlarmPage, AlarmSummary, AlarmSuppression } from "../../api/types";
 import { nav, useLocation } from "../../app/nav";
 import { useSession } from "../../app/session";
+import { SuppressButton } from "../../panels/alarms/SuppressForm";
 import { BulkBar } from "../../panels/triage/BulkBar";
 import { CaseBadge, useCaseBadges } from "../../panels/cases/CaseBadge";
 import { highest } from "../../panels/triage/bulk";
 import { DataTable } from "../../ui/DataTable";
-import { Select } from "../../ui/Select";
 import { ViewHeader } from "../../ui/ViewHeader";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../../ui/bits";
 import { severityOrder } from "../../ui/format";
-import { Confirm } from "../../ui/panel";
 import { filterKey, useSelection } from "../../ui/selection";
 import { matches } from "../../ui/table";
-import { toast } from "../../ui/toast";
 import { isTest } from "../lists/testRules";
 
 /** Alarms fetched per "Load more" (the API's page size). */
@@ -44,56 +42,6 @@ function selectAlarms(loaded: readonly AlarmSummary[], params: URLSearchParams):
   return loaded.filter((a) => matches([a.message, a.rule_id, a.hostname ?? a.agent_id, a.exe, a.parent_exe ?? ""], q));
 }
 
-const quietScopes = [
-  { scope: "host", label: "On this host", everywhere: false },
-  { scope: "program", label: "For this program, any host", everywhere: true },
-  { scope: "command", label: "For this exact command, any host", everywhere: true },
-] as const;
-
-/** Creates a suppression derived from one alarm ("don't alarm on this again"). */
-async function quiet(alarmId: string, scope: string, note: string): Promise<void> {
-  await request("POST", "/api/v1/alarm-suppressions", { alarm_id: alarmId, scope, note });
-  invalidate("/api/v1/alarm");
-  toast("Quieted: new matches are closed as false positives");
-}
-
-/** From the list: closes this alarm as a false positive and then quiets
- * new ones, both with the user's note. */
-async function closeAndQuiet(alarmId: string, scope: string, note: string): Promise<void> {
-  const path = `/api/v1/alarms/${encodeURIComponent(alarmId)}`;
-  const alarm = await request<AlarmDetail>("GET", path);
-  if (alarm.triage.state !== "false_positive") {
-    await request("PUT", `${path}/triage`, { state: "false_positive", note, assigned_to: alarm.triage.assigned_to ?? null, accepted_until: null },
-      { "if-match": `"${alarm.triage.version}"` });
-  }
-  await quiet(alarmId, scope, note);
-}
-
-export function QuietMenu({ alarm }: Readonly<{ alarm: AlarmSummary }>) {
-  const { can, canEverywhere } = useSession();
-  const [scope, setScope] = useState("");
-  const scopes = quietScopes.filter((s) => (s.everywhere ? canEverywhere("alarms.suppress") : can("alarms.suppress")));
-  if (scopes.length === 0 || alarm.suppressed_by) return null;
-  const chosen = quietScopes.find((s) => s.scope === scope);
-  const what = {
-    host: `on ${alarm.hostname ?? alarm.agent_id}`,
-    program: `${alarm.exe} on every host`,
-    command: `this exact ${alarm.exe} command on every host`,
-  }[scope] ?? "";
-  // Choosing a scope does nothing by itself (arrow keys change a closed
-  // select); only the confirmation acts, and it names what it quiets.
-  return (
-    <div className="row">
-      <Select small label={`Quiet ${alarm.message}`} value={scope} onChange={setScope}
-        options={[{ value: "", label: "Quiet…" }, ...scopes.map((s) => ({ value: s.scope, label: s.label }))]} />
-      {chosen && (
-        <Confirm danger label={`Close this alarm as a false positive and quiet ${what}?`} reason="Why (saved as the note)"
-          onConfirm={async (note) => { await closeAndQuiet(alarm.id, scope, note); setScope(""); }}>Quiet</Confirm>
-      )}
-    </div>
-  );
-}
-
 export function Alarms() {
   const { params, panels } = useLocation();
   // Alarms are per occurrence and can run to thousands: the newest pages
@@ -108,6 +56,17 @@ export function Alarms() {
   const [selected, setSelected] = useSelection(filterKey(params));
   const chosen = () => rows.filter((a) => selected.has(a.id));
   const cases = useCaseBadges("alarm");
+  // An alarm with a waiting request shows it, never a second Suppress…;
+  // until the list of waiting requests is known (or if it fails), no row offers one.
+  const { can } = useSession();
+  const readsRequests = can("alarms.suppressions.read") && can("alarms.suppress");
+  const waiting = useResource<{ items: AlarmSuppression[] }>(readsRequests ? "/api/v1/alarm-suppressions?state=waiting" : null);
+  const requests = useMemo(() => {
+    const byAlarm = new Map<string, boolean>();
+    for (const s of waiting.data?.items ?? []) if (s.alarm_id) byAlarm.set(s.alarm_id, (byAlarm.get(s.alarm_id) ?? false) || s.can_withdraw);
+    return byAlarm;
+  }, [waiting.data]);
+  const offers = !readsRequests || (waiting.data !== undefined && !waiting.error);
   const top = panels[panels.length - 1];
   // An empty filtered page: does any alarm exist at all? If not, the
   // empty state explains how to turn alarms on, not the chips.
@@ -140,7 +99,9 @@ export function Alarms() {
             { key: "count", header: "Count", numeric: true, width: "80px", sort: (a) => a.count, render: (a) => <span className="num">{a.count}</span> },
             { key: "state", header: "Triage", width: "130px", hideBelow: 760, sort: (a) => a.state, render: (a) => <TriageBadge state={a.state} /> },
             { key: "last", header: "Last seen", width: "120px", hideBelow: 900, sort: (a) => a.last_seen, render: (a) => <span className="subtle"><Ago value={a.last_seen} /></span> },
-            { key: "quiet", header: "Quiet", width: "200px", hideBelow: 900, render: (a) => <QuietMenu alarm={a} /> },
+            { key: "suppress", header: "Suppress", width: "140px", hideBelow: 900, render: (a) => requests.has(a.id)
+              ? <span className="badge badge--plain">{requests.get(a.id) ? "Requested" : "Waiting for approval"}</span>
+              : offers && <SuppressButton alarm={a} label={`Suppress… ${a.message} on ${a.hostname ?? a.agent_id}`} /> },
           ]} />
       )}
       <BulkBar kind="alarms" noun={selected.size === 1 ? "alarm" : "alarms"} count={selected.size} onClear={() => setSelected(new Set())}

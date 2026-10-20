@@ -137,19 +137,39 @@ struct Suppression {
     args_sha256: Option<String>,
 }
 
+/// Whether a suppression of `scope` (with its `exe`, `args_sha256` and host
+/// `agent_id`) covers an alarm of the same rule from `alarm_agent` with
+/// `alarm` = (exe, args hash). A group is checked in SQL. Ingest and the
+/// "would have closed" count share it.
+pub(crate) fn suppression_matches(
+    scope: &str,
+    exe: Option<&str>,
+    args_sha256: Option<&str>,
+    agent_id: Option<&str>,
+    alarm_agent: &str,
+    alarm: (&str, &str),
+) -> bool {
+    let host = agent_id.is_none_or(|agent| agent == alarm_agent);
+    match scope {
+        "host" => agent_id == Some(alarm_agent),
+        "program" => host && exe == Some(alarm.0),
+        "command" => host && exe == Some(alarm.0) && args_sha256 == Some(alarm.1),
+        _ => false,
+    }
+}
+
 impl Suppression {
     fn matches(&self, agent_id: &str, alarm: &StoredAlarm) -> bool {
         self.rule_set_id == alarm.rule_set_id
             && self.rule_id == alarm.rule_id
-            && match self.scope.as_str() {
-                "host" => self.agent_id.as_deref() == Some(agent_id),
-                "program" => self.exe.as_deref() == Some(alarm.exe.as_str()),
-                "command" => {
-                    self.exe.as_deref() == Some(alarm.exe.as_str())
-                        && self.args_sha256.as_deref() == Some(alarm.args_sha256.as_str())
-                }
-                _ => false,
-            }
+            && suppression_matches(
+                &self.scope,
+                self.exe.as_deref(),
+                self.args_sha256.as_deref(),
+                self.agent_id.as_deref(),
+                agent_id,
+                (&alarm.exe, &alarm.args_sha256),
+            )
     }
 }
 
@@ -172,18 +192,25 @@ pub async fn insert_batch(
             &[&agent_id, &dropped],
         )
         .await?;
-    let rule_sets: Vec<&str> = alarms
+    // The batch's (rule set, rule) pairs, so group rows of other rules are
+    // never evaluated.
+    let (rule_sets, rules): (Vec<&str>, Vec<&str>) = alarms
         .iter()
-        .map(|alarm| alarm.rule_set_id.as_str())
+        .map(|alarm| (alarm.rule_set_id.as_str(), alarm.rule_id.as_str()))
         .collect::<BTreeSet<_>>()
         .into_iter()
-        .collect();
+        .unzip();
     let suppressions: Vec<Suppression> = transaction
         .query(
             "SELECT id, rule_set_id, rule_id, scope, agent_id, exe, args_sha256
              FROM alarm_suppressions
-             WHERE removed_at IS NULL AND rule_set_id = ANY($1)",
-            &[&rule_sets],
+             WHERE state = 'active'
+               AND (expires_at IS NULL OR expires_at > $3)
+               AND (rule_set_id, rule_id) IN (SELECT * FROM unnest($1::text[], $4::text[]))
+               AND (agent_id IS NULL OR agent_id = $2)
+               AND (host_group_id IS NULL OR console_host_in_group($2, host_group_id))
+             ORDER BY id",
+            &[&rule_sets, &agent_id, &now, &rules],
         )
         .await?
         .iter()

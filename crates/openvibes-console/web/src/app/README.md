@@ -15,6 +15,6 @@ App-wide state and wiring that is neither a screen nor a shared widget: where th
 | `assistant.ts` | Assistant conversation and dock state shared by every "Ask about this". |
 | `liveAlarms.ts` | Polls for the newest alarm so alarm views, toasts and the menu count update without a reload. |
 | `livePresence.ts` | Listens for agent online/offline changes so agent views refetch. |
-| `menuCount.ts` | Formats the count beside a menu item (nothing at 0, 99+ beyond 99). |
+| `menuCount.ts` | Formats the count beside a menu item (nothing at 0, 99+ beyond 99), and counts the suppression requests the viewer can decide. |
 
 More: [docs/components/console-web.md](../../../../../docs/components/console-web.md)

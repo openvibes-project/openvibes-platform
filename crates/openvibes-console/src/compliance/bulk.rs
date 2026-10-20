@@ -4,8 +4,6 @@
 //! browser sends exactly the rows it shows; each item goes through its
 //! single-item rules, and skipped items come back with a reason.
 
-use std::collections::HashSet;
-
 use axum::{
     Json,
     extract::{State, rejection::JsonRejection},
@@ -14,13 +12,15 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use platform_store::{
-    alarm_suppressions::{self, Change},
     bulk_triage::{self as store, BulkChange, BulkRefusal, BulkResult, MAX_ITEMS},
     console_cases::{self, NewCase, Refusal},
     console_read::AgentScope,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+mod suppress;
+use suppress::suppress;
 
 use crate::{
     Permission, ProblemDetails, access::guard::unavailable_auth, cases::authorize,
@@ -436,46 +436,4 @@ async fn add_to_case(
         number = Some(detail.summary.number);
     }
     respond(result, number.map(|n| (case.clone(), n)))
-}
-
-/// One `program` suppression per distinct rule and program among the
-/// selected alarms (which closes every matching alarm, these included).
-async fn suppress(
-    client: &mut platform_store::Client,
-    scope: &AgentScope,
-    user_id: &str,
-    ids: &[i64],
-    note: &str,
-    now: DateTime<Utc>,
-) -> Response {
-    let Ok(rows) = client
-        .query(
-            "SELECT DISTINCT ON (rule_set_id, rule_id, process->>'exe') id
-             FROM alarms WHERE id = ANY($1) AND source = 'agent' ORDER BY rule_set_id, rule_id, process->>'exe', id",
-            &[&ids],
-        )
-        .await
-    else {
-        return unavailable_auth();
-    };
-    let representatives: HashSet<i64> = rows.iter().map(|r| r.get(0)).collect();
-    let mut result = BulkResult::default();
-    for id in ids {
-        if !representatives.contains(id) {
-            continue;
-        }
-        match alarm_suppressions::create(client, scope, *id, "program", note, user_id, now).await {
-            Ok(Change::Done(_)) => result.changed += 1,
-            Ok(Change::NeedsGlobalScope) => {
-                result
-                    .skipped
-                    .push((id.to_string(), "program suppressions need global scope"));
-            }
-            Ok(_) => result
-                .skipped
-                .push((id.to_string(), "not found or out of scope")),
-            Err(_) => return unavailable_auth(),
-        }
-    }
-    respond(result, None)
 }
