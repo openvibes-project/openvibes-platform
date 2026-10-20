@@ -160,7 +160,7 @@ pub const PG_PACKAGES: [&str; 3] = ["postgresql-server", "postgresql", "postgres
 /// passed): a retry then skips the database queries (the service may be
 /// stopped or gone) and goes on removing.
 pub const PG_MARK: &str = "/etc/openvibes/postgresql-removing";
-const PG_VERSION: &str = "/var/lib/pgsql/data/PG_VERSION";
+pub(super) const PG_VERSION: &str = "/var/lib/pgsql/data/PG_VERSION";
 
 pub fn postgres_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let done = ctx.succeeds(Rpm, &["-q", "--quiet", "postgresql-server"])

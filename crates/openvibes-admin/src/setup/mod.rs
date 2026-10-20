@@ -16,6 +16,8 @@ mod console;
 mod fake;
 mod fetch_domain;
 mod fleet;
+#[allow(dead_code)] // wired into Update and Remove by the next tasks (#292)
+mod pg_health;
 pub use fleet::AGENT_AUDIT_RULE;
 pub(crate) use fleet::agent_by_default;
 pub(crate) mod pki;
