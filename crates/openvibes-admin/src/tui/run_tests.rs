@@ -324,7 +324,10 @@ fn the_password_is_typed_on_a_legacy_screen_too() {
 fn grouped_work_reports_one_state_per_label() {
     let calls = |n: usize| vec![Call::Repair(Step::Packages); n];
     let work = Work::grouped(
-        Kind::Ports,
+        Kind::Ports {
+            what: "Moving ports".into(),
+            done: "Moved".into(),
+        },
         vec![
             ("one".into(), calls(2)),
             ("two".into(), calls(2)),

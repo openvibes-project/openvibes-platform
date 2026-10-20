@@ -11,6 +11,10 @@ pub mod folder;
 mod parts;
 #[cfg(test)]
 mod parts_tests;
+pub mod ports;
+mod ports_run;
+#[cfg(test)]
+mod ports_tests;
 mod repair;
 #[cfg(test)]
 mod repair_tests;
@@ -51,6 +55,7 @@ pub enum Page {
     Update,
     Repair,
     Parts,
+    Ports,
     Uninstall,
     WhatsNew,
     /// The folder browser, reached with Tab from a typed folder.
@@ -65,6 +70,7 @@ impl Page {
             Page::Update => "Update OpenVIBES",
             Page::Repair => "Repair",
             Page::Parts => "Optional parts",
+            Page::Ports => "Ports and addresses",
             Page::Uninstall => "Uninstall",
             Page::WhatsNew => "What's new",
             Page::Folder => "Choose a folder",
@@ -85,6 +91,9 @@ impl Page {
             }
             Page::Parts => {
                 "Space ticks the agent or the assistant; Apply installs or removes what changed."
+            }
+            Page::Ports => {
+                "Enter on a port types a new one; Apply moves it and opens the new port."
             }
             Page::Uninstall => {
                 "Space chooses Keep the data or Remove everything; Uninstall asks first."
@@ -120,12 +129,14 @@ pub struct Maint {
     pub plan_error: Option<String>,
     /// Optional parts: the ticks, from the plan read when the page opens.
     pub parts: parts::Parts,
+    /// Ports and addresses: the saved plan, the edits, the port being typed.
+    pub ports: ports::Ports,
 }
 
 impl Maint {
     /// A value is being typed on a page: its keys are the page's.
     pub fn editing(&self) -> bool {
-        self.folder.editing() || self.typing
+        self.folder.editing() || self.typing || self.ports.typing()
     }
 }
 
@@ -135,6 +146,7 @@ pub enum Then {
     Update,
     Uninstall,
     Parts,
+    Ports,
 }
 
 #[derive(Clone, Copy)]
@@ -144,10 +156,11 @@ enum Entry {
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 8] = [
+const ENTRIES: [(Entry, &str); 9] = [
     (Entry::Page(Page::Update), "Update OpenVIBES"),
     (Entry::Page(Page::Repair), "Repair"),
     (Entry::Page(Page::Parts), "Optional parts"),
+    (Entry::Page(Page::Ports), "Ports and addresses"),
     (Entry::Legacy(Tab::Setup), "Components and ports"),
     (Entry::Page(Page::Database), "Database"),
     (Entry::Page(Page::Backup), "Back up"),
@@ -166,6 +179,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
         },
         Entry::Page(Page::Repair) => "check every step, fix what is wrong".into(),
         Entry::Page(Page::Parts) => "agent on this host · assistant".into(),
+        Entry::Page(Page::Ports) => "console, agent connections, rule distribution".into(),
         Entry::Page(Page::Database) => "schema, size, automatic clean-up".into(),
         Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
         Entry::Page(Page::Uninstall) => "remove OpenVIBES from this host".into(),
@@ -244,6 +258,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
         Page::Update => update::draw(frame, head, app),
         Page::Repair => repair::draw(frame, head, app),
         Page::Parts => parts::draw(frame, head, app),
+        Page::Ports => ports::draw(frame, head, app),
         Page::Uninstall => uninstall::draw(frame, head, app),
         Page::WhatsNew => update::draw_whats_new(frame, head, app),
         Page::Folder => folder::draw(frame, head, app),
@@ -292,6 +307,7 @@ impl<H: Host> App<H> {
             }
             Page::Repair => self.open_repair(),
             Page::Parts => self.open_parts(),
+            Page::Ports => self.open_ports(),
             Page::Uninstall => self.open_uninstall(),
             Page::WhatsNew | Page::Folder => {}
         }
@@ -305,6 +321,7 @@ impl<H: Host> App<H> {
             Page::Update => self.update_key(key),
             Page::Repair => self.repair_key(key),
             Page::Parts => self.parts_key(key),
+            Page::Ports => self.ports_key(key),
             Page::Uninstall => self.uninstall_key(key),
             Page::WhatsNew => {}
             Page::Folder => self.browse_key(key),
@@ -318,6 +335,7 @@ impl<H: Host> App<H> {
             Then::Update => self.update_yes(),
             Then::Uninstall => self.uninstall_yes(),
             Then::Parts => self.parts_yes(),
+            Then::Ports => self.ports_yes(),
         }
     }
 

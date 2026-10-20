@@ -55,8 +55,12 @@ pub enum Kind {
         /// The result line, without how long it took.
         done: String,
     },
-    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
-    Ports,
+    /// Ports moved; `what` is the title.
+    Ports {
+        what: String,
+        /// The result line, without how long it took.
+        done: String,
+    },
     #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
     Names,
 }
@@ -78,7 +82,7 @@ impl Kind {
             Kind::Uninstall { .. } => "Uninstalling".into(),
             Kind::Report => "Reading the database".into(),
             Kind::Parts { what, .. } => what.clone(),
-            Kind::Ports => "Moving agent connections".into(),
+            Kind::Ports { what, .. } => what.clone(),
             Kind::Names => "New certificates".into(),
         }
     }
@@ -94,7 +98,7 @@ impl Kind {
             Kind::Uninstall { .. } => "OpenVIBES is removed".into(),
             Kind::Report => "Read".into(),
             Kind::Parts { done, .. } => done.clone(),
-            Kind::Ports => "Moved".into(),
+            Kind::Ports { done, .. } => done.clone(),
             Kind::Names => "New certificates made".into(),
         }
     }
@@ -107,7 +111,7 @@ impl Kind {
             Kind::Uninstall { .. } => "The uninstall stopped".into(),
             Kind::Report => "The database could not be read".into(),
             Kind::Parts { .. } => "The change stopped".into(),
-            Kind::Ports => "The move stopped".into(),
+            Kind::Ports { .. } => "The move stopped".into(),
             Kind::Names => "The change stopped".into(),
         }
     }
@@ -120,7 +124,7 @@ impl Kind {
             Kind::Fix => "Fix",
             Kind::Uninstall { .. } => "Uninstall",
             Kind::Report => "Read",
-            Kind::Parts { .. } | Kind::Ports | Kind::Names => "Apply",
+            Kind::Parts { .. } | Kind::Ports { .. } | Kind::Names => "Apply",
         }
     }
 }
