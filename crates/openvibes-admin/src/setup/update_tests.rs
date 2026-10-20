@@ -4,6 +4,7 @@ use platform_host::{StepState, UpdateStep};
 
 use super::{UpdateArgs, run};
 use crate::setup::{
+    base::PG_VERSION,
     fake::{Fake, plan},
     plan::Component::*,
 };
@@ -16,9 +17,41 @@ const ADMIN: [&str; 5] = [
     "/usr/bin/openvibes-admin",
 ];
 
+const RPM_Q: &[&str] = &["/usr/bin/rpm", "-q", "--quiet", "postgresql-server"];
+
+/// PostgreSQL installed, its data folder there (major 18), and running.
+fn healthy(fake: &Fake) {
+    fake.file(PG_VERSION, "18\n");
+    fake.answer(&["/usr/bin/rpm", "-q", "--qf"], 0, "18.6");
+    fake.answer(RPM_Q, 0, "");
+    fake.answer(
+        &["/usr/bin/systemctl", "is-active", "--quiet", "postgresql"],
+        0,
+        "",
+    );
+}
+
+/// Like `healthy`, but the server package was removed by hand.
+fn server_removed(fake: &Fake) {
+    fake.answer(RPM_Q, 1, "");
+    fake.answer(&["/usr/bin/dnf", "install"], 0, "");
+    fake.answer(&["/usr/bin/systemctl", "enable"], 0, "");
+    healthy(fake);
+}
+
+/// The index of the first call starting with `prefix`.
+fn at(fake: &Fake, prefix: &[&str]) -> usize {
+    fake.calls
+        .borrow()
+        .iter()
+        .position(|call| call.iter().zip(prefix).all(|(a, b)| a == b) && call.len() >= prefix.len())
+        .unwrap_or_else(|| panic!("no call {prefix:?}"))
+}
+
 #[test]
 fn without_a_backup_path_the_backup_is_skipped() {
     let fake = Fake::new("update-no-backup");
+    healthy(&fake);
     let plan = plan(&[Ingest]);
     assert!(matches!(
         run(&fake.ctx(&plan), UpdateStep::Backup, &UpdateArgs::default()),
@@ -29,6 +62,7 @@ fn without_a_backup_path_the_backup_is_skipped() {
 #[test]
 fn update_stops_nothing_when_the_backup_fails() {
     let fake = Fake::new("update-backup-exists");
+    healthy(&fake);
     fake.file("/home/alice/b.dump", "old");
     let plan = plan(&[Ingest]);
     let args = UpdateArgs {
@@ -38,11 +72,11 @@ fn update_stops_nothing_when_the_backup_fails() {
     };
     let state = run(&fake.ctx(&plan), UpdateStep::Backup, &args);
     assert!(matches!(state, StepState::Failed(_)), "{state:?}");
-    assert!(!fake.called(&["/usr/bin/systemctl"]));
+    assert!(!fake.called(&["/usr/bin/systemctl", "stop"]));
 }
 
 #[test]
-fn only_previously_active_units_are_started() {
+fn a_disabled_stopped_unit_stays_stopped() {
     let fake = Fake::new("update-stop-start");
     fake.answer(
         &[
@@ -65,6 +99,7 @@ fn only_previously_active_units_are_started() {
         "",
     );
     fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
+    fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
     fake.answer(&["/usr/bin/systemctl", "stop"], 0, "");
     fake.answer(&["/usr/bin/systemctl", "start"], 0, "");
     let plan = plan(&[Ingest, Distribution, Agent]);
@@ -181,6 +216,7 @@ fn a_local_folder_upgrades_from_its_files() {
 #[test]
 fn migrate_runs_migrate_and_maintenance() {
     let fake = Fake::new("update-migrate");
+    healthy(&fake);
     fake.answer(
         &[&ADMIN[..], &["migrate"]].concat(),
         0,
@@ -206,6 +242,7 @@ fn migrate_runs_migrate_and_maintenance() {
 #[test]
 fn migrate_flattens_multi_line_maintenance_output() {
     let fake = Fake::new("update-migrate-flat");
+    healthy(&fake);
     fake.answer(
         &[&ADMIN[..], &["migrate"]].concat(),
         0,
@@ -234,6 +271,7 @@ fn migrate_flattens_multi_line_maintenance_output() {
 #[test]
 fn migrate_publishes_a_newer_rules_package() {
     let fake = Fake::new("update-rules");
+    healthy(&fake);
     fake.answer(
         &[&ADMIN[..], &["migrate"]].concat(),
         0,
@@ -289,6 +327,7 @@ fn migrate_publishes_a_newer_rules_package() {
 #[test]
 fn a_failing_rules_publish_never_stops_the_update() {
     let fake = Fake::new("update-rules-fail");
+    healthy(&fake);
     fake.answer(
         &[&ADMIN[..], &["migrate"]].concat(),
         0,
@@ -530,4 +569,82 @@ fn the_agent_is_never_left_stopped() {
     let _ = run(&ctx, UpdateStep::Stop, &UpdateArgs::default());
     assert!(later.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]));
     assert!(!later.root.join("run/openvibes-admin/update-agent").exists());
+}
+
+#[test]
+fn a_missing_postgresql_stops_the_update_before_anything_stops() {
+    let fake = Fake::new("update-pg-gone");
+    fake.answer(RPM_Q, 1, "");
+    let plan = plan(&[Ingest]);
+    let state = run(&fake.ctx(&plan), UpdateStep::Backup, &UpdateArgs::default());
+    assert!(
+        matches!(&state, StepState::Failed(text) if text.contains("data folder")),
+        "{state:?}"
+    );
+    assert!(!fake.called(&["/usr/bin/systemctl", "stop"]));
+    assert!(crate::setup::system::job_guard(&fake.root, "setup").is_ok());
+}
+
+#[test]
+fn the_backup_step_puts_postgresql_back() {
+    let fake = Fake::new("update-pg-backup");
+    server_removed(&fake);
+    let plan = plan(&[Ingest]);
+    let state = run(&fake.ctx(&plan), UpdateStep::Backup, &UpdateArgs::default());
+    assert!(
+        matches!(&state, StepState::Skipped(text) if text.starts_with("PostgreSQL was missing or stopped") && text.ends_with("no backup chosen")),
+        "{state:?}"
+    );
+    assert!(fake.called(&["/usr/bin/dnf", "install", "-y", "postgresql-server"]));
+    assert!(!fake.called(&["/usr/bin/systemctl", "stop"]));
+}
+
+#[test]
+fn migrate_puts_postgresql_back_first() {
+    let fake = Fake::new("update-pg-migrate");
+    server_removed(&fake);
+    fake.file("run/openvibes-admin/job", "update\n");
+    fake.answer(
+        &[&ADMIN[..], &["migrate"]].concat(),
+        0,
+        "schema version 25\n",
+    );
+    fake.answer(&[&ADMIN[..], &["maintenance"]].concat(), 0, "ok\n");
+    let plan = plan(&[Ingest]);
+    let state = run(
+        &fake.ctx(&plan),
+        UpdateStep::Migrate,
+        &UpdateArgs::default(),
+    );
+    assert!(
+        matches!(&state, StepState::Done(text) if text.starts_with("PostgreSQL was missing or stopped")),
+        "{state:?}"
+    );
+    assert!(at(&fake, &["/usr/bin/dnf", "install"]) < at(&fake, &ADMIN));
+}
+
+#[test]
+fn an_enabled_unit_that_was_down_starts_again() {
+    let fake = Fake::new("update-enabled-down");
+    fake.answer(
+        &[
+            "/usr/bin/systemctl",
+            "is-enabled",
+            "--quiet",
+            "openvibes-ingest.service",
+        ],
+        0,
+        "",
+    );
+    fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
+    fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
+    fake.answer(&["/usr/bin/systemctl", "start"], 0, "");
+    let plan = plan(&[Ingest, Distribution]);
+    let ctx = fake.ctx(&plan);
+    run(&ctx, UpdateStep::Stop, &UpdateArgs::default());
+    run(&ctx, UpdateStep::Start, &UpdateArgs::default());
+    assert_eq!(
+        fake.call(&["/usr/bin/systemctl", "start"]),
+        ["/usr/bin/systemctl", "start", "openvibes-ingest.service"]
+    );
 }

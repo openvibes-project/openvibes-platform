@@ -623,8 +623,13 @@ refused while one works):
   never makes a new CA: with the CA files gone it stops and says how to
   recover. Certificates issued for other names are issued again; one
   expiring within 14 days is reported, not replaced.
-- `setup --update [--backup PATH] [--update-repo-dir DIR]`: backup, stop
-  the active OpenVIBES units (remembered in
+- `setup --update [--backup PATH] [--update-repo-dir DIR]`: check
+  PostgreSQL first (#292; the Backup and Update-the-database steps both do:
+  a removed `postgresql-server` or a stopped service is installed and
+  started again and the step says so; a gone data folder or a server newer
+  than the data fails the step, nothing stopped and no half-done mark),
+  backup, stop the active or enabled OpenVIBES units (an enabled unit that
+  was down is started again too; remembered in
   `/run/openvibes-admin/update-active`), `dnf upgrade` of exactly the
   installed `openvibes-*` packages (the agent too), `migrate` and
   `maintenance` (and, with the rules component, publishing the upgraded

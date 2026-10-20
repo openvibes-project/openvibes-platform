@@ -274,7 +274,8 @@ fn after(run: &Run, skip: usize) -> String {
         }
         (1 | 2, _) if run.running() => "The services are being started again…".into(),
         (1 | 2, _) => "Nothing more was run: see Status for the services.".into(),
-        (3, _) => "The packages are new but the database is not yet: Try again finishes it. \
+        (3, _) => "The packages are new but the database is not yet: Try again finishes it \
+                   (it also puts PostgreSQL back if it is missing). \
                    The services stay stopped until then."
             .into(),
         (4, _) => "Some services did not start: see Status, then Try again.".into(),

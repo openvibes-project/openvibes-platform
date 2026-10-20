@@ -12,7 +12,7 @@ use platform_host::{
     },
 };
 
-use super::{Ctx, backup, base::local_rpm, fleet, run::ready};
+use super::{Ctx, backup, base::local_rpm, fleet, pg_health, run::ready};
 
 const ACTIVE: &str = "/run/openvibes-admin/update-active";
 const AGENT: &str = "openvibes-agent.service";
@@ -57,11 +57,16 @@ fn stop<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         .into_iter()
         .filter(|unit| ctx.succeeds(Systemctl, &["is-active", "--quiet", unit]))
         .collect();
-    // A re-run after a failure keeps what the first run stopped.
+    // A re-run after a failure keeps what the first run stopped; a unit
+    // that is enabled but was down (a crash) comes back with the others.
     let earlier = ctx.read(ACTIVE).unwrap_or_default();
     let remembered: Vec<&str> = units()
         .into_iter()
-        .filter(|unit| running.contains(unit) || earlier.lines().any(|line| line == *unit))
+        .filter(|unit| {
+            running.contains(unit)
+                || earlier.lines().any(|line| line == *unit)
+                || ctx.succeeds(Systemctl, &["is-enabled", "--quiet", unit])
+        })
         .collect();
     ctx.job_begin("update")?;
     ctx.put(
@@ -250,18 +255,33 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: UpdateStep, args: &UpdateArgs) -> Step
     }
     let result = match step {
         UpdateStep::Backup => {
+            // A removed or stopped PostgreSQL is put back before anything stops.
+            let note = match pg_health::ensure(ctx) {
+                Ok(note) => note,
+                Err(error) => return StepState::Failed(error),
+            };
             if args.remember_choice {
                 // ponytail: best effort; the choice only presets a checkbox.
                 let _ = backup::remember(ctx, None, Some(args.backup.is_some()));
             }
+            let join = |text: String| match &note {
+                Some(note) => format!("{note}; {text}"),
+                None => text,
+            };
             match &args.backup {
-                None => Ok(StepState::Skipped("no backup chosen".into())),
-                Some(path) => backup::dump(ctx, path).map(StepState::Done),
+                None => Ok(StepState::Skipped(join("no backup chosen".into()))),
+                Some(path) => backup::dump(ctx, path).map(|done| StepState::Done(join(done))),
             }
         }
         UpdateStep::Stop => stop(ctx),
         UpdateStep::Upgrade => upgrade(ctx, args),
-        UpdateStep::Migrate => migrate(ctx),
+        UpdateStep::Migrate => pg_health::ensure(ctx).and_then(|note| {
+            let done = migrate(ctx)?;
+            Ok(match (note, done) {
+                (Some(note), StepState::Done(text)) => StepState::Done(format!("{note}; {text}")),
+                (_, done) => done,
+            })
+        }),
         UpdateStep::Start => start(ctx),
         UpdateStep::Ready => wait_ready(ctx).inspect(|_| ctx.job_end()),
     };
