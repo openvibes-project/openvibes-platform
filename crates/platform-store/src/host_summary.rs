@@ -23,7 +23,7 @@ const TOP: usize = 3;
 /// Certificates shown on the page.
 const CERTIFICATES: u16 = 5;
 
-/// The first [`TOP`] items of a list and how many there are in all.
+/// The first `TOP` (three) items of a list and how many there are in all.
 #[derive(Clone, Debug)]
 pub struct Top<T> {
     /// Most severe first, then newest.
