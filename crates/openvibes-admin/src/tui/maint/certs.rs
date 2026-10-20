@@ -63,7 +63,7 @@ fn report(certs: Pems, quick: bool, now: DateTime<Utc>) -> Certs {
         let pem = pem.as_ref().map_err(ToString::to_string);
         let valid = pem.clone().and_then(|p| until(p)).and_then(|end| {
             let date = end.format("%Y-%m-%d");
-            let days = (end - now).num_days();
+            let days = (end.date_naive() - now.date_naive()).num_days();
             if end <= now {
                 Err(format!("expired {date}"))
             } else if days == 1 {

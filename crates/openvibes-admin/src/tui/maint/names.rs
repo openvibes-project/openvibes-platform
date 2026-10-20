@@ -13,6 +13,7 @@ use ratatui::{
 };
 
 use super::{Then, failure, ports_run::draw as draw_run};
+use crate::tui::status::wrap;
 use crate::{
     setup::plan::{MAX_SANS, Plan, check_name, check_san, plan_of},
     tui::{
@@ -117,6 +118,19 @@ impl Names {
         }))
     }
 
+    /// Names agents may have dialled that the new certificates no longer
+    /// cover: the old host name if it changed, and every removed other name.
+    fn gone(&self) -> Vec<&str> {
+        let (Some(was), Some(now)) = (&self.saved, &self.now) else {
+            return Vec::new();
+        };
+        let host = (was.hostname != now.hostname).then_some(was.hostname.as_str());
+        let removed = was.sans.iter().filter(|s| !now.sans.contains(s));
+        host.into_iter()
+            .chain(removed.map(String::as_str))
+            .collect()
+    }
+
     fn done(&self) -> String {
         let n = 1 + self.now.as_ref().map_or(0, |p| p.sans.len());
         format!(
@@ -215,23 +229,33 @@ fn row<H: Host>(app: &App<H>, at: At, names: &Names) -> Row {
     }
 }
 
-fn help<H: Host>(app: &App<H>, names: &Names, at: Option<At>) -> Line<'static> {
+fn help<H: Host>(app: &App<H>, names: &Names, at: Option<At>) -> Vec<Line<'static>> {
     let t = &app.theme;
     if names.typing.is_some() {
-        return match &names.note {
+        return vec![match &names.note {
             Some(Err(why)) => Line::styled(format!("    {why}"), t.red()),
             Some(Ok(ok)) => Line::styled(format!("    {ok}"), t.dim()),
             None => Line::raw(""),
-        };
+        }];
     }
     let text = match at {
-        Some(At::Host) => "The name this host is known by.",
-        Some(At::Other(_)) => "A name or address agents and browsers may use.",
-        Some(At::Add) => "Names agents and browsers may use to reach this host.",
-        Some(At::Apply) => "Agents keep working; browsers see the new names.",
-        _ => "",
+        Some(At::Host) => "The name this host is known by.".to_owned(),
+        Some(At::Other(_)) => "A name or address agents and browsers may use.".into(),
+        Some(At::Add) => "Names agents and browsers may use to reach this host.".into(),
+        Some(At::Apply) => match names.gone().as_slice() {
+            [] => "Agents keep working; browsers see the new names.".into(),
+            [old] => {
+                format!("Agents that use {old} stop connecting: they need the new install line.")
+            }
+            _ => "Agents that use a removed name stop connecting: they need the new install line."
+                .into(),
+        },
+        _ => String::new(),
     };
-    Line::styled(format!("    {text}"), t.dim())
+    wrap(&text, 72, 2)
+        .into_iter()
+        .map(|l| Line::styled(format!("    {l}"), t.dim()))
+        .collect()
 }
 
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
@@ -264,11 +288,12 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         return frame.render_widget(Paragraph::new(lines), area);
     }
     let list_rows: Vec<Row> = rows.iter().map(|r| row(app, *r, names)).collect();
-    let height = (2 * rows.len() as u16 + 1).min(area.height.saturating_sub(1));
+    let help = help(app, names, at);
+    let height = (2 * rows.len() as u16 + 1).min(area.height.saturating_sub(help.len() as u16));
     let mut scroll = app.nav.scroll.get();
     let mut lines = list::lines(t, &list_rows, app.nav.row, &mut scroll, height, 22);
     app.nav.scroll.set(scroll);
-    lines.push(help(app, names, at));
+    lines.extend(help);
     frame.render_widget(Paragraph::new(lines), area);
 }
 
@@ -321,7 +346,9 @@ impl<H: Host> App<H> {
             return;
         };
         match key {
-            Key::Char(c) if !c.is_control() && text.len() < 253 => text.push(c),
+            Key::Char(c) if !c.is_control() && text.len() < 253 => {
+                text.push(c.to_ascii_lowercase())
+            }
             Key::Backspace => {
                 text.pop();
             }
@@ -428,9 +455,15 @@ impl<H: Host> App<H> {
     /// A run ended: a finished one says when the new certificate ends,
     /// read from the file again.
     pub(super) fn names_ended(&mut self) {
+        if !self
+            .run
+            .as_ref()
+            .is_some_and(|r| r.ok() && matches!(r.work.kind, Kind::Names { .. }))
+        {
+            return;
+        }
         let valid = super::certs::valid_until(&self.host);
         if let Some(run) = self.run.as_mut()
-            && run.ok()
             && let Kind::Names { done, .. } = &mut run.work.kind
         {
             done.truncate(done.find(" · valid until").unwrap_or(done.len()));

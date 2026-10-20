@@ -3,6 +3,7 @@
 use platform_host::{Step, StepState};
 
 use crate::setup::{
+    check,
     fake::{Fake, plan},
     plan::{CaMode, Component::*},
     run_step,
@@ -177,15 +178,14 @@ fn careful_ca_waits_for_the_signed_certificate() {
     assert!(fake.called(&with(&ADMIN, &["ca", "import-intermediate"])));
 }
 
-#[test]
-fn certificates_are_issued_for_every_name_and_installed() {
-    let fake = Fake::new("certificates");
+/// A fake with the intermediate and an `issue-server` that writes the files.
+fn issuing(test: &str) -> Fake {
+    let fake = Fake::new(test);
     fake.file("/etc/openvibes/pki/intermediate.crt", "INTERMEDIATE\n");
     fake.file(
         "/var/lib/openvibes-ingest/intermediate.key",
         "INTERMEDIATE KEY",
     );
-    fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
     fake.effect(&with(&ADMIN, &["ca", "issue-server"]), |root| {
         for service in ["ingest", "distribution", "console"] {
             let dir = root.join(format!("run/openvibes-ca/{service}"));
@@ -205,6 +205,13 @@ fn certificates_are_issued_for_every_name_and_installed() {
         }
         panic!("no output directory");
     });
+    fake
+}
+
+#[test]
+fn certificates_are_issued_for_every_name_and_installed() {
+    let fake = issuing("certificates");
+    fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
     let state = run_step(
         &fake.ctx(&plan(&[Ingest, Console, Distribution])),
         Step::Certificates,
@@ -255,36 +262,10 @@ fn certificates_are_issued_for_every_name_and_installed() {
 
 #[test]
 fn new_certificates_restart_the_tls_services() {
-    let fake = Fake::new("certificates-restart");
-    fake.file("/etc/openvibes/pki/intermediate.crt", "INTERMEDIATE\n");
-    fake.file(
-        "/var/lib/openvibes-ingest/intermediate.key",
-        "INTERMEDIATE KEY",
-    );
+    let fake = issuing("certificates-restart");
     fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
-    fake.effect(&with(&ADMIN, &["ca", "issue-server"]), |root| {
-        for service in ["ingest", "distribution", "console"] {
-            let dir = root.join(format!("run/openvibes-ca/{service}"));
-            if dir.exists() && !dir.join("platform.example.com.crt").exists() {
-                std::fs::write(
-                    dir.join("platform.example.com.crt"),
-                    format!("{service} CERT\n"),
-                )
-                .unwrap();
-                std::fs::write(
-                    dir.join("platform.example.com.key"),
-                    format!("{service} KEY"),
-                )
-                .unwrap();
-                return;
-            }
-        }
-        panic!("no output directory");
-    });
-    let state = run_step(
-        &fake.ctx(&plan(&[Ingest, Console, Distribution])),
-        Step::Certificates,
-    );
+    let plan = plan(&[Ingest, Console, Distribution]);
+    let state = run_step(&fake.ctx(&plan), Step::Certificates);
     assert!(matches!(state, StepState::Done(_)), "{state:?}");
     assert_eq!(
         fake.call(&["/usr/bin/systemctl", "try-restart"]),
@@ -296,6 +277,17 @@ fn new_certificates_restart_the_tls_services() {
             "openvibes-console"
         ]
     );
+}
+
+#[test]
+fn a_failed_restart_leaves_the_names_unwritten_so_repair_retries() {
+    let fake = issuing("certificates-restart-fails");
+    fake.fail(&["/usr/bin/systemctl", "try-restart"], "boom");
+    let plan = plan(&[Ingest, Console, Distribution]);
+    let state = run_step(&fake.ctx(&plan), Step::Certificates);
+    assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+    assert!(!fake.root.join("etc/openvibes/tls/setup-names").exists());
+    assert_eq!(check(&fake.ctx(&plan), Step::Certificates), StepState::Todo);
 }
 
 #[test]

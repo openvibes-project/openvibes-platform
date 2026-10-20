@@ -74,7 +74,7 @@ fn the_report_shows_dates_names_and_signer() {
     let text = screen(&app);
     for want in [
         "Maintenance › Certificates",
-        &format!("valid until {end} · 79 days left"),
+        &format!("valid until {end} · 80 days left"),
         "limebox.lan, 192.168.1.10",
         "signed by OpenVIBES Root CA · until",
         "Root key",
@@ -147,7 +147,7 @@ fn a_bad_name_is_said_at_once() {
     app.key(Key::Enter);
     let text = screen(&app);
     assert!(
-        text.contains("Open Vibes█") && !text.contains("Apply"),
+        text.contains("open vibes█") && !text.contains("Apply"),
         "{text}"
     );
     app.key(Key::Esc);
@@ -285,4 +285,80 @@ fn at_most_16_other_names() {
         app.outcome,
         Some((false, "✗ At most 16 other names.".to_owned()))
     );
+}
+
+/// The Apply row's help after `edit` on the page.
+fn apply_help(edit: impl Fn(&mut App<SetupHost>)) -> String {
+    let mut app = names_page();
+    edit(&mut app);
+    for _ in 0..10 {
+        app.key(Key::Down);
+    }
+    screen(&app)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[test]
+fn apply_says_who_stops_connecting() {
+    // Only added: agents keep working.
+    let text = apply_help(|app| {
+        app.nav.row = 2;
+        app.key(Key::Enter);
+        type_text(app, "new.lan");
+        app.key(Key::Enter);
+    });
+    assert!(
+        text.contains("Agents keep working; browsers see the new names."),
+        "{text}"
+    );
+    // The host name changed.
+    let text = apply_help(|app| {
+        type_row(app, 0, "other.lan");
+        app.key(Key::Enter);
+    });
+    assert!(
+        text.contains(
+            "Agents that use limebox.lan stop connecting: they need the new install line."
+        ),
+        "{text}"
+    );
+    // A name removed.
+    let text = apply_help(|app| {
+        type_row(app, 1, "");
+        app.key(Key::Enter);
+    });
+    assert!(
+        text.contains(
+            "Agents that use 192.168.1.10 stop connecting: they need the new install line."
+        ),
+        "{text}"
+    );
+    // Both.
+    let text = apply_help(|app| {
+        type_row(app, 1, "");
+        app.key(Key::Enter);
+        type_row(app, 0, "other.lan");
+        app.key(Key::Enter);
+    });
+    assert!(
+        text.contains(
+            "Agents that use a removed name stop connecting: they need the new install line."
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+fn names_are_lowercased_as_typed() {
+    let mut app = names_page();
+    type_row(&mut app, 0, "LimeBox2.lan");
+    let text = screen(&app);
+    assert!(
+        text.contains("limebox2.lan█") && text.contains("A valid DNS name."),
+        "{text}"
+    );
+    app.key(Key::Enter);
+    assert!(screen(&app).contains("limebox2.lan · was limebox.lan"));
 }
