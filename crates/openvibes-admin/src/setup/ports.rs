@@ -51,6 +51,12 @@ pub fn check_ports(console: u16, ingest: u16, distribution: u16) -> Result<(), S
     if console == ingest || console == distribution || ingest == distribution {
         return Err("the console, ingest and distribution ports must differ".into());
     }
+    // Only the console's unit may bind below 1024 (CAP_NET_BIND_SERVICE).
+    for (what, port) in [("ingest", ingest), ("distribution", distribution)] {
+        if port < 1024 {
+            return Err(format!("{what} port {port} must be 1024 or higher"));
+        }
+    }
     Ok(())
 }
 

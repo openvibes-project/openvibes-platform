@@ -12,6 +12,7 @@ mod parts;
 #[cfg(test)]
 mod parts_tests;
 pub mod ports;
+mod ports_rows;
 mod ports_run;
 #[cfg(test)]
 mod ports_tests;

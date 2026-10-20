@@ -4,17 +4,17 @@
 //! the new port and closes the old one.
 
 use platform_host::{Host, Step};
-use ratatui::{
-    Frame,
-    text::{Line, Span},
-    widgets::Paragraph,
-};
+use ratatui::{Frame, widgets::Paragraph};
 
-use super::{Then, failure, ports_run::draw as draw_run};
+use super::{
+    Then, failure,
+    ports_rows::{help, row},
+    ports_run::draw as draw_run,
+};
 use crate::{
     setup::{
         plan::{Plan, plan_of},
-        ports::{CONSOLE_DEFAULT, check_ports},
+        ports::{CONSOLE_DEFAULT, RESERVED},
     },
     tui::{
         app::{App, Key, Question},
@@ -36,16 +36,16 @@ pub enum PortRow {
 }
 
 impl PortRow {
-    const ALL: [PortRow; 3] = [PortRow::Console, PortRow::Ingest, PortRow::Distribution];
+    pub(super) const ALL: [PortRow; 3] = [PortRow::Console, PortRow::Ingest, PortRow::Distribution];
 
-    fn name(self) -> &'static str {
+    pub(super) fn name(self) -> &'static str {
         match self {
             PortRow::Console => "Console",
             PortRow::Ingest => "Agent connections",
             PortRow::Distribution => "Rule distribution",
         }
     }
-    fn of(self, plan: &Plan) -> u16 {
+    pub(super) fn of(self, plan: &Plan) -> u16 {
         match self {
             PortRow::Console => plan.console_port,
             PortRow::Ingest => plan.ingest_port,
@@ -83,14 +83,25 @@ pub fn port_note<H: Host>(
             other.name()
         ));
     }
-    let mut asked = plan.clone();
-    row.set(&mut asked, port);
-    check_ports(
-        asked.console_port,
-        asked.ingest_port,
-        asked.distribution_port,
-    )
-    .map_err(|why| format!("✗ {why}."))?;
+    if port == 0 {
+        return Err("✗ a port is a number from 1 to 65535.".into());
+    }
+    if RESERVED.contains(&port) {
+        return Err(format!(
+            "✗ {port} is not allowed for {}: 18430 and 18480-18484 are the platform's own.",
+            row.name()
+        ));
+    }
+    // Only the console's unit may bind below 1024.
+    match row {
+        PortRow::Ingest if port < 1024 => {
+            return Err("✗ Agent connections need a port from 1024 up.".into());
+        }
+        PortRow::Distribution if port < 1024 => {
+            return Err("✗ Rule distribution needs a port from 1024 up.".into());
+        }
+        _ => {}
+    }
     if port != row.of(plan) {
         let seen = host.listeners(port).map_err(|e| format!("✗ {e}."))?;
         if !seen.trim().is_empty() {
@@ -106,12 +117,12 @@ pub fn port_note<H: Host>(
 /// being typed.
 #[derive(Debug, Default)]
 pub struct Ports {
-    saved: Option<Plan>,
-    now: Option<Plan>,
+    pub(super) saved: Option<Plan>,
+    pub(super) now: Option<Plan>,
     error: Option<String>,
     /// The digits typed for the row under the cursor.
-    typing: Option<String>,
-    note: Option<Result<String, String>>,
+    pub(super) typing: Option<String>,
+    pub(super) note: Option<Result<String, String>>,
 }
 
 impl Ports {
@@ -120,7 +131,7 @@ impl Ports {
     }
 
     /// The rows whose port differs from the saved plan.
-    fn moved(&self) -> Vec<PortRow> {
+    pub(super) fn moved(&self) -> Vec<PortRow> {
         match (&self.saved, &self.now) {
             (Some(was), Some(now)) => PortRow::ALL
                 .into_iter()
@@ -130,17 +141,17 @@ impl Ports {
         }
     }
 
-    fn agent_moved(&self) -> bool {
+    pub(super) fn agent_moved(&self) -> bool {
         self.moved().iter().any(|r| *r != PortRow::Console)
     }
 
     /// Rows in the list: the four ports, then Apply once something changed.
-    fn count(&self) -> usize {
+    pub(super) fn count(&self) -> usize {
         if self.moved().is_empty() { 4 } else { 5 }
     }
 
     /// `https://host[:port]`.
-    fn address(&self) -> String {
+    pub(super) fn address(&self) -> String {
         let plan = self.now.as_ref().expect("a plan");
         web(&plan.hostname, plan.console_port)
     }
@@ -216,7 +227,7 @@ impl Ports {
 }
 
 /// `https://host`, with `:port` unless it is the default.
-fn web(host: &str, port: u16) -> String {
+pub(super) fn web(host: &str, port: u16) -> String {
     if port == CONSOLE_DEFAULT {
         format!("https://{host}")
     } else {
@@ -228,80 +239,6 @@ fn ports_run<H: Host>(app: &App<H>) -> Option<&Run> {
     app.run
         .as_ref()
         .filter(|r| matches!(r.work.kind, Kind::Ports { .. }))
-}
-
-fn row<H: Host>(app: &App<H>, ports: &Ports, at: usize) -> Row {
-    let t = &app.theme;
-    let (Some(was), Some(now)) = (&ports.saved, &ports.now) else {
-        return Row::entry("", "");
-    };
-    if at == 3 {
-        return Row::entry("Network devices", "514/udp");
-    }
-    if at == 4 {
-        let says = if ports.agent_moved() {
-            "agents must be told the new port"
-        } else {
-            "the web address changes"
-        };
-        return Row::entry("Apply", says);
-    }
-    let r = PortRow::ALL[at];
-    let (old, new) = (r.of(was), r.of(now));
-    let typed = app.nav.row == at && ports.typing.is_some();
-    let dim = |s: String| vec![Span::styled(s, t.dim())];
-    if let (true, Some(text)) = (typed, &ports.typing) {
-        return Row::Entry {
-            name: vec![Span::raw(r.name())],
-            value: dim(format!("{text}█")),
-        };
-    }
-    if ports.typing.is_some() {
-        return Row::Entry {
-            name: vec![Span::raw(r.name())],
-            value: dim(new.to_string()),
-        };
-    }
-    if old != new {
-        return Row::Entry {
-            name: vec![
-                Span::styled("*", t.yellow()),
-                Span::raw(format!(" {}", r.name())),
-            ],
-            value: dim(format!("{new} · was {old}")),
-        };
-    }
-    let value = match r {
-        PortRow::Console => format!("{new} · {}", web(&now.hostname, new)),
-        _ => new.to_string(),
-    };
-    Row::Entry {
-        name: vec![Span::raw(r.name())],
-        value: dim(value),
-    }
-}
-
-fn help<H: Host>(app: &App<H>) -> Line<'static> {
-    let t = &app.theme;
-    let ports = &app.maint.ports;
-    if ports.typing.is_some() {
-        return match &ports.note {
-            Some(Err(why)) => Line::styled(format!("    {why}"), t.red()),
-            Some(Ok(ok)) => Line::styled(format!("    {ok}"), t.dim()),
-            None => Line::raw(""),
-        };
-    }
-    let text = match app.nav.row {
-        0 => "The console's port; the web address follows it.".to_owned(),
-        1 => "The port agents send their findings to.".into(),
-        2 => "The port agents fetch their rules from.".into(),
-        3 => "Network devices send their logs here; it is not changed on this page.".into(),
-        _ if ports.agent_moved() => {
-            "Agents on other hosts need their install line again after this.".into()
-        }
-        _ => format!("The console's web address changes to {}.", ports.address()),
-    };
-    Line::styled(format!("    {text}"), t.dim())
 }
 
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
@@ -373,6 +310,15 @@ impl<H: Host> App<H> {
         else {
             return;
         };
+        if let Ok(port) = typed.parse::<u16>()
+            && let Some(other) = PortRow::ALL
+                .iter()
+                .find(|r| **r != row && r.of(saved) == port && r.of(now) != port)
+        {
+            let why = format!("✗ {port} is still used by {} until Apply.", other.name());
+            self.maint.ports.note = Some(Err(why));
+            return;
+        }
         let mut probe = now.clone();
         row.set(&mut probe, row.of(saved));
         let note = port_note(&self.host, &probe, row, typed);

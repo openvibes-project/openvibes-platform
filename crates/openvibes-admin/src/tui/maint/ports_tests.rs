@@ -81,6 +81,7 @@ fn a_free_port_is_said_free() {
     assert!(screen(&app).contains("18500 is free on this host."));
     app.key(Key::Enter);
     let text = screen(&app);
+    assert!(!text.contains("https://"), "{text}");
     for want in ["* Agent connections", "18500 · was 18423", "Apply"] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
     }
@@ -116,7 +117,7 @@ fn a_port_another_row_uses_is_refused() {
 fn a_reserved_port_is_refused() {
     let mut app = page();
     type_agent_port(&mut app, "18430");
-    assert!(screen(&app).contains("✗ ingest port 18430 is not allowed"));
+    assert!(screen(&app).contains("✗ 18430 is not allowed for Agent connections"));
 }
 
 #[test]
@@ -192,6 +193,54 @@ fn the_console_question_and_result() {
     app.key(Key::Enter);
     assert!(
         screen(&app).contains("Console moved to 8443 · https://platform.example.com:8443 ("),
+        "{}",
+        screen(&app)
+    );
+}
+
+#[test]
+fn a_port_below_1024_is_for_the_console_only() {
+    let mut app = page();
+    type_agent_port(&mut app, "80");
+    assert!(screen(&app).contains("✗ Agent connections need a port from 1024 up."));
+    app.key(Key::Esc);
+    app.nav.row = 2;
+    app.key(Key::Enter);
+    for _ in 0..5 {
+        app.key(Key::Backspace);
+    }
+    type_text(&mut app, "80");
+    assert!(screen(&app).contains("✗ Rule distribution needs a port from 1024 up."));
+    app.key(Key::Esc);
+    app.nav.row = 0;
+    app.key(Key::Enter);
+    for _ in 0..3 {
+        app.key(Key::Backspace);
+    }
+    type_text(&mut app, "80");
+    assert!(screen(&app).contains("80 is free on this host."));
+}
+
+#[test]
+fn refusals_name_the_row_and_a_swap_waits_for_apply() {
+    let mut app = page();
+    type_agent_port(&mut app, "18430");
+    assert!(
+        screen(&app).contains("✗ 18430 is not allowed for Agent connections"),
+        "{}",
+        screen(&app)
+    );
+    app.key(Key::Esc);
+    type_agent_port(&mut app, "18500");
+    app.key(Key::Enter);
+    app.nav.row = 2;
+    app.key(Key::Enter);
+    for _ in 0..5 {
+        app.key(Key::Backspace);
+    }
+    type_text(&mut app, "18423");
+    assert!(
+        screen(&app).contains("✗ 18423 is still used by Agent connections until Apply."),
         "{}",
         screen(&app)
     );

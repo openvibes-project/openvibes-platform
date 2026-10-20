@@ -75,6 +75,14 @@ fn chosen_ports_are_real_ours_to_take_and_different() {
             "{c} {i} {d}"
         );
     }
+    // Ingest and distribution cannot bind below 1024; the console can.
+    check_ports(80, 18423, 18424).unwrap();
+    for (c, i, d) in [(443, 80, 18424), (443, 18423, 1023)] {
+        assert!(
+            check_ports(c, i, d).unwrap_err().contains("1024 or higher"),
+            "{c} {i} {d}"
+        );
+    }
     for (c, i, d) in [
         (18423, 18423, 18424),
         (443, 18424, 18424),
@@ -396,9 +404,10 @@ fn a_port_another_service_moved_onto_stays_open() {
         "success\n",
     );
     fake.answer(&["/usr/bin/firewall-cmd", "--reload"], 0, "success\n");
-    let old = plan(&[Ingest, Distribution, Console]);
-    // The console leaves 443 and ingest takes it: 443 must stay open.
-    let new = old.with_ports(Some(8443), Some(443), None).unwrap();
+    let mut old = plan(&[Ingest, Distribution, Console]);
+    old.console_port = 18500;
+    // The console leaves 18500 and ingest takes it: 18500 must stay open.
+    let new = old.with_ports(Some(8443), Some(18500), None).unwrap();
     free(&fake);
     assert_eq!(close_old(&fake.ctx(&new), &old).unwrap().0, ["18423/tcp"]);
 }
