@@ -15,7 +15,7 @@ test("an alarm shows its process tree and is triaged and suppressed", async ({ p
   const row = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
   await expect(row).toContainText("postgres → bash");
   await row.locator("td").nth(2).click();
-  // The alarm's page (until screen 30: its panel, full width).
+  // The alarm's page (screen 30).
   await expect(page).toHaveURL(/\/alarms\/\d+$/);
   const inspector = page.locator(".view");
   const tree = inspector.getByRole("list", { name: /Process tree/ });
@@ -24,7 +24,7 @@ test("an alarm shows its process tree and is triaged and suppressed", async ({ p
   await expect(tree.locator("li").first()).toContainText("postgres: checkpointer");
 
   // One step to a closing state, and it needs a note (triage v2).
-  await inspector.locator(".panel-header__actions").getByRole("button", { name: /^Set state/ }).click();
+  await inspector.locator(".person-page__actions").getByRole("button", { name: /^Set state/ }).click();
   await page.getByRole("menuitem", { name: /^False positive/ }).click();
   const dialog = page.getByRole("dialog", { name: "False positive" });
   await dialog.getByRole("button", { name: "Mark as false positive: 1 alarm" }).click();
@@ -32,10 +32,10 @@ test("an alarm shows its process tree and is triaged and suppressed", async ({ p
   await dialog.getByRole("textbox", { name: "Why (required)" }).fill("our backup job");
   await dialog.getByRole("button", { name: "Mark as false positive: 1 alarm" }).click();
   await expect(page.locator(".toast")).toContainText("1 changed");
-  await expect(inspector.locator(".panel-header")).toContainText("False positive");
+  await expect(inspector.locator(".person-page__head")).toContainText("False positive");
   // Closing an alarm that isn't the newest still lowers the menu count (#164).
   if (before < 99) await expect(badge).toHaveText(String(before - 1));
-  // Then suppress it on this host, from the panel (screen 12).
+  // Then suppress it on this host, from the page's header (screen 12).
   await inspector.getByRole("button", { name: "Suppress…" }).click();
   const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
   await expect(form.getByRole("button", { name: "Suppress", exact: true })).toBeDisabled();
@@ -69,7 +69,7 @@ test("suppressing from the alarm's page with approval off closes the alarm and l
   await form.getByRole("button", { name: "Suppress", exact: true }).click();
   // Closed as a false positive: it leaves the default (open) list.
   // (The demo keeps its data in memory, so this test never reloads.)
-  await page.getByRole("link", { name: "← Alarms" }).click();
+  await page.locator(".person-page__crumb").getByRole("link", { name: "Alarms" }).click();
   await expect(page.locator(".view tbody tr").first()).toBeVisible();
   await expect(page.locator('.view tbody tr a[href="/alarms/9002"]')).toHaveCount(0);
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
@@ -103,7 +103,7 @@ test("with approval on, a request waits on its alarm, is withdrawn, asked again 
   await inspector.getByRole("button", { name: "Withdraw request" }).click();
   await expect(inspector.getByRole("button", { name: "Suppress…" })).toBeVisible();
   await ask();
-  await expect(inspector.locator(".panel-header")).toContainText("Open");
+  await expect(inspector.locator(".person-page__head")).toContainText("Open");
   // Back on the page later, it still waits: no second Suppress….
   const url = page.url();
   await page.goto(url);

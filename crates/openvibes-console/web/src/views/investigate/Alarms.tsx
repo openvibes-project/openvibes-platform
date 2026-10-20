@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 import { invalidate, useResource } from "../../api/client";
 import type { AlarmList, AlarmListRow } from "../../api/types";
 import { nav, useLocation, viewLink } from "../../app/nav";
-import { AlarmPanel } from "../../panels/alarms/AlarmPanel";
 import { caseNumber } from "../../panels/cases/cases";
 import { highest } from "../../panels/triage/bulk";
 import { BulkBar } from "../../panels/triage/BulkBar";
@@ -23,6 +22,7 @@ import { SummaryLine } from "../../ui/list/SummaryLine";
 import { useSelection } from "../../ui/selection";
 import { useHostName } from "../lists/HostChip";
 import { isTest } from "../lists/testRules";
+import { AlarmPage } from "./alarm/AlarmPage";
 import { Pager } from "./Hosts";
 
 const PAGE_SIZE = 50;
@@ -216,20 +216,9 @@ export function alarmIdOf(view: string): string | null {
   }
 }
 
-/** Until the alarm's page (screen 30) lands: the alarm's panel, full width, so a row never dead-ends. */
-function AlarmPageStopgap({ id }: { id: string }) {
-  return (
-    <div className="view">
-      <h1 className="sr-only">Alarm {id}</h1>
-      <div className="view-pad"><a {...viewLink("/alarms")}>← Alarms</a></div>
-      <div className="view-pad"><AlarmPanel id={id} /></div>
-    </div>
-  );
-}
-
 export function Alarms() {
   const { view } = useLocation();
   if (!view.startsWith("/alarms/")) return <AlarmListView />;
   const id = alarmIdOf(view);
-  return id === null ? <Empty icon="alarm" title="No such alarm">Check the link, or find the alarm in the list.</Empty> : <AlarmPageStopgap key={id} id={id} />;
+  return id === null ? <Empty icon="alarm" title="No such alarm">Check the link, or find the alarm in the list.</Empty> : <AlarmPage key={id} id={id} />;
 }

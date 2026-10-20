@@ -5,7 +5,7 @@ The detail panels that open in the inspector beside a list (or in a floating win
 | File | What it does |
 |---|---|
 | `hosts/` | Host, package, port and compare panels, and the host export. |
-| `alarms/` | The threat alarm panel and its evidence. |
+| `alarms/` | An alarm's evidence and the suppress form (an alarm itself is a page, `views/investigate/alarm/`). |
 | `findings/` | The compliance finding and vulnerability advisory panels. |
 | `triage/` | The triage actions and the detail template alarms, findings and advisories share. |
 | `cases/` | The case panel and the add-to-case button. |

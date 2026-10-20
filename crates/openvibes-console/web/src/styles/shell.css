@@ -402,3 +402,9 @@
 .suppression-row__chips, .suppression-row__actions { gap: 6px; flex-wrap: wrap; }
 .suppression-row__reject { gap: 8px; max-width: 60ch; }
 .hourly-bars { margin: 0; }
+/* An alarm's page (screen 30): rule text keeps its line breaks; a command seen once stands out. */
+.pre-line { white-space: pre-line; margin: 0; }
+.cmd-once { background: var(--warn-soft); }
+/* Subtle text stays readable on the highlighted row and the current process (axe, dark). */
+.cmd-once .subtle, .process--current .subtle { color: var(--text-2); }
+.alarm-command { overflow-wrap: anywhere; }

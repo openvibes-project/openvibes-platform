@@ -3,7 +3,7 @@ import type { MouseEvent, ReactNode } from "react";
 
 import type { ApiError } from "../api/client";
 import { nav } from "../app/nav";
-import { type PanelRef, hostPath } from "../app/location";
+import { type PanelRef, pagePath } from "../app/location";
 import { ago, triageLabel, when } from "./format";
 import { Icon, type IconName } from "./Icon";
 
@@ -56,8 +56,9 @@ export function ObjectLink({ to, children, fromList = false, className }: { to: 
   };
   const params = new URLSearchParams(nav.location.params);
   params.append("open", `${to.kind}:${to.id}`);
-  // A host is a page: a new tab opens it directly.
-  const href = to.kind === "agent" ? nav.href(hostPath(to.id)) : `?${params.toString()}`;
+  // A host or an alarm is a page: a new tab opens it directly.
+  const page = pagePath(to);
+  const href = page ? nav.href(page) : `?${params.toString()}`;
   return <a className={className ?? "object-link"} href={href} onClick={onClick}>{children}</a>;
 }
 

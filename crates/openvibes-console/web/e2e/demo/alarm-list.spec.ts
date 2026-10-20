@@ -101,9 +101,9 @@ test("the message is a real link to the alarm's page, which shows the alarm full
   expect(href).toMatch(/^\/alarms\/\d+$/);
   await link.click();
   await expect(page).toHaveURL(new RegExp(`${href ?? ""}$`));
-  await expect(page.locator(".view .panel-header")).toContainText("A database server started a shell");
-  await expect(page.locator(".inspector .panel-header")).toHaveCount(0);
-  await page.getByRole("link", { name: "← Alarms" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("A database server started a shell");
+  await expect(page.locator(".inspector")).toHaveCount(0);
+  await page.locator(".person-page__crumb").getByRole("link", { name: "Alarms" }).click();
   await expect(page).toHaveURL(/\/alarms$/);
 });
 

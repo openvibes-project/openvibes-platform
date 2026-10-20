@@ -43,15 +43,26 @@ export function hostsQuery(query: string): string {
 /** A host's page (approved screen 17). */
 export const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
 
+/** An alarm's page (approved screen 30). */
+export const alarmPath = (id: string) => `/alarms/${encodeURIComponent(id)}`;
+
+/** The page an object opens instead of a panel: a host or an alarm; null for a panel. */
+export function pagePath(panel: PanelRef): string | null {
+  return panel.kind === "agent" ? hostPath(panel.id) : panel.kind === "alarm" ? alarmPath(panel.id) : null;
+}
+
 /**
- * Old addresses as today's (plan ruling 1): `/agents?…` is the Hosts list,
- * and a host panel opened on any view (`?open=agent:ID`, the assistant's
- * `/agents?agent=ID`) is that host's page, a whole page with no panels
- * (as `nav.open` opens it).
+ * Old addresses as today's (plan ruling 1; roles 5a): `/agents?…` is the
+ * Hosts list, and a host or alarm panel opened on any view
+ * (`?open=agent:ID`, `?open=alarm:ID`, the assistant's `/agents?agent=ID`)
+ * is that object's page, a whole page with no panels (as `nav.open` opens it).
+ * A host panel wins over an alarm panel.
  */
 export function redirect(location: AppLocation): AppLocation {
-  const host = location.panels.find((p) => p.kind === "agent")?.id ?? (location.view === "/agents" ? location.params.get("agent") : null);
-  if (host) return { view: hostPath(host), panels: [], params: new URLSearchParams() };
+  const host = location.view === "/agents" ? location.params.get("agent") : null;
+  const panel = location.panels.find((p) => p.kind === "agent") ?? (host ? { kind: "agent", id: host } : location.panels.find((p) => p.kind === "alarm"));
+  const page = panel && pagePath(panel);
+  if (page) return { view: page, panels: [], params: new URLSearchParams() };
   if (location.view !== "/agents") return location;
   return { ...location, view: "/hosts", params: new URLSearchParams(hostsQuery(location.params.toString())) };
 }

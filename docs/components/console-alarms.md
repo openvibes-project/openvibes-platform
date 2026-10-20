@@ -16,6 +16,11 @@ Hosts pages ([console-hosts.md](console-hosts.md)).
 - `GET|POST|DELETE /api/v1/saved-views`, `GET|PUT /api/v1/list-columns/alarms`
   ([saved-views.md](saved-views.md)).
 - `GET /api/v1/agents/{id}`: the host chip's name, with `hosts.read`.
+- `GET /api/v1/alarms/{id}/summary`: the page above the fold
+  (`src/alarms/summary.rs`); `GET /api/v1/alarms/{id}` and
+  `GET /api/v1/alarms/{id}/rule`: the evidence; `GET /api/v1/triage-history`:
+  History; `GET|POST /api/v1/alarm-suppressions…`: Suppress…, a waiting
+  request and Withdraw ([console-detection.md](console-detection.md)).
 
 ## The list (screen 29)
 
@@ -81,7 +86,7 @@ Hosts pages ([console-hosts.md](console-hosts.md)).
   If none does, "No alarms" says how alarms start. Otherwise "Nothing matches these filters" says closed and
   suppressed alarms are hidden unless State or Suppressed says otherwise.
 - **Freshness:**
-  - a change from the bulk bar, the suppress form or the alarm panel
+  - a change from the bulk bar, the suppress form, Add to case on an alarm or the alarm's page
     invalidates the prefix `/api/v1/alarm` (`ALARMS_PREFIX`, `app/liveAlarms.ts`);
   - so does a new alarm seen by the live poll;
   - that prefix covers `/alarm-list`, `/alarms` and `/alarm-suppressions`.
@@ -93,15 +98,43 @@ Hosts pages ([console-hosts.md](console-hosts.md)).
 
 ## An alarm's page
 
-`/alarms/{id}` belongs to the Alarms view (`prefix: "/alarms/"`). Until
-screen 30 lands, it shows the alarm's panel content full width, with
-"← Alarms", so a row never dead-ends. `?open=alarm:ID` still opens the
-panel. A path that is not an id (a sub-path, a bad escape) shows
-"No such alarm".
+`/alarms/{id}` belongs to the Alarms view (`prefix: "/alarms/"`;
+`views/investigate/alarm/`, see its README). It replaced the alarm panel,
+which is gone. A path that is not an id (a sub-path, a bad escape), a
+missing alarm and one on a host out of reach (404) show "No such alarm".
+
+- **Header:** the message, severity and state; the host (to its page), the
+  program chain and last seen. Set state ▾ and Assign ▾ (the inline bulk
+  bar, with `can.triage`), Suppress… (screen 12, with `can.suppress`; not
+  while a request waits or once suppressed), Ask about this (ruling 6,
+  `can.ask`), and ⋯ with Export (ruling 7, `can.export`: a CSV of the
+  alarm and its siblings) and Copy link.
+- **Tiles:** starts matched (to Last 24 hours), different commands (to
+  Commands seen), first seen and confidence.
+- **Left:** What happened (the rule's `explain`, then `check`, as plain text
+  with line breaks kept; until the rule has them, its title and message;
+  then the evidence, "Why it triggered"); Details (a closed alarm's
+  decision with Reopen; rule and set with versions, ATT&CK, last seen,
+  received, assignee, case with Add to case, and the suppression: the one
+  that closed it, or a waiting request with Withdraw); History.
+- **Right:** Commands seen (every sibling, most starts first; each links to
+  its page; the usual one has "Suppress this command…", the screen-12 form
+  for *that sibling's* id, preset to the exact command; one seen once is
+  highlighted with Add to case for that sibling); the process chain; Last
+  24 hours (`HourlyBars`); Related (other open alarms on the host,
+  vulnerabilities with `vulnerabilities.read`, and the same rule elsewhere
+  linking to `/alarms?q=<rule_id>`, ruling 9).
+- **Old links:** an alarm panel link (`?open=alarm:ID` on any view, from
+  dashboards, cases, suppressions, the host page or the attention list) is
+  `/alarms/ID` with no panels (`app/location.ts` `redirect`, `pagePath`);
+  `nav.open` and `ObjectLink` go there too, and a direct load replaces the
+  URL so history keeps no dead entry. A popped-out alarm window from before
+  is dropped. The server serves `/alarms/{alarm_id}` (`frontend-contract.json`).
 
 ## Failure behaviour
 
-- A refused or failed load shows the error box.
+- A refused or failed load shows the error box; on the page, a failed
+  waiting-request load shows it in Details and offers no Suppress….
 - A refused bulk action is a toast, and the selection stays.
 
 ## Demo
@@ -124,9 +157,16 @@ panel. A path that is not an id (a sub-path, a bad escape) shows
   - `ui/DataTable.test.tsx`: the server-paged selection bar;
   - `ui/list/FilterBar.test.tsx`: chip-only filters;
   - `app/liveAlarms.test.ts`: the prefix;
-  - `demo/routes/alarmList.test.ts`.
+  - `demo/routes/alarmList.test.ts`, `demo/routes/alarmSummary.test.ts`;
+  - `views/investigate/alarm/AlarmPage.test.tsx`: tiles, rule text and its
+    fallback, Commands seen, actions by permission, suppression, Related,
+    Export, the waiting request;
+  - `app/location.test.ts` (`old_alarm_links_open_the_page`), `app/registry.test.tsx`.
 - **E2E (demo):**
   - `e2e/demo/alarm-list.spec.ts`: Severity and Technique, then a reload;
     a saved view; a hidden column; bulk Suppress…; the row link; axe;
+  - `e2e/demo/alarm-page.spec.ts`: `old_alarm_links_open_the_page`,
+    `suppress_this_command_uses_that_line`, Set state and Reopen, Add to
+    case on a command seen once, the timeline, axe light and dark;
   - `alarms.spec.ts`, `bulk.spec.ts`, `alarm-suppressions.spec.ts`,
-    `detection.spec.ts`.
+    `detection.spec.ts`, `cases.spec.ts`.

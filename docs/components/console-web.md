@@ -67,8 +67,8 @@ Show everything, without page changes for details:
   the ones already open. Rows in an open case show
   its badge (`panels/cases/CaseBadge.tsx`). Vulnerabilities count open hosts
   and hide advisories triaged everywhere unless Include resolved is on.
-- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding, an advisory
-  and an alarm share one layout: the triage actions on the panel header's
+- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding and an advisory
+  share one layout (an alarm is a page, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
   actions line (a finding or advisory: "Set state: N open", acting on its
   open hosts), a short summary, then the console's underline tabs
   (`Tabs`). Findings and advisories: Hosts (a `DataTable` with a state
@@ -266,7 +266,7 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
 
 - **Alarms** (`/alarms`, `g m`, `alarms.read`) and an alarm's page
   (`/alarms/{id}`): see [console-alarms.md](console-alarms.md). An alarm's
-  page and the panel have **Suppress…** (with `alarms.suppress`), which opens
+  page has **Suppress…** (with `alarms.suppress`), which opens
   the suppress form (approved screen 12, `panels/alarms/SuppressForm.tsx`):
   - **What:** this program (its path) or this exact command (path and
     masked arguments, shown).
@@ -305,17 +305,10 @@ unavailable here). A Hosts section at the bottom of Site rules counts the
 hosts the user may see running each set (current, behind, refused, not set up), lists the
 ones that aren't current, and shows the `[[rule_sets]]` lines to paste into
 an existing agent's `agent.toml`.
-- **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the
-  process: program, masked command line, uid and euid when they differ,
-  working directory, pid), rule and versions, first/last seen, count, in
-  the detail template (Process, Evidence, History tabs); the summary has
-  the triage actions and Suppress…. It fetches
-  `GET /api/v1/alarm-suppressions?alarm_id=<id>&state=waiting`; while a
-  request from this alarm waits, the summary shows "Suppression requested,
-  waiting for approval… these alarms keep arriving" instead, with
-  **Withdraw request** for the requester (`can_withdraw`, disabled while
-  it sends). If that fetch fails the panel shows the error, not
-  Suppress….
+- **An alarm's page** replaced the alarm panel (`alarm`), keeping all it
+  showed: the process tree, rule and versions, evidence, history, the
+  triage actions, Suppress… and a waiting request with **Withdraw request**
+  ([console-alarms.md](console-alarms.md#an-alarms-page)).
 - **Coverage** (`/coverage`, `g t`, global `rules.coverage.read`): an ATT&CK
   matrix (tactics as columns, covered techniques with rule counts; empty
   tactics stay as visible gaps) above the rule list. Chips: Kill chain
@@ -352,7 +345,7 @@ an existing agent's `agent.toml`.
   hands focus to its card. The menu item counts the waiting requests the
   viewer can decide (`GET /api/v1/alarm-suppressions?state=waiting`,
   fetched only with `alarms.suppressions.approve`; `app/menuCount.ts`).
-- Alarms are not offered to the assistant (no "Ask about" on the panel).
+- An alarm's page offers **Ask about this** with `assistant.use` on its host (ruling 6).
 - The demo serves alarms and suppressions with the server's rules
   (`demo/suppressions.ts`): the approval setting from Settings › General,
   waiting/active/rejected/withdrawn/removed states, every refusal code,
@@ -393,8 +386,8 @@ triage on alarms and findings stays as it is.
     disabled until the rules are met (`panels/cases/cases.ts`, `closeProblems`).
     A closed case offers **Reopen**;
   - **Items**: each row shows its kind, title, severity and host and opens
-    that object's own panel (alarm `alarm:<id>`, finding `finding:<rule
-    set>/<rule>`, vulnerability `advisory:<advisory>`, host `agent:<id>`,
+    that object's own panel or page (alarm: its page `/alarms/<id>`, finding `finding:<rule
+    set>/<rule>`, vulnerability `advisory:<advisory>`, host: its page,
     software `package:<manager>/<name>`). Alarms, findings and
     vulnerabilities take an outcome: resolved (offered only while the
     evidence is gone), false positive or accepted risk (a note is required).
@@ -404,7 +397,7 @@ triage on alarms and findings stays as it is.
     what.
   - Without `cases.write` the panel is read-only.
 - **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.write`): a button on
-  the alarm panel, on each host row of a finding and of an advisory, on the
+  an alarm's page (Details, and a command seen once), on each host row of a finding and of an advisory, on the
   host page and its top vulnerabilities, and on the software panel. Its dialog
   asks `/cases/for-item` first. An alarm, finding or vulnerability that is
   already in an open case shows that case (a link) and offers nothing else,
@@ -418,7 +411,7 @@ triage on alarms and findings stays as it is.
 - **The demo** (`demo/cases.ts`) serves the same routes, JSON, status codes
   and rules as the server: filters, `If-Match`, exclusivity, close rules,
   outcomes decided by the demo's own alarms and findings (mitigating an alarm
-  in the Alarm panel makes "resolved" available for it), the visibility rule
+  on its page makes "resolved" available for it), the visibility rule
   for a scoped viewer, and accepted risk that reopens when its date passes.
   It starts with four cases over real demo objects (an SSH and shell
   investigation, an exploited advisory on three hosts, web servers starting
