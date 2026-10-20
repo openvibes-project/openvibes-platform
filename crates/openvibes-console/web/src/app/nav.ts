@@ -2,14 +2,18 @@
 // browser's back button closes panels and returns to earlier views.
 import { useSyncExternalStore } from "react";
 
-import { type AppLocation, type PanelRef, formatLocation, parseLocation, popPanel, pushPanel } from "./location";
+import { type AppLocation, type PanelRef, formatLocation, hostPath, parseLocation, popPanel, pushPanel, redirect } from "./location";
 
 const base = import.meta.env.BASE_URL;
 const listeners = new Set<() => void>();
 let snapshot: AppLocation = read();
 let snapshotKey = window.location.pathname + window.location.search;
-// An old /findings link: show the URL of the page it now opens.
-if (window.location.pathname.endsWith("/findings")) {
+settle();
+
+/** An old /findings or /agents address, or an old host panel: show the URL
+ * of the page it now opens, in place, so history keeps no dead entry (plan ruling 1). */
+function settle() {
+  if (!/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=agent(%3A|:)/i.test(window.location.search)) return;
   snapshotKey = formatLocation(snapshot, base);
   window.history.replaceState(null, "", snapshotKey);
 }
@@ -37,9 +41,11 @@ window.addEventListener("popstate", () => {
     return;
   }
   notify();
+  settle();
 });
 
-function go(next: AppLocation, replace = false) {
+function go(to: AppLocation, replace = false) {
+  const next = redirect(to);
   const url = formatLocation(next, base);
   if (url === window.location.pathname + window.location.search) return;
   if (replace) window.history.replaceState(null, "", url);
@@ -59,7 +65,12 @@ export const nav = {
     if (guard && !guard()) return;
     go({ view, panels: snapshot.panels, params: new URLSearchParams(params) });
   },
-  open(panel: PanelRef, fromList = false) { go(pushPanel(snapshot, panel, fromList)); },
+  /** A host is a whole page (approved screen 17): opening one goes there and closes the panels. */
+  open(panel: PanelRef, fromList = false) {
+    if (panel.kind !== "agent") { go(pushPanel(snapshot, panel, fromList)); return; }
+    if (guard && !guard()) return;
+    go({ view: hostPath(panel.id), panels: [], params: new URLSearchParams() });
+  },
   back() { go(popPanel(snapshot)); },
   closeAll() { go({ ...snapshot, panels: [] }); },
   truncate(depth: number) { go({ ...snapshot, panels: snapshot.panels.slice(0, depth) }); },
@@ -77,6 +88,21 @@ export const nav = {
   },
 };
 
+type Click = { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; preventDefault(): void };
+
+/** An in-console link's props: a plain left click navigates in place; with a
+ * modifier key or another button the browser opens the href (new tab, window). */
+export function viewLink(view: string, params?: Record<string, string>) {
+  return {
+    href: nav.href(view, params),
+    onClick: (e: Click) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      nav.view(view, params);
+    },
+  };
+}
+
 /** The panel on top of the stack: the one a list highlights as open. */
 export function useTopPanel() {
   const { panels } = useLocation();
@@ -87,5 +113,5 @@ export function useLocation(): AppLocation {
   return useSyncExternalStore((listener) => {
     listeners.add(listener);
     return () => listeners.delete(listener);
-  }, () => snapshot);
+  }, () => snapshot, () => snapshot);
 }

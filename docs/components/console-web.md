@@ -41,7 +41,7 @@ Show everything, without page changes for details:
     the new-account picker offers only roles inside the creator's own access
     (`fitsShare`, as for people);
   - audit log, with ranges, CSV export and retention.
-- **Host hardening** (`panels/hosts/HostHardening.tsx`): the host panel's Hardening
+- **Host hardening** (`views/investigate/host/HostHardening.tsx`): the host page's Hardening
   row, "Hardening facts unavailable" warning and "Not assigned" badge; see
   `rule-set-assignment.md`.
 - **Triage** (triage v2, `panels/triage/triage.ts`, `panels/triage/bulk.ts`,
@@ -179,8 +179,8 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   and editing is hidden, "Edit" and "Duplicate to edit" included (the
   dashboard menu says "Editing needs a wider screen"). Below 720px the rail is a bottom bar in which every
   destination fits (icons only, each link keeps its name for screen
-  readers); tables wrap long names, and Agents drops Last heartbeat below
-  480px so host names fit.
+  readers); tables wrap long names, and Hosts keeps only Host and Last
+  heartbeat below 600px so host names fit.
 - **Menu:**
   - Duplicate, Rename and Delete;
   - Share with role (owner with `dashboards.share`): only the roles the
@@ -412,7 +412,7 @@ triage on alarms and findings stays as it is.
   - Without `cases.write` the panel is read-only.
 - **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.write`): a button on
   the alarm panel, on each host row of a finding and of an advisory, on the
-  host panel and its vulnerabilities, and on the software panel. Its dialog
+  host page and its top vulnerabilities, and on the software panel. Its dialog
   asks `/cases/for-item` first. An alarm, finding or vulnerability that is
   already in an open case shows that case (a link) and offers nothing else,
   because it can be in one at a time; a host or software lists the cases
@@ -437,27 +437,8 @@ triage on alarms and findings stays as it is.
 
 ## Assets v1 (hosts and software)
 
-- **Hosts** (`/agents`, the former Agents view): a row opens the **Host
-  page** (the `agent` panel): Findings, Vulnerabilities, **Alarms** (active
-  ones), **Software** (the host's packages, filtered on the server by name
-  and "Fix available", 200 at a time) and Details (identity, system and
-  running kernel, "software as of", threat alarms, groups and labels, certificates).
-  **Last test** shows when the host last raised the harmless test alarm
-  and test finding (`openvibes-test alarm|finding`, from `last_test` on
-  the host detail), with both commands; test alarms and findings carry a
-  Test badge in the lists (`views/lists/testRules.ts`).
-  **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why", "To
-  fix: …", and, when there is one, the command in a wrapped code block with
-  a copy button; an off host also shows
-  that line at the top of its Alarms tab. The Hosts list adds an "Alarms off"
-  badge beside Online only when the alarms are off by a fault (not when
-  process events were simply not enabled). The list, panel and
-  host export call `last_seen_at` **Last heartbeat**. Its hover text
-  says agents send one about every minute and a host is online within three
-  minutes of the last. Online and offline changes show up without a reload:
-  `app/livePresence.ts` keeps `GET /api/v1/agents/events` open (a fetch marked
-  background, so it does not extend the session) and refetches the agent
-  views, at most every two seconds, when the server reports a change.
+- **Hosts and the host page** (`/hosts`, `/hosts/{id}`): see
+  [console-hosts.md](console-hosts.md).
 - **Software** (`/software`, `g w`): packages across the caller's hosts with
   hosts, versions (highlighted when more than one is in use), open
   advisories (worst severity, count, no-fix count, an Exploited flag) and
@@ -469,6 +450,72 @@ triage on alarms and findings stays as it is.
   default; no-fix ones stay in Vulnerabilities).
 - On a phone, Software sits under More (`phoneMore`), so the bar keeps five
   labelled slots.
+
+## Shared list and detail pieces
+
+Built once for every list and detail page (roles spec §10.3; approved
+screens 16 and 17, and the shared layout). Hosts is the first user; the
+other list pages move to them in step 5. `ui/ViewHeader.tsx` keeps working
+for the pages not yet moved; its saved views stay in the browser.
+
+- **FilterBar** (`ui/list/FilterBar.tsx`): the search box (`q` in the URL
+  250 ms after the last key, at once on Enter or blur, and only onto the
+  list's own URL: leaving the page drops a search not yet sent; "/" focuses it) and one chip per `ListFilter`
+  (`{ param, label, values: {value, label, count}[] }`, `ui/list/filters.ts`).
+  A chip is a Select drawn as a button (`aria-haspopup="listbox"`,
+  `aria-expanded`, the Select's keyboard and search); its options show each
+  value's count. A chosen value becomes a chip "Status: Online" with an ×
+  ("Remove filter Status: Online"); focus moves to the chip that replaces
+  the one used. On the right: **Clear all** (every parameter but `sort` and
+  `dir`), **Save view** (only with something set and not already saved; a
+  refusal such as "You already have a view with that name" is a
+  `role="alert"` tied to the name field) and **Columns**. Saved views are
+  chips: a click applies one (its parameters replace today's; only the
+  page's filters, `q`, `sort` and `dir` are taken from it); × asks
+  "Delete the view “…”?" before deleting (Escape cancels). After a save or
+  delete, focus goes to the saved views, or to the search when none is left.
+- **Columns** (`ui/list/ColumnsMenu.tsx`): a disclosure button with a
+  checkbox per column; the first (Host) is checked and disabled, and all are
+  disabled until the person's columns have loaded. Each change is a
+  `PUT /api/v1/list-columns/{page}` carrying the full set after every
+  toggle so far (`columnSaver` queues them, so quick toggles never undo
+  each other); a refusal is a toast, and the queued set stays until the
+  queue drains (a toggle made meanwhile builds on it), then the server's
+  copy shows again.
+- **Saved views** (`ui/list/savedViews.ts`): `useSavedViews(page)` and
+  `useHiddenColumns(page)` (undefined until loaded) over `GET /api/v1/saved-views?page=` and
+  `GET /api/v1/list-columns/{page}`; `saveView`, `deleteView` and
+  `setHiddenColumns`. `importBrowserViews(page, legacyKey, mapQuery)` moves
+  a page's old browser-only views to the console, mapping each query and
+  storing it normalised (so it shows as active). Names are cut to 60
+  characters; a name taken by a different view is retried once as
+  "name (imported)". The key is removed only when every view is saved or
+  already there (same name, same query); otherwise it stays and the next
+  visit tries again.
+- **SummaryLine** (`ui/list/SummaryLine.tsx`): `{count, text}` parts joined
+  with " · ", zeros left out with `skipZero`; a `role="status"` paragraph
+  that is always present, so a change is announced.
+- **DetailPage** (`ui/detail/DetailPage.tsx`): optional crumb; header with
+  icon, title, status, a facts line (joined with " · ", empty facts left
+  out) and actions; an error callout (`role="alert"`); tiles; a narrow left
+  and a wide right column (one column fills the width). An empty slot draws
+  nothing. `Card` (a card of either column) lives here too; the person,
+  group and settings pages use it. **Tile**
+  (`ui/detail/Tile.tsx`): a link to the full list, named "Open alarms: 3".
+  Tiles and the settings pages' links use `viewLink` (`app/nav.ts`): a
+  plain left click navigates in place, a modified or middle click is left
+  to the browser.
+- **Demo** (`demo/routes/lists.ts`): the same routes, codes, caps (60
+  characters, 1000-character query, 50 views per page, case-blind names, no
+  Host column) and messages as `src/lists/saved_views.rs`, kept per person
+  in the browser (`openvibes.v2.demo.lists.<user>`) and checked on load.
+- **Tests:** `ui/list/FilterBar.test.tsx`, `ui/list/savedViews.test.ts`,
+  `ui/detail/DetailPage.test.tsx`, `demo/routes/lists.test.ts`,
+  `views/investigate/Hosts.test.tsx`, `demo/versionOrder.test.ts`,
+  `app/location.test.ts` (the redirects). Vitest has no DOM: the bar is
+  checked as markup and its actions as the helpers it calls; click and key
+  flows (the chip menu from the keyboard, focus on the new chip's ×,
+  Escape) are in `e2e/demo/hosts.spec.ts`.
 
 ## Interfaces
 
@@ -660,13 +707,15 @@ triage on alarms and findings stays as it is.
   holds the state every area shares; each area's routes are in
   `demo/routes/` (hosts, findings, alarms, rules, cases, …). It follows the wire
   types and the permission model, with personas viewer, analyst, operator,
-  scoped operator, team lead and admin. Each persona signs in as a seeded
-  person (Vic, Sam, Ola, Pia, Lee, Alex) whose demo roles give its capabilities through
+  scoped operator, team lead, rule author and admin. Each persona signs in as a seeded
+  person (Vic, Sam, Ola, Pia, Lee, Rae, Alex) whose demo roles give its capabilities through
   `resolveCapabilities` in `demo/share.ts` (the port of `access/rbac.rs`);
   roles are Administrator, Viewer, Analyst and Operator on all hosts,
   "Windows lead" (Team lead on WindowsServers, held by Wen), "Pilot lead"
   (Team lead on Pilot hosts, the team lead persona) and "Operator (Prod)"
-  (the scoped operator). `routes/roles.ts` and
+  (the scoped operator), and "Rule author" on all hosts (the rule author
+  persona: hosts but no alarms, vulnerabilities or compliance, so a host's
+  page shows none of them). `routes/roles.ts` and
   `routes/access.ts` mirror the roles, people and service-account routes
   with their refusal codes (`stale_role`, `role_name_taken`, `role_in_use`
   with `holders`, `protected_role`, `missing_needs`, `unknown_group`,
@@ -698,6 +747,14 @@ triage on alarms and findings stays as it is.
   holds it to that list.
 - **Types:** from the OpenAPI client (`src/api/generated.ts`, generated by
   `npm run generate:api`), via `api/types.ts`.
+
+## Upgrading
+
+- **Roles step 4 (Hosts):** Hosts moved from `/agents` to `/hosts`, and the
+  host panel became the host page `/hosts/{id}`. Old links and bookmarks
+  redirect (`/agents?…` to the list, `?open=agent:ID` to the page). Views
+  saved in the browser are imported to the person's account the first time
+  they open Hosts; see [console-hosts.md](console-hosts.md).
 
 ## Configuration
 
@@ -756,7 +813,8 @@ view (no error, no CSP violation, no third-party request), `/login` and
 retired `/assistant`, bulk triage, one host's accepted risk with an
 assignee and date (refused for an unknown assignee, shown again on
 reselect), a dashboard shared with a role and seen
-read-only, and axe in both themes.
+read-only, the two-team journey (`teams.spec.ts`), the Hosts journey
+(`hosts.spec.ts`, see console-hosts.md), and axe in both themes.
 The live tests also check the service accounts empty state on a fresh server
 and the People and Audit filtered empty states at narrow widths in light and
 dark themes. Audit distinguishes an empty date range from filters that hide existing events.

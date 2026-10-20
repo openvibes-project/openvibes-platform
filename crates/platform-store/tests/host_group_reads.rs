@@ -190,3 +190,26 @@ async fn preview_lists_joins_leaves_and_who_gains_or_loses() {
     }
     db.drop().await;
 }
+
+/// Group pages count critical as the Hosts list and the host page do
+/// (`host_listed_critical`), not the fleet summary's fixable-only count.
+#[tokio::test]
+async fn group_critical_is_the_hosts_list_count() {
+    let (db, c) = migrated().await;
+    fleet(&c).await;
+    seed_host_vuln_counts(&c, A1, 2, 0, 0, 0).await;
+    c.execute(
+        "UPDATE host_listed_critical SET critical = 4 WHERE agent_id = $1",
+        &[&A1],
+    )
+    .await
+    .unwrap();
+    let web = manual_group(&c, "Web", &[A1]).await;
+    let all = host_groups::list(&c, &AgentScope::Global).await.unwrap();
+    assert_eq!(named(&all, "Web").critical, 4);
+    let hosts = host_groups::hosts(&c, &web, &AgentScope::Global, None, 10)
+        .await
+        .unwrap();
+    assert_eq!(hosts[0].critical, 4);
+    db.drop().await;
+}

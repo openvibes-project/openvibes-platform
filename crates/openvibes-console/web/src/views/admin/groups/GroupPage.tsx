@@ -15,7 +15,7 @@ import { ago, plural } from "../../../ui/format";
 import { Icon } from "../../../ui/Icon";
 import { MenuButton } from "../../../ui/Menu";
 import { toast } from "../../../ui/toast";
-import { Card } from "../people/PersonPage";
+import { Card } from "../../../ui/detail/DetailPage";
 import { initials } from "../people/people";
 import { KindBadge, PreviewNote, Problems } from "./badges";
 import { DeleteGroup } from "./DeleteGroup";

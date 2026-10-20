@@ -18,7 +18,8 @@ export function registerAlarmRoutes(ctx: DemoContext & { suppressions: Suppressi
     const suppressed = query.get("suppressed") === "true";
     const state = query.get("state");
     const severity = query.get("severity");
-    const items = alarmList().filter((alarm) => (suppressed || !alarm.suppressed_by)
+    const agent = query.get("agent_id");
+    const items = alarmList().filter((alarm) => (suppressed || !alarm.suppressed_by) && (!agent || alarm.agent_id === agent)
         && (!state || alarm.state === state || (state === "active" && alarm.state === "open"))
         && (!severity || alarm.severity === severity))
       .sort((a, b) => b.last_seen.localeCompare(a.last_seen)).map(summary);

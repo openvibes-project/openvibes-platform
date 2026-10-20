@@ -11,7 +11,7 @@ import { auditActionLabel } from "../../ui/auditActions";
 import { ErrorBox, Loading } from "../../ui/bits";
 import { ago } from "../../ui/format";
 import { link } from "../admin/groups/groupApi";
-import { Card } from "../admin/people/PersonPage";
+import { Card } from "../../ui/detail/DetailPage";
 import { SuppressionRow } from "./SuppressionRow";
 
 const CARDS = [

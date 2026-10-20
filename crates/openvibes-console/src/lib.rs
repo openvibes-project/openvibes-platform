@@ -20,6 +20,7 @@ mod config;
 mod dashboards;
 mod hosts;
 mod http;
+mod lists;
 mod rules;
 #[cfg(feature = "dev-seed")]
 mod seeded;

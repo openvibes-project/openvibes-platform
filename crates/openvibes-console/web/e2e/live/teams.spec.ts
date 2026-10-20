@@ -68,7 +68,7 @@ test("two teams each see and change only their hosts, and a team lead gives only
     for (const [os, mine, theirs] of teams) {
       const member = await firstSignIn(browser, `${os}-${tag}`, people[os].one_time_password);
       pages.push(member);
-      await member.goto("/agents");
+      await member.goto("/hosts");
       const hosts = member.getByRole("table", { name: "Hosts" }).locator("tbody tr");
       await expect(hosts).toHaveCount(2);
       for (const host of mine) await expect(hosts.filter({ hasText: host })).toHaveCount(1);

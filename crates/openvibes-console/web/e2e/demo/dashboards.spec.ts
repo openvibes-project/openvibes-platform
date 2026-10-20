@@ -63,14 +63,14 @@ test("a new dashboard gets a widget, is saved, and survives a reload", async ({ 
   await page.getByRole("menuitem", { name: "New dashboard" }).click();
   await page.getByRole("button", { name: /^Number/ }).click();
   await page.getByRole("combobox", { name: "Count", exact: true }).click();
-  await page.getByRole("option", { name: "Stale hosts" }).click();
+  await page.getByRole("option", { name: "Offline hosts" }).click();
   await page.getByLabel("Dashboard name").fill("Stale watch");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Stale watch");
   const url = page.url();
   await page.reload();
   await expect(page).toHaveURL(url);
-  await expect(page.locator(".tile", { hasText: "Stale hosts" })).toBeVisible();
+  await expect(page.locator(".tile", { hasText: "Offline hosts" })).toBeVisible();
 });
 
 test("the built-in is duplicated to edit, a tile moves by keyboard, and it becomes home", async ({ page }) => {
@@ -171,7 +171,7 @@ test("a dashboard with a widget type this console does not know still renders", 
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("From a newer console");
   await expect(page.locator(".tile", { hasText: "Unsupported widget" })).toBeVisible();
-  await expect(page.locator(".tile", { hasText: "Stale hosts" })).toBeVisible();
+  await expect(page.locator(".tile", { hasText: "Offline hosts" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Compliance", exact: true })).toBeVisible();
 });
 
@@ -431,9 +431,9 @@ test("a Select wrapped in a label still picks an option and stays closed", async
   });
   const count = panel.getByRole("combobox", { name: "Count", exact: true });
   await count.click();
-  await page.getByRole("option", { name: "Stale hosts" }).click();
+  await page.getByRole("option", { name: "Offline hosts" }).click();
   await expect(page.locator(".sel__popup")).toHaveCount(0);
-  await expect(count).toContainText("Stale hosts");
+  await expect(count).toContainText("Offline hosts");
 });
 
 test("Edit shows a pencil, and new widgets fill the first free spot", async ({ page }) => {

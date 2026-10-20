@@ -1,20 +1,17 @@
 // The host's "Groups and labels" card (approved screen 17): the groups it is in, and its labels.
 import { useState } from "react";
 
-import { ApiError, invalidate, request, useResource } from "../../api/client";
-import type { HostGroup } from "../../api/types";
-import { useSession } from "../../app/session";
-import { Icon } from "../../ui/Icon";
-import { ErrorBox, Loading } from "../../ui/bits";
-import { Section } from "../../ui/panel";
-import { KindBadge } from "../../views/admin/groups/badges";
-import { link } from "../../views/admin/groups/groupApi";
+import { ApiError, invalidate, request } from "../../../api/client";
+import type { HostGroup } from "../../../api/types";
+import { Card } from "../../../ui/detail/DetailPage";
+import { Icon } from "../../../ui/Icon";
+import { KindBadge } from "../../admin/groups/badges";
+import { link } from "../../admin/groups/groupApi";
 
 /** The server's cap on labels per host. */
 export const MAX_LABELS = 32;
 
-type GroupRef = { asset_group_id: string; name: string; kind: HostGroup["kind"] };
-type View = { labels: string[]; groups: GroupRef[] };
+type GroupRef = { id: string; name: string; kind: HostGroup["kind"] };
 
 /** The label to add: trimmed, or undefined when it is empty or already there. */
 export const nextLabel = (labels: readonly string[], input: string): string | undefined => {
@@ -44,12 +41,12 @@ export function LabelsCard({ labels, groups, editable, error, busy = false, onAd
 }) {
   const [draft, setDraft] = useState("");
   return (
-    <Section title="Groups and labels">
+    <Card title="Groups and labels">
       <div className="stack">
         <div className="row row--wrap" aria-label="Groups">
           {groups.length === 0 && <span className="subtle">In no group</span>}
           {groups.map((g) => (
-            <a key={g.asset_group_id} className="chip" {...link(`/settings/host-groups/${encodeURIComponent(g.asset_group_id)}`)}>{g.name} <KindBadge kind={g.kind} /></a>
+            <a key={g.id} className="chip" {...link(`/settings/host-groups/${encodeURIComponent(g.id)}`)}>{g.name} <KindBadge kind={g.kind} /></a>
           ))}
         </div>
         <div className="row row--wrap" aria-label="Labels">
@@ -74,14 +71,13 @@ export function LabelsCard({ labels, groups, editable, error, busy = false, onAd
         {error && <p className="warn-text" role="alert">{error}</p>}
         <p className="subtle">For filtering and finding hosts. Labels never change who can see a host.</p>
       </div>
-    </Section>
+    </Card>
   );
 }
 
-export function HostLabels({ id }: { id: string }) {
-  const { can } = useSession();
-  const path = labelsPath(id);
-  const view = useResource<View>(path);
+/** The card on the host's page, from its summary; a change reloads the
+ * summary and the Hosts list (both under /api/v1/hosts). */
+export function HostLabels({ id, labels, groups, editable }: { id: string; labels: readonly string[]; groups: readonly GroupRef[]; editable: boolean }) {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const change = async ({ method, path: url }: { method: string; path: string }): Promise<boolean> => {
@@ -89,15 +85,13 @@ export function HostLabels({ id }: { id: string }) {
     setBusy(true);
     try {
       await request(method, url);
-      invalidate(path);
+      invalidate("/api/v1/hosts");
       invalidate("/api/v1/host-groups");
       return true;
     } catch (e) { setError(labelError(e)); return false; } finally { setBusy(false); }
   };
-  if (view.error) return <Section title="Groups and labels"><ErrorBox error={view.error} /></Section>;
-  if (!view.data) return <Loading rows={2} />;
   return (
-    <LabelsCard labels={view.data.labels} groups={view.data.groups} editable={can("hosts.label")} error={error} busy={busy}
+    <LabelsCard labels={labels} groups={groups} editable={editable} error={error} busy={busy}
       onAdd={(label) => {
         const refused = refusedLabel(label);
         if (!refused) return change(addRequest(id, label));

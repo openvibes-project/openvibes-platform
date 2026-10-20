@@ -174,7 +174,7 @@ pub static CATALOGUE: [Metric; 21] = [
     ),
     m!(
         "agents.stale",
-        "Stale hosts",
+        "Offline hosts",
         &[AG],
         Expr::HostsWhere("status = 'stale'")
     ),
@@ -188,6 +188,7 @@ pub static CATALOGUE: [Metric; 21] = [
 
 /// Query of `GET /api/v1/metrics/history`.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct HistoryParams {
     /// Catalogue id, for example `vulns.open.critical`.
     metric: Option<String>,
@@ -262,6 +263,7 @@ async fn common_read_scope(
 
 /// Query of `GET /api/v1/metrics/top-hosts`.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct TopHostsParams {
     /// How many hosts, 1 to 10 (default 6).
     limit: Option<String>,

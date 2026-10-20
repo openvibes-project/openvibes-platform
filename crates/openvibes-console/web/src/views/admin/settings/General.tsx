@@ -11,7 +11,7 @@ import { ErrorBox, Loading } from "../../../ui/bits";
 import { ago } from "../../../ui/format";
 import { Switch } from "../../../ui/Switch";
 import { link } from "../groups/groupApi";
-import { Card } from "../people/PersonPage";
+import { Card } from "../../../ui/detail/DetailPage";
 import { createRowEditor } from "./rowEditor";
 
 const SAVED = "Saved · recorded in the audit log";

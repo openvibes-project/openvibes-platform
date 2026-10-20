@@ -15,6 +15,7 @@ import { Ago, Empty, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../..
 import { severityOrder } from "../../ui/format";
 import { filterKey, useSelection } from "../../ui/selection";
 import { matches } from "../../ui/table";
+import { HostChip } from "../lists/HostChip";
 import { isTest } from "../lists/testRules";
 
 /** Alarms fetched per "Load more" (the API's page size). */
@@ -27,12 +28,14 @@ export function lineage(alarm: Pick<AlarmSummary, "exe" | "parent_exe">): string
 }
 
 /** The API query for the list's filters; the text filter stays local. */
-function alarmQuery(params: URLSearchParams): string {
+export function alarmQuery(params: URLSearchParams): string {
   const query = new URLSearchParams();
   if (params.get("state") !== "all") query.set("state", "active");
   const severity = params.get("severity");
   if (severity) query.set("severity", severity);
   if (params.get("suppressed") === "true") query.set("suppressed", "true");
+  const host = params.get("host");
+  if (host) query.set("agent_id", host);
   return `/api/v1/alarms?${query.toString()}`;
 }
 
@@ -76,6 +79,7 @@ export function Alarms() {
   return (
     <div className="view">
       <ViewHeader title="Alarms" count={rows.length} total={loaded.length} refresh="/api/v1/alarms" placeholder="Filter by message, rule, host or program…"
+        filters={<HostChip id={params.get("host")} />}
         chips={[
           { label: "Include resolved", param: "state", value: "all" },
           { label: "Include suppressed", param: "suppressed", value: "true" },

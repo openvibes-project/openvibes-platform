@@ -11,16 +11,21 @@ import { highest } from "../../panels/triage/bulk";
 import { DataTable } from "../../ui/DataTable";
 import { filterKey, useSelection } from "../../ui/selection";
 import { severityOrder } from "../../ui/format";
-import { activeCount, selectFindings } from "../lists/rows";
+import { activeCount, complianceGroupsPath, selectFindings } from "../lists/rows";
 import { ViewHeader } from "../../ui/ViewHeader";
 import { filterChips } from "../lists/filters";
+import { HostChip } from "../lists/HostChip";
 import { isTest } from "../lists/testRules";
 
 export function Findings() {
   const { params, panels } = useLocation();
-  const groups = useAllPages<FindingGroup>("/api/v1/compliance/groups");
+  // Filtered to one host (plan ruling 9): its findings by rule, with its own triage.
+  const host = params.get("host");
+  const groups = useAllPages<FindingGroup>(complianceGroupsPath(params));
   const onlyOpen = params.get("state") !== "all";
   const all = useMemo(() => groups.data ?? [], [groups.data]);
+  // Filtered to one host, an action touches that host only.
+  const on = host ? { agent_id: host } : {};
   const rows = useMemo(() => selectFindings(all, params), [all, params]);
   const [selected, setSelected] = useSelection(filterKey(params));
   const chosen = () => rows.filter((g) => selected.has(`${g.rule_set_id}/${g.rule_id}`));
@@ -35,6 +40,7 @@ export function Findings() {
   return (
     <div className="view">
       <ViewHeader title="Compliance" count={rows.length} total={all.length} refresh="/api/v1/compliance" placeholder="Filter by message, rule or rule set…"
+        filters={<HostChip id={host} />}
         chips={[
           ...filterChips("/compliance").map((c) => ({ ...c, count: c.param === "state" ? resolved : bySeverity(c.value) })),
           ...sets.map((set) => ({ label: set, param: "set", value: set })),
@@ -63,9 +69,9 @@ export function Findings() {
           ones already closed alone. */}
       <BulkBar kind="compliance" noun={selected.size === 1 ? "finding" : "findings"} count={selected.size}
         onClear={() => setSelected(new Set())}
-        items={() => chosen().map((g) => ({ rule_set_id: g.rule_set_id, rule_id: g.rule_id }))}
+        items={() => chosen().map((g) => ({ rule_set_id: g.rule_set_id, rule_id: g.rule_id, ...on }))}
         closed={chosen().filter((g) => g.endpoint_count > g.triage_counts.open).length}
-        reopenItems={() => chosen().filter((g) => g.endpoint_count > g.triage_counts.open).map((g) => ({ rule_set_id: g.rule_set_id, rule_id: g.rule_id }))}
+        reopenItems={() => chosen().filter((g) => g.endpoint_count > g.triage_counts.open).map((g) => ({ rule_set_id: g.rule_set_id, rule_id: g.rule_id, ...on }))}
         newCase={() => { const c = chosen(); return { title: `${c.length} findings: ${c[0]?.latest_message ?? ""}`, severity: highest(c.map((g) => g.severity)) }; }} />
     </div>
   );

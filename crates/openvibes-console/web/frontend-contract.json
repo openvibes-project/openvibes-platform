@@ -10,6 +10,7 @@
     "/coverage",
     "/vulnerabilities",
     "/agents",
+    "/hosts",
     "/software",
     "/ports",
     "/services",
@@ -20,7 +21,8 @@
     "/dashboards/{dashboard_id}",
     "/settings/roles/{role_id}",
     "/settings/people/{user_id}",
-    "/settings/host-groups/{group_id}"
+    "/settings/host-groups/{group_id}",
+    "/hosts/{agent_id}"
   ],
   "publicAssets": [
     {

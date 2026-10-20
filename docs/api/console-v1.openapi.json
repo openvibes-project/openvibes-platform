@@ -487,38 +487,29 @@
           },
           {
             "name": "q",
-            "in": "path",
+            "in": "query",
             "description": "Case-insensitive substring of the name (at most 128 bytes).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -1102,86 +1093,65 @@
         "parameters": [
           {
             "name": "agent_id",
-            "in": "path",
+            "in": "query",
             "description": "Exact agent.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "rule_id",
-            "in": "path",
+            "in": "query",
             "description": "Exact rule.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "severity",
-            "in": "path",
+            "in": "query",
             "description": "Exact severity.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "state",
-            "in": "path",
+            "in": "query",
             "description": "Exact triage state, or `active` (open).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "suppressed",
-            "in": "path",
+            "in": "query",
             "description": "Include alarms closed by a suppression (default false).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": "boolean"
             }
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -2169,74 +2139,56 @@
         "parameters": [
           {
             "name": "status",
-            "in": "path",
+            "in": "query",
             "description": "`open`, `investigating`, `closed` or `all`; open and investigating\nwhen absent.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "severity",
-            "in": "path",
+            "in": "query",
             "description": "Exact severity.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "assignee",
-            "in": "path",
+            "in": "query",
             "description": "A user id, `me`, or `none` for unassigned.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "q",
-            "in": "path",
+            "in": "query",
             "description": "Text in the title, or a case number such as `C-104`.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -2411,7 +2363,7 @@
         "parameters": [
           {
             "name": "kind",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -2531,7 +2483,7 @@
         "parameters": [
           {
             "name": "kind",
-            "in": "path",
+            "in": "query",
             "description": "`alarm`, `finding`, `vulnerability`, `host` or `software`.",
             "required": true,
             "schema": {
@@ -2540,7 +2492,7 @@
           },
           {
             "name": "ref",
-            "in": "path",
+            "in": "query",
             "description": "The object's id (see `CaseItemView.ref`).",
             "required": true,
             "schema": {
@@ -3294,6 +3246,15 @@
           {
             "name": "since",
             "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "description": "One host's findings only",
             "required": false,
             "schema": {
               "type": "string"
@@ -5315,6 +5276,168 @@
         }
       }
     },
+    "/api/v1/hosts": {
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "The Hosts list.",
+        "operationId": "list_hosts",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Host name (contains), agent id or address prefix, or CIDR range.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "online, offline, revoked or imported.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "os",
+            "in": "query",
+            "description": "linux or windows.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "description": "A host group id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "description": "A label.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "problems",
+            "in": "query",
+            "description": "critical, alarms or none.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "description": "older or latest.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "host, heartbeat, version or problems.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc or desc.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of hosts in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/hosts/{agent_id}/labels": {
       "get": {
         "tags": [
@@ -5488,6 +5611,198 @@
         }
       }
     },
+    "/api/v1/hosts/{agent_id}/summary": {
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "The host page's summary.",
+        "operationId": "host_summary",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "description": "Agent id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The host page above the fold",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSummaryView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "host_not_found: missing or outside reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/list-columns/{page}": {
+      "get": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "The columns the person hid on a page.",
+        "operationId": "get_columns",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hidden columns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListColumnsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "list_page_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Sets the columns the person hides on a page.",
+        "operationId": "put_columns",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListColumnsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListColumnsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "list_page_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_columns",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/home": {
       "get": {
         "tags": [
@@ -5615,26 +5930,20 @@
         "parameters": [
           {
             "name": "metric",
-            "in": "path",
+            "in": "query",
             "description": "Catalogue id, for example `vulns.open.critical`.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "days",
-            "in": "path",
+            "in": "query",
             "description": "Window in days: 7, 30, 90 or 365 (default 30).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -5701,14 +6010,11 @@
         "parameters": [
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "How many hosts, 1 to 10 (default 6).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -5809,14 +6115,11 @@
         "parameters": [
           {
             "name": "exposed",
-            "in": "path",
+            "in": "query",
             "description": "Only ports exposed on at least one host.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": "boolean"
             }
           }
         ],
@@ -5895,26 +6198,20 @@
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -7246,6 +7543,171 @@
         }
       }
     },
+    "/api/v1/saved-views": {
+      "get": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "The person's saved views on a page.",
+        "operationId": "list_views",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "The list page, such as `hosts`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Views by name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "list_page_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Saves a view.",
+        "operationId": "create_view",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveViewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "list_page_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "view_name_taken or too_many_views",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_saved_view",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/saved-views/{id}": {
+      "delete": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Deletes one of the person's own views.",
+        "operationId": "delete_view",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "saved_view_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/service-accounts": {
       "get": {
         "tags": [
@@ -7683,26 +8145,20 @@
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -7997,62 +8453,47 @@
         "parameters": [
           {
             "name": "q",
-            "in": "path",
+            "in": "query",
             "description": "Case-insensitive substring of the name (at most 128 bytes).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "fixable",
-            "in": "path",
+            "in": "query",
             "description": "Only packages with an open vulnerability with a fix on at least\none visible host.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": "boolean"
             }
           },
           {
             "name": "multiple_versions",
-            "in": "path",
+            "in": "query",
             "description": "Only packages in use in more than one version.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": "boolean"
             }
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -8127,26 +8568,20 @@
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -8215,7 +8650,7 @@
         "parameters": [
           {
             "name": "kind",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -8223,46 +8658,34 @@
           },
           {
             "name": "id",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "rule_set_id",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "rule_id",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "advisory_id",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -11670,6 +12093,25 @@
         },
         "additionalProperties": false
       },
+      "CountView": {
+        "type": "object",
+        "description": "A filter value and how many hosts have it.",
+        "required": [
+          "value",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts matching with the other filters applied."
+          },
+          "value": {
+            "type": "string",
+            "description": "The URL value."
+          }
+        }
+      },
       "CoverageRule": {
         "type": "object",
         "description": "One rule and what it covers.",
@@ -13124,6 +13566,35 @@
         },
         "additionalProperties": false
       },
+      "GroupCountView": {
+        "type": "object",
+        "description": "A group filter value.",
+        "required": [
+          "value",
+          "name",
+          "kind",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in the group in the viewer's reach."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind",
+            "description": "How the group gets its hosts."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group name."
+          },
+          "value": {
+            "type": "string",
+            "description": "Group id."
+          }
+        }
+      },
       "GroupHostView": {
         "type": "object",
         "description": "A member host on the group page.",
@@ -13304,6 +13775,207 @@
           }
         },
         "additionalProperties": false
+      },
+      "HostActionsView": {
+        "type": "object",
+        "description": "What the caller may do on this host.",
+        "required": [
+          "label",
+          "revoke",
+          "export",
+          "add_to_case",
+          "ask"
+        ],
+        "properties": {
+          "add_to_case": {
+            "type": "boolean",
+            "description": "Add to a case (`cases.write`)."
+          },
+          "ask": {
+            "type": "boolean",
+            "description": "Ask the assistant (`assistant.use`)."
+          },
+          "export": {
+            "type": "boolean",
+            "description": "Export (`hosts.export`)."
+          },
+          "label": {
+            "type": "boolean",
+            "description": "Add and remove labels (`hosts.label`, not on a revoked or imported host)."
+          },
+          "revoke": {
+            "type": "boolean",
+            "description": "Revoke (`hosts.revoke`, not on a revoked or imported host)."
+          }
+        }
+      },
+      "HostAgentView": {
+        "type": "object",
+        "description": "The host's agent.",
+        "properties": {
+          "older": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Older than the latest release; absent when unknown."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent version."
+          }
+        }
+      },
+      "HostCountsView": {
+        "type": "object",
+        "description": "Per-value counts for every filter.",
+        "required": [
+          "status",
+          "os",
+          "group",
+          "label",
+          "problems",
+          "agent"
+        ],
+        "properties": {
+          "agent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By agent age."
+          },
+          "group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCountView"
+            },
+            "description": "By group."
+          },
+          "label": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By label."
+          },
+          "os": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By OS family."
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By problems."
+          },
+          "status": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By status."
+          }
+        }
+      },
+      "HostFactsView": {
+        "type": "object",
+        "description": "The header and Details facts.",
+        "required": [
+          "id",
+          "status",
+          "os",
+          "enrolled_at",
+          "capabilities"
+        ],
+        "properties": {
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Address of the last connection."
+          },
+          "agent_older": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Older than the latest agent release; absent when unknown."
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Reported agent capabilities."
+          },
+          "enrolled_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name."
+          },
+          "id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "inventory_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last inventory, RFC 3339."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last heartbeat, RFC 3339."
+          },
+          "os": {
+            "$ref": "#/components/schemas/HostOsView",
+            "description": "Operating system."
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339."
+          },
+          "running_kernel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Running kernel."
+          },
+          "scanner_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent version."
+          },
+          "status": {
+            "type": "string",
+            "description": "`online`, `offline`, `revoked` or `imported`."
+          }
+        }
       },
       "HostGroupDetail": {
         "allOf": [
@@ -13527,6 +14199,38 @@
           }
         }
       },
+      "HostInventoryView": {
+        "type": "object",
+        "description": "Software, ports and services counts.",
+        "required": [
+          "packages",
+          "listening_ports",
+          "exposed_ports",
+          "services"
+        ],
+        "properties": {
+          "exposed_ports": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Listening ports reachable from outside the host."
+          },
+          "listening_ports": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Listening ports."
+          },
+          "packages": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Installed packages."
+          },
+          "services": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Running services."
+          }
+        }
+      },
       "HostLabelsView": {
         "type": "object",
         "description": "A host's labels and the groups it is in.",
@@ -13548,6 +14252,107 @@
               "type": "string"
             },
             "description": "In byte order."
+          }
+        }
+      },
+      "HostListGroupView": {
+        "type": "object",
+        "description": "A group a host belongs to.",
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Group id."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind",
+            "description": "How the group gets its hosts."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group name."
+          }
+        }
+      },
+      "HostListView": {
+        "type": "object",
+        "description": "One page of the Hosts list.",
+        "required": [
+          "items",
+          "total",
+          "counts",
+          "summary",
+          "generated_at"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/HostCountsView",
+            "description": "Per-value counts."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostRowView"
+            },
+            "description": "The page."
+          },
+          "latest_agent_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest agent release, when known."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/HostSummaryLineView",
+            "description": "Summary over the matching hosts."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts matching every filter."
+          }
+        }
+      },
+      "HostOsView": {
+        "type": "object",
+        "description": "A host's operating system.",
+        "properties": {
+          "distribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name, such as `Debian 12`."
+          },
+          "family": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`linux` or `windows`."
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OS id, such as `debian`."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OS version."
           }
         }
       },
@@ -13615,6 +14420,141 @@
           "version": {
             "type": "string",
             "description": "Version."
+          }
+        }
+      },
+      "HostProblemsView": {
+        "type": "object",
+        "description": "Problem counts; absent where the viewer may not read that kind for the host.",
+        "properties": {
+          "critical": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Critical vulnerabilities."
+          },
+          "failing": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Failing compliance checks."
+          },
+          "open_alarms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Open agent alarms."
+          }
+        }
+      },
+      "HostProtectionView": {
+        "type": "object",
+        "description": "Protection: threat alarms and the latest test.",
+        "required": [
+          "last_test"
+        ],
+        "properties": {
+          "last_test": {
+            "$ref": "#/components/schemas/LastTest",
+            "description": "The latest test alarm and finding."
+          },
+          "threat_alarms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentAlarmsView",
+                "description": "Threat alarms on or off; absent before the first health report."
+              }
+            ]
+          }
+        }
+      },
+      "HostRowView": {
+        "type": "object",
+        "description": "One row of the Hosts list.",
+        "required": [
+          "id",
+          "os",
+          "status",
+          "groups",
+          "group_count",
+          "labels",
+          "problems",
+          "agent",
+          "alarms_off"
+        ],
+        "properties": {
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Address of the last connection."
+          },
+          "agent": {
+            "$ref": "#/components/schemas/HostAgentView",
+            "description": "Agent."
+          },
+          "alarms_off": {
+            "type": "boolean",
+            "description": "Online with threat alarms off by a fault (not by choice): the list\nwarns \"Alarms off\"."
+          },
+          "group_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All its groups."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostListGroupView"
+            },
+            "description": "The first two groups by name."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name."
+          },
+          "id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last heartbeat, RFC 3339."
+          },
+          "os": {
+            "$ref": "#/components/schemas/HostOsView",
+            "description": "Operating system."
+          },
+          "problems": {
+            "$ref": "#/components/schemas/HostProblemsView",
+            "description": "Problem counts."
+          },
+          "status": {
+            "type": "string",
+            "description": "`online`, `offline`, `revoked` or `imported`."
           }
         }
       },
@@ -13740,6 +14680,166 @@
           }
         }
       },
+      "HostSummaryLineView": {
+        "type": "object",
+        "description": "The line above the list.",
+        "required": [
+          "online",
+          "older_agent",
+          "critical"
+        ],
+        "properties": {
+          "critical": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts with a critical vulnerability."
+          },
+          "older_agent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts with an older agent."
+          },
+          "online": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Online hosts."
+          }
+        }
+      },
+      "HostSummaryView": {
+        "type": "object",
+        "description": "Everything above the fold on a host's page.",
+        "required": [
+          "host",
+          "tiles",
+          "protection",
+          "groups",
+          "labels",
+          "certificates",
+          "certificate_count",
+          "inventory",
+          "can"
+        ],
+        "properties": {
+          "can": {
+            "$ref": "#/components/schemas/HostActionsView",
+            "description": "Allowed actions."
+          },
+          "certificate_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All its certificates."
+          },
+          "certificates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CertificateView"
+            },
+            "description": "The five newest certificates."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostListGroupView"
+            },
+            "description": "Groups holding the host, by name."
+          },
+          "host": {
+            "$ref": "#/components/schemas/HostFactsView",
+            "description": "Header and Details facts."
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/HostInventoryView",
+            "description": "Counts behind the software, ports and services sub-pages."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels."
+          },
+          "protection": {
+            "$ref": "#/components/schemas/HostProtectionView",
+            "description": "Protection."
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/HostTilesView",
+            "description": "Tiles."
+          },
+          "top_alarms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TopAlarmsView",
+                "description": "Top three open alarms (`alarms.read`)."
+              }
+            ]
+          },
+          "top_failing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TopFailingListView",
+                "description": "Top three failing checks (`compliance.read`)."
+              }
+            ]
+          },
+          "top_vulnerabilities": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TopVulnerabilitiesView",
+                "description": "Top three open vulnerabilities (`vulnerabilities.read`)."
+              }
+            ]
+          }
+        }
+      },
+      "HostTilesView": {
+        "type": "object",
+        "description": "The four tiles; each absent without its permission on this host.",
+        "properties": {
+          "compliance_failing": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Failing compliance checks (`compliance.read`)."
+          },
+          "open_alarms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Open agent alarms (`alarms.read`)."
+          },
+          "software": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Installed packages (`hosts.read`)."
+          },
+          "vulnerabilities": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Open vulnerabilities (`vulnerabilities.read`)."
+          }
+        }
+      },
       "InputView": {
         "type": "object",
         "description": "A recorded input, a scalar or a summarized list.",
@@ -13827,6 +14927,38 @@
               "null"
             ],
             "description": "Latest test finding observation (RFC 3339)."
+          }
+        }
+      },
+      "ListColumnsRequest": {
+        "type": "object",
+        "description": "The columns to hide on a page.",
+        "required": [
+          "hidden"
+        ],
+        "properties": {
+          "hidden": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Column keys, at most 32, none twice; never `host`."
+          }
+        }
+      },
+      "ListColumnsView": {
+        "type": "object",
+        "description": "The columns a person hid on a page.",
+        "required": [
+          "hidden"
+        ],
+        "properties": {
+          "hidden": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Hidden column keys."
           }
         }
       },
@@ -15327,6 +16459,78 @@
         },
         "additionalProperties": false
       },
+      "SaveViewRequest": {
+        "type": "object",
+        "description": "A view to save.",
+        "required": [
+          "page",
+          "name",
+          "query"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1–60 characters, unique per person and page regardless of case."
+          },
+          "page": {
+            "type": "string",
+            "description": "The list page, such as `hosts`."
+          },
+          "query": {
+            "type": "string",
+            "description": "The URL query string, at most 1000 characters."
+          }
+        }
+      },
+      "SavedViewList": {
+        "type": "object",
+        "description": "The person's views on a page, by name.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SavedViewView"
+            },
+            "description": "The views."
+          }
+        }
+      },
+      "SavedViewView": {
+        "type": "object",
+        "description": "One saved view.",
+        "required": [
+          "id",
+          "page",
+          "name",
+          "query",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339 creation time."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable UUID."
+          },
+          "name": {
+            "type": "string",
+            "description": "1–60 characters."
+          },
+          "page": {
+            "type": "string",
+            "description": "The list page."
+          },
+          "query": {
+            "type": "string",
+            "description": "The URL query string (at most 1000 characters)."
+          }
+        }
+      },
       "ServiceAccountPage": {
         "type": "object",
         "description": "Bounded service-account inventory.",
@@ -16356,6 +17560,112 @@
           }
         }
       },
+      "TopAlarmView": {
+        "type": "object",
+        "description": "An open alarm in the top three.",
+        "required": [
+          "id",
+          "rule_id",
+          "message",
+          "severity",
+          "last_seen"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Alarm id."
+          },
+          "last_seen": {
+            "type": "string",
+            "description": "Latest match, RFC 3339."
+          },
+          "message": {
+            "type": "string",
+            "description": "Message."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity."
+          }
+        }
+      },
+      "TopAlarmsView": {
+        "type": "object",
+        "description": "Open alarms, most severe then newest first.",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopAlarmView"
+            },
+            "description": "Up to three."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All of them."
+          }
+        }
+      },
+      "TopFailingListView": {
+        "type": "object",
+        "description": "Failing checks, most severe then newest first.",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopFailingView"
+            },
+            "description": "Up to three."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All of them."
+          }
+        }
+      },
+      "TopFailingView": {
+        "type": "object",
+        "description": "A failing check in the top three.",
+        "required": [
+          "rule_set_id",
+          "rule_id",
+          "severity",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity."
+          }
+        }
+      },
       "TopHostItem": {
         "type": "object",
         "description": "One host in the ranking.",
@@ -16403,6 +17713,61 @@
               "$ref": "#/components/schemas/TopHostItem"
             },
             "description": "Most exposed first."
+          }
+        }
+      },
+      "TopVulnerabilitiesView": {
+        "type": "object",
+        "description": "Open vulnerabilities, in the Vulnerabilities list's priority order.",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopVulnerabilityView"
+            },
+            "description": "Up to three."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All of them."
+          }
+        }
+      },
+      "TopVulnerabilityView": {
+        "type": "object",
+        "description": "An open vulnerability in the top three.",
+        "required": [
+          "advisory",
+          "severity",
+          "kev",
+          "exploited",
+          "title"
+        ],
+        "properties": {
+          "advisory": {
+            "type": "string",
+            "description": "Advisory id."
+          },
+          "exploited": {
+            "type": "boolean",
+            "description": "Known to be exploited (KEV or EUVD), as the Vulnerabilities list flags it."
+          },
+          "kev": {
+            "type": "boolean",
+            "description": "On the known-exploited list."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity."
+          },
+          "title": {
+            "type": "string",
+            "description": "The advisory's title."
           }
         }
       },
@@ -17246,6 +18611,10 @@
       "description": "Platform versions and newer-release check"
     },
     {
+      "name": "hosts",
+      "description": "The Hosts list"
+    },
+    {
       "name": "agents",
       "description": "Scope-filtered agent reads"
     },
@@ -17284,6 +18653,10 @@
     {
       "name": "audit",
       "description": "Audit policy and event access"
+    },
+    {
+      "name": "lists",
+      "description": "Saved views and hidden columns of the list pages, per person"
     }
   ]
 }

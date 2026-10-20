@@ -63,7 +63,9 @@ pub enum GroupWrite {
     Invalid(String),
 }
 
-fn is_cidr(value: &str) -> bool {
+/// An IP address, optionally with a prefix of 1–3 ASCII digits within its
+/// family's length.
+pub(crate) fn is_cidr(value: &str) -> bool {
     let (address, prefix) = match value.split_once('/') {
         Some((address, prefix)) => (address, Some(prefix)),
         None => (value, None),

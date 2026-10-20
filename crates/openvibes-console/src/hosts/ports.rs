@@ -99,6 +99,7 @@ pub struct UnitView {
 
 /// Filter for the fleet's ports.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct PortParams {
     /// Only ports exposed on at least one host.
@@ -303,6 +304,7 @@ pub struct UnitDetail {
 
 /// Paging for the hosts of one port or unit.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HostsParams {
     /// Opaque continuation cursor.

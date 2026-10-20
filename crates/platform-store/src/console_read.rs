@@ -342,6 +342,8 @@ pub struct FindingGroupQuery {
     pub after: Option<FindingGroupCursor>,
     /// Page size.
     pub limit: PageLimit,
+    /// One host's findings only (the host page's `/compliance?host=`).
+    pub agent_id: Option<String>,
 }
 
 /// One rule group and its in-scope endpoint rollup.
@@ -914,7 +916,7 @@ pub async fn finding_groups_in_scope(
                     SELECT c.*, a.hostname, COALESCE(t.state, 'open') AS triage_state
                     FROM current_findings c JOIN agents a USING (agent_id)
                     LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
-                    WHERE {visible_agent}
+                    WHERE {visible_agent} AND ($9::text IS NULL OR c.agent_id = $9)
                  ), grouped AS (
                     SELECT rule_set_id, rule_id,
                            count(*) FILTER (WHERE last_observed_at >= $1)::bigint AS endpoint_count,
@@ -958,6 +960,7 @@ pub async fn finding_groups_in_scope(
                 &(query.limit.value() + 1),
                 &global,
                 &groups,
+                &query.agent_id,
             ],
         )
         .await?;

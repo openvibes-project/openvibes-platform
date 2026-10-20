@@ -1,6 +1,6 @@
 // What the group page, the new-group page and the delete dialog share: paths,
 // saving, who may write, and the debounced preview.
-import { type MouseEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { invalidate, request } from "../../../api/client";
 import type { CreateHostGroup, GroupHost, HostGroup, HostGroupPreview, PreviewHostGroup, UpdateHostGroup } from "../../../api/types";
@@ -23,9 +23,7 @@ export const refreshGroups = () => { invalidate("/api/v1/host-groups"); invalida
 export const saveGroup = (groupId: string, body: CreateHostGroup | UpdateHostGroup): Promise<HostGroup> =>
   groupId === "new" ? request<HostGroup>("POST", "/api/v1/host-groups", body) : request<HostGroup>("PATCH", groupPath(groupId), body);
 
-export function link(view: string, params?: Record<string, string>) {
-  return { href: nav.href(view, params), onClick: (e: MouseEvent) => { e.preventDefault(); nav.view(view, params); } };
-}
+export { viewLink as link } from "../../../app/nav";
 
 export const picks = (hosts: readonly GroupHost[]): Picked[] => hosts.map((h) => ({ agent_id: h.agent_id, hostname: h.hostname ?? h.agent_id }));
 

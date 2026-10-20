@@ -19,6 +19,8 @@ Hosts in the console: the agent list, summary, detail and certificates, revoking
 | `group_checks.rs` | The host-group handlers' rule and pick checks, the reaching-role and preview-people share checks, and the store's outcomes as answers. |
 | `groups_types.rs` | Request and response types of host groups and labels. |
 | `group_words.rs` | `membership_sentence`: a group's membership in one plain sentence, shared with rule-set assignment. |
+| `list.rs`, `list_types.rs` | `GET /v1/hosts`: the Hosts list with filters, per-value counts and a summary line, and its answer types. |
+| `summary.rs`, `summary_types.rs` | `GET /v1/hosts/{agent_id}/summary`: the host page above the fold, each section only with its permission on this host, and its answer types. |
 | `labels.rs` | Host labels: read, add and remove (spec §5.2). |
 | `types.rs` | Request and response types of hosts, certificates and enrollment tokens. |
 

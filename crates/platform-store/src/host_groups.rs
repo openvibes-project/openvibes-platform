@@ -131,10 +131,12 @@ pub struct AuditLine {
     pub detail: serde_json::Value,
 }
 
-/// Per-host open agent alarms and critical vulnerabilities, for an `agents a` row.
+/// Per-host open agent alarms and critical vulnerabilities, for an `agents a`
+/// row; critical as the Hosts list and the host page count it
+/// (`host_listed_critical`, migration 58).
 const PROBLEMS: &str = "(SELECT count(*) FROM alarms al
                          WHERE al.agent_id = a.agent_id AND al.state = 'open' AND al.source = 'agent')::bigint,
-                        COALESCE((SELECT v.critical FROM host_vulnerability_counts v
+                        COALESCE((SELECT v.critical FROM host_listed_critical v
                                   WHERE v.agent_id = a.agent_id), 0)::bigint";
 
 /// Summaries; `$1` global, `$2` scope groups, `$3` online threshold, `$4`

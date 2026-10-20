@@ -230,6 +230,7 @@ pub struct SetCaseItemOutcomeRequest {
 
 /// Filters and paging for the case list.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct CaseListParams {
     /// `open`, `investigating`, `closed` or `all`; open and investigating
@@ -249,6 +250,7 @@ pub(crate) struct CaseListParams {
 
 /// Which cases hold an item.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ForItemParams {
     /// `alarm`, `finding`, `vulnerability`, `host` or `software`.
@@ -279,6 +281,7 @@ pub struct ActiveCaseItem {
 
 /// `kind`: `alarm`, `compliance_finding` or `vulnerability`.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ActiveItemsParams {
     pub(super) kind: String,

@@ -76,7 +76,7 @@ impl From<&Segment> for AssistantSegment {
                     Citation::Agent(id) => (
                         "agent",
                         id.clone(),
-                        format!("/agents?agent={}", encode_component(id)),
+                        format!("/hosts/{}", encode_component(id)),
                     ),
                     Citation::Finding { rule_set, rule } => {
                         let id = format!("{rule_set}/{rule}");
@@ -107,4 +107,23 @@ pub(crate) fn encode_component(value: &str) -> String {
         }
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_citations_link_to_the_host_page() {
+        let segment = Segment::Cite(platform_assistant::Citation::Agent("web 01/a".into()));
+        match AssistantSegment::from(&segment) {
+            AssistantSegment::Citation {
+                target_kind, path, ..
+            } => {
+                assert_eq!(target_kind, "agent");
+                assert_eq!(path, "/hosts/web%2001%2Fa");
+            }
+            AssistantSegment::Text { .. } => panic!("a citation"),
+        }
+    }
 }
