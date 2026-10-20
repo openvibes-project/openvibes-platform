@@ -121,6 +121,20 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             remove_staged(path);
         }
     }
+    // The root helper downloads the model inside this call; the operator's
+    // TUI reads its progress from a file that goes when the call ends.
+    let _progress = if installed(ctx) {
+        None
+    } else {
+        crate::model_fetch::pin_or_embedded().ok().map(|pin| {
+            crate::model_progress::Watch::start(
+                ctx.root,
+                ctx.path("/var/lib/openvibes-llm/models"),
+                pin.file,
+                crate::model_progress::MODEL_BYTES,
+            )
+        })
+    };
     // The command's own text is internal: only what it said is shown.
     let out = ctx
         .ok(Admin, &["helper", "assistant-setup"])

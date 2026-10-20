@@ -431,7 +431,12 @@ impl PlanArgs {
         let assistant = components.contains(&Component::Assistant);
         // Names are stored lowercase (DNS ignores case; approved.md 52).
         let hostname = self.hostname.to_ascii_lowercase();
-        let sans: Vec<String> = self.san.iter().map(|s| s.to_ascii_lowercase()).collect();
+        let mut sans: Vec<String> = Vec::new();
+        for san in self.san.iter().map(|s| s.to_ascii_lowercase()) {
+            if !sans.contains(&san) {
+                sans.push(san);
+            }
+        }
         check_name(&hostname)?;
         let (console_port, ingest_port, distribution_port) = (
             self.console_port.unwrap_or(super::ports::CONSOLE_DEFAULT),

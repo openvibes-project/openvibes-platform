@@ -2,6 +2,8 @@
 //! model's as a note), then the result or what failed. Split from
 //! `parts.rs` (size).
 
+use std::path::Path;
+
 use platform_host::{Host, StepState};
 use ratatui::{Frame, text::Line, widgets::Paragraph};
 
@@ -14,6 +16,23 @@ use crate::tui::{
     run::{Run, label_states},
     ui::{bar::Bar, frame, logo::Header, steps},
 };
+
+/// `(done, total)` bytes from the root helper's progress file (total 0 when
+/// unknown); `None` when it is absent or unreadable.
+pub(super) fn model_progress(root: &Path) -> Option<(u64, u64)> {
+    let text = std::fs::read_to_string(root.join("run/openvibes-admin/model-progress")).ok()?;
+    let mut numbers = text.split_whitespace().map(|n| n.parse::<u64>().ok());
+    Some((numbers.next()??, numbers.next()??))
+}
+
+fn progress_text(progress: Option<(u64, u64)>) -> String {
+    let gb = |n: u64| format!("{:.1}", n as f64 / 1e9);
+    match progress {
+        Some((done, 0)) => format!("{} GB downloaded", gb(done)),
+        Some((done, total)) => format!("{} of {} GB", gb(done), gb(total)),
+        None => "about 2.7 GB".into(),
+    }
+}
 
 /// The result line (without the time) for these changes: "Assistant
 /// installed · ask it in the console".
@@ -63,12 +82,12 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run:
             other => other,
         })
         .collect();
-    // No progress is read while it downloads.
+    let progress = model_progress(&app.root);
     let titles: Vec<String> = titles
         .into_iter()
         .map(|t| {
             if t == MODEL && running.is_some_and(|i| run.work.labels[i].0 == MODEL) {
-                format!("{t}  about 2.7 GB")
+                format!("{t}  {}", progress_text(progress))
             } else {
                 t
             }

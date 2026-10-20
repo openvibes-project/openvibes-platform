@@ -257,6 +257,14 @@ fn names_are_stored_lowercase() {
 }
 
 #[test]
+fn names_differing_only_in_case_are_stored_once() {
+    let plan = args(&[Component::Ingest], "a.lan", &["Foo.lan", "foo.lan"])
+        .plan(None)
+        .unwrap();
+    assert_eq!(plan.sans, ["foo.lan"]);
+}
+
+#[test]
 fn a_plan_without_its_port_keys_is_from_an_older_version() {
     let old = "components = [\"ingest\"]\nhostname = \"a\"\nca = \"quick\"\n";
     assert!(lacks_ports(old));

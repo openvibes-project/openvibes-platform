@@ -406,6 +406,18 @@ fn the_model_row_says_the_size_while_it_downloads() {
     let text = screen(&app);
     assert!(text.contains("Download the model  about 2.7 GB"), "{text}");
     assert!(text.contains("Step 3 of 4: Download the model"), "{text}");
+    let file = app.root.join("run/openvibes-admin/model-progress");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    for (seed, want) in [
+        (
+            "1200000000 2700000000\n",
+            "Download the model  1.2 of 2.7 GB",
+        ),
+        ("1200000000 0\n", "Download the model  1.2 GB downloaded"),
+    ] {
+        std::fs::write(&file, seed).unwrap();
+        assert!(screen(&app).contains(want), "{want}");
+    }
 }
 
 #[test]
