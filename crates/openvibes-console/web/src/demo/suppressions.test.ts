@@ -54,7 +54,8 @@ describe("demo suppressions", () => {
     expect(await rows(analyst)).toEqual([]);
     const again = (await ask(analyst)).body;
     const waiting = (await call<{ items: AlarmSuppression[] }>(as("admin"), "GET", `${LIST}?alarm_id=${PILOT_ALARM}&state=waiting`)).body.items;
-    expect(waiting).toMatchObject([{ id: again.id, can_decide: true, would_close: 1 }]);
+    // It would close the alarm and its two siblings on the same host (same rule and program).
+    expect(waiting).toMatchObject([{ id: again.id, can_decide: true, would_close: 3 }]);
     const admin = as("admin");
     const approved = await call<AlarmSuppression>(admin, "POST", `${LIST}/${again.id}/approve`);
     expect(approved.body).toMatchObject({ status: "active", decided_by: "Alex Admin" });
@@ -125,7 +126,7 @@ describe("demo suppressions", () => {
 
   it("bulk Suppress closes every selected alarm of one rule and program, none while approval is on", async () => {
     type Row = { id: string; rule_set_id: string; rule_id: string; exe: string | null; state: string };
-    // The demo's two nginx health-check alarms share rule and program.
+    // The demo's four nginx shell alarms (two hosts) share rule and program.
     const pick = async () => {
       const items = (await call<{ items: Row[] }>(as("admin"), "GET", "/api/v1/alarms?limit=100")).body.items;
       return items.filter((a) => a.rule_id === "web-server-spawns-shell" && a.exe === "/usr/bin/sh").map((a) => a.id);
@@ -134,14 +135,14 @@ describe("demo suppressions", () => {
       (await call<{ changed: number; skipped: { reason: string }[] }>(as("admin"), "POST", "/api/v1/alarms/bulk", { action: "suppress", note: "noise", items: ids.map((id) => ({ id })) })).body;
     await approval(true);
     const ids = await pick();
-    expect(ids).toHaveLength(2);
+    expect(ids).toHaveLength(4);
     const waiting = await bulk(ids);
     expect(waiting.changed).toBe(0);
-    expect(waiting.skipped.map((s) => s.reason)).toEqual(Array(2).fill("Suppression requested, waiting for approval"));
+    expect(waiting.skipped.map((s) => s.reason)).toEqual(Array(4).fill("Suppression requested, waiting for approval"));
     for (const id of ids) expect((await alarm(as("admin"), id)).state).toBe("open");
     await approval(false);
     const done = await bulk(ids);
-    expect(done).toMatchObject({ changed: 2, skipped: [] });
+    expect(done).toMatchObject({ changed: 4, skipped: [] });
     for (const id of ids) expect((await alarm(as("admin"), id)).state).toBe("false_positive");
   });
 

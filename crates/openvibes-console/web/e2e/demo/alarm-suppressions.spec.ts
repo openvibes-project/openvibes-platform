@@ -9,8 +9,10 @@ const persona = async (page: Page, name: string) => {
 };
 
 const ask = async (page: Page, alarm: string, reason: string) => {
+  // From the alarm's page: the list has Suppress… only in its bulk bar (screen 29).
   await page.goto("/alarms");
-  await page.locator(".view tbody tr").filter({ hasText: alarm }).first().getByRole("button", { name: /^Suppress…/ }).click();
+  await page.locator(".view tbody tr").filter({ hasText: alarm }).first().getByRole("link", { name: alarm }).click();
+  await page.locator(".view").getByRole("button", { name: "Suppress…" }).click();
   const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
   await form.getByRole("textbox", { name: "Reason (required)" }).fill(reason);
   await form.getByRole("button", { name: "Request" }).click();

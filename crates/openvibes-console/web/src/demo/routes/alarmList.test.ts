@@ -54,6 +54,15 @@ describe("demo Alarms list", () => {
     expect(chosen.items.every((i) => i.techniques.includes(technique))).toBe(true);
   });
 
+  it("hides the seed's suppressed alarm unless Suppressed is shown", async () => {
+    const hidden = (await get("/api/v1/alarm-list?state=all")).body;
+    expect(hidden.items.some((i) => i.suppressed)).toBe(false);
+    const counts = Object.fromEntries(hidden.counts.suppressed.map((c) => [c.value, c.count]));
+    expect(counts.shown).toBeGreaterThan(counts.hidden ?? 0);
+    const shown = (await get("/api/v1/alarm-list?state=all&suppressed=shown")).body;
+    expect(shown.items.some((i) => i.suppressed)).toBe(true);
+  });
+
   it("resolves me from the session and unassigned apart from any name", async () => {
     const sam = (await get("/api/v1/alarm-list?state=all&assignee=me", "analyst")).body;
     expect(sam.items.length).toBeGreaterThan(0);

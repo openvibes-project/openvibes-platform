@@ -15,7 +15,10 @@ describe("HourlyBars", () => {
     const html = renderToStaticMarkup(<HourlyBars values={values} label="Starts per hour" />);
     expect(html.match(/<rect/g)).toHaveLength(24);
     expect(html).toContain("<title>");
-    expect(html).toContain('role="img"');
+    // The table carries the values for screen readers; the picture is hidden from them.
+    expect(html).toContain('<svg aria-hidden="true"');
+    expect(html).not.toContain('role="img"');
+    expect(html).toContain("<caption>Starts per hour</caption>");
     expect(html).toContain("sr-only");
     expect(html.match(/<tr/g)).toHaveLength(25);
   });

@@ -120,7 +120,7 @@ function columns(latest: string | null): Column<HostRow>[] {
 }
 
 /** Previous and next page, and which rows these are. */
-function Pager({ offset, shown, total }: { offset: number; shown: number; total: number }) {
+export function Pager({ offset, shown, total }: { offset: number; shown: number; total: number }) {
   if (total <= PAGE_SIZE && offset === 0) return null;
   const go = (to: number) => nav.setParams({ [PAGE]: to > 0 ? String(to) : null });
   return (

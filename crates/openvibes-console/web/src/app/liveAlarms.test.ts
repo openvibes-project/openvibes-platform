@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AlarmPage } from "../api/types";
-import { compareNewest } from "./liveAlarms";
+import { ALARMS_PREFIX, compareNewest } from "./liveAlarms";
 
 const alarm = (id: string, first_seen: string, last_seen = first_seen, count = 1) => ({ id, first_seen, last_seen, count });
 const page = (...items: ReturnType<typeof alarm>[]) => ({ items }) as unknown as AlarmPage;
@@ -39,5 +39,9 @@ describe("live alarms", () => {
   it("compares times, not text: a fraction of a second later is fresh", () => {
     const { seen } = compareNewest(undefined, page(alarm("a", "2026-10-02T10:00:00Z")));
     expect(compareNewest(seen, page(alarm("b", "2026-10-02T10:00:00.5Z")))).toMatchObject({ fresh: true });
+  });
+
+  it("a new alarm refreshes the Alarms list and the old alarm reads alike", () => {
+    for (const path of ["/api/v1/alarm-list?limit=50", "/api/v1/alarms?state=active", "/api/v1/alarms/9000/summary"]) expect(path.startsWith(ALARMS_PREFIX)).toBe(true);
   });
 });

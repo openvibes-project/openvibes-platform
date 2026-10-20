@@ -46,12 +46,13 @@ describe("demo alarm summary", () => {
       clone("9104", 9, HOUR, { agent_id: other }),
     );
     const { body } = await call(server, "9000");
-    expect(body.commands.map((c) => c.id)).toEqual([9100, 9101, 9000]);
+    // 9008 (12 starts) and 9009 (1) are the seed's own siblings of 9000.
+    expect(body.commands.map((c) => c.id)).toEqual([9100, 9008, 9101, 9000, 9009]);
     expect(body.commands[0]?.args).toEqual(["sh", "-c", "9100"]);
-    expect(body.tiles.starts).toBe(50 + 7 + base.count);
+    expect(body.tiles.starts).toBe(50 + 12 + 7 + base.count + 1);
     // 9100 an hour ago; 9101, 25 hours ago, is outside the window.
     expect(body.hourly[22]).toBeGreaterThanOrEqual(50);
-    expect(body.hourly.reduce((n, h) => n + h, 0)).toBe(50 + base.count);
+    expect(body.hourly.reduce((n, h) => n + h, 0)).toBe(50 + 12 + base.count + 1);
     expect(body.related.same_rule_elsewhere.hosts).toBeGreaterThanOrEqual(1);
   });
 

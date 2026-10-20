@@ -13,6 +13,9 @@ const POLL_MS = 5000;
 
 const listeners = new Set<() => void>();
 
+/** Every alarm read (the old list, the Alarms list, an alarm's page) starts with this. */
+export const ALARMS_PREFIX = "/api/v1/alarm";
+
 /** Active alarms for the menu's count: up to 100 (`more` beyond). */
 let active: { count: number; more: boolean } | undefined;
 const setActive = (value: typeof active) => {
@@ -72,7 +75,7 @@ export function useLiveAlarms(enabled: boolean): void {
         // The count changes only with the newest alarm (or its going away).
         if (first || changed) void recount();
         last = seen;
-        if (changed) invalidate("/api/v1/alarms");
+        if (changed) invalidate(ALARMS_PREFIX);
         const top = page.items[0];
         if (fresh && top) {
           toast(`New alarm: ${top.message}${top.hostname ? ` on ${top.hostname}` : ""}`);

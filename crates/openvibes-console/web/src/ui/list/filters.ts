@@ -3,8 +3,9 @@
 // can be bookmarked, shared and saved.
 import type { SelectOption } from "../select";
 
-/** One filter chip: its URL parameter, its name, and its values with how many rows each matches. */
-export type ListFilter = { param: string; label: string; values: readonly { value: string; label: string; count: number }[] };
+/** One filter chip: its URL parameter, its name, and its values with how many rows each matches.
+ * `chipOnly`: set from elsewhere (a host page's tile), so drawn only while chosen. */
+export type ListFilter = { param: string; label: string; values: readonly { value: string; label: string; count: number }[]; chipOnly?: boolean };
 
 /** Parameters that order the list rather than filter it: Clear all keeps them. */
 const ORDER = new Set(["sort", "dir"]);

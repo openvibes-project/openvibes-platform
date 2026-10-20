@@ -15,7 +15,9 @@ test("an alarm shows its process tree and is triaged and suppressed", async ({ p
   const row = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
   await expect(row).toContainText("postgres → bash");
   await row.locator("td").nth(2).click();
-  const inspector = page.locator(".inspector");
+  // The alarm's page (until screen 30: its panel, full width).
+  await expect(page).toHaveURL(/\/alarms\/\d+$/);
+  const inspector = page.locator(".view");
   const tree = inspector.getByRole("list", { name: /Process tree/ });
   await expect(tree.locator("li")).toHaveCount(2);
   await expect(tree.locator("li").last()).toContainText("/usr/bin/bash");
@@ -51,26 +53,10 @@ test("resolved alarms are hidden by default and counted in the empty state", asy
   await expect(page.getByText("Nothing matches these filters")).toBeVisible();
 });
 
-test("typing in a row's suppress form never moves the table or opens the inspector", async ({ page }) => {
-  await page.goto("/alarms");
-  const row = page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" });
-  await row.getByRole("button", { name: "Suppress…" }).click();
-  const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
-  // j, k, x and Enter are the table's keys; in the form they are text.
-  await form.getByRole("textbox", { name: "Reason (required)" }).pressSequentially("jkx");
-  await form.getByRole("textbox", { name: "Reason (required)" }).press("Enter");
-  await expect(form.getByRole("textbox", { name: "Reason (required)" })).toHaveValue("jkx\n");
-  expect((await new AxeBuilder({ page }).include("dialog").analyze()).violations).toEqual([]);
-  await form.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.locator(".inspector .panel-header")).toHaveCount(0);
-  // Focus returns to the button that opened the form, which names its alarm.
-  await expect(row.getByRole("button", { name: "Suppress… A shell downloaded a program and ran it on " })).toBeFocused();
-});
-
-test("suppressing from the list with approval off closes the alarm and lists it as active", async ({ page }) => {
-  await page.goto("/alarms");
-  const row = page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" });
-  await row.getByRole("button", { name: "Suppress…" }).click();
+test("suppressing from the alarm's page with approval off closes the alarm and lists it as active", async ({ page }) => {
+  // 9002: curl -o x, one of two "downloaded a program" alarms.
+  await page.goto("/alarms/9002");
+  await page.locator(".view").getByRole("button", { name: "Suppress…" }).click();
   const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
   await expect(form).toContainText("/usr/bin/curl, with any arguments");
   await form.getByRole("radio", { name: "This exact command" }).click();
@@ -81,9 +67,11 @@ test("suppressing from the list with approval off closes the alarm and lists it 
   await expect(form).not.toContainText("Someone who can approve");
   await form.getByRole("textbox", { name: "Reason (required)" }).fill("admin's install script");
   await form.getByRole("button", { name: "Suppress", exact: true }).click();
-  // Closed as a false positive: it leaves the default (active) list.
+  // Closed as a false positive: it leaves the default (open) list.
   // (The demo keeps its data in memory, so this test never reloads.)
-  await expect(page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" })).toHaveCount(0);
+  await page.getByRole("link", { name: "← Alarms" }).click();
+  await expect(page.locator(".view tbody tr").first()).toBeVisible();
+  await expect(page.locator('.view tbody tr a[href="/alarms/9002"]')).toHaveCount(0);
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
   const listed = page.locator("#suppressions-active [data-id]").filter({ hasText: "/usr/bin/curl" });
   await expect(listed).toContainText("admin's install script");
@@ -101,7 +89,7 @@ test("with approval on, a request waits on its alarm, is withdrawn, asked again 
   await persona("analyst");
   await page.goto("/alarms");
   await page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" }).locator("td").nth(2).click();
-  const inspector = page.locator(".inspector");
+  const inspector = page.locator(".view");
   const ask = async () => {
     await inspector.getByRole("button", { name: "Suppress…" }).click();
     const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
@@ -115,18 +103,17 @@ test("with approval on, a request waits on its alarm, is withdrawn, asked again 
   await expect(inspector.getByRole("button", { name: "Suppress…" })).toBeVisible();
   await ask();
   await expect(inspector.locator(".panel-header")).toContainText("Open");
-  // The list (wide enough for its Suppress column) offers no second request for it.
-  await page.goto("/alarms");
-  const listRow = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
-  await expect(listRow).toContainText("Requested");
-  await expect(listRow.getByRole("button", { name: /^Suppress…/ })).toHaveCount(0);
+  // Back on the page later, it still waits: no second Suppress….
+  const url = page.url();
+  await page.goto(url);
+  await expect(inspector).toContainText("Suppression requested, waiting for approval");
+  await expect(inspector.getByRole("button", { name: "Suppress…" })).toHaveCount(0);
 
   // An approver on the same hosts (the administrator) sees it waiting and approves.
   await persona("admin");
-  await page.goto("/alarms");
-  const theirs = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
-  await expect(theirs).toContainText("Waiting for approval");
-  await expect(theirs.getByRole("button", { name: /^Suppress…/ })).toHaveCount(0);
+  await page.goto(url);
+  await expect(inspector).toContainText("Suppression requested, waiting for approval");
+  await expect(inspector.getByRole("button", { name: "Suppress…" })).toHaveCount(0);
   await page.goto("/alarm-suppressions");
   await expect(page.locator("#suppressions-waiting [data-id]").filter({ hasText: "nightly vacuum script" })).toContainText("Waiting");
   await page.locator("#suppressions-waiting [data-id]").filter({ hasText: "nightly vacuum script" }).getByRole("button", { name: "Approve" }).click();

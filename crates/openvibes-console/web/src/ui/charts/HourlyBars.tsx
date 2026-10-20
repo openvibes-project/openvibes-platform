@@ -1,5 +1,5 @@
-// 24 bars, oldest hour first, ending at the current hour. An SVG image
-// with a <title> per bar (hover text) and a visually hidden table of the
+// 24 bars, oldest hour first, ending at the current hour. An SVG picture
+// (hidden from screen readers) with a <title> per bar for hover, and a visually hidden table of the
 // same values for screen readers.
 const W = 240;
 const H = 40;
@@ -16,7 +16,7 @@ export function HourlyBars({ values, label }: Readonly<{ values: number[]; label
   const ago = (i: number) => (i === values.length - 1 ? "this hour" : `${values.length - 1 - i}h ago`);
   return (
     <figure className="hourly-bars">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} preserveAspectRatio="none" width="100%" height={H}>
+      <svg aria-hidden="true" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={H}>
         {values.map((v, i) => (
           <rect key={i} x={i * step + 1} width={step - 2} y={H - (heights[i] ?? 0)} height={heights[i] ?? 0} fill="var(--accent)">
             <title>{`${ago(i)}: ${v.toLocaleString()}`}</title>

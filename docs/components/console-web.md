@@ -264,13 +264,9 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
 
 ## Threat alarms (P14)
 
-- **Alarms** (`/alarms`, `g m`, `alarms.read`): newest first; severity,
-  message with `parent → program`, host, count, triage, last seen. Resolved
-  and suppressed alarms are hidden unless their chips are on; the empty
-  state says agents report process starts by themselves and each host's page says whether its alarms are on. The list loads
-  the newest 100 with the filters sent to the API (`state=active` by
-  default) and **Load 100 more**; the text filter applies to what is
-  loaded. Each row has **Suppress…** (with `alarms.suppress`), which opens
+- **Alarms** (`/alarms`, `g m`, `alarms.read`) and an alarm's page
+  (`/alarms/{id}`): see [console-alarms.md](console-alarms.md). An alarm's
+  page and the panel have **Suppress…** (with `alarms.suppress`), which opens
   the suppress form (approved screen 12, `panels/alarms/SuppressForm.tsx`):
   - **What:** this program (its path) or this exact command (path and
     masked arguments, shown).
@@ -286,14 +282,11 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
   one toasts "Requested · waiting for approval". Refusals show the
   server's field message in `role="alert"`; the controls are disabled
   while it sends. `bodyOf` (the POST body) and `whereChoices` are pure and
-  tested. Keys typed in a dialog opened from a row (or in any textarea)
-  never move the table cursor or open a row; closing the form returns
-  focus to the button that opened it (the shared `Modal`). A row's button
-  is labelled with the alarm and host. A row whose alarm has a waiting
-  request shows "Requested" (the viewer's own) or "Waiting for approval"
-  (someone else's) instead, like the panel; until the waiting list has
-  loaded, or if it fails, no row offers Suppress…, so the list never asks
-  twice.
+  tested. Keys typed in any dialog or textarea never move a table cursor;
+  closing the form returns focus to the button that opened it (the shared
+  `Modal`). An alarm with a waiting request shows it instead of
+  Suppress…; until the waiting list has loaded, or if it fails, none is
+  offered, so nobody asks twice.
 
 **Site rules** (`/site-rules`, with `site_rules.read`) lists the site's own
 compliance rules and alarm rules (drafts) with New rule. A rule opens in
@@ -501,7 +494,7 @@ for the pages not yet moved; its saved views stay in the browser.
   and a wide right column (one column fills the width). An empty slot draws
   nothing. `Card` (a card of either column) lives here too; the person,
   group and settings pages use it. **Tile**
-  (`ui/detail/Tile.tsx`): a link to the full list, named "Open alarms: 3". **FactTile** (`ui/detail/FactTile.tsx`): the same look for a fact, no link. **HourlyBars** (`ui/charts/HourlyBars.tsx`): 24 bars, a `<title>` each, with a hidden table. **BulkBar** on a server-paged list: it acts on the ids it is given (this page); the bulk route takes no filter, so there is no "select all n matching".
+  (`ui/detail/Tile.tsx`): a link to the full list, named "Open alarms: 3". **FactTile** (`ui/detail/FactTile.tsx`): the same look for a fact, no link. **HourlyBars** (`ui/charts/HourlyBars.tsx`): 24 bars, a `<title>` each for hover, the SVG hidden from screen readers (`aria-hidden`); a visually hidden table with a caption carries the values. **BulkBar** on a server-paged list: it acts on the ids it is given (this page); the bulk route takes no filter, so `DataTable serverPaged` says "All n on this page are selected." and offers no "select all n matching". A `ListFilter` with `chipOnly` (the Alarms host) is drawn only while chosen.
   Tiles and the settings pages' links use `viewLink` (`app/nav.ts`): a
   plain left click navigates in place, a modified or middle click is left
   to the browser.
