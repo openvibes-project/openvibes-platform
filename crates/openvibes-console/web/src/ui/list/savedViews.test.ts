@@ -20,7 +20,7 @@ const views = async () => (await request<SavedViewList>("GET", "/api/v1/saved-vi
 const LEGACY = "openvibes.v2.views./agents";
 const toOnline = (query: string) => query.replace("status=active", "status=online");
 
-beforeEach(() => { configureDemo("admin"); vi.mocked(toast).mockClear(); });
+beforeEach(() => { configureDemo("admin"); vi.mocked(toast).mockClear(); const session = new Map<string, string>(); vi.stubGlobal("sessionStorage", { getItem: (k: string) => session.get(k) ?? null, setItem: (k: string, v: string) => { session.set(k, v); } }); });
 afterEach(() => { vi.unstubAllGlobals(); configureDemo(undefined); });
 
 describe("saved views", () => {
@@ -86,15 +86,30 @@ describe("importBrowserViews", () => {
     expect(store.has(LEGACY)).toBe(false);
   });
 
-  it("gives up on a view the console refuses for good: one toast naming it, key removed, no retry", async () => {
+  it("at the view limit nothing is lost: the key keeps every unsaved view, one toast per session", async () => {
     for (let i = 0; i < 50; i += 1) await saveView("hosts", `View ${i}`, "");
+    const old = [{ name: "Active", query: "status=active" }, { name: "Linux", query: "os=linux" }];
+    const store = stubStorage({ [LEGACY]: JSON.stringify(old) });
+    await importBrowserViews("hosts", LEGACY, toOnline);
+    expect(JSON.parse(store.get(LEGACY) ?? "null")).toEqual(old);
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith("2 views saved in this browser couldn't be moved to your account (you have the most saved views allowed — delete one to make room). They stay in this browser and will be tried again.", true);
+    await importBrowserViews("hosts", LEGACY, toOnline);
+    expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  it("a mix leaves only the refused view in the key; once there is room it moves and the key goes", async () => {
+    for (let i = 0; i < 49; i += 1) await saveView("hosts", `View ${i}`, "");
     const store = stubStorage({ [LEGACY]: JSON.stringify([{ name: "Active", query: "status=active" }, { name: "Linux", query: "os=linux" }]) });
     await importBrowserViews("hosts", LEGACY, toOnline);
-    expect(store.has(LEGACY)).toBe(false);
-    expect(toast).toHaveBeenCalledTimes(1);
-    expect(toast).toHaveBeenCalledWith("These saved views couldn't be moved to your account: Active, Linux", true);
+    expect(JSON.parse(store.get(LEGACY) ?? "null")).toEqual([{ name: "Linux", query: "os=linux" }]);
+    expect((await views()).some((v) => v.name === "Active")).toBe(true);
+    const first = (await views()).find((v) => v.name === "View 0");
+    await deleteView("hosts", first?.id ?? "");
     await importBrowserViews("hosts", LEGACY, toOnline);
-    expect(toast).toHaveBeenCalledTimes(1);
+    expect((await views()).some((v) => v.name === "Linux")).toBe(true);
+    expect(store.has(LEGACY)).toBe(false);
+    expect((await views()).filter((v) => v.name === "Active")).toHaveLength(1);
   });
 
   it("keeps the key on a server error, for the next visit", async () => {

@@ -45,15 +45,22 @@ const clip = (name: string, max = 60) => [...name.trim()].slice(0, max).join("")
 
 const running = new Map<string, Promise<void>>();
 const FINAL = new Set(["invalid_saved_view", "too_many_views", "view_name_taken"]);
+const REASON: Record<string, string> = {
+  too_many_views: "you have the most saved views allowed — delete one to make room",
+  view_name_taken: "the name is already used",
+  invalid_saved_view: "the server refused it",
+};
+const TOLD = "openvibes.v2.views-import-told";
 
 /**
  * Moves the views a page kept in this browser (before saved views lived on
  * the console) to the console: `mapQuery` turns an old query into today's,
  * stored normalised (`viewQuery`) so the view shows as active. A name taken
  * by a different view is retried once as "name (imported)". One run per key
- * at a time (every mount calls this). The key is removed once every view is
- * saved, already there, or refused for good (invalid, too many, name taken
- * twice: one toast names those); a transient error keeps it for the next visit.
+ * at a time (every mount calls this). Views are never discarded: afterwards the
+ * key holds exactly the views not on the server (refused, or a transient
+ * error) and is removed only when none are left. Refusals are told once per
+ * browser session.
  */
 export function importBrowserViews(page: string, legacyKey: string, mapQuery: (query: string) => string): Promise<void> {
   const active = running.get(legacyKey);
@@ -73,15 +80,16 @@ async function importOnce(page: string, legacyKey: string, mapQuery: (query: str
     old = undefined; // no storage, or not JSON: nothing to import
   }
   const views = Array.isArray(old) ? old.filter((v): v is { name: string; query: string } => typeof v?.name === "string" && typeof v?.query === "string") : [];
-  const refused: string[] = [];
-  let transient = false;
+  const keep: typeof views = [];
+  const reasons = new Set<string>();
+  let refused = 0;
   try {
     const existing = views.length > 0 ? (await request<SavedViewList>("GET", viewsPath(page))).items : [];
     for (const view of views) {
       const query = viewQuery(new URLSearchParams(mapQuery(view.query)));
       const base = clip(view.name) || "Imported view";
       let done = false;
-      let final = false;
+      let code: string | undefined;
       for (const name of [base, `${clip(base, 60 - SUFFIX.length)}${SUFFIX}`]) {
         if (existing.some((v) => v.name.toLowerCase() === name.toLowerCase() && v.query === query)) { done = true; break; }
         try {
@@ -89,22 +97,28 @@ async function importOnce(page: string, legacyKey: string, mapQuery: (query: str
           done = true;
           break;
         } catch (error) {
-          const code = error instanceof ApiError ? error.code : undefined;
-          final = code !== undefined && FINAL.has(code);
+          code = error instanceof ApiError ? error.code : undefined;
           if (code !== "view_name_taken") break;
         }
       }
       if (done) continue;
-      if (final) refused.push(base); else transient = true;
+      keep.push(view);
+      if (code !== undefined && FINAL.has(code)) { refused += 1; reasons.add(REASON[code] ?? ""); }
     }
   } catch {
     return; // unreachable or signed out: try again next time
   } finally {
     if (views.length > 0) invalidate(viewsPath(page));
   }
-  if (refused.length > 0) toast(`These saved views couldn't be moved to your account: ${refused.join(", ")}`, true);
-  if (transient) return;
-  try { localStorage.removeItem(legacyKey); } catch { /* storage gone: nothing left to remove */ }
+  try {
+    if (keep.length === 0) localStorage.removeItem(legacyKey); else localStorage.setItem(legacyKey, JSON.stringify(keep));
+  } catch { /* storage gone: nothing to keep or remove */ }
+  if (refused === 0) return;
+  try {
+    if (sessionStorage.getItem(TOLD)) return;
+    sessionStorage.setItem(TOLD, "1");
+  } catch { /* no session storage: tell every run */ }
+  toast(`${refused} view${refused === 1 ? "" : "s"} saved in this browser couldn't be moved to your account (${[...reasons].join("; ")}). They stay in this browser and will be tried again.`, true);
 }
 
 /**

@@ -46,7 +46,14 @@ the old Agents view and host panel. The shared pieces they are built from
   again at the first page). The last page stays on screen while the next
   loads. On first visit, views kept in the browser under
   `openvibes.v2.views./agents` are imported (`hostsQuery` maps their
-  status values).
+  status values). A view is never discarded: after each run the key holds
+  exactly the views not yet on the server (refused, or a 503/network
+  failure) and is removed only when none are left; saved and exact-duplicate
+  views leave the key. Refusals (view limit, name clash after the
+  " (imported)" retry, invalid view) are tried again on the next visit and
+  told once per browser session: "N views saved in this browser couldn't be
+  moved to your account (reason). They stay in this browser and will be
+  tried again."
 - **Old addresses** (`app/location.ts` `redirect`, plan ruling 1):
   `/agents?…` reads as `/hosts?…` with `status=active` → `online` and
   `stale` → `offline`; `/agents?open=agent:ID` and the assistant's
