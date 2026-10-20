@@ -211,7 +211,13 @@ pub fn run_step<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         // A failed check (e.g. a certificate about to expire) is reported,
         // not acted on.
         state @ (StepState::Done(_) | StepState::Skipped(_) | StepState::Failed(_)) => state,
-        _ => apply(ctx, step),
+        // Repair says what it changed: the journal line carries the detail.
+        state => match apply(ctx, step) {
+            StepState::Done(detail) if ctx.repair && state == StepState::Todo => {
+                StepState::Done(format!("repaired: {detail}"))
+            }
+            applied => applied,
+        },
     }
 }
 

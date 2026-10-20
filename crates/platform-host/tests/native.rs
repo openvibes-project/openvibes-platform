@@ -450,7 +450,10 @@ fn privileged_verbs_pass_the_password_on_stdin_only() {
         .iter()
         .find(|call| call[0] == "/usr/bin/logger")
         .unwrap();
-    assert!(journal[3].ends_with(" setup-step ca ok"), "{journal:?}");
+    assert!(
+        journal[3].ends_with(" setup-step ca ok: intermediate imported"),
+        "{journal:?}"
+    );
     assert_eq!(format!("{password:?}"), "Secret(..)");
 }
 
@@ -652,7 +655,10 @@ fn the_journal_records_the_state_a_step_ended_in() {
         .iter()
         .find(|call| call[0] == "/usr/bin/logger")
         .unwrap();
-    assert!(journal[3].ends_with(" setup-step ca failed"), "{journal:?}");
+    assert!(
+        journal[3].ends_with(" setup-step ca failed: database down"),
+        "{journal:?}"
+    );
 }
 
 #[test]
@@ -866,5 +872,46 @@ fn free_space_is_dfs_avail_column() {
     assert_eq!(
         calls[0],
         ["/usr/bin/df", "--output=avail", "-h", "--", "/mnt/nas"]
+    );
+}
+
+fn step_journal(detail: &str) -> String {
+    let host = fake(vec![
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "setup-step",
+            ],
+            out(0, &format!("done\t{detail}\n"), ""),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    host.privileged(
+        Privileged::SetupStep(Step::Firewall),
+        &Secret::new("pw".into()),
+    )
+    .unwrap();
+    let calls = host.runner.calls.borrow();
+    let call = calls.iter().find(|c| c[0] == "/usr/bin/logger").unwrap();
+    call[3].clone()
+}
+
+#[test]
+fn a_step_journal_line_carries_the_detail() {
+    let line = step_journal("opened 8443/tcp");
+    assert!(
+        line.ends_with("setup-step firewall ok: opened 8443/tcp"),
+        "{line}"
+    );
+    let long = step_journal(&"é".repeat(400));
+    assert!(
+        long.ends_with(&format!("ok: {}", "é".repeat(300))),
+        "{long}"
     );
 }

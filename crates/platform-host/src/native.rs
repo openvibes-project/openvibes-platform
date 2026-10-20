@@ -4,6 +4,8 @@
 
 use zeroize::Zeroizing;
 
+use crate::journal::step_suffix;
+
 use crate::{
     CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged, SETUP_FILE,
     Secret, Service, ServiceAction, ServiceStatus, Unit,
@@ -122,7 +124,11 @@ impl<R: Runner> Native<R> {
     // ponytail: the note is best effort (no database yet during Setup, no
     // operator group before the next login); the journal line is the record.
     fn journal(&self, action: &str, target: &str, outcome: &str) {
-        self.log(&format!("{action} {target} {outcome}"));
+        self.journal_detail(action, target, outcome, "");
+    }
+    /// `journal` with `suffix` on the journal line only (not `audit note`).
+    fn journal_detail(&self, action: &str, target: &str, outcome: &str, suffix: &str) {
+        self.log(&format!("{action} {target} {outcome}{suffix}"));
         let _ = self.as_admin(&["audit", "note", action, target, outcome]);
     }
 
@@ -256,7 +262,10 @@ impl<R: Runner> Host for Native<R> {
         };
         let journal = verb.journal();
         match journal.split_once(' ') {
-            Some((action, target)) => self.journal(action, target, outcome),
+            Some((action, target)) => {
+                let suffix = step_suffix(action, &out.stdout);
+                self.journal_detail(action, target, outcome, &suffix);
+            }
             // One-word verbs: `setup-status` only reads, so it is journalled
             // but not noted (the console exports audit_log); `setup-plan`
             // is noted with the file it writes.

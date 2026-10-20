@@ -411,3 +411,39 @@ fn update_readiness_only_warns_when_netlog_is_not_ready() {
         "{state:?}"
     );
 }
+
+/// Firewall step against a plan with one service: `query` is the answer to
+/// "is the port open?" (1 = not yet).
+fn firewall(name: &str, query: i32, repair: bool) -> StepState {
+    let fake = Fake::new(name);
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "");
+    fake.answer(
+        &["/usr/bin/firewall-cmd", "--permanent", "--query-port"],
+        query,
+        "",
+    );
+    fake.answer(&["/usr/bin/firewall-cmd"], 0, "");
+    let plan = plan(&[Ingest]);
+    let mut ctx = fake.ctx(&plan);
+    ctx.repair = repair;
+    run_step(&ctx, Step::Firewall)
+}
+
+#[test]
+fn repair_marks_an_applied_step() {
+    // #292: after a stuck update every repaired step just said "ok".
+    let state = firewall("fw-repair", 1, true);
+    assert!(state.detail().starts_with("repaired: open: "), "{state:?}");
+}
+
+#[test]
+fn a_done_step_is_not_marked() {
+    let state = firewall("fw-done", 0, true);
+    assert!(state.detail().starts_with("open: "), "{state:?}");
+}
+
+#[test]
+fn setup_does_not_mark() {
+    let state = firewall("fw-setup", 1, false);
+    assert!(state.detail().starts_with("open: "), "{state:?}");
+}
