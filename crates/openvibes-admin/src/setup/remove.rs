@@ -391,9 +391,17 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
             ctx.plan.hostname
         ));
     }
+    // A part removal is refused under any mark, an uninstall's too: it
+    // leaves no mark of its own, so it must not finish someone else's job.
+    let part = part::is_part_removal(ctx.plan, &args.components);
+    if part && ctx.read("/run/openvibes-admin/job").is_ok() {
+        let why = super::system::job_guard(ctx.root, "").err();
+        return StepState::Failed(
+            why.unwrap_or_else(|| "a job is half done on this host: finish it first".into()),
+        );
+    }
     // A half-done Update must not block an uninstall (#292); any other mark does.
-    // A part removal is refused under any mark.
-    let after_update = !part::is_part_removal(ctx.plan, &args.components)
+    let after_update = !part
         && ctx
             .read("/run/openvibes-admin/job")
             .is_ok_and(|mark| mark.lines().next() == Some("update"));

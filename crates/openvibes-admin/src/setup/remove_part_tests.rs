@@ -173,3 +173,22 @@ fn a_part_removal_leaves_no_half_done_mark_but_a_whole_uninstall_does() {
     );
     assert!(whole.root.join("run/openvibes-admin/job").exists());
 }
+
+#[test]
+fn a_part_removal_is_refused_under_a_half_done_uninstall_too() {
+    for mark in ["uninstall", "uninstall\neverything", ""] {
+        let fake = Fake::new("part-under-uninstall");
+        seed(&fake);
+        fake.file("run/openvibes-admin/job", mark);
+        let state = run(
+            &fake.ctx(&plan(&[Ingest])),
+            RemoveStep::Purge,
+            &args(&[Agent], None),
+        );
+        assert!(
+            matches!(&state, StepState::Failed(why) if why.contains("half done")),
+            "{mark:?}: {state:?}"
+        );
+        assert!(fake.root.join("var/lib/openvibes-agent/queue").exists());
+    }
+}
