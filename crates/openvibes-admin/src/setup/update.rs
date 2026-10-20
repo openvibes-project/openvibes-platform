@@ -205,6 +205,13 @@ pub(super) fn resume_agent<R: Runner>(ctx: &Ctx<R>) {
     }
 }
 
+/// Gives up a half-done Update (an Uninstall replaces it): starts the agent
+/// again and forgets the stopped-services record.
+pub(super) fn abandon<R: Runner>(ctx: &Ctx<R>) {
+    resume_agent(ctx);
+    let _ = std::fs::remove_file(ctx.path(ACTIVE));
+}
+
 fn wait_ready<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let running: Vec<Unit> = Unit::ALL
         .into_iter()

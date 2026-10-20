@@ -173,6 +173,11 @@ fn purge_drops_the_database_roles_files_and_accounts() {
     );
     fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
     fake.answer(&[&PG[..], &["/usr/bin/dropuser"]].concat(), 0, "");
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "postgresql-server"],
+        0,
+        "",
+    );
     fake.answer(&["/usr/sbin/userdel"], 0, "");
     fake.answer(&["/usr/sbin/groupdel"], 0, "");
     let plan = plan(&[Ingest, Console]);

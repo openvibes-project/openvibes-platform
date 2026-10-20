@@ -663,6 +663,15 @@ refused while one works):
   The retry finishes (stop, `rpm -e`, `/var/lib/pgsql`, then the
   mark, then the record). A record without the `postgresql-server` package
   and without the mark is stale: it is deleted and no data folder is touched.
+  Uninstall also works from a half-done Update (#292): a job mark whose first
+  line is `update` does not block it (any other mark still does), and its Stop
+  step starts the agent again if the update stopped it and forgets the
+  update's records before writing the `uninstall` mark. When the
+  PostgreSQL server package is gone (removed by hand, no removal mark),
+  Back up first fails with the problem and "untick Back up first to uninstall
+  without a backup", and Remove everything skips the database drops, deletes
+  only the Setup record and mark, keeps `/var/lib/pgsql` and says "no
+  PostgreSQL server: the database was not dropped and /var/lib/pgsql stays".
   The last step, `admin`, removes `openvibes-admin`
   itself and, with `--everything`, what rpm kept of it (`/etc/openvibes`,
   including `admin.toml.rpmsave` and `setup.toml`, which every earlier step

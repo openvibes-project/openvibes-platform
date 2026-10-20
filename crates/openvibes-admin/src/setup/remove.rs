@@ -270,17 +270,24 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     // Once PostgreSQL's own removal has begun the cluster may be gone: the
     // database work was done before the mark was written.
     // A stale mark with the cluster answering still drops (review I2).
-    let roles = match ctx.as_postgres(&[
-        "/usr/bin/psql",
-        "-Atqc",
-        "SELECT rolname FROM pg_roles WHERE rolname LIKE 'openvibes-%' ORDER BY oid",
-    ]) {
-        Ok(roles) => {
-            ctx.as_postgres(&["/usr/bin/dropdb", "--if-exists", "openvibes"])?;
-            roles
+    // No server (removed by hand): nothing to drop, and /var/lib/pgsql stays.
+    // Under our own removal mark the retry below still finishes the job.
+    let server = installed(ctx, "postgresql-server") || ctx.exists(PG_MARK);
+    let roles = if !server {
+        String::new()
+    } else {
+        match ctx.as_postgres(&[
+            "/usr/bin/psql",
+            "-Atqc",
+            "SELECT rolname FROM pg_roles WHERE rolname LIKE 'openvibes-%' ORDER BY oid",
+        ]) {
+            Ok(roles) => {
+                ctx.as_postgres(&["/usr/bin/dropdb", "--if-exists", "openvibes"])?;
+                roles
+            }
+            Err(_) if ctx.exists(PG_MARK) => String::new(),
+            Err(error) => return Err(error),
         }
-        Err(_) if ctx.exists(PG_MARK) => String::new(),
-        Err(error) => return Err(error),
     };
     for role in roles.lines().map(str::trim).filter(|r| {
         r.starts_with("openvibes-") && r.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
@@ -351,7 +358,13 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
             let _ = ctx.ok(Groupdel, &[group]);
         }
     }
-    let postgresql = postgresql(ctx)?;
+    let postgresql = if server {
+        postgresql(ctx)?
+    } else {
+        remove_file_or_dir(&ctx.path(PG_RECORD))?;
+        remove_file_or_dir(&ctx.path(PG_MARK))?;
+        "no PostgreSQL server: the database was not dropped and /var/lib/pgsql stays".into()
+    };
     // A reinstalled signer makes a new site key (lead, #2086).
     let site_key = if site_key {
         "; the site rule key is gone: after a reinstall, agents need the new key's lines from `agent command`"
@@ -374,7 +387,11 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
             ctx.plan.hostname
         ));
     }
-    if let Err(error) = super::system::job_guard(ctx.root, "uninstall") {
+    // A half-done Update must not block an uninstall (#292); any other mark does.
+    let after_update = ctx
+        .read("/run/openvibes-admin/job")
+        .is_ok_and(|mark| mark.lines().next() == Some("update"));
+    if !after_update && let Err(error) = super::system::job_guard(ctx.root, "uninstall") {
         return StepState::Failed(error);
     }
     // Its data may be gone already: never finish it as Keep the data (review I3).
@@ -396,15 +413,25 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
             }
             match &args.backup {
                 None => Ok(StepState::Skipped("no backup chosen".into())),
-                Some(path) => backup::dump(ctx, path).map(StepState::Done),
+                Some(path) => backup::dump(ctx, path)
+                    .map(StepState::Done)
+                    .map_err(|error| match super::pg_health::problem(ctx) {
+                        Some(p) => {
+                            format!("{p}: untick Back up first to uninstall without a backup")
+                        }
+                        None => error,
+                    }),
             }
         }
-        RemoveStep::Stop => ctx
-            .job_begin(match args.confirm {
+        // Always called: a no-op unless an Update left its records.
+        RemoveStep::Stop => {
+            super::update::abandon(ctx);
+            ctx.job_begin(match args.confirm {
                 Some(_) => "uninstall\neverything",
                 None => "uninstall",
             })
-            .and_then(|()| stop(ctx, args)),
+            .and_then(|()| stop(ctx, args))
+        }
         RemoveStep::Firewall => firewall(ctx, args),
         RemoveStep::Packages => remove_packages(ctx, args),
         RemoveStep::Purge => purge(ctx, args),
