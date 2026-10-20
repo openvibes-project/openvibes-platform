@@ -53,6 +53,22 @@ pub(super) fn valid_until<H: Host>(host: &H) -> Option<String> {
     Some(until(pem).ok()?.format("%Y-%m-%d").to_string())
 }
 
+/// The menu's one line: who signed the intermediate and until when.
+pub(super) fn summary<H: Host>(host: &H) -> String {
+    let all = host.certificates();
+    let Some(Ok(pem)) = pem_of(&all, INTERMEDIATE) else {
+        return "no certificates yet".into();
+    };
+    match (platform_pki::issuer_common_name(pem), until(pem)) {
+        (Ok(who), Ok(end)) => format!(
+            "signed by {} · until {}",
+            who.unwrap_or_else(|| "an unnamed issuer".into()),
+            end.format("%Y-%m-%d")
+        ),
+        _ => "cannot be read".into(),
+    }
+}
+
 fn report(certs: Pems, quick: bool, now: DateTime<Utc>) -> Certs {
     let mut rows = Vec::new();
     let mut web = |name, value: Result<String, String>| match value {

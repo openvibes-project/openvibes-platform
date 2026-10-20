@@ -1,7 +1,7 @@
 //! Maintenance (spec §6): the menu and the pages behind it, on today's
 //! backend. Pages whose backend comes with a later step are not listed
-//! until then; today's Components and ports and Settings files screens
-//! stay behind the menu until their pages replace them.
+//! until then; today's Settings files screen stays behind the menu until
+//! its page replaces it.
 
 pub mod backup;
 #[cfg(test)]
@@ -33,6 +33,8 @@ mod update_tests;
 pub use update::half_done as update_half_done;
 
 use platform_host::Host;
+
+use crate::setup::plan::{Component, Plan, plan_of};
 use ratatui::{
     Frame,
     text::{Line, Span},
@@ -174,13 +176,12 @@ enum Entry {
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 10] = [
+const ENTRIES: [(Entry, &str); 9] = [
     (Entry::Page(Page::Update), "Update OpenVIBES"),
     (Entry::Page(Page::Repair), "Repair"),
     (Entry::Page(Page::Parts), "Optional parts"),
     (Entry::Page(Page::Ports), "Ports and addresses"),
     (Entry::Page(Page::Certificates), "Certificates"),
-    (Entry::Legacy(Tab::Setup), "Components and ports"),
     (Entry::Page(Page::Database), "Database"),
     (Entry::Page(Page::Backup), "Back up"),
     (Entry::Legacy(Tab::Configuration), "Settings files"),
@@ -189,22 +190,57 @@ const ENTRIES: [(Entry, &str); 10] = [
 
 fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
     match entry {
-        Entry::Legacy(Tab::Setup) => "agent, assistant, ports".into(),
-        Entry::Legacy(Tab::Configuration) => "feeds, proxy, limits, database connection".into(),
+        Entry::Legacy(_) => "feeds, proxy, limits, database connection".into(),
         Entry::Page(Page::Update) => match &app.update {
             Some(v) => format!("{v} is available"),
             None if update::updates_available(&app.packages) => "updates are available".into(),
             None => "up to date".into(),
         },
         Entry::Page(Page::Repair) => "check every step, fix what is wrong".into(),
-        Entry::Page(Page::Parts) => "agent on this host · assistant".into(),
-        Entry::Page(Page::Ports) => "console, agent connections, rule distribution".into(),
-        Entry::Page(Page::Certificates) => "when they end, the names agents use".into(),
+        Entry::Page(Page::Parts) => plan_of_host(app).map_or_else(
+            || "agent on this host · assistant".into(),
+            |plan| {
+                let parts: Vec<&str> = [
+                    (Component::Agent, "agent on this host"),
+                    (Component::Assistant, "assistant"),
+                ]
+                .iter()
+                .filter(|(c, _)| plan.has(*c))
+                .map(|(_, n)| *n)
+                .collect();
+                if parts.is_empty() {
+                    "none".into()
+                } else {
+                    parts.join(" · ")
+                }
+            },
+        ),
+        Entry::Page(Page::Ports) => plan_of_host(app).map_or_else(
+            || "console, agents, devices".into(),
+            |p| {
+                format!(
+                    "console {}, agents {} and {}, devices 514",
+                    p.console_port, p.ingest_port, p.distribution_port
+                )
+            },
+        ),
+        Entry::Page(Page::Certificates) => certs::summary(&app.host),
         Entry::Page(Page::Database) => "schema, size, automatic clean-up".into(),
         Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
         Entry::Page(Page::Uninstall) => "remove OpenVIBES from this host".into(),
         Entry::Page(Page::Names | Page::Folder | Page::WhatsNew) => String::new(),
     }
+}
+
+/// The saved plan, for the menu's values; `None` when it cannot be read.
+fn plan_of_host<H: Host>(app: &App<H>) -> Option<Plan> {
+    plan_of(&app.host.setup_plan().ok()?).ok()
+}
+
+/// The menu's names, in order (tests).
+#[cfg(test)]
+pub fn names() -> Vec<&'static str> {
+    ENTRIES.iter().map(|(_, n)| *n).collect()
 }
 
 /// The menu row of `name` (tests).

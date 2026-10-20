@@ -223,9 +223,7 @@ fn adding_a_name_then_apply_passes_every_san() {
     );
     // Back lands on the report.
     app.key(Key::Enter);
-    assert!(
-        screen(&app).contains("Maintenance › Certificates\n") || screen(&app).contains("signed by")
-    );
+    assert!(screen(&app).contains("signed by"));
 }
 
 #[test]

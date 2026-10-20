@@ -38,14 +38,14 @@ They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. A set-up host opens on Home (Status, Maintenance,
 Quit); `Enter` opens the highlighted entry, `Esc` goes back one screen, `?`
-shows the keys, and `q` quits from Home. Maintenance lists, in this order, Update OpenVIBES, Repair, Optional parts, Ports and addresses, Certificates, Components and ports (today's Setup screen, until the last pages replace it), Database, Back up, Settings files (today's Configuration screen, until the console's admin pages hold its fields, spec §12 step 6) and Uninstall; later entries are added by their pages. Today's screens keep their own keys, and `Esc` leaves them only when nothing is being typed or asked (unsaved settings ask first). A host not set up
+shows the keys, and `q` quits from Home. Maintenance lists, in this order, Update OpenVIBES, Repair, Optional parts, Ports and addresses, Certificates, Database, Back up, Settings files (today's Configuration screen, until the console's admin pages hold its fields, spec §12 step 6) and Uninstall; later entries are added by their pages. Today's screens keep their own keys, and `Esc` leaves them only when nothing is being typed or asked (unsaved settings ask first). A host not set up
 opens on the install form, which `Esc` does not leave. In any field being
 edited, `Ctrl+U` empties it (other Ctrl chords are ignored, never typed as
 letters). Every new screen (Home, Status, Service, the full log,
 Maintenance and Help) shows the block logo ("OPEN" in white, "VIBES" in the
 brand teal `#36b9e0`), a location line (host, where you are, the version
 and any available update; a long host name is cut with `…` first), and a
-key bar; today's screens (Components and ports, Settings files) show only the
+key bar; today's screens (Settings files) show only the
 location line and have no Help. With `NO_COLOR` set there is no
 colour. The code is in `src/tui/` (`nav.rs` the screen stack, `home.rs`
 Home, Maintenance and Help, `status.rs` Status, `ui/` the shared frame).
@@ -122,7 +122,7 @@ without sudo after logging in again. A detail in a wording the screen does
 not know is shown as it is. No agent install line: hosts are added from the
 console; `agent command` prints one for scripts. Repair, update and remove
 runs end on every step's outcome. On a set-up
-host, Maintenance › Components and ports (today's Setup screen, until 2b) offers `m` change components (the form filled from `setup.toml`;
+host, today's Setup screen (no longer in the Maintenance menu: Optional parts, Ports and addresses and Certificates replace it; its code goes in 2b-2) offers `m` change components (the form filled from `setup.toml`;
 added components are installed, unticked ones removed keeping data, ports
 included), `p` change ports (the same form, on the port rows, #69; it says when a
 default port is held by another program ("443 is in use"; "443 is in use by
