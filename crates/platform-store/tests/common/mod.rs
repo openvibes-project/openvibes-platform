@@ -1,5 +1,6 @@
 //! A fresh, uniquely named database per test, dropped afterwards.
 
+pub mod alarms;
 pub mod groups;
 pub mod hosts;
 

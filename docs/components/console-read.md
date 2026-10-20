@@ -64,6 +64,10 @@ agent visibility in SQL for the supplied global or host-group scope.
   same visibility predicate to its rows, total, per-value counts and
   summary, and gates each problem count by its own kind's scope, so no
   number or group or label value comes from a host out of reach.
+- The Alarms list (`alarm_list::alarm_list`, see platform-store.md) reads
+  its rows, total, per-value counts and summary only from agent alarms on
+  hosts the `alarms.read` scope reaches, so no number or group, technique
+  or person value comes from a host out of reach.
 - `schema_is_current` is false for an empty, older, or newer schema; callers
   must keep readiness false and must not serve data unless it returns true.
 
@@ -108,3 +112,16 @@ same query took 9.0 s; group membership is therefore evaluated in one pass
 with the inlinable `console_condition_holds_prepared`, and the version
 functions are single expressions so they inline (a call per host cost
 750 ms). Past this size, membership should be materialised in a table.
+
+Alarms list (2026-10-20, same cluster, run under `nice -n 19`): the same
+20,000 agents and 20 groups with 200,000 agent alarms (ten per host over
+six days, a third mitigated, rule metadata for some rules, 1,000 in a case,
+a tenth of hosts reporting alarms off). The default list (open, not
+suppressed, newest first, 50 rows, every count and the summary) measured a
+median of 609 ms over 7 runs (597–625 ms) at full reach (120,000 matching),
+and 219 ms (217–227 ms) scoped to two manual groups of about 1,000 hosts
+each (10,956 matching). Run it with
+`cargo test -p platform-store --test alarm_list_timing -- --ignored --nocapture`;
+it fails above 1 s at full reach. The cost is the one materialised pass
+over the alarms in reach (it spills past `work_mem` at this size) and the
+group membership pass; the counts read a small cube, not the alarms.

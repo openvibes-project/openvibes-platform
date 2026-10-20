@@ -6,6 +6,10 @@
 
 /// Agent listing, inspection, and revocation.
 pub mod agents;
+/// The Alarms list: filters, per-value counts, summary and paging in scope.
+pub mod alarm_list;
+/// The SQL of the Alarms list's one statement.
+mod alarm_list_sql;
 mod alarm_suppression_writes;
 /// Alarm suppressions (P14) as the console manages them: states, where
 /// and duration (roles spec §8).

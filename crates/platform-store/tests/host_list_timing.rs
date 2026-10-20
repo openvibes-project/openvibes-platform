@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::hosts::{everywhere, in_group_counts, query, run};
+use common::hosts::{everywhere, in_group_counts, large_fleet, query, run};
 
 /// Records the default Hosts list (no filters, host order, 50 rows) at
 /// 20,000 agents and 20 groups (10 rule, 10 manual); see console-read.md.
@@ -12,16 +12,9 @@ use common::hosts::{everywhere, in_group_counts, query, run};
 async fn records_hosts_list_latency_at_twenty_thousand_agents() {
     const RUNS: usize = 7;
     let (db, c) = common::migrated().await;
+    large_fleet(&c).await;
     c.batch_execute(
-        "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, hostname, os_id, os_version,
-                             last_address, scanner_version)
-         SELECT 'agent.' || gen_random_uuid()::text, CASE WHEN n % 29 = 0 THEN 'revoked' ELSE 'active' END,
-                now() - interval '180 days', now() - make_interval(mins => (n % 900)::int), 'host-' || n,
-                (ARRAY['debian','ubuntu','fedora','windows','rocky'])[n % 5 + 1], '12',
-                ('10.' || (n / 65536) || '.' || (n / 256 % 256) || '.' || (n % 256))::inet,
-                CASE WHEN n % 3 = 0 THEN '0.4.1' ELSE '0.4.2' END
-         FROM generate_series(1, 20000) n;
-         INSERT INTO console_host_labels (agent_id, label, added_at, added_by)
+        "INSERT INTO console_host_labels (agent_id, label, added_at, added_by)
          SELECT agent_id, 'label-' || (abs(hashtext(agent_id)) % 80), now(), 't' FROM agents;
          INSERT INTO host_vulnerability_counts (agent_id, no_fix, critical, important, moderate, low, unrated, reboot, counted_at)
          SELECT agent_id, 0, abs(hashtext(agent_id)) % 3, 1, 1, 1, 0, 0, now() FROM agents;
@@ -42,37 +35,6 @@ async fn records_hosts_list_latency_at_twenty_thousand_agents() {
     )
     .await
     .unwrap();
-    for (i, os) in ["debian", "ubuntu", "fedora", "windows", "rocky"]
-        .iter()
-        .enumerate()
-    {
-        common::rule_group(
-            &c,
-            &format!("os {i}"),
-            &[("distribution", false, &[&format!("{os} 12")])],
-        )
-        .await;
-        common::rule_group(
-            &c,
-            &format!("name {i}"),
-            &[("hostname", false, &[&format!("host-{i}*")])],
-        )
-        .await;
-    }
-    for i in 0..10 {
-        let members: Vec<String> = c
-            .query(
-                "SELECT agent_id FROM agents WHERE abs(hashtext(agent_id || $1)) % 20 = 0",
-                &[&i.to_string()],
-            )
-            .await
-            .unwrap()
-            .iter()
-            .map(|r| r.get(0))
-            .collect();
-        let members: Vec<&str> = members.iter().map(String::as_str).collect();
-        common::manual_group(&c, &format!("manual {i}"), &members).await;
-    }
     c.batch_execute("ANALYZE").await.unwrap();
 
     let mut samples = Vec::with_capacity(RUNS);

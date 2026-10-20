@@ -621,6 +621,47 @@ inlinable form of the group rule check. `console_condition_holds` keeps its
 answers and now calls the prepared form. Tests: `tests/host_list.rs`,
 `tests/version_order.rs`; the 20,000-host timing (`tests/host_list_timing.rs`) is in console-read.md.
 
+## The Alarms list (`alarm_list::alarm_list`, schema 60)
+
+`alarm_list(client, &AlarmQuery, &AgentScope, actor_id, now) -> AlarmListPage`:
+one statement returns the page rows, the total, the count for every value
+of every filter with the other filters applied, and the summary line, so
+the numbers always agree (roles spec §10.3; plan rulings 2–5). Only agent
+alarms (`source = 'agent'`) are listed. Filters (one value each, all
+combining): state (`None` is every state; the console's default is open),
+severity, suppressed (hidden unless `suppressed`), host (agent id), group,
+technique, case (in an open case or not) and assignee (`Me` is
+`actor_id`, `Unassigned`, or a user id; a value that is not a user id
+matches nothing). Search `q` matches the message, rule id, host name,
+program and parent program (contains, any case). `offset` is held to
+0–100000 and `limit` to 1–100; sorts (last seen, first seen, count,
+severity) break ties by alarm id in the same direction.
+
+Each row carries the host's OS family and distribution display name, the
+techniques of its rule from `console_rule_meta` (matched on rule set,
+set version, rule and rule version; empty when the rule is not indexed, so
+the technique filter never matches it), the assignee (id, display name),
+the open case holding it (id, number) and `suppressed_by`.
+
+The summary counts, over the alarms matching every filter: open; open and
+critical or high; open on hosts that are online with threat alarms off by
+a fault (the Hosts list's `alarms_off` rule: the statement returns each
+host's `health -> 'alarms'` with its counters zeroed, grouped, and
+`alarms_status` decides). The console shows the last part only with
+`hosts.read`.
+
+Scope (spec §6): the hosts are `agent_visibility`'s rule read from the
+one-pass group membership (`host_list_sql::members`, over every agent;
+calling `console_host_in_group` per agent and scope group cost 0.9 s at
+20,000 agents). Group values are groups holding a host with an alarm in
+reach (plus the chosen one when the scope reaches it); technique and
+person values come from alarms in reach, so no value is named from a host
+out of reach. The host filter has no value list. The counts come from a
+small `cube` (alarms per combination of state, severity, suppressed, in a
+case, assignee and techniques) and a per-host rollup for groups and the
+alarms-off part. Tests: `tests/alarm_list.rs`; the 200,000-alarm timing
+(`tests/alarm_list_timing.rs`) is in console-read.md.
+
 ## The host page summary (`host_summary::summary`)
 
 `summary(client, agent_id, &HostScopes, latest, now) -> Option<HostSummary>`:
