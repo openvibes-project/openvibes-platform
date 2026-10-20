@@ -46,9 +46,12 @@ test("a suppression waits for approval and the other team lead approves it", asy
   const b = await firstSignIn(browser, `lead-b-${tag}`, passwords.b);
   const w = await firstSignIn(browser, `lead-w-${tag}`, passwords.w);
   try {
-    // 2. Lead A suppresses the alarm on their host for the Linux group; it waits.
+    // 2. Lead A suppresses the alarm on their host for the Linux group from
+    // the alarm's page (list rows have no Suppress… of their own); it waits.
     await a.goto("/alarms");
-    await a.locator(".view tbody tr").filter({ hasText: `Team alarm on ${host}` }).getByRole("button", { name: /^Suppress…/ }).click();
+    await a.getByRole("link", { name: `Team alarm on ${host}`, exact: true }).click();
+    await expect(a.getByRole("heading", { level: 1 })).toHaveText(`Team alarm on ${host}`);
+    await a.getByRole("button", { name: "Suppress…", exact: true }).click();
     const form = a.getByRole("dialog", { name: "Suppress alarms like this" });
     await form.getByRole("combobox", { name: "Where" }).click();
     await a.getByRole("option", { name: `Linux leads ${tag}` }).click();

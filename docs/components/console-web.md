@@ -73,9 +73,7 @@ Show everything, without page changes for details:
   open hosts), a short summary, then the console's underline tabs
   (`Tabs`). Findings and advisories: Hosts (a `DataTable` with a state
   filter, selection and the bulk bar, never cut off), Evidence, History.
-  Alarms: Process, Evidence, History; a closed alarm shows its decision
-  (note, who, when) with Reopen, and the case button names the open case
-  holding it; plus Suppress… (or the waiting request). The Hosts table shows each
+  The Hosts table shows each
   host's assignee and, for accepted risk, the date it is accepted until
   (marked expired once past), and a `fixed <date>` badge (`about` when
   approximate) for a host whose agent reported the match ended (P13).
@@ -264,29 +262,9 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
 
 ## Threat alarms (P14)
 
-- **Alarms** (`/alarms`, `g m`, `alarms.read`) and an alarm's page
-  (`/alarms/{id}`): see [console-alarms.md](console-alarms.md). An alarm's
-  page has **Suppress…** (with `alarms.suppress`), which opens
-  the suppress form (approved screen 12, `panels/alarms/SuppressForm.tsx`):
-  - **What:** this program (its path) or this exact command (path and
-    masked arguments, shown).
-  - **Where:** this host, each group from
-    `GET /api/v1/alarm-suppressions/options`, then All hosts when the
-    caller's suppress reach is global.
-  - **For:** 7 days (the default), 30 days or until removed.
-  - **Reason:** required; the button stays off until it is filled.
-  With approval on, the note reads "Someone who can approve on those hosts
-  must accept it. Until then these alarms keep arriving." and the button
-  says Request; otherwise Suppress. An active result toasts "Suppressed ·
-  recorded in the audit log" (the server has closed the alarm); a waiting
-  one toasts "Requested · waiting for approval". Refusals show the
-  server's field message in `role="alert"`; the controls are disabled
-  while it sends. `bodyOf` (the POST body) and `whereChoices` are pure and
-  tested. Keys typed in any dialog or textarea never move a table cursor;
-  closing the form returns focus to the button that opened it (the shared
-  `Modal`). An alarm with a waiting request shows it instead of
-  Suppress…; until the waiting list has loaded, or if it fails, none is
-  offered, so nobody asks twice.
+- **Alarms** (`/alarms`, `g m`, `alarms.read`), an alarm's page
+  (`/alarms/{id}`) and the suppress form (approved screen 12): see
+  [console-alarms.md](console-alarms.md).
 
 **Site rules** (`/site-rules`, with `site_rules.read`) lists the site's own
 compliance rules and alarm rules (drafts) with New rule. A rule opens in
@@ -305,10 +283,6 @@ unavailable here). A Hosts section at the bottom of Site rules counts the
 hosts the user may see running each set (current, behind, refused, not set up), lists the
 ones that aren't current, and shows the `[[rule_sets]]` lines to paste into
 an existing agent's `agent.toml`.
-- **An alarm's page** replaced the alarm panel (`alarm`), keeping all it
-  showed: the process tree, rule and versions, evidence, history, the
-  triage actions, Suppress… and a waiting request with **Withdraw request**
-  ([console-alarms.md](console-alarms.md#an-alarms-page)).
 - **Coverage** (`/coverage`, `g t`, global `rules.coverage.read`): an ATT&CK
   matrix (tactics as columns, covered techniques with rule counts; empty
   tactics stay as visible gaps) above the rule list. Chips: Kill chain
@@ -345,7 +319,6 @@ an existing agent's `agent.toml`.
   hands focus to its card. The menu item counts the waiting requests the
   viewer can decide (`GET /api/v1/alarm-suppressions?state=waiting`,
   fetched only with `alarms.suppressions.approve`; `app/menuCount.ts`).
-- An alarm's page offers **Ask about this** with `assistant.use` on its host (ruling 6).
 - The demo serves alarms and suppressions with the server's rules
   (`demo/suppressions.ts`): the approval setting from Settings › General,
   waiting/active/rejected/withdrawn/removed states, every refusal code,
@@ -741,6 +714,13 @@ for the pages not yet moved; its saved views stay in the browser.
   redirect (`/agents?…` to the list, `?open=agent:ID` to the page). Views
   saved in the browser are imported to the person's account the first time
   they open Hosts; see [console-hosts.md](console-hosts.md).
+- **Roles step 5a (Alarms):** the alarm panel became the alarm's page
+  `/alarms/{id}`; old links (`?open=alarm:ID`) redirect to it. Its Last 24
+  hours timeline starts filling after the upgrade (ingest records hourly
+  starts from then on). Rules without `explain` and `check` text show their
+  title and message. The list no longer sorts by message, host or state.
+  Alarm views saved in the browser are moved to the person's account the
+  first time they open Alarms; see [console-alarms.md](console-alarms.md).
 
 ## Configuration
 

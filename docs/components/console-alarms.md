@@ -135,6 +135,60 @@ missing alarm and one on a host out of reach (404) show "No such alarm".
   URL so history keeps no dead entry. A popped-out alarm window from before
   is dropped. The server serves `/alarms/{alarm_id}` (`frontend-contract.json`).
 
+## The suppress form (screen 12)
+
+Suppress… on an alarm's page (with `can.suppress`), "Suppress this
+command…" on a command seen, and Suppress… in the list's bulk bar open the
+suppress form (`panels/alarms/SuppressForm.tsx`):
+
+- **What:** this program (its path) or this exact command (path and
+  masked arguments, shown).
+- **Where:** this host, each group from
+  `GET /api/v1/alarm-suppressions/options`, then All hosts when the
+  caller's suppress reach is global.
+- **For:** 7 days (the default), 30 days or until removed.
+- **Reason:** required; the button stays off until it is filled.
+With approval on, the note reads "Someone who can approve on those hosts
+must accept it. Until then these alarms keep arriving." and the button
+says Request; otherwise Suppress. An active result toasts "Suppressed ·
+recorded in the audit log" (the server has closed the alarm); a waiting
+one toasts "Requested · waiting for approval". Refusals show the
+server's field message in `role="alert"`; the controls are disabled
+while it sends. `bodyOf` (the POST body) and `whereChoices` are pure and
+tested. Keys typed in any dialog or textarea never move a table cursor;
+closing the form returns focus to the button that opened it (the shared
+`Modal`). An alarm with a waiting request shows it instead of
+Suppress…; until the waiting list has loaded, or if it fails, none is
+offered, so nobody asks twice.
+
+## Data behind the page
+
+- **Summary** (`GET /api/v1/alarms/{id}/summary`, store
+  `alarm_summary::alarm_summary`): the alarm, its tiles, rule text, siblings
+  (agent alarms on the same host with the same rule set, rule, program and
+  parent; user decision 1), the 24 hourly sums and the Related card, in one
+  call scoped like the list
+  ([openvibes-console.md](openvibes-console.md#an-alarms-page-summary),
+  [platform-store.md](platform-store.md#an-alarms-page-alarm_summaryalarm_summary-roles-5a)).
+- **Hourly starts** (`alarm_hourly_starts`, schema 60): ingest adds a new
+  alarm's count, or a resend's growth, to the hour it receives it
+  ([openvibes-ingest.md](openvibes-ingest.md)). Hours before the upgrade
+  have no rows, so the timeline starts filling then; maintenance keeps 7 days.
+- **Rule metadata** (`console_rule_meta`, schema 59): each stored bundle's
+  rule title, message, ATT&CK pairs and optional `explain` and `check`
+  (at most 600 characters, protocol rule fields agents ignore), indexed
+  from the verified bundle ([console-detection.md](console-detection.md)).
+  A rule without text shows its title and message; an unindexed rule shows
+  the alarm's message. The baseline alarm rules carry text from the rules
+  repository's next release.
+
+## Upgrading
+
+The alarm panel became this page and old links redirect; the timeline
+starts filling after the upgrade; rules without text show their title;
+sorting by message, host or state is gone; alarm views saved in the
+browser move to the account. See [console-web.md](console-web.md#upgrading).
+
 ## Failure behaviour
 
 - A refused or failed load shows the error box; on the page, a failed
@@ -174,3 +228,13 @@ missing alarm and one on a host out of reach (404) show "No such alarm".
     case on a command seen once, the timeline, axe light and dark;
   - `alarms.spec.ts`, `bulk.spec.ts`, `alarm-suppressions.spec.ts`,
     `detection.spec.ts`, `cases.spec.ts`.
+- **E2E (live, `scripts/test-console-e2e.sh`):** `e2e/live/alarms.spec.ts`:
+  a team lead reaching only `page-1` (seeded with an alarm and two
+  siblings by `scripts/console-e2e-server.sh`) sees only its three alarms,
+  the counts agree with the rows, and the page shows the tiles, Commands
+  seen and the last 24 hours.
+- **Real agent (CI `alarms-e2e`):** `scripts/alarms-e2e.sh` checks the
+  summary after three starts: `tiles.starts` is 3 in one hourly bucket.
+- **Server:** `cargo test -p openvibes-console --test alarm_list_http
+  --test alarm_summary_http`; `cargo test -p platform-store --test
+  alarm_list --test alarm_summary --test alarm_hourly --test rule_meta`.

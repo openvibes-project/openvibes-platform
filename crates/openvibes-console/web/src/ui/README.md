@@ -27,6 +27,6 @@ Shared building blocks used by views, panels and dashboards. They know nothing a
 | `format.ts` | Formatting for times, counts and plurals. |
 | `auditActions.ts` | Audit action ids as short sentences ("Gave a role"), with a readable fallback. |
 | `csv.ts` | Safe CSV cells and the download for the CSV exports. |
-| `charts/HourlyBars.tsx` | 24 hourly bars as an SVG (hidden from screen readers) with a title per bar, and a hidden table of the values. |
+| `charts/` | Small charts shared by pages: `HourlyBars`. |
 
 More: [docs/components/console-web.md](../../../../../docs/components/console-web.md)

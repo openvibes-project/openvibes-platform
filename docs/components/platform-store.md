@@ -691,6 +691,8 @@ for its `can` flags. Tests: `tests/host_summary.rs`.
 
 ## An alarm's page (`alarm_summary::alarm_summary`, roles 5a)
 
+The web page it serves: [console-alarms.md](console-alarms.md).
+
 `alarm_summary(client, id, &alarms_scope, vulnerabilities_scope, now) ->
 Option<AlarmPageSummary>`: `None` when the alarm is missing or `alarms_scope`
 does not reach its host (`console_alarms::detail`). Otherwise: the alarm as

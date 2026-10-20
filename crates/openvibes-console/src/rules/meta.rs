@@ -92,7 +92,7 @@ pub struct Backfill {
     pub skipped: usize,
 }
 
-/// Indexes stored bundles not yet indexed, at most [`BACKFILL_LIMIT`].
+/// Indexes stored bundles not yet indexed, at most `BACKFILL_LIMIT` (10,000).
 pub async fn backfill(client: &Client) -> Result<Backfill, StoreError> {
     let mut done = Backfill::default();
     for (set, version) in rule_meta::missing_bundles(client, BACKFILL_LIMIT).await? {

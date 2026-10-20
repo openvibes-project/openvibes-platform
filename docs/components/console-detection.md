@@ -9,8 +9,9 @@ true, and the exact historical rule definition.
 ## Interfaces
 
 - Finding and alarm detail responses carry their optional stored `Detection`
-  explanation. The web panel labels incomplete, masked, summarized, and
-  truncated values and shows the recorded evaluation time.
+  explanation. The finding panel and the alarm's page ("Why it
+  triggered") label incomplete, masked, summarized, and truncated values
+  and show the recorded evaluation time.
 - `GET /api/v1/compliance/{id}/rule` and
   `GET /api/v1/alarms/{id}/rule` resolve the original rule from the signed
   bundle identified by the observation's set version and preimage hash.
@@ -28,7 +29,10 @@ true, and the exact historical rule definition.
   draft publishing, and `openvibes-admin rules publish`. On start the
   console indexes, once and in the background, stored bundles without rows
   (at most 10,000 per start) and logs how many it indexed and how many did
-  not verify. YAML payloads get no `explain`/`check`.
+  not verify. YAML payloads get no `explain`/`check`. An alarm's page
+  shows `explain` and `check` under What happened, or the rule's title and
+  message until the rule has them
+  ([console-alarms.md](console-alarms.md#data-behind-the-page)).
 - Each rule lookup first authorizes access to the referenced finding or alarm
   with the same permission and asset scope as the parent observation.
 
