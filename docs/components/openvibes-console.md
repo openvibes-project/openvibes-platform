@@ -174,7 +174,8 @@ caller.
 `GET /api/v1/compliance/groups` shows each rule set and rule once in the recent
 window, after scope filtering; `agent_id` narrows it to one host's findings
 (still inside the scope; its cursor is bound to it), for the host page's
-`/compliance?host=`. Its endpoint route pages visible current
+`/compliance?host=`; with `agent_id`, `since` may be any past time (the host
+page asks from 1970 for every current finding), otherwise at most 90 days back. Its endpoint route pages visible current
 reporters with a cursor-bound window (the response's `since` is reused for
 subsequent pages) and can include older matches on request. Triage counts are
 typed by state in OpenAPI. `~unknown` represents

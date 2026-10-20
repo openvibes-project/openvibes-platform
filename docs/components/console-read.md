@@ -100,7 +100,8 @@ Hosts list (2026-10-20, same cluster, run under `nice -n 19`): 20,000 agents,
 about 1,000 hosts), labels, alarms, vulnerability counts and failing checks
 on a share of hosts. The default list (no filters, host order, 50 rows,
 every count and the summary) measured a median of 744 ms over 7 runs
-(735–776 ms). Run it with
+(735–776 ms); with failing checks counted by open triage and critical read
+from `host_listed_critical` (Task 7 fix round 2), 872 ms (810–911 ms). Run it with
 `cargo test -p platform-store --test host_list_timing -- --ignored --nocapture`;
 it fails above 1 s. Through `console_host_in_group` per host and group the
 same query took 9.0 s; group membership is therefore evaluated in one pass

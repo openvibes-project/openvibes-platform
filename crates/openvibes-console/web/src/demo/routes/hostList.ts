@@ -59,8 +59,11 @@ export function registerHostListRoutes(ctx: DemoContext) {
         // Members are active hosts only (console_host_in_group).
         groups: isActive(f) ? data.access.host_groups.filter((g) => inGroup(f, g)).map((g) => g.asset_group_id) : [],
         open_alarms: reaches("alarms.read", agent.id) ? data.alarms.filter((a) => a.agent_id === agent.id && a.state === "open").length : null,
+        // As the host page and the Vulnerabilities list show them by default:
+        // one per advisory, confidence 80 or more, triage open.
         critical: reaches("vulnerabilities.read", agent.id)
-          ? data.vulnerabilities.filter((v) => v.agent_id === agent.id && v.fixed_at == null && v.severity === "critical").length : null,
+          ? new Set(data.vulnerabilities.filter((v) => v.agent_id === agent.id && v.fixed_at == null && v.severity === "critical"
+            && v.confidence >= 80 && v.triage_state === "open").map((v) => v.advisory_id)).size : null,
         // Not triaged away, as the Compliance list and the host page count them.
         failing: reaches("compliance.read", agent.id)
           ? data.findings.filter((x) => x.agent_id === agent.id && (data.triage.get(ctx.triageKey(agent.id, x.rule_set_id, x.rule_id))?.state ?? "open") === "open").length : null,

@@ -154,7 +154,7 @@ fn base() -> String {
          console_version_older(a.scanner_version, $10) AS older,
          CASE WHEN {alarms} THEN (SELECT count(*) FROM alarms al WHERE al.agent_id = a.agent_id
                                     AND al.state = 'open' AND al.source = 'agent') END AS open_alarms,
-         CASE WHEN {vulns} THEN COALESCE((SELECT v.critical FROM host_vulnerability_counts v
+         CASE WHEN {vulns} THEN COALESCE((SELECT v.critical FROM host_listed_critical v
                                            WHERE v.agent_id = a.agent_id), 0)::bigint END AS critical,
          CASE WHEN {compliance} THEN (SELECT count(*) FROM current_findings cf
                                         LEFT JOIN console_finding_triage ct USING (agent_id, rule_set_id, rule_id)

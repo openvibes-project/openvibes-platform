@@ -475,8 +475,7 @@ triage on alarms and findings stays as it is.
   (`ObjectLink`, whose href is the page), the palette, an assistant
   citation and `nav.open({kind: "agent"})` (in `app/nav.ts`, so every call
   site follows) open it and close any open panels (a host is a whole page); the `agent` panel kind is gone, and old
-  `?open=agent:ID` addresses on any view read as the page (other panels
-  stay open). A host window popped out before is dropped. A malformed or
+  `?open=agent:ID` addresses on any view read as the page, with no panels. A host window popped out before is dropped. A malformed or
   unreachable address says "No such host". It reads
   `GET /api/v1/hosts/{id}/summary` (what this person may see and do on
   this host) and `GET /api/v1/agents/{id}` (rule sets, hardening, Export,
@@ -513,10 +512,14 @@ triage on alarms and findings stays as it is.
     (vulnerabilities); Compliance reads `/compliance/groups?agent_id=`,
     that host's findings by rule with its own triage (Include resolved,
     Reopen and bulk close work as usual). Bulk actions then name the host
-    (`agent_id`), so they touch it alone. The page counts what these lists
+    (`agent_id`), so they touch it alone. The Compliance tile and "Show all
+    n" add `window=all`, so the view asks for every current finding of the
+    host (`since` 1970, allowed with `agent_id` only) and a host silent for
+    days lists what the tile counts; removing the chip drops both. The page counts what these lists
     show by default: open-triaged alarms, checks and advisories, and
     vulnerabilities mapped at confidence 80 or more; the Hosts list's
-    failing count is open-triaged checks too.
+    failing count is open-triaged checks too, and its critical count the
+    critical advisories as the page counts them.
   **Last test** shows when the host last raised the harmless test alarm
   and test finding (`openvibes-test alarm|finding`, from `last_test` in
   the summary), with both commands; test alarms and findings carry a

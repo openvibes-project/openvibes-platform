@@ -74,4 +74,18 @@ describe("demo host summary", () => {
     expect(groups.every((g) => g.endpoint_count === 1)).toBe(true);
     expect(groups.filter((g) => g.triage_counts.open > 0)).toHaveLength(after.tiles.compliance_failing ?? -1);
   });
+
+  it("the Hosts list counts critical advisories as the page lists them: an accepted risk leaves the count", async () => {
+    const server = createDemoServer();
+    const call = async (method: string, path: string, body?: unknown) => (await server.handle(method, path, body)).json() as Promise<Record<string, unknown>>;
+    const critical = async (id: string) => ((await call("GET", `/api/v1/hosts?q=${id}`)).items as { problems: { critical: number } }[])[0]?.problems.critical ?? -1;
+    const vulns = (await call("GET", "/api/v1/vulnerabilities")).items as { agent_id: string; advisory_id: string; severity: string }[];
+    const hit = vulns.find((v) => v.severity === "critical");
+    expect(hit).toBeDefined();
+    const id = hit?.agent_id ?? "";
+    const before = await critical(id);
+    expect(before).toBeGreaterThan(0);
+    await call("POST", "/api/v1/vulnerabilities/bulk", { action: "state", state: "accepted_risk", note: "later", accepted_until: new Date(Date.now() + 86_400_000 * 30).toISOString(), items: [{ advisory_id: hit?.advisory_id, agent_id: id }] });
+    expect(await critical(id)).toBe(before - 1);
+  });
 });

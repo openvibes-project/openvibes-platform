@@ -112,7 +112,9 @@ pub(crate) async fn authenticated_finding_groups(
         Ok(v) => v.with_timezone(&Utc),
         Err(_) => return invalid_finding_query(),
     };
-    if since > Utc::now() || since < Utc::now() - Duration::days(90) {
+    // One host's findings are few: its page asks for all of them (any
+    // `since`), so a host silent for days still lists what its tile counts.
+    if since > Utc::now() || (agent_id.is_none() && since < Utc::now() - Duration::days(90)) {
         return invalid_finding_query();
     }
     let limit = match platform_store::console_read::PageLimit::new(

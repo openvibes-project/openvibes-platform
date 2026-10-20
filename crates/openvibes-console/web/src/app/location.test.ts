@@ -25,14 +25,14 @@ describe("location", () => {
     ["?status=active&sort=host", "/hosts?status=online&sort=host"],
     ["?open=agent%3Aagent-00005", "/hosts/agent-00005"],
     ["?agent=agent-00005", "/hosts/agent-00005"],
-    ["?q=web&open=agent%3Aagent-00005&open=advisory%3AX-1", "/hosts/agent-00005?open=advisory%3AX-1"],
+    ["?q=web&open=agent%3Aagent-00005&open=advisory%3AX-1", "/hosts/agent-00005"],
   ])("reads the old /agents%s as %s", (search, want) => {
     expect(formatLocation(parseLocation("/console/agents", search, "/console/"), "/console/")).toBe(`/console${want}`);
   });
 
   it.each([
-    ["/alarms", "?q=web&open=alarm%3A7&open=agent%3Aweb%2001", "/hosts/web%2001?open=alarm%3A7"],
-    ["/compliance", "?open=agent%3Aagent-1&open=advisory%3AX-1", "/hosts/agent-1?open=advisory%3AX-1"],
+    ["/alarms", "?q=web&open=alarm%3A7&open=agent%3Aweb%2001", "/hosts/web%2001"],
+    ["/compliance", "?open=agent%3Aagent-1&open=advisory%3AX-1", "/hosts/agent-1"],
   ])("reads an old host panel on %s%s as the host's page, %s", (view, search, want) => {
     expect(formatLocation(parseLocation(view, search, "/"), "/")).toBe(want);
   });

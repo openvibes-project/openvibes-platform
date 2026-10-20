@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 57; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 58; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -575,6 +575,16 @@ as a CIDR, containment. Each row's `alarms_off` is true when the host is
 online and `alarms_status` of its last health report is off by a fault. Each
 filter takes one value; `offset` is held to 0–100000 and `limit` to 1–100;
 sorts (host, heartbeat, version, problems) break ties by agent ID.
+
+Failing checks are those whose triage is open. Critical is
+`host_listed_critical` (migration 58, a derived table; no row is 0),
+recounted by `refresh_counts` with the matcher and after each triage change: critical
+advisories as the Vulnerabilities list and the host page show them by
+default, one per advisory, fixable or without a fix, reboot pending or
+not, mapped at confidence 80 or more (a known distribution's advisory or a
+package without a fix, as `vulns/confidence.rs`) and triage open. The
+older `critical` column (fixable, no reboot pending) still feeds the fleet
+summary, its history and the group pages.
 
 Scope (spec §6): rows, total, counts and summary come only from hosts in
 `HostScopes.hosts`. Open alarms, critical vulnerabilities and failing

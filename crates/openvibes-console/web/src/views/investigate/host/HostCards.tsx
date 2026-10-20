@@ -186,7 +186,7 @@ export function TopCards({ summary }: { summary: HostSummary }) {
       )}
       {failing && (
         <TopCard title="Compliance failing" total={failing.total} empty="No failing checks" head={["Check", "Rule set", "Severity"]}
-          more={<ShowAll n={failing.total} what="checks" view="/compliance" params={q} />}>
+          more={<ShowAll n={failing.total} what="checks" view="/compliance" params={{ ...q, window: "all" }} />}>
           {failing.items.map((f) => (
             <tr key={`${f.rule_set_id}/${f.rule_id}`}>
               <td><ObjectLink to={{ kind: "finding", id: `${f.rule_set_id}/${f.rule_id}` }}>{f.message}</ObjectLink></td>

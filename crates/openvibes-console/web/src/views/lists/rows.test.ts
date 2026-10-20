@@ -47,6 +47,9 @@ describe("the host filter (plan ruling 9)", () => {
 
   it("a host filter asks the Compliance groups for that host, with its triage", () => {
     expect(complianceGroupsPath(new URLSearchParams("host=agent%2F1&severity=high"))).toBe("/api/v1/compliance/groups?agent_id=agent%2F1");
+    // The host page's links ask for every current finding of the host.
+    expect(complianceGroupsPath(new URLSearchParams("host=agent-1&window=all"))).toBe("/api/v1/compliance/groups?agent_id=agent-1&since=1970-01-01T00%3A00%3A00Z");
+    expect(complianceGroupsPath(new URLSearchParams("window=all"))).toBe("/api/v1/compliance/groups");
     expect(complianceGroupsPath(new URLSearchParams("severity=high"))).toBe("/api/v1/compliance/groups");
   });
 });

@@ -46,11 +46,12 @@ export const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
 /**
  * Old addresses as today's (plan ruling 1): `/agents?…` is the Hosts list,
  * and a host panel opened on any view (`?open=agent:ID`, the assistant's
- * `/agents?agent=ID`) is that host's page; the other panels stay open.
+ * `/agents?agent=ID`) is that host's page, a whole page with no panels
+ * (as `nav.open` opens it).
  */
 export function redirect(location: AppLocation): AppLocation {
   const host = location.panels.find((p) => p.kind === "agent")?.id ?? (location.view === "/agents" ? location.params.get("agent") : null);
-  if (host) return { view: hostPath(host), panels: location.panels.filter((p) => p.kind !== "agent"), params: new URLSearchParams() };
+  if (host) return { view: hostPath(host), panels: [], params: new URLSearchParams() };
   if (location.view !== "/agents") return location;
   return { ...location, view: "/hosts", params: new URLSearchParams(hostsQuery(location.params.toString())) };
 }

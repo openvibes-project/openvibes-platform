@@ -21,7 +21,7 @@ test("old_panel_links_open_the_page: an old host link lands on the page, and Bac
   await expect(heading(page)).toContainText(NAME);
   await page.goBack();
   await expect(page).toHaveURL(/\/alarms$/);
-  // An old host panel on another view is the page too, the view's other panels kept.
+  // An old host panel on another view is the page too, with no panels (a whole page).
   await page.goto("/compliance?open=agent%3Aagent-00005");
   await expect(page).toHaveURL(/\/hosts\/agent-00005$/);
   await page.goBack();
@@ -43,8 +43,11 @@ test("the header reads the host's facts and the tiles lead to the filtered lists
   await expect(page.getByText(`Host: ${NAME}`)).toHaveCount(0);
   await page.goto("/hosts/agent-00005");
   await tiles(page).getByRole("link", { name: /^Compliance failing: \d+$/ }).click();
-  await expect(page).toHaveURL(/\/compliance\?host=agent-00005$/);
+  // Every current finding of the host, as the tile counts them.
+  await expect(page).toHaveURL(/\/compliance\?host=agent-00005&window=all$/);
   await expect(page.locator(".view tbody tr")).toHaveCount(1);
+  await page.getByRole("button", { name: `Remove filter Host: ${NAME}` }).click();
+  await expect(page).toHaveURL(/\/compliance$/);
 });
 
 test("a label is added and removed", async ({ page }) => {

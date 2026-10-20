@@ -34,6 +34,7 @@ async fn seed(fx: &Fx) -> String {
                 VALUES ('{WIN}', '{W1}', now(), 't'), ('{WIN}', '{W2}', now(), 't');
              INSERT INTO host_vulnerability_counts (agent_id, no_fix, critical, important, moderate, low, unrated, reboot, counted_at)
                 VALUES ('{W1}', 0, 2, 0, 0, 0, 0, 0, now());
+             INSERT INTO host_listed_critical (agent_id, critical) VALUES ('{W1}', 2);
              INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version, rule_id, rule_version,
                                  severity, confidence, message, first_seen, last_seen, count, process, ancestors,
                                  received_at, state, note)

@@ -192,7 +192,8 @@ pub async fn seed_alarm(
         .unwrap();
 }
 
-/// A host's stored vulnerability counts (no_fix, unrated and reboot zero).
+/// A host's stored vulnerability counts (no_fix, unrated and reboot zero;
+/// the Hosts list's critical count equals `critical`).
 #[allow(dead_code, reason = "used by some test binaries only")]
 pub async fn seed_host_vuln_counts(
     client: &deadpool_postgres::Client,
@@ -208,6 +209,13 @@ pub async fn seed_host_vuln_counts(
                  (agent_id, no_fix, critical, important, moderate, low, unrated, reboot, counted_at)
              VALUES ($1, 0, $2, $3, $4, $5, 0, 0, now())",
             &[&agent_id, &critical, &important, &moderate, &low],
+        )
+        .await
+        .unwrap();
+    client
+        .execute(
+            "INSERT INTO host_listed_critical (agent_id, critical) VALUES ($1, $2)",
+            &[&agent_id, &critical],
         )
         .await
         .unwrap();

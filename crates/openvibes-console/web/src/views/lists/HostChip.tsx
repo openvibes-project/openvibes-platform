@@ -15,7 +15,7 @@ export function HostChip({ id }: { id: string | null }) {
   const text = `Host: ${agent.data?.hostname ?? id}`;
   return (
     <span className="chip filter-chip">{text}
-      <button type="button" className="filter-chip__remove" aria-label={`Remove filter ${text}`} onClick={() => nav.setParams({ host: null })}>
+      <button type="button" className="filter-chip__remove" aria-label={`Remove filter ${text}`} onClick={() => nav.setParams({ host: null, window: null })}>
         <Icon name="close" size={12} />
       </button>
     </span>

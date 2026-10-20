@@ -421,3 +421,49 @@ async fn a_triaged_finding_is_not_failing() {
     assert_eq!(row(5).failing, Some(1));
     db.drop().await;
 }
+
+/// The list's critical count is what the host page and the Vulnerabilities
+/// list show by default: fixable or not, reboot pending or not, one per
+/// advisory, mapped at confidence 80 or more, triage open.
+#[tokio::test]
+async fn critical_counts_what_the_host_page_lists() {
+    let (db, c) = common::migrated().await;
+    fleet(&c).await;
+    let host = id(6);
+    c.batch_execute(&format!(
+        "INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url) VALUES
+             ('ADV-C1', 'rocky', 'rocky', '9', 'critical', 't', 'u'),
+             ('ADV-REB', 'rocky', 'rocky', '9', 'critical', 't', 'u'),
+             ('ADV-NOFIX', 'rocky', 'rocky', '9', 'critical', 't', 'u'),
+             ('ADV-ODD', 'elsewhere', 'rocky', '9', 'critical', 't', 'u'),
+             ('ADV-RISK', 'rocky', 'rocky', '9', 'critical', 't', 'u'),
+             ('ADV-IMP', 'rocky', 'rocky', '9', 'important', 't', 'u');
+         INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, last_evaluated_at, fixed_at, reboot_needed)
+         VALUES ('{host}', 'ADV-C1', '[]', now(), now(), NULL, false), ('{host}', 'ADV-REB', '[]', now(), now(), NULL, true),
+                ('{host}', 'ADV-ODD', '[]', now(), now(), NULL, false), ('{host}', 'ADV-RISK', '[]', now(), now(), NULL, false),
+                ('{host}', 'ADV-IMP', '[]', now(), now(), NULL, false);
+         INSERT INTO vulnerability_triage (agent_id, advisory_id, state, note, accepted_until, version, updated_at, updated_by)
+         VALUES ('{host}', 'ADV-RISK', 'accepted_risk', 'later', now() + interval '30 days', 1, now(), 'test');
+         INSERT INTO package_versions (manager, name, version) VALUES ('rpm', 'openssl', '3');
+         INSERT INTO host_packages (agent_id, package_version_id) SELECT '{host}', id FROM package_versions;
+         INSERT INTO version_vulnerabilities (package_version_id, advisory_id, package, first_seen_at)
+         SELECT id, 'ADV-NOFIX', 'openssl', now() FROM package_versions;"
+    ))
+    .await
+    .unwrap();
+    platform_store::vulns::refresh_counts(&c, &[host.to_owned()], chrono::Utc::now())
+        .await
+        .unwrap();
+    let page = run(&c, &query(), &everywhere(), None).await;
+    let row = page.rows.iter().find(|r| r.agent_id == host).unwrap();
+    assert_eq!(row.critical, Some(3));
+    let s =
+        platform_store::host_summary::summary(&c, host, &everywhere(), None, chrono::Utc::now())
+            .await
+            .unwrap()
+            .unwrap();
+    let top = s.top_vulnerabilities.unwrap();
+    assert_eq!(top.total, 4);
+    assert!(top.items.iter().all(|v| v.severity == "critical"));
+    db.drop().await;
+}

@@ -303,6 +303,49 @@ async fn compliance_groups_filter_by_host_inside_the_scope() {
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
+    // A host silent for days: its page asks for every current finding.
+    client
+        .batch_execute(&format!(
+            "UPDATE current_findings SET last_observed_at = now() - interval '200 days'
+             WHERE agent_id = '{L1}' AND rule_id = 'tmp-noexec'"
+        ))
+        .await
+        .unwrap();
+    let all_time = "since=1970-01-01T00:00:00Z";
+    let (_, recent) = fx
+        .call(
+            &fx.admin,
+            "GET",
+            &format!("/api/v1/compliance/groups?agent_id={L1}"),
+            None,
+        )
+        .await;
+    assert_eq!(groups(&recent), [("ssh-root".into(), 1, 1)]);
+    let (status, all) = fx
+        .call(
+            &fx.admin,
+            "GET",
+            &format!("/api/v1/compliance/groups?agent_id={L1}&{all_time}"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{all}");
+    let mut got = groups(&all);
+    got.sort();
+    assert_eq!(
+        got,
+        [("ssh-root".into(), 1, 1), ("tmp-noexec".into(), 1, 1)]
+    );
+    let (status, _) = fx
+        .call(
+            &fx.admin,
+            "GET",
+            &format!("/api/v1/compliance/groups?{all_time}"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
     // Mitigated on W1: the host's group shows it closed, the page counts 0.
     client
         .batch_execute(&format!(

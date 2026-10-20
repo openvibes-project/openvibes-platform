@@ -25,6 +25,8 @@ async fn records_hosts_list_latency_at_twenty_thousand_agents() {
          SELECT agent_id, 'label-' || (abs(hashtext(agent_id)) % 80), now(), 't' FROM agents;
          INSERT INTO host_vulnerability_counts (agent_id, no_fix, critical, important, moderate, low, unrated, reboot, counted_at)
          SELECT agent_id, 0, abs(hashtext(agent_id)) % 3, 1, 1, 1, 0, 0, now() FROM agents;
+         INSERT INTO host_listed_critical (agent_id, critical)
+         SELECT agent_id, abs(hashtext(agent_id)) % 3 FROM agents WHERE abs(hashtext(agent_id)) % 3 > 0;
          INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version, rule_id, rule_version,
                              severity, confidence, message, first_seen, last_seen, count, process, ancestors,
                              received_at, state, note)
