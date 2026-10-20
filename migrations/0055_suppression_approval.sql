@@ -17,7 +17,7 @@ ALTER TABLE alarm_suppressions
     ADD COLUMN alarm_id bigint;
 
 UPDATE alarm_suppressions SET state = 'removed' WHERE removed_at IS NOT NULL;
-UPDATE alarm_suppressions SET activated_at = created_at;
+UPDATE alarm_suppressions SET activated_at = created_at WHERE activated_at IS NULL;
 ALTER TABLE alarm_suppressions ALTER COLUMN state DROP DEFAULT;
 
 ALTER TABLE alarm_suppressions

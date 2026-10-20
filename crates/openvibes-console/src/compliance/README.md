@@ -11,6 +11,7 @@ Compliance in the console: the latest findings and finding groups, history, tria
 | `triage.rs` | One finding's triage: read and update. |
 | `history.rs` | Finding history: the list and one event. |
 | `bulk.rs` | Bulk triage of alarms, findings or vulnerabilities. |
+| `bulk/` | The bulk "suppress" action. |
 | `triage_detail.rs` | Triage in the detail view and the History tab. |
 | `types.rs` | Request and response types of findings, groups, history and triage. |
 
