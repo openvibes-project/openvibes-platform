@@ -98,7 +98,7 @@ test("Most exposed hosts ranks hosts across all kinds even before any feed impor
   const tile = page.locator(".tile", { hasText: "Most exposed hosts" });
   const row = tile.locator(".list__row").first();
   await expect(row).toContainText(/\d+ open$/);
-  await expect(row).toHaveAttribute("href", /agent/);
+  await expect(row).toHaveAttribute("href", /^\/hosts\/[^/]+$/);
   await expect(tile.getByText("No host has an open")).toHaveCount(0);
 });
 
