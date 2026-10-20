@@ -379,8 +379,9 @@ impl Run {
     }
 }
 
-/// Each label's state: the last call's when all its calls finished, the
-/// first that did not finish, `None` before it is reached. The optional
+/// Each label's state: the first call that did not finish; when all
+/// finished, Done if one call did the work (Skipped only when every call
+/// was); `None` before it is reached. The optional
 /// model's call is left out of a label that holds other calls: it never
 /// stops a run, so it must not turn them red.
 pub fn label_states(run: &Run) -> Vec<Option<StepState>> {
@@ -402,10 +403,12 @@ pub fn label_states(run: &Run) -> Vec<Option<StepState>> {
                 .flatten()
                 .find(|s| !s.finished())
                 .or_else(|| {
-                    own.iter()
-                        .all(|s| s.is_some())
-                        .then(|| own.last().copied().and_then(Option::as_ref))
-                        .flatten()
+                    // Finished: one call that did the work makes the row done.
+                    own.iter().all(|s| s.is_some()).then(|| {
+                        let mut all = own.iter().copied().flatten();
+                        let first = all.clone().next();
+                        all.find(|s| matches!(s, StepState::Done(_))).or(first)
+                    })?
                 })
                 .cloned()
         })

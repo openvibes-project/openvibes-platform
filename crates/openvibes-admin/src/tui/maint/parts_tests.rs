@@ -486,3 +486,24 @@ fn a_half_done_job_blocks_apply_with_repairs_words() {
     apply(&mut app);
     assert!(app.outcome.is_none());
 }
+
+#[test]
+fn a_step_group_with_one_skipped_call_still_shows_done() {
+    let ok = |t: &str| Ok(t.to_owned());
+    let mut app = page(vec![
+        ok("done\tok"),
+        ok("done\tok"),
+        ok("done\tok"),
+        ok("done\tok"),
+        ok("done\tok"),
+        ok("done\tremoved the agent's data and account"),
+        ok("skipped\tthe administration tool stays: other parts remain"),
+    ]);
+    tick(&mut app, 0);
+    apply(&mut app);
+    yes_and_password(&mut app);
+    let text = screen(&app);
+    let row = text.lines().find(|l| l.contains("Remove its data"));
+    assert!(row.is_some_and(|l| l.contains("✓")), "{text}");
+    assert!(!text.contains("–"), "{text}");
+}
