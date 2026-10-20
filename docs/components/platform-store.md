@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 42; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 57; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -561,6 +561,39 @@ count, then insert; returns `Saved`, `NameTaken` or `TooMany` at 50),
 `delete` (own views only; false when none), `hidden_columns` and
 `set_hidden_columns`. Page and column keys are validated by the console.
 Tests: `tests/saved_views.rs`. See [saved-views.md](saved-views.md).
+
+## The Hosts list (`host_list::hosts`, schema 57)
+
+`hosts(client, &HostQuery, &HostScopes, latest, now) -> HostListPage`: one
+statement returns the page rows, the total, the count for every value of
+every filter with the other filters applied (status, OS family, group,
+label, problems, agent age), and the summary line (online, older agent,
+critical), so the numbers always agree (roles spec §10.1, §10.3; plan
+rulings 2–7). Search `q` matches the host name (contains, any case), the
+start of the IP address, or, when it parses as a CIDR, containment. Each
+filter takes one value; `offset` is held to 0–100000 and `limit` to 1–100;
+sorts (host, heartbeat, version, problems) break ties by agent ID.
+
+Scope (spec §6): rows, total, counts and summary come only from hosts in
+`HostScopes.hosts`. Open alarms, critical vulnerabilities and failing
+checks are each counted only where `alarms`, `vulnerabilities` or
+`compliance` reaches the host (`None` on the row otherwise, and not counted
+in that problem value); "none open" needs at least one kind in reach. Group
+values are groups with a host in scope (plus the chosen one, if it has
+one); label values are the 50 most used on hosts in scope (plus the chosen
+one, if present there). Group membership is evaluated in one pass
+(`host_list_counts::members`), the same rule as `console_host_in_group`,
+pinned by the tests.
+
+Migration 57 adds `console_version_parts(v) -> int[]` and
+`console_version_older(v, latest) -> boolean` (NULL when either is
+unknown; numeric segments, pre-release older than its release, build
+ignored, as the web's `olderThan`), with the Rust twin
+`version_order::older` checked against the same table; and
+`console_condition_holds_prepared` / `console_condition_likes`, an
+inlinable form of the group rule check. `console_condition_holds` keeps its
+answers and now calls the prepared form. Tests: `tests/host_list.rs`,
+`tests/version_order.rs`; the 20,000-host timing (`tests/host_list_timing.rs`) is in console-read.md.
 
 ## Suppressions with approval (`alarm_suppressions::…`, schema 55)
 

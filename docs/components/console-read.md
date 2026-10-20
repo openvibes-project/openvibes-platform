@@ -60,6 +60,10 @@ agent visibility in SQL for the supplied global or host-group scope.
 - Every list requires `PageLimit`, which accepts 1–100 rows, and fetches at
   most one extra row to decide whether to return a continuation cursor. The
   console serializes cursors and binds them to filters and authorization.
+- The Hosts list (`host_list::hosts`, see platform-store.md) applies the
+  same visibility predicate to its rows, total, per-value counts and
+  summary, and gates each problem count by its own kind's scope, so no
+  number or group or label value comes from a host out of reach.
 - `schema_is_current` is false for an empty, older, or newer schema; callers
   must keep readiness false and must not serve data unless it returns true.
 
@@ -90,3 +94,16 @@ the 50-row page measured p50 496 µs and p95 568 µs. The deliberate summary
 aggregate used a sequential scan of 50,000 rows (758 shared buffers, 9.158 ms
 execution); its thirty client round trips measured p50 6.910 ms and p95 7.527
 ms. These are local warm-cache observations, not a deployment latency target.
+
+Hosts list (2026-10-20, same cluster, run under `nice -n 19`): 20,000 agents,
+20 groups (5 distribution and 5 host-name rule groups, 10 manual groups of
+about 1,000 hosts), labels, alarms, vulnerability counts and failing checks
+on a share of hosts. The default list (no filters, host order, 50 rows,
+every count and the summary) measured a median of 744 ms over 7 runs
+(735–776 ms). Run it with
+`cargo test -p platform-store --test host_list_timing -- --ignored --nocapture`;
+it fails above 1 s. Through `console_host_in_group` per host and group the
+same query took 9.0 s; group membership is therefore evaluated in one pass
+with the inlinable `console_condition_holds_prepared`, and the version
+functions are single expressions so they inline (a call per host cost
+750 ms). Past this size, membership should be materialised in a table.

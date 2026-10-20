@@ -67,6 +67,10 @@ pub mod host_group_writes;
 pub mod host_groups;
 /// Host labels: free strings for filtering, never part of access.
 pub mod host_labels;
+/// The Hosts list: filters, per-value counts, summary and paging in scope.
+pub mod host_list;
+/// The Hosts list's filters and per-value counts.
+mod host_list_counts;
 /// Open ports and running services per host (P15, Assets v2).
 pub mod host_services;
 /// Queries the ingest service runs.
@@ -89,6 +93,8 @@ mod status;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;
 pub mod triage_history;
+/// Agent version order, the Rust twin of `console_version_older` (schema 57).
+pub mod version_order;
 pub mod vulnerability_triage;
 /// Advisories, vulnerabilities, and feed state (vulnerability management).
 pub mod vulns;
