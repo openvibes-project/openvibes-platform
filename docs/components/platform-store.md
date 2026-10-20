@@ -582,7 +582,7 @@ in that problem value); "none open" needs at least one kind in reach. Group
 values are groups with a host in scope (plus the chosen one, if it has
 one); label values are the 50 most used on hosts in scope (plus the chosen
 one, if present there). Group membership is evaluated in one pass
-(`host_list_counts::members`), the same rule as `console_host_in_group`,
+(`host_list_sql::members`), the same rule as `console_host_in_group`,
 pinned by the tests.
 
 Migration 57 adds `console_version_parts(v) -> int[]` and

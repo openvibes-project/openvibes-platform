@@ -69,8 +69,8 @@ pub mod host_groups;
 pub mod host_labels;
 /// The Hosts list: filters, per-value counts, summary and paging in scope.
 pub mod host_list;
-/// The Hosts list's filters and per-value counts.
-mod host_list_counts;
+/// The SQL of the Hosts list's one statement.
+mod host_list_sql;
 /// Open ports and running services per host (P15, Assets v2).
 pub mod host_services;
 /// Queries the ingest service runs.

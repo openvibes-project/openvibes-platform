@@ -1,10 +1,12 @@
 -- OpenVIBES platform schema version 57: agent version order and a faster
 -- host-group rule check for the Hosts list (roles plan 2026-10-20).
 --
--- Version order (ruling 7) matches the web's `olderThan`
--- (views/lists/rows.ts) and platform-store's version_order.rs: numeric
--- segments compared (the shorter padded with zeros), a pre-release is older
--- than its release, build metadata ignored. Unknown gives NULL. Both
+-- Version order (ruling 7), the same rules as platform-store's
+-- version_order.rs and close to the web's `olderThan` (views/lists/rows.ts):
+-- numeric segments compared (the shorter padded with zeros), a pre-release
+-- is older than its release, build metadata ignored. Unlike the web, it
+-- ignores the pre-release tag itself (1.0.0-rc1 and 1.0.0-rc2 are equal) and
+-- gives NULL for an unknown or non-numeric version. Both
 -- functions are single expressions so PostgreSQL inlines them; a function
 -- call per host cost 750 ms at 20,000 hosts.
 

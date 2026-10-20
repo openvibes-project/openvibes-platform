@@ -5,16 +5,15 @@
 //! always agree, and every part sees only hosts inside the viewer's scope;
 //! each problem kind is counted only where its own permission reaches.
 
-use std::net::IpAddr;
-
 use chrono::{DateTime, Duration, Utc};
 use tokio_postgres::Row;
 
 use crate::{
     Client, StoreError,
-    console_read::{AgentScope, MAX_PAGE_SIZE, agent_visibility},
+    console_read::{AgentScope, MAX_PAGE_SIZE},
+    host_group_writes::is_cidr,
     host_groups::GroupKind,
-    host_list_counts::{counts, except, members},
+    host_list_sql::statement,
     status::OFFLINE_AFTER_MINUTES,
 };
 
@@ -218,93 +217,9 @@ pub struct HostListPage {
     pub summary: HostSummaryLine,
 }
 
-/// CTE `base`: hosts in the hosts scope (`$2`,`$3`) matching the search
-/// (`$11` text, `$12` CIDR), with status (`$1` online threshold), agent age
-/// (`$10` latest) and each problem count gated by its own scope (`$4`–`$9`).
-fn base() -> String {
-    let hosts = agent_visibility("a.agent_id", "$2", "$3");
-    let alarms = agent_visibility("a.agent_id", "$4", "$5");
-    let vulns = agent_visibility("a.agent_id", "$6", "$7");
-    let compliance = agent_visibility("a.agent_id", "$8", "$9");
-    format!(
-        "base AS MATERIALIZED (
-  SELECT a.agent_id, a.hostname, a.last_address, a.os_id, a.os_version, a.distribution,
-         a.os_family, a.scanner_version, s.seen,
-         CASE WHEN a.status = 'imported' THEN 'imported' WHEN a.status = 'revoked' THEN 'revoked'
-              WHEN s.seen IS NULL OR s.seen < $1 THEN 'offline' ELSE 'online' END AS status,
-         console_version_older(a.scanner_version, $10) AS older,
-         CASE WHEN {alarms} THEN (SELECT count(*) FROM alarms al WHERE al.agent_id = a.agent_id
-                                    AND al.state = 'open' AND al.source = 'agent') END AS open_alarms,
-         CASE WHEN {vulns} THEN COALESCE((SELECT v.critical FROM host_vulnerability_counts v
-                                           WHERE v.agent_id = a.agent_id), 0)::bigint END AS critical,
-         CASE WHEN {compliance} THEN (SELECT count(*) FROM current_findings cf
-                                        WHERE cf.agent_id = a.agent_id) END AS failing
-  FROM agents a CROSS JOIN LATERAL (SELECT agent_seen_at(a.agent_id, a.last_seen_at) AS seen) s
-  WHERE {hosts}
-    AND ($11::text IS NULL OR strpos(lower(a.hostname), lower($11)) > 0
-         OR starts_with(host(a.last_address), $11) OR a.last_address <<= $12::text::inet))"
-    )
-}
-
-/// The sort keys over a `filtered f` row, ending in the agent-id tie-break.
-fn order(sort: HostSort, descending: bool) -> String {
-    let dir = if descending { "DESC" } else { "ASC" };
-    let key = match sort {
-        HostSort::Host => format!("COALESCE(lower(f.hostname), '') {dir}"),
-        HostSort::Heartbeat => format!("f.seen {dir} NULLS LAST"),
-        HostSort::Version => format!(
-            "console_version_parts(f.scanner_version) {dir} NULLS LAST,
-             strpos(split_part(f.scanner_version, '+', 1), '-') = 0 {dir}"
-        ),
-        HostSort::Problems => format!(
-            "COALESCE(f.open_alarms, 0) + COALESCE(f.critical, 0) + COALESCE(f.failing, 0) {dir}"
-        ),
-    };
-    format!("{key}, f.agent_id")
-}
-
-/// The statement: `filtered` is `base` with every filter; `meta` holds the
-/// total, summary and counts as JSON on the first row only; the page rows
-/// (`$19` limit, `$20` offset) carry their groups and labels. An empty page
-/// still returns one row, with the meta and no host.
-fn statement(sort: HostSort, descending: bool) -> String {
-    format!(
-        "WITH {base}, {members}, {counts},
-filtered AS (SELECT * FROM base b WHERE {all}),
-meta AS (
-  SELECT jsonb_build_object(
-    'total', count(*), 'online', count(*) FILTER (WHERE status = 'online'),
-    'older', count(*) FILTER (WHERE older), 'critical', count(*) FILTER (WHERE critical > 0),
-    'counts', (SELECT COALESCE(jsonb_agg(jsonb_build_array(facet, key, name, kind, n)), '[]') FROM counts)) AS meta
-  FROM filtered),
-page AS (SELECT f.*, row_number() OVER (ORDER BY {order}) AS ord FROM filtered f ORDER BY ord LIMIT $19 OFFSET $20)
-SELECT CASE WHEN p.ord IS NOT DISTINCT FROM (SELECT min(ord) FROM page) THEN m.meta END,
-       p.agent_id, p.hostname, host(p.last_address), p.os_id, p.os_version,
-       console_distribution_name(p.distribution), p.os_family, p.status, p.seen,
-       gr.ids, gr.names, gr.kinds, gr.n,
-       ARRAY(SELECT l.label FROM console_host_labels l WHERE l.agent_id = p.agent_id ORDER BY l.label COLLATE \"C\"),
-       p.open_alarms, p.critical, p.failing, p.scanner_version, p.older
-FROM meta m LEFT JOIN page p ON true
-LEFT JOIN LATERAL (
-  SELECT (array_agg(g.asset_group_id::text ORDER BY lower(g.name), g.asset_group_id))[1:2] AS ids,
-         (array_agg(g.name ORDER BY lower(g.name), g.asset_group_id))[1:2] AS names,
-         (array_agg(g.kind ORDER BY lower(g.name), g.asset_group_id))[1:2] AS kinds, count(*) AS n
-  FROM console_asset_groups g WHERE console_host_in_group(p.agent_id, g.asset_group_id)) gr ON true
-ORDER BY p.ord",
-        base = base(),
-        members = members(),
-        counts = counts(),
-        all = except(None),
-        order = order(sort, descending),
-    )
-}
-
 /// `q` as a CIDR when it is one (`10.0.0.0/16`), so the cast never fails.
 fn cidr(q: &str) -> Option<&str> {
-    let (addr, prefix) = q.split_once('/')?;
-    let addr: IpAddr = addr.parse().ok()?;
-    let prefix: u8 = prefix.parse().ok()?;
-    (prefix <= if addr.is_ipv4() { 32 } else { 128 }).then_some(q)
+    (q.contains('/') && is_cidr(q)).then_some(q)
 }
 
 fn scope_params(scope: Option<&AgentScope>) -> (bool, Vec<String>) {

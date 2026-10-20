@@ -41,6 +41,10 @@ async fn search_matches_name_and_address() {
         ),
         ("WEB-01", vec!["web-01"]),
         ("10.0.0.0/99", vec![]),
+        ("10.0.0.0/+8", vec![]),
+        ("10.0.0.0/33", vec![]),
+        ("::/129", vec![]),
+        ("10.0.0.0/", vec![]),
     ] {
         let page = run(
             &c,
@@ -129,6 +133,60 @@ async fn counts_and_values_stay_inside_the_scope() {
     let page = run(&c, &label, &scopes, None).await;
     assert_eq!(page.total, 0);
     assert!(page.counts.labels.iter().all(|l| l.0 != "win-only"));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn chosen_values_in_reach_are_listed_with_zero() {
+    let (db, c) = common::migrated().await;
+    let groups = fleet(&c).await;
+    // global: no host matching "web" is in Windows box or labelled win-only
+    let q = HostQuery {
+        q: Some("web"),
+        group: Some(&groups.windows),
+        label: Some("win-only"),
+        ..query()
+    };
+    let page = run(&c, &q, &everywhere(), None).await;
+    assert_eq!(page.total, 0);
+    let windows: Vec<_> = page
+        .counts
+        .groups
+        .iter()
+        .filter(|g| g.0 == groups.windows)
+        .collect();
+    assert_eq!(windows.len(), 1);
+    assert_eq!((windows[0].1.as_str(), windows[0].3), ("Windows box", 0));
+    assert!(page.counts.labels.contains(&("win-only".to_owned(), 0)));
+
+    // scoped to Web: the scope's own group is listed with 0 under a search
+    // matching none of its hosts; a label on Web hosts likewise
+    let web = AgentScope::AssetGroups(vec![groups.web.clone()]);
+    let scopes = HostScopes {
+        hosts: &web,
+        ..everywhere()
+    };
+    let q = HostQuery {
+        q: Some("zzz"),
+        group: Some(&groups.web),
+        label: Some("prod"),
+        ..query()
+    };
+    let page = run(&c, &q, &scopes, None).await;
+    assert!(
+        page.counts
+            .groups
+            .iter()
+            .any(|g| g.0 == groups.web && g.3 == 0)
+    );
+    assert!(page.counts.labels.contains(&("prod".to_owned(), 0)));
+    // an unknown label is never echoed
+    let q = HostQuery {
+        label: Some("nope"),
+        ..query()
+    };
+    let page = run(&c, &q, &scopes, None).await;
+    assert!(page.counts.labels.iter().all(|l| l.0 != "nope"));
     db.drop().await;
 }
 
