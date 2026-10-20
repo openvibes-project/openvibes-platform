@@ -730,6 +730,51 @@ These fill gaps in §10.
     The Rule sets card and the hardening row keep their existing components and routes (`/agents/{id}/rule-set-assignments`, `/rule-sets`), which are already permission-aware.
 11. **`DetailPage` builds only what screen 17 uses:** the header, four tiles and the two columns. The hosts table with segment chips and the Related card come with step 5's first page that needs them.
 
+### Plan rulings, 2026-10-20 (step 5a)
+
+These fill gaps in the Alarms list and an alarm's page.
+
+**User decisions (2026-10-20):**
+
+1. **Commands seen = siblings.** The page lists every alarm on the same host with the same rule set, rule, program (`exe`) and parent (`ancestors[0].exe`). Each sibling is one distinct command line, with its count, first and last seen, state, case and suppression. The spec's `alarm_commands` table is dropped. Agents already split alarms by command line (contracts-v1, alarm collapse), so the siblings are those lines. Old data works as is.
+2. **The last 24 hours = per-hour starts.** Ingest records the growth of each alarm's count, bucketed by the hour the report arrived. Rows are kept 7 days. The page draws 24 hourly bars for the alarm and its siblings together.
+3. **"What happened" and "what to check" come from rules.**
+   - Rules gain optional `explain` and `check` text, at most 600 characters each. This is changed in `openvibes-protocol` first.
+   - Old agents ignore the fields: the agent's `Rule` has no `deny_unknown_fields`, and the rule-set schema allows extra properties.
+   - The platform reads the fields from the verified bundle JSON, so no agent release is needed.
+   - Until a rule has the text, the card shows the rule's title and its message.
+
+**Rulings:**
+
+1. **A new list route, `GET /v1/alarm-list`.** The keyset-paged `GET /v1/alarms` stays for its current users: live alarms, dashboards and the host page. `/alarms/{id}` is the page.
+2. **Filter values** (one per filter, all combining):
+   - **State:** open, mitigated, accepted_risk, false_positive. The default view is "open"; a `state=all` value shows every state.
+   - **Severity:** the five levels.
+   - **Suppressed:** hidden (default), shown. Shown means suppressed alarms are included.
+   - **Host:** the host chip from step 4.
+   - **Group:** groups with at least one host the viewer can see, plus the chosen one.
+   - **Technique:** techniques of alarms in reach, from the rule-metadata index. An alarm whose rule has no technique matches none.
+   - **Case:** in a case, not in a case.
+   - **Assignee:** me, unassigned, and people with at least one alarm in reach.
+3. **Search** covers the message, rule ID, host name, program and parent program.
+4. **Paging is by offset,** as on Hosts: `offset` 0..=100000, `limit` 1..=100, default 50.
+   - **Sorts:** last seen (default, newest first), first seen, count, severity.
+   - Ties are broken by id.
+5. **The summary line:** "N open · N critical or high · N on hosts with alarms off". The last part shows only with `hosts.read`.
+6. **Ask about this** on the page uses the host page's pattern (`assistant.askAbout`), shown with `assistant.use` on that host.
+7. **⋯** holds Export (a CSV of this alarm and its siblings, with `alarms.export`) and Copy link.
+8. **The rule-metadata index:**
+   - `console_rule_meta` (rule_set_id, rule_set_version, rule_id, rule_version, title, message, explain, check, attack jsonb) is filled from verified bundles when a rule set is stored or uploaded.
+   - On console start, a one-time background backfill indexes every stored bundle not yet indexed.
+   - An alarm whose rule is not indexed falls back to `GET /alarms/{id}/rule`, which resolves it as today.
+9. **"Same rule elsewhere"** shows the count of other hosts in reach with an open alarm from this rule, and links to the list filtered by the rule (`?q=<rule_id>`). Rule ID is not a separate filter.
+10. **Hourly starts:**
+    - a new alarm adds its whole count to the hour it was received;
+    - a growing count adds the difference to the hour of the report;
+    - a shrinking count is ignored.
+
+    The table is `alarm_hourly_starts (alarm_row_id bigint, hour timestamptz, starts int, PK (alarm_row_id, hour))`. It is not partitioned, and maintenance deletes hours older than 7 days.
+
 ## 11. Dashboards
 
 - **Storage:** `console_dashboards.shared_role_id` becomes a visibility:
