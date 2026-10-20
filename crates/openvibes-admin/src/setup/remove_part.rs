@@ -44,20 +44,20 @@ fn wipe<R: Runner>(ctx: &Ctx<R>, paths: &[&str]) -> Result<(), String> {
         .try_for_each(|path| remove_file_or_dir(&ctx.path(path)))
 }
 
-/// The console's `[assistant]` section, when it is the local one.
-fn console_section<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
+/// The console's `[assistant]` section, when it is the local one. Written
+/// like `assistant_setup` does: owner and mode kept, validated, a `.bak`.
+fn console_section<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     let Ok(text) = ctx.read(CONSOLE) else {
-        return Ok(false);
+        return Ok(());
     };
-    let Some(updated) = crate::assistant_setup::unconfigure(&text)? else {
-        return Ok(false);
-    };
-    // Owner stays (None); the mode is the file's own.
-    let mode = std::fs::metadata(ctx.path(CONSOLE))
-        .map(|m| std::os::unix::fs::PermissionsExt::mode(&m.permissions()) & 0o7777)
-        .map_err(|error| format!("{CONSOLE}: {error}"))?;
-    ctx.put(CONSOLE, updated.as_bytes(), None, mode)?;
-    Ok(true)
+    match crate::assistant_setup::unconfigure(&text)? {
+        Some(updated) => crate::config_file::replace(
+            &ctx.path("/etc/openvibes"),
+            platform_host::Service::Console,
+            &updated,
+        ),
+        None => Ok(()),
+    }
 }
 
 pub(super) fn purge<R: Runner>(
@@ -71,12 +71,15 @@ pub(super) fn purge<R: Runner>(
         done.push("removed the agent's data and account");
     }
     if components.contains(&Component::Assistant) {
+        // The console stops pointing at the model before the model goes.
+        console_section(ctx)?;
         wipe(
             ctx,
             &["/var/lib/openvibes-llm", "/etc/openvibes/llm-api-key"],
         )?;
         account(ctx, "openvibes-llm")?;
-        if console_section(ctx)? {
+        // Every run, so Try again after a failed restart restarts.
+        if super::installed(ctx, "openvibes-console") {
             ctx.ok(Systemctl, &["try-restart", "openvibes-console"])?;
         }
         done.push("removed the assistant's data, model and account");

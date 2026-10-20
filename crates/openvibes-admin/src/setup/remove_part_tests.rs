@@ -7,6 +7,7 @@ use crate::setup::{
     plan::Component::*,
 };
 
+const BASE: &str = "development_listen = \"127.0.0.1:8443\"\nhealth_listen = \"127.0.0.1:8444\"\n";
 const FOREIGN: &str = "[assistant]\nenabled = true\nprofile = \"large\"\n[assistant.backend]\nurl = \"https://gpu.lan/v1\"\nmodel = \"m\"\n";
 
 fn purge(fake: &Fake, plan: &crate::setup::plan::Plan, args: &RemoveArgs) -> StepState {
@@ -14,6 +15,11 @@ fn purge(fake: &Fake, plan: &crate::setup::plan::Plan, args: &RemoveArgs) -> Ste
 }
 
 fn seed(fake: &Fake) {
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "openvibes-console"],
+        0,
+        "",
+    );
     fake.answer(&["/usr/sbin/userdel"], 0, "");
     fake.answer(&["/usr/sbin/groupdel"], 0, "");
     fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
@@ -67,18 +73,20 @@ fn removing_the_assistant_removes_model_key_account_and_its_console_section() {
             &format!("{text}openvibes-llm:x:1:1::/:/sbin/nologin\n"),
         );
     }
-    let local = crate::assistant_setup::configure("x = 1\n", &Default::default(), false).unwrap();
+    let local = crate::assistant_setup::configure(BASE, &Default::default(), false).unwrap();
     fake.file("/etc/openvibes/console.toml", &local);
     let state = purge(&fake, &plan(&[Ingest]), &args(&[Assistant], None));
     assert_eq!(
         state,
         StepState::Done("removed the assistant's data, model and account".into())
     );
-    assert_eq!(fake.text("/etc/openvibes/console.toml"), "x = 1\n");
+    assert_eq!(fake.text("/etc/openvibes/console.toml"), BASE);
     assert!(!fake.root.join("etc/openvibes/llm-api-key").exists());
     assert!(!fake.root.join("var/lib/openvibes-llm").exists());
     assert_eq!(fake.call(&["/usr/sbin/userdel"])[1], "openvibes-llm");
-    fake.call(&["/usr/bin/systemctl", "try-restart", "openvibes-console"]);
+    assert!(fake.called(&["/usr/bin/systemctl", "try-restart", "openvibes-console"]));
+    // Written by config_file::replace: a backup of the old file is left.
+    assert!(fake.root.join("etc/openvibes/console.toml.bak").exists());
     assert!(fake.root.join("var/lib/openvibes-agent").exists());
 }
 
@@ -89,7 +97,21 @@ fn a_foreign_assistant_backend_stays() {
     fake.file("/etc/openvibes/console.toml", FOREIGN);
     purge(&fake, &plan(&[Ingest]), &args(&[Assistant], None));
     assert_eq!(fake.text("/etc/openvibes/console.toml"), FOREIGN);
-    assert!(!fake.called(&["/usr/bin/systemctl", "try-restart"]));
+}
+
+#[test]
+fn removing_both_parts_joins_the_text_and_deletes_the_groups() {
+    let fake = Fake::new("part-both");
+    seed(&fake);
+    let state = purge(&fake, &plan(&[Ingest]), &args(&[Agent, Assistant], None));
+    assert_eq!(
+        state,
+        StepState::Done(
+            "removed the agent's data and account; removed the assistant's data, model and account"
+                .into()
+        )
+    );
+    assert!(fake.called(&["/usr/sbin/groupdel", "openvibes_agent"]));
 }
 
 #[test]
