@@ -1,10 +1,48 @@
-// Settings: the audit log and its retention, and the assistant's internet access.
+// Settings: the general settings (settings/ in the console), the audit log and its retention, and the assistant's internet access.
 import { validDomain, validSearxngUrl } from "../../views/admin/settings/assistantRules";
 import type { DemoContext } from "../context";
-import { json, page, problem } from "../http";
+import type { SettingChangeView, SettingView } from "../../api/types";
+import { browserPersistence, json, page, problem } from "../http";
+
+// The typed general settings, as settings/definitions.rs lists them.
+const DEFINITIONS = [
+  { key: "suppressions.require_approval", section: "Alarm suppressions", label: "Suppressions need approval", kind: "bool", default: false,
+    help: "A new suppression waits until someone else who can approve on those hosts accepts it. Matching alarms keep arriving while it waits." },
+  { key: "sso.remove_inactive_days", section: "Single sign-on", label: "Remove inactive single sign-on users", kind: "int", min: 1, max: 3650, default: 90,
+    help: "Days without a sign-in before a single sign-on user is removed. Takes effect once single sign-on is set up." },
+] as const;
+type Stored = { value: unknown; changed_at: string; changed_by: string };
+type State = { values: Record<string, Stored>; recent: SettingChangeView[] };
 
 export function registerSettingsRoutes(ctx: DemoContext) {
   const { data, iso, actor, audit, route } = ctx;
+  // Kept in the browser, so a reload keeps a change.
+  const store = browserPersistence("openvibes.v2.demo.settings");
+  const loaded = store?.load() as State | null | undefined;
+  const state: State = loaded?.values && loaded.recent ? loaded : { values: {}, recent: [] };
+  const view = (def: (typeof DEFINITIONS)[number]): SettingView => {
+    const stored = state.values[def.key];
+    return { ...def, min: "min" in def ? def.min : null, max: "max" in def ? def.max : null, value: stored?.value ?? def.default,
+      changed_at: stored?.changed_at ?? null, changed_by: stored?.changed_by ?? null };
+  };
+  route("GET", "/api/v1/settings", "settings.manage", () => json({ items: DEFINITIONS.map(view), recent: state.recent.slice(0, 5) }));
+  route("PATCH", "/api/v1/settings/{key}", "settings.manage", (params, _, body) => {
+    const def = DEFINITIONS.find((d) => d.key === params.key);
+    if (!def) return problem(404, "setting_not_found", "No such setting");
+    const v = body.value;
+    const fits = def.kind === "bool" ? typeof v === "boolean" : typeof v === "number" && Number.isInteger(v) && v >= def.min && v <= def.max;
+    if (!fits) {
+      const message = def.kind === "bool" ? "Use true or false" : `Use a whole number from ${def.min} to ${def.max}`;
+      return problem(422, "invalid_setting", "The setting value is invalid", { field_errors: [{ field: "value", code: "invalid", message }] });
+    }
+    const old = state.values[def.key]?.value ?? null;
+    state.values[def.key] = { value: v, changed_at: iso(), changed_by: actor };
+    state.recent.unshift({ at: iso(), actor, key: def.key, old, new: v });
+    state.recent.length = Math.min(state.recent.length, 5);
+    store?.save(state);
+    audit("settings.changed", def.key, "setting");
+    return json(view(def));
+  });
   route("GET", "/api/v1/audit-events", "audit.read", (_, query) => {
     const since = Date.parse(query.get("since") ?? "");
     if (Number.isNaN(since) || since > Date.now()) return problem(400, "invalid_query", "Audit event query parameters are invalid");

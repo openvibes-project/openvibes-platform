@@ -315,3 +315,24 @@ describe("demo bulk triage (triage v2)", () => {
     expect((after.items as { advisory_id: string; triage_state: string }[]).filter((v) => v.advisory_id === advisory).every((v) => v.triage_state === "false_positive")).toBe(true);
   });
 });
+
+describe("demo general settings", () => {
+  it("lists, saves with an audit line, and refuses like the server", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const first = await json(await server.handle("GET", "/api/v1/settings"));
+    expect((first.items as { key: string; value: unknown }[]).map((i) => [i.key, i.value])).toEqual([["suppressions.require_approval", false], ["sso.remove_inactive_days", 90]]);
+    const saved = await server.handle("PATCH", "/api/v1/settings/suppressions.require_approval", { value: true });
+    expect(saved.status).toBe(200);
+    const after = await json(await server.handle("GET", "/api/v1/settings"));
+    expect(after.recent).toMatchObject([{ key: "suppressions.require_approval", old: null, new: true }]);
+    const audit = await json(await server.handle("GET", `/api/v1/audit-events?limit=1&since=${new Date(Date.now() - 86_400_000).toISOString()}`));
+    expect((audit.items as { action: string }[])[0]?.action).toBe("settings.changed");
+    const bad = await server.handle("PATCH", "/api/v1/settings/sso.remove_inactive_days", { value: 0 });
+    expect(bad.status).toBe(422);
+    expect(await json(bad)).toMatchObject({ code: "invalid_setting", field_errors: [{ field: "value", message: "Use a whole number from 1 to 3650" }] });
+    expect((await server.handle("PATCH", "/api/v1/settings/nope", { value: 1 })).status).toBe(404);
+    const viewer = createDemoServer({ persona: "viewer" });
+    expect((await viewer.handle("GET", "/api/v1/settings")).status).toBe(403);
+    expect((await viewer.handle("PATCH", "/api/v1/settings/sso.remove_inactive_days", { value: 5 })).status).toBe(403);
+  });
+});

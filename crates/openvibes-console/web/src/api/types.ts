@@ -93,3 +93,6 @@ export type RuleSetAssignments = S["RuleSetAssignmentsView"];
 export type RuleSetAssignment = S["RuleSetAssignmentView"];
 export type AssignableGroup = S["AssignableGroupView"];
 export type HostRuleSetAssignments = S["HostRuleSetAssignmentsView"];
+export type SettingsView = S["SettingsView"];
+export type SettingView = S["SettingView"];
+export type SettingChangeView = S["SettingChangeView"];

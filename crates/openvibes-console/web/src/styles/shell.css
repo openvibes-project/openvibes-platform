@@ -352,3 +352,7 @@
   .group-hosts__filter { width: 100%; }
   .rule-row__hint { padding-left: 0; }
 }
+.general-row { gap: 24px; align-items: flex-start; }
+.general-row__text { min-width: 0; max-width: 60ch; }
+.general-row__number { width: 7em; flex: none; }
+.general-row__error { color: var(--bad); font-size: 13px; }

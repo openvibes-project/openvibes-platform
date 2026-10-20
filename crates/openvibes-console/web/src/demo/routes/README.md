@@ -17,7 +17,7 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 | `roles.ts` | The permission catalogue, templates and roles (create, edit, delete). |
 | `rules.ts` | Rule sets, bundles, site rule drafts, ATT&CK coverage and per-host rule sets. |
 | `session.ts` | The session, password changes and the About page. |
-| `settings.ts` | The audit log, its retention and the assistant's internet access. |
+| `settings.ts` | The general settings, the audit log, its retention and the assistant's internet access. |
 | `triage.ts` | Bulk triage of alarms, findings and vulnerabilities. |
 | `vulnerabilities.ts` | The vulnerability list, summary and one advisory's hosts. |
 

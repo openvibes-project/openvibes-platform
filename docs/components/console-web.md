@@ -34,7 +34,9 @@ Show everything, without page changes for details:
   - agents, with labels, host groups and revocation;
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
-  - settings: people, roles and host groups;
+  - settings: General (typed settings that save as they change, with the
+    approvers named and Recent changes; needs `settings.manage`), people,
+    roles and host groups;
   - service accounts, with tokens issued once; roles are shown by name, and
     the new-account picker offers only roles inside the creator's own access
     (`fitsShare`, as for people);
@@ -427,7 +429,7 @@ triage on alarms and findings stays as it is.
     `investigate/` (Alarms, Compliance, Vulnerabilities, Hosts, Software,
     Ports and Services, Cases), `operate/` (Alarm suppressions, Site rules,
     Coverage), `admin/` (`Audit.tsx`, `settings/`: `Settings.tsx` plus
-    one file per tab, `roles/`: the role page, `people/`: a person's
+    one file per tab (`General.tsx`: the General tab), `roles/`: the role page, `people/`: a person's
     page, and `groups/`: a host group's page) and `help/` (About). `views/lists/` holds what the
     lists share: filter catalogues (`filters.ts`), row selection and
     sorting (`rows.ts`) and the test-trigger rules (`testRules.ts`).

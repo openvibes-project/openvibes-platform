@@ -14,6 +14,7 @@ const LABELS: Record<string, string> = {
   "user.enabled": "Enabled a person",
   "user.password_reset": "Reset a password",
   "user.unlocked": "Unlocked a person",
+  "settings.changed": "Changed a setting",
   "rbac.binding.created": "Gave a role",
   "rbac.binding.revoked": "Removed a role",
   "rbac.role.created": "Created a role",
