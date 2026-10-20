@@ -31,8 +31,9 @@ const FACETS: [Facet; 8] = [
 ];
 
 /// One filter over a `base b` row (all but host and group also over a
-/// `cube b` row); `$5`–`$12` are the chosen values (NULL
-/// for no filter; `$7` is true when suppressed alarms are shown).
+/// `cube b` row); `$5`–`$12` and `$15` are the chosen values
+/// (NULL for no filter; `$7` is true when suppressed alarms are shown; `$12` is
+/// a user id as text, `$15` true for "unassigned").
 fn filter(facet: Facet) -> &'static str {
     match facet {
         Facet::State => "($5::text IS NULL OR b.state = $5)",
@@ -45,8 +46,8 @@ fn filter(facet: Facet) -> &'static str {
         Facet::Technique => "($10::text IS NULL OR $10 = ANY(b.techniques))",
         Facet::Case => "($11::boolean IS NULL OR b.in_case = $11)",
         Facet::Assignee => {
-            "($12::text IS NULL OR ($12 = 'unassigned' AND b.assigned_to IS NULL)
-              OR b.assigned_to::text = $12)"
+            "(($12::text IS NULL AND NOT $15::boolean) OR ($15 AND b.assigned_to IS NULL)
+              OR b.assigned_to = $12::text::uuid)"
         }
     }
 }
@@ -103,7 +104,7 @@ base AS MATERIALIZED (
 fn rollups() -> String {
     let host_group = [filter(Facet::Host), filter(Facet::Group)].join(" AND ");
     let but_group = except(&[Facet::Group]);
-    let all = except(&[]);
+    let open = except(&[Facet::State]);
     format!(
         "cube AS MATERIALIZED (
   SELECT b.state, b.severity, b.suppressed, b.in_case, b.assigned_to, b.techniques, count(*) AS n
@@ -111,7 +112,7 @@ fn rollups() -> String {
   GROUP BY b.state, b.severity, b.suppressed, b.in_case, b.assigned_to, b.techniques),
 per_host AS MATERIALIZED (
   SELECT b.agent_id, count(*) FILTER (WHERE {but_group}) AS n,
-         count(*) FILTER (WHERE {all} AND b.state = 'open') AS open
+         count(*) FILTER (WHERE {open} AND b.state = 'open') AS open
   FROM base b GROUP BY b.agent_id)"
     )
 }
@@ -198,19 +199,20 @@ const HEALTH: &str = "(SELECT COALESCE(jsonb_agg(jsonb_build_array(x.health, x.n
       GROUP BY 1) x)";
 
 /// The statement: `meta` holds the total, summary and counts as JSON on the
-/// first row only; the page rows (`$13` limit, `$14` offset of `base` with
+/// first row only (the summary counts open alarms whatever the state filter); the page rows (`$13` limit, `$14` offset of `base` with
 /// every filter) are read back from `alarms`. An empty page still returns
 /// one row, with the meta and no alarm.
 pub(crate) fn statement(sort: AlarmSort, descending: bool) -> String {
     let all = except(&[]);
     let in_cube = except(&[Facet::Host, Facet::Group]);
+    let in_cube_any_state = except(&[Facet::State, Facet::Host, Facet::Group]);
     format!(
         "WITH {members}, {base}, {rollups}, {counts},
 meta AS (
   SELECT jsonb_build_object(
     'total', COALESCE(sum(b.n) FILTER (WHERE {in_cube}), 0),
-    'open', COALESCE(sum(b.n) FILTER (WHERE {in_cube} AND b.state = 'open'), 0),
-    'severe', COALESCE(sum(b.n) FILTER (WHERE {in_cube} AND b.state = 'open'
+    'open', COALESCE(sum(b.n) FILTER (WHERE {in_cube_any_state} AND b.state = 'open'), 0),
+    'severe', COALESCE(sum(b.n) FILTER (WHERE {in_cube_any_state} AND b.state = 'open'
                                         AND b.severity IN ('critical', 'high')), 0),
     'health', {HEALTH},
     'counts', (SELECT COALESCE(jsonb_agg(jsonb_build_array(facet, key, name, kind, n)), '[]') FROM counts)) AS meta

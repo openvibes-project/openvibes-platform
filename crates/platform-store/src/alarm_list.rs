@@ -202,6 +202,16 @@ pub struct AlarmListPage {
     pub summary: AlarmSummaryLine,
 }
 
+const NOBODY: &str = "00000000-0000-0000-0000-000000000000";
+
+fn is_uuid(s: &str) -> bool {
+    s.len() == 36
+        && s.char_indices().all(|(i, c)| match i {
+            8 | 13 | 18 | 23 => c == '-',
+            _ => c.is_ascii_hexdigit(),
+        })
+}
+
 type CountLine = (String, String, Option<String>, Option<String>, i64);
 
 #[derive(serde::Deserialize)]
@@ -225,11 +235,14 @@ pub async fn alarm_list(
 ) -> Result<AlarmListPage, StoreError> {
     let threshold = now - Duration::minutes(OFFLINE_AFTER_MINUTES);
     let q = query.q.map(str::trim).filter(|q| !q.is_empty());
-    let assignee = query.assignee.map(|a| match a {
-        Assignee::Me => actor_id,
-        Assignee::Unassigned => "unassigned",
-        Assignee::User(id) => id,
-    });
+    // A user id binds as a uuid; text that is not one matches nobody.
+    let user = match query.assignee {
+        Some(Assignee::Me) => Some(actor_id),
+        Some(Assignee::User(id)) => Some(id),
+        _ => None,
+    }
+    .map(|id| if is_uuid(id) { id } else { NOBODY });
+    let unassigned = query.assignee == Some(Assignee::Unassigned);
     let rows = client
         .query(
             &statement(query.sort, query.descending),
@@ -245,9 +258,10 @@ pub async fn alarm_list(
                 &query.group,
                 &query.technique,
                 &query.case,
-                &assignee,
+                &user,
                 &query.limit.clamp(1, i64::from(MAX_PAGE_SIZE)),
                 &query.offset.clamp(0, 100_000),
+                &unassigned,
             ],
         )
         .await?;

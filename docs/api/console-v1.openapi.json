@@ -743,6 +743,186 @@
         }
       }
     },
+    "/api/v1/alarm-list": {
+      "get": {
+        "tags": [
+          "alarms"
+        ],
+        "summary": "The Alarms list.",
+        "operationId": "list_alarm_page",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Message, rule id, host name or program (contains).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "open (default), mitigated, accepted_risk, false_positive or all.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "description": "critical, high, medium, low or info.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "suppressed",
+            "in": "query",
+            "description": "hidden (default) or shown.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "description": "An agent id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "description": "A host group id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "technique",
+            "in": "query",
+            "description": "An ATT&CK technique id, such as T1059.004.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "case",
+            "in": "query",
+            "description": "yes (in an open case) or no.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "query",
+            "description": "me, unassigned or a user id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "last_seen (default), first_seen, count or severity.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc or desc (default).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of alarms in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs alarms.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/alarm-suppressions": {
       "get": {
         "tags": [
@@ -10297,6 +10477,67 @@
           }
         }
       },
+      "AlarmCountsView": {
+        "type": "object",
+        "description": "Per-value counts for every filter.",
+        "required": [
+          "state",
+          "severity",
+          "suppressed",
+          "case",
+          "group",
+          "technique",
+          "assignee"
+        ],
+        "properties": {
+          "assignee": {
+            "$ref": "#/components/schemas/AssigneeCountsView",
+            "description": "By assignee."
+          },
+          "case": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`yes` (in an open case) and `no`."
+          },
+          "group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCountView"
+            },
+            "description": "By group."
+          },
+          "severity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By severity."
+          },
+          "state": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By state."
+          },
+          "suppressed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`hidden` and `shown`."
+          },
+          "technique": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By ATT&CK technique."
+          }
+        }
+      },
       "AlarmDetailView": {
         "allOf": [
           {
@@ -10365,6 +10606,221 @@
         ],
         "description": "One alarm with its process tree and triage."
       },
+      "AlarmListCaseView": {
+        "type": "object",
+        "description": "The open case holding an alarm.",
+        "required": [
+          "id",
+          "number"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Case id."
+          },
+          "number": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Case number."
+          }
+        }
+      },
+      "AlarmListHostView": {
+        "type": "object",
+        "description": "The host that raised the alarm.",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "distribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name, such as `Debian 12`."
+          },
+          "id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name."
+          },
+          "os_family": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`linux` or `windows`."
+          }
+        }
+      },
+      "AlarmListPersonView": {
+        "type": "object",
+        "description": "Who an alarm is assigned to.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "User id."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name."
+          }
+        }
+      },
+      "AlarmListRowView": {
+        "type": "object",
+        "description": "One row of the Alarms list.",
+        "required": [
+          "id",
+          "host",
+          "rule_set_id",
+          "rule_id",
+          "severity",
+          "message",
+          "program",
+          "techniques",
+          "count",
+          "first_seen",
+          "last_seen",
+          "state",
+          "suppressed"
+        ],
+        "properties": {
+          "assignee": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AlarmListPersonView",
+                "description": "Assignee."
+              }
+            ]
+          },
+          "case": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AlarmListCaseView",
+                "description": "The open case holding it."
+              }
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Starts matched."
+          },
+          "first_seen": {
+            "type": "string",
+            "description": "First start that matched, RFC 3339."
+          },
+          "host": {
+            "$ref": "#/components/schemas/AlarmListHostView",
+            "description": "Host."
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The platform's alarm id."
+          },
+          "last_seen": {
+            "type": "string",
+            "description": "Last start that matched, RFC 3339."
+          },
+          "message": {
+            "type": "string",
+            "description": "The rule's message."
+          },
+          "parent_program": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its parent's program, when known."
+          },
+          "program": {
+            "type": "string",
+            "description": "The process's program (exe)."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set."
+          },
+          "severity": {
+            "type": "string",
+            "description": "`critical`, `high`, `medium`, `low` or `info`."
+          },
+          "state": {
+            "type": "string",
+            "description": "`open`, `mitigated`, `accepted_risk` or `false_positive`."
+          },
+          "suppressed": {
+            "type": "boolean",
+            "description": "Closed by a suppression."
+          },
+          "techniques": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ATT&CK technique ids (empty when the rule is not indexed)."
+          }
+        }
+      },
+      "AlarmListView": {
+        "type": "object",
+        "description": "One page of the Alarms list.",
+        "required": [
+          "items",
+          "total",
+          "counts",
+          "summary",
+          "generated_at"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/AlarmCountsView",
+            "description": "Per-value counts."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlarmListRowView"
+            },
+            "description": "The page."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AlarmSummaryLineView",
+            "description": "Summary line."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Alarms matching every filter."
+          }
+        }
+      },
       "AlarmPage": {
         "type": "object",
         "description": "A page of alarms, newest first.",
@@ -10385,6 +10841,34 @@
               "null"
             ],
             "description": "Pass as `cursor` for the next page; absent on the last page."
+          }
+        }
+      },
+      "AlarmSummaryLineView": {
+        "type": "object",
+        "description": "The line above the list: over open alarms matching every filter but state.",
+        "required": [
+          "open",
+          "critical_or_high"
+        ],
+        "properties": {
+          "critical_or_high": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open and critical or high."
+          },
+          "on_alarms_off_hosts": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Open, on hosts online with threat alarms off by a fault; absent\nwithout `hosts.read`."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open alarms."
           }
         }
       },
@@ -10813,6 +11297,34 @@
           "summary": {
             "type": "string",
             "description": "Its membership in one sentence, e.g. \"Hosts where OS family is\nLinux\", or \"3 hosts picked by hand\"."
+          }
+        }
+      },
+      "AssigneeCountsView": {
+        "type": "object",
+        "description": "The Assignee filter's values.",
+        "required": [
+          "me",
+          "unassigned",
+          "people"
+        ],
+        "properties": {
+          "me": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Assigned to the viewer (`assignee=me`)."
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonCountView"
+            },
+            "description": "People with an alarm in reach."
+          },
+          "unassigned": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Assigned to nobody (`assignee=unassigned`)."
           }
         }
       },
@@ -14942,7 +15454,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Column keys, at most 32, none twice; never `host`."
+            "description": "Column keys, at most 32, none twice; never the page's first column."
           }
         }
       },
@@ -15192,6 +15704,30 @@
           }
         ],
         "description": "Effective object scope attached to one permission."
+      },
+      "PersonCountView": {
+        "type": "object",
+        "description": "A person with alarms in reach.",
+        "required": [
+          "value",
+          "name",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Alarms matching with the other filters applied."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name."
+          },
+          "value": {
+            "type": "string",
+            "description": "User id (the `assignee` value)."
+          }
+        }
       },
       "PersonRow": {
         "type": "object",

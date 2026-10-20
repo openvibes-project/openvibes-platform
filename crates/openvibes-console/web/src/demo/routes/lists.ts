@@ -4,8 +4,11 @@ import type { ListColumns, SavedView } from "../../api/types";
 import type { DemoContext } from "../context";
 import { browserPersistence, json, problem } from "../http";
 
-/** The list pages and the columns each may hide (src/lists/mod.rs); Host never. */
-const HIDEABLE: Record<string, readonly string[]> = { hosts: ["os", "groups", "labels", "problems", "heartbeat", "agent"] };
+/** The list pages and the columns each may hide (src/lists/mod.rs); a page's first column never (Host; alarms: Severity). */
+const HIDEABLE: Record<string, readonly string[]> = {
+  hosts: ["os", "groups", "labels", "problems", "heartbeat", "agent"],
+  alarms: ["alarm", "host", "count", "seen", "state", "assignee", "case"],
+};
 const MAX_VIEWS = 50;
 const CONTROL = /\p{Cc}/u;
 
@@ -85,7 +88,7 @@ export function registerListRoutes(ctx: DemoContext) {
     if (!allowed) return pageNotFound();
     const keys = body.hidden;
     if (!Array.isArray(keys) || !keys.every((k) => typeof k === "string")) return problem(400, "invalid_request", "The request is invalid");
-    if (keys.includes("host")) return invalid("invalid_columns", "hidden", "The Host column can't be hidden");
+    if (keys.includes("host") && !allowed.includes("host")) return invalid("invalid_columns", "hidden", "The Host column can't be hidden");
     if (keys.length > 32 || keys.some((k, i) => !allowed.includes(k) || keys.indexOf(k) !== i)) return invalid("invalid_columns", "hidden", "Unknown or repeated column");
     hidden[page] = keys;
     save();

@@ -10,6 +10,8 @@ use crate::http::AuthHttpState;
 
 pub(crate) mod alarm;
 pub(crate) mod detection;
+pub(crate) mod list;
+pub(crate) mod list_types;
 pub(crate) mod suppression_decisions;
 pub(crate) mod suppression_types;
 pub(crate) mod suppressions;
@@ -34,6 +36,7 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
         )
         .route("/v1/alarms/{id}/rule", get(detection::alarm_rule))
         .route("/v1/alarms", get(alarm::list_alarms))
+        .route("/v1/alarm-list", get(list::list_alarm_page))
         .route("/v1/alarms/{alarm_id}", get(alarm::get_alarm))
         .route(
             "/v1/alarms/{alarm_id}/triage",

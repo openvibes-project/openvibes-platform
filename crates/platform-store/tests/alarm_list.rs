@@ -409,3 +409,76 @@ async fn summary_counts_open_severe_and_alarms_off_hosts() {
     assert_eq!(page.total, 3);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn summary_counts_open_alarms_whatever_the_state_filter() {
+    let (db, mut c) = common::migrated().await;
+    alarm_fleet(&mut c).await;
+    let open = run(&c, &query(), &ALL).await.summary;
+    for state in [
+        Some(AlarmState::Mitigated),
+        Some(AlarmState::FalsePositive),
+        None,
+    ] {
+        let page = run(&c, &AlarmQuery { state, ..query() }, &ALL).await;
+        assert_eq!(page.summary, open, "{state:?}");
+    }
+    // other filters still apply to it
+    let page = run(
+        &c,
+        &AlarmQuery {
+            state: Some(AlarmState::Mitigated),
+            severity: Some(AlarmSeverity::Medium),
+            ..query()
+        },
+        &ALL,
+    )
+    .await;
+    assert_eq!((page.total, page.summary.open), (0, 1));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn search_under_a_narrow_scope_finds_nothing_out_of_reach() {
+    let (db, mut c) = common::migrated().await;
+    let groups = alarm_fleet(&mut c).await;
+    let web = AgentScope::AssetGroups(vec![groups.web.clone()]);
+    for q in ["win-01", "powershell", "db-01", "ps-encoded"] {
+        let page = run(
+            &c,
+            &AlarmQuery {
+                q: Some(q),
+                ..query()
+            },
+            &web,
+        )
+        .await;
+        assert_eq!(page.total, 0, "{q}");
+        assert!(page.rows.is_empty(), "{q}");
+        let k = &page.counts;
+        assert!(k.techniques.is_empty(), "{q}");
+        assert!(k.people.is_empty(), "{q}");
+        assert!(k.groups.iter().all(|g| g.1 != "Windows box"), "{q}");
+    }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn assignee_text_that_is_not_a_user_id_matches_nobody() {
+    let (db, mut c) = common::migrated().await;
+    alarm_fleet(&mut c).await;
+    for text in ["unassigned", "me", "not-a-uuid"] {
+        let q = AlarmQuery {
+            state: None,
+            assignee: Some(Assignee::User(text)),
+            ..query()
+        };
+        assert_eq!(run(&c, &q, &ALL).await.total, 0, "{text}");
+    }
+    let q = AlarmQuery {
+        assignee: Some(Assignee::Unassigned),
+        ..query()
+    };
+    assert_eq!(names(&run(&c, &q, &ALL).await), ["a2"]);
+    db.drop().await;
+}

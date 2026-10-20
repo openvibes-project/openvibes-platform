@@ -6,6 +6,8 @@ Alarms in the console: the alarm list, one alarm with its process tree and triag
 |---|---|
 | `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `alarm.rs` | Threat alarms: list, one alarm with its process tree, triage. |
+| `list.rs` | `GET /v1/alarm-list`: the Alarms list's parameters, validation and the call into the store. |
+| `list_types.rs` | The Alarms list answer: rows, per-value counts, the summary line. |
 | `suppressions.rs` | Alarm suppressions: list, the suppress form's options, a new request. |
 | `suppression_decisions.rs` | Approve, reject, withdraw and remove a suppression. |
 | `suppression_types.rs` | The suppression bodies and view with the caller's `can_*` flags, and the refusal each store outcome maps to. |

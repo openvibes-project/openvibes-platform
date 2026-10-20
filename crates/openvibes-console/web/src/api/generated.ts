@@ -205,6 +205,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alarm-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Alarms list. */
+        get: operations["list_alarm_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alarm-suppressions": {
         parameters: {
             query?: never;
@@ -2309,6 +2326,23 @@ export interface components {
             /** @description Current lifecycle state. */
             status: components["schemas"]["AgentStatus"];
         };
+        /** @description Per-value counts for every filter. */
+        AlarmCountsView: {
+            /** @description By assignee. */
+            assignee: components["schemas"]["AssigneeCountsView"];
+            /** @description `yes` (in an open case) and `no`. */
+            case: components["schemas"]["CountView"][];
+            /** @description By group. */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description By severity. */
+            severity: components["schemas"]["CountView"][];
+            /** @description By state. */
+            state: components["schemas"]["CountView"][];
+            /** @description `hidden` and `shown`. */
+            suppressed: components["schemas"]["CountView"][];
+            /** @description By ATT&CK technique. */
+            technique: components["schemas"]["CountView"][];
+        };
         /** @description One alarm with its process tree and triage. */
         AlarmDetailView: components["schemas"]["AlarmSummaryView"] & {
             /** @description Its ancestors, nearest first, as sent. */
@@ -2336,12 +2370,114 @@ export interface components {
             /** @description Current triage. */
             triage: components["schemas"]["AlarmTriageView"];
         };
+        /** @description The open case holding an alarm. */
+        AlarmListCaseView: {
+            /** @description Case id. */
+            id: string;
+            /**
+             * Format: int64
+             * @description Case number.
+             */
+            number: number;
+        };
+        /** @description The host that raised the alarm. */
+        AlarmListHostView: {
+            /** @description Display name, such as `Debian 12`. */
+            distribution?: string | null;
+            /** @description Agent id. */
+            id: string;
+            /** @description Host name. */
+            name?: string | null;
+            /** @description `linux` or `windows`. */
+            os_family?: string | null;
+        };
+        /** @description Who an alarm is assigned to. */
+        AlarmListPersonView: {
+            /** @description User id. */
+            id: string;
+            /** @description Display name. */
+            name: string;
+        };
+        /** @description One row of the Alarms list. */
+        AlarmListRowView: {
+            assignee?: null | components["schemas"]["AlarmListPersonView"];
+            case?: null | components["schemas"]["AlarmListCaseView"];
+            /**
+             * Format: int64
+             * @description Starts matched.
+             */
+            count: number;
+            /** @description First start that matched, RFC 3339. */
+            first_seen: string;
+            /** @description Host. */
+            host: components["schemas"]["AlarmListHostView"];
+            /**
+             * Format: int64
+             * @description The platform's alarm id.
+             */
+            id: number;
+            /** @description Last start that matched, RFC 3339. */
+            last_seen: string;
+            /** @description The rule's message. */
+            message: string;
+            /** @description Its parent's program, when known. */
+            parent_program?: string | null;
+            /** @description The process's program (exe). */
+            program: string;
+            /** @description Rule. */
+            rule_id: string;
+            /** @description Rule set. */
+            rule_set_id: string;
+            /** @description `critical`, `high`, `medium`, `low` or `info`. */
+            severity: string;
+            /** @description `open`, `mitigated`, `accepted_risk` or `false_positive`. */
+            state: string;
+            /** @description Closed by a suppression. */
+            suppressed: boolean;
+            /** @description ATT&CK technique ids (empty when the rule is not indexed). */
+            techniques: string[];
+        };
+        /** @description One page of the Alarms list. */
+        AlarmListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["AlarmCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["AlarmListRowView"][];
+            /** @description Summary line. */
+            summary: components["schemas"]["AlarmSummaryLineView"];
+            /**
+             * Format: int64
+             * @description Alarms matching every filter.
+             */
+            total: number;
+        };
         /** @description A page of alarms, newest first. */
         AlarmPage: {
             /** @description The alarms. */
             items: components["schemas"]["AlarmSummaryView"][];
             /** @description Pass as `cursor` for the next page; absent on the last page. */
             next_cursor?: string | null;
+        };
+        /** @description The line above the list: over open alarms matching every filter but state. */
+        AlarmSummaryLineView: {
+            /**
+             * Format: int64
+             * @description Open and critical or high.
+             */
+            critical_or_high: number;
+            /**
+             * Format: int64
+             * @description Open, on hosts online with threat alarms off by a fault; absent
+             *     without `hosts.read`.
+             */
+            on_alarms_off_hosts?: number | null;
+            /**
+             * Format: int64
+             * @description Open alarms.
+             */
+            open: number;
         };
         /** @description One alarm in the list. */
         AlarmSummaryView: {
@@ -2513,6 +2649,21 @@ export interface components {
              *     Linux", or "3 hosts picked by hand".
              */
             summary: string;
+        };
+        /** @description The Assignee filter's values. */
+        AssigneeCountsView: {
+            /**
+             * Format: int64
+             * @description Assigned to the viewer (`assignee=me`).
+             */
+            me: number;
+            /** @description People with an alarm in reach. */
+            people: components["schemas"]["PersonCountView"][];
+            /**
+             * Format: int64
+             * @description Assigned to nobody (`assignee=unassigned`).
+             */
+            unassigned: number;
         };
         /** @description The assistant's internet-lookup setting. */
         AssistantInternet: {
@@ -4183,7 +4334,7 @@ export interface components {
         };
         /** @description The columns to hide on a page. */
         ListColumnsRequest: {
-            /** @description Column keys, at most 32, none twice; never `host`. */
+            /** @description Column keys, at most 32, none twice; never the page's first column. */
             hidden: string[];
         };
         /** @description The columns a person hid on a page. */
@@ -4261,6 +4412,18 @@ export interface components {
             asset_group_ids: string[];
             /** @enum {string} */
             kind: "asset_groups";
+        };
+        /** @description A person with alarms in reach. */
+        PersonCountView: {
+            /**
+             * Format: int64
+             * @description Alarms matching with the other filters applied.
+             */
+            count: number;
+            /** @description Display name. */
+            name: string;
+            /** @description User id (the `assignee` value). */
+            value: string;
         };
         /** @description One person in the People list. */
         PersonRow: {
@@ -6244,6 +6407,89 @@ export interface operations {
             };
             /** @description Absent or outside the caller's scope */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_alarm_page: {
+        parameters: {
+            query?: {
+                /** @description Message, rule id, host name or program (contains). */
+                q?: string;
+                /** @description open (default), mitigated, accepted_risk, false_positive or all. */
+                state?: string;
+                /** @description critical, high, medium, low or info. */
+                severity?: string;
+                /** @description hidden (default) or shown. */
+                suppressed?: string;
+                /** @description An agent id. */
+                host?: string;
+                /** @description A host group id. */
+                group?: string;
+                /** @description An ATT&CK technique id, such as T1059.004. */
+                technique?: string;
+                /** @description yes (in an open case) or no. */
+                case?: string;
+                /** @description me, unassigned or a user id. */
+                assignee?: string;
+                /** @description last_seen (default), first_seen, count or severity. */
+                sort?: string;
+                /** @description asc or desc (default). */
+                dir?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of alarms in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs alarms.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

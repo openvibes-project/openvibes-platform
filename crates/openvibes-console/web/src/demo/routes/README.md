@@ -5,6 +5,7 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 | File | What it does |
 |---|---|
 | `access.ts` | People (list, page, create, edit, disable, enable, reset, roles) and service accounts, inside the share. |
+| `alarmList.ts` | The Alarms list (`GET /api/v1/alarm-list`): filters, counts with the others applied, the open-alarms summary, sort and paging inside the persona's reach. |
 | `alarms.ts` | Threat alarms, their triage and suppressions. |
 | `assets.ts` | Packages, open ports, running services and software across the fleet; `hostServices` is one host's report. |
 | `assistant.ts` | The assistant's answers. |

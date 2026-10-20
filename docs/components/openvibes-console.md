@@ -913,6 +913,31 @@ the update checker's last-known agent release (null when the checker is off
 or has not found one yet); it is looked up in the background at start, so it
 fills a few seconds after start, and the route never waits on the network. A store failure is 503.
 
+## Alarms list
+
+`GET /api/v1/alarm-list` (needs `alarms.read`; session or bearer; roles 5a)
+pages the Alarms list over the store's `alarm_list`. The keyset-paged
+`GET /api/v1/alarms` stays for live alarms, dashboards and the host page.
+Filters (one value each, ANDed): `q` (message, rule id, host name, program or
+parent program), `state` (`open` by default, `mitigated`, `accepted_risk`,
+`false_positive`, or `all`, which the store sees as no state filter),
+`severity`, `suppressed` (`hidden` by default, `shown`), `host` (agent id),
+`group` (UUID), `technique`, `case` (`yes|no`) and `assignee` (`me`,
+`unassigned` or a user UUID, lowercased; `me` is the session user's id, so a
+bearer token's service-account id matches nobody). `sort` is
+`last_seen` (default), `first_seen`, `count` or `severity`; `dir` is `desc`
+by default; `offset` 0..=100000 and `limit` 1..=100 (default 50) outside
+those are 400 (the store clamps as defence). An invalid value or an unknown
+parameter is 400 `invalid_query` naming the parameter. Rows, per-value
+`counts` (each with the other filters applied; group, technique and person
+values come only from alarms in reach) and the `summary` are inside the
+caller's `alarms.read` reach. The summary counts OPEN alarms under every
+filter except state, so `state=mitigated` still shows the open count;
+`on_alarms_off_hosts` is null without `hosts.read`. Saved views and hidden
+columns accept the page `alarms` (hideable: `alarm`, `host`, `count`, `seen`,
+`state`, `assignee`, `case`; severity is the first column and never hidden).
+Tests: `tests/alarm_list_http.rs`; demo: `web/src/demo/routes/alarmList.ts`.
+
 ## Host page summary
 
 `GET /api/v1/hosts/{agent_id}/summary` (needs `hosts.read`; session or

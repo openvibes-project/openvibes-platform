@@ -444,6 +444,15 @@ repeated or shrinking count adds nothing. `prune_alarm_hourly(client, now)`
 (run by `openvibes-admin` maintenance) deletes hours older than 7 days.
 Grants: ingest SELECT/INSERT/UPDATE, console SELECT.
 
+**Alarms list** (`alarm_list::alarm_list`, roles 5a): one statement gives the
+page, total, per-value counts and the summary line, all inside the
+`alarms.read` scope. The summary ("N open", "critical or high", "on hosts with
+alarms off") counts OPEN alarms under every filter except state, so choosing
+`state=mitigated` never shows "0 open". The assignee user binds as text cast
+to uuid; "unassigned" is a separate flag, and text that is not a user id
+matches nobody. `limit` and `offset` are clamped (the console rejects values
+out of range first).
+
 ## Threat alarms (schema 29)
 
 `0029_alarms.sql` (additive; protocol P14, plan

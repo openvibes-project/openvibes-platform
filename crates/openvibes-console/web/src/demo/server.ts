@@ -6,6 +6,7 @@ import { createDemoContext } from "./context";
 import { MAX_PAGE, problem } from "./http";
 import type { Persona } from "./personas";
 import { registerAccessRoutes } from "./routes/access";
+import { registerAlarmListRoute } from "./routes/alarmList";
 import { registerAlarmRoutes } from "./routes/alarms";
 import { registerAssetRoutes } from "./routes/assets";
 import { registerAssistantRoutes } from "./routes/assistant";
@@ -50,6 +51,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   registerAssistantRoutes(ctx);
   registerDashboardRoutes(ctx);
   const cases = registerCaseRoutes(ctx);
+  registerAlarmListRoute({ ...ctx, cases });
   registerTriageRoutes({ ...ctx, cases, suppressions });
 
   return {

