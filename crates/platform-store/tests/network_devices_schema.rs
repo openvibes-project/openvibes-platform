@@ -136,7 +136,8 @@ async fn device_and_signature_suppressions_are_device_rule_sets_only() {
         async move {
             c.execute(
                 "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, device_id, note,
-                    created_by, created_at) VALUES ($1, 'ips.1', $2, $3, 'n', 't', now())",
+                    created_by, created_at, state, activated_at)
+                    VALUES ($1, 'ips.1', $2, $3, 'n', 't', now(), 'active', now())",
                 &[&set, &scope, &dev],
             )
             .await

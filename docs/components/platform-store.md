@@ -485,9 +485,7 @@ Code over these tables:
 - `console_alarms` (console): scoped `list` (filters, keyset `(last_seen,
   id)`), `detail`, and `update_triage` with the findings workflow, history
   and audit.
-- `alarm_suppressions` (console): `list`, `create` (derived from a visible
-  alarm; `program`/`command` need global scope) and `remove` (kept as
-  history), audited.
+- `alarm_suppressions` (console): see "Suppressions with approval" below.
 - `rule_drafts` (schema 42): one row per draft rule of `site` or
   `site-alarms`; `list`, `get`, `put` (upsert) and `delete`. The console
   validates before `put`; the table holds only rules the agent would accept.
@@ -550,6 +548,46 @@ per changed key; a key with no row has its default (kept in the console).
 with `{key, old, new}`; returns the old value), `recent` (newest change
 audits) and `require_approval(&impl GenericClient)` (false when the row is
 absent or not a bool). Tests: `tests/console_settings.rs`.
+
+## Suppressions with approval (`alarm_suppressions::…`, schema 55)
+
+`0055_suppression_approval.sql` (needs a backup) gives `alarm_suppressions`
+a `state` (`waiting`, `active`, `rejected`, `withdrawn`, `removed`), a
+where (`agent_id` for one host, `host_group_id` for one group, neither for
+all hosts), `for_days` (7, 30 or null), `activated_at`, `expires_at`,
+`decided_by/at`, `decision_reason` and the source `alarm_id` (no foreign
+key: `alarms` is partitioned). Old rows become `active` from `created_at`,
+removed ones `removed`; `removed_at` stays in step with `state = 'removed'`.
+The console may now UPDATE `alarms.suppressed_by`.
+
+- `request(client, suppress, &Request { alarm_row_id, what, place,
+  for_days, reason }, actor, now)`: derived from an alarm within the
+  `suppress` scope; all hosts needs a global scope, a group must be in the
+  scope. Waiting when `console_settings::require_approval`, else active at
+  once: `expires_at = activated_at + for_days`, and the source alarm, if
+  open or investigating, is closed as ingest closes a matched one
+  (`false_positive`, `suppressed_by`, triage history).
+- `decide(client, approve, id, approve_it, reason, actor, now)`: waiting
+  rows in the approver's reach only; never the requester's own
+  (`OwnRequest`); rejecting needs a reason. Approving starts the period and
+  closes the source alarm.
+- `withdraw(client, id, actor, now)`: the requester's own waiting row;
+  another person's is `NotFound`.
+- `remove(client, suppress, id, actor, now)`: an active row in reach.
+- `list(client, read, &ListFilter { state, alarm_id }, now)`: waiting
+  (oldest first), active including expired (`expired` is derived at `now`)
+  and rejected rows, at most 500 each. Reach (`in_reach`): a host row if
+  the host is visible, a group row if the group is in the scope, an
+  all-hosts row for every reader but only a global caller for decide and
+  remove, a device row for a global caller.
+- `create_for_device` (`openvibes-admin`): device and signature rows are
+  always active.
+
+Every transition is audited: `alarm.suppression.requested`, `.created`,
+`.approved`, `.rejected`, `.withdrawn`, `.removed`. Ingest applies them
+when it stores a new alarm (above). Tests:
+`tests/alarm_suppressions.rs`, `tests/alarm_suppression_states.rs` and
+`tests/suppression_upgrade.rs`.
 
 ## Status
 

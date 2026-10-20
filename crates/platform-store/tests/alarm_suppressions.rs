@@ -2,89 +2,31 @@
 //! `openvibes-console` role.
 
 mod common;
+mod suppression_fixture;
 
 use chrono::{Duration, Utc};
-use common::TestDb;
 use openvibes_core::{Alarm, AlarmProcess, Confidence, Identifier, Severity};
 use platform_store::{
-    Client,
-    alarm_suppressions::{self, Change},
+    alarm_suppressions::{self, Change, ListFilter, Request, What, Where},
     alarms,
     console_read::AgentScope,
 };
+use suppression_fixture::{AGENT, as_console, setup};
 
-const AGENT: &str = "agent.00000000-0000-4000-8000-000000000401";
-
-async fn setup() -> (TestDb, i64) {
-    let db = TestDb::create().await;
-    let mut admin = db.pool.get().await.unwrap();
-    platform_store::migrate(&mut admin).await.unwrap();
-    let now = Utc::now();
-    platform_store::ensure_partitions(&admin, now.date_naive() - Duration::days(1), 2)
-        .await
-        .unwrap();
-    admin
-        .execute(
-            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ($1, 'active', $2)",
-            &[&AGENT, &now],
-        )
-        .await
-        .unwrap();
-    let process = |exe: &str| AlarmProcess {
-        pid: 1,
-        exe: exe.into(),
-        args: vec!["sh".into(), "-c".into(), "id".into()],
-        cwd: None,
-        uid: 0,
-        euid: 0,
-        truncated: false,
-        seeded: false,
-    };
-    let alarm = Alarm {
-        detection: None,
-        alarm_id: Identifier::new(format!("alarm.{:032x}", 1)).unwrap(),
-        rule_set_id: Identifier::new("baseline").unwrap(),
-        rule_set_version: 1,
-        rule_id: Identifier::new("web-server-spawns-shell").unwrap(),
-        rule_version: 1,
-        severity: Severity::High,
-        confidence: Confidence::new(80).unwrap(),
-        message: "A web server started a shell".into(),
-        first_seen_unix_ms: now.timestamp_millis(),
-        last_seen_unix_ms: now.timestamp_millis(),
-        count: 1,
-        process: process("/usr/bin/sh"),
-        ancestors: vec![process("/usr/sbin/nginx")],
-    };
-    let partitions = platform_store::partition_days_of(&admin, "alarms")
-        .await
-        .unwrap();
-    let row = alarms::row(
-        &alarm,
-        now - Duration::days(1),
-        now + Duration::minutes(5),
-        &partitions,
-    )
-    .unwrap();
-    alarms::insert_batch(&mut admin, AGENT, 0, &[row], now)
-        .await
-        .unwrap();
-    let id = admin
-        .query_one("SELECT id FROM alarms", &[])
-        .await
-        .unwrap()
-        .get(0);
-    (db, id)
+fn ask(alarm: i64, what: What, place: Where, reason: &str) -> Request<'_> {
+    Request {
+        alarm_row_id: alarm,
+        what,
+        place,
+        for_days: None,
+        reason,
+    }
 }
 
-async fn as_console(db: &TestDb) -> Client {
-    let client = db.pool.get().await.unwrap();
-    client
-        .batch_execute("SET ROLE \"openvibes-console\"")
-        .await
-        .unwrap();
-    client
-}
+const ALL: ListFilter = ListFilter {
+    state: None,
+    alarm_id: None,
+};
 
 fn scoped() -> AgentScope {
     AgentScope::AssetGroups(vec!["00000000-0000-4000-8000-00000000000f".into()])
@@ -96,17 +38,12 @@ async fn suppressions_are_derived_from_the_alarm_and_keep_history() {
     let mut client = as_console(&db).await;
     let now = Utc::now();
     let global = AgentScope::Global;
-    let Change::Done(command) = alarm_suppressions::create(
-        &mut client,
-        &global,
-        alarm,
-        "command",
-        "cron job",
-        "alice",
-        now,
-    )
-    .await
-    .unwrap() else {
+    let request = ask(alarm, What::Command, Where::All, "cron job");
+    let Change::Done(command) =
+        alarm_suppressions::request(&mut client, &global, &request, "alice", now)
+            .await
+            .unwrap()
+    else {
         panic!("expected a suppression");
     };
     assert_eq!(command.exe.as_deref(), Some("/usr/bin/sh"));
@@ -115,27 +52,29 @@ async fn suppressions_are_derived_from_the_alarm_and_keep_history() {
         Some(alarms::args_sha256(&["sh".into(), "-c".into(), "id".into()]).as_str()),
         "the same hash ingest matches on"
     );
+    let request = ask(alarm, What::Program, Where::Host, "lab box");
     let Change::Done(host) =
-        alarm_suppressions::create(&mut client, &global, alarm, "host", "lab box", "alice", now)
+        alarm_suppressions::request(&mut client, &global, &request, "alice", now)
             .await
             .unwrap()
     else {
         panic!("expected a suppression");
     };
     assert_eq!(host.agent_id.as_deref(), Some(AGENT));
-    assert_eq!(
-        alarm_suppressions::list(&client, &global)
-            .await
-            .unwrap()
-            .len(),
-        2
-    );
-    for (kind, note) in [("everywhere", "x"), ("host", " ")] {
+    assert_eq!(host.scope, "program");
+    let listed = alarm_suppressions::list(&client, &global, &ALL, now).await;
+    assert_eq!(listed.unwrap().len(), 2);
+    let blank = ask(alarm, What::Program, Where::Host, " ");
+    let fortnight = Request {
+        for_days: Some(14),
+        ..ask(alarm, What::Program, Where::Host, "x")
+    };
+    for (request, field) in [(blank, "reason"), (fortnight, "for")] {
         assert_eq!(
-            alarm_suppressions::create(&mut client, &global, alarm, kind, note, "alice", now)
+            alarm_suppressions::request(&mut client, &global, &request, "alice", now)
                 .await
                 .unwrap(),
-            Change::Invalid
+            Change::Invalid(field.into())
         );
     }
     assert!(matches!(
@@ -151,10 +90,8 @@ async fn suppressions_are_derived_from_the_alarm_and_keep_history() {
         Change::NotFound,
         "already removed"
     );
-    assert_eq!(
-        alarm_suppressions::list(&client, &global).await.unwrap(),
-        [host]
-    );
+    let listed = alarm_suppressions::list(&client, &global, &ALL, now).await;
+    assert_eq!(listed.unwrap(), [host]);
     let admin = db.pool.get().await.unwrap();
     let kept: i64 = admin
         .query_one(
@@ -178,45 +115,41 @@ async fn suppressions_are_derived_from_the_alarm_and_keep_history() {
     db.drop().await;
 }
 
+/// All hosts needs a caller reaching all hosts to make or remove it, but
+/// every reader sees it (ruling 5): it closes alarms on their hosts too.
 #[tokio::test]
-async fn a_scoped_caller_cannot_suppress_everywhere_nor_see_it() {
+async fn a_scoped_caller_cannot_suppress_everywhere_but_sees_it() {
     let (db, alarm) = setup().await;
     let mut client = as_console(&db).await;
     let now = Utc::now();
-    for kind in ["program", "command"] {
+    for what in [What::Program, What::Command] {
+        let request = ask(alarm, what, Where::All, "noisy");
         assert_eq!(
-            alarm_suppressions::create(&mut client, &scoped(), alarm, kind, "noisy", "sam", now)
+            alarm_suppressions::request(&mut client, &scoped(), &request, "sam", now)
                 .await
                 .unwrap(),
             Change::NeedsGlobalScope
         );
     }
     // A host suppression on an alarm outside the caller's groups is absent.
+    let request = ask(alarm, What::Program, Where::Host, "noisy");
     assert_eq!(
-        alarm_suppressions::create(&mut client, &scoped(), alarm, "host", "noisy", "sam", now)
+        alarm_suppressions::request(&mut client, &scoped(), &request, "sam", now)
             .await
             .unwrap(),
         Change::NotFound
     );
-    let Change::Done(program) = alarm_suppressions::create(
-        &mut client,
-        &AgentScope::Global,
-        alarm,
-        "program",
-        "noisy",
-        "alice",
-        now,
-    )
-    .await
-    .unwrap() else {
-        panic!("expected a suppression");
-    };
-    assert!(
-        alarm_suppressions::list(&client, &scoped())
+    let request = ask(alarm, What::Program, Where::All, "noisy");
+    let Change::Done(program) =
+        alarm_suppressions::request(&mut client, &AgentScope::Global, &request, "alice", now)
             .await
             .unwrap()
-            .is_empty()
-    );
+    else {
+        panic!("expected a suppression");
+    };
+    let listed = alarm_suppressions::list(&client, &scoped(), &ALL, now).await;
+    let ids: Vec<i64> = listed.unwrap().iter().map(|s| s.id).collect();
+    assert_eq!(ids, [program.id]);
     assert_eq!(
         alarm_suppressions::remove(&mut client, &scoped(), program.id, "sam", now)
             .await
@@ -289,17 +222,10 @@ async fn a_command_suppression_closes_the_same_command_on_reingest() {
         .unwrap()
         .get(0);
     let mut client = as_console(&db).await;
-    let made = alarm_suppressions::create(
-        &mut client,
-        &AgentScope::Global,
-        first,
-        "command",
-        "ok",
-        "a",
-        now,
-    )
-    .await
-    .unwrap();
+    let request = ask(first, What::Command, Where::All, "ok");
+    let made = alarm_suppressions::request(&mut client, &AgentScope::Global, &request, "a", now)
+        .await
+        .unwrap();
     assert!(matches!(made, Change::Done(_)), "{made:?}");
     let done = alarms::insert_batch(&mut admin, AGENT, 0, &[row(8)], now)
         .await

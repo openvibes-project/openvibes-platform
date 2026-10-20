@@ -11,7 +11,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{SecondsFormat, Utc};
-use platform_store::alarm_suppressions::{self as store, Change, Suppression};
+use platform_store::alarm_suppressions::{
+    self as store, Change, ListFilter, Request, State as SuppressionState, Suppression, What, Where,
+};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -87,16 +89,16 @@ fn view(suppression: Suppression) -> AlarmSuppressionView {
 fn answer(change: Change, done: StatusCode) -> Response {
     match change {
         Change::Done(suppression) => (done, Json(view(suppression))).into_response(),
-        Change::NotFound => problem_response(ProblemDetails::not_found(
-            "alarm_not_found",
-            "Alarm or suppression not found",
-        )),
-        Change::NeedsGlobalScope => problem_response(ProblemDetails::new(
+        // ponytail: interim codes until Task 5 builds the approval API.
+        Change::NotFound | Change::WrongState | Change::OwnRequest => problem_response(
+            ProblemDetails::not_found("alarm_not_found", "Alarm or suppression not found"),
+        ),
+        Change::NeedsGlobalScope | Change::NotInReach => problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,
             "global_scope_required",
             "Only a user with access to every host may suppress on every host",
         )),
-        Change::Invalid => problem_response(ProblemDetails::new(
+        Change::Invalid(_) => problem_response(ProblemDetails::new(
             StatusCode::BAD_REQUEST,
             "invalid_suppression",
             "Scope must be host, program or command, with a note",
@@ -120,7 +122,11 @@ pub(crate) async fn list_suppressions(
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    match store::list(&client, &scope).await {
+    let active = ListFilter {
+        state: Some(SuppressionState::Active),
+        alarm_id: None,
+    };
+    match store::list(&client, &scope, &active, Utc::now()).await {
         Ok(items) => Json(AlarmSuppressionList {
             items: items.into_iter().map(view).collect(),
         })
@@ -146,7 +152,14 @@ pub(crate) async fn create_suppression(
             Err(response) => return response,
         };
     let Ok(Json(request)) = payload else {
-        return answer(Change::Invalid, StatusCode::CREATED);
+        return answer(Change::Invalid("body".into()), StatusCode::CREATED);
+    };
+    // The old body until Task 5: `host` is now this program on this host.
+    let (what, place) = match request.scope.as_str() {
+        "host" => (What::Program, Where::Host),
+        "program" => (What::Program, Where::All),
+        "command" => (What::Command, Where::All),
+        _ => return answer(Change::Invalid("scope".into()), StatusCode::CREATED),
     };
     let Some(alarm_id) = request.alarm_id.parse::<i64>().ok().filter(|id| *id > 0) else {
         return answer(Change::NotFound, StatusCode::CREATED);
@@ -154,17 +167,14 @@ pub(crate) async fn create_suppression(
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    match store::create(
-        &mut client,
-        &scope,
-        alarm_id,
-        &request.scope,
-        &request.note,
-        &user_id,
-        Utc::now(),
-    )
-    .await
-    {
+    let request = Request {
+        alarm_row_id: alarm_id,
+        what,
+        place,
+        for_days: None,
+        reason: &request.note,
+    };
+    match store::request(&mut client, &scope, &request, &user_id, Utc::now()).await {
         Ok(change) => answer(change, StatusCode::CREATED),
         Err(_) => unavailable_auth(),
     }

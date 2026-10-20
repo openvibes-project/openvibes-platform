@@ -7,7 +7,7 @@ use std::net::IpAddr;
 use chrono::{DateTime, Utc};
 use clap::Subcommand;
 use platform_store::{
-    alarm_suppressions::{self, Change, Suppression},
+    alarm_suppressions::{self, Change, ListFilter, State, Suppression},
     console_read::AgentScope,
     devices::{self, Device},
 };
@@ -121,7 +121,11 @@ pub async fn run(
             }
         }
         DeviceCommand::Suppressions => {
-            match alarm_suppressions::list(client, &AgentScope::Global).await {
+            let active = ListFilter {
+                state: Some(State::Active),
+                alarm_id: None,
+            };
+            match alarm_suppressions::list(client, &AgentScope::Global, &active, now).await {
                 Ok(list) => {
                     let rows: Vec<String> = list
                         .iter()

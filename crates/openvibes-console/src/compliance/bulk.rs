@@ -14,7 +14,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use platform_store::{
-    alarm_suppressions::{self, Change},
+    alarm_suppressions::{self, Change, Request, What, Where},
     bulk_triage::{self as store, BulkChange, BulkRefusal, BulkResult, MAX_ITEMS},
     console_cases::{self, NewCase, Refusal},
     console_read::AgentScope,
@@ -464,7 +464,14 @@ async fn suppress(
         if !representatives.contains(id) {
             continue;
         }
-        match alarm_suppressions::create(client, scope, *id, "program", note, user_id, now).await {
+        let request = Request {
+            alarm_row_id: *id,
+            what: What::Program,
+            place: Where::All,
+            for_days: None,
+            reason: note,
+        };
+        match alarm_suppressions::request(client, scope, &request, user_id, now).await {
             Ok(Change::Done(_)) => result.changed += 1,
             Ok(Change::NeedsGlobalScope) => {
                 result

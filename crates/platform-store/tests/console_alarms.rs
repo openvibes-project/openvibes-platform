@@ -64,8 +64,9 @@ async fn setup() -> (TestDb, Vec<i64>) {
     admin
         .execute(
             "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, exe, note,
-                created_by, created_at)
-             VALUES ('baseline', 'quiet-rule', 'program', '/usr/bin/sh', 'noisy', 'a', now())",
+                created_by, created_at, state, activated_at)
+             VALUES ('baseline', 'quiet-rule', 'program', '/usr/bin/sh', 'noisy', 'a', now(),
+                'active', now())",
             &[],
         )
         .await
