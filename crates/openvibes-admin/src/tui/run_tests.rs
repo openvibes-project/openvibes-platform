@@ -152,6 +152,7 @@ fn a_failure_the_rescue_covers_runs_the_rescue_with_the_same_password() {
                 update(UpdateStep::Stop),
                 update(UpdateStep::Upgrade),
             ],
+            labels: (0..3).map(|i| (String::new(), i..i + 1)).collect(),
             rescue: Some(Rescue {
                 from: 1,
                 to: 3,
@@ -317,4 +318,39 @@ fn the_password_is_typed_on_a_legacy_screen_too() {
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     assert_eq!(app.host.calls.borrow()[0].1, "pw");
+}
+
+#[test]
+fn grouped_work_reports_one_state_per_label() {
+    let calls = |n: usize| vec![Call::Repair(Step::Packages); n];
+    let work = Work::grouped(
+        Kind::Ports,
+        vec![
+            ("one".into(), calls(2)),
+            ("two".into(), calls(2)),
+            ("three".into(), calls(1)),
+        ],
+    );
+    assert_eq!(work.labels[1], ("two".to_owned(), 2..4));
+    let mut run = super::run::Run::new(work, Instant::now());
+    for i in 0..3 {
+        run.take(
+            Progress {
+                index: i,
+                result: Ok("done\tok\n".into()),
+            },
+            Instant::now(),
+        );
+    }
+    run.take(
+        Progress {
+            index: 3,
+            result: Ok("failed\tdisk full\n".into()),
+        },
+        Instant::now(),
+    );
+    let states = super::run::label_states(&run);
+    assert!(matches!(states[0], Some(StepState::Done(_))));
+    assert_eq!(states[1], Some(StepState::Failed("disk full".into())));
+    assert_eq!(states[2], None);
 }

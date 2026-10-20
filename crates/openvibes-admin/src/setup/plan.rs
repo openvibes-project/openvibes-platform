@@ -300,6 +300,12 @@ impl Plan {
     }
 }
 
+/// The plan in `setup.toml`'s text (what `Host::setup_plan` returns).
+#[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
+pub fn plan_of(text: &str) -> Result<Plan, String> {
+    toml::from_str(text).map_err(|error| format!("setup.toml: {error}"))
+}
+
 /// Setup's arguments, shared by `helper setup-plan` and `setup --quick`.
 #[derive(clap::Args, Clone, Debug)]
 pub struct PlanArgs {

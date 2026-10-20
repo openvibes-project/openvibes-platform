@@ -5,7 +5,7 @@
 //! the services again) may follow. Without a worker (tests) the calls run
 //! at once on the TUI's own host.
 
-use std::{sync::mpsc::Receiver, time::Instant};
+use std::{ops::Range, sync::mpsc::Receiver, time::Instant};
 
 use platform_host::{
     Database, Host, HostError, Privileged, RemoveStep, Secret, Step, StepState, Unit, UpdateStep,
@@ -21,6 +21,9 @@ pub enum Call {
     Repair(Step),
     Update(UpdateStep, Vec<String>),
     Remove(RemoveStep, Vec<String>),
+    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
+    /// `setup-plan` with these arguments (the whole plan: see `Plan::args`).
+    SetupPlan(Vec<String>),
     /// A database command (no password).
     Database(Database),
     /// The database's disk: `size<TAB>percent<TAB>free`, empty when unknown.
@@ -47,6 +50,15 @@ pub enum Kind {
     },
     /// The Database page's reads.
     Report,
+    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
+    /// Optional parts added or removed; `what` is the title.
+    Parts {
+        what: String,
+    },
+    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
+    Ports,
+    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
+    Names,
 }
 
 impl Kind {
@@ -65,6 +77,9 @@ impl Kind {
             Kind::Fix => "Repairing".into(),
             Kind::Uninstall { .. } => "Uninstalling".into(),
             Kind::Report => "Reading the database".into(),
+            Kind::Parts { what } => what.clone(),
+            Kind::Ports => "Moving agent connections".into(),
+            Kind::Names => "New certificates".into(),
         }
     }
     pub fn done(&self) -> String {
@@ -78,6 +93,9 @@ impl Kind {
             Kind::Fix => "Repaired".into(),
             Kind::Uninstall { .. } => "OpenVIBES is removed".into(),
             Kind::Report => "Read".into(),
+            Kind::Parts { .. } => "Changed".into(),
+            Kind::Ports => "Moved".into(),
+            Kind::Names => "New certificates made".into(),
         }
     }
     pub fn stopped(&self) -> String {
@@ -88,6 +106,9 @@ impl Kind {
             Kind::Fix => "The repair stopped".into(),
             Kind::Uninstall { .. } => "The uninstall stopped".into(),
             Kind::Report => "The database could not be read".into(),
+            Kind::Parts { .. } => "The change stopped".into(),
+            Kind::Ports => "The move stopped".into(),
+            Kind::Names => "The change stopped".into(),
         }
     }
     /// What Enter does once the password is typed.
@@ -99,6 +120,7 @@ impl Kind {
             Kind::Fix => "Fix",
             Kind::Uninstall { .. } => "Uninstall",
             Kind::Report => "Read",
+            Kind::Parts { .. } | Kind::Ports | Kind::Names => "Apply",
         }
     }
 }
@@ -115,14 +137,38 @@ pub struct Rescue {
 pub struct Work {
     pub kind: Kind,
     pub calls: Vec<Call>,
+    /// The step list's rows: a title and the calls (indices) it covers.
+    pub labels: Vec<(String, Range<usize>)>,
     pub rescue: Option<Rescue>,
 }
 
 impl Work {
+    /// Every call is its own row (the caller titles them).
     pub fn new(kind: Kind, calls: Vec<Call>) -> Work {
+        let labels = (0..calls.len())
+            .map(|i| (String::new(), i..i + 1))
+            .collect();
         Work {
             kind,
             calls,
+            labels,
+            rescue: None,
+        }
+    }
+
+    /// Several calls under one row each.
+    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
+    pub fn grouped(kind: Kind, groups: Vec<(String, Vec<Call>)>) -> Work {
+        let mut calls = Vec::new();
+        let mut labels = Vec::new();
+        for (title, group) in groups {
+            labels.push((title, calls.len()..calls.len() + group.len()));
+            calls.extend(group);
+        }
+        Work {
+            kind,
+            calls,
+            labels,
             rescue: None,
         }
     }
@@ -143,6 +189,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::Repair(step) => host.privileged(Privileged::Repair(*step), secret),
         Call::Update(step, args) => host.privileged(Privileged::Update(*step, args), secret),
         Call::Remove(step, args) => host.privileged(Privileged::Remove(*step, args), secret),
+        Call::SetupPlan(args) => host.privileged(Privileged::SetupPlan(args), secret),
         Call::Database(command) => host.database(*command),
         Call::Disk => host.disk().map(|disks| {
             disks
@@ -323,6 +370,32 @@ impl Run {
         }
         false
     }
+}
+
+#[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
+/// Each label's state: the last call's when all its calls finished, the
+/// first that did not finish, `None` before it is reached.
+pub fn label_states(run: &Run) -> Vec<Option<StepState>> {
+    run.work
+        .labels
+        .iter()
+        .map(|(_, calls)| {
+            let states = &run.states[calls.clone()];
+            states
+                .iter()
+                .flatten()
+                .find(|s| !s.finished())
+                .or_else(|| {
+                    states
+                        .iter()
+                        .all(Option::is_some)
+                        .then(|| states.last())
+                        .flatten()
+                        .and_then(Option::as_ref)
+                })
+                .cloned()
+        })
+        .collect()
 }
 
 /// The password for a run, typed in the bar.

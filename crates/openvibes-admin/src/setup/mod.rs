@@ -23,6 +23,7 @@ pub(crate) mod pki;
 #[cfg(test)]
 mod pki_tests;
 pub mod plan;
+mod plan_args;
 #[cfg(test)]
 mod plan_tests;
 pub(crate) mod ports;
