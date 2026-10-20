@@ -39,7 +39,8 @@ pub(crate) async fn authenticated_permission(
 }
 
 /// The caller's effective capabilities and ID (user or service account),
-/// for a session or a bearer token.
+/// for a session or a bearer token. It checks no permission: callers must
+/// `scope_of` before reading anything.
 pub(crate) async fn authenticated_capabilities(
     state: &AuthHttpState,
     headers: &HeaderMap,
@@ -97,7 +98,7 @@ pub(crate) fn scope_of(
     })
 }
 
-fn permission_denied() -> Response {
+pub(crate) fn permission_denied() -> Response {
     problem_response(ProblemDetails::new(
         StatusCode::FORBIDDEN,
         "permission_denied",

@@ -73,6 +73,10 @@ async fn every_parameter_is_validated_and_named() {
         ("limit=101", "limit"),
         ("limit=x", "limit"),
         ("label=%00", "label"),
+        (
+            "label=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "label",
+        ),
     ];
     for (query, field) in bad {
         let (status, body) = fx
@@ -250,5 +254,49 @@ async fn a_role_without_hosts_read_is_refused() {
     let ao = common::http::sign_in(&fx.router, "ao").await;
     let (status, _) = fx.call(&ao, "GET", URL, None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+    fx.db.drop().await;
+}
+
+#[tokio::test]
+async fn a_bearer_token_may_read_the_list() {
+    use axum::{
+        body::Body,
+        http::{Request, header},
+    };
+    use sha2::{Digest, Sha256};
+    use tower::ServiceExt;
+    let Some(fx) = Fx::new().await else { return };
+    seed(&fx).await;
+    let secret = "ovst_0123456789abcdef0123456789abcdef0123456789a";
+    let mut client = fx.db.pool.get().await.unwrap();
+    let account = platform_store::console_auth::create_service_account(
+        &mut client,
+        "ci",
+        &["admin".to_owned()],
+        &common::people::uid(1),
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    client
+        .execute(
+            "INSERT INTO console_service_tokens (token_id, service_account_id, token_sha256, label,
+                created_at, expires_at, created_by)
+             VALUES (gen_random_uuid(), $1::text::uuid, $2, 'test', now(), now() + interval '1 day', 'test')",
+            &[&account, &Sha256::digest(secret.as_bytes()).as_slice()],
+        )
+        .await
+        .unwrap();
+    drop(client);
+    let request = Request::builder()
+        .uri(URL)
+        .header(header::AUTHORIZATION, format!("Bearer {secret}"))
+        .body(Body::empty())
+        .unwrap();
+    let response = fx.router.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = common::http::body(response).await;
+    assert_eq!(body["total"], 3);
     fx.db.drop().await;
 }

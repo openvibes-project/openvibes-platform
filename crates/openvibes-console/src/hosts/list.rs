@@ -16,7 +16,7 @@ use utoipa::IntoParams;
 use super::list_types::HostListView;
 use crate::{
     Permission,
-    access::guard::{authenticated_capabilities, scope_of, unavailable_auth},
+    access::guard::{authenticated_capabilities, permission_denied, scope_of, unavailable_auth},
     http::{
         AuthHttpState,
         problem::{FieldError, ProblemDetails, problem_response},
@@ -115,11 +115,7 @@ pub(crate) async fn list_hosts(
         Err(response) => return response,
     };
     let Some(hosts_scope) = scope_of(&capabilities, Permission::HostsRead) else {
-        return problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Access is not available",
-        ));
+        return permission_denied();
     };
     let Ok(Query(mut p)) = query else {
         return invalid_query("query");
@@ -142,9 +138,9 @@ pub(crate) async fn list_hosts(
         }
     }
     let parsed = (|| {
-        for (field, v) in [("q", &p.q), ("label", &p.label)] {
+        for (field, v, max) in [("q", &p.q, 200), ("label", &p.label, 64)] {
             if v.as_deref()
-                .is_some_and(|v| v.chars().count() > 200 || v.chars().any(char::is_control))
+                .is_some_and(|v| v.chars().count() > max || v.chars().any(char::is_control))
             {
                 return Err(field);
             }

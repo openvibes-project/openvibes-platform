@@ -901,8 +901,9 @@ unknown parameter is 400 `invalid_query` naming the parameter; an unknown
 are inside the caller's `hosts.read` reach; open-alarm, critical and failing
 counts are null for hosts outside the caller's `alarms.read`,
 `vulnerabilities.read` or `compliance.read` reach. `latest_agent_version` is
-the update checker's cached value (null when the checker is off or has not
-run); the route never waits on the network. A store failure is 503.
+the update checker's last-known agent release (null when the checker is off
+or has not found one yet); it is looked up in the background at start, so it
+fills a few seconds after start, and the route never waits on the network. A store failure is 503.
 
 ## Saved views and list columns
 

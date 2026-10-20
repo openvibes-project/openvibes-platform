@@ -128,3 +128,25 @@ async fn the_latest_agent_release_is_looked_up_on_its_own() {
     assert_eq!(result.state, UpdateState::Unavailable);
     assert_eq!(result.latest_agent_version.as_deref(), Some("0.2.7"));
 }
+
+#[tokio::test]
+async fn the_agent_version_fills_in_the_background_and_is_never_blanked() {
+    let checker = Arc::new(UpdateChecker::with_urls(
+        &refused(),
+        &serve_once(agent_release("v0.2.7")),
+    ));
+    // Unknown at first: no waiting, one lookup starts.
+    assert_eq!(checker.agent_version_now(), None);
+    let mut found = None;
+    for _ in 0..100 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        found = checker.agent_version_now();
+        if found.is_some() {
+            break;
+        }
+    }
+    assert_eq!(found.as_deref(), Some("0.2.7"));
+    // A refresh holding the cache lock does not hide the known value.
+    let _held = checker.agent.cache.lock().await;
+    assert_eq!(checker.agent_version_now().as_deref(), Some("0.2.7"));
+}
