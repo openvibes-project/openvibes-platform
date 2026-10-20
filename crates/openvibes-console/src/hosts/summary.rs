@@ -95,7 +95,7 @@ pub(crate) async fn host_summary(
         revoke: changeable && here(Permission::HostsRevoke),
         export: here(Permission::HostsExport),
         add_to_case: here(Permission::CasesWrite),
-        ask: here(Permission::AssistantUse),
+        ask: state.assistant.is_some() && here(Permission::AssistantUse),
     };
     axum::Json(view(s, can)).into_response()
 }

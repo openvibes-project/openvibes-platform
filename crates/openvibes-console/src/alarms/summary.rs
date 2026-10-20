@@ -80,7 +80,7 @@ pub(crate) async fn alarm_summary_page(
         assign: triage && here(Permission::CasesAssign),
         suppress: here(Permission::AlarmsSuppress),
         add_to_case: here(Permission::CasesWrite),
-        // The session drops assistant.use when the assistant is off.
+        // Capabilities here are not filtered like /session's; the assistant may be off.
         ask: state.assistant.is_some() && here(Permission::AssistantUse),
         export: here(Permission::AlarmsExport),
     };

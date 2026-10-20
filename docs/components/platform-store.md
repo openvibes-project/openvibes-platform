@@ -712,7 +712,8 @@ with an open, unsuppressed alarm from this rule set and rule, and their
 open alarms. The siblings share the host, so the scope that reached the
 alarm reaches them. `AlarmPageSummary::reaches(scope)` applies
 `agent_visibility`'s rule from the host's groups; the console uses it for
-its `can` flags. Tests: `tests/alarm_summary.rs`.
+its `can` flags. The sibling key groups NULL with NULL (no parent, or no
+exe). Tests: `tests/alarm_summary.rs`.
 
 ## Suppressions with approval (`alarm_suppressions::…`, schema 55)
 
