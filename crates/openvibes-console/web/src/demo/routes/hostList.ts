@@ -11,6 +11,9 @@ import { json, problem } from "../http";
 import { LATEST_AGENT_VERSION } from "./session";
 import { compareVersions, older } from "../versionOrder";
 
+/** Code-unit order, as the server's COLLATE "C". */
+const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 type Facet = "status" | "os" | "group" | "label" | "problems" | "agent";
 type Host = {
   agent: Agent; status: string; family: string | null; address: string | null; labels: string[]; groups: string[];
@@ -62,7 +65,7 @@ export function registerHostListRoutes(ctx: DemoContext) {
         && !(address ?? "").startsWith(q) && !(q.includes("/") && address && inCidr(address, q))) return [];
       const f = facts(agent);
       return [{
-        agent, address, status: statusOf(agent), family: osFamily(f), labels: [...(data.labels.get(agent.id) ?? [])].sort(),
+        agent, address, status: statusOf(agent), family: osFamily(f), labels: [...(data.labels.get(agent.id) ?? [])].sort(byteOrder),
         // Members are active hosts only (console_host_in_group).
         groups: isActive(f) ? data.access.host_groups.filter((g) => inGroup(f, g)).map((g) => g.asset_group_id) : [],
         open_alarms: reaches("alarms.read", agent.id) ? data.alarms.filter((a) => a.agent_id === agent.id && a.state === "open").length : null,
@@ -111,7 +114,6 @@ export function registerHostListRoutes(ctx: DemoContext) {
       ...(chosen.group && groupOf.has(chosen.group) && !byGroup.get(chosen.group) && reachable(chosen.group) ? [chosen.group] : [])];
     // The 50 most used labels on matching hosts, plus the chosen one (when on a
     // visible host), all most used first: a chosen label with 0 sorts into place.
-    const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
     const used = [...byLabel].filter(([l, n]) => n > 0 && l !== chosen.label).sort((a, b) => b[1] - a[1] || byteOrder(a[0], b[0])).slice(0, 50);
     if (chosen.label && data.agents.some((a) => visible(a.id) && (data.labels.get(a.id) ?? []).includes(chosen.label ?? ""))) used.push([chosen.label, byLabel.get(chosen.label) ?? 0]);
     const labelKeys = used.sort((a, b) => b[1] - a[1] || byteOrder(a[0], b[0])).map(([k]) => k);
@@ -146,7 +148,7 @@ export function registerHostListRoutes(ctx: DemoContext) {
       total: matching.length,
       counts: {
         status: STATUS.map((value) => ({ value, count: byStatus.get(value) ?? 0 })),
-        os: [...byOs.entries()].sort().map(([value, count]) => ({ value, count })),
+        os: [...byOs.entries()].sort((a, b) => byteOrder(a[0], b[0])).map(([value, count]) => ({ value, count })),
         group: groupIds.sort(byName).map((value) => ({ value, name: groupOf.get(value)?.name ?? value, kind: groupOf.get(value)?.kind ?? "manual", count: byGroup.get(value) ?? 0 })),
         label: labelKeys.map((value) => ({ value, count: byLabel.get(value) ?? 0 })),
         problems: PROBLEMS.map((value) => ({ value, count: byProblem.get(value) ?? 0 })),
