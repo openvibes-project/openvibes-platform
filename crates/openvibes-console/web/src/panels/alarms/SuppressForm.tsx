@@ -104,14 +104,14 @@ function SuppressDialog({ alarmId, onClose }: { alarmId: string; onClose: () => 
   return <SuppressForm source={source} options={options.data} onClose={onClose} />;
 }
 
-/** "Suppress…" for one alarm, for whoever holds alarms.suppress. */
-export function SuppressButton({ alarm }: Readonly<{ alarm: Pick<AlarmSummary, "id" | "suppressed_by"> }>) {
+/** "Suppress…" for one alarm, for whoever holds alarms.suppress; `label` names the alarm where many are listed. */
+export function SuppressButton({ alarm, label }: Readonly<{ alarm: Pick<AlarmSummary, "id" | "suppressed_by">; label?: string }>) {
   const { can } = useSession();
   const [open, setOpen] = useState(false);
   if (!can("alarms.suppress") || alarm.suppressed_by) return null;
   return (
     <>
-      <button type="button" className="button button--small" onClick={() => setOpen(true)}>Suppress…</button>
+      <button type="button" className="button button--small" aria-label={label} onClick={() => setOpen(true)}>Suppress…</button>
       {open && <SuppressDialog alarmId={alarm.id} onClose={() => setOpen(false)} />}
     </>
   );

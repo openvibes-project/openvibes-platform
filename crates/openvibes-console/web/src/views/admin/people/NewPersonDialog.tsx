@@ -13,10 +13,16 @@ import { toast } from "../../../ui/toast";
 import { fitsShare, refreshPeople } from "./people";
 import { hostsSummary } from "../roles/roleState";
 
-/** A native modal dialog: focus trapped, Escape closes it (onClose). */
+/** A native modal dialog: focus trapped, Escape closes it (onClose); on
+ * unmount it closes and gives focus back to what opened it. */
 export function Modal({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => { if (!dialog.current?.open) dialog.current?.showModal(); }, []);
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const d = dialog.current;
+    if (d && !d.open) d.showModal();
+    return () => { if (d?.open) d.close(); opener?.focus(); };
+  }, []);
   return <dialog ref={dialog} className="palette bulk-modal" aria-label={label} onClose={onClose}>{children}</dialog>;
 }
 

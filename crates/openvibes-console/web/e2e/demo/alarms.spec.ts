@@ -63,6 +63,8 @@ test("typing in a row's suppress form never moves the table or opens the inspect
   expect((await new AxeBuilder({ page }).include("dialog").analyze()).violations).toEqual([]);
   await form.getByRole("button", { name: "Cancel" }).click();
   await expect(page.locator(".inspector .panel-header")).toHaveCount(0);
+  // Focus returns to the button that opened the form, which names its alarm.
+  await expect(row.getByRole("button", { name: "Suppress… A shell downloaded a program and ran it on " })).toBeFocused();
 });
 
 test("suppressing from the list with approval off closes the alarm and lists it as active", async ({ page }) => {
@@ -113,6 +115,11 @@ test("with approval on, a request waits on its alarm, is withdrawn, asked again 
   await expect(inspector.getByRole("button", { name: "Suppress…" })).toBeVisible();
   await ask();
   await expect(inspector.locator(".panel-header")).toContainText("Open");
+  // The list (wide enough for its Suppress column) offers no second request for it.
+  await page.goto("/alarms");
+  const listRow = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
+  await expect(listRow).toContainText("Requested");
+  await expect(listRow.getByRole("button", { name: /^Suppress…/ })).toHaveCount(0);
 
   // An approver on the same hosts (the administrator) sees it waiting and approves.
   await persona("admin");

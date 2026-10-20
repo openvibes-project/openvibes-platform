@@ -11,7 +11,7 @@ import { createDemoServer } from "./server";
 type Server = ReturnType<typeof createDemoServer>;
 const LIST = "/api/v1/alarm-suppressions";
 // Alarm 9000 runs on a Pilot host (the team lead's reach); 9001 and 9002 do not.
-const LAB_ALARM = "9000";
+const PILOT_ALARM = "9000";
 
 async function call<T = Record<string, unknown>>(server: Server, method: string, url: string, body?: unknown) {
   const response = await server.handle(method, url, body);
@@ -19,9 +19,9 @@ async function call<T = Record<string, unknown>>(server: Server, method: string,
 }
 const as = (persona: Persona) => createDemoServer({ persona });
 const ask = (server: Server, more: Record<string, unknown> = {}) =>
-  call<AlarmSuppression>(server, "POST", LIST, { alarm_id: LAB_ALARM, what: "program", where: { kind: "host" }, for_days: 7, reason: "health check", ...more });
+  call<AlarmSuppression>(server, "POST", LIST, { alarm_id: PILOT_ALARM, what: "program", where: { kind: "host" }, for_days: 7, reason: "health check", ...more });
 const rows = async (server: Server) => (await call<{ items: AlarmSuppression[] }>(server, "GET", LIST)).body.items;
-const alarm = async (server: Server, id = LAB_ALARM) => (await call<{ state: string; suppressed_by: string | null }>(server, "GET", `/api/v1/alarms/${id}`)).body;
+const alarm = async (server: Server, id = PILOT_ALARM) => (await call<{ state: string; suppressed_by: string | null }>(server, "GET", `/api/v1/alarms/${id}`)).body;
 const approval = async (on: boolean) => expect((await call(as("admin"), "PATCH", "/api/v1/settings/suppressions.require_approval", { value: on })).status).toBe(200);
 
 beforeEach(() => {
@@ -35,7 +35,7 @@ describe("demo suppressions", () => {
     const analyst = as("analyst");
     const made = await ask(analyst);
     expect(made.status).toBe(201);
-    expect(made.body).toMatchObject({ status: "active", what: "program", for_days: 7, requested_by: "Sam Analyst", alarm_id: LAB_ALARM, can_remove: true, can_withdraw: false });
+    expect(made.body).toMatchObject({ status: "active", what: "program", for_days: 7, requested_by: "Sam Analyst", alarm_id: PILOT_ALARM, can_remove: true, can_withdraw: false });
     expect(made.body.where).toMatchObject({ kind: "host", hostname: "api-01.lab.example.test" });
     expect(Date.parse(made.body.expires_at ?? "") - Date.parse(made.body.activated_at ?? "")).toBe(7 * 86_400_000);
     expect(await alarm(analyst)).toMatchObject({ state: "false_positive", suppressed_by: made.body.id });
@@ -53,7 +53,7 @@ describe("demo suppressions", () => {
     expect((await call(analyst, "POST", `${LIST}/${first.id}/withdraw`)).status).toBe(200);
     expect(await rows(analyst)).toEqual([]);
     const again = (await ask(analyst)).body;
-    const waiting = (await call<{ items: AlarmSuppression[] }>(as("admin"), "GET", `${LIST}?alarm_id=${LAB_ALARM}&state=waiting`)).body.items;
+    const waiting = (await call<{ items: AlarmSuppression[] }>(as("admin"), "GET", `${LIST}?alarm_id=${PILOT_ALARM}&state=waiting`)).body.items;
     expect(waiting).toMatchObject([{ id: again.id, can_decide: true, would_close: 1 }]);
     const admin = as("admin");
     const approved = await call<AlarmSuppression>(admin, "POST", `${LIST}/${again.id}/approve`);
@@ -84,6 +84,17 @@ describe("demo suppressions", () => {
     expect(await code(call(as("viewer"), "POST", LIST, {}))).toEqual([403, "forbidden", undefined]);
     const rejected = await call<AlarmSuppression>(as("admin"), "POST", `${LIST}/${own.id}/reject`, { reason: "too wide" });
     expect(rejected.body).toMatchObject({ status: "rejected", decision_reason: "too wide" });
+  });
+
+  it("drops malformed rows read back from storage", async () => {
+    const made = (await ask(as("admin"))).body;
+    const stored = JSON.parse(localStorage.getItem("openvibes.v2.demo.suppressions") ?? "[]") as Record<string, unknown>[];
+    const bad = [null, 7, { ...stored[0], id: "x" }, { ...stored[0], id: "8", state: "odd" }, { ...stored[0], id: "9", for_days: 5 },
+      { ...stored[0], id: "10", args: [1] }, { ...stored[0], id: "11", reason: null }, { ...stored[0], id: "12", agent_id: 3 }];
+    localStorage.setItem("openvibes.v2.demo.suppressions", JSON.stringify([...stored, ...bad]));
+    const list = await call<{ items: AlarmSuppression[] }>(as("admin"), "GET", LIST);
+    expect(list.status).toBe(200);
+    expect(list.body.items.map((r) => r.id)).toEqual([made.id]);
   });
 
   it("shows rows by reach and offers the caller's groups", async () => {

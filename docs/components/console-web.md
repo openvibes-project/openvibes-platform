@@ -287,7 +287,11 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
   server's field message in `role="alert"`; the controls are disabled
   while it sends. `bodyOf` (the POST body) and `whereChoices` are pure and
   tested. Keys typed in a dialog opened from a row (or in any textarea)
-  never move the table cursor or open a row.
+  never move the table cursor or open a row; closing the form returns
+  focus to the button that opened it (the shared `Modal`). A row's button
+  is labelled with the alarm and host; a row whose alarm has the viewer's
+  own waiting request shows "Requested" instead, so the list cannot ask
+  twice.
 
 **Site rules** (`/site-rules`, with `site_rules.read`) lists the site's own
 compliance rules and alarm rules (drafts) with New rule. A rule opens in
@@ -314,7 +318,9 @@ an existing agent's `agent.toml`.
   `GET /api/v1/alarm-suppressions?alarm_id=<id>&state=waiting`; while a
   request from this alarm waits, the summary shows "Suppression requested,
   waiting for approval… these alarms keep arriving" instead, with
-  **Withdraw request** for the requester (`can_withdraw`).
+  **Withdraw request** for the requester (`can_withdraw`, disabled while
+  it sends). If that fetch fails the panel shows the error, not
+  Suppress….
 - **Coverage** (`/coverage`, `g t`, global `rules.coverage.read`): an ATT&CK
   matrix (tactics as columns, covered techniques with rule counts; empty
   tactics stay as visible gaps) above the rule list. Chips: Kill chain
@@ -338,7 +344,8 @@ an existing agent's `agent.toml`.
   group rows matched with `demo/hostGroups.ts`, and a group's delete
   withdrawing its waiting rows and removing its active ones (counted in
   the delete preview's `suppressions_ended`). Rows are kept in browser
-  storage, so a request made as one persona waits for another.
+  storage, so a request made as one persona waits for another; rows read
+  back are checked field by field (`validRow`) and malformed ones dropped.
 
 ## Cases
 

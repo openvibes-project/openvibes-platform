@@ -3,6 +3,8 @@
 // its decision with Reopen; then "don't alarm on this again", the process
 // tree, the evidence and the triage history. A waiting suppression request
 // made from it shows instead of "Suppress…" (approved screen 12).
+import { useState } from "react";
+
 import { apiMessage, invalidate, request, useResource } from "../../api/client";
 import type { AlarmDetail, AlarmProcess, AlarmSuppression } from "../../api/types";
 import { useSession } from "../../app/session";
@@ -34,19 +36,24 @@ function Process({ process, current }: { process: AlarmProcess; current: boolean
 
 /** A suppression request from this alarm waiting for approval; its requester may withdraw it. */
 export function WaitingRequest({ request: waiting }: { request: AlarmSuppression }) {
+  const [busy, setBusy] = useState(false);
   const withdraw = async () => {
+    if (busy) return;
+    setBusy(true);
     try {
       await request("POST", `/api/v1/alarm-suppressions/${encodeURIComponent(waiting.id)}/withdraw`);
       invalidate("/api/v1/alarm");
       toast("Request withdrawn · recorded in the audit log");
     } catch (error) {
       toast(apiMessage(error, "Withdraw failed"), true);
+    } finally {
+      setBusy(false);
     }
   };
   return (
     <div className="callout callout--warn" role="status">
       <Icon name="clock" size={16} /><span className="grow">Suppression requested, waiting for approval… these alarms keep arriving</span>
-      {waiting.can_withdraw && <button type="button" className="button button--small" onClick={() => void withdraw()}>Withdraw request</button>}
+      {waiting.can_withdraw && <button type="button" className="button button--small" disabled={busy} onClick={() => void withdraw()}>Withdraw request</button>}
     </div>
   );
 }
@@ -54,7 +61,8 @@ export function WaitingRequest({ request: waiting }: { request: AlarmSuppression
 export function AlarmPanel({ id }: { id: string }) {
   const { can } = useSession();
   const alarm = useResource<AlarmDetail>(`/api/v1/alarms/${encodeURIComponent(id)}`);
-  const requests = useResource<{ items: AlarmSuppression[] }>(can("alarms.suppressions.read") ? `/api/v1/alarm-suppressions?alarm_id=${encodeURIComponent(id)}&state=waiting` : null);
+  const reads = can("alarms.suppressions.read");
+  const requests = useResource<{ items: AlarmSuppression[] }>(reads ? `/api/v1/alarm-suppressions?alarm_id=${encodeURIComponent(id)}&state=waiting` : null);
   // The caller's own request first: it is the one they can withdraw.
   const waiting = [...(requests.data?.items ?? [])].sort((a, b) => Number(b.can_withdraw) - Number(a.can_withdraw))[0];
   const cases = useCaseBadges("alarm");
@@ -96,7 +104,8 @@ export function AlarmPanel({ id }: { id: string }) {
       <dt>Confidence</dt><dd className="num">{a.confidence}</dd>
       {a.suppressed_by && <><dt>Suppressed</dt><dd>by suppression #{a.suppressed_by}</dd></>}
     </dl>
-    {waiting ? <WaitingRequest request={waiting} /> : <SuppressButton alarm={a} />}
+    {/* Not knowing whether a request waits, it offers no Suppress… (no duplicate). */}
+    {requests.error ? <ErrorBox error={requests.error} /> : waiting ? <WaitingRequest request={waiting} /> : (requests.data || !reads) && <SuppressButton alarm={a} />}
   </>;
   const actions = <>
     <BulkBar inline kind="alarms" noun="alarm" count={1} onClear={() => undefined} items={() => [{ id: a.id }]} without={["case", "suppress"]}

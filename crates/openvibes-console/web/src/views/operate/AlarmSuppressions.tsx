@@ -1,4 +1,6 @@
 // Alarm suppressions: the program and command rules that quiet new alarms.
+import { useState } from "react";
+
 import { apiMessage, invalidate, request, useResource } from "../../api/client";
 import type { AlarmSuppression } from "../../api/types";
 import { nav } from "../../app/nav";
@@ -7,6 +9,18 @@ import { ViewHeader } from "../../ui/ViewHeader";
 import { Ago, Empty, ErrorBox, Loading } from "../../ui/bits";
 import { Confirm } from "../../ui/panel";
 import { toast } from "../../ui/toast";
+
+// ponytail: interim Approve until Task 7's Waiting card with Reject….
+function ApproveButton({ id }: { id: string }) {
+  const [busy, setBusy] = useState(false);
+  const approve = () => {
+    setBusy(true);
+    request("POST", `/api/v1/alarm-suppressions/${encodeURIComponent(id)}/approve`)
+      .then(() => { invalidate("/api/v1/alarm"); toast("Saved · recorded in the audit log"); }, (e: unknown) => toast(apiMessage(e, "Approve failed"), true))
+      .finally(() => setBusy(false));
+  };
+  return <button type="button" className="button button--small" disabled={busy} onClick={approve}>Approve</button>;
+}
 
 export function AlarmSuppressions() {
   const list = useResource<{ items: AlarmSuppression[] }>("/api/v1/alarm-suppressions");
@@ -26,11 +40,7 @@ export function AlarmSuppressions() {
             { key: "rule", header: "Rule", sort: (s) => s.rule_id, render: (s) => <div className="cell-two"><span className="mono">{s.rule_id}</span><span className="subtle">{what(s)}</span></div> },
             { key: "note", header: "Why", hideBelow: 560, render: (s) => <span className="truncate">{s.reason}</span> },
             { key: "created", header: "By", width: "180px", hideBelow: 760, sort: (s) => s.requested_at, render: (s) => <span className="subtle">{s.requested_by}, {s.status}, <Ago value={s.requested_at} /></span> },
-            // ponytail: interim Approve until Task 7's Waiting card with Reject….
-            { key: "approve", header: "Approve", width: "120px", render: (s) => s.can_decide && (
-              <button type="button" className="button button--small" onClick={() => void request("POST", `/api/v1/alarm-suppressions/${encodeURIComponent(s.id)}/approve`)
-                .then(() => { invalidate("/api/v1/alarm"); toast("Saved · recorded in the audit log"); }, (e: unknown) => toast(apiMessage(e, "Approve failed"), true))}>Approve</button>
-            ) },
+            { key: "approve", header: "Approve", width: "120px", render: (s) => s.can_decide && <ApproveButton id={s.id} /> },
             { key: "remove", header: "Remove", width: "120px", render: (s) => s.can_remove && (
               <Confirm danger label={`Remove? Matching alarms raise again from now on.`} onConfirm={async () => {
                 await request("DELETE", `/api/v1/alarm-suppressions/${encodeURIComponent(s.id)}`);

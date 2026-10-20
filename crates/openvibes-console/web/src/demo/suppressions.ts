@@ -27,13 +27,27 @@ export type Request = { alarmId: string; what: "program" | "command"; where: { k
 const notFound: Refusal = { status: 404, code: "suppression_not_found" };
 const invalid = (field: string): Refusal => ({ status: 422, code: "invalid_suppression", field });
 const validReason = (r: string) => r.length > 0 && [...r].length <= 4000;
+const STATES: readonly string[] = ["waiting", "active", "rejected", "withdrawn", "removed"];
+
+/** Whether a row read back from browser storage has the stored shape (it could be anything). */
+export function validRow(value: unknown): value is Stored {
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  const text = (k: string) => typeof r[k] === "string";
+  const textOrNull = (k: string) => r[k] === null || typeof r[k] === "string";
+  return typeof r.id === "string" && /^\d+$/.test(r.id) && STATES.includes(r.state as string) && (r.what === "program" || r.what === "command")
+    && ["exe", "rule_set_id", "rule_id", "reason", "created_by", "created_at"].every(text)
+    && ["agent_id", "group_id", "alarm_id", "decided_by", "decided_at", "decision_reason", "activated_at", "expires_at"].every(textOrNull)
+    && (r.for_days === null || r.for_days === 7 || r.for_days === 30)
+    && (r.args === null || (Array.isArray(r.args) && r.args.every((a) => typeof a === "string")));
+}
 
 export function createSuppressions(ctx: DemoContext, requireApproval: () => boolean) {
   const { data, capabilities, me, actor, iso, audit, reaches, facts } = ctx;
   const storage = browserPersistence("openvibes.v2.demo.suppressions");
   const loaded = storage?.load();
-  // What storage holds could be anything: only rows with an id and a state are taken.
-  const rows: Stored[] = Array.isArray(loaded) ? (loaded as Stored[]).filter((r) => typeof r?.id === "string" && typeof r.state === "string") : [];
+  // What storage holds could be anything: invalid rows are dropped.
+  const rows: Stored[] = Array.isArray(loaded) ? loaded.filter(validRow) : [];
   const save = () => storage?.save(rows);
   const scope = (permission: Permission) => capabilities.find((c) => c.permission === permission)?.scope;
   const groupOf = (id: string | null) => data.access.host_groups.find((g) => g.asset_group_id === id);
