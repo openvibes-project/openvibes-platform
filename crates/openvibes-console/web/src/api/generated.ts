@@ -1032,6 +1032,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Hosts list. */
+        get: operations["list_hosts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hosts/{agent_id}/labels": {
         parameters: {
             query?: never;
@@ -2966,6 +2983,16 @@ export interface components {
             answer: string;
             question: string;
         };
+        /** @description A filter value and how many hosts have it. */
+        CountView: {
+            /**
+             * Format: int64
+             * @description Hosts matching with the other filters applied.
+             */
+            count: number;
+            /** @description The URL value. */
+            value: string;
+        };
         /** @description One rule and what it covers. */
         CoverageRule: {
             /** @description Its pairs; empty when the rule is not mapped. */
@@ -3577,6 +3604,20 @@ export interface components {
              */
             values: string[];
         };
+        /** @description A group filter value. */
+        GroupCountView: {
+            /**
+             * Format: int64
+             * @description Hosts in the group in the viewer's reach.
+             */
+            count: number;
+            /** @description How the group gets its hosts. */
+            kind: components["schemas"]["HostGroupKind"];
+            /** @description Group name. */
+            name: string;
+            /** @description Group id. */
+            value: string;
+        };
         /** @description A member host on the group page. */
         GroupHostView: {
             agent_id: string;
@@ -3639,6 +3680,28 @@ export interface components {
         HomeDashboard: {
             /** @description Visible dashboard id, or `null`. */
             dashboard_id?: string | null;
+        };
+        /** @description The host's agent. */
+        HostAgentView: {
+            /** @description Older than the latest release; absent when unknown. */
+            older?: boolean | null;
+            /** @description Agent version. */
+            version?: string | null;
+        };
+        /** @description Per-value counts for every filter. */
+        HostCountsView: {
+            /** @description By agent age. */
+            agent: components["schemas"]["CountView"][];
+            /** @description By group. */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description By label. */
+            label: components["schemas"]["CountView"][];
+            /** @description By OS family. */
+            os: components["schemas"]["CountView"][];
+            /** @description By problems. */
+            problems: components["schemas"]["CountView"][];
+            /** @description By status. */
+            status: components["schemas"]["CountView"][];
         };
         /** @description A group's page: the group and its recent changes. */
         HostGroupDetail: components["schemas"]["HostGroupView"] & {
@@ -3750,6 +3813,35 @@ export interface components {
             /** @description In byte order. */
             labels: string[];
         };
+        /** @description One page of the Hosts list. */
+        HostListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["HostCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["HostRowView"][];
+            /** @description Latest agent release, when known. */
+            latest_agent_version?: string | null;
+            /** @description Summary over the matching hosts. */
+            summary: components["schemas"]["HostSummaryView"];
+            /**
+             * Format: int64
+             * @description Hosts matching every filter.
+             */
+            total: number;
+        };
+        /** @description A host's operating system. */
+        HostOsView: {
+            /** @description Display name, such as `Debian 12`. */
+            distribution?: string | null;
+            /** @description `linux` or `windows`. */
+            family?: string | null;
+            /** @description OS id, such as `debian`. */
+            id?: string | null;
+            /** @description OS version. */
+            version?: string | null;
+        };
         /** @description A page of a host's packages, by name. */
         HostPackagePage: {
             /** @description Packages on this page. */
@@ -3776,6 +3868,52 @@ export interface components {
             release: string;
             /** @description Version. */
             version: string;
+        };
+        /** @description Problem counts; absent where the viewer may not read that kind for the host. */
+        HostProblemsView: {
+            /**
+             * Format: int64
+             * @description Critical vulnerabilities.
+             */
+            critical?: number | null;
+            /**
+             * Format: int64
+             * @description Failing compliance checks.
+             */
+            failing?: number | null;
+            /**
+             * Format: int64
+             * @description Open agent alarms.
+             */
+            open_alarms?: number | null;
+        };
+        /** @description One row of the Hosts list. */
+        HostRowView: {
+            /** @description Address of the last connection. */
+            address?: string | null;
+            /** @description Agent. */
+            agent: components["schemas"]["HostAgentView"];
+            /**
+             * Format: int64
+             * @description All its groups.
+             */
+            group_count: number;
+            /** @description The first two groups by name. */
+            groups: components["schemas"]["HostGroupRef"][];
+            /** @description Host name. */
+            hostname?: string | null;
+            /** @description Agent id. */
+            id: string;
+            /** @description Labels. */
+            labels: string[];
+            /** @description Last heartbeat, RFC 3339. */
+            last_seen_at?: string | null;
+            /** @description Operating system. */
+            os: components["schemas"]["HostOsView"];
+            /** @description Problem counts. */
+            problems: components["schemas"]["HostProblemsView"];
+            /** @description `online`, `offline`, `revoked` or `imported`. */
+            status: string;
         };
         /** @description One assignable set's state on a host, as the platform decides it. */
         HostRuleSetAssignmentView: {
@@ -3834,6 +3972,24 @@ export interface components {
              *     incomplete.
              */
             truncated: boolean;
+        };
+        /** @description The line above the list. */
+        HostSummaryView: {
+            /**
+             * Format: int64
+             * @description Hosts with a critical vulnerability.
+             */
+            critical: number;
+            /**
+             * Format: int64
+             * @description Hosts with an older agent.
+             */
+            older_agent: number;
+            /**
+             * Format: int64
+             * @description Online hosts.
+             */
+            online: number;
         };
         /** @description A recorded input, a scalar or a summarized list. */
         InputView: {
@@ -9228,6 +9384,85 @@ export interface operations {
             };
             /** @description invalid_condition */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_hosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Host name, address prefix or CIDR range. */
+                q: string | null;
+                /** @description online, offline, revoked or imported. */
+                status: string | null;
+                /** @description linux or windows. */
+                os: string | null;
+                /** @description A host group id. */
+                group: string | null;
+                /** @description A label. */
+                label: string | null;
+                /** @description critical, alarms or none. */
+                problems: string | null;
+                /** @description older or latest. */
+                agent: string | null;
+                /** @description host, heartbeat, version or problems. */
+                sort: string | null;
+                /** @description asc or desc. */
+                dir: string | null;
+                /** @description Rows to skip, 0 to 100000. */
+                offset: string | null;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of hosts in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

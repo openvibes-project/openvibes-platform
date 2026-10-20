@@ -5315,6 +5315,201 @@
         }
       }
     },
+    "/api/v1/hosts": {
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "The Hosts list.",
+        "operationId": "list_hosts",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "path",
+            "description": "Host name, address prefix or CIDR range.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "path",
+            "description": "online, offline, revoked or imported.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "os",
+            "in": "path",
+            "description": "linux or windows.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "group",
+            "in": "path",
+            "description": "A host group id.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "label",
+            "in": "path",
+            "description": "A label.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "problems",
+            "in": "path",
+            "description": "critical, alarms or none.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "description": "older or latest.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "path",
+            "description": "host, heartbeat, version or problems.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "dir",
+            "in": "path",
+            "description": "asc or desc.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "path",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of hosts in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/hosts/{agent_id}/labels": {
       "get": {
         "tags": [
@@ -11955,6 +12150,25 @@
         },
         "additionalProperties": false
       },
+      "CountView": {
+        "type": "object",
+        "description": "A filter value and how many hosts have it.",
+        "required": [
+          "value",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts matching with the other filters applied."
+          },
+          "value": {
+            "type": "string",
+            "description": "The URL value."
+          }
+        }
+      },
       "CoverageRule": {
         "type": "object",
         "description": "One rule and what it covers.",
@@ -13409,6 +13623,35 @@
         },
         "additionalProperties": false
       },
+      "GroupCountView": {
+        "type": "object",
+        "description": "A group filter value.",
+        "required": [
+          "value",
+          "name",
+          "kind",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in the group in the viewer's reach."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind",
+            "description": "How the group gets its hosts."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group name."
+          },
+          "value": {
+            "type": "string",
+            "description": "Group id."
+          }
+        }
+      },
       "GroupHostView": {
         "type": "object",
         "description": "A member host on the group page.",
@@ -13589,6 +13832,82 @@
           }
         },
         "additionalProperties": false
+      },
+      "HostAgentView": {
+        "type": "object",
+        "description": "The host's agent.",
+        "properties": {
+          "older": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Older than the latest release; absent when unknown."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent version."
+          }
+        }
+      },
+      "HostCountsView": {
+        "type": "object",
+        "description": "Per-value counts for every filter.",
+        "required": [
+          "status",
+          "os",
+          "group",
+          "label",
+          "problems",
+          "agent"
+        ],
+        "properties": {
+          "agent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By agent age."
+          },
+          "group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCountView"
+            },
+            "description": "By group."
+          },
+          "label": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By label."
+          },
+          "os": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By OS family."
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By problems."
+          },
+          "status": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By status."
+          }
+        }
       },
       "HostGroupDetail": {
         "allOf": [
@@ -13836,6 +14155,84 @@
           }
         }
       },
+      "HostListView": {
+        "type": "object",
+        "description": "One page of the Hosts list.",
+        "required": [
+          "items",
+          "total",
+          "counts",
+          "summary",
+          "generated_at"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/HostCountsView",
+            "description": "Per-value counts."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostRowView"
+            },
+            "description": "The page."
+          },
+          "latest_agent_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest agent release, when known."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/HostSummaryView",
+            "description": "Summary over the matching hosts."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts matching every filter."
+          }
+        }
+      },
+      "HostOsView": {
+        "type": "object",
+        "description": "A host's operating system.",
+        "properties": {
+          "distribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name, such as `Debian 12`."
+          },
+          "family": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`linux` or `windows`."
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OS id, such as `debian`."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OS version."
+          }
+        }
+      },
       "HostPackagePage": {
         "type": "object",
         "description": "A page of a host's packages, by name.",
@@ -13900,6 +14297,112 @@
           "version": {
             "type": "string",
             "description": "Version."
+          }
+        }
+      },
+      "HostProblemsView": {
+        "type": "object",
+        "description": "Problem counts; absent where the viewer may not read that kind for the host.",
+        "properties": {
+          "critical": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Critical vulnerabilities."
+          },
+          "failing": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Failing compliance checks."
+          },
+          "open_alarms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Open agent alarms."
+          }
+        }
+      },
+      "HostRowView": {
+        "type": "object",
+        "description": "One row of the Hosts list.",
+        "required": [
+          "id",
+          "os",
+          "status",
+          "groups",
+          "group_count",
+          "labels",
+          "problems",
+          "agent"
+        ],
+        "properties": {
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Address of the last connection."
+          },
+          "agent": {
+            "$ref": "#/components/schemas/HostAgentView",
+            "description": "Agent."
+          },
+          "group_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All its groups."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostGroupRef"
+            },
+            "description": "The first two groups by name."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name."
+          },
+          "id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last heartbeat, RFC 3339."
+          },
+          "os": {
+            "$ref": "#/components/schemas/HostOsView",
+            "description": "Operating system."
+          },
+          "problems": {
+            "$ref": "#/components/schemas/HostProblemsView",
+            "description": "Problem counts."
+          },
+          "status": {
+            "type": "string",
+            "description": "`online`, `offline`, `revoked` or `imported`."
           }
         }
       },
@@ -14022,6 +14525,32 @@
           "truncated": {
             "type": "boolean",
             "description": "The agent cut a list to the protocol limits: the lists are\nincomplete."
+          }
+        }
+      },
+      "HostSummaryView": {
+        "type": "object",
+        "description": "The line above the list.",
+        "required": [
+          "online",
+          "older_agent",
+          "critical"
+        ],
+        "properties": {
+          "critical": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts with a critical vulnerability."
+          },
+          "older_agent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts with an older agent."
+          },
+          "online": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Online hosts."
           }
         }
       },
@@ -17633,6 +18162,10 @@
     {
       "name": "about",
       "description": "Platform versions and newer-release check"
+    },
+    {
+      "name": "hosts",
+      "description": "The Hosts list"
     },
     {
       "name": "agents",

@@ -32,6 +32,19 @@ pub(crate) async fn authenticated_permission(
     permission: crate::Permission,
     csrf_required: bool,
 ) -> Result<(platform_store::console_read::AgentScope, String), Response> {
+    let (capabilities, id) = authenticated_capabilities(state, headers, csrf_required).await?;
+    scope_of(&capabilities, permission)
+        .map(|scope| (scope, id))
+        .ok_or_else(permission_denied)
+}
+
+/// The caller's effective capabilities and ID (user or service account),
+/// for a session or a bearer token.
+pub(crate) async fn authenticated_capabilities(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+    csrf_required: bool,
+) -> Result<(Vec<crate::EffectiveCapability>, String), Response> {
     use crate::access::auth::{PresentedCredentials, presented_credentials, session_digest};
 
     let now = Utc::now();
@@ -59,16 +72,12 @@ pub(crate) async fn authenticated_permission(
             )
             .await
             .map_err(|_| unavailable_auth())?;
-            return scope_of(&capabilities, permission)
-                .map(|scope| (scope, token.service_account_id))
-                .ok_or_else(permission_denied);
+            return Ok((capabilities, token.service_account_id));
         }
         _ => return Err(authentication_required()),
     };
     let user = session_capabilities(state, headers, secret.expose_secret(), csrf_required).await?;
-    scope_of(&user.capabilities, permission)
-        .map(|scope| (scope, user.user_id))
-        .ok_or_else(permission_denied)
+    Ok((user.capabilities, user.user_id))
 }
 
 /// The scope `capabilities` give `permission`, if they hold it.

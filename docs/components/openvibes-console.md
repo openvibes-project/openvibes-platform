@@ -889,9 +889,24 @@ Also renamed: the cases API's item kind `finding` is now `compliance_finding`
 `compliance_finding_not_found`; the page `/findings` is now `/compliance`
 (old links and saved views carry over).
 
+## Hosts list
+
+`GET /api/v1/hosts` (needs `hosts.read`; session or bearer) pages the Hosts
+list. Filters `q`, `status`, `os`, `group`, `label`, `problems`
+(`critical|alarms|none`) and `agent` (`older|latest`) each take one value and
+AND together; `sort` (`host|heartbeat|version|problems`), `dir`, `offset`
+(0..=100000) and `limit` (1..=100, default 50). An invalid value or an
+unknown parameter is 400 `invalid_query` naming the parameter; an unknown
+`group` is an empty result. Rows, per-filter `counts` and the `summary` line
+are inside the caller's `hosts.read` reach; open-alarm, critical and failing
+counts are null for hosts outside the caller's `alarms.read`,
+`vulnerabilities.read` or `compliance.read` reach. `latest_agent_version` is
+the update checker's cached value (null when the checker is off or has not
+run); the route never waits on the network. A store failure is 503.
+
 ## Saved views and list columns
 
-`GET/POST /api/v1/saved-views`, `DELETE /api/v1/saved-views/{id}` and
+`GET/POST /api/v1/saved-views`, `DELETE /api/v1/saved-views/{id}` (a name or query with control characters is 422 `invalid_saved_view`) and
 `GET/PUT /api/v1/list-columns/{page}` (signed-in session, own data only);
 see [saved-views.md](saved-views.md).
 

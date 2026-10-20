@@ -20,6 +20,8 @@ pub(crate) mod groups;
 pub(crate) mod groups_types;
 pub(crate) mod install;
 pub(crate) mod labels;
+pub(crate) mod list;
+pub(crate) mod list_types;
 pub(crate) mod ports;
 pub(crate) mod presence;
 pub(crate) mod site_fleet;
@@ -50,6 +52,7 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
             "/v1/agents/summary",
             get(agents::authenticated_agent_summary),
         )
+        .route("/v1/hosts", get(list::list_hosts))
         .route("/v1/agents/events", get(presence::agent_events))
         .route("/v1/agents", get(agents::authenticated_agents))
         .route(

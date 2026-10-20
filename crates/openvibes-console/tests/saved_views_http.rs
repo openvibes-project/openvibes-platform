@@ -37,6 +37,8 @@ async fn saved_views_are_validated_per_person_and_csrf_guarded() {
         ("".to_string(), "a=b".to_string(), "name"),
         ("n".repeat(61), "a=b".to_string(), "name"),
         ("ok".to_string(), "q".repeat(1001), "query"),
+        ("bad\0name".to_string(), "a=b".to_string(), "name"),
+        ("ok".to_string(), "a=b\u{7}".to_string(), "query"),
     ] {
         let (status, body) = fx
             .call(

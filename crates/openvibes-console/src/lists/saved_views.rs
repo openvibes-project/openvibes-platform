@@ -175,14 +175,14 @@ pub(crate) async fn create_view(
         return page_not_found();
     }
     let name = request.name.trim();
-    if !(1..=60).contains(&name.chars().count()) {
+    if !(1..=60).contains(&name.chars().count()) || name.chars().any(char::is_control) {
         return invalid(
             "invalid_saved_view",
             "name",
             "The name must be 1 to 60 characters",
         );
     }
-    if request.query.chars().count() > 1000 {
+    if request.query.chars().count() > 1000 || request.query.chars().any(char::is_control) {
         return invalid(
             "invalid_saved_view",
             "query",

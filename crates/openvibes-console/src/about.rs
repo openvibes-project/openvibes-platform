@@ -215,6 +215,17 @@ impl UpdateChecker {
     }
 }
 
+/// The cached latest agent release, without a network call or waiting for
+/// a fetch in progress; `None` when the checker is off or has not run.
+pub(crate) fn latest_agent_version(state: &AuthHttpState) -> Option<String> {
+    let cache = state.update_checker.as_ref()?.agent.cache.try_lock().ok()?;
+    cache
+        .as_ref()?
+        .1
+        .as_ref()
+        .map(|latest| latest.version.clone())
+}
+
 /// One repository's latest release, cached.
 struct ReleaseFeed {
     url: String,
