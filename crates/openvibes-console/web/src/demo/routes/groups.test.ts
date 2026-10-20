@@ -2,7 +2,7 @@
 // (hosts/groups.rs, group_checks.rs, labels.rs).
 import { describe, expect, it } from "vitest";
 
-import type { GroupHost, HostGroup, HostGroupDetail, HostGroupPreview } from "../../api/types";
+import type { GroupHost, HostGroup, HostGroupDetail, HostGroupPreview, HostList } from "../../api/types";
 import { resolveCapabilities } from "../share";
 import { createDemoServer } from "../server";
 import { writeRefusal } from "./groups";
@@ -30,6 +30,26 @@ describe("demo host groups", () => {
     expect(prod?.membership).toBe(`${prod?.picked} hosts picked by hand`);
     expect(prod?.hosts).toBe(prod?.picked);
     expect(byName.get("Linux")?.hosts).toBeGreaterThan(prod?.hosts ?? 0);
+  });
+
+  it("counts critical as the Hosts list does: an accepted risk leaves the group's counts", async () => {
+    const server = admin();
+    const vulns = (await call<{ items: { agent_id: string; advisory_id: string; severity: string }[] }>(server, "GET", "/api/v1/vulnerabilities")).body.items;
+    const hit = vulns.find((v) => v.severity === "critical");
+    const id = hit?.agent_id ?? "";
+    // The host's smallest group, so its hosts fit on one page.
+    const row = (await call<HostList>(server, "GET", `/api/v1/hosts?q=${id}`)).body.items[0];
+    const counts = async () => {
+      const g = (await call<HostGroup[]>(server, "GET", "/api/v1/host-groups")).body
+        .filter((x) => row?.groups.some((r) => r.id === x.asset_group_id)).sort((a, b) => a.hosts - b.hosts)[0];
+      const hosts = (await call<GroupHost[]>(server, "GET", `/api/v1/host-groups/${g?.asset_group_id}/hosts?limit=100`)).body;
+      return { group: g?.critical, host: hosts.find((h) => h.agent_id === id)?.critical };
+    };
+    const before = await counts();
+    expect(before.host).toBeGreaterThan(0);
+    await call(server, "POST", "/api/v1/vulnerabilities/bulk", { action: "state", state: "accepted_risk", note: "later",
+      accepted_until: new Date(Date.now() + 86_400_000 * 30).toISOString(), items: [{ advisory_id: hit?.advisory_id, agent_id: id }] });
+    expect(await counts()).toEqual({ group: (before.group ?? 0) - 1, host: (before.host ?? 0) - 1 });
   });
 
   it("counts hosts inside the reader's reach and leaves picked hosts out of a scoped reader's history", async () => {

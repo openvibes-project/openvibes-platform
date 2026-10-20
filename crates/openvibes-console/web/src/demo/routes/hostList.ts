@@ -5,6 +5,7 @@
 // where its own permission reaches (plan rulings 2–7).
 import type { Agent, HostList } from "../../api/types";
 import type { DemoContext } from "../context";
+import type { DemoData } from "../data";
 import { distribution, distributionName, hasControl, inCidr, inGroup, isActive, osFamily } from "../hostGroups";
 import { json, problem } from "../http";
 import { LATEST_AGENT_VERSION } from "./session";
@@ -26,6 +27,12 @@ const noneOpen = (h: Host) => (h.open_alarms !== null || h.critical !== null || 
 const problemHit = (h: Host, p: string) => (p === "critical" ? (h.critical ?? 0) > 0 : p === "alarms" ? (h.open_alarms ?? 0) > 0 : noneOpen(h));
 const invalid = (field: string) => problem(400, "invalid_query", "Host query parameters are invalid",
   { field_errors: [{ field, code: "invalid", message: `The ${field} parameter is invalid` }] });
+
+/** A host's critical count as the host page and the Vulnerabilities list
+ * show them by default (host_listed_critical): one per advisory, confidence
+ * 80 or more, triage open. The group pages count the same. */
+export const listedCritical = (data: DemoData, id: string) => new Set(data.vulnerabilities.filter((v) => v.agent_id === id
+  && v.fixed_at == null && v.severity === "critical" && v.confidence >= 80 && v.triage_state === "open").map((v) => v.advisory_id)).size;
 
 export function registerHostListRoutes(ctx: DemoContext) {
   const { data, route, visible, reaches, facts } = ctx;
@@ -59,11 +66,7 @@ export function registerHostListRoutes(ctx: DemoContext) {
         // Members are active hosts only (console_host_in_group).
         groups: isActive(f) ? data.access.host_groups.filter((g) => inGroup(f, g)).map((g) => g.asset_group_id) : [],
         open_alarms: reaches("alarms.read", agent.id) ? data.alarms.filter((a) => a.agent_id === agent.id && a.state === "open").length : null,
-        // As the host page and the Vulnerabilities list show them by default:
-        // one per advisory, confidence 80 or more, triage open.
-        critical: reaches("vulnerabilities.read", agent.id)
-          ? new Set(data.vulnerabilities.filter((v) => v.agent_id === agent.id && v.fixed_at == null && v.severity === "critical"
-            && v.confidence >= 80 && v.triage_state === "open").map((v) => v.advisory_id)).size : null,
+        critical: reaches("vulnerabilities.read", agent.id) ? listedCritical(data, agent.id) : null,
         // Not triaged away, as the Compliance list and the host page count them.
         failing: reaches("compliance.read", agent.id)
           ? data.findings.filter((x) => x.agent_id === agent.id && (data.triage.get(ctx.triageKey(agent.id, x.rule_set_id, x.rule_id))?.state ?? "open") === "open").length : null,

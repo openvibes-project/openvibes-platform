@@ -9,6 +9,7 @@ import type { DemoContext } from "../context";
 import { type Condition, type StoredGroup, distribution, distributionName, hasControl, inGroup, isActive, invalidRule, membershipSentence, ruleHolds } from "../hostGroups";
 import { json, problem } from "../http";
 import { ADMIN_ROLE, hostScoped, shareRefusal } from "../share";
+import { listedCritical } from "./hostList";
 import type { Suppressions } from "../suppressions";
 import type { RoleHelpers } from "./roles";
 
@@ -64,7 +65,7 @@ export function registerGroupRoutes(ctx: DemoContext & { roles: RoleHelpers; ove
     && data.access.bindings.some((b) => b.user_id === u.user_id && roleIds.includes(b.role_id)));
   const online = (a: Agent) => !!a.last_seen_at && Date.parse(a.last_seen_at) >= Date.now() - ONLINE_MS;
   const alarms = (id: string) => data.alarms.filter((al) => al.agent_id === id && al.state === "open").length;
-  const critical = (id: string) => data.vulnerabilities.filter((v) => v.agent_id === id && v.fixed_at == null && v.severity === "critical").length;
+  const critical = (id: string) => listedCritical(data, id);
 
   /** HostGroupView, counted inside the reader's hosts.read reach. */
   const view = (g: StoredGroup): HostGroup => {
