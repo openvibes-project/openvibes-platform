@@ -105,6 +105,13 @@ describe("host page", () => {
     expect(render(summary({ certificates: [1, 2, 3, 4, 5].map(cert), certificate_count: 7 }), null)).not.toContain("Show all 7<");
   });
 
+  it("names the 100 newest when the agent's record caps the certificates", () => {
+    const many = { ...agent, certificates: Array.from({ length: 100 }, (_, i) => cert(i)) } as AgentDetail;
+    const html = render(summary({ certificates: [1, 2, 3, 4, 5].map(cert), certificate_count: 250 }), many);
+    expect(html).toMatch(/<button [^>]*>Show the 100 newest of 250<\/button>/);
+    expect(html).not.toContain("Show all 250");
+  });
+
   it("says why Rule sets is missing when the agent's record fails, and offers no Export", () => {
     const html = render(summary(), null, new ApiError(500, "unavailable", "The console could not read the agent"));
     expect(html).toContain("The console could not read the agent");

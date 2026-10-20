@@ -124,14 +124,16 @@ export function RuleSetsCard({ agent, error }: { agent: Agent | undefined; error
   );
 }
 
-/** The five newest from the summary; "Show all n" lists every one from the agent's record. */
+/** The five newest from the summary; "Show all n" lists every one from the
+ * agent's record, which holds the 100 newest, so past 100 it says so. */
 export function CertificatesCard({ summary, agent }: { summary: HostSummary; agent: AgentDetail | undefined }) {
   const [all, setAll] = useState(false);
   const total = summary.certificate_count;
   const certificates = all && agent ? agent.certificates : summary.certificates;
+  const more = agent && agent.certificates.length < total ? `Show the ${agent.certificates.length.toLocaleString()} newest of ${total.toLocaleString()}` : `Show all ${total.toLocaleString()}`;
   return (
     <Card title="Certificates" aside={total > summary.certificates.length && agent && (
-      <button type="button" className="link-button detail-more" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show the newest 5" : `Show all ${total.toLocaleString()}`}</button>
+      <button type="button" className="link-button detail-more" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show the newest 5" : more}</button>
     )}>
       {certificates.length === 0 ? <p className="subtle">None</p> : (
         <ul className="list list--plain" aria-label="Certificates">
