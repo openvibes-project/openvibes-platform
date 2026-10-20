@@ -145,7 +145,7 @@ fn entries(steps: &[(Step, StepState)], half: Option<&str>) -> Vec<(Do, String, 
 }
 
 /// The entry and page that finish a half-done job.
-pub(super) fn finishing(kind: &str) -> Option<(&'static str, Page)> {
+fn finishing(kind: &str) -> Option<(&'static str, Page)> {
     match kind {
         "update" => Some(("Finish the update", Page::Update)),
         "uninstall" => Some(("Finish the uninstall", Page::Uninstall)),

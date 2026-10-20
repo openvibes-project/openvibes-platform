@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     setup::{
-        plan::{Plan, plan_of},
+        plan::Plan,
         ports::{CONSOLE_DEFAULT, Problem, Which, port_problem},
     },
     tui::{
@@ -286,19 +286,14 @@ impl<H: Host> App<H> {
         {
             self.run = None;
         }
-        let read = self
-            .host
-            .setup_plan()
-            .map_err(|e| e.to_string())
-            .and_then(|text| plan_of(&text));
-        self.maint.ports = match read {
+        self.maint.ports = match super::read_plan(&self.host) {
             Ok(plan) => Ports {
                 saved: Some(plan.clone()),
                 now: Some(plan),
                 ..Ports::default()
             },
             Err(error) => Ports {
-                error: Some(format!("The plan cannot be read: {error}")),
+                error: Some(error),
                 ..Ports::default()
             },
         };
@@ -397,7 +392,7 @@ impl<H: Host> App<H> {
         if moved.is_empty() {
             return;
         }
-        if let Some(why) = super::blocked_by_half_done(self) {
+        if let Some(why) = super::cannot_ask(self, self.maint.ports.saved.as_ref()) {
             self.outcome = Some((false, why));
             return;
         }

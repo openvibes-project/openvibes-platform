@@ -157,7 +157,7 @@ pub(super) fn type_text(app: &mut App<SetupHost>, text: &str) {
     }
 }
 
-pub(super) const PLAN: &str = "components = [\"ingest\", \"console\", \"distribution\", \"vulns\", \"rules\", \"agent\"]\nhostname = \"platform.example.com\"\nsans = []\nca = \"quick\"\noperator = \"alice\"\n";
+pub(super) const PLAN: &str = "components = [\"ingest\", \"console\", \"distribution\", \"vulns\", \"rules\", \"agent\"]\nhostname = \"platform.example.com\"\nsans = []\nca = \"quick\"\noperator = \"alice\"\nconsole_port = 443\ningest_port = 18423\ndistribution_port = 18424\n";
 
 pub(super) fn set_up(answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
     let mut app = app(true, answers);

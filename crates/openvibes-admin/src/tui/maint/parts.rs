@@ -2,32 +2,38 @@
 //! agent and the assistant, Apply shows what it will do and asks. The
 //! plan is saved whole first, then each removed part is stopped, removed
 //! and purged (`remove-step`), then the added ones are installed by the
-//! repair steps. Removing a part leaves nothing of it behind.
+//! repair steps. Removing a part leaves nothing of it behind; a removal
+//! that stopped half way shows as "removal not finished", and Apply
+//! finishes it.
 
-use platform_host::{Host, RemoveStep, Step, StepState};
+use platform_host::{Host, RemoveStep, Step};
 use ratatui::{
     Frame,
     text::{Line, Span},
     widgets::Paragraph,
 };
 
-use super::{Then, failure};
+use super::{
+    Then, cannot_ask, failure,
+    parts_run::{done_text, draw as draw_run},
+    read_plan,
+};
 use crate::{
-    setup::plan::{Component, ModelChoice, Plan, plan_of},
+    setup::plan::{Component, ModelChoice, Plan},
     tui::{
         app::{App, Key, Question},
-        run::{Call, Kind, Run, Work, label_states},
+        run::{Call, Kind, Run, Work},
         ui::{
             bar::Bar,
             frame,
             list::{self, Row},
             logo::Header,
-            steps,
         },
     },
 };
 
-const MODEL: &str = "Download the model";
+pub(super) const MODEL: &str = "Download the model";
+pub(super) const SAVE: &str = "Save the choice";
 
 /// The page's choices: what is ticked, from the saved plan.
 #[derive(Debug, Default)]
@@ -36,10 +42,13 @@ pub struct Parts {
     error: Option<String>,
     agent: bool,
     assistant: bool,
+    /// Not in the plan, but its package or data folder is still here: a
+    /// removal that did not finish.
+    leftover: Vec<Part>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Part {
+pub(super) enum Part {
     Agent,
     Assistant,
 }
@@ -51,8 +60,15 @@ impl Part {
             Part::Assistant => Component::Assistant,
         }
     }
-    fn name(self) -> &'static str {
+    pub(super) fn name(self) -> &'static str {
         self.component().name()
+    }
+    /// Its data folder, under the root.
+    fn data(self) -> &'static str {
+        match self {
+            Part::Agent => "var/lib/openvibes-agent",
+            Part::Assistant => "var/lib/openvibes-llm",
+        }
     }
 }
 
@@ -62,7 +78,7 @@ fn names(parts: &[Part]) -> String {
     all.join(" and ")
 }
 
-fn cap(text: &str) -> String {
+pub(super) fn cap(text: &str) -> String {
     let mut chars = text.chars();
     chars
         .next()
@@ -81,13 +97,19 @@ impl Parts {
         self.plan.as_ref().is_some_and(|p| p.has(part.component()))
     }
 
-    /// (parts to install, parts to remove).
+    /// Out of the plan, unticked, and something of it is still here.
+    fn finishing(&self, part: Part) -> bool {
+        !self.ticked(part) && !self.installed(part) && self.leftover.contains(&part)
+    }
+
+    /// (parts to install, parts to remove or to finish removing).
     fn changes(&self) -> (Vec<Part>, Vec<Part>) {
         let (mut add, mut remove) = (Vec::new(), Vec::new());
         for part in [Part::Agent, Part::Assistant] {
             match (self.ticked(part), self.installed(part)) {
                 (true, false) => add.push(part),
                 (false, true) => remove.push(part),
+                _ if self.finishing(part) => remove.push(part),
                 _ => {}
             }
         }
@@ -99,7 +121,14 @@ impl Parts {
         let (add, remove) = self.changes();
         let said: Vec<String> = remove
             .iter()
-            .map(|p| ("remove", p))
+            .map(|p| {
+                let verb = if self.finishing(*p) {
+                    "finish removing"
+                } else {
+                    "remove"
+                };
+                (verb, p)
+            })
             .chain(add.iter().map(|p| ("install", p)))
             .map(|(verb, p)| format!("{verb} the {}", p.name()))
             .collect();
@@ -128,10 +157,11 @@ impl Parts {
     fn work(&self) -> Option<Work> {
         let plan = self.edited()?;
         let (add, remove) = self.changes();
-        let mut groups = vec![(
-            "Save the choice".to_owned(),
-            vec![Call::SetupPlan(plan.args())],
-        )];
+        // Only finishing a removal: the plan is already without it.
+        let mut groups = Vec::new();
+        if self.plan.as_ref() != Some(&plan) {
+            groups.push((SAVE.to_owned(), vec![Call::SetupPlan(plan.args())]));
+        }
         if !remove.is_empty() {
             let args = vec![
                 "--components".to_owned(),
@@ -206,30 +236,6 @@ fn parts_run<H: Host>(app: &App<H>) -> Option<&Run> {
         .filter(|r| matches!(r.work.kind, Kind::Parts { .. }))
 }
 
-/// The result line (without the time) for these changes: "Assistant
-/// installed · ask it in the console".
-fn done_text(said: &[(Part, bool)]) -> String {
-    let heads: Vec<String> = said
-        .iter()
-        .enumerate()
-        .map(|(i, (part, add))| {
-            let head = format!(
-                "{} {}",
-                part.name(),
-                if *add { "installed" } else { "removed" }
-            );
-            if i == 0 { cap(&head) } else { head }
-        })
-        .collect();
-    let tail = match said {
-        [(Part::Assistant, true)] => " · ask it in the console",
-        [(Part::Agent, true)] => " · this host reports to the console",
-        [(_, false)] => " · nothing of it is left on this host",
-        _ => "",
-    };
-    format!("{}{tail}", heads.join(" and "))
-}
-
 fn row<H: Host>(app: &App<H>, part: Part) -> Row {
     let t = &app.theme;
     let mark = if app.maint.parts.ticked(part) {
@@ -241,9 +247,14 @@ fn row<H: Host>(app: &App<H>, part: Part) -> Row {
         Part::Agent => (" Agent on this host", "watch this host too"),
         Part::Assistant => (" Assistant", "local AI helper · 2.7 GB download"),
     };
+    let value = if app.maint.parts.finishing(part) {
+        Span::styled("removal not finished", t.yellow())
+    } else {
+        Span::styled(value, t.dim())
+    };
     Row::Entry {
         name: vec![mark, Span::raw(name)],
-        value: vec![Span::styled(value, t.dim())],
+        value: vec![value],
     }
 }
 
@@ -257,6 +268,10 @@ fn help<H: Host>(app: &App<H>) -> Line<'static> {
                 Part::Assistant
             };
             match (parts.installed(part), parts.ticked(part), part) {
+                _ if parts.finishing(part) => format!(
+                    "A removal of the {} stopped half way: Apply finishes it.",
+                    part.name()
+                ),
                 (true, false, _) => format!(
                     "Removing the {} also removes its data from this host.",
                     part.name()
@@ -302,85 +317,6 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     frame.render_widget(Paragraph::new(lines), area);
 }
 
-fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) {
-    let t = &app.theme;
-    let titles: Vec<String> = run.work.labels.iter().map(|(t, _)| t.clone()).collect();
-    // The label holding the call running now.
-    let running = run
-        .current()
-        .and_then(|c| run.work.labels.iter().position(|(_, r)| r.contains(&c)));
-    // The optional model never stops the run: its own row shows its
-    // state as a note (label_states keeps it out of the other rows).
-    let states: Vec<Option<StepState>> = label_states(run)
-        .into_iter()
-        .zip(&titles)
-        .map(|(state, title)| match state {
-            Some(s) if title == MODEL && !s.finished() => {
-                let why = if s.detail().is_empty() {
-                    s.label()
-                } else {
-                    s.detail()
-                };
-                Some(StepState::Skipped(why.to_owned()))
-            }
-            other => other,
-        })
-        .collect();
-    // No progress is read while it downloads.
-    let titles: Vec<String> = titles
-        .into_iter()
-        .map(|t| {
-            if t == MODEL && running.is_some_and(|i| run.work.labels[i].0 == MODEL) {
-                format!("{t}  about 2.7 GB")
-            } else {
-                t
-            }
-        })
-        .collect();
-    let bar = match running {
-        Some(i) => Bar::Busy {
-            text: format!("Step {} of {}: {}", i + 1, titles.len(), titles[i]),
-            tick: app.tick_count,
-        },
-        None if run.running() => Bar::Busy {
-            text: "Finishing…".into(),
-            tick: app.tick_count,
-        },
-        None if run.ok() => Bar::only(&[("Enter", "Back")]),
-        None => Bar::act(&[("Enter", "Try again")]),
-    };
-    let area = frame::draw(frame, t, head, Some(&run.work.kind.doing()), &app.bar(bar));
-    let mut lines = vec![Line::raw("")];
-    lines.extend(steps::lines(
-        t,
-        &titles,
-        &states,
-        running,
-        app.tick_count,
-        10,
-    ));
-    lines.push(Line::raw(""));
-    if run.ok() {
-        lines.push(Line::styled(
-            format!("    ✓ {} ({})", run.work.kind.done(), run.took()),
-            t.green(),
-        ));
-    } else if let Some(at) = run.stopped_at() {
-        let why = run.states[at].as_ref().map_or("", StepState::detail);
-        let saved = run.work.labels[0].1.contains(&at);
-        lines.extend(failure(
-            t,
-            why,
-            if saved {
-                "Nothing was changed. Try again saves the choice and goes on."
-            } else {
-                "The choice is saved. Try again goes on from here."
-            },
-        ));
-    }
-    frame.render_widget(Paragraph::new(lines), area);
-}
-
 impl<H: Host> App<H> {
     pub(super) fn open_parts(&mut self) {
         self.nav.row = 0;
@@ -393,23 +329,31 @@ impl<H: Host> App<H> {
         {
             self.run = None;
         }
-        let read = self
-            .host
-            .setup_plan()
-            .map_err(|e| e.to_string())
-            .and_then(|text| plan_of(&text));
-        self.maint.parts = match read {
+        self.maint.parts = match read_plan(&self.host) {
             Ok(plan) => Parts {
                 agent: plan.has(Component::Agent),
                 assistant: plan.has(Component::Assistant),
+                leftover: [Part::Agent, Part::Assistant]
+                    .into_iter()
+                    .filter(|p| !plan.has(p.component()) && self.left_behind(*p))
+                    .collect(),
                 plan: Some(plan),
                 error: None,
             },
             Err(error) => Parts {
-                error: Some(format!("The plan cannot be read: {error}")),
+                error: Some(error),
                 ..Parts::default()
             },
         };
+    }
+
+    /// Something of `part` is still on this host, seen without sudo: one
+    /// of its packages in the list Update reads, or its data folder.
+    fn left_behind(&self, part: Part) -> bool {
+        let names = part.component().packages();
+        let package = matches!(&self.packages,
+            Some(Ok(list)) if list.iter().any(|p| names.contains(&p.name.as_str())));
+        package || self.root.join(part.data()).exists()
     }
 
     pub(super) fn parts_key(&mut self, key: Key) {
@@ -443,7 +387,7 @@ impl<H: Host> App<H> {
         if add.is_empty() && remove.is_empty() {
             return;
         }
-        if let Some(why) = super::blocked_by_half_done(self) {
+        if let Some(why) = cannot_ask(self, self.maint.parts.plan.as_ref()) {
             self.outcome = Some((false, why));
             return;
         }
@@ -478,6 +422,27 @@ impl<H: Host> App<H> {
             },
             yes,
         ));
+    }
+
+    /// A finished run removed its parts' packages: drop them from the
+    /// list read at start (reading it again runs dnf), or the page would
+    /// show them as left behind.
+    pub(super) fn parts_ended(&mut self) {
+        let done = self
+            .run
+            .as_ref()
+            .is_some_and(|r| r.ok() && matches!(r.work.kind, Kind::Parts { .. }));
+        let (true, Ok(plan), Some(Ok(list))) =
+            (done, read_plan(&self.host), self.packages.as_mut())
+        else {
+            return;
+        };
+        let gone: Vec<&str> = [Part::Agent, Part::Assistant]
+            .iter()
+            .filter(|p| !plan.has(p.component()))
+            .flat_map(|p| p.component().packages().iter().copied())
+            .collect();
+        list.retain(|p| !gone.contains(&p.name.as_str()));
     }
 
     pub(super) fn parts_yes(&mut self) {

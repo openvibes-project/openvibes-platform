@@ -15,7 +15,7 @@ use ratatui::{
 use super::{Then, failure, ports_run::draw as draw_run};
 use crate::tui::status::wrap;
 use crate::{
-    setup::plan::{MAX_SANS, Plan, check_name, check_san, plan_of},
+    setup::plan::{MAX_SANS, Plan, check_name, check_san},
     tui::{
         app::{App, Key, Question},
         run::{Call, Kind, Run, Work},
@@ -309,19 +309,14 @@ impl<H: Host> App<H> {
         {
             self.run = None;
         }
-        let read = self
-            .host
-            .setup_plan()
-            .map_err(|e| e.to_string())
-            .and_then(|text| plan_of(&text));
-        self.maint.names = match read {
+        self.maint.names = match super::read_plan(&self.host) {
             Ok(plan) => Names {
                 saved: Some(plan.clone()),
                 now: Some(plan),
                 ..Names::default()
             },
             Err(error) => Names {
-                error: Some(format!("The plan cannot be read: {error}")),
+                error: Some(error),
                 ..Names::default()
             },
         };
@@ -431,7 +426,7 @@ impl<H: Host> App<H> {
     }
 
     fn ask_names(&mut self) {
-        if let Some(why) = super::blocked_by_half_done(self) {
+        if let Some(why) = super::cannot_ask(self, self.maint.names.saved.as_ref()) {
             self.outcome = Some((false, why));
             return;
         }

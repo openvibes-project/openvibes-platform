@@ -298,6 +298,10 @@ impl<H: Host> App<H> {
                 if matches!(self.nav.screen, Screen::Service(_)) {
                     self.load_logs();
                 }
+                // Back from Names, run or not: the report may be new.
+                if self.nav.screen == Screen::Maint(super::maint::Page::Certificates) {
+                    self.read_certs();
+                }
             }
             Key::Char('q') if self.nav.screen == Screen::Home => self.quit_or_ask(),
             _ => match self.nav.screen.clone() {

@@ -3,6 +3,8 @@
 //! until then; today's Settings files screen stays behind the menu until
 //! its page replaces it.
 
+#[cfg(test)]
+mod apply_tests;
 pub mod backup;
 #[cfg(test)]
 mod backup_tests;
@@ -13,6 +15,9 @@ mod database;
 pub mod folder;
 mod names;
 mod parts;
+#[cfg(test)]
+mod parts_finish_tests;
+mod parts_run;
 #[cfg(test)]
 mod parts_tests;
 pub mod ports;
@@ -34,7 +39,7 @@ pub use update::half_done as update_half_done;
 
 use platform_host::Host;
 
-use crate::setup::plan::{Component, Plan, plan_of};
+use crate::setup::plan::{Component, Plan, lacks_ports, plan_of};
 use ratatui::{
     Frame,
     text::{Line, Span},
@@ -44,7 +49,7 @@ use ratatui::{
 use super::{
     app::{App, Key, Tab},
     nav::Screen,
-    run::Kind,
+    run::{Kind, Run},
     status::wrap,
     ui::{
         bar::Bar,
@@ -198,7 +203,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
         },
         Entry::Page(Page::Repair) => "check every step, fix what is wrong".into(),
         Entry::Page(Page::Parts) => plan_of_host(app).map_or_else(
-            || "agent on this host · assistant".into(),
+            || "cannot be read".into(),
             |plan| {
                 let parts: Vec<&str> = [
                     (Component::Agent, "agent on this host"),
@@ -216,7 +221,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
             },
         ),
         Entry::Page(Page::Ports) => plan_of_host(app).map_or_else(
-            || "console, agents, devices".into(),
+            || "cannot be read".into(),
             |p| {
                 format!(
                     "console {}, agents {} and {}, devices 514",
@@ -252,12 +257,34 @@ pub fn row_of(name: &str) -> usize {
         .expect("a Maintenance entry")
 }
 
-/// Why a change to the plan must wait: a half-done update or uninstall
-/// (Repair's words). `None` when nothing is half done.
-pub(super) fn blocked_by_half_done<H: Host>(app: &App<H>) -> Option<String> {
-    let kind = app.half_done.as_deref()?;
-    let (what, todo) = repair::half_note(kind);
-    Some(format!("{what}{todo}"))
+/// The saved plan for a page that changes it. A plan from before the
+/// port choices is refused: its real ports are in root-only files, and
+/// a default would move a working service (Repair saves them, #76).
+pub(super) fn read_plan<H: Host>(host: &H) -> Result<Plan, String> {
+    let unread = |e: String| format!("The plan cannot be read: {e}");
+    let text = host.setup_plan().map_err(|e| unread(e.to_string()))?;
+    if lacks_ports(&text) {
+        return Err("Run Repair first: this plan is from an older version.".into());
+    }
+    plan_of(&text).map_err(unread)
+}
+
+/// Why a page's Apply must not ask now: other work running, a half-done
+/// update or uninstall (Repair's words), or a plan that is not the one
+/// the page opened with. `None` when it may ask.
+pub(super) fn cannot_ask<H: Host>(app: &App<H>, opened: Option<&Plan>) -> Option<String> {
+    if app.run.as_ref().is_some_and(Run::running) {
+        return Some("Wait: other work is still running".into());
+    }
+    if let Some(kind) = app.half_done.as_deref() {
+        let (what, todo) = repair::half_note(kind);
+        return Some(format!("{what}{todo}"));
+    }
+    match read_plan(&app.host) {
+        Ok(plan) if Some(&plan) == opened => None,
+        Ok(_) => Some("The setup changed meanwhile: open the page again.".into()),
+        Err(why) => Some(why),
+    }
 }
 
 /// "3.1 GB", "42 MB", "1 KB".
@@ -411,6 +438,7 @@ impl<H: Host> App<H> {
         }
         if !background {
             self.names_ended();
+            self.parts_ended();
             self.repair_ended();
         }
     }

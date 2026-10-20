@@ -53,20 +53,27 @@ pub(super) fn valid_until<H: Host>(host: &H) -> Option<String> {
     Some(until(pem).ok()?.format("%Y-%m-%d").to_string())
 }
 
-/// The menu's one line: who signed the intermediate and until when.
+/// The menu's one line: who signed the intermediate, and when the web
+/// and agent certificate ends (the page's "Web and agents" date).
 pub(super) fn summary<H: Host>(host: &H) -> String {
-    let all = host.certificates();
-    let Some(Ok(pem)) = pem_of(&all, INTERMEDIATE) else {
+    summary_of(&host.certificates())
+}
+
+pub(super) fn summary_of(certs: Pems) -> String {
+    let Some(leaf) = pem_of(certs, INGEST) else {
         return "no certificates yet".into();
     };
-    match (platform_pki::issuer_common_name(pem), until(pem)) {
-        (Ok(who), Ok(end)) => format!(
+    let line = || -> Option<String> {
+        let end = until(leaf.as_ref().ok()?).ok()?;
+        let signer = pem_of(certs, INTERMEDIATE)?.as_ref().ok()?;
+        let who = platform_pki::issuer_common_name(signer).ok()?;
+        Some(format!(
             "signed by {} · until {}",
             who.unwrap_or_else(|| "an unnamed issuer".into()),
             end.format("%Y-%m-%d")
-        ),
-        _ => "cannot be read".into(),
-    }
+        ))
+    };
+    line().unwrap_or_else(|| "cannot be read".into())
 }
 
 fn report(certs: Pems, quick: bool, now: DateTime<Utc>) -> Certs {
@@ -152,7 +159,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
 
 impl<H: Host> App<H> {
     /// Reads the certificate files again.
-    pub(super) fn read_certs(&mut self) {
+    pub(in crate::tui) fn read_certs(&mut self) {
         let quick = self
             .host
             .setup_plan()

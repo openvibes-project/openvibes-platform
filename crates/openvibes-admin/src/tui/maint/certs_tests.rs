@@ -360,3 +360,43 @@ fn names_are_lowercased_as_typed() {
     app.key(Key::Enter);
     assert!(screen(&app).contains("limebox2.lan · was limebox.lan"));
 }
+
+#[test]
+fn the_menu_line_dates_the_server_certificate() {
+    let app = app_with(pems(10));
+    let end = (Utc::now() + Duration::days(80)).format("%Y-%m-%d");
+    assert_eq!(
+        super::certs::summary(&app.host),
+        format!("signed by OpenVIBES Root CA · until {end}")
+    );
+    let unread = || Err(platform_host::HostError::Failed("denied".into()));
+    let pems = pems(10);
+    let intermediate = || Ok(pems[1].1.clone());
+    for (certs, want) in [
+        (
+            vec![(INGEST, unread()), (INTERMEDIATE, intermediate())],
+            "cannot be read",
+        ),
+        (vec![(INTERMEDIATE, intermediate())], "no certificates yet"),
+        (vec![], "no certificates yet"),
+        (
+            vec![(INGEST, Ok(pems[0].1.clone())), (INTERMEDIATE, unread())],
+            "cannot be read",
+        ),
+    ] {
+        assert_eq!(super::certs::summary_of(&certs), want);
+    }
+}
+
+#[test]
+fn back_from_names_reads_the_report_again() {
+    let mut app = names_page();
+    // New certificates were issued meanwhile (here: an older one).
+    app.host.pems = pems(100);
+    app.key(Key::Esc);
+    assert_eq!(
+        app.nav.screen,
+        crate::tui::nav::Screen::Maint(Page::Certificates)
+    );
+    assert!(screen(&app).contains("expired 20"), "{}", screen(&app));
+}
