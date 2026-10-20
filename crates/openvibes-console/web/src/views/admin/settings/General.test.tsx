@@ -11,6 +11,7 @@ import { ApiError } from "../../../api/client";
 import type { Role, SettingsView } from "../../../api/types";
 import { SessionContext } from "../../../app/session";
 import { GeneralBody, saveValue } from "./General";
+import { type Send, createRowEditor } from "./rowEditor";
 
 const settings: SettingsView = {
   items: [
@@ -57,5 +58,38 @@ describe("saveValue", () => {
   it("turns a 422 into the server's field message", async () => {
     const refuse = async () => { throw new ApiError(422, "invalid_setting", "The setting value is invalid", [{ field: "value", code: "invalid", message: "Use a whole number from 1 to 3650" }]); };
     expect(await saveValue("k", 0, refuse)).toEqual({ ok: false, message: "Use a whole number from 1 to 3650" });
+  });
+});
+
+describe("row editor", () => {
+  const make = (value: unknown, send: Send) => {
+    const calls: unknown[] = [];
+    const ed = createRowEditor("sso.remove_inactive_days", value, async (m, p, b) => { calls.push(b); return send(m, p, b); }, () => {}, () => {});
+    return { ed, calls };
+  };
+  const refuse = async () => { throw new ApiError(422, "invalid_setting", "t", [{ field: "value", code: "invalid", message: "Use a whole number from 1 to 3650" }]); };
+
+  it("sends only a changed number", async () => {
+    const { ed, calls } = make(90, async () => ({}));
+    ed.type("90");
+    await ed.commit();
+    expect(calls).toEqual([]);
+    expect(ed.state.text).toBeUndefined();
+    ed.type("120");
+    await ed.commit();
+    expect(calls).toEqual([{ value: 120 }]);
+    expect(ed.state.result).toEqual({ ok: true, message: "Saved · recorded in the audit log" });
+  });
+  it("Enter then the blur it causes saves once", async () => {
+    const { ed, calls } = make(90, async () => ({}));
+    ed.type("120");
+    await Promise.all([ed.commit(), ed.commit()]);
+    expect(calls).toHaveLength(1);
+  });
+  it("keeps the typed text when the server refuses", async () => {
+    const { ed } = make(90, refuse);
+    ed.type("0");
+    await ed.commit();
+    expect(ed.state).toMatchObject({ text: "0", busy: false, result: { ok: false, message: "Use a whole number from 1 to 3650" } });
   });
 });

@@ -5,6 +5,7 @@ The Settings page, one tab per area. A tab opens to its own permission; a new ta
 | File | What it does |
 |---|---|
 | `General.tsx` | The General tab (approved screen 11): typed settings that save as they change, with Recent changes. |
+| `rowEditor.ts` | One General row's editing (typed text, saving, last result) apart from React, so it is tested without a DOM. |
 | `Settings.tsx` | The Settings page, its tab list and the `subPage` hook for full pages under `/settings/…` (roles, people, host groups). |
 | `People.tsx` | The People tab: each person's roles with where they apply, how they sign in, status and last sign-in. |
 | `Roles.tsx` | The Roles tab: every role, where it applies, its permissions and people. |

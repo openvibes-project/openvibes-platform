@@ -1,7 +1,7 @@
 // Settings › General (approved screen 11) in the shared layout: "On this page"
 // and Recent changes on the left, one card per section on the right. A switch
 // saves when flipped, a number when it loses focus or Enter is pressed.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ApiError, invalidate, request, useResource } from "../../../api/client";
 import type { PersonRow, Role, SettingChangeView, SettingView, SettingsView } from "../../../api/types";
@@ -12,6 +12,7 @@ import { ago } from "../../../ui/format";
 import { Switch } from "../../../ui/Switch";
 import { link } from "../groups/groupApi";
 import { Card } from "../people/PersonPage";
+import { createRowEditor } from "./rowEditor";
 
 const SAVED = "Saved · recorded in the audit log";
 const APPROVE = "alarms.suppressions.approve";
@@ -34,38 +35,25 @@ export async function saveValue(key: string, value: unknown, send: (method: stri
 const show = (value: unknown) => (value === null || value === undefined ? "default" : value === true ? "on" : value === false ? "off" : String(value));
 
 function Row({ setting }: { setting: SettingView }) {
-  const [text, setText] = useState<string>(); // what is typed; undefined shows the saved value
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<Saved>();
+  const [, tick] = useState(0);
+  const [ed] = useState(() => createRowEditor(setting.key, setting.value, request, () => tick((n) => n + 1), () => invalidate("/api/v1/settings")));
+  useEffect(() => { ed.setValue(setting.value); });
   const { can } = useSession();
   const off = !can("settings.manage");
-  const save = async (value: unknown) => {
-    setBusy(true);
-    setResult(undefined);
-    const saved = await saveValue(setting.key, value);
-    setBusy(false);
-    setResult(saved);
-    if (saved.ok) { setText(undefined); invalidate("/api/v1/settings"); }
-  };
-  const commit = () => {
-    if (text === undefined || busy) return;
-    if (text.trim() !== "" && Number(text) === setting.value) { setText(undefined); return; }
-    void save(text.trim() === "" ? text : Number(text));
-  };
+  const { text, busy, result } = ed.state;
   return (
     <div className="row row--between general-row">
       <div className="stack general-row__text">
         <strong>{setting.label}</strong>
         <span className="subtle">{setting.help}</span>
-        {result && (result.ok
-          ? <span className="subtle" role="status">{result.message}</span>
-          : <span className="general-row__error" role="alert">{result.message}</span>)}
+        <span className="subtle" role="status">{result?.ok ? result.message : ""}</span>
+        {result?.ok === false && <span className="general-row__error" role="alert">{result.message}</span>}
       </div>
       {setting.kind === "bool"
-        ? <Switch bare label={setting.label} checked={setting.value === true} busy={busy} disabled={off} onChange={(checked) => void save(checked)} />
+        ? <Switch bare label={setting.label} checked={setting.value === true} busy={busy} disabled={off} onChange={(checked) => void ed.save(checked)} />
         : <input className="input general-row__number" type="number" aria-label={setting.label} min={setting.min ?? undefined} max={setting.max ?? undefined}
-            value={text ?? String(setting.value)} disabled={busy || off} aria-invalid={result?.ok === false || undefined}
-            onChange={(e) => { setText(e.target.value); setResult(undefined); }} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") commit(); }} />}
+            value={text ?? String(setting.value)} disabled={off} readOnly={busy} aria-disabled={busy || undefined} aria-invalid={result?.ok === false || undefined}
+            onChange={(e) => { if (!busy) ed.type(e.target.value); }} onBlur={() => void ed.commit()} onKeyDown={(e) => { if (e.key === "Enter") void ed.commit(); }} />}
     </div>
   );
 }
@@ -94,7 +82,7 @@ export function GeneralBody({ settings, roles, names = new Map() }: { settings: 
   return (
     <div className="view person-page">
       <header className="person-page__head">
-        <div className="stack grow person-page__title"><h1>General</h1><span className="subtle">Settings that apply to the whole console.</span></div>
+        <div className="stack grow person-page__title"><h2>General</h2><span className="subtle">Settings that apply to the whole console.</span></div>
       </header>
       <div className="person-page__cols">
         <div className="stack person-page__col">

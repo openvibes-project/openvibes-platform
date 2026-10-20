@@ -266,7 +266,8 @@
 .person-page__head { display: flex; gap: 16px; align-items: center; padding: 8px 24px 16px; }
 .person-page__avatar { display: grid; place-items: center; width: 64px; height: 64px; flex: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 22px; }
 .person-page__title { gap: 4px; min-width: 0; flex: 1 1 0; }
-.person-page__title h1 { margin: 0; }
+.person-page__title h1, .person-page__title h2 { margin: 0; }
+.person-page__title h2 { font-size: 22px; }
 .person-page__error { margin: 0 24px 16px; }
 .person-page__cols { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 24px; align-items: start; padding: 0 24px 40px; }
 .person-page__col { gap: 16px; min-width: 0; }

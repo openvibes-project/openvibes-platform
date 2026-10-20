@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildDemoData } from "./data";
 import { createDemoServer } from "./server";
@@ -334,5 +334,19 @@ describe("demo general settings", () => {
     const viewer = createDemoServer({ persona: "viewer" });
     expect((await viewer.handle("GET", "/api/v1/settings")).status).toBe(403);
     expect((await viewer.handle("PATCH", "/api/v1/settings/sso.remove_inactive_days", { value: 5 })).status).toBe(403);
+  });
+
+  it("ignores stored state that does not fit (a hand-edited or old localStorage)", async () => {
+    const store = new Map([["openvibes.v2.demo.settings", JSON.stringify({
+      recent: "x", values: { "sso.remove_inactive_days": { value: "90", changed_at: "t", changed_by: "a" }, "suppressions.require_approval": { value: 1, changed_at: "t", changed_by: "a" } },
+    })]]);
+    vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } });
+    try {
+      const response = await createDemoServer({ persona: "admin" }).handle("GET", "/api/v1/settings");
+      expect(response.status).toBe(200);
+      const body = await json(response);
+      expect((body.items as { value: unknown }[]).map((i) => i.value)).toEqual([false, 90]);
+      expect(body.recent).toEqual([]);
+    } finally { vi.unstubAllGlobals(); }
   });
 });

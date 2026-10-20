@@ -16,10 +16,16 @@ type State = { values: Record<string, Stored>; recent: SettingChangeView[] };
 
 export function registerSettingsRoutes(ctx: DemoContext) {
   const { data, iso, actor, audit, route } = ctx;
-  // Kept in the browser, so a reload keeps a change.
+  // Values are kept in the browser, so a reload keeps a change; what it holds is checked, as it could be anything.
   const store = browserPersistence("openvibes.v2.demo.settings");
-  const loaded = store?.load() as State | null | undefined;
-  const state: State = loaded?.values && loaded.recent ? loaded : { values: {}, recent: [] };
+  const fits = (def: (typeof DEFINITIONS)[number], v: unknown) =>
+    def.kind === "bool" ? typeof v === "boolean" : typeof v === "number" && Number.isInteger(v) && v >= def.min && v <= def.max;
+  const loaded = store?.load() as { values?: Record<string, Partial<Stored>> } | null | undefined;
+  const state: State = { values: {}, recent: [] }; // Recent changes stay in memory: the audit lines they link to do too.
+  for (const def of DEFINITIONS) {
+    const v = loaded?.values && typeof loaded.values === "object" ? loaded.values[def.key] : undefined;
+    if (v && typeof v === "object" && fits(def, v.value) && typeof v.changed_at === "string" && typeof v.changed_by === "string") state.values[def.key] = v as Stored;
+  }
   const view = (def: (typeof DEFINITIONS)[number]): SettingView => {
     const stored = state.values[def.key];
     return { ...def, min: "min" in def ? def.min : null, max: "max" in def ? def.max : null, value: stored?.value ?? def.default,
@@ -30,8 +36,7 @@ export function registerSettingsRoutes(ctx: DemoContext) {
     const def = DEFINITIONS.find((d) => d.key === params.key);
     if (!def) return problem(404, "setting_not_found", "No such setting");
     const v = body.value;
-    const fits = def.kind === "bool" ? typeof v === "boolean" : typeof v === "number" && Number.isInteger(v) && v >= def.min && v <= def.max;
-    if (!fits) {
+    if (!fits(def, v)) {
       const message = def.kind === "bool" ? "Use true or false" : `Use a whole number from ${def.min} to ${def.max}`;
       return problem(422, "invalid_setting", "The setting value is invalid", { field_errors: [{ field: "value", code: "invalid", message }] });
     }
@@ -39,7 +44,7 @@ export function registerSettingsRoutes(ctx: DemoContext) {
     state.values[def.key] = { value: v, changed_at: iso(), changed_by: actor };
     state.recent.unshift({ at: iso(), actor, key: def.key, old, new: v });
     state.recent.length = Math.min(state.recent.length, 5);
-    store?.save(state);
+    store?.save({ values: state.values });
     audit("settings.changed", def.key, "setting");
     return json(view(def));
   });

@@ -10,9 +10,9 @@ test("an administrator switches approval on, and it stays on", async ({ page }) 
   await expect(page.getByText("Saved · recorded in the audit log").first()).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await expect(page.getByText(/Approvers: people whose role holds Approve suppressions/)).toBeVisible();
+  await expect(page.getByText("Changed a setting").first()).toBeVisible();
   await page.reload();
   await expect(page.getByRole("switch", { name: "Suppressions need approval" })).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByText("Changed a setting").first()).toBeVisible();
 });
 
 test("a number outside the range is refused with the server's words", async ({ page }) => {
@@ -26,7 +26,7 @@ test("a number outside the range is refused with the server's words", async ({ p
 
 test("the page has no accessibility violations", async ({ page }) => {
   await page.goto("/settings?tab=general");
-  await expect(page.getByRole("heading", { level: 1, name: "General" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "General" })).toBeVisible();
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
