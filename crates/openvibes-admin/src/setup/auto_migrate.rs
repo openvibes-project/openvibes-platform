@@ -48,7 +48,7 @@ pub fn run<R: Runner>(root: &Path, runner: &R, stamp: &str) -> (Vec<String>, boo
     let _lock = match system::lock(root) {
         Ok(lock) => lock,
         Err(error) if error.contains("another Setup run") => {
-            log.push("Setup or Update is running; if the services then refuse the schema, run Update in Setup".into());
+            log.push("Setup, Update or Repair is running and migrates the database itself: nothing to do here".into());
             return (log, true);
         }
         Err(error) => return (vec![format!("upgrade migration failed: {error}")], false),
@@ -396,7 +396,7 @@ mod tests {
         let _held = system::lock(&fake.root).unwrap();
         let (log, ok) = run(&fake.root, &fake, "t");
         assert!(
-            ok && log[0].contains("Setup or Update is running"),
+            ok && log[0].contains("Setup, Update or Repair is running and migrates the database itself: nothing to do here"),
             "{log:?}"
         );
         assert!(fake.calls.borrow().is_empty());
