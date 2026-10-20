@@ -1613,6 +1613,78 @@
         }
       }
     },
+    "/api/v1/alarms/{id}/summary": {
+      "get": {
+        "tags": [
+          "alarms"
+        ],
+        "summary": "An alarm's page.",
+        "operationId": "alarm_summary_page",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Alarm id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The alarm page above the fold",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmSummaryPageView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs alarms.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "alarm_not_found: missing or outside reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/assistant-internet": {
       "get": {
         "tags": [
@@ -10477,6 +10549,106 @@
           }
         }
       },
+      "AlarmActionsView": {
+        "type": "object",
+        "description": "Actions allowed on this alarm, each by its permission on the host.",
+        "required": [
+          "triage",
+          "assign",
+          "suppress",
+          "add_to_case",
+          "ask",
+          "export"
+        ],
+        "properties": {
+          "add_to_case": {
+            "type": "boolean",
+            "description": "Add to case (`cases.write`)."
+          },
+          "ask": {
+            "type": "boolean",
+            "description": "Ask about this (`assistant.use`, with the assistant on)."
+          },
+          "assign": {
+            "type": "boolean",
+            "description": "Assign (`alarms.triage` and `cases.assign`)."
+          },
+          "export": {
+            "type": "boolean",
+            "description": "Export (`alarms.export`)."
+          },
+          "suppress": {
+            "type": "boolean",
+            "description": "Suppress (`alarms.suppress`)."
+          },
+          "triage": {
+            "type": "boolean",
+            "description": "Set state (`alarms.triage`)."
+          }
+        }
+      },
+      "AlarmCommandView": {
+        "type": "object",
+        "description": "One command seen: a sibling alarm with its own command line.",
+        "required": [
+          "id",
+          "args",
+          "count",
+          "first_seen",
+          "last_seen",
+          "state"
+        ],
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The command line, masked as stored."
+          },
+          "case": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AlarmListCaseView",
+                "description": "The open case holding it."
+              }
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Starts matched."
+          },
+          "first_seen": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The sibling's alarm id."
+          },
+          "last_seen": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "state": {
+            "type": "string",
+            "description": "Triage state."
+          },
+          "suppressed_by": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The suppression that closed it."
+          }
+        }
+      },
       "AlarmCountsView": {
         "type": "object",
         "description": "Per-value counts for every filter.",
@@ -10844,6 +11016,132 @@
           }
         }
       },
+      "AlarmPageAlarmView": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AlarmListRowView",
+            "description": "The list-row fields."
+          },
+          {
+            "type": "object",
+            "required": [
+              "confidence",
+              "rule_set_version",
+              "rule_version",
+              "process",
+              "ancestors",
+              "received_at",
+              "triage"
+            ],
+            "properties": {
+              "ancestors": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "Its ancestors, nearest first, as sent."
+              },
+              "confidence": {
+                "type": "integer",
+                "format": "int32",
+                "description": "0 to 100."
+              },
+              "process": {
+                "type": "object",
+                "description": "The process (masked args) as the agent sent it."
+              },
+              "received_at": {
+                "type": "string",
+                "description": "When ingest stored it, RFC 3339."
+              },
+              "rule_set_version": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Rule set version."
+              },
+              "rule_version": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Rule version."
+              },
+              "triage": {
+                "$ref": "#/components/schemas/AlarmTriageView",
+                "description": "Current triage."
+              }
+            }
+          }
+        ],
+        "description": "The alarm: the list-row fields and its detail."
+      },
+      "AlarmRelatedView": {
+        "type": "object",
+        "description": "The Related card.",
+        "required": [
+          "host_alarms",
+          "same_rule_elsewhere"
+        ],
+        "properties": {
+          "host_alarms": {
+            "$ref": "#/components/schemas/TopAlarmsView",
+            "description": "Up to five other open alarms on the host, and the total."
+          },
+          "host_vulnerabilities": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TopVulnerabilitiesView",
+                "description": "The host's top three open vulnerabilities and the total; absent\nwithout `vulnerabilities.read` on the host."
+              }
+            ]
+          },
+          "same_rule_elsewhere": {
+            "$ref": "#/components/schemas/SameRuleElsewhereView",
+            "description": "Same rule elsewhere."
+          }
+        }
+      },
+      "AlarmRuleTextView": {
+        "type": "object",
+        "description": "What the \"What happened\" card says. Until the rule is indexed, the\ntitle and message are the alarm's message (`GET /alarms/{id}/rule` still\nresolves it).",
+        "required": [
+          "title",
+          "message",
+          "techniques"
+        ],
+        "properties": {
+          "check": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What a person should look at."
+          },
+          "explain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What a match means."
+          },
+          "message": {
+            "type": "string",
+            "description": "Rule message."
+          },
+          "techniques": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ATT&CK technique ids."
+          },
+          "title": {
+            "type": "string",
+            "description": "Rule title."
+          }
+        }
+      },
       "AlarmSummaryLineView": {
         "type": "object",
         "description": "The line above the list: over open alarms matching every filter but state.",
@@ -10869,6 +11167,56 @@
             "type": "integer",
             "format": "int64",
             "description": "Open alarms."
+          }
+        }
+      },
+      "AlarmSummaryPageView": {
+        "type": "object",
+        "description": "Everything above the fold on an alarm's page.",
+        "required": [
+          "alarm",
+          "tiles",
+          "rule",
+          "commands",
+          "hourly",
+          "related",
+          "can"
+        ],
+        "properties": {
+          "alarm": {
+            "$ref": "#/components/schemas/AlarmPageAlarmView",
+            "description": "The alarm."
+          },
+          "can": {
+            "$ref": "#/components/schemas/AlarmActionsView",
+            "description": "Allowed actions."
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlarmCommandView"
+            },
+            "description": "Commands seen: the alarm and its siblings, most starts first."
+          },
+          "hourly": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Starts per hour of the alarm and its siblings, the 24 hours ending\nwith the current one, oldest first."
+          },
+          "related": {
+            "$ref": "#/components/schemas/AlarmRelatedView",
+            "description": "The Related card."
+          },
+          "rule": {
+            "$ref": "#/components/schemas/AlarmRuleTextView",
+            "description": "The rule's text."
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/AlarmTilesView",
+            "description": "The tiles."
           }
         }
       },
@@ -11200,6 +11548,37 @@
           "kind": {
             "type": "string",
             "description": "`host`, `group`, `all` or `device`."
+          }
+        }
+      },
+      "AlarmTilesView": {
+        "type": "object",
+        "description": "The four tiles, over the alarm and its siblings.",
+        "required": [
+          "starts",
+          "different_commands",
+          "first_seen",
+          "confidence"
+        ],
+        "properties": {
+          "confidence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The alarm's confidence, 0 to 100."
+          },
+          "different_commands": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Distinct command lines (siblings)."
+          },
+          "first_seen": {
+            "type": "string",
+            "description": "The earliest first start, RFC 3339."
+          },
+          "starts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Starts matched."
           }
         }
       },
@@ -16937,6 +17316,26 @@
           }
         }
       },
+      "SameRuleElsewhereView": {
+        "type": "object",
+        "description": "Other hosts in reach with an open alarm from this rule.",
+        "required": [
+          "hosts",
+          "open"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Their open alarms from the rule."
+          }
+        }
+      },
       "SaveDashboardRequest": {
         "type": "object",
         "description": "Create or replace a dashboard's name and layout.",
@@ -18143,7 +18542,7 @@
             "items": {
               "$ref": "#/components/schemas/TopAlarmView"
             },
-            "description": "Up to three."
+            "description": "The first three (five on an alarm's page)."
           },
           "total": {
             "type": "integer",

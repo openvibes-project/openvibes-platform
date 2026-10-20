@@ -967,6 +967,34 @@ list's summary line schema is `HostSummaryLineView`, and its group items
 are `HostListGroupView` (`id`, `name`, `kind`); `api_contract` fails when
 two registered schemas share a name. Tests: `tests/host_summary_http.rs`.
 
+## An alarm's page summary
+
+`GET /api/v1/alarms/{id}/summary` (needs `alarms.read`; session or bearer;
+roles 5a) answers everything above the fold on an alarm's page over the
+store's `alarm_summary`: `alarm` (the Alarms list row fields plus
+`confidence`, `rule_set_version`, `rule_version`, `process`, `ancestors`,
+`received_at` and `triage`), `tiles` (`starts` and `first_seen` over the
+alarm and its siblings, `different_commands`, `confidence`), `rule`
+(`title`, `message`, `explain`, `check`, `techniques`; the alarm's message
+when the rule is not indexed, and `GET /alarms/{id}/rule` still resolves
+it), `commands` (the alarm and its siblings: same host, rule set, rule,
+program and parent; most starts first; each with `id`, masked `args`,
+`count`, `first_seen`, `last_seen`, `state`, `suppressed_by` and `case`),
+`hourly` (24 numbers, oldest first, ending with the current hour),
+`related` (`host_alarms`: up to five other open alarms on the host and the
+total; `host_vulnerabilities`: the host page's top three and total, null
+without `vulnerabilities.read` on the host; `same_rule_elsewhere`: other
+hosts in reach with an open, unsuppressed alarm from the rule, and their
+open alarms) and `can` (`triage`: `alarms.triage`; `assign`:
+`alarms.triage` and `cases.assign`; `suppress`: `alarms.suppress`;
+`add_to_case`: `cases.write`; `ask`: `assistant.use` with the assistant
+on; `export`: `alarms.export`; each on this host). A missing alarm, a bad
+id and one outside the caller's `alarms.read` reach are the same 404
+`alarm_not_found`; a store failure is 503. The schema is
+`AlarmSummaryPageView` (the list item of `GET /alarms` already holds the
+name `AlarmSummaryView`). Tests: `tests/alarm_summary_http.rs`; demo:
+`web/src/demo/routes/alarmSummary.ts`.
+
 ## Saved views and list columns
 
 `GET/POST /api/v1/saved-views`, `DELETE /api/v1/saved-views/{id}` (a name or query with control characters is 422 `invalid_saved_view`) and

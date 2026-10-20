@@ -106,7 +106,7 @@ pub(crate) struct TopFailingView {
 /// Open alarms, most severe then newest first.
 #[derive(Serialize, ToSchema)]
 pub(crate) struct TopAlarmsView {
-    /// Up to three.
+    /// The first three (five on an alarm's page).
     pub items: Vec<TopAlarmView>,
     /// All of them.
     pub total: i64,

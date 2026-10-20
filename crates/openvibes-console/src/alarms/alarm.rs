@@ -173,7 +173,7 @@ fn summary_view(alarm: AlarmSummary) -> AlarmSummaryView {
     }
 }
 
-fn triage_view(triage: AlarmTriage) -> AlarmTriageView {
+pub(crate) fn triage_view(triage: AlarmTriage) -> AlarmTriageView {
     AlarmTriageView {
         state: triage.state,
         assigned_to: triage.assigned_to_username,

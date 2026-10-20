@@ -11,7 +11,7 @@ import { distribution, distributionName, hasControl, inGroup, isActive, osFamily
 import { json, problem } from "../http";
 
 type Facet = "state" | "severity" | "suppressed" | "group" | "technique" | "case" | "assignee";
-type Row = { row: AlarmListRow; groups: string[]; severe: boolean; alarmsOff: boolean };
+export type Row = { row: AlarmListRow; groups: string[]; severe: boolean; alarmsOff: boolean };
 
 const STATES = ["open", "mitigated", "accepted_risk", "false_positive"];
 const SEVERITIES = ["critical", "high", "medium", "low", "info"];
@@ -21,7 +21,7 @@ const invalid = (field: string) => problem(400, "invalid_query", "Alarm query pa
   { field_errors: [{ field, code: "invalid", message: `The ${field} parameter is invalid` }] });
 
 export function registerAlarmListRoute(ctx: DemoContext & { cases: ReturnType<typeof createCaseStore> }) {
-  const { data, route, alarmList, facts, cases, me } = ctx;
+  const { data, route, me } = ctx;
   route("GET", "/api/v1/alarm-list", "alarms.read", (_, query) => {
     const get = (k: string) => query.get(k) || null;
     const closed: [string, string | null, string[]][] = [["state", get("state"), [...STATES, "all"]], ["severity", get("severity"), SEVERITIES],
@@ -47,37 +47,10 @@ export function registerAlarmListRoute(ctx: DemoContext & { cases: ReturnType<ty
     const host = get("host");
     const q = (get("q") ?? "").trim().toLowerCase();
     const people = new Map(data.access.users.map((u) => [u.user_id, u]));
-    const userOf = (name: string | null) => data.access.users.find((u) => u.username === name);
-    const inCase = new Map(((cases.activeItems(new URLSearchParams({ kind: "alarm" })).body as { items: { ref: string }[] }).items)
-      .map(({ ref }) => {
-        const found = (cases.forItem(new URLSearchParams({ kind: "alarm", ref })).body as { items: { case: { case_id: string; number: number } }[] }).items[0];
-        return [ref, found ? { id: found.case.case_id, number: found.case.number } : null] as const;
-      }));
+    const base = alarmRows(ctx).filter(({ row: r }) =>
+      !q || [r.message, r.rule_id, r.host.name ?? "", r.program, r.parent_program ?? ""].some((h) => h.toLowerCase().includes(q)));
     const groupOf = new Map(data.access.host_groups.map((g) => [g.asset_group_id, g]));
 
-    const base: Row[] = alarmList().flatMap((a) => {
-      const agent = data.agents.find((x) => x.id === a.agent_id);
-      const hay = [a.message, a.rule_id, a.hostname ?? "", a.exe, a.parent_exe ?? ""];
-      if (q && !hay.some((h) => h.toLowerCase().includes(q))) return [];
-      const f = agent ? facts(agent) : undefined;
-      const dist = f && distribution(f);
-      const user = userOf(a.triage.assigned_to);
-      const found = inCase.get(a.id) ?? null;
-      const techniques = [...new Set((demoMappings[a.rule_id] ?? []).flatMap((p) => (p.technique ? [p.technique] : [])))].sort(byteOrder);
-      return [{
-        // Members are active hosts only (console_host_in_group).
-        groups: f && isActive(f) ? data.access.host_groups.filter((g) => inGroup(f, g)).map((g) => g.asset_group_id) : [],
-        severe: a.severity === "critical" || a.severity === "high",
-        alarmsOff: agent?.status === "active" && agent.alarms?.state === "off" && agent.alarms.fault === true,
-        row: {
-          id: Number(a.id), host: { id: a.agent_id, name: a.hostname, os_family: f ? osFamily(f) : null, distribution: dist ? distributionName(dist) : null },
-          rule_set_id: a.rule_set_id, rule_id: a.rule_id, severity: a.severity, message: a.message, program: a.exe, parent_program: a.parent_exe,
-          techniques, count: a.count, first_seen: a.first_seen, last_seen: a.last_seen, state: a.state,
-          assignee: user ? { id: user.user_id, name: user.display_name } : null,
-          case: found ? { id: found.id, number: found.number } : null, suppressed: a.suppressed_by !== null,
-        },
-      }];
-    });
     const holds = ({ row, groups }: Row, facet: Facet): boolean => {
       switch (facet) {
         case "state": return chosen.state === null || row.state === chosen.state;
@@ -149,5 +122,37 @@ export function registerAlarmListRoute(ctx: DemoContext & { cases: ReturnType<ty
       generated_at: ctx.iso(),
     };
     return json(body);
+  });
+}
+
+/** Every alarm in reach as a list row, with what the filters need. */
+export function alarmRows(ctx: DemoContext & { cases: ReturnType<typeof createCaseStore> }): Row[] {
+  const { data, alarmList, facts, cases } = ctx;
+  const userOf = (name: string | null) => data.access.users.find((u) => u.username === name);
+  const inCase = new Map(((cases.activeItems(new URLSearchParams({ kind: "alarm" })).body as { items: { ref: string }[] }).items)
+    .map(({ ref }) => {
+      const found = (cases.forItem(new URLSearchParams({ kind: "alarm", ref })).body as { items: { case: { case_id: string; number: number } }[] }).items[0];
+      return [ref, found ? { id: found.case.case_id, number: found.case.number } : null] as const;
+    }));
+  return alarmList().map((a) => {
+    const agent = data.agents.find((x) => x.id === a.agent_id);
+    const f = agent ? facts(agent) : undefined;
+    const dist = f && distribution(f);
+    const user = userOf(a.triage.assigned_to);
+    const found = inCase.get(a.id) ?? null;
+    const techniques = [...new Set((demoMappings[a.rule_id] ?? []).flatMap((p) => (p.technique ? [p.technique] : [])))].sort(byteOrder);
+    return {
+      // Members are active hosts only (console_host_in_group).
+      groups: f && isActive(f) ? data.access.host_groups.filter((g) => inGroup(f, g)).map((g) => g.asset_group_id) : [],
+      severe: a.severity === "critical" || a.severity === "high",
+      alarmsOff: agent?.status === "active" && agent.alarms?.state === "off" && agent.alarms.fault === true,
+      row: {
+        id: Number(a.id), host: { id: a.agent_id, name: a.hostname, os_family: f ? osFamily(f) : null, distribution: dist ? distributionName(dist) : null },
+        rule_set_id: a.rule_set_id, rule_id: a.rule_id, severity: a.severity, message: a.message, program: a.exe, parent_program: a.parent_exe,
+        techniques, count: a.count, first_seen: a.first_seen, last_seen: a.last_seen, state: a.state,
+        assignee: user ? { id: user.user_id, name: user.display_name } : null,
+        case: found ? { id: found.id, number: found.number } : null, suppressed: a.suppressed_by !== null,
+      },
+    };
   });
 }

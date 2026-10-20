@@ -10,6 +10,8 @@ pub mod agents;
 pub mod alarm_list;
 /// The SQL of the Alarms list's one statement.
 mod alarm_list_sql;
+/// An alarm's page above the fold: siblings, last 24 hours, rule text, related.
+pub mod alarm_summary;
 mod alarm_suppression_writes;
 /// Alarm suppressions (P14) as the console manages them: states, where
 /// and duration (roles spec §8).

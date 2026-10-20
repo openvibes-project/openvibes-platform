@@ -6,6 +6,7 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 |---|---|
 | `access.ts` | People (list, page, create, edit, disable, enable, reset, roles) and service accounts, inside the share. |
 | `alarmList.ts` | The Alarms list (`GET /api/v1/alarm-list`): filters, counts with the others applied, the open-alarms summary, sort and paging inside the persona's reach. |
+| `alarmSummary.ts` | An alarm's page (`GET /api/v1/alarms/{id}/summary`): the alarm in reach, its siblings as commands seen, the last 24 hours (each sibling's count at the hour it was last seen), the Related card and the `can` flags. |
 | `alarms.ts` | Threat alarms, their triage and suppressions. |
 | `assets.ts` | Packages, open ports, running services and software across the fleet; `hostServices` is one host's report. |
 | `assistant.ts` | The assistant's answers. |

@@ -75,6 +75,7 @@ use crate::{
         crate::hosts::groups::list_groups,
         crate::hosts::list::list_hosts,
         crate::alarms::list::list_alarm_page,
+        crate::alarms::summary::alarm_summary_page,
         crate::hosts::summary::host_summary,
         crate::hosts::groups::create_group,
         crate::hosts::groups::get_group,

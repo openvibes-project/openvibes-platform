@@ -689,6 +689,31 @@ reaches the host. `HostSummary::reaches(scope)` applies the
 `agent_visibility` rule from the groups already read; the console uses it
 for its `can` flags. Tests: `tests/host_summary.rs`.
 
+## An alarm's page (`alarm_summary::alarm_summary`, roles 5a)
+
+`alarm_summary(client, id, &alarms_scope, vulnerabilities_scope, now) ->
+Option<AlarmPageSummary>`: `None` when the alarm is missing or `alarms_scope`
+does not reach its host (`console_alarms::detail`). Otherwise: the alarm as
+an `AlarmListRow` (OS, techniques from `console_rule_meta`, assignee, open
+case) with its detail and triage; the rule's text from `rule_meta::get`, or
+the alarm's message as title and message with no explain, check or
+techniques when the rule is not indexed; the commands seen, which are the
+alarm and its siblings (agent alarms on the same host with the same rule
+set, rule, `process.exe` and `ancestors[0].exe`, user decision 1), most
+starts first, then by id, each with its masked `args`, count, first and last
+seen, state, suppression and open case; `hourly`, 24 sums of
+`alarm_hourly_starts` over those siblings from 23 hours before the current
+hour to the current hour, oldest first (hours cut by `date_trunc` as
+ingest cuts them); the host's other open agent alarms (five and the total,
+`host_summary::top_alarms`); the host's open advisories through
+`host_summary::top_vulnerabilities` when `vulnerabilities_scope` reaches
+the host, else `None`; and `elsewhere`, the other hosts in `alarms_scope`
+with an open, unsuppressed alarm from this rule set and rule, and their
+open alarms. The siblings share the host, so the scope that reached the
+alarm reaches them. `AlarmPageSummary::reaches(scope)` applies
+`agent_visibility`'s rule from the host's groups; the console uses it for
+its `can` flags. Tests: `tests/alarm_summary.rs`.
+
 ## Suppressions with approval (`alarm_suppressions::…`, schema 55)
 
 `0055_suppression_approval.sql` (needs a backup) gives `alarm_suppressions`

@@ -398,6 +398,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alarms/{id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An alarm's page. */
+        get: operations["alarm_summary_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assistant-internet": {
         parameters: {
             query?: never;
@@ -2326,6 +2343,48 @@ export interface components {
             /** @description Current lifecycle state. */
             status: components["schemas"]["AgentStatus"];
         };
+        /** @description Actions allowed on this alarm, each by its permission on the host. */
+        AlarmActionsView: {
+            /** @description Add to case (`cases.write`). */
+            add_to_case: boolean;
+            /** @description Ask about this (`assistant.use`, with the assistant on). */
+            ask: boolean;
+            /** @description Assign (`alarms.triage` and `cases.assign`). */
+            assign: boolean;
+            /** @description Export (`alarms.export`). */
+            export: boolean;
+            /** @description Suppress (`alarms.suppress`). */
+            suppress: boolean;
+            /** @description Set state (`alarms.triage`). */
+            triage: boolean;
+        };
+        /** @description One command seen: a sibling alarm with its own command line. */
+        AlarmCommandView: {
+            /** @description The command line, masked as stored. */
+            args: string[];
+            case?: null | components["schemas"]["AlarmListCaseView"];
+            /**
+             * Format: int64
+             * @description Starts matched.
+             */
+            count: number;
+            /** @description RFC 3339. */
+            first_seen: string;
+            /**
+             * Format: int64
+             * @description The sibling's alarm id.
+             */
+            id: number;
+            /** @description RFC 3339. */
+            last_seen: string;
+            /** @description Triage state. */
+            state: string;
+            /**
+             * Format: int64
+             * @description The suppression that closed it.
+             */
+            suppressed_by?: number | null;
+        };
         /** @description Per-value counts for every filter. */
         AlarmCountsView: {
             /** @description By assignee. */
@@ -2460,6 +2519,57 @@ export interface components {
             /** @description Pass as `cursor` for the next page; absent on the last page. */
             next_cursor?: string | null;
         };
+        /** @description The alarm: the list-row fields and its detail. */
+        AlarmPageAlarmView: components["schemas"]["AlarmListRowView"] & {
+            /** @description Its ancestors, nearest first, as sent. */
+            ancestors: Record<string, never>[];
+            /**
+             * Format: int32
+             * @description 0 to 100.
+             */
+            confidence: number;
+            /** @description The process (masked args) as the agent sent it. */
+            process: Record<string, never>;
+            /** @description When ingest stored it, RFC 3339. */
+            received_at: string;
+            /**
+             * Format: int64
+             * @description Rule set version.
+             */
+            rule_set_version: number;
+            /**
+             * Format: int64
+             * @description Rule version.
+             */
+            rule_version: number;
+            /** @description Current triage. */
+            triage: components["schemas"]["AlarmTriageView"];
+        };
+        /** @description The Related card. */
+        AlarmRelatedView: {
+            /** @description Up to five other open alarms on the host, and the total. */
+            host_alarms: components["schemas"]["TopAlarmsView"];
+            host_vulnerabilities?: null | components["schemas"]["TopVulnerabilitiesView"];
+            /** @description Same rule elsewhere. */
+            same_rule_elsewhere: components["schemas"]["SameRuleElsewhereView"];
+        };
+        /**
+         * @description What the "What happened" card says. Until the rule is indexed, the
+         *     title and message are the alarm's message (`GET /alarms/{id}/rule` still
+         *     resolves it).
+         */
+        AlarmRuleTextView: {
+            /** @description What a person should look at. */
+            check?: string | null;
+            /** @description What a match means. */
+            explain?: string | null;
+            /** @description Rule message. */
+            message: string;
+            /** @description ATT&CK technique ids. */
+            techniques: string[];
+            /** @description Rule title. */
+            title: string;
+        };
         /** @description The line above the list: over open alarms matching every filter but state. */
         AlarmSummaryLineView: {
             /**
@@ -2478,6 +2588,26 @@ export interface components {
              * @description Open alarms.
              */
             open: number;
+        };
+        /** @description Everything above the fold on an alarm's page. */
+        AlarmSummaryPageView: {
+            /** @description The alarm. */
+            alarm: components["schemas"]["AlarmPageAlarmView"];
+            /** @description Allowed actions. */
+            can: components["schemas"]["AlarmActionsView"];
+            /** @description Commands seen: the alarm and its siblings, most starts first. */
+            commands: components["schemas"]["AlarmCommandView"][];
+            /**
+             * @description Starts per hour of the alarm and its siblings, the 24 hours ending
+             *     with the current one, oldest first.
+             */
+            hourly: number[];
+            /** @description The Related card. */
+            related: components["schemas"]["AlarmRelatedView"];
+            /** @description The rule's text. */
+            rule: components["schemas"]["AlarmRuleTextView"];
+            /** @description The tiles. */
+            tiles: components["schemas"]["AlarmTilesView"];
         };
         /** @description One alarm in the list. */
         AlarmSummaryView: {
@@ -2605,6 +2735,26 @@ export interface components {
             hostname?: string | null;
             /** @description `host`, `group`, `all` or `device`. */
             kind: string;
+        };
+        /** @description The four tiles, over the alarm and its siblings. */
+        AlarmTilesView: {
+            /**
+             * Format: int32
+             * @description The alarm's confidence, 0 to 100.
+             */
+            confidence: number;
+            /**
+             * Format: int64
+             * @description Distinct command lines (siblings).
+             */
+            different_commands: number;
+            /** @description The earliest first start, RFC 3339. */
+            first_seen: string;
+            /**
+             * Format: int64
+             * @description Starts matched.
+             */
+            starts: number;
         };
         /** @description An alarm's triage. */
         AlarmTriageView: {
@@ -4888,6 +5038,19 @@ export interface components {
             /** @description `match`, `no_match`, `unavailable` or `failed`. */
             outcome: string;
         };
+        /** @description Other hosts in reach with an open alarm from this rule. */
+        SameRuleElsewhereView: {
+            /**
+             * Format: int64
+             * @description Hosts.
+             */
+            hosts: number;
+            /**
+             * Format: int64
+             * @description Their open alarms from the rule.
+             */
+            open: number;
+        };
         /** @description Create or replace a dashboard's name and layout. */
         SaveDashboardRequest: {
             /** @description Layout document (validated; at most 64 KiB and 40 widgets). */
@@ -5398,7 +5561,7 @@ export interface components {
         };
         /** @description Open alarms, most severe then newest first. */
         TopAlarmsView: {
-            /** @description Up to three. */
+            /** @description The first three (five on an alarm's page). */
             items: components["schemas"]["TopAlarmView"][];
             /**
              * Format: int64
@@ -7012,6 +7175,65 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    alarm_summary_page: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Alarm id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The alarm page above the fold */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmSummaryPageView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs alarms.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description alarm_not_found: missing or outside reach */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
         };
     };
