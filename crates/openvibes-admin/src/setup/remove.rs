@@ -371,8 +371,9 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     } else {
         ""
     };
+    let dropped = if server { "database, roles, " } else { "" };
     Ok(StepState::Done(format!(
-        "database, roles, configuration, data and service accounts removed; {postgresql}{site_key}"
+        "{dropped}configuration, data and service accounts removed; {postgresql}{site_key}"
     )))
 }
 
@@ -417,7 +418,9 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
                     .map(StepState::Done)
                     .map_err(|error| match super::pg_health::problem(ctx) {
                         Some(p) => {
-                            format!("{p}: untick Back up first to uninstall without a backup")
+                            format!(
+                                "{p}: untick Back up first to uninstall without a backup ({error})"
+                            )
                         }
                         None => error,
                     }),

@@ -206,9 +206,18 @@ pub(super) fn resume_agent<R: Runner>(ctx: &Ctx<R>) {
 }
 
 /// Gives up a half-done Update (an Uninstall replaces it): starts the agent
-/// again and forgets the stopped-services record.
+/// again and forgets the stopped-services record. Only the agent is
+/// started (Stop lists it, but only Start leaves AGENT_PENDING, so an update
+/// quit in between would leave it off for good); the platform units in the
+/// record stay stopped: they would run on a half-migrated database.
 pub(super) fn abandon<R: Runner>(ctx: &Ctx<R>) {
     resume_agent(ctx);
+    if ctx
+        .read(ACTIVE)
+        .is_ok_and(|t| t.lines().any(|l| l == AGENT))
+    {
+        let _ = ctx.ok(Systemctl, &["start", AGENT]);
+    }
     let _ = std::fs::remove_file(ctx.path(ACTIVE));
 }
 
