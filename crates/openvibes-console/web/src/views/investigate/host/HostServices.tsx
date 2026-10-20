@@ -1,7 +1,7 @@
-import { useResource } from "../../api/client";
-import type { HostServices } from "../../api/types";
-import { Ago, Empty, ErrorBox, Loading } from "../../ui/bits";
-import { Icon } from "../../ui/Icon";
+import { useResource } from "../../../api/client";
+import type { HostServices } from "../../../api/types";
+import { Ago, Empty, ErrorBox, Loading } from "../../../ui/bits";
+import { Icon } from "../../../ui/Icon";
 
 const REFUSED: Record<string, string> = {
   too_large: "over 512 KiB",

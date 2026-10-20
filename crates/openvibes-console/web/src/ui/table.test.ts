@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { matches, sortRows } from "./table";
+import { matches, sortRows, tableIgnoresKey } from "./table";
 
 const rows = [
   { name: "b", n: 2, when: null },
@@ -24,5 +24,17 @@ describe("table", () => {
     expect(matches(["web-01.prod.example.test", "Online"], "WEB prod")).toBe(true);
     expect(matches(["web-01.prod.example.test"], "web lab")).toBe(false);
     expect(matches(["x"], "  ")).toBe(true);
+  });
+
+  it("leaves keys in fields to them, and Enter on a focused link or button to it", () => {
+    // A fake element: `inside` lists the selectors it sits in.
+    const el = (...inside: string[]) => ({ closest: (sel: string) => (sel.split(",").some((s) => inside.includes(s)) ? {} : null) });
+    expect(tableIgnoresKey(el("input"), "j")).toBe(true);
+    expect(tableIgnoresKey(el("dialog"), "Enter")).toBe(true);
+    // A Tabbed-to host link plus a row cursor never opens two hosts.
+    expect(tableIgnoresKey(el("a"), "Enter")).toBe(true);
+    expect(tableIgnoresKey(el("button"), "Enter")).toBe(true);
+    expect(tableIgnoresKey(el("a"), "j")).toBe(false);
+    expect(tableIgnoresKey(el(), "Enter")).toBe(false);
   });
 });

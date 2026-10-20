@@ -27,3 +27,10 @@ export function matches(fields: readonly (string | null | undefined)[], filter: 
   const haystack = fields.filter(Boolean).join(" \u0000 ").toLowerCase();
   return words.every((word) => haystack.includes(word));
 }
+
+/** A table's key that is not its own: typing in a field, a Select or a dialog
+ * opened from a row, or Enter on a focused link or button (which acts itself;
+ * the row's Enter on top would open a second object). */
+export function tableIgnoresKey(target: { closest(selector: string): unknown }, key: string): boolean {
+  return target.closest("input,textarea,.sel,dialog") !== null || (key === "Enter" && target.closest("a,button") !== null);
+}

@@ -1,6 +1,6 @@
 # ui/detail
 
-The shared layout of a detail page (approved screens 11 and 17): header, tiles, and a left and a right column of cards. The host page is the first user.
+The shared layout of a detail page (approved screens 11 and 17): header, tiles, and a left and a right column of cards. The host page (`views/investigate/host/`) is the first user.
 
 | File | What it does |
 |---|---|

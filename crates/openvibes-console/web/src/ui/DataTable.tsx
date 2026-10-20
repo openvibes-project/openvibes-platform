@@ -8,7 +8,7 @@ import { nav, useLocation } from "../app/nav";
 import { Icon } from "./Icon";
 import { PAGE } from "./list/filters";
 import { MAX_SELECTION, selectAll, selectRange } from "./selection";
-import { type Direction, type SortValue, sortRows } from "./table";
+import { type Direction, type SortValue, sortRows, tableIgnoresKey } from "./table";
 
 export type Column<T> = {
   key: string;
@@ -87,8 +87,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
   const everySelected = selection !== undefined && sorted.length > 0 && selection.selected.size >= Math.min(sorted.length, MAX_SELECTION) && pageSelected;
 
   const onKeyDown = (event: KeyboardEvent) => {
-    // Typing in a field, a Select or a dialog opened from a row is not table navigation.
-    if (event.target instanceof HTMLInputElement || (event.target as HTMLElement).closest("textarea,.sel,dialog")) return;
+    if (tableIgnoresKey(event.target as HTMLElement, event.key)) return;
     const max = Math.min(sorted.length, shown) - 1;
     keyboard.current = true;
     if (event.key === "j" || event.key === "ArrowDown") { event.preventDefault(); setCursor((c) => Math.min(max, c + 1)); }

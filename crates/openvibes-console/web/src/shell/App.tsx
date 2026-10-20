@@ -18,6 +18,7 @@ import { CommandPalette, rememberRecent } from "./CommandPalette";
 import { Inspector, WindowLayer } from "./Frames";
 import { SetPassword } from "./SetPassword";
 import { SignIn } from "./SignIn";
+import { hostRoute } from "../views/investigate/Hosts";
 
 const personaKey = "openvibes.v2.persona";
 function readPersona(): Persona {
@@ -60,6 +61,9 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
   const top = panels[panels.length - 1];
 
   useEffect(() => { if (top) rememberRecent(top); }, [top]);
+  // A host is a page (approved screen 17), and still a recent object.
+  const host = view.startsWith("/hosts/") ? hostRoute(view)?.id : undefined;
+  useEffect(() => { if (host) rememberRecent({ kind: "agent", id: host }); }, [host]);
   // Old sign-in bookmarks: once signed in, /login is just the home dashboard.
   useEffect(() => { if (auth === "ok" && view === "/login") nav.view("/"); }, [auth, view]);
   useEffect(() => { document.title = `${current?.label ?? "OpenVIBES"} · OpenVIBES`; }, [current]);

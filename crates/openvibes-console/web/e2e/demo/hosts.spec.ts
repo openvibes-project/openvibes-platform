@@ -117,13 +117,13 @@ test("clicking a host opens its page, and old links land on the Hosts list or pa
   await page.goto("/hosts?q=web-");
   await rows(page).first().locator("td").nth(1).click();
   await expect(page).toHaveURL(/\/hosts\/agent-\d{5}$/);
-  await expect(page.locator(".host-page")).toContainText("web-");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("web-");
   await page.goto("/agents?status=stale&q=web");
   await expect(page).toHaveURL(/\/hosts\?status=offline&q=web$/);
   await expect(filters(page)).toContainText("Status: Offline");
   await page.goto("/agents?agent=agent-00005");
   await expect(page).toHaveURL(/\/hosts\/agent-00005$/);
-  await expect(page.locator(".host-page")).toContainText("agent-00005");
+  await expect(page.locator(".detail-page__facts")).toContainText("agent-00005");
 });
 
 test("the Hosts list passes axe, filtered and not", async ({ page }) => {

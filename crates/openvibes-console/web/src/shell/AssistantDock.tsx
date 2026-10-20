@@ -7,7 +7,7 @@ import { useResource } from "../api/client";
 import type { AssistantInternetSource, AssistantSegment, AssistantStatus } from "../api/types";
 import { assistant, useAssistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
-import { objectTitle, panels } from "../app/registry";
+import { objectIcon, objectTitle, panels } from "../app/registry";
 import { useTitles } from "../app/titles";
 import { Icon } from "../ui/Icon";
 
@@ -22,7 +22,7 @@ function Segments({ segments }: { segments: AssistantSegment[] }) {
     <p className="assistant__answer">
       {segments.map((segment, index) => segment.kind === "text" ? <span key={index}>{segment.text}</span> : (
         <button key={index} type="button" className="cite" onClick={() => nav.open({ kind: segment.target_kind, id: segment.id })}>
-          <Icon name={panels[segment.target_kind]?.icon ?? "layers"} size={12} />
+          <Icon name={objectIcon(segment.target_kind)} size={12} />
           {objectTitle({ kind: segment.target_kind, id: segment.id })}
         </button>
       ))}
@@ -96,7 +96,7 @@ export function AssistantDock() {
         {state.turns.map((turn, index) => (
           <div key={index} className="turn">
             <div className="turn__q">
-              {turn.context && <span className="turn__ctx"><Icon name={panels[turn.context.kind]?.icon ?? "layers"} size={11} /> {panels[turn.context.kind]?.title(turn.context.id)}</span>}
+              {turn.context && <span className="turn__ctx"><Icon name={objectIcon(turn.context.kind)} size={11} /> {objectTitle(turn.context)}</span>}
               {turn.question}
             </div>
             {turn.segments ? <><Segments segments={turn.segments} /><Sources sources={turn.internet} /></> : turn.error ? <p className="turn__error"><Icon name="alert" size={14} /> {turn.error}</p> : (
@@ -109,7 +109,7 @@ export function AssistantDock() {
       <form className="assistant__form" onSubmit={(event) => { event.preventDefault(); send(); }}>
         {state.context ? (
           <div className="context-chip">
-            <Icon name={panels[state.context.kind]?.icon ?? "layers"} size={12} />
+            <Icon name={objectIcon(state.context.kind)} size={12} />
             <span className="truncate">About {state.contextLabel ?? state.context.id}</span>
             <button type="button" aria-label="Remove context" onClick={() => assistant.clearContext()}><Icon name="close" size={12} /></button>
           </div>

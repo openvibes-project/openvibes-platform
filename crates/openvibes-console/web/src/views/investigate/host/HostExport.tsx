@@ -3,12 +3,12 @@
 // one file with a `section` column. Nothing new on the server.
 import { useState } from "react";
 
-import { request } from "../../api/client";
-import type { Agent, AlarmSummary, Finding, HostPackage, HostServices, Vulnerability } from "../../api/types";
-import { useSession } from "../../app/session";
-import { downloadCsv } from "../../ui/csv";
-import { Icon } from "../../ui/Icon";
-import { toast } from "../../ui/toast";
+import { request } from "../../../api/client";
+import type { Agent, AlarmSummary, Finding, HostPackage, HostServices, Vulnerability } from "../../../api/types";
+import { useSession } from "../../../app/session";
+import { downloadCsv } from "../../../ui/csv";
+import { Icon } from "../../../ui/Icon";
+import { toast } from "../../../ui/toast";
 
 type Section = "details" | "compliance" | "alarms" | "vulnerabilities" | "software" | "ports" | "services";
 type Row = [Section, string, string, string, string, string];

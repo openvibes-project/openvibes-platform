@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { activeCount, selectAgents, selectAudit, selectFindings, severityBadge } from "./rows";
+import type { Finding } from "../../api/types";
+import { activeCount, hostFindingRows, selectAgents, selectAudit, selectFindings, severityBadge, vulnerabilityQuery } from "./rows";
 
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
@@ -37,4 +38,21 @@ describe("list selection matches the views", () => {
 
 it("List badges are capitalised, tone unchanged", () => {
   expect(severityBadge("critical")).toEqual({ label: "Critical", tone: "critical" });
+});
+
+describe("the host filter (plan ruling 9)", () => {
+  it("a host filter asks the vulnerability list for that host only", () => {
+    expect(vulnerabilityQuery(new URLSearchParams("host=agent%2F1&severity=high"))).toBe("/api/v1/vulnerabilities?severity=high&min_confidence=80&host=agent%2F1");
+    expect(vulnerabilityQuery(new URLSearchParams("severity=high"))).not.toContain("host=");
+  });
+
+  it("a host's compliance findings are one row per rule, each failing on that one host", () => {
+    const finding = { rule_set_id: "baseline", rule_id: "ssh-root", rule_version: 3, severity: "high", message: "SSH allows root login",
+      first_observed_at: "2026-10-01T00:00:00Z", last_observed_at: "2026-10-02T00:00:00Z" } as Finding;
+    const [row] = hostFindingRows([finding]);
+    expect(row).toEqual({ rule_set_id: "baseline", rule_id: "ssh-root", severity: "high", latest_message: "SSH allows root login", rule_versions: [3],
+      endpoint_count: 1, older_endpoint_count: 0, first_observed_at: "2026-10-01T00:00:00Z", last_observed_at: "2026-10-02T00:00:00Z",
+      triage_counts: { open: 1, mitigated: 0, accepted_risk: 0, false_positive: 0 } });
+    expect(selectFindings(hostFindingRows([finding]), new URLSearchParams("host=agent-1"))).toHaveLength(1);
+  });
 });

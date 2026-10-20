@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatLocation, hostsQuery, parseLocation, popPanel, pushPanel } from "./location";
+import { formatLocation, hostPath, hostsQuery, parseLocation, popPanel, pushPanel } from "./location";
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
-    const loc = parseLocation("/console/alarms", "?open=agent%3Aagent-1&open=advisory%3ARHSA-2026%3A1&q=web", "/console/");
+    const loc = parseLocation("/console/alarms", "?open=alarm%3A7&open=advisory%3ARHSA-2026%3A1&q=web", "/console/");
     expect(loc.view).toBe("/alarms");
-    expect(loc.panels).toEqual([{ kind: "agent", id: "agent-1" }, { kind: "advisory", id: "RHSA-2026:1" }]);
+    expect(loc.panels).toEqual([{ kind: "alarm", id: "7" }, { kind: "advisory", id: "RHSA-2026:1" }]);
     expect(loc.params.get("q")).toBe("web");
   });
 
@@ -28,6 +28,17 @@ describe("location", () => {
     ["?q=web&open=agent%3Aagent-00005&open=advisory%3AX-1", "/hosts/agent-00005?open=advisory%3AX-1"],
   ])("reads the old /agents%s as %s", (search, want) => {
     expect(formatLocation(parseLocation("/console/agents", search, "/console/"), "/console/")).toBe(`/console${want}`);
+  });
+
+  it.each([
+    ["/alarms", "?q=web&open=alarm%3A7&open=agent%3Aweb%2001", "/hosts/web%2001?open=alarm%3A7"],
+    ["/compliance", "?open=agent%3Aagent-1&open=advisory%3AX-1", "/hosts/agent-1?open=advisory%3AX-1"],
+  ])("reads an old host panel on %s%s as the host's page, %s", (view, search, want) => {
+    expect(formatLocation(parseLocation(view, search, "/"), "/")).toBe(want);
+  });
+
+  it("names a host's page", () => {
+    expect(hostPath("web 01/a")).toBe("/hosts/web%2001%2Fa");
   });
 
   it("maps an old Hosts query's status values and keeps the rest", () => {

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { Agent } from "../../api/types";
+import type { Agent } from "../../../api/types";
 import { HardeningLine, NotAssigned, hostAssignmentsPath } from "./HostHardening";
 
 const text = (html: string) => html.replace(/<[^>]+>/g, "").replaceAll("&#x27;", "'");

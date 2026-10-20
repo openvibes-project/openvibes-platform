@@ -231,5 +231,8 @@ fn path_parameters_are_placeholders_of_their_path() {
             }
         }
     }
-    assert!(wrong.is_empty(), "query parameters declared in the path: {wrong:?}");
+    assert!(
+        wrong.is_empty(),
+        "query parameters declared in the path: {wrong:?}"
+    );
 }

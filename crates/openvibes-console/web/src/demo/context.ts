@@ -14,7 +14,7 @@ type Route = { method: string; pattern: RegExp; keys: string[]; permission: Perm
 export type DemoContext = ReturnType<typeof createDemoContext>;
 
 // Who each persona signs in as; what they may do comes from that person's roles.
-const PERSON: Record<Persona, string> = { admin: "u-admin", analyst: "u-sam", operator: "u-ola", scoped_operator: "u-pia", team_lead: "u-lee", viewer: "u-vic" };
+const PERSON: Record<Persona, string> = { admin: "u-admin", analyst: "u-sam", operator: "u-ola", scoped_operator: "u-pia", team_lead: "u-lee", viewer: "u-vic", rule_author: "u-rae" };
 
 export function createDemoContext({ persona, now }: { persona: Persona; now: number }) {
   const data = buildDemoData(now);

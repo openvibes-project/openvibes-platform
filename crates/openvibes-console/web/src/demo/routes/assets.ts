@@ -42,35 +42,14 @@ export function registerAssetRoutes(ctx: DemoContext) {
       }))
       .sort((a, b) => Number(b.exploited) - Number(a.exploited) || (b.epss ?? 0) - (a.epss ?? 0) || (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9));
   };
-  // Assets v2: open ports and running services, from the host's role.
-  const PORTS: Record<string, [number, string, string][]> = {
-    web: [[443, "nginx.service", "nginx"], [80, "nginx.service", "nginx"]], proxy: [[443, "haproxy.service", "haproxy"]], api: [[8080, "api.service", "node"]],
-    db: [[5432, "postgresql.service", "postgres"]], cache: [[6379, "redis.service", "redis-server"]], mail: [[25, "postfix.service", "master"]],
-  };
-  const hostServices = (agentId: string) => {
-    const role = (data.agents.find((a) => a.id === agentId)?.hostname ?? "").split("-")[0] ?? "";
-    const own = PORTS[role] ?? [];
-    const listeners = [
-      ...own.map(([port, service, program]) => ({ protocol: "tcp", address: "0.0.0.0", port, exposed: true, service, program })),
-      { protocol: "tcp", address: "0.0.0.0", port: 22, exposed: true, service: "sshd.service", program: "sshd" },
-      { protocol: "udp", address: "127.0.0.53", port: 53, exposed: false, service: "systemd-resolved.service", program: "systemd-resolve" },
-    ].sort((a, b) => Number(b.exposed) - Number(a.exposed) || a.port - b.port);
-    const units = new Map(listeners.map((l) => [l.service, l.program]));
-    units.set("chronyd.service", "chronyd");
-    const services = [...units].map(([unit, program]) => ({ unit, programs: [program], processes: unit === "nginx.service" ? 3 : 1, run_as: "root" })).sort((a, b) => a.unit.localeCompare(b.unit));
-    // The mail hosts' last report was refused (over 512 KiB): the tab says so.
-    const refused = role === "mail" ? { refused: "too_large", refused_at: new Date(Date.now() - 5 * 60_000).toISOString() } : { refused: null, refused_at: null };
-    // The build hosts run more than a report carries: their lists were cut.
-    return { reported_at: new Date(Date.now() - 20 * 60_000).toISOString(), owners: "partial", truncated: role === "build", ...refused, listeners, services };
-  };
   route("GET", "/api/v1/agents/{id}/services", "hosts.read", ({ id = "" }) => {
     if (!agentById(id)) return problem(404, "agent_not_found", "Agent not found");
-    return json(hostServices(id));
+    return json(hostServices(data, id));
   });
   route("GET", "/api/v1/ports", "hosts.read", (_, query) => {
     const rows = new Map<string, { protocol: string; port: number; hosts: number; exposed_hosts: number; services: Set<string> }>();
     for (const agent of hosts()) {
-      for (const l of hostServices(agent.id).listeners) {
+      for (const l of hostServices(data, agent.id).listeners) {
         const row = rows.get(`${l.protocol}/${l.port}`) ?? { protocol: l.protocol, port: l.port, hosts: 0, exposed_hosts: 0, services: new Set() };
         row.hosts += 1;
         if (l.exposed) row.exposed_hosts += 1;
@@ -83,11 +62,11 @@ export function registerAssetRoutes(ctx: DemoContext) {
   });
   route("GET", "/api/v1/services", "hosts.read", () => {
     const counts = new Map<string, number>();
-    for (const agent of hosts()) for (const s of hostServices(agent.id).services) counts.set(s.unit, (counts.get(s.unit) ?? 0) + 1);
+    for (const agent of hosts()) for (const s of hostServices(data, agent.id).services) counts.set(s.unit, (counts.get(s.unit) ?? 0) + 1);
     return json([...counts].sort(([a], [b]) => a.localeCompare(b)).map(([unit, hosts]) => ({ unit, hosts })));
   });
   route("GET", "/api/v1/ports/{protocol}/{port}", "hosts.read", ({ protocol = "", port = "" }, query) => {
-    const found = hosts().flatMap((agent) => hostServices(agent.id).listeners
+    const found = hosts().flatMap((agent) => hostServices(data, agent.id).listeners
       .filter((l) => l.protocol === protocol && String(l.port) === port)
       .map((l) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, address: l.address, exposed: l.exposed, service: l.service, program: l.program, last_seen_at: agent.last_seen_at ?? null })));
     if (found.length === 0) return problem(404, "port_not_found", "No host listens on this port");
@@ -96,7 +75,7 @@ export function registerAssetRoutes(ctx: DemoContext) {
   });
   route("GET", "/api/v1/services/{unit}", "hosts.read", ({ unit = "" }, query) => {
     const name = decodeURIComponent(unit);
-    const found = hosts().flatMap((agent) => hostServices(agent.id).services
+    const found = hosts().flatMap((agent) => hostServices(data, agent.id).services
       .filter((s) => s.unit === name)
       .map((s) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, programs: s.programs, processes: s.processes, run_as: s.run_as, last_seen_at: agent.last_seen_at ?? null })));
     if (found.length === 0) return problem(404, "service_not_found", "No host runs this service");
@@ -132,4 +111,26 @@ export function registerAssetRoutes(ctx: DemoContext) {
     const { items, next_cursor } = page(found.map(({ agent, p }) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, version: `${p.version}-${p.release}`, arch: p.arch, last_seen_at: agent.last_seen_at ?? null, fixable_vulnerable: p.fixable_vulnerable })), query);
     return json({ manager, name: decodeURIComponent(name), versions: [...versions.values()], advisories: packageAdvisories(decodeURIComponent(name)), hosts: items, next_cursor });
   });
+}
+
+// Assets v2: open ports and running services, from the host's role.
+const PORTS: Record<string, [number, string, string][]> = {
+  web: [[443, "nginx.service", "nginx"], [80, "nginx.service", "nginx"]], proxy: [[443, "haproxy.service", "haproxy"]], api: [[8080, "api.service", "node"]],
+  db: [[5432, "postgresql.service", "postgres"]], cache: [[6379, "redis.service", "redis-server"]], mail: [[25, "postfix.service", "master"]],
+};
+export function hostServices(data: DemoContext["data"], agentId: string) {
+  const role = (data.agents.find((a) => a.id === agentId)?.hostname ?? "").split("-")[0] ?? "";
+  const own = PORTS[role] ?? [];
+  const listeners = [
+    ...own.map(([port, service, program]) => ({ protocol: "tcp", address: "0.0.0.0", port, exposed: true, service, program })),
+    { protocol: "tcp", address: "0.0.0.0", port: 22, exposed: true, service: "sshd.service", program: "sshd" },
+    { protocol: "udp", address: "127.0.0.53", port: 53, exposed: false, service: "systemd-resolved.service", program: "systemd-resolve" },
+  ].sort((a, b) => Number(b.exposed) - Number(a.exposed) || a.port - b.port);
+  const units = new Map(listeners.map((l) => [l.service, l.program]));
+  units.set("chronyd.service", "chronyd");
+  const services = [...units].map(([unit, program]) => ({ unit, programs: [program], processes: unit === "nginx.service" ? 3 : 1, run_as: "root" })).sort((a, b) => a.unit.localeCompare(b.unit));
+  // The mail hosts' last report was refused (over 512 KiB): the tab says so.
+  const refused = role === "mail" ? { refused: "too_large", refused_at: new Date(Date.now() - 5 * 60_000).toISOString() } : { refused: null, refused_at: null };
+  // The build hosts run more than a report carries: their lists were cut.
+  return { reported_at: new Date(Date.now() - 20 * 60_000).toISOString(), owners: "partial", truncated: role === "build", ...refused, listeners, services };
 }

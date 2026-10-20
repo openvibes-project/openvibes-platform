@@ -15,6 +15,7 @@ import { registerFindingRoutes } from "./routes/findings";
 import { registerGroupRoutes } from "./routes/groups";
 import { registerHostListRoutes } from "./routes/hostList";
 import { registerHostRoutes } from "./routes/hosts";
+import { registerHostSummaryRoute } from "./routes/hostSummary";
 import { registerListRoutes } from "./routes/lists";
 import { registerMetricRoutes } from "./routes/metrics";
 import { registerRoleRoutes } from "./routes/roles";
@@ -34,6 +35,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   registerSessionRoutes(ctx);
   registerHostRoutes(ctx);
   registerHostListRoutes(ctx);
+  registerHostSummaryRoute(ctx);
   registerListRoutes(ctx);
   registerFindingRoutes(ctx);
   const settings = registerSettingsRoutes(ctx);

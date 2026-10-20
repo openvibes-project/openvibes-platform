@@ -21,11 +21,14 @@ test("a finding opens in the inspector, links stack, and Esc goes back", async (
   await page.getByRole("link", { name: "Compliance", exact: true }).click();
   await page.locator(".view tbody tr").first().locator("td").nth(2).click();
   await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
+  // A host is a page (approved screen 17): its link opens it under the finding, which stays open.
   await page.locator(".inspector tbody a").first().click();
-  await expect(page.locator(".panel-header__kind")).toContainText("Host");
-  await expect(page.locator(".crumbs__item")).toHaveCount(2);
-  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/hosts\/agent-\d{5}\?open=finding/);
+  await expect(page.locator(".detail-page h1")).toBeVisible();
   await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".inspector")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/hosts\/agent-\d{5}$/);
 });
 
 test("a finding's hosts show their assignee and accepted-risk expiry", async ({ page }) => {
@@ -44,8 +47,8 @@ test("the palette finds a host and opens it", async ({ page }) => {
   await page.keyboard.press("Control+k");
   await page.getByRole("combobox", { name: "Search" }).fill("web-01");
   await page.keyboard.press("Enter");
-  await expect(page.locator(".panel-header__kind")).toContainText("Host");
-  await expect(page.locator(".panel-header__title")).toContainText("web-01");
+  await expect(page).toHaveURL(/\/hosts\/agent-\d{5}$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("web-01");
 });
 
 test("a panel pops out into a window and docks back", async ({ page }) => {
@@ -65,7 +68,8 @@ test("the assistant answers with citations that open objects", async ({ page }) 
   const cite = page.locator(".cite").first();
   await expect(cite).toBeVisible();
   await cite.click();
-  await expect(page.locator(".panel-header__kind")).toContainText("Host");
+  await expect(page).toHaveURL(/\/hosts\/agent-\d{5}$/);
+  await expect(page.locator(".detail-page h1")).toBeVisible();
   await expect(page.locator(".assistant")).toBeVisible();
 });
 

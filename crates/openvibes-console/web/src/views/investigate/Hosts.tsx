@@ -6,19 +6,19 @@ import { useEffect, useState } from "react";
 
 import { invalidate, useResource } from "../../api/client";
 import type { HostList, HostRow } from "../../api/types";
-import { hostsQuery } from "../../app/location";
+import { hostPath, hostsQuery } from "../../app/location";
 import { nav, useLocation, viewLink } from "../../app/nav";
-import { AgentPanel } from "../../panels/hosts/AgentPanel";
 import { Ago, Empty, ErrorBox, Loading, SAVED_HEARTBEAT_HINT, StatusBadge } from "../../ui/bits";
 import { type Column, DataTable } from "../../ui/DataTable";
 import { Icon } from "../../ui/Icon";
 import { FilterBar } from "../../ui/list/FilterBar";
+import { HostPage, NoSuchHost } from "./host/HostPage";
+import { HostSubPage, SUB_PAGES, type SubPage } from "./host/HostSubPage";
 import { type ListFilter, PAGE, hasFilters } from "../../ui/list/filters";
 import { importBrowserViews, useHiddenColumns } from "../../ui/list/savedViews";
 import { SummaryLine } from "../../ui/list/SummaryLine";
 
 const PAGE_SIZE = 50;
-const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
 const ALARMS_OFF = "Threat alarms are off on this host because of a fault, not by choice. Its page says why and how to turn them on.";
 /** The list's columns (keys as the console keeps hidden ones), Host first. */
 const COLUMNS = [
@@ -188,13 +188,6 @@ function HostListView() {
   );
 }
 
-/** A host's page. Until it is built (roles step 4, task 7) it shows the
- * host's panel at full width, so no link to a host leads nowhere. */
-function HostPage({ id }: { id: string | null }) {
-  if (id === null) return <div className="view"><Empty icon="agents" title="No such host">This address does not name a host.</Empty></div>;
-  return <div className="view host-page"><AgentPanel id={id} /></div>;
-}
-
 /** The host id in a /hosts/{id} path; null when the path is not one (bad escapes). */
 export function hostIdOf(view: string): string | null {
   try {
@@ -204,7 +197,18 @@ export function hostIdOf(view: string): string | null {
   }
 }
 
+/** A host's page (/hosts/{id}) or one of its lists (/hosts/{id}/software|ports|services); null for anything else. */
+export function hostRoute(view: string): { id: string; page: SubPage | null } | null {
+  const [raw = "", sub, ...rest] = view.slice("/hosts/".length).split("/");
+  if (rest.length > 0 || (sub !== undefined && !Object.hasOwn(SUB_PAGES, sub))) return null;
+  const id = hostIdOf(`/hosts/${raw}`);
+  return id === null ? null : { id, page: (sub as SubPage | undefined) ?? null };
+}
+
 export function Hosts() {
   const { view } = useLocation();
-  return view.startsWith("/hosts/") ? <HostPage id={hostIdOf(view)} /> : <HostListView />;
+  if (!view.startsWith("/hosts/")) return <HostListView />;
+  const route = hostRoute(view);
+  if (route === null) return <NoSuchHost />;
+  return route.page ? <HostSubPage id={route.id} page={route.page} /> : <HostPage id={route.id} />;
 }

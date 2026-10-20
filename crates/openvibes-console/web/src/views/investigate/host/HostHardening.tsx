@@ -1,9 +1,9 @@
 // The host's Hardening line (approved screens 6–8): each assignable set as the
 // platform decides it, the group that decided it, whether the agent has
 // caught up, and why hardening checks may show as unavailable.
-import { useResource } from "../../api/client";
-import type { Agent, HostRuleSetAssignments } from "../../api/types";
-import { factsNote, factsUnavailable, hardeningParts, type HardeningPart } from "../rules/ruleAssignment";
+import { useResource } from "../../../api/client";
+import type { Agent, HostRuleSetAssignments } from "../../../api/types";
+import { factsNote, factsUnavailable, hardeningParts, type HardeningPart } from "../../../panels/rules/ruleAssignment";
 
 /** Linux hosts only (os-release reported), never imported or revoked ones. */
 export const hostAssignmentsPath = (agent: Agent): string | null =>

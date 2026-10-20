@@ -41,7 +41,7 @@ Show everything, without page changes for details:
     the new-account picker offers only roles inside the creator's own access
     (`fitsShare`, as for people);
   - audit log, with ranges, CSV export and retention.
-- **Host hardening** (`panels/hosts/HostHardening.tsx`): the host panel's Hardening
+- **Host hardening** (`views/investigate/host/HostHardening.tsx`): the host page's Hardening
   row, "Hardening facts unavailable" warning and "Not assigned" badge; see
   `rule-set-assignment.md`.
 - **Triage** (triage v2, `panels/triage/triage.ts`, `panels/triage/bulk.ts`,
@@ -412,7 +412,7 @@ triage on alarms and findings stays as it is.
   - Without `cases.write` the panel is read-only.
 - **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.write`): a button on
   the alarm panel, on each host row of a finding and of an advisory, on the
-  host panel and its vulnerabilities, and on the software panel. Its dialog
+  host page and its top vulnerabilities, and on the software panel. Its dialog
   asks `/cases/for-item` first. An alarm, finding or vulnerability that is
   already in an open case shows that case (a link) and offers nothing else,
   because it can be in one at a time; a host or software lists the cases
@@ -469,20 +469,55 @@ triage on alarms and findings stays as it is.
   `/agents?agent=ID` read as `/hosts/ID`. `app/nav.ts` replaces the URL in
   place (no dead history entry) on load, Back/Forward, and any in-app
   navigation to `/agents` (the dashboard List widget's "Open list").
-- **Host page** (`/hosts/{id}`): a row opens it. Until the page of screen
-  17 is built it shows the `agent` panel's content at full width
-  (`.host-page`); a malformed address says "No such host". The panel itself (still opened from other objects): Findings, Vulnerabilities, **Alarms** (active
-  ones), **Software** (the host's packages, filtered on the server by name
-  and "Fix available", 200 at a time) and Details (identity, system and
-  running kernel, "software as of", threat alarms, groups and labels, certificates).
+- **Host page** (`/hosts/{id}`, approved screen 17, `views/investigate/host/`):
+  it replaces the old host panel and its tabs; everything the panel showed
+  is kept (spec §10.2). A row of the Hosts list, any host link
+  (`ObjectLink`, whose href is the page), the palette, an assistant
+  citation and `nav.open({kind: "agent"})` (in `app/nav.ts`, so every call
+  site follows) open it; the `agent` panel kind is gone, and old
+  `?open=agent:ID` addresses on any view read as the page (other panels
+  stay open). A host window popped out before is dropped. A malformed or
+  unreachable address says "No such host". It reads
+  `GET /api/v1/hosts/{id}/summary` (what this person may see and do on
+  this host) and `GET /api/v1/agents/{id}` (rule sets, hardening, Export).
+  - **Header:** an OS badge (LX, WIN), the name and status; the facts line
+    "agent ID · system · IP · agent version (older, in amber) · last
+    heartbeat · enrolled 3 Oct"; Compare (opens the compare panel), Export
+    (`can.export`), Add to case (`can.add_to_case`), Ask about this
+    (`can.ask`), and ⋯ with **Revoke…** (`can.revoke`; a dialog that needs
+    a reason, kept in the audit log).
+  - **Tiles:** Open alarms, Compliance failing, Vulnerabilities (each only
+    with its read permission on this host) and Software, linking to
+    `/alarms?host=ID`, `/compliance?host=ID`, `/vulnerabilities?host=ID`
+    and `/hosts/ID/software`.
+  - **Left column:** Details (host name, agent ID, system, running kernel,
+    IP, agent version, software as of, status, enrolled, revoked,
+    capabilities); Protection (threat alarms, the hardening row, last
+    test); Rule sets; Groups and labels (labels with × and "Add a label"
+    with `can.label`, never on a revoked or imported host); Certificates
+    (the five newest, the first marked Current).
+  - **Right column**, in the left menu's order (#118): the top three open
+    alarms, failing checks and vulnerabilities (with Add to case each),
+    each with "Show all n" to the filtered list; then "Software, ports and
+    services" with counts and links to the host's lists.
+  - **The host's lists** (`/hosts/{id}/software|ports|services`,
+    `HostSubPage.tsx`): the panel's Software, Ports and Services tabs at
+    full width (software filtered on the server by name and "Fix
+    available", 200 at a time), with links between the three.
+  - **The host filter:** Alarms, Compliance and Vulnerabilities take
+    `host=ID` (`views/lists/HostChip.tsx`), shown as a removable chip
+    "Host: web-01 ×" and sent as `agent_id` (alarms) or `host`
+    (vulnerabilities); Compliance then lists that host's current findings
+    (`/compliance/latest?agent_id=`), one row per rule, each counted as
+    failing there, as the host page does. Bulk actions then name the host
+    (`agent_id`), so they touch it alone.
   **Last test** shows when the host last raised the harmless test alarm
-  and test finding (`openvibes-test alarm|finding`, from `last_test` on
-  the host detail), with both commands; test alarms and findings carry a
+  and test finding (`openvibes-test alarm|finding`, from `last_test` in
+  the summary), with both commands; test alarms and findings carry a
   Test badge in the lists (`views/lists/testRules.ts`).
   **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why", "To
   fix: …", and, when there is one, the command in a wrapped code block with
-  a copy button; an off host also shows
-  that line at the top of its Alarms tab. The list, panel and
+  a copy button. The list, page and
   host export call `last_seen_at` **Last heartbeat**. Its hover text
   says agents send one about every minute and a host is online within three
   minutes of the last. Online and offline changes show up without a reload:
@@ -769,13 +804,15 @@ for the pages not yet moved; its saved views stay in the browser.
   holds the state every area shares; each area's routes are in
   `demo/routes/` (hosts, findings, alarms, rules, cases, …). It follows the wire
   types and the permission model, with personas viewer, analyst, operator,
-  scoped operator, team lead and admin. Each persona signs in as a seeded
-  person (Vic, Sam, Ola, Pia, Lee, Alex) whose demo roles give its capabilities through
+  scoped operator, team lead, rule author and admin. Each persona signs in as a seeded
+  person (Vic, Sam, Ola, Pia, Lee, Rae, Alex) whose demo roles give its capabilities through
   `resolveCapabilities` in `demo/share.ts` (the port of `access/rbac.rs`);
   roles are Administrator, Viewer, Analyst and Operator on all hosts,
   "Windows lead" (Team lead on WindowsServers, held by Wen), "Pilot lead"
   (Team lead on Pilot hosts, the team lead persona) and "Operator (Prod)"
-  (the scoped operator). `routes/roles.ts` and
+  (the scoped operator), and "Rule author" on all hosts (the rule author
+  persona: hosts but no alarms, vulnerabilities or compliance, so a host's
+  page shows none of them). `routes/roles.ts` and
   `routes/access.ts` mirror the roles, people and service-account routes
   with their refusal codes (`stale_role`, `role_name_taken`, `role_in_use`
   with `holders`, `protected_role`, `missing_needs`, `unknown_group`,

@@ -18,7 +18,6 @@ import { ServiceAccountPanel } from "../panels/admin/ServiceAccountPanel";
 import { AdvisoryPanel } from "../panels/findings/AdvisoryPanel";
 import { AlarmPanel } from "../panels/alarms/AlarmPanel";
 import { CasePanel, NewCasePanel } from "../panels/cases/CasePanel";
-import { AgentPanel } from "../panels/hosts/AgentPanel";
 import { SiteRulePanel } from "../panels/rules/SiteRulePanel";
 import { PackagePanel, splitPackageId } from "../panels/hosts/PackagePanel";
 import { PortPanel, UnitPanel, splitPortId } from "../panels/hosts/PortPanel";
@@ -81,13 +80,15 @@ type PanelDef = {
   render: (id: string) => ReactNode;
 };
 
+/** An object's icon; a host is a page, not a panel (approved screen 17). */
+export const objectIcon = (kind: string): IconName => panels[kind]?.icon ?? (kind === "agent" ? "agents" : "layers");
+
 /** The best known name of an object: learned from its panel, else from its id. */
 export function objectTitle(ref: { kind: string; id: string }): string {
   return panelTitle(ref) ?? panels[ref.kind]?.title(ref.id) ?? ref.id;
 }
 
 export const panels: Readonly<Record<string, PanelDef>> = {
-  agent: { label: "Host", icon: "agents", title: (id) => id, render: (id) => <AgentPanel id={id} /> },
   alarm: { label: "Alarm", icon: "alarm", title: (id) => `#${id}`, render: (id) => <AlarmPanel id={id} /> },
   case: { label: "Case", icon: "cases", title: (id) => id === "new" ? "New case" : "Case", render: (id) => id === "new" ? <NewCasePanel /> : <CasePanel id={id} /> },
   finding: { label: "Compliance finding", icon: "findings", title: (id) => splitFindingId(id)[1], render: (id) => <FindingPanel id={id} /> },

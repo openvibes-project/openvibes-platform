@@ -40,15 +40,18 @@ export function hostsQuery(query: string): string {
   return params.toString();
 }
 
+/** A host's page (approved screen 17). */
+export const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
+
 /**
  * Old addresses as today's (plan ruling 1): `/agents?…` is the Hosts list,
- * and a host opened there (`?open=agent:ID`, the assistant's `?agent=ID`)
- * is that host's page.
+ * and a host panel opened on any view (`?open=agent:ID`, the assistant's
+ * `/agents?agent=ID`) is that host's page; the other panels stay open.
  */
 export function redirect(location: AppLocation): AppLocation {
+  const host = location.panels.find((p) => p.kind === "agent")?.id ?? (location.view === "/agents" ? location.params.get("agent") : null);
+  if (host) return { view: hostPath(host), panels: location.panels.filter((p) => p.kind !== "agent"), params: new URLSearchParams() };
   if (location.view !== "/agents") return location;
-  const host = location.panels.find((p) => p.kind === "agent")?.id ?? location.params.get("agent");
-  if (host) return { view: `/hosts/${encodeURIComponent(host)}`, panels: location.panels.filter((p) => p.kind !== "agent"), params: new URLSearchParams() };
   return { ...location, view: "/hosts", params: new URLSearchParams(hostsQuery(location.params.toString())) };
 }
 

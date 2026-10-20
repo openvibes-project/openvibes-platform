@@ -1,13 +1,14 @@
 # views/investigate
 
-The lists you investigate from. A row opens its panel from `panels/` in the inspector.
+The lists you investigate from. A row opens its panel from `panels/` in the inspector; a host opens its page.
 
 | File | What it does |
 |---|---|
-| `Hosts.tsx` | The Hosts list (screen 16): server filters with counts, saved views, columns, summary line and paging; `/hosts/{id}` shows the host's panel full width until its page is built. |
-| `Alarms.tsx` | Threat alarms, newest first. |
-| `Findings.tsx` | Compliance findings by rule. |
-| `Vulnerabilities.tsx` | Vulnerabilities by advisory. |
+| `Hosts.tsx` | The Hosts list (screen 16): server filters with counts, saved views, columns, summary line and paging; routes `/hosts/{id}` and `/hosts/{id}/software\|ports\|services` to `host/`. |
+| `host/` | A host's page (screen 17) and its software, ports and services pages; see its README. |
+| `Alarms.tsx` | Threat alarms, newest first; `host=` filters to one host. |
+| `Findings.tsx` | Compliance findings by rule; `host=` lists one host's current findings. |
+| `Vulnerabilities.tsx` | Vulnerabilities by advisory; `host=` filters to one host. |
 | `Software.tsx` | Packages across the fleet. |
 | `Ports.tsx` | Open ports and running services across the fleet. |
 | `Cases.tsx` | Cases: the list of investigations. |

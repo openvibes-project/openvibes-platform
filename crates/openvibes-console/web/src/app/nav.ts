@@ -2,7 +2,7 @@
 // browser's back button closes panels and returns to earlier views.
 import { useSyncExternalStore } from "react";
 
-import { type AppLocation, type PanelRef, formatLocation, parseLocation, popPanel, pushPanel, redirect } from "./location";
+import { type AppLocation, type PanelRef, formatLocation, hostPath, parseLocation, popPanel, pushPanel, redirect } from "./location";
 
 const base = import.meta.env.BASE_URL;
 const listeners = new Set<() => void>();
@@ -10,10 +10,10 @@ let snapshot: AppLocation = read();
 let snapshotKey = window.location.pathname + window.location.search;
 settle();
 
-/** An old /findings or /agents address: show the URL of the page it now
- * opens, in place, so history keeps no dead entry (plan ruling 1). */
+/** An old /findings or /agents address, or an old host panel: show the URL
+ * of the page it now opens, in place, so history keeps no dead entry (plan ruling 1). */
 function settle() {
-  if (!/\/(findings|agents)$/.test(window.location.pathname)) return;
+  if (!/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=agent(%3A|:)/i.test(window.location.search)) return;
   snapshotKey = formatLocation(snapshot, base);
   window.history.replaceState(null, "", snapshotKey);
 }
@@ -65,7 +65,12 @@ export const nav = {
     if (guard && !guard()) return;
     go({ view, panels: snapshot.panels, params: new URLSearchParams(params) });
   },
-  open(panel: PanelRef, fromList = false) { go(pushPanel(snapshot, panel, fromList)); },
+  /** A host is a page, not a panel (approved screen 17): opening one goes there. */
+  open(panel: PanelRef, fromList = false) {
+    if (panel.kind !== "agent") { go(pushPanel(snapshot, panel, fromList)); return; }
+    if (guard && !guard()) return;
+    go({ view: hostPath(panel.id), panels: fromList ? [] : snapshot.panels, params: new URLSearchParams() });
+  },
   back() { go(popPanel(snapshot)); },
   closeAll() { go({ ...snapshot, panels: [] }); },
   truncate(depth: number) { go({ ...snapshot, panels: snapshot.panels.slice(0, depth) }); },

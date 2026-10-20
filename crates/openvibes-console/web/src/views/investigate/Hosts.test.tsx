@@ -9,7 +9,7 @@ vi.hoisted(() => {
 });
 
 import type { HostList, HostRow } from "../../api/types";
-import { HostListBody, hostFilters, hostIdOf } from "./Hosts";
+import { HostListBody, hostFilters, hostIdOf, hostRoute } from "./Hosts";
 
 const row = (over: Partial<HostRow>): HostRow => ({
   id: "agent-1", hostname: "web-01", address: "10.0.1.3", status: "online", last_seen_at: "2026-10-20T10:00:00Z",
@@ -75,6 +75,12 @@ describe("Hosts", () => {
     expect(hostIdOf("/hosts/a%2Fb")).toBe("a/b");
     expect(hostIdOf("/hosts/%E0%A4%A")).toBeNull();
     expect(hostIdOf("/hosts/")).toBeNull();
+    expect(hostRoute("/hosts/a%2Fb")).toEqual({ id: "a/b", page: null });
+    expect(hostRoute("/hosts/agent-1/software")).toEqual({ id: "agent-1", page: "software" });
+    expect(hostRoute("/hosts/agent-1/services")).toEqual({ id: "agent-1", page: "services" });
+    expect(hostRoute("/hosts/agent-1/nope")).toBeNull();
+    expect(hostRoute("/hosts/agent-1/toString")).toBeNull();
+    expect(hostRoute("/hosts/agent-1/ports/x")).toBeNull();
   });
 
   it("leaves hidden columns out", () => {

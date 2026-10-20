@@ -102,3 +102,4 @@ export type SavedViewList = S["SavedViewList"];
 export type ListColumns = S["ListColumnsView"];
 export type HostList = S["HostListView"];
 export type HostRow = S["HostRowView"];
+export type HostSummary = S["HostSummaryView"];

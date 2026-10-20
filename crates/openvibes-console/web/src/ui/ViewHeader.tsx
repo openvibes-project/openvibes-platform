@@ -43,9 +43,11 @@ type Props = {
   chips?: readonly Chip[];
   actions?: ReactNode;
   refresh?: string;
+  /** Filters set elsewhere, shown as removable chips (the host filter). */
+  filters?: ReactNode;
 };
 
-export function ViewHeader({ title, count, total, placeholder = "Filter…", chips = [], actions, refresh }: Props) {
+export function ViewHeader({ title, count, total, placeholder = "Filter…", chips = [], actions, refresh, filters }: Props) {
   const { view, params } = useLocation();
   const [saved, setSaved] = useState(() => readSaved(view));
   const [naming, setNaming] = useState(false);
@@ -111,6 +113,7 @@ export function ViewHeader({ title, count, total, placeholder = "Filter…", chi
             onChange={(event) => nav.setParams({ q: event.target.value })} />
           <span className="kbd view-header__kbd" aria-hidden="true">/</span>
         </label>
+        {filters}
         {chips.length > 0 && (
           <div className="row row--wrap" role="group" aria-label="Quick filters">
             {chips.map((chip) => {
