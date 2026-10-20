@@ -5,7 +5,7 @@
 // where its own permission reaches (plan rulings 2–7).
 import type { Agent, HostList } from "../../api/types";
 import type { DemoContext } from "../context";
-import { distribution, distributionName, inCidr, inGroup, isActive, osFamily } from "../hostGroups";
+import { distribution, distributionName, hasControl, inCidr, inGroup, isActive, osFamily } from "../hostGroups";
 import { json, problem } from "../http";
 import { LATEST_AGENT_VERSION } from "./session";
 import { compareVersions, older } from "../versionOrder";
@@ -13,7 +13,7 @@ import { compareVersions, older } from "../versionOrder";
 type Facet = "status" | "os" | "group" | "label" | "problems" | "agent";
 type Host = {
   agent: Agent; status: string; family: string | null; address: string | null; labels: string[]; groups: string[];
-  open_alarms: number | null; critical: number | null; failing: number | null; older: boolean | null;
+  open_alarms: number | null; critical: number | null; failing: number | null; older: boolean | null; alarms_off: boolean;
 };
 
 const STATUS = ["online", "offline", "revoked", "imported"];
@@ -35,6 +35,13 @@ export function registerHostListRoutes(ctx: DemoContext) {
     const closed: [string, string | null, string[]][] = [["status", chosen.status, STATUS], ["os", chosen.os, ["linux", "windows"]],
       ["problems", chosen.problems, PROBLEMS], ["agent", chosen.agent, AGENT], ["sort", get("sort"), SORTS], ["dir", get("dir"), ["asc", "desc"]]];
     for (const [field, value, allowed] of closed) if (value !== null && !allowed.includes(value)) return invalid(field);
+    // The same text limits as the server; a group must have the demo's id
+    // shape (grp-…), standing in for the server's UUID check.
+    for (const [field, max] of [["q", 200], ["label", 64]] as const) {
+      const v = get(field);
+      if (v !== null && ([...v].length > max || hasControl(v))) return invalid(field);
+    }
+    if (chosen.group !== null && !/^grp-[a-z0-9-]{1,64}$/.test(chosen.group)) return invalid("group");
     const offset = Number(get("offset") ?? 0);
     const limit = Number(get("limit") ?? 50);
     if (!Number.isInteger(offset) || offset < 0 || offset > 100_000) return invalid("offset");
@@ -44,7 +51,8 @@ export function registerHostListRoutes(ctx: DemoContext) {
     const q = (get("q") ?? "").trim().toLowerCase();
     const base: Host[] = data.agents.filter((a) => visible(a.id)).flatMap((agent) => {
       const address = data.addresses.get(agent.id) ?? null;
-      if (q && !(agent.hostname ?? "").toLowerCase().includes(q) && !(address ?? "").startsWith(q) && !(q.includes("/") && address && inCidr(address, q))) return [];
+      if (q && !(agent.hostname ?? "").toLowerCase().includes(q) && !agent.id.toLowerCase().startsWith(q)
+        && !(address ?? "").startsWith(q) && !(q.includes("/") && address && inCidr(address, q))) return [];
       const f = facts(agent);
       return [{
         agent, address, status: statusOf(agent), family: osFamily(f), labels: [...(data.labels.get(agent.id) ?? [])].sort(),
@@ -55,6 +63,8 @@ export function registerHostListRoutes(ctx: DemoContext) {
           ? data.vulnerabilities.filter((v) => v.agent_id === agent.id && v.fixed_at == null && v.severity === "critical").length : null,
         failing: reaches("compliance.read", agent.id) ? data.findings.filter((x) => x.agent_id === agent.id).length : null,
         older: agent.scanner_version ? older(agent.scanner_version, latest) : null,
+        // Online with alarms off by a fault (alarms_status: off by choice is quiet).
+        alarms_off: agent.status === "active" && agent.alarms?.state === "off" && agent.alarms.fault,
       }];
     });
     const holds = (h: Host, facet: Facet): boolean => {
@@ -84,11 +94,19 @@ export function registerHostListRoutes(ctx: DemoContext) {
     const byGroup = tally(except("group"), (h) => h.groups);
     const byLabel = tally(except("label"), (h) => h.labels);
     const groupOf = new Map(data.access.host_groups.map((g) => [g.asset_group_id, g]));
-    // Groups with a matching host in reach, plus the chosen one (when in reach); by name.
-    const groupIds = [...byGroup.keys(), ...(chosen.group && groupOf.has(chosen.group) && !byGroup.has(chosen.group)
-      && (!ctx.scoped || base.some((h) => h.groups.includes(chosen.group ?? ""))) ? [chosen.group] : [])];
-    const labelKeys = [...byLabel.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 50).map(([k]) => k);
-    if (chosen.label && !labelKeys.includes(chosen.label) && base.some((h) => h.labels.includes(chosen.label ?? ""))) labelKeys.push(chosen.label);
+    // Groups with a matching host in reach, plus the chosen one when the hosts
+    // scope reaches it (a member in reach, a global scope, or one of the scope's groups); by name.
+    const scope = ctx.capabilities.find((c) => c.permission === "hosts.read")?.scope;
+    const reachable = (g: string) => base.some((h) => h.groups.includes(g)) || scope?.kind === "global"
+      || (scope?.kind === "asset_groups" && scope.asset_group_ids.includes(g));
+    const groupIds = [...[...byGroup].filter(([, n]) => n > 0).map(([g]) => g),
+      ...(chosen.group && groupOf.has(chosen.group) && !byGroup.get(chosen.group) && reachable(chosen.group) ? [chosen.group] : [])];
+    // The 50 most used labels on matching hosts, plus the chosen one (when on a
+    // visible host), all most used first: a chosen label with 0 sorts into place.
+    const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    const used = [...byLabel].filter(([l, n]) => n > 0 && l !== chosen.label).sort((a, b) => b[1] - a[1] || byteOrder(a[0], b[0])).slice(0, 50);
+    if (chosen.label && data.agents.some((a) => visible(a.id) && (data.labels.get(a.id) ?? []).includes(chosen.label ?? ""))) used.push([chosen.label, byLabel.get(chosen.label) ?? 0]);
+    const labelKeys = used.sort((a, b) => b[1] - a[1] || byteOrder(a[0], b[0])).map(([k]) => k);
 
     const matching = except(null);
     const dir = get("dir") === "desc" ? -1 : 1;
@@ -97,7 +115,7 @@ export function registerHostListRoutes(ctx: DemoContext) {
     const key: Record<string, (a: Host, b: Host) => number> = {
       host: (a, b) => dir * (a.agent.hostname ?? "").toLowerCase().localeCompare((b.agent.hostname ?? "").toLowerCase()),
       heartbeat: (a, b) => last(a.agent.last_seen_at, b.agent.last_seen_at) || dir * (a.agent.last_seen_at ?? "").localeCompare(b.agent.last_seen_at ?? ""),
-      version: (a, b) => last(a.agent.scanner_version, b.agent.scanner_version) || dir * compareVersions(a.agent.scanner_version, b.agent.scanner_version),
+      version: (a, b) => compareVersions(a.agent.scanner_version, b.agent.scanner_version, dir),
       problems: (a, b) => dir * (sum(a) - sum(b)),
     };
     const order = key[get("sort") ?? "host"] ?? key.host;
@@ -114,7 +132,7 @@ export function registerHostListRoutes(ctx: DemoContext) {
           groups: groups.slice(0, 2).map((id) => ({ id, name: groupOf.get(id)?.name ?? id, kind: groupOf.get(id)?.kind ?? "manual" })),
           group_count: groups.length, labels: h.labels,
           problems: { open_alarms: h.open_alarms, critical: h.critical, failing: h.failing },
-          agent: { version: h.agent.scanner_version ?? null, older: h.older },
+          agent: { version: h.agent.scanner_version ?? null, older: h.older }, alarms_off: h.alarms_off,
         };
       }),
       total: matching.length,

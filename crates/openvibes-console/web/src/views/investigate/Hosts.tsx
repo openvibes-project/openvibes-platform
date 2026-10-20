@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { invalidate, useResource } from "../../api/client";
 import type { HostList, HostRow } from "../../api/types";
 import { hostsQuery } from "../../app/location";
-import { nav, useLocation } from "../../app/nav";
+import { nav, useLocation, viewLink } from "../../app/nav";
 import { AgentPanel } from "../../panels/hosts/AgentPanel";
 import { Ago, Empty, ErrorBox, Loading, SAVED_HEARTBEAT_HINT, StatusBadge } from "../../ui/bits";
 import { type Column, DataTable } from "../../ui/DataTable";
@@ -18,6 +18,8 @@ import { importBrowserViews, useHiddenColumns } from "../../ui/list/savedViews";
 import { SummaryLine } from "../../ui/list/SummaryLine";
 
 const PAGE_SIZE = 50;
+const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
+const ALARMS_OFF = "Threat alarms are off on this host because of a fault, not by choice. Its page says why and how to turn them on.";
 /** The list's columns (keys as the console keeps hidden ones), Host first. */
 const COLUMNS = [
   { key: "host", label: "Host" }, { key: "os", label: "OS" }, { key: "groups", label: "Groups" }, { key: "labels", label: "Labels" },
@@ -61,9 +63,14 @@ export function hostFilters(list: HostList | undefined): ListFilter[] {
   ];
 }
 
+/** "—" on screen, `text` for screen readers and on hover. */
+function Dash({ text }: { text: string }) {
+  return <span className="subtle" title={text}><span aria-hidden="true">—</span><span className="sr-only">{text}</span></span>;
+}
+
 /** One problem count; "—" where the viewer may not read that kind on the host. */
 function Count({ n, what, tone }: { n: number | null | undefined; what: string; tone: string }) {
-  if (n == null) return <span className="subtle" title={`You can’t see ${what} on this host`}>—</span>;
+  if (n == null) return <Dash text={`You can’t see ${what} on this host`} />;
   return <span className={n > 0 ? tone : "subtle"} title={`${n.toLocaleString()} ${what}`}>{n.toLocaleString()}</span>;
 }
 
@@ -77,20 +84,20 @@ function agentNote(row: HostRow, latest: string | null): { older: boolean; title
 function columns(latest: string | null): Column<HostRow>[] {
   return [
     { key: "host", header: header("host"), sort: (h) => h.hostname ?? h.id, render: (h) => (
-      <div className="cell-two"><span className="truncate">{h.hostname ?? h.id}</span><span className="mono subtle">{h.address ?? "—"}</span></div>
+      <div className="cell-two"><a className="truncate" {...viewLink(hostPath(h.id))}>{h.hostname ?? h.id}</a>{h.address ? <span className="mono subtle">{h.address}</span> : <Dash text="No address reported" />}</div>
     ) },
     { key: "os", header: header("os"), width: "150px", hideBelow: 700, render: (h) => (
-      <div className="cell-two"><span>{h.os.distribution ?? "—"}</span><span className="subtle">{OS[h.os.family ?? ""] ?? h.os.family ?? ""}</span></div>
+      <div className="cell-two">{h.os.distribution ? <span>{h.os.distribution}</span> : <Dash text="OS not reported" />}<span className="subtle">{OS[h.os.family ?? ""] ?? h.os.family ?? ""}</span></div>
     ) },
     { key: "groups", header: header("groups"), hideBelow: 900, render: (h) => (
       <span className="row row--wrap">
         {h.groups.map((g) => <span key={g.id} className="badge badge--plain">{g.name}</span>)}
         {h.group_count > h.groups.length && <span className="subtle" title={`${h.group_count} groups`}>+{h.group_count - h.groups.length}</span>}
-        {h.group_count === 0 && <span className="subtle">—</span>}
+        {h.group_count === 0 && <Dash text="In no group" />}
       </span>
     ) },
     { key: "labels", header: header("labels"), hideBelow: 1000, render: (h) => (
-      <span className="row row--wrap">{h.labels.length === 0 ? <span className="subtle">—</span> : h.labels.map((l) => <span key={l} className="badge badge--plain">{l}</span>)}</span>
+      <span className="row row--wrap">{h.labels.length === 0 ? <Dash text="No labels" /> : h.labels.map((l) => <span key={l} className="badge badge--plain">{l}</span>)}</span>
     ) },
     { key: "problems", header: header("problems"), width: "210px", hideBelow: 640, sort: (h) => (h.problems.open_alarms ?? 0) + (h.problems.critical ?? 0) + (h.problems.failing ?? 0), render: (h) => (
       <span className="nowrap">
@@ -100,10 +107,12 @@ function columns(latest: string | null): Column<HostRow>[] {
       </span>
     ) },
     { key: "heartbeat", header: header("heartbeat"), width: "120px", sort: (h) => h.last_seen_at, render: (h) => (
-      <div className="cell-two"><span><StatusBadge status={h.status} /></span><span className="subtle"><Ago value={h.last_seen_at} hint={SAVED_HEARTBEAT_HINT} /></span></div>
+      <div className="cell-two"><span className="row row--wrap"><StatusBadge status={h.status} />{h.alarms_off && (
+        <span className="badge badge--warn" title={ALARMS_OFF}>Alarms off</span>
+      )}</span><span className="subtle"><Ago value={h.last_seen_at} hint={SAVED_HEARTBEAT_HINT} /></span></div>
     ) },
     { key: "agent", header: header("agent"), width: "100px", hideBelow: 600, sort: (h) => h.agent.version, render: (h) => {
-      if (!h.agent.version) return <span className="subtle">—</span>;
+      if (!h.agent.version) return <Dash text="Agent version not reported" />;
       const note = agentNote(h, latest);
       return <span className={note.older ? "mono warn-text" : "mono"} title={note.title}>{h.agent.version}</span>;
     } },
@@ -136,7 +145,7 @@ export function HostListBody({ list, hidden, offset = 0 }: { list: HostList; hid
     <>
       <div className="view-pad host-summary"><SummaryLine parts={parts} /></div>
       <DataTable label="Hosts" rows={list.items} rowKey={(h) => h.id} serverSort defaultSort={{ key: "host", direction: "asc" }}
-        onOpen={(h) => nav.view(`/hosts/${encodeURIComponent(h.id)}`)}
+        onOpen={(h) => nav.view(hostPath(h.id))}
         columns={columns(latest).filter((c) => !hidden.includes(c.key))} />
       <Pager offset={offset} shown={list.items.length} total={list.total} />
     </>
@@ -181,11 +190,21 @@ function HostListView() {
 
 /** A host's page. Until it is built (roles step 4, task 7) it shows the
  * host's panel at full width, so no link to a host leads nowhere. */
-function HostPage({ id }: { id: string }) {
+function HostPage({ id }: { id: string | null }) {
+  if (id === null) return <div className="view"><Empty icon="agents" title="No such host">This address does not name a host.</Empty></div>;
   return <div className="view host-page"><AgentPanel id={id} /></div>;
+}
+
+/** The host id in a /hosts/{id} path; null when the path is not one (bad escapes). */
+export function hostIdOf(view: string): string | null {
+  try {
+    return decodeURIComponent(view.slice("/hosts/".length)) || null;
+  } catch {
+    return null;
+  }
 }
 
 export function Hosts() {
   const { view } = useLocation();
-  return view.startsWith("/hosts/") ? <HostPage id={decodeURIComponent(view.slice("/hosts/".length))} /> : <HostListView />;
+  return view.startsWith("/hosts/") ? <HostPage id={hostIdOf(view)} /> : <HostListView />;
 }

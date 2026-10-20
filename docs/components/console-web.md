@@ -439,14 +439,19 @@ triage on alarms and findings stays as it is.
 
 - **Hosts** (`/hosts`, `g a`; approved screen 16): `views/investigate/Hosts.tsx`
   over `GET /api/v1/hosts`, filtered, counted, sorted and paged on the
-  server. The FilterBar's chips are Status (online, offline, revoked,
+  server. The search matches a host name (contains), an agent id or an
+  address (prefix), or a CIDR range. The host name is a link to the host's
+  page (a new tab works too); an empty cell shows "—" with its meaning for
+  screen readers. The FilterBar's chips are Status (online, offline, revoked,
   imported), OS, Group, Label, Problems (has critical, has open alarms,
   none open) and Agent (older than the latest, the latest), each value with
   the server's count under the other filters; saved views and columns are
   the page `hosts`. Columns: Host and IP; OS (distribution, family); Groups
   (two, then "+n"); Labels; Open problems (alarms, critical, failing, "—"
   where the viewer may not read that kind on the host); Last heartbeat with
-  the status; Agent version (amber, with a title, when older than the
+  the status, and an "Alarms off" warning beside it when the host is online
+  with threat alarms off by a fault (`alarms_off`; off by choice stays
+  quiet); Agent version (amber, with a title, when older than the
   latest agent release; never amber while that release is unknown). The
   summary line reads "9 online · 4 with an older agent · 4 with critical
   vulnerabilities" (the older part left out while the latest release is
@@ -466,7 +471,7 @@ triage on alarms and findings stays as it is.
   navigation to `/agents` (the dashboard List widget's "Open list").
 - **Host page** (`/hosts/{id}`): a row opens it. Until the page of screen
   17 is built it shows the `agent` panel's content at full width
-  (`.host-page`). The panel itself (still opened from other objects): Findings, Vulnerabilities, **Alarms** (active
+  (`.host-page`); a malformed address says "No such host". The panel itself (still opened from other objects): Findings, Vulnerabilities, **Alarms** (active
   ones), **Software** (the host's packages, filtered on the server by name
   and "Fix available", 200 at a time) and Details (identity, system and
   running kernel, "software as of", threat alarms, groups and labels, certificates).
@@ -483,7 +488,9 @@ triage on alarms and findings stays as it is.
   minutes of the last. Online and offline changes show up without a reload:
   `app/livePresence.ts` keeps `GET /api/v1/agents/events` open (a fetch marked
   background, so it does not extend the session) and refetches the agent
-  views, at most every two seconds, when the server reports a change.
+  views, the Hosts list and the host summaries (`PRESENCE_PREFIXES`:
+  `/api/v1/agents`, `/api/v1/hosts`), at most every two seconds, when the
+  server reports a change.
 - **Software** (`/software`, `g w`): packages across the caller's hosts with
   hosts, versions (highlighted when more than one is in use), open
   advisories (worst severity, count, no-fix count, an Exploited flag) and
@@ -559,8 +566,11 @@ for the pages not yet moved; its saved views stay in the browser.
   inside the persona's `hosts.read` reach and each problem count only where
   its permission `reaches`; groups from `demo/hostGroups.ts`, labels from
   the demo data, versions by `demo/versionOrder.ts` (the twin of
-  `version_order.rs`, tested on the same table) against the about/update
-  route's `LATEST_AGENT_VERSION`.
+  `version_order.rs`, tested on the same table; its sort compares as SQL's
+  int[] with unknown versions last either way) against the about/update
+  route's `LATEST_AGENT_VERSION`. The same 400s for a bad value, a `q` over
+  200 or a `label` over 64 characters; a `group` must have the demo's id
+  shape (`grp-…`), standing in for the server's UUID check.
 - **Tests:** `ui/list/FilterBar.test.tsx`, `ui/list/savedViews.test.ts`,
   `ui/detail/DetailPage.test.tsx`, `demo/routes/lists.test.ts`,
   `views/investigate/Hosts.test.tsx`, `demo/versionOrder.test.ts`,

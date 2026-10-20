@@ -28,8 +28,13 @@ describe("versionOrder", () => {
     expect(older(version, latest)).toBe(want);
   });
 
-  it("sorts numerically, a pre-release before its release, unknown last", () => {
+  it("sorts numerically, a pre-release before its release, unknown last both ways", () => {
     const sorted = ["0.10.0", "x", "0.9.9", "0.10.0-rc.1", "0.4.2"].sort((a, b) => compareVersions(a, b));
     expect(sorted).toEqual(["0.4.2", "0.9.9", "0.10.0-rc.1", "0.10.0", "x"]);
+    const down = ["0.10.0", "x", "0.9.9", "0.10.0-rc.1", "0.4.2"].sort((a, b) => compareVersions(a, b, -1));
+    expect(down).toEqual(["0.10.0", "0.10.0-rc.1", "0.9.9", "0.4.2", "x"]);
+    // As SQL compares int[]: trailing zero segments dropped, then the shorter first.
+    expect(compareVersions("1.0", "1.0.0")).toBe(0);
+    expect(compareVersions("1.2", "1.2.1")).toBeLessThan(0);
   });
 });

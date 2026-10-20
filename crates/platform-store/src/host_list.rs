@@ -29,13 +29,13 @@ macro_rules! values {
             /// Every value, in display order.
             pub const ALL: &'static [Self] = &[$(Self::$variant),+];
 
-            /// The URL and SQL spelling.
+            /// The SQL spelling; also the URL's, except for `Problems`.
             #[must_use]
             pub fn as_str(self) -> &'static str {
                 match self { $(Self::$variant => $text),+ }
             }
 
-            /// Parses the URL spelling.
+            /// Parses that spelling.
             #[must_use]
             pub fn parse(text: &str) -> Option<Self> {
                 Self::ALL.iter().copied().find(|v| v.as_str() == text)
@@ -59,7 +59,8 @@ values!(
 );
 
 values!(
-    /// The Problems filter (ruling 4).
+    /// The Problems filter (ruling 4). Its URL spelling (`critical`,
+    /// `alarms`, `none`) is the console's `list_types::problems_value`.
     Problems {
         /// At least one critical vulnerability.
         Critical = "critical",
@@ -97,7 +98,7 @@ values!(
 /// What the list asks for. `offset` is held to 0–100000 and `limit` to 1–100.
 #[derive(Clone, Debug)]
 pub struct HostQuery<'a> {
-    /// Host name (contains, any case), IP prefix, or CIDR containment.
+    /// Host name (contains, any case), agent id or IP prefix, or CIDR containment.
     pub q: Option<&'a str>,
     /// Status.
     pub status: Option<HostStatus>,
@@ -173,6 +174,9 @@ pub struct HostRow {
     pub scanner_version: Option<String>,
     /// Older than the latest agent release.
     pub agent_older: Option<bool>,
+    /// Online, with threat alarms off by a fault (not by choice): the same
+    /// rule as the host's `alarms` status (`alarms_status`).
+    pub alarms_off: bool,
 }
 
 /// Hosts per filter value, each with the other filters applied.
@@ -297,6 +301,7 @@ fn host_row(row: &Row) -> Option<HostRow> {
     let ids: Vec<String> = row.get::<_, Option<_>>(10).unwrap_or_default();
     let names: Vec<String> = row.get::<_, Option<_>>(11).unwrap_or_default();
     let kinds: Vec<String> = row.get::<_, Option<_>>(12).unwrap_or_default();
+    let status = HostStatus::parse(row.get(8)).unwrap_or(HostStatus::Offline);
     Some(HostRow {
         agent_id,
         hostname: row.get(2),
@@ -305,7 +310,7 @@ fn host_row(row: &Row) -> Option<HostRow> {
         os_version: row.get(5),
         distribution: row.get(6),
         os_family: row.get(7),
-        status: HostStatus::parse(row.get(8)).unwrap_or(HostStatus::Offline),
+        status,
         last_seen_at: row.get(9),
         groups: ids
             .into_iter()
@@ -320,6 +325,14 @@ fn host_row(row: &Row) -> Option<HostRow> {
         failing: row.get(17),
         scanner_version: row.get(18),
         agent_older: row.get(19),
+        alarms_off: status == HostStatus::Online
+            && matches!(
+                crate::alarms_status::alarms_status(
+                    row.get(20),
+                    row.get::<_, Option<serde_json::Value>>(21).as_ref()
+                ),
+                Some(crate::alarms_status::AlarmsStatus::Off { fault: true, .. })
+            ),
     })
 }
 

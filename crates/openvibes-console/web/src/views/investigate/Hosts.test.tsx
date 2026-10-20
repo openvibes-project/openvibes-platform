@@ -9,13 +9,13 @@ vi.hoisted(() => {
 });
 
 import type { HostList, HostRow } from "../../api/types";
-import { HostListBody, hostFilters } from "./Hosts";
+import { HostListBody, hostFilters, hostIdOf } from "./Hosts";
 
 const row = (over: Partial<HostRow>): HostRow => ({
   id: "agent-1", hostname: "web-01", address: "10.0.1.3", status: "online", last_seen_at: "2026-10-20T10:00:00Z",
   os: { id: "debian", version: "12", distribution: "Debian 12", family: "linux" },
   groups: [{ id: "g1", name: "Linux", kind: "automatic" }, { id: "g2", name: "Production", kind: "rule" }], group_count: 3,
-  labels: ["pci"], problems: { open_alarms: 2, critical: 1, failing: 0 }, agent: { version: "0.4.1", older: true }, ...over,
+  labels: ["pci"], problems: { open_alarms: 2, critical: 1, failing: 0 }, agent: { version: "0.4.1", older: true }, alarms_off: false, ...over,
 });
 const list = (over: Partial<HostList> = {}): HostList => ({
   items: [row({}), row({ id: "agent-2", hostname: "win-01", address: null, os: { family: "windows", distribution: "Windows 11" }, groups: [], group_count: 0, labels: [],
@@ -53,8 +53,28 @@ describe("Hosts", () => {
 
   it("shows — for a problem kind the viewer cannot read on that host", () => {
     const html = render(list({ items: [row({ problems: { open_alarms: null, critical: 0, failing: null } })] }));
-    expect(html).toMatch(/title="You can’t see open alarms on this host">—</);
-    expect(html).toMatch(/title="You can’t see failing checks on this host">—</);
+    expect(html).toContain('title="You can’t see open alarms on this host"><span aria-hidden="true">—</span><span class="sr-only">You can’t see open alarms on this host</span>');
+    expect(html).toContain('<span class="sr-only">You can’t see failing checks on this host</span>');
+  });
+
+  it("warns of threat alarms off by a fault beside the status", () => {
+    const html = render(list({ items: [row({ alarms_off: true }), row({ id: "agent-2", hostname: "web-02" })] }));
+    expect(html.match(/>Alarms off</g)).toHaveLength(1);
+    expect(html).toMatch(/class="badge badge--warn" title="Threat alarms are off on this host because of a fault/);
+  });
+
+  it("links each host name to its page, and says what an empty cell means", () => {
+    const html = render(list({ items: [row({ address: null, labels: [] })] }));
+    expect(html).toContain('href="/hosts/agent-1"');
+    expect(html).toContain('<span class="sr-only">No address reported</span>');
+    expect(html).toContain('<span class="sr-only">No labels</span>');
+  });
+
+  it("reads the host id from its page path, refusing a malformed one", () => {
+    expect(hostIdOf("/hosts/agent.00000000-0000-4000-8000-0000000000a1")).toBe("agent.00000000-0000-4000-8000-0000000000a1");
+    expect(hostIdOf("/hosts/a%2Fb")).toBe("a/b");
+    expect(hostIdOf("/hosts/%E0%A4%A")).toBeNull();
+    expect(hostIdOf("/hosts/")).toBeNull();
   });
 
   it("leaves hidden columns out", () => {

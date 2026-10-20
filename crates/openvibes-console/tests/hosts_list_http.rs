@@ -148,6 +148,7 @@ async fn an_administrator_sees_rows_counts_and_a_summary() {
     assert_eq!(w1["problems"]["open_alarms"], 1);
     assert_eq!(w1["problems"]["critical"], 2);
     assert_eq!(w1["agent"]["version"], "0.4.1");
+    assert_eq!(w1["alarms_off"], false);
     assert!(w1["agent"]["older"].is_null());
     assert_eq!(body["summary"]["online"], 2);
     let status_count = |v: &str| {

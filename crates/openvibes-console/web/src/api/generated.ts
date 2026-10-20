@@ -3991,6 +3991,11 @@ export interface components {
             /** @description Agent. */
             agent: components["schemas"]["HostAgentView"];
             /**
+             * @description Online with threat alarms off by a fault (not by choice): the list
+             *     warns "Alarms off".
+             */
+            alarms_off: boolean;
+            /**
              * Format: int64
              * @description All its groups.
              */
@@ -9611,7 +9616,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Host name, address prefix or CIDR range. */
+                /** @description Host name (contains), agent id or address prefix, or CIDR range. */
                 q: string | null;
                 /** @description online, offline, revoked or imported. */
                 status: string | null;

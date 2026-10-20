@@ -27,7 +27,7 @@ use crate::{
 #[derive(Deserialize, IntoParams)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HostListParams {
-    /// Host name, address prefix or CIDR range.
+    /// Host name (contains), agent id or address prefix, or CIDR range.
     q: Option<String>,
     /// online, offline, revoked or imported.
     status: Option<String>,

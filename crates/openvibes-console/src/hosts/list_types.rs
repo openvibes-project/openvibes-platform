@@ -75,6 +75,9 @@ pub(crate) struct HostRowView {
     pub problems: HostProblemsView,
     /// Agent.
     pub agent: HostAgentView,
+    /// Online with threat alarms off by a fault (not by choice): the list
+    /// warns "Alarms off".
+    pub alarms_off: bool,
 }
 
 /// A filter value and how many hosts have it.
@@ -178,6 +181,7 @@ impl From<HostRow> for HostRowView {
                 version: r.scanner_version,
                 older: r.agent_older,
             },
+            alarms_off: r.alarms_off,
         }
     }
 }

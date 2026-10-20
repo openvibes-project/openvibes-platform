@@ -29,7 +29,7 @@ fn n<K: PartialEq>(values: &[(K, i64)], key: K) -> i64 {
 }
 
 #[tokio::test]
-async fn search_matches_name_and_address() {
+async fn search_matches_name_agent_id_and_address() {
     let (db, c) = common::migrated().await;
     fleet(&c).await;
     for (q, want) in [
@@ -40,6 +40,14 @@ async fn search_matches_name_and_address() {
             vec!["app-01", "db-01", "old-01", "web-01", "web-02"],
         ),
         ("WEB-01", vec!["web-01"]),
+        ("agent.00000000-0000-4000-8000-000000000003", vec!["db-01"]),
+        (
+            "AGENT.00000000-0000-4000-8000-00000000000",
+            vec![
+                "app-01", "db-01", "mail-01", "old-01", "web-01", "web-02", "win-01",
+            ],
+        ),
+        ("import.", vec!["imp-01"]),
         ("10.0.0.0/99", vec![]),
         ("10.0.0.0/+8", vec![]),
         ("10.0.0.0/33", vec![]),
@@ -361,5 +369,34 @@ async fn groups_column_shows_two_and_a_count() {
         counted,
         [("Alpha", 1), ("Linux", 5), ("Web", 2), ("Windows box", 1)]
     );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn alarms_off_marks_only_online_hosts_off_by_a_fault() {
+    let (db, c) = common::migrated().await;
+    fleet(&c).await;
+    // web-01 and db-01 (offline) report no source (a fault); web-02 never
+    // enabled process events (off by choice); win-01 is on through audit.
+    let fault = r#"{"collector": "ok", "events_dropped_total": 0, "alarms_dropped_total": 0, "pending": 0,
+        "platform_unsupported": false, "rules_accepted": 1, "rules_refused": 0, "rules_without_prefilter": 0,
+        "events_budget_cut_total": 0, "source": "none", "fallback": {"detail": "no_btf", "audit_rule_loaded": true}}"#;
+    let on = fault.replace(r#""source": "none""#, r#""source": "audit""#);
+    c.batch_execute(&format!(
+        "UPDATE agents SET health_at = now(), health = jsonb_build_object('alarms', '{fault}'::jsonb) WHERE agent_id IN ('{}', '{}');
+         UPDATE agents SET health_at = now(), health = '{{\"alarms\": null}}'::jsonb WHERE agent_id = '{}';
+         UPDATE agents SET health_at = now(), health = jsonb_build_object('alarms', '{on}'::jsonb) WHERE agent_id = '{}';",
+        id(1), id(3), id(2), id(4)
+    ))
+    .await
+    .unwrap();
+    let page = run(&c, &query(), &everywhere(), None).await;
+    let off: Vec<&str> = page
+        .rows
+        .iter()
+        .filter(|r| r.alarms_off)
+        .map(|r| r.hostname.as_deref().unwrap())
+        .collect();
+    assert_eq!(off, ["web-01"]);
     db.drop().await;
 }

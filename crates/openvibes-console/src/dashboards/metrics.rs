@@ -174,7 +174,7 @@ pub static CATALOGUE: [Metric; 21] = [
     ),
     m!(
         "agents.stale",
-        "Stale hosts",
+        "Offline hosts",
         &[AG],
         Expr::HostsWhere("status = 'stale'")
     ),

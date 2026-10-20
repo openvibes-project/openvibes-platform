@@ -892,7 +892,8 @@ Also renamed: the cases API's item kind `finding` is now `compliance_finding`
 ## Hosts list
 
 `GET /api/v1/hosts` (needs `hosts.read`; session or bearer) pages the Hosts
-list. Filters `q`, `status`, `os`, `group`, `label`, `problems`
+list. Filters `q` (host name contains, agent id or address starts with, or a
+CIDR range), `status`, `os`, `group`, `label`, `problems`
 (`critical|alarms|none`) and `agent` (`older|latest`) each take one value and
 AND together; `sort` (`host|heartbeat|version|problems`), `dir`, `offset`
 (0..=100000) and `limit` (1..=100, default 50). An invalid value or an
@@ -902,7 +903,9 @@ parameter takes it (`problems` counts are `critical`, `alarms`, `none`), so
 a chosen value filters. Rows, per-filter `counts` and the `summary` line
 are inside the caller's `hosts.read` reach; open-alarm, critical and failing
 counts are null for hosts outside the caller's `alarms.read`,
-`vulnerabilities.read` or `compliance.read` reach. `latest_agent_version` is
+`vulnerabilities.read` or `compliance.read` reach. `alarms_off` is true for an online
+host whose threat alarms are off by a fault (the rule of the host's
+`alarms` status; off by choice is false). `latest_agent_version` is
 the update checker's last-known agent release (null when the checker is off
 or has not found one yet); it is looked up in the background at start, so it
 fills a few seconds after start, and the route never waits on the network. A store failure is 503.

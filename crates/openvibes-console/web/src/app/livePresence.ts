@@ -13,6 +13,8 @@ import { inDemo, invalidate } from "../api/client";
 const MIN_REFRESH_MS = 2000;
 /** Wait before reconnecting after the stream ends or fails. */
 const RECONNECT_MS = 3000;
+/** What a change refetches: the agent views, the Hosts list and the host summaries. */
+export const PRESENCE_PREFIXES = ["/api/v1/agents", "/api/v1/hosts"] as const;
 
 /** Reads event-stream text and calls `onEvent` for each `presence` event.
  *  Returns what is left of an unfinished line, to prepend to the next chunk. */
@@ -40,7 +42,7 @@ export function useLivePresence(enabled: boolean): void {
       pending = window.setTimeout(() => {
         pending = undefined;
         last = Date.now();
-        invalidate("/api/v1/agents");
+        for (const prefix of PRESENCE_PREFIXES) invalidate(prefix);
       }, wait);
     };
     const run = async () => {

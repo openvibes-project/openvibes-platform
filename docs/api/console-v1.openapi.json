@@ -5326,7 +5326,7 @@
           {
             "name": "q",
             "in": "path",
-            "description": "Host name, address prefix or CIDR range.",
+            "description": "Host name (contains), agent id or address prefix, or CIDR range.",
             "required": true,
             "schema": {
               "type": [
@@ -14617,7 +14617,8 @@
           "group_count",
           "labels",
           "problems",
-          "agent"
+          "agent",
+          "alarms_off"
         ],
         "properties": {
           "address": {
@@ -14630,6 +14631,10 @@
           "agent": {
             "$ref": "#/components/schemas/HostAgentView",
             "description": "Agent."
+          },
+          "alarms_off": {
+            "type": "boolean",
+            "description": "Online with threat alarms off by a fault (not by choice): the list\nwarns \"Alarms off\"."
           },
           "group_count": {
             "type": "integer",

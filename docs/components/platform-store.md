@@ -570,7 +570,9 @@ every filter with the other filters applied (status, OS family, group,
 label, problems, agent age), and the summary line (online, older agent,
 critical), so the numbers always agree (roles spec §10.1, §10.3; plan
 rulings 2–7). Search `q` matches the host name (contains, any case), the
-start of the IP address, or, when it parses as a CIDR, containment. Each
+start of the agent ID (any case) or of the IP address, or, when it parses
+as a CIDR, containment. Each row's `alarms_off` is true when the host is
+online and `alarms_status` of its last health report is off by a fault. Each
 filter takes one value; `offset` is held to 0–100000 and `limit` to 1–100;
 sorts (host, heartbeat, version, problems) break ties by agent ID.
 

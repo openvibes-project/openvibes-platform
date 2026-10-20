@@ -138,7 +138,7 @@ fn counts() -> String {
 }
 
 /// CTE `base`: hosts in the hosts scope (`$2`,`$3`) matching the search
-/// (`$11` text, `$12` CIDR), with status (`$1` online threshold), agent age
+/// (`$11`: name contains, agent id or address starts with; `$12` CIDR), with status (`$1` online threshold), agent age
 /// (`$10` latest) and each problem count gated by its own scope (`$4`–`$9`).
 fn base() -> String {
     let hosts = agent_visibility("a.agent_id", "$2", "$3");
@@ -148,7 +148,7 @@ fn base() -> String {
     format!(
         "base AS MATERIALIZED (
   SELECT a.agent_id, a.hostname, a.last_address, a.os_id, a.os_version, a.distribution,
-         a.os_family, a.scanner_version, s.seen,
+         a.os_family, a.scanner_version, s.seen, a.health_at, a.health -> 'alarms' AS alarms_health,
          CASE WHEN a.status = 'imported' THEN 'imported' WHEN a.status = 'revoked' THEN 'revoked'
               WHEN s.seen IS NULL OR s.seen < $1 THEN 'offline' ELSE 'online' END AS status,
          console_version_older(a.scanner_version, $10) AS older,
@@ -161,6 +161,7 @@ fn base() -> String {
   FROM agents a CROSS JOIN LATERAL (SELECT agent_seen_at(a.agent_id, a.last_seen_at) AS seen) s
   WHERE {hosts}
     AND ($11::text IS NULL OR strpos(lower(a.hostname), lower($11)) > 0
+         OR starts_with(lower(a.agent_id), lower($11))
          OR starts_with(host(a.last_address), $11) OR a.last_address <<= $12::text::inet))"
     )
 }
@@ -202,7 +203,8 @@ SELECT CASE WHEN p.ord IS NOT DISTINCT FROM (SELECT min(ord) FROM page) THEN m.m
        console_distribution_name(p.distribution), p.os_family, p.status, p.seen,
        gr.ids, gr.names, gr.kinds, gr.n,
        ARRAY(SELECT l.label FROM console_host_labels l WHERE l.agent_id = p.agent_id ORDER BY l.label COLLATE \"C\"),
-       p.open_alarms, p.critical, p.failing, p.scanner_version, p.older
+       p.open_alarms, p.critical, p.failing, p.scanner_version, p.older,
+       p.health_at IS NOT NULL, p.alarms_health
 FROM meta m LEFT JOIN page p ON true
 LEFT JOIN LATERAL (
   SELECT (array_agg(g.asset_group_id::text ORDER BY lower(g.name), g.asset_group_id))[1:2] AS ids,

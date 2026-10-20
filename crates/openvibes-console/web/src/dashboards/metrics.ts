@@ -27,7 +27,7 @@ const defs = {
   "compliance.open.medium": { label: "Open medium compliance findings", permissions: ["compliance.read"], view: ["/compliance", { severity: "medium" }] },
   "compliance.open.low": { label: "Open low compliance findings", permissions: ["compliance.read"], view: ["/compliance", { severity: "low" }] },
   "agents.active": { label: "Hosts online", permissions: ["hosts.read"], view: ["/hosts", { status: "online" }] },
-  "agents.stale": { label: "Stale hosts", permissions: ["hosts.read"], view: ["/hosts", { status: "offline" }] },
+  "agents.stale": { label: "Offline hosts", permissions: ["hosts.read"], view: ["/hosts", { status: "offline" }] },
   "agents.revoked": { label: "Revoked hosts", permissions: ["hosts.read"], view: ["/hosts", { status: "revoked" }] },
 } satisfies Record<string, Entry>;
 /** Name in graphs and their picker, where "Critical" alone would not say it spans kinds. */
