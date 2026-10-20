@@ -264,6 +264,8 @@ pub struct HostGroupPreview {
     pub people_total: i64,
     /// Rule-set switches a delete removes.
     pub overrides_removed: i64,
+    /// Waiting and active alarm suppressions a delete ends.
+    pub suppressions_ended: i64,
 }
 
 fn host(h: HostRef) -> PreviewHost {
@@ -292,6 +294,7 @@ impl From<Preview> for HostGroupPreview {
             leaves_total: p.leaves_total,
             people_total: p.people_total,
             overrides_removed: p.overrides_removed,
+            suppressions_ended: p.suppressions_ended,
         }
     }
 }

@@ -465,7 +465,8 @@ Code over these tables:
 
 - `alarms` (ingest): `row` checks one alarm (time, skew, retention,
   partition); `insert_batch` upserts with `GREATEST` on count and last
-  seen, applies active suppressions, reopens a mitigated alarm or an
+  seen, applies active, unexpired suppressions on the alarm's host, group
+  or all hosts (`suppression_matches`, first by id), reopens a mitigated alarm or an
   expired accepted risk on recurrence, and keeps `alarms_dropped_total`.
   `args_sha256` is the `command` suppression hash (SHA-256 of the args'
   JSON array).
@@ -558,7 +559,9 @@ all hosts), `for_days` (7, 30 or null), `activated_at`, `expires_at`,
 `decided_by/at`, `decision_reason` and the source `alarm_id` (no foreign
 key: `alarms` is partitioned). Old rows become `active` from `created_at`,
 removed ones `removed`; `removed_at` stays in step with `state = 'removed'`.
-The console may now UPDATE `alarms.suppressed_by`.
+The console may now UPDATE `alarms.suppressed_by`; ingest may SELECT
+`console_host_group_members` (`console_host_in_group` runs with the
+caller's rights).
 
 - `request(client, suppress, &Request { alarm_row_id, what, place,
   for_days, reason }, actor, now)`: derived from an alarm within the
@@ -576,7 +579,9 @@ The console may now UPDATE `alarms.suppressed_by`.
 - `remove(client, suppress, id, actor, now)`: an active row in reach.
 - `list(client, read, &ListFilter { state, alarm_id }, now)`: waiting
   (oldest first), active including expired (`expired` is derived at `now`)
-  and rejected rows, at most 500 each. Reach (`in_reach`): a host row if
+  and rejected rows, at most 500 each. A waiting row carries
+  `would_close`: the alarms last seen in the 7 days before `now` it would
+  have closed, counted with ingest's matcher (at most 10,000 scanned). Reach (`in_reach`): a host row if
   the host is visible, a group row if the group is in the scope, an
   all-hosts row for every reader but only a global caller for decide and
   remove, a device or signature row for a global caller only. Approving a
@@ -585,10 +590,13 @@ The console may now UPDATE `alarms.suppressed_by`.
   always active.
 
 Every transition is audited: `alarm.suppression.requested`, `.created`,
-`.approved`, `.rejected`, `.withdrawn`, `.removed`. Ingest applies them
-when it stores a new alarm (above). Tests:
+`.approved`, `.rejected`, `.withdrawn`, `.removed`. Ingest applies only
+active rows not past `expires_at` (checked at the batch's `now`; there is
+no expiry job), and a group row through `console_host_in_group`, so a host
+is covered from the moment it joins. Deleting a host group withdraws its
+waiting rows and removes its active ones (plan ruling 4). Tests:
 `tests/alarm_suppressions.rs`, `tests/alarm_suppression_states.rs` and
-`tests/suppression_upgrade.rs`.
+`tests/suppression_upgrade.rs` and `tests/suppression_matching.rs`.
 
 ## Status
 
@@ -1042,16 +1050,18 @@ Test: `tests/host_group_facts.rs`.
   the person's (the next inventory does not make it again).
   Manual members keep their `added_at` across updates. A delete refuses
   while roles reach the group (`InUse` with their names), remembers an
-  automatic key in `console_host_group_dismissed`, and cascades rule-set
-  switches. Audit: `host_group.created` / `updated` (`{name, kind,
+  automatic key in `console_host_group_dismissed`, cascades rule-set
+  switches, and ends the group's suppressions (waiting → `withdrawn`,
+  active → `removed`, by the deleter). Audit: `host_group.created` / `updated` (`{name, kind,
   conditions | picked}`), `host_group.deleted` (`{name, kind,
-  overrides_removed}`).
+  overrides_removed, suppressions_ended}`).
 - `host_group_writes::preview(id, proposed)` (module `host_group_preview`)
   returns `PreviewOutcome::Invalid(part)` for a malformed rule
   (`invalid_content`, the checks writes use) and `NotFound` for a missing
   group; otherwise `Ready(Preview)`. It compares today's membership with the proposed rule (evaluated with
   `console_condition_holds` over active hosts) or picked list; `proposed`
-  None previews a delete and counts `overrides_removed`. `gains` / `loses`
+  None previews a delete and counts `overrides_removed` and
+  `suppressions_ended`. `gains` / `loses`
   are the enabled people bound to roles reaching the group who get the
   joining / lose the leaving hosts, except those holding a role on all
   hosts (simplified: their other groups are not checked). Lists hold at

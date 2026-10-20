@@ -153,7 +153,7 @@ describe("group page", () => {
 
   it("the preview names hosts and people", () => {
     const html = renderToStaticMarkup(<PreviewNote preview={{ joins: [{ agent_id: "a", hostname: "web-01" }], joins_total: 1, leaves: [], leaves_total: 0,
-      gains: [{ user_id: "u", username: "w", display_name: "Wendy Ward" }], loses: [], people_total: 1, overrides_removed: 0 }} />);
+      gains: [{ user_id: "u", username: "w", display_name: "Wendy Ward" }], loses: [], people_total: 1, overrides_removed: 0, suppressions_ended: 0 }} />);
     expect(html.replace(/<\/?span>/g, "")).toContain("If you save: <b>+1</b> (web-01). Wendy Ward gains access to them.");
   });
 

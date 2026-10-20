@@ -198,6 +198,11 @@ async fn requester_cannot_decide_own() {
         );
         assert_eq!(change.await.unwrap(), Change::OwnRequest);
     }
+    // The list counts what a waiting row would have closed: its source alarm.
+    let s = Suppression {
+        would_close: Some(1),
+        ..s
+    };
     assert_eq!(listed(&client, alarm).await, [s]);
     drop(client);
     db.drop().await;

@@ -4781,7 +4781,7 @@
         "tags": [
           "access control"
         ],
-        "summary": "Deletes a group no role reaches, with its rule-set switches.",
+        "summary": "Deletes a group no role reaches, with its rule-set switches; its waiting\nalarm suppressions are withdrawn and active ones removed.",
         "operationId": "delete_group",
         "parameters": [
           {
@@ -12937,7 +12937,8 @@
           "joins_total",
           "leaves_total",
           "people_total",
-          "overrides_removed"
+          "overrides_removed",
+          "suppressions_ended"
         ],
         "properties": {
           "gains": {
@@ -12982,6 +12983,11 @@
           "people_total": {
             "type": "integer",
             "format": "int64"
+          },
+          "suppressions_ended": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Waiting and active alarm suppressions a delete ends."
           }
         }
       },

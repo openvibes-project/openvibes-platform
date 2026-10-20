@@ -51,3 +51,7 @@ CREATE INDEX alarm_suppressions_waiting_idx ON alarm_suppressions (created_at)
 
 -- Activation closes the source alarm (plan ruling 3), as ingest does.
 GRANT UPDATE (suppressed_by) ON alarms TO "openvibes-console";
+
+-- Ingest matches group suppressions with console_host_in_group, which runs
+-- with the caller's rights and reads manual group members.
+GRANT SELECT ON console_host_group_members TO "openvibes-ingest";

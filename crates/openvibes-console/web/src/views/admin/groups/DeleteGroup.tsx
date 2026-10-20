@@ -1,5 +1,5 @@
 // "Delete group…": what deleting would change (the save preview with `{}`),
-// the rule-set switches it removes, then DELETE with the version read.
+// the rule-set switches it removes and the suppressions it ends, then DELETE with the version read.
 import { useState } from "react";
 
 import { invalidate, request } from "../../../api/client";
@@ -32,6 +32,7 @@ export function DeleteGroup({ group, onClose }: { group: HostGroupDetail; onClos
     }
   };
   const switches = preview && preview !== "failed" ? preview.overrides_removed : 0;
+  const ended = preview && preview !== "failed" ? preview.suppressions_ended : 0;
   return (
     <Modal label="Delete group" onClose={onClose}>
       <div className="bulk-dialog stack">
@@ -39,6 +40,7 @@ export function DeleteGroup({ group, onClose }: { group: HostGroupDetail; onClos
         <p>{group.kind === "automatic" ? "Deleting it is remembered; it won't come back." : "This cannot be undone."}</p>
         <PreviewNote preview={preview} verb="delete" />
         {switches > 0 && <p>Removes {switches} rule-set {switches === 1 ? "switch" : "switches"}.</p>}
+        {ended > 0 && <p>Ends {ended} alarm {ended === 1 ? "suppression" : "suppressions"}.</p>}
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div className="row row--end">
           <button type="button" className="button button--ghost" onClick={onClose}>Cancel</button>

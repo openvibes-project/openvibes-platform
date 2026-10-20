@@ -914,7 +914,10 @@ export interface paths {
         get: operations["get_group"];
         put?: never;
         post?: never;
-        /** Deletes a group no role reaches, with its rule-set switches. */
+        /**
+         * Deletes a group no role reaches, with its rule-set switches; its waiting
+         *     alarm suppressions are withdrawn and active ones removed.
+         */
         delete: operations["delete_group"];
         options?: never;
         head?: never;
@@ -3483,6 +3486,11 @@ export interface components {
             overrides_removed: number;
             /** Format: int64 */
             people_total: number;
+            /**
+             * Format: int64
+             * @description Waiting and active alarm suppressions a delete ends.
+             */
+            suppressions_ended: number;
         };
         /** @description A group a host is in. */
         HostGroupRef: {

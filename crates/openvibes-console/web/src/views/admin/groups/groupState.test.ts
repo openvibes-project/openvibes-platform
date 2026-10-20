@@ -16,7 +16,7 @@ const group = (over: Partial<HostGroup> = {}): HostGroup => ({
 });
 const run = (start: Draft, ...actions: Parameters<typeof reduce>[1][]) => actions.reduce(reduce, start);
 const preview = (over: Partial<HostGroupPreview> = {}): HostGroupPreview => ({
-  joins: [], joins_total: 0, leaves: [], leaves_total: 0, gains: [], loses: [], people_total: 0, overrides_removed: 0, ...over,
+  joins: [], joins_total: 0, leaves: [], leaves_total: 0, gains: [], loses: [], people_total: 0, overrides_removed: 0, suppressions_ended: 0, ...over,
 });
 const host = (agent_id: string, hostname: string) => ({ agent_id, hostname });
 const person = (display_name: string) => ({ user_id: display_name, username: display_name, display_name });

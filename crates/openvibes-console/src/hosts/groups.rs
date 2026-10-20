@@ -291,7 +291,8 @@ pub(crate) struct DeleteQuery {
     version: i32,
 }
 
-/// Deletes a group no role reaches, with its rule-set switches.
+/// Deletes a group no role reaches, with its rule-set switches; its waiting
+/// alarm suppressions are withdrawn and active ones removed.
 #[utoipa::path(delete, path = "/api/v1/host-groups/{group_id}", tag = "access control",
     params(("group_id" = String, Path), ("version" = i32, Query, description = "The version you read")),
     responses((status = 204, description = "Deleted"),

@@ -13,6 +13,7 @@ use deadpool_postgres::GenericClient;
 pub use crate::alarm_suppression_writes::{decide, remove, request, withdraw};
 use crate::{
     Client, StoreError,
+    alarms::{args_sha256, suppression_matches},
     console_read::{AgentScope, agent_visibility},
 };
 
@@ -138,6 +139,9 @@ pub struct Suppression {
     pub decision_reason: Option<String>,
     /// The source alarm's platform id; `None` for rows made before schema 55.
     pub alarm_id: Option<i64>,
+    /// For a waiting row: alarms of the last 7 days it would have closed
+    /// (counted when [`list`] reads it).
+    pub would_close: Option<i64>,
 }
 
 /// Outcome of a write.
@@ -212,6 +216,7 @@ fn suppression(row: &tokio_postgres::Row) -> Suppression {
         decided_at: row.get(19),
         decision_reason: row.get(20),
         alarm_id: row.get(21),
+        would_close: None,
     }
 }
 
@@ -285,7 +290,58 @@ pub async fn list(
             ],
         )
         .await?;
-    Ok(rows.iter().map(suppression).collect())
+    let mut list: Vec<Suppression> = rows.iter().map(suppression).collect();
+    for row in &mut list {
+        if row.state == State::Waiting {
+            row.would_close = Some(would_close(client, row, now).await?);
+        }
+    }
+    Ok(list)
+}
+
+/// Alarms last seen in the 7 days before `now` that `s` would have closed,
+/// with ingest's matcher.
+pub(crate) async fn would_close(
+    client: &impl GenericClient,
+    s: &Suppression,
+    now: DateTime<Utc>,
+) -> Result<i64, StoreError> {
+    // ponytail: scans at most 10,000 alarms per waiting row, so a very noisy
+    // rule shows at most 10,000; count in SQL if that ever misleads.
+    let rows = client
+        .query(
+            "SELECT al.agent_id, al.process->>'exe', al.process->'args' FROM alarms al
+             WHERE al.rule_set_id = $1 AND al.rule_id = $2 AND al.agent_id IS NOT NULL
+               AND al.last_seen > $3::timestamptz - interval '7 days'
+               AND ($4::text IS NULL OR al.agent_id = $4)
+               AND ($5::text IS NULL OR console_host_in_group(al.agent_id, $5::text::uuid))
+             LIMIT 10000",
+            &[
+                &s.rule_set_id,
+                &s.rule_id,
+                &now,
+                &s.agent_id,
+                &s.host_group_id,
+            ],
+        )
+        .await?;
+    let matching = rows.iter().filter(|row| {
+        let agent: String = row.get(0);
+        let exe: Option<String> = row.get(1);
+        let args: Option<serde_json::Value> = row.get(2);
+        let args: Vec<String> = args
+            .and_then(|args| serde_json::from_value(args).ok())
+            .unwrap_or_default();
+        suppression_matches(
+            &s.scope,
+            s.exe.as_deref(),
+            s.args_sha256.as_deref(),
+            s.agent_id.as_deref(),
+            &agent,
+            (exe.as_deref().unwrap_or_default(), &args_sha256(&args)),
+        )
+    });
+    Ok(i64::try_from(matching.count()).unwrap_or(i64::MAX))
 }
 
 /// `host`, `group`, `all` or `device`.

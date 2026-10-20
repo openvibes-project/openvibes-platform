@@ -132,6 +132,8 @@ export function registerGroupRoutes(ctx: DemoContext & { roles: RoleHelpers; ove
       joins: joins.slice(0, PREVIEW_CAP), leaves: leaves.slice(0, PREVIEW_CAP), gains: joins.length ? shown : [], loses: leaves.length ? shown : [],
       joins_total: joins.length, leaves_total: leaves.length, people_total: people.length,
       overrides_removed: g && !content ? overridesOf(g.asset_group_id) : 0,
+      // The demo holds no group suppressions yet, so a delete ends none.
+      suppressions_ended: 0,
     };
   };
   const previewRoute = (id: string | undefined, body: Record<string, unknown>) => {
@@ -226,7 +228,7 @@ export function registerGroupRoutes(ctx: DemoContext & { roles: RoleHelpers; ove
     const overrides = overridesOf(id);
     data.access.host_groups = groups().filter((x) => x !== g);
     dropGroup(id);
-    record(g, "host_group.deleted", { name: g.name, kind: g.kind, overrides_removed: overrides });
+    record(g, "host_group.deleted", { name: g.name, kind: g.kind, overrides_removed: overrides, suppressions_ended: 0 });
     return new Response(null, { status: 204 });
   });
 }

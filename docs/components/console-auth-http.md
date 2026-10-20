@@ -133,8 +133,8 @@ own share); `people_total` still counts everyone.
 | `GET /api/v1/host-groups/{id}` | `HostGroupView` plus `recent` (newest 10 audit changes; no host lists or counts for a caller without global `hosts.read`) |
 | `GET /api/v1/host-groups/{id}/hosts?after=&limit=` | `[GroupHostView]`, by hostname, 1–100 (50) |
 | `PATCH /api/v1/host-groups/{id}` | `{name?, description?, conditions?, agent_ids?, version}`; a left-out field is unchanged; an automatic group edited becomes a rule group and its key is dismissed → `HostGroupView` |
-| `DELETE /api/v1/host-groups/{id}?version=` | 204; removes its rule-set switches |
-| `POST /api/v1/host-groups/{id}/preview` | `{conditions}` or `{agent_ids}`, or `{}` for a delete → `{joins, leaves, gains, loses, joins_total, leaves_total, people_total, overrides_removed}` |
+| `DELETE /api/v1/host-groups/{id}?version=` | 204; removes its rule-set switches and ends its alarm suppressions |
+| `POST /api/v1/host-groups/{id}/preview` | `{conditions}` or `{agent_ids}`, or `{}` for a delete → `{joins, leaves, gains, loses, joins_total, leaves_total, people_total, overrides_removed, suppressions_ended}` |
 | `POST /api/v1/host-groups/preview` | the same for a new group (joins only) |
 | `GET /api/v1/hosts/{agent_id}/labels` | `hosts.read` on that host → `{labels, groups: [{asset_group_id, name, kind}]}` |
 | `PUT`/`DELETE /api/v1/hosts/{agent_id}/labels/{label}` | `hosts.label` on that host, CSRF → 204 (idempotent) |
