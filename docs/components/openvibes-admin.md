@@ -188,6 +188,8 @@ to the journal (`config-write SERVICE ok|failed`, never the content).
 
 **Repair** (Maintenance): it asks for the password and checks every step first (`helper setup-status`), then lists the steps that need attention with why. The ones that pass fold into one line ("✓ 11 other steps in order"), since 14 do not fit 80×24. Fix N problems runs every step with `--repair` (never a new CA) on the worker, then checks again; the bar says what is left. A step that stops is marked ✗ with its error, and Try again goes on from it. Check again re-reads. A half-done update blocks repair runs (`job_guard`), so Repair says so and offers no Fix until the update is finished in Update OpenVIBES, and a half-done uninstall the same way in Uninstall (each has its "Finish the …" entry there). Tests: `src/tui/maint/repair_tests.rs`.
 
+A repaired step reads "repaired: ..." in the list, and the journal line of each setup, update and remove step carries its detail (first 300 characters), e.g. `setup-step firewall --repair ok: repaired: open: 18423/tcp` (#292).
+
 **Back up** (Maintenance › Back up): what a backup holds, Save in folder and Back up now. The folder is typed in place and checked as typed: a full path (text only, on every key), then, once the typing pauses (or on Enter), on its own thread: that it exists, is a folder, is not reached through a symbolic link (the real path is named), is writable for you (a probe file) and how much space is left (`df`). That thread gives up after 5 seconds, so a dead mount cannot freeze the screen. Tab browses folders instead (Enter opens, Use this folder picks, ? is Help; symbolic links are not listed; the listing itself still runs on the UI thread). No folder is shown or assumed until you choose one; the helper remembers it after the first backup written there (`/etc/openvibes/backup.toml`; a remembered folder that is not a full path, or holds control characters, is ignored). Every backup gets a new name, `openvibes-<version>-<date>-<HHMM>.dump` (`-2`, `-3`... within the same minute, or when a stray `.dump.roles.sql` of that name exists). It runs `helper update-step backup --backup FILE` on the worker, then shows the file and its size, and says to copy it off this host. The helper refuses a folder whose path goes through a symbolic link, and removes the dump again if its `.roles.sql` cannot be written, so no half backup is left. *Ceiling:* a root-squashed NFS folder passes the check (you can write there) but the helper, as root, cannot: the backup then fails with that error and nothing else runs.
 
 **Health**: one line per check, problems first, each marked `problem` or
@@ -623,8 +625,13 @@ refused while one works):
   never makes a new CA: with the CA files gone it stops and says how to
   recover. Certificates issued for other names are issued again; one
   expiring within 14 days is reported, not replaced.
-- `setup --update [--backup PATH] [--update-repo-dir DIR]`: backup, stop
-  the active OpenVIBES units (remembered in
+- `setup --update [--backup PATH] [--update-repo-dir DIR]`: check
+  PostgreSQL first (#292; the Backup and Update-the-database steps both do:
+  a removed `postgresql-server` or a stopped service is installed and
+  started again and the step says so, leaving Setup's PostgreSQL record as it found it, so a PostgreSQL put back is never taken for Setup's by Remove everything; a failed backup keeps that note in its error; a gone data folder or a server newer
+  than the data fails the step, nothing stopped and no half-done mark),
+  backup, stop the active or enabled OpenVIBES units (an enabled unit that
+  was down is started again too; remembered in
   `/run/openvibes-admin/update-active`), `dnf upgrade` of exactly the
   installed `openvibes-*` packages (the agent too), `migrate` and
   `maintenance` (and, with the rules component, publishing the upgraded
@@ -637,7 +644,7 @@ refused while one works):
   itself). Setup's Agent step likewise waits for distribution to be ready
   before it restarts the agent.
 - `setup --uninstall --keep-data [--backup PATH]`: stop and disable, close
-  ports, remove the packages; database, CA and configuration stay.
+  ports, remove the packages (an Update left half-done is abandoned first: the agent is not started again when this uninstall removes it); database, CA and configuration stay.
   `--everything --confirm HOSTNAME` also drops the database and every
   `openvibes-*` role and deletes `/etc/openvibes`, `/etc/openvibes-agent`,
   `/var/lib/openvibes-*`, `/var/backups/openvibes` and the service accounts.
@@ -658,6 +665,15 @@ refused while one works):
   The retry finishes (stop, `rpm -e`, `/var/lib/pgsql`, then the
   mark, then the record). A record without the `postgresql-server` package
   and without the mark is stale: it is deleted and no data folder is touched.
+  Uninstall also works from a half-done Update (#292): a job mark whose first
+  line is `update` does not block it (any other mark still does), and its Stop
+  step starts the agent again if the update stopped it and forgets the
+  update's records before writing the `uninstall` mark. When the
+  PostgreSQL server package is gone (removed by hand, no removal mark),
+  Back up first fails with the problem and "untick Back up first to uninstall
+  without a backup", and Remove everything skips the database drops, deletes
+  only the Setup record and mark, keeps `/var/lib/pgsql` and says "no
+  PostgreSQL server: the database was not dropped and /var/lib/pgsql stays".
   The last step, `admin`, removes `openvibes-admin`
   itself and, with `--everything`, what rpm kept of it (`/etc/openvibes`,
   including `admin.toml.rpmsave` and `setup.toml`, which every earlier step
@@ -821,4 +837,4 @@ unit tests.
 
 `assistant-tune` waits (up to 300 s, before it writes the new tuning) for systemd's jobs on `openvibes-llm.service` and its proxy before stopping the server, and tries a stop that systemd cancels ("Job for openvibes-llm.service canceled", the restart a package upgrade ends with) up to 3 times, 5 s apart. If `--auto` still fails, the old tuning is restored, `tune.lock` (only an `flock`, released at exit) blocks nothing, and the line says tuning is retried at the next upgrade or from Setup.
 
-**Uninstall** (Maintenance): Keep the data (the default) or Remove everything, chosen with Space or Enter (Enter then moves to the name row, or to Uninstall); Back up first as in Update (Space or Enter toggles it); and Uninstall, which alone asks, so stray Enters never start anything ("Remove OpenVIBES?" or "Remove OpenVIBES and all its data?", No highlighted, the one question that starts on No, approved.md 47). Remove everything first needs this host's name (from `setup.toml`) typed exactly; a tick shows when it matches, and Uninstall on a wrong name moves to that row. The page says what happens to PostgreSQL (approved.md 46): Keep the data leaves it installed; Remove everything takes it too only when Setup recorded installing it (`/etc/openvibes/setup-installed-postgresql`, read by the TUI) and nothing else uses it. The six remove steps run on the worker; the last one removes the administration tool itself, so once it is done Enter (or `q`) quits and nothing else is offered or sent to the helper. If the run ends while you are on another screen, the page with the result is shown. A failed step shows what failed and Try again goes on from it. The result shows what the helper reported staying (Keep's kept list, PostgreSQL and why, the repository when another package uses it, the site rule key note) and "Nothing is left behind" only when the helper says so; then the backup file and the old root key file, which are the user's. Remove everything refuses a backup folder it would delete, on the page before the question. A half-done Remove everything reopens as Remove everything, without a backup. Tests: `src/tui/maint/uninstall_tests.rs`.
+**Uninstall** (Maintenance): Keep the data (the default) or Remove everything, chosen with Space or Enter (Enter then moves to the name row, or to Uninstall); Back up first as in Update (Space or Enter toggles it); and Uninstall, which alone asks, so stray Enters never start anything ("Remove OpenVIBES?" or "Remove OpenVIBES and all its data?", No highlighted, the one question that starts on No, approved.md 47). Remove everything first needs this host's name (from `setup.toml`) typed exactly; a tick shows when it matches, and Uninstall on a wrong name moves to that row. The page says what happens to PostgreSQL (approved.md 46): Keep the data leaves it installed; Remove everything takes it too only when Setup recorded installing it (`/etc/openvibes/setup-installed-postgresql`, read by the TUI) and the server is still installed (`/usr/bin/postgres` exists; otherwise the page says PostgreSQL is not installed, the database is not dropped and `/var/lib/pgsql` stays) and nothing else uses it. The six remove steps run on the worker; the last one removes the administration tool itself, so once it is done Enter (or `q`) quits and nothing else is offered or sent to the helper. If the run ends while you are on another screen, the page with the result is shown. A failed step shows what failed and Try again goes on from it. The result shows what the helper reported staying (Keep's kept list, PostgreSQL and why, the repository when another package uses it, the site rule key note) and "Nothing is left behind" only when the helper says so; then the backup file and the old root key file, which are the user's. Remove everything refuses a backup folder it would delete, on the page before the question. A half-done Remove everything reopens as Remove everything, without a backup. Tests: `src/tui/maint/uninstall_tests.rs`.

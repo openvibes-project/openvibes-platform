@@ -95,19 +95,24 @@ fn the_help_never_touches_the_bar() {
 #[test]
 fn remove_everything_says_what_happens_to_postgresql() {
     let mut app = set_up(vec![]);
-    app.open_page(Page::Uninstall);
-    app.key(Key::Down);
-    app.key(Key::Char(' '));
-    let text = screen(&app);
-    assert!(text.contains("Setup did not install it"), "{text}");
-    let etc = app.root.join("etc/openvibes");
-    std::fs::create_dir_all(&etc).unwrap();
-    std::fs::write(etc.join("setup-installed-postgresql"), "x\n").unwrap();
-    app.open_page(Page::Uninstall);
-    app.key(Key::Down);
-    app.key(Key::Char(' '));
-    let text = screen(&app);
-    assert!(text.contains("PostgreSQL goes too"), "{text}");
+    macro_rules! everything {
+        ($app:expr) => {{
+            $app.open_page(Page::Uninstall);
+            $app.key(Key::Down);
+            $app.key(Key::Char(' '));
+            screen(&$app)
+        }};
+    }
+    assert!(everything!(app).contains("Setup did not install it"));
+    let rec = app.root.join("etc/openvibes/setup-installed-postgresql");
+    std::fs::create_dir_all(rec.parent().unwrap()).unwrap();
+    std::fs::write(rec, "x\n").unwrap();
+    let text = everything!(app);
+    assert!(text.contains("PostgreSQL is not installed") && !text.contains("goes too"));
+    let bin = app.root.join("usr/bin/postgres");
+    std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+    std::fs::write(bin, "").unwrap();
+    assert!(everything!(app).contains("PostgreSQL goes too"));
 }
 
 #[test]

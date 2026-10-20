@@ -16,6 +16,7 @@ mod console;
 mod fake;
 mod fetch_domain;
 mod fleet;
+mod pg_health;
 pub use fleet::AGENT_AUDIT_RULE;
 pub(crate) use fleet::agent_by_default;
 pub(crate) mod pki;
@@ -210,7 +211,13 @@ pub fn run_step<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         // A failed check (e.g. a certificate about to expire) is reported,
         // not acted on.
         state @ (StepState::Done(_) | StepState::Skipped(_) | StepState::Failed(_)) => state,
-        _ => apply(ctx, step),
+        // Repair says what it changed: the journal line carries the detail.
+        state => match apply(ctx, step) {
+            StepState::Done(detail) if ctx.repair && state == StepState::Todo => {
+                StepState::Done(format!("repaired: {detail}"))
+            }
+            applied => applied,
+        },
     }
 }
 

@@ -3,6 +3,7 @@
 //! them on systemd; later deployments (pods, Kubernetes) implement the same
 //! trait. No terminal code lives here.
 
+mod journal;
 pub mod native;
 pub mod runner;
 pub mod service;

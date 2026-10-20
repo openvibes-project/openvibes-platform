@@ -257,6 +257,10 @@ mod tests {
     fn a_backup_remembers_its_folder_and_the_choice_only_when_asked() {
         let fake = Fake::new("backup-memory");
         postgres(&fake);
+        // The Backup step checks PostgreSQL first (#292): installed, there, running.
+        fake.file(crate::setup::base::PG_VERSION, "18\n");
+        fake.answer(&["/usr/bin/rpm", "-q"], 0, "18.6");
+        fake.answer(&["/usr/bin/systemctl", "is-active"], 0, "");
         std::fs::create_dir_all(fake.root.join("home/alice")).unwrap();
         let plan = plan(&[Ingest]);
         super::dump(&fake.ctx(&plan), std::path::Path::new("/home/alice/b.dump")).unwrap();

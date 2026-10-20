@@ -450,7 +450,10 @@ fn privileged_verbs_pass_the_password_on_stdin_only() {
         .iter()
         .find(|call| call[0] == "/usr/bin/logger")
         .unwrap();
-    assert!(journal[3].ends_with(" setup-step ca ok"), "{journal:?}");
+    assert!(
+        journal[3].ends_with(" setup-step ca ok: intermediate imported"),
+        "{journal:?}"
+    );
     assert_eq!(format!("{password:?}"), "Secret(..)");
 }
 
@@ -652,7 +655,10 @@ fn the_journal_records_the_state_a_step_ended_in() {
         .iter()
         .find(|call| call[0] == "/usr/bin/logger")
         .unwrap();
-    assert!(journal[3].ends_with(" setup-step ca failed"), "{journal:?}");
+    assert!(
+        journal[3].ends_with(" setup-step ca failed: database down"),
+        "{journal:?}"
+    );
 }
 
 #[test]
@@ -867,4 +873,74 @@ fn free_space_is_dfs_avail_column() {
         calls[0],
         ["/usr/bin/df", "--output=avail", "-h", "--", "/mnt/nas"]
     );
+}
+
+fn step_journal(detail: &str) -> String {
+    step_journal_of(Step::Firewall, detail, false)
+}
+
+fn step_journal_of(step: Step, detail: &str, repair: bool) -> String {
+    let host = fake(vec![
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "setup-step",
+            ],
+            out(0, &format!("done\t{detail}\n"), ""),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    let verb = if repair {
+        Privileged::Repair(step)
+    } else {
+        Privileged::SetupStep(step)
+    };
+    host.privileged(verb, &Secret::new("pw".into())).unwrap();
+    let calls = host.runner.calls.borrow();
+    let call = calls.iter().find(|c| c[0] == "/usr/bin/logger").unwrap();
+    call[3].clone()
+}
+
+#[test]
+fn a_step_journal_line_carries_the_detail() {
+    let line = step_journal("opened 8443/tcp");
+    assert!(
+        line.ends_with("setup-step firewall ok: opened 8443/tcp"),
+        "{line}"
+    );
+    let long = step_journal(&"é".repeat(400));
+    assert!(
+        long.ends_with(&format!("ok: {}", "é".repeat(300))),
+        "{long}"
+    );
+}
+
+#[test]
+fn a_step_detail_that_may_hold_a_secret_is_withheld() {
+    let line = step_journal_of(
+        Step::Console,
+        "console admin: admin, password hunter2 (shown only now)",
+        false,
+    );
+    assert!(
+        line.ends_with("setup-step console ok: (detail withheld)"),
+        "{line}"
+    );
+    assert!(!line.contains("hunter2"), "{line}");
+    let line = step_journal("enrollment Token abc");
+    assert!(line.ends_with("ok: (detail withheld)"), "{line}");
+}
+
+#[test]
+fn the_console_detail_is_withheld_without_a_keyword() {
+    for repair in [false, true] {
+        let line = step_journal_of(Step::Console, "https://x · console admin: admin", repair);
+        assert!(line.ends_with("ok: (detail withheld)"), "{repair}: {line}");
+    }
 }

@@ -271,8 +271,6 @@ fn a_stale_record_deletes_nothing() {
     fake.file("/etc/openvibes/setup.toml", "plan");
     fake.file(REC, "postgresql-server\n");
     fake.file("/var/lib/pgsql/16/data/PG_VERSION", "16\n");
-    fake.answer(&[&PG[..], &["/usr/bin/psql"]].concat(), 0, "");
-    fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
     fake.answer(&["/usr/sbin/userdel"], 0, "");
     fake.answer(&["/usr/sbin/groupdel"], 0, "");
     let plan = plan(&[Ingest]);
@@ -281,8 +279,151 @@ fn a_stale_record_deletes_nothing() {
         RemoveStep::Purge,
         &args(&[Ingest], Some("platform.example.com")),
     );
-    assert!(state.detail().contains("stale"), "{state:?}");
+    // No server and no mark: nothing to drop, the record goes, the data stays.
+    assert!(state.detail().contains("no PostgreSQL server"), "{state:?}");
     assert!(fake.root.join("var/lib/pgsql/16/data/PG_VERSION").exists());
     assert!(!fake.root.join(REC.trim_start_matches('/')).exists());
     assert!(!fake.called(&["/usr/bin/rpm", "-e"]));
+    assert!(!fake.called(&[&PG[..], &["/usr/bin/psql"]].concat()));
+}
+
+fn update_mark(fake: &Fake) {
+    fake.file("/run/openvibes-admin/job", "update");
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "openvibes-ingest"],
+        0,
+        "",
+    );
+    fake.answer(&["/usr/bin/systemctl", "disable", "--now"], 0, "");
+}
+
+#[test]
+fn an_uninstall_runs_after_a_half_done_update() {
+    let fake = Fake::new("remove-after-update");
+    update_mark(&fake);
+    let plan = plan(&[Ingest]);
+    let keep = args(&[Ingest], None);
+    let backup = run(&fake.ctx(&plan), RemoveStep::Backup, &keep);
+    assert!(matches!(backup, StepState::Skipped(_)), "{backup:?}");
+    let stop = run(&fake.ctx(&plan), RemoveStep::Stop, &keep);
+    assert!(matches!(stop, StepState::Done(_)), "{stop:?}");
+    assert_eq!(fake.text("/run/openvibes-admin/job"), "uninstall");
+}
+
+#[test]
+fn uninstall_after_a_half_done_update_starts_the_agent_again() {
+    let fake = Fake::new("remove-after-update-agent");
+    update_mark(&fake);
+    fake.file("/run/openvibes-admin/update-agent", "");
+    fake.file(
+        "/run/openvibes-admin/update-active",
+        "openvibes-agent.service\n",
+    );
+    fake.answer(
+        &["/usr/bin/systemctl", "start", "openvibes-agent.service"],
+        0,
+        "",
+    );
+    let plan = plan(&[Ingest]);
+    let stop = run(&fake.ctx(&plan), RemoveStep::Stop, &args(&[Ingest], None));
+    assert!(matches!(stop, StepState::Done(_)), "{stop:?}");
+    assert!(fake.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]));
+    assert!(!fake.root.join("run/openvibes-admin/update-active").exists());
+    assert!(!fake.root.join("run/openvibes-admin/update-agent").exists());
+}
+
+#[test]
+fn backup_without_a_server_says_untick_it() {
+    let fake = Fake::new("remove-backup-no-server");
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "postgresql-server"],
+        1,
+        "",
+    );
+    let plan = plan(&[Ingest]);
+    let mut with = args(&[Ingest], None);
+    with.backup = Some("/var/backups/ov-new".into());
+    let state = run(&fake.ctx(&plan), RemoveStep::Backup, &with);
+    assert!(
+        matches!(&state, StepState::Failed(why) if why.contains("PostgreSQL is not installed")
+            && why.contains("untick Back up first")),
+        "{state:?}"
+    );
+    assert!(!fake.called(&["/usr/bin/systemctl", "stop"]));
+}
+
+#[test]
+fn remove_everything_without_a_server_keeps_the_data_folder() {
+    let fake = Fake::new("remove-everything-no-server");
+    fake.file("/etc/openvibes/setup.toml", "plan");
+    fake.file(REC, "postgresql-server\n");
+    fake.file("/var/lib/pgsql/data/PG_VERSION", "17\n");
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "postgresql-server"],
+        1,
+        "",
+    );
+    fake.answer(&["/usr/sbin/userdel"], 0, "");
+    fake.answer(&["/usr/sbin/groupdel"], 0, "");
+    let plan = plan(&[Ingest]);
+    let state = run(
+        &fake.ctx(&plan),
+        RemoveStep::Purge,
+        &args(&[Ingest], Some("platform.example.com")),
+    );
+    assert!(
+        matches!(&state, StepState::Done(text) if text.contains(
+            "no PostgreSQL server: the database was not dropped and /var/lib/pgsql stays")),
+        "{state:?}"
+    );
+    assert!(!state.detail().contains("database, roles"), "{state:?}");
+    assert!(!fake.called(&[&PG[..], &["/usr/bin/psql"]].concat()));
+    assert!(!fake.called(&[&PG[..], &["/usr/bin/dropdb"]].concat()));
+    assert!(fake.root.join("var/lib/pgsql/data").exists());
+    assert!(
+        !fake
+            .root
+            .join("etc/openvibes/setup-installed-postgresql")
+            .exists()
+    );
+}
+
+#[test]
+fn abandoning_an_update_between_stop_and_start_starts_only_the_agent() {
+    let fake = Fake::new("remove-after-update-no-pending");
+    update_mark(&fake);
+    fake.file(
+        "/run/openvibes-admin/update-active",
+        "openvibes-agent.service\nopenvibes-ingest.service\n",
+    );
+    fake.answer(
+        &["/usr/bin/systemctl", "start", "openvibes-agent.service"],
+        0,
+        "",
+    );
+    let plan = plan(&[Ingest]);
+    let stop = run(&fake.ctx(&plan), RemoveStep::Stop, &args(&[Ingest], None));
+    assert!(matches!(stop, StepState::Done(_)), "{stop:?}");
+    assert!(fake.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]));
+    assert!(!fake.called(&["/usr/bin/systemctl", "start", "openvibes-ingest.service"]));
+    assert!(!fake.root.join("run/openvibes-admin/update-active").exists());
+}
+
+#[test]
+fn abandoning_an_update_does_not_start_an_agent_this_uninstall_removes() {
+    let fake = Fake::new("remove-after-update-agent-removed");
+    update_mark(&fake);
+    fake.file(
+        "/run/openvibes-admin/update-active",
+        "openvibes-agent.service\nopenvibes-ingest.service\n",
+    );
+    let plan = plan(&[Ingest, Agent]);
+    let stop = run(
+        &fake.ctx(&plan),
+        RemoveStep::Stop,
+        &args(&[Ingest, Agent], None),
+    );
+    assert!(matches!(stop, StepState::Done(_)), "{stop:?}");
+    assert!(!fake.called(&["/usr/bin/systemctl", "start"]));
+    assert!(!fake.root.join("run/openvibes-admin/update-active").exists());
 }
