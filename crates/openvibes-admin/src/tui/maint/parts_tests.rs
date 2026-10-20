@@ -202,7 +202,7 @@ fn unticking_the_agent_asks_starting_on_no() {
     );
     apply(&mut app);
     let text = screen(&app);
-    assert!(text.contains("Remove the agent from this host?"), "{text}");
+    assert!(text.contains("Remove the agent?"), "{text}");
     assert_eq!(detail(&app), "its data goes too");
     assert!(text.contains("[ Yes ]  No"), "{text}");
     app.key(Key::Enter);
@@ -256,11 +256,8 @@ fn removing_the_assistant_asks_and_names_its_model() {
     assert!(screen(&app).contains("Removing the assistant also removes its data"));
     apply(&mut app);
     let text = screen(&app);
-    assert!(
-        text.contains("Remove the assistant from this host?"),
-        "{text}"
-    );
-    assert_eq!(detail(&app), "its data and model go too");
+    assert!(text.contains("Remove the assistant?"), "{text}");
+    assert_eq!(detail(&app), "its data goes too");
 }
 
 #[test]
@@ -308,4 +305,44 @@ fn adding_only_the_agent_leaves_the_model_to_ready() {
             .count(),
         Step::ALL.len()
     );
+}
+
+#[test]
+fn every_question_fits_the_bar_with_its_buttons() {
+    type Setup = fn(&mut App<SetupHost>);
+    let cases: [(Setup, &[usize], &str, &str); 5] = [
+        (|_| {}, &[1], "Install the assistant?", "2.7 GB"),
+        (
+            |a| a.host.plan = PLAN.replace(", \"agent\"]", "]"),
+            &[0],
+            "Install the agent?",
+            "watch this host too",
+        ),
+        (
+            |a| a.host.plan = PLAN.replace(", \"agent\"]", "]"),
+            &[0, 1],
+            "Install both parts?",
+            "2.7 GB",
+        ),
+        (|_| {}, &[0], "Remove the agent?", "its data goes too"),
+        (
+            |a| a.host.plan = PLAN.replace("\"agent\"]", "\"agent\", \"assistant\"]"),
+            &[0, 1],
+            "Remove both parts?",
+            "their data goes too",
+        ),
+    ];
+    for (setup, ticks, text, detail) in cases {
+        let mut app = set_up(vec![]);
+        setup(&mut app);
+        app.open_page(Page::Parts);
+        for row in ticks {
+            tick(&mut app, *row);
+        }
+        apply(&mut app);
+        let bar = screen(&app);
+        for want in [text, detail, "Yes", "No"] {
+            assert!(bar.contains(want), "missing {want:?} in\n{bar}");
+        }
+    }
 }

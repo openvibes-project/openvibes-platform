@@ -432,25 +432,26 @@ impl<H: Host> App<H> {
 
     fn ask_parts(&mut self) {
         let (add, remove) = self.maint.parts.changes();
+        // Question and detail fit 40 columns, so the buttons always show.
+        let which = |parts: &[Part]| match parts {
+            [one] => format!("the {}", one.name()),
+            _ => "both parts".to_owned(),
+        };
         let (text, detail, yes) = if !remove.is_empty() {
-            let detail = match remove.as_slice() {
-                [Part::Agent] => "its data goes too",
-                [Part::Assistant] => "its data and model go too",
-                _ => "their data and model go too",
+            let detail = if remove.len() == 1 {
+                "its data goes too"
+            } else {
+                "their data goes too"
             };
             // Starts on No: a stray Enter removes nothing.
-            (
-                format!("Remove {} from this host?", names(&remove)),
-                detail,
-                false,
-            )
+            (format!("Remove {}?", which(&remove)), detail, false)
         } else if !add.is_empty() {
             let detail = if add.contains(&Part::Assistant) {
                 "2.7 GB"
             } else {
                 "watch this host too"
             };
-            (format!("Install {}?", names(&add)), detail, true)
+            (format!("Install {}?", which(&add)), detail, true)
         } else {
             return;
         };
