@@ -10,6 +10,7 @@ use platform_store::{
     alarm_suppressions::{self, Change, ListFilter, Request, What, Where},
     alarms,
     console_read::AgentScope,
+    console_settings,
 };
 use suppression_fixture::{AGENT, as_console, setup};
 
@@ -231,6 +232,108 @@ async fn a_command_suppression_closes_the_same_command_on_reingest() {
         .await
         .unwrap();
     assert_eq!(done.suppressed, 1, "the re-reported command is closed");
+    drop((client, admin));
+    db.drop().await;
+}
+
+/// Signature rows (device rule sets, every device) are global-only, even
+/// though they name no host, group or device.
+#[tokio::test]
+async fn a_signature_row_is_read_by_global_readers_only() {
+    let (db, _) = setup().await;
+    let admin = db.pool.get().await.unwrap();
+    admin
+        .execute(
+            "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, note, created_by,
+                created_at, state, activated_at)
+             VALUES ('device-unifi', 'ips.1', 'signature', 'n', 't', now(), 'active', now())",
+            &[],
+        )
+        .await
+        .unwrap();
+    let client = as_console(&db).await;
+    let now = Utc::now();
+    let scoped_list = alarm_suppressions::list(&client, &scoped(), &ALL, now).await;
+    assert!(scoped_list.unwrap().is_empty());
+    let global_list = alarm_suppressions::list(&client, &AgentScope::Global, &ALL, now).await;
+    assert_eq!(global_list.unwrap()[0].scope, "signature");
+    drop((client, admin));
+    db.drop().await;
+}
+
+/// Decide and remove use the caller's reach: an all-hosts row needs a
+/// global caller, a group row a caller holding that group.
+#[tokio::test]
+async fn decide_and_remove_follow_reach() {
+    let (db, alarm) = setup().await;
+    let mut admin = db.pool.get().await.unwrap();
+    let mine = common::manual_group(&admin, "mine", &[AGENT]).await;
+    let other = common::manual_group(&admin, "other", &[]).await;
+    let approval = serde_json::json!(true);
+    let key = "suppressions.require_approval";
+    console_settings::set(&mut admin, key, &approval, "admin", Utc::now())
+        .await
+        .unwrap();
+    let mut client = as_console(&db).await;
+    let now = Utc::now();
+    let global = AgentScope::Global;
+    let mut ask_for = async |place: Where| {
+        let request = ask(alarm, What::Program, place, "noisy");
+        match alarm_suppressions::request(&mut client, &global, &request, "alice", now).await {
+            Ok(Change::Done(made)) => made.id,
+            other => panic!("{other:?}"),
+        }
+    };
+    let all = ask_for(Where::All).await;
+    let theirs = ask_for(Where::Group(other)).await;
+    let ours = ask_for(Where::Group(mine.clone())).await;
+    let lead = AgentScope::AssetGroups(vec![mine]);
+    for id in [all, theirs] {
+        let change = alarm_suppressions::decide(&mut client, &lead, id, true, None, "bob", now);
+        assert_eq!(change.await.unwrap(), Change::NotFound, "{id}");
+    }
+    let change = alarm_suppressions::decide(&mut client, &lead, ours, true, None, "bob", now);
+    assert!(matches!(change.await.unwrap(), Change::Done(_)));
+    let change = alarm_suppressions::decide(&mut client, &global, all, true, None, "bob", now);
+    assert!(matches!(change.await.unwrap(), Change::Done(_)));
+    let change = alarm_suppressions::remove(&mut client, &lead, all, "bob", now);
+    assert_eq!(change.await.unwrap(), Change::NotFound);
+    drop((client, admin));
+    db.drop().await;
+}
+
+/// A deleted group's waiting request cannot be approved: it would match
+/// nothing.
+#[tokio::test]
+async fn approving_a_request_for_a_deleted_group_is_refused() {
+    let (db, alarm) = setup().await;
+    let mut admin = db.pool.get().await.unwrap();
+    let group = common::manual_group(&admin, "gone", &[]).await;
+    let approval = serde_json::json!(true);
+    let key = "suppressions.require_approval";
+    console_settings::set(&mut admin, key, &approval, "admin", Utc::now())
+        .await
+        .unwrap();
+    let mut client = as_console(&db).await;
+    let now = Utc::now();
+    let global = AgentScope::Global;
+    let request = ask(alarm, What::Program, Where::Group(group.clone()), "noisy");
+    let Change::Done(made) =
+        alarm_suppressions::request(&mut client, &global, &request, "alice", now)
+            .await
+            .unwrap()
+    else {
+        panic!("expected a request");
+    };
+    admin
+        .execute(
+            "DELETE FROM console_asset_groups WHERE asset_group_id = $1::text::uuid",
+            &[&group],
+        )
+        .await
+        .unwrap();
+    let change = alarm_suppressions::decide(&mut client, &global, made.id, true, None, "bob", now);
+    assert_eq!(change.await.unwrap(), Change::Invalid("group".into()));
     drop((client, admin));
     db.drop().await;
 }

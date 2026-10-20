@@ -439,7 +439,8 @@ async fn add_to_case(
 }
 
 /// One `program` suppression per distinct rule and program among the
-/// selected alarms (which closes every matching alarm, these included).
+/// selected alarms. Activation closes only each representative alarm;
+/// new matching alarms are closed as they arrive.
 async fn suppress(
     client: &mut platform_store::Client,
     scope: &AgentScope,

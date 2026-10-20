@@ -579,7 +579,8 @@ The console may now UPDATE `alarms.suppressed_by`.
   and rejected rows, at most 500 each. Reach (`in_reach`): a host row if
   the host is visible, a group row if the group is in the scope, an
   all-hosts row for every reader but only a global caller for decide and
-  remove, a device row for a global caller.
+  remove, a device or signature row for a global caller only. Approving a
+  group row whose group is gone is refused (`Invalid("group")`).
 - `create_for_device` (`openvibes-admin`): device and signature rows are
   always active.
 

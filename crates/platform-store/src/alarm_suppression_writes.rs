@@ -146,7 +146,10 @@ pub async fn decide(
     let Some(row) = tx
         .query_opt(
             &format!(
-                "SELECT s.state, s.created_by, s.alarm_id FROM alarm_suppressions s
+                "SELECT s.state, s.created_by, s.alarm_id,
+                    s.host_group_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM console_asset_groups g
+                        WHERE g.asset_group_id = s.host_group_id)
+                 FROM alarm_suppressions s
                  WHERE s.id = $3 AND {} FOR UPDATE OF s",
                 in_reach(false)
             ),
@@ -165,6 +168,10 @@ pub async fn decide(
     let reason = reason.map(str::trim).filter(|reason| !reason.is_empty());
     if reason.is_some_and(|reason| !valid_reason(reason)) || (!approve_it && reason.is_none()) {
         return Ok(Change::Invalid("reason".into()));
+    }
+    // A deleted group's suppression would match nothing (ruling 4).
+    if approve_it && row.get::<_, bool>(3) {
+        return Ok(Change::Invalid("group".into()));
     }
     let (state, action) = if approve_it {
         (State::Active, "alarm.suppression.approved")

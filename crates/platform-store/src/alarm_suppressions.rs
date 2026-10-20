@@ -234,7 +234,8 @@ pub(crate) fn params(scope: &AgentScope) -> (bool, Vec<String>) {
 /// SQL: suppression `s` is within the reach of `$1`/`$2`. A host row if
 /// the host is in reach; a group row if the group is in the scope; an
 /// all-hosts row for every reader (`all_rows`, ruling 5) but only a
-/// global caller otherwise; a device row only for a global caller.
+/// global caller otherwise; a device or signature row only for a global
+/// caller.
 pub(crate) fn in_reach(all_rows: bool) -> String {
     let agent = agent_visibility("a.agent_id", "$1", "$2");
     let all_rows = if all_rows { "true" } else { "$1::boolean" };
@@ -244,7 +245,7 @@ pub(crate) fn in_reach(all_rows: bool) -> String {
                 SELECT 1 FROM agents a WHERE a.agent_id = s.agent_id AND {agent}))
           OR (s.host_group_id IS NOT NULL AND s.host_group_id::text = ANY($2::text[]))
           OR (s.agent_id IS NULL AND s.host_group_id IS NULL AND s.device_id IS NULL
-              AND {all_rows}))"
+              AND s.scope <> 'signature' AND {all_rows}))"
     )
 }
 
@@ -289,7 +290,7 @@ pub async fn list(
 
 /// `host`, `group`, `all` or `device`.
 fn place(suppression: &Suppression) -> &'static str {
-    if suppression.device_id.is_some() {
+    if matches!(suppression.scope.as_str(), "device" | "signature") {
         "device"
     } else if suppression.agent_id.is_some() {
         "host"

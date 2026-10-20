@@ -27,13 +27,15 @@ async fn old_suppressions_become_active_or_removed() {
          ('baseline', 'r', 'program', NULL, '/bin/sh', NULL, NULL, 'n', 'a', '2026-10-02T00:00:00Z', NULL, NULL),
          ('baseline', 'r', 'command', NULL, '/bin/sh', '{hash}', NULL, 'n', 'a', '2026-10-03T00:00:00Z', NULL, NULL),
          ('baseline', 'r', 'program', NULL, '/bin/sh', NULL, NULL, 'n', 'a', '2026-10-04T00:00:00Z', 'b', '2026-10-05T00:00:00Z'),
-         ('device-unifi', 'ips.1', 'device', NULL, NULL, NULL, {device}, 'n', 'a', '2026-10-06T00:00:00Z', NULL, NULL)"
+         ('device-unifi', 'ips.1', 'device', NULL, NULL, NULL, {device}, 'n', 'a', '2026-10-06T00:00:00Z', NULL, NULL),
+         ('device-unifi', 'ips.2', 'signature', NULL, NULL, NULL, NULL, 'n', 'a', '2026-10-07T00:00:00Z', NULL, NULL),
+         ('device-unifi', 'ips.3', 'device', NULL, NULL, NULL, {device}, 'n', 'a', '2026-10-08T00:00:00Z', 'b', '2026-10-09T00:00:00Z')"
     ))
     .await
     .unwrap();
     let before = c
         .query_one(
-            "SELECT to_jsonb(s) FROM alarm_suppressions s WHERE scope = 'device'",
+            "SELECT to_jsonb(s) FROM alarm_suppressions s WHERE rule_id = 'ips.1'",
             &[],
         )
         .await
@@ -64,12 +66,14 @@ async fn old_suppressions_become_active_or_removed() {
             row("active", None),
             row("removed", None),
             row("active", None),
+            row("active", None),
+            row("removed", None),
         ]
     );
     // The device row keeps every old column as it was.
     let after = c
         .query_one(
-            "SELECT to_jsonb(s) FROM alarm_suppressions s WHERE scope = 'device'",
+            "SELECT to_jsonb(s) FROM alarm_suppressions s WHERE rule_id = 'ips.1'",
             &[],
         )
         .await
