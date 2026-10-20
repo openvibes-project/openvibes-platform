@@ -30,31 +30,41 @@ Hosts pages ([console-hosts.md](console-hosts.md)).
   - Host: only a chip, set by a host page's tiles and "Show all n"
     (`ListFilter.chipOnly`), named by `useHostName` (`views/lists/HostChip.tsx`);
   - Group;
-  - Technique (ATT&CK ids from the rule-metadata index);
+  - Technique (ATT&CK ids from the rule-metadata index; the chips show
+    ids only, and technique names are a follow-up);
   - Case (in a case, or not);
   - Assignee (me, unassigned, people).
   Saved views and columns are the page `alarms`; a saved view restores the
-  host too.
+  host too. Views the old list kept in this browser
+  (`openvibes.v2.views./alarms`) are moved to the console once
+  (`importBrowserViews` with `alarmViewQuery`): `suppressed=true` becomes
+  `shown`, the sort `last` becomes `seen`, and sorts that no longer exist
+  are dropped with their direction.
 - **Columns:**
   - Severity, never hidden;
   - Alarm: the message as a real link to `/alarms/{id}` (a new tab works),
     a Test badge for the test-trigger rules, and `parent → program · techniques`;
   - Host: name (or agent id) and its distribution or OS family;
   - Count;
-  - Seen: last seen, then "first …";
+  - Last seen and First seen: two columns that the Columns menu shows and
+    hides together as "Last and first seen" (key `seen`);
   - State;
   - Assignee;
   - Case: the open case's number.
 
   Empty cells show "—", with their meaning for screen readers.
-- **Sort:** last seen (newest first by default), count and severity, on the
-  server; `seen` in the URL is the API's `last_seen`.
+- **Sort:** on the server, by last seen (the default, newest first), first
+  seen, count or severity. In the URL, `seen` is the API's `last_seen` and
+  `first` is its `first_seen`.
 - **Summary line:** "N open · N critical or high · N on hosts with alarms
   off". The last part shows only when the server sends it (`hosts.read`).
 - **Paging:** by offset, 50 a page, with Previous and Next (`Pager` from
   `Hosts.tsx`). The last page stays on screen while the next loads.
 - **Selection:**
-  - it is of the page on screen, and a new filter, order or page empties it;
+  - it is of the page on screen in its order (`selectionKey`, the whole
+    list query), so a new filter, sort, direction or page empties it;
+  - it holds only ids of rows on screen (`onPage`), so after a refresh the
+    bar counts exactly the ids it sends;
   - the header box selects the page, and the table says "All n on this
     page are selected." (`DataTable serverPaged`), never "select all
     matching", because the bulk route takes ids, not a filter.
@@ -66,8 +76,9 @@ Hosts pages ([console-hosts.md](console-hosts.md)).
   - Add to case.
 
   Rows have no Suppress… of their own; an alarm's page has one.
-- **Empty states:** "No alarms" says how alarms start when nothing exists
-  at all. Otherwise "Nothing matches these filters" says closed and
+- **Empty states:** with no filter and nothing open, one request
+  (`state=all&suppressed=shown&limit=1`) checks whether any alarm exists.
+  If none does, "No alarms" says how alarms start. Otherwise "Nothing matches these filters" says closed and
   suppressed alarms are hidden unless State or Suppressed says otherwise.
 - **Freshness:**
   - a change from the bulk bar, the suppress form or the alarm panel
@@ -76,7 +87,8 @@ Hosts pages ([console-hosts.md](console-hosts.md)).
   - that prefix covers `/alarm-list`, `/alarms` and `/alarm-suppressions`.
 
   The menu's count stays on `app/liveAlarms.ts`.
-- **Old links:** `suppressed=true` is sent as `suppressed=shown`. Unknown
+- **Old links:** `?suppressed=true` is rewritten in place to
+  `suppressed=shown` (a history replace). Unknown
   parameters (such as `window`) are never sent, because the API refuses them.
 
 ## An alarm's page
@@ -100,7 +112,9 @@ panel. A path that is not an id (a sub-path, a bad escape) shows
 - two siblings of alarm 9000 on its host (same rule, program and parent;
   other arguments), so the page's commands have a usual one and one seen
   once;
-- a suppressed, closed alarm, so Suppressed has a value.
+- a suppressed, closed alarm, so Suppressed has a value, with its active
+  exact-command suppression #900 (`demo/suppressions.ts` seeds it when
+  storage lacks it).
 
 ## How to test
 

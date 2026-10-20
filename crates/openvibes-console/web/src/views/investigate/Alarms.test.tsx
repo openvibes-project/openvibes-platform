@@ -10,7 +10,7 @@ vi.hoisted(() => {
 });
 
 import type { AlarmList, AlarmListRow } from "../../api/types";
-import { AlarmListBody, alarmFilters, alarmIdOf, apiQuery } from "./Alarms";
+import { AlarmListBody, alarmFilters, alarmIdOf, alarmViewQuery, apiQuery, onPage, selectionKey } from "./Alarms";
 
 const row = (over: Partial<AlarmListRow> = {}): AlarmListRow => ({
   id: 9000, host: { id: "agent-1", name: "web-01", os_family: "linux", distribution: "Debian 12" },
@@ -40,13 +40,14 @@ describe("Alarms list", () => {
     expect(apiQuery(new URLSearchParams("q=sh&severity=high&host=a%2F1&technique=T1059.004&window=7d&offset=50&sort=seen&dir=asc")))
       .toBe("q=sh&severity=high&host=a%2F1&technique=T1059.004&dir=asc&offset=50&sort=last_seen&limit=50");
     expect(apiQuery(new URLSearchParams("sort=count"))).toBe("sort=count&limit=50");
+    expect(apiQuery(new URLSearchParams("sort=first&dir=asc"))).toBe("dir=asc&sort=first_seen&limit=50");
     // Old links: "include suppressed" was suppressed=true.
     expect(apiQuery(new URLSearchParams("suppressed=true"))).toBe("suppressed=shown&limit=50");
   });
 
   it("renders screen 29's columns: the message a real link to the alarm's page, chain and technique, host with OS, case and assignee", () => {
     const html = render(list());
-    for (const header of ["Severity", "Alarm", "Host", "Count", "Seen", "State", "Assignee", "Case"]) expect(html).toContain(`>${header}<`);
+    for (const header of ["Severity", "Alarm", "Host", "Count", "Last seen", "First seen", "State", "Assignee", "Case"]) expect(html).toContain(`>${header}<`);
     expect(html).toContain('href="/alarms/9000"');
     expect(html).toContain("nginx → sh");
     expect(html).toContain("T1059.004");
@@ -68,6 +69,27 @@ describe("Alarms list", () => {
     expect(html).not.toContain(">Case<");
     expect(html).not.toContain(">Assignee<");
     expect(html).toContain(">Severity<");
+  });
+
+  it("hides Last and First seen together (one column to the person)", () => {
+    const html = render(list(), ["seen"]);
+    expect(html).not.toContain(">Last seen<");
+    expect(html).not.toContain(">First seen<");
+  });
+
+  it("moves a view saved in the browser to today's parameters", () => {
+    expect(alarmViewQuery("state=all&suppressed=true&sort=last&dir=asc")).toBe("state=all&suppressed=shown&sort=seen&dir=asc");
+    expect(alarmViewQuery("severity=high&sort=count&dir=desc")).toBe("severity=high&sort=count&dir=desc");
+    // Sorts that no longer exist go, with their direction.
+    expect(alarmViewQuery("severity=high&sort=suppress&dir=desc")).toBe("severity=high");
+    expect(alarmViewQuery("q=sh&sort=alarm&dir=asc")).toBe("q=sh");
+  });
+
+  it("keeps a selection only for this exact page and order, and only rows on it", () => {
+    expect(selectionKey(new URLSearchParams("severity=high&sort=count"))).not.toBe(selectionKey(new URLSearchParams("severity=high&sort=seen")));
+    expect(selectionKey(new URLSearchParams("sort=count&dir=asc"))).not.toBe(selectionKey(new URLSearchParams("sort=count&dir=desc")));
+    expect(selectionKey(new URLSearchParams("offset=50"))).not.toBe(selectionKey(new URLSearchParams()));
+    expect([...onPage(new Set(["9000", "1"]), list().items)]).toEqual(["9000"]);
   });
 
   it("says the summary line, without the alarms-off part when it is not given", () => {

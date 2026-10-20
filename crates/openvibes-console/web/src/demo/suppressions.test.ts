@@ -12,6 +12,8 @@ type Server = ReturnType<typeof createDemoServer>;
 const LIST = "/api/v1/alarm-suppressions";
 // Alarm 9000 runs on a Pilot host (the team lead's reach); 9001 and 9002 do not.
 const PILOT_ALARM = "9000";
+/** The seed's own active suppression (it closed the seed's suppressed alarm). */
+const SEED = "900";
 
 async function call<T = Record<string, unknown>>(server: Server, method: string, url: string, body?: unknown) {
   const response = await server.handle(method, url, body);
@@ -51,7 +53,7 @@ describe("demo suppressions", () => {
     expect(first).toMatchObject({ status: "waiting", can_withdraw: true, can_decide: false, activated_at: null });
     expect((await alarm(analyst)).state).toBe("open");
     expect((await call(analyst, "POST", `${LIST}/${first.id}/withdraw`)).status).toBe(200);
-    expect(await rows(analyst)).toEqual([]);
+    expect((await rows(analyst)).filter((r) => r.id !== SEED)).toEqual([]);
     const again = (await ask(analyst)).body;
     const waiting = (await call<{ items: AlarmSuppression[] }>(as("admin"), "GET", `${LIST}?alarm_id=${PILOT_ALARM}&state=waiting`)).body.items;
     // It would close the alarm and its two siblings on the same host (same rule and program).
@@ -95,7 +97,7 @@ describe("demo suppressions", () => {
     localStorage.setItem("openvibes.v2.demo.suppressions", JSON.stringify([...stored, ...bad]));
     const list = await call<{ items: AlarmSuppression[] }>(as("admin"), "GET", LIST);
     expect(list.status).toBe(200);
-    expect(list.body.items.map((r) => r.id)).toEqual([made.id]);
+    expect(list.body.items.map((r) => r.id)).toEqual([made.id, SEED]);
   });
 
   it("shows rows by reach and offers the caller's groups", async () => {

@@ -73,8 +73,9 @@ test("suppressing from the alarm's page with approval off closes the alarm and l
   await expect(page.locator(".view tbody tr").first()).toBeVisible();
   await expect(page.locator('.view tbody tr a[href="/alarms/9002"]')).toHaveCount(0);
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
-  const listed = page.locator("#suppressions-active [data-id]").filter({ hasText: "/usr/bin/curl" });
-  await expect(listed).toContainText("admin's install script");
+  // The seed has its own curl suppression (#900): this one is by its reason.
+  const listed = page.locator("#suppressions-active [data-id]").filter({ hasText: "admin's install script" });
+  await expect(listed).toContainText("/usr/bin/curl");
   await expect(listed).toContainText("Active");
 });
 

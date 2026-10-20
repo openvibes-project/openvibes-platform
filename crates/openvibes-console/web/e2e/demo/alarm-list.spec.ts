@@ -115,3 +115,26 @@ test("axe finds nothing on the list, filtered or not", async ({ page }) => {
   await expect(rows(page).first()).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("a re-sort empties the selection, and First seen sorts on the server", async ({ page }) => {
+  await page.goto("/alarms");
+  await rows(page).first().getByRole("checkbox", { name: "Select row" }).check();
+  const bar = page.getByRole("region", { name: "Bulk actions" });
+  await expect(bar).toContainText("1 selected");
+  await table(page).getByRole("button", { name: "First seen" }).click();
+  await expect(page).toHaveURL(/[?&]sort=first/);
+  await expect(bar).toHaveCount(0);
+  await expect(table(page).getByRole("checkbox", { name: "Select row", checked: true })).toHaveCount(0);
+});
+
+test("an old link and a view saved in this browser by the old list come over", async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem("openvibes.v2.views./alarms",
+    JSON.stringify([{ name: "Old everything", query: "state=all&suppressed=true&sort=last&dir=asc" }])));
+  await page.goto("/alarms?suppressed=true");
+  await expect(page).toHaveURL(/[?&]suppressed=shown/);
+  await expect(filters(page)).toContainText("Suppressed: Shown");
+  await page.getByRole("group", { name: "Saved views" }).getByRole("button", { name: "Old everything", exact: true }).click();
+  await expect(page).toHaveURL(/[?&]sort=seen/);
+  await expect(filters(page)).toContainText("State: All states");
+  expect(await page.evaluate(() => localStorage.getItem("openvibes.v2.views./alarms"))).toBeNull();
+});

@@ -3,7 +3,7 @@
 // saved views, the person's columns, a summary line, paging by offset (all
 // in the URL) and the bulk bar (Set state, Assign, Add to case, Suppress…).
 // A row opens the alarm's page at /alarms/{id}.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { invalidate, useResource } from "../../api/client";
 import type { AlarmList, AlarmListRow } from "../../api/types";
@@ -18,9 +18,9 @@ import { triageLabel } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { FilterBar } from "../../ui/list/FilterBar";
 import { type ListFilter, PAGE, hasFilters } from "../../ui/list/filters";
-import { useHiddenColumns } from "../../ui/list/savedViews";
+import { importBrowserViews, useHiddenColumns } from "../../ui/list/savedViews";
 import { SummaryLine } from "../../ui/list/SummaryLine";
-import { filterKey, useSelection } from "../../ui/selection";
+import { useSelection } from "../../ui/selection";
 import { useHostName } from "../lists/HostChip";
 import { isTest } from "../lists/testRules";
 import { Pager } from "./Hosts";
@@ -29,12 +29,14 @@ const PAGE_SIZE = 50;
 /** The list's columns (keys as the console keeps hidden ones), Severity first: it is never hidden. */
 const COLUMNS = [
   { key: "severity", label: "Severity" }, { key: "alarm", label: "Alarm" }, { key: "host", label: "Host" }, { key: "count", label: "Count" },
-  { key: "seen", label: "Seen" }, { key: "state", label: "State" }, { key: "assignee", label: "Assignee" }, { key: "case", label: "Case" },
+  { key: "seen", label: "Last and first seen" }, { key: "state", label: "State" }, { key: "assignee", label: "Assignee" }, { key: "case", label: "Case" },
 ] as const;
 const header = (key: (typeof COLUMNS)[number]["key"]) => COLUMNS.find((c) => c.key === key)?.label ?? key;
 
 /** The URL's sort (a column key) in the API's spelling. */
-const API_SORT: Record<string, string> = { seen: "last_seen", count: "count", severity: "severity" };
+const API_SORT: Record<string, string> = { seen: "last_seen", first: "first_seen", count: "count", severity: "severity" };
+/** The old list's sorts (views saved in the browser) as today's; the others are gone. */
+const OLD_SORT: Record<string, string> = { last: "seen", count: "count", severity: "severity" };
 const API_PARAMS = ["q", "state", "severity", "suppressed", "host", "group", "technique", "case", "assignee", "dir", PAGE];
 
 /** The API query for the list's URL: only what the API reads (it refuses anything else). */
@@ -49,6 +51,27 @@ export function apiQuery(params: URLSearchParams): string {
   if (sort) query.set("sort", sort);
   query.set("limit", String(PAGE_SIZE));
   return query.toString();
+}
+
+/** A view saved in the browser by the old list, in today's parameters. */
+export function alarmViewQuery(query: string): string {
+  const params = new URLSearchParams(query);
+  if (params.get("suppressed") === "true") params.set("suppressed", "shown");
+  const sort = params.get("sort");
+  if (sort !== null) {
+    const next = OLD_SORT[sort];
+    if (next) params.set("sort", next);
+    else { params.delete("sort"); params.delete("dir"); }
+  }
+  return params.toString();
+}
+
+/** What a selection belongs to: this exact page in this order (a re-sort or another page empties it). */
+export const selectionKey = (params: URLSearchParams) => apiQuery(params);
+
+/** The selected ids among the rows on screen: what the bulk bar counts and sends. */
+export function onPage(selected: ReadonlySet<string>, rows: readonly AlarmListRow[]): Set<string> {
+  return new Set(rows.map((a) => String(a.id)).filter((id) => selected.has(id)));
 }
 
 /** `parent → program`, by base name, the way an analyst reads it. */
@@ -96,9 +119,9 @@ const columns: Column<AlarmListRow>[] = [
       <span className="subtle">{a.host.distribution ?? OS[a.host.os_family ?? ""] ?? a.host.os_family ?? ""}</span></div>
   ) },
   { key: "count", header: header("count"), numeric: true, width: "80px", sort: (a) => a.count, render: (a) => <span className="num">{a.count.toLocaleString()}</span> },
-  { key: "seen", header: header("seen"), width: "130px", hideBelow: 900, sort: (a) => a.last_seen, render: (a) => (
-    <div className="cell-two"><span><Ago value={a.last_seen} /></span><span className="subtle">first <Ago value={a.first_seen} /></span></div>
-  ) },
+  { key: "seen", header: "Last seen", width: "110px", hideBelow: 900, sort: (a) => a.last_seen, render: (a) => <Ago value={a.last_seen} /> },
+  // Shown and hidden with Last seen: one column to the person (src/lists/mod.rs keeps "seen").
+  { key: "first", header: "First seen", width: "110px", hideBelow: 1000, sort: (a) => a.first_seen, render: (a) => <span className="subtle"><Ago value={a.first_seen} /></span> },
   { key: "state", header: header("state"), width: "130px", hideBelow: 760, render: (a) => <TriageBadge state={a.state} /> },
   { key: "assignee", header: header("assignee"), width: "130px", hideBelow: 1000, render: (a) => a.assignee ? <span className="truncate">{a.assignee.name}</span> : none("Unassigned") },
   { key: "case", header: header("case"), width: "90px", hideBelow: 1100, render: (a) => a.case
@@ -120,7 +143,7 @@ export function AlarmListBody({ list, hidden, offset = 0, selected, onSelect }: 
       <div className="view-pad host-summary"><SummaryLine parts={parts} /></div>
       <DataTable label="Alarms" rows={list.items} rowKey={(a) => String(a.id)} serverSort serverPaged defaultSort={{ key: "seen", direction: "desc" }}
         selection={{ selected, onChange: onSelect }} onOpen={(a) => nav.view(alarmPath(a.id))}
-        columns={columns.filter((c) => c.key === "severity" || !hidden.includes(c.key))} />
+        columns={columns.filter((c) => c.key === "severity" || !hidden.includes(c.key === "first" ? "seen" : c.key))} />
       <Pager offset={offset} shown={list.items.length} total={list.total} />
     </>
   );
@@ -136,12 +159,19 @@ function AlarmListView() {
   const [kept, setKept] = useState<AlarmList>();
   if (list.data && list.data !== kept) setKept(list.data);
   const data = list.data ?? kept;
-  // A selection is of this page: a new filter, order or page empties it.
-  const [selected, setSelected] = useSelection(filterKey(params));
+  // A selection is of this page in this order, and only of the rows on it
+  // (a refresh may drop some): the bar counts exactly what it sends.
+  const [picked, setSelected] = useSelection(selectionKey(params));
+  const selected = onPage(picked, data?.items ?? []);
   const chosen = () => (data?.items ?? []).filter((a) => selected.has(String(a.id)));
-  // No alarm at all (not just none matching): say how alarms start.
-  const noAlarms = data !== undefined && !hasFilters(params) && data.counts.state.every((s) => s.count === 0)
-    && data.counts.suppressed.every((s) => s.count === 0);
+  // Nothing open and no filter: is there any alarm at all? If not, say how alarms start.
+  const any = useResource<AlarmList>(data?.total === 0 && !hasFilters(params) ? "/api/v1/alarm-list?state=all&suppressed=shown&limit=1" : null);
+  const noAlarms = any.data?.total === 0;
+  // Old links said "include suppressed" as suppressed=true: today's spelling, in place.
+  const oldSuppressed = params.get("suppressed") === "true";
+  useEffect(() => { if (oldSuppressed) nav.setParams({ suppressed: "shown" }); }, [oldSuppressed]);
+  // Views saved in this browser before saved views lived on the console.
+  useEffect(() => { void importBrowserViews("alarms", "openvibes.v2.views./alarms", alarmViewQuery); }, []);
 
   return (
     <div className="view">
