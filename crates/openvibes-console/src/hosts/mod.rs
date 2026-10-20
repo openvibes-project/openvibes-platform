@@ -1,10 +1,11 @@
 //! Hosts: the agent list, summary, detail and certificates, revoking an
 //! agent, enrollment tokens, the agent install package and command, software,
-//! ports and services, live presence, and the site rule-set fleet.
+//! ports and services, live presence, the site rule-set fleet, host groups
+//! and host labels.
 
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 
 use crate::http::AuthHttpState;
@@ -13,7 +14,12 @@ pub(crate) mod agent_package;
 pub(crate) mod agents;
 pub(crate) mod certificates;
 pub(crate) mod enrollment;
+mod group_checks;
+pub mod group_words;
+pub(crate) mod groups;
+pub(crate) mod groups_types;
 pub(crate) mod install;
+pub(crate) mod labels;
 pub(crate) mod ports;
 pub(crate) mod presence;
 pub(crate) mod site_fleet;
@@ -29,7 +35,7 @@ pub use types::{
 
 /// Hosts and their certificates, enrollment tokens, the agent package and
 /// install command, live presence, software, ports and services, and the
-/// site rule-set fleet.
+/// site rule-set fleet, host groups and host labels.
 pub(crate) fn routes() -> Router<AuthHttpState> {
     Router::new()
         .route(
@@ -86,4 +92,25 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
         .route("/v1/services", get(ports::list_services))
         .route("/v1/services/{unit}", get(ports::get_unit))
         .route("/v1/site-rules/fleet", get(site_fleet::site_fleet))
+        .route(
+            "/v1/host-groups",
+            get(groups::list_groups).post(groups::create_group),
+        )
+        .route("/v1/host-groups/preview", post(groups::preview_new_group))
+        .route(
+            "/v1/host-groups/{group_id}",
+            get(groups::get_group)
+                .patch(groups::update_group)
+                .delete(groups::delete_group),
+        )
+        .route("/v1/host-groups/{group_id}/hosts", get(groups::group_hosts))
+        .route(
+            "/v1/host-groups/{group_id}/preview",
+            post(groups::preview_group),
+        )
+        .route("/v1/hosts/{agent_id}/labels", get(labels::host_labels))
+        .route(
+            "/v1/hosts/{agent_id}/labels/{label}",
+            put(labels::add_label).delete(labels::remove_label),
+        )
 }

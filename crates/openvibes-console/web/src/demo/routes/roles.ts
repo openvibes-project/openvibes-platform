@@ -1,5 +1,5 @@
-// Roles (access/roles.rs): the permission catalogue, the templates, roles
-// and host groups. Every role write fits inside the editor's share, as on
+// Roles (access/roles.rs): the permission catalogue, the templates and
+// roles (host groups are in groups.ts). Every role write fits inside the editor's share, as on
 // the server. Returns what the people and service-account routes share.
 import type { Role } from "../../api/types";
 import catalogue from "../../api/permissions.json";
@@ -13,7 +13,7 @@ const NEEDS = new Map(catalogue.map((p) => [p.id, p.needs]));
 
 export function registerRoleRoutes(ctx: DemoContext) {
   const { data, me, capabilities, permissions, rolesOf, audit, route } = ctx;
-  const groupName = (id: string) => data.access.asset_groups.find((g) => g.asset_group_id === id)?.name ?? id;
+  const groupName = (id: string) => data.access.host_groups.find((g) => g.asset_group_id === id)?.name ?? id;
   const reachView = (reach: StoredReach): Role["reach"] =>
     reach.kind === "groups" ? { kind: "groups", groups: reach.asset_group_ids.map((id) => ({ asset_group_id: id, name: groupName(id) })) } : { kind: reach.kind };
   // Active bindings, people and service accounts.
@@ -81,7 +81,7 @@ export function registerRoleRoutes(ctx: DemoContext) {
   /** What the store refuses: a name taken whatever its case, a group that does not exist. */
   const storeRefusal = (role: { name: string; reach: StoredReach }, except?: string) => {
     if (data.access.roles.some((r) => r.role_id !== except && r.name.toLowerCase() === role.name.toLowerCase())) return problem(409, "role_name_taken", "Another role has this name");
-    if (role.reach.kind === "groups" && role.reach.asset_group_ids.some((id) => !data.access.asset_groups.some((g) => g.asset_group_id === id))) {
+    if (role.reach.kind === "groups" && role.reach.asset_group_ids.some((id) => !data.access.host_groups.some((g) => g.asset_group_id === id))) {
       return problem(422, "unknown_group", "A host group does not exist");
     }
     return null;
@@ -123,35 +123,6 @@ export function registerRoleRoutes(ctx: DemoContext) {
     data.access.roles = data.access.roles.filter((r) => r.role_id !== id);
     audit("rbac.role.deleted", stored.name, "role");
     return new Response(null, { status: 204 });
-  });
-
-  // Host groups: listed for host_groups.manage or access.read.
-  route("GET", "/api/v1/host-groups", null, () => {
-    if (!permissions.includes("host_groups.manage") && !permissions.includes("access.read")) return problem(403, "permission_denied", "Access is not available");
-    const reaching = (id: string) => data.access.roles.filter((r) => r.reach.kind === "groups" && r.reach.asset_group_ids.includes(id)).length;
-    return json(data.access.asset_groups.map((g) => ({ ...g, roles: reaching(g.asset_group_id) })));
-  });
-  const saveGroup = (id: string, body: Record<string, unknown>) => {
-    const name = (typeof body.name === "string" ? body.name : "").trim();
-    const selectors = ((body.selectors ?? []) as { key: string; value: string }[]).map((sel) => `${sel.key}=${sel.value}`);
-    if (name === "" || selectors.length === 0 || selectors.some((sel) => /^=|=$/.test(sel))) return undefined;
-    return { asset_group_id: id, name, selectors };
-  };
-  route("POST", "/api/v1/access-control/asset-groups", "host_groups.manage", (_, __, body) => {
-    const group = saveGroup(`grp-${Date.now().toString(36)}`, body);
-    if (!group) return problem(422, "invalid_asset_group", "Give the group a name and at least one key=value selector");
-    data.access.asset_groups.push(group);
-    audit("access.asset_group.create", group.asset_group_id, "asset_group");
-    return json(group, 201);
-  });
-  route("PUT", "/api/v1/access-control/asset-groups/{id}", "host_groups.manage", ({ id = "" }, _, body) => {
-    const index = data.access.asset_groups.findIndex((g) => g.asset_group_id === id);
-    const group = saveGroup(id, body);
-    if (index < 0) return problem(404, "not_found", "Asset group not found");
-    if (!group) return problem(422, "invalid_asset_group", "Give the group a name and at least one key=value selector");
-    data.access.asset_groups[index] = group;
-    audit("access.asset_group.update", id, "asset_group");
-    return json(group);
   });
 
   return { roleView, roleById, refuseOutside, rolesFit, admin };

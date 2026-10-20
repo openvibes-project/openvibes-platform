@@ -11,7 +11,8 @@ export type Grant = { role_id: string; permissions: readonly string[]; reach: St
 /** The built-in Administrator: every permission on every host, whatever is stored. */
 export const ADMIN_ROLE = "admin";
 
-const hostScoped = new Set(CATALOGUE.filter((p) => p.scope === "host").map((p) => p.id));
+/** Host permissions: those a role's reach limits. */
+export const hostScoped = new Set(CATALOGUE.filter((p) => p.scope === "host").map((p) => p.id));
 
 /**
  * A platform permission is global whatever the reach; a host permission

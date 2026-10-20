@@ -38,7 +38,7 @@ async fn people_list_shows_roles_with_reach_and_sign_in_source() {
     let (status, groups) = fx.call(&fx.admin, "GET", "/api/v1/host-groups", None).await;
     assert_eq!(status, StatusCode::OK, "{groups}");
     assert_eq!(groups[0]["name"], "win");
-    assert_eq!(groups[0]["roles"], 1);
+    assert_eq!(groups[0]["roles"][0]["name"], "Win viewers");
     fx.db.drop().await;
 }
 

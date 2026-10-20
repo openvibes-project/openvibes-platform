@@ -29,10 +29,11 @@ function link(view: string, params?: Record<string, string>) {
   return { href: nav.href(view, params), onClick: (e: MouseEvent) => { e.preventDefault(); nav.view(view, params); } };
 }
 
-const Card = ({ title, aside, children }: { title: ReactNode; aside?: ReactNode; children: ReactNode }) => (
+/** A card of the shared detail-page layout (approved screen 11); `flush` drops the body padding (a table). */
+export const Card = ({ title, aside, flush, children }: { title: ReactNode; aside?: ReactNode; flush?: boolean; children: ReactNode }) => (
   <section className="card person-card">
     <div className="row row--between person-card__head"><h2 className="section-title">{title}</h2>{aside}</div>
-    <div className="person-card__body">{children}</div>
+    <div className={flush ? undefined : "person-card__body"}>{children}</div>
   </section>
 );
 

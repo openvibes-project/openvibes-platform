@@ -16,6 +16,7 @@ pub async fn run(settings: &Settings, listener: TcpListener, health: TcpListener
                  app: impl FnOnce(Pool) -> Router, shutdown: impl Future<Output = ()>)
                  -> Result<(), ServerError>;
 pub struct AuthenticatedAgent(pub String);  // extractor; needs Pool: FromRef<S>
+pub struct PeerAddr(pub IpAddr);  // IPv4-mapped IPv6 is stored as IPv4; the address OpenVIBES sees (behind NAT: the router)
 pub enum ApiError { BadRequest, Unauthorized, Revoked, NotFound, Unavailable, Busy, Timeout, Resync }
 pub enum ServerError { Config, Tls, Database, Listen }
 pub const MAX_BODY_BYTES: usize;            // 1 MiB, the V1 document limit

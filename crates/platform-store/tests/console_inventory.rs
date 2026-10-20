@@ -35,10 +35,8 @@ async fn setup() -> TestDb {
                 ('{DB}', 'active', now(), 'db-01', now()),
                 ('{IMPORTED}', 'imported', now(), 'old-01', NULL),
                 ('{REVOKED}', 'revoked', now(), 'gone-01', now());
-             INSERT INTO console_agent_tags VALUES
-                ('{WEB}', 'env', 'prod', now(), 't'), ('{DB}', 'env', 'dev', now(), 't');
              INSERT INTO console_asset_groups VALUES ('{PROD}', 'prod', now(), 't');
-             INSERT INTO console_asset_group_selectors VALUES ('{PROD}', 'env', 'prod', now());
+             INSERT INTO console_host_group_members VALUES ('{PROD}', '{WEB}', now(), 't');
              INSERT INTO package_versions (id, manager, name, epoch, version, release, arch) VALUES
                 (1, 'rpm', 'openssl', 1, '3.0.13', '1.fc44', 'x86_64'),
                 (2, 'rpm', 'openssl', 1, '3.0.14', '1.fc44', 'x86_64'),
@@ -431,12 +429,10 @@ async fn measure_the_fleet_aggregate_on_1000_hosts() {
                     jsonb_build_array(jsonb_build_object('name', 'pkg-' || lpad((k * 20)::text, 4, '0'))),
                     now(), now()
              FROM generate_series(1, 1000) h, generate_series(1, 100) k WHERE (h + k) % 2 = 0;
-             INSERT INTO console_agent_tags
-             SELECT 'agent.00000000-0000-4000-8000-' || lpad(h::text, 12, '0'), 'env', 'prod', now(), 't'
-             FROM generate_series(1, 100) h;
              INSERT INTO console_asset_groups VALUES ('00000000-0000-4000-8000-0000000000a1', 'prod', now(), 't');
-             INSERT INTO console_asset_group_selectors
-             VALUES ('00000000-0000-4000-8000-0000000000a1', 'env', 'prod', now());
+             INSERT INTO console_host_group_members
+             SELECT '00000000-0000-4000-8000-0000000000a1', 'agent.00000000-0000-4000-8000-' || lpad(h::text, 12, '0'), now(), 't'
+             FROM generate_series(1, 100) h;
              ANALYZE;",
         )
         .await

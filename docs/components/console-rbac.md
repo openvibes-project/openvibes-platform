@@ -77,8 +77,22 @@ alarm suppression list `alarms.suppressions.read`; creating or editing a
 case `cases.write`, and setting or changing its assignee (and the assignee
 list) `cases.assign`; enrollment tokens `tokens.manage`, the agent installer
 `tokens.installer`; creating users `access.users`; bindings `access.grant`;
-host groups and host tags `host_groups.manage`; service accounts
+changing host groups `host_groups.manage` plus `hosts.read` on all hosts;
+labels `hosts.label` on that host; service accounts
 `service_accounts.manage`, their tokens `service_accounts.tokens`.
+
+Who may change host groups (spec §5, ruling 2026-10-19; `hosts/groups.rs`):
+changing a group's membership changes access for everyone whose role
+reaches it, so creating, editing, deleting and previewing a group need
+`host_groups.manage` **and** `hosts.read` on all hosts (Administrators
+qualify); anyone else holding it gets 403 "Changing host groups needs access
+to every host". Reading groups needs `access.read` or `host_groups.manage`,
+and host counts and lists show only hosts the reader reaches with
+`hosts.read`. Changing a group's membership also needs each role reaching
+it to fit inside the editor's share on all hosts (its host permissions
+held everywhere), since the change widens those roles' reach. A group a
+role reaches cannot be deleted (409 `group_in_use`,
+naming the roles).
 
 People (spec §4.4, §9.1; `access/people.rs`, `people_roles.rs`): `GET
 /api/v1/users` (`access.read`) and `GET /api/v1/users/{id}` (`access.read`,
@@ -96,23 +110,19 @@ Administrator is kept by the store under the access-binding advisory lock
 enforces resolved asset scope before any filtering, aggregation, pagination,
 or facet calculation.
 
-Global `host_groups.manage` administrators can create groups with one to 32
-exact selectors or replace an existing group's name and full selector set
-through POST/PUT under `/api/v1/access-control/asset-groups`. Selector keys are
-unique within a group and key/value lengths follow the schema limits. Changes
-require the same Origin, Fetch Metadata, and CSRF checks, and their selector
-data and audit detail commit in one transaction. Selector writes serialize
-with agent tag changes. Settings › Host groups provides the create/edit forms; editing
-requires explicit confirmation because it can change membership and what
-the roles reaching the group see.
+Since schema 53 tag-selector groups and host tags are gone: membership is
+decided by the SQL function `console_host_in_group` (platform-store.md "Host
+groups"), groups are changed through `/api/v1/host-groups` and labels through
+`/api/v1/hosts/{id}/labels` (console-auth-http.md), and the old
+`/api/v1/access-control/asset-groups*` and agent tag routes are gone (404).
 
 Run `cargo test -p openvibes-console --lib access::`,
 `cargo test -p platform-store --test permission_catalogue` and
 `cargo test -p openvibes-console --test auth_http` (with the PostgreSQL test
 database configured) to cover resolution, a service token following role
-edits (`service_token_follows_role_edits`), authenticated group
-creation/update and the agent-tag preview, stale-preview rejection, apply,
-and audit journey. `cases_http`'s
+edits (`service_token_follows_role_edits`) and the audit journey;
+`--test host_groups_http` and `--test host_labels_http` cover group writes
+(needing every host), previews, refusals and labels. `cases_http`'s
 `writing_cases_without_cases_assign_cannot_set_the_assignee` covers
 `cases.assign`. The console HTTP tests create the roles they bind with
 `tests/common` (`ensure_role` for the former viewer, analyst and operator,
@@ -127,6 +137,12 @@ role reaching one group, as migration 52 does).
 
 Existing roles are kept: migrations 51 and 52 (both are marked as needing a backup) rename the permissions and turn each holder's scoped grants of one role into a role of its own, such as "Operator (Lab)", reaching those groups, so nobody gains or loses access (`platform-store/tests/custom_roles.rs` compares access before and after).
 
+Migration 53 (needs a backup) replaces tags with host groups and labels, again without changing who reaches which host:
+
+- each tag-selector group becomes a **manual** group of the active hosts it matched at upgrade time (marked "upgraded from tags", with a description naming its tags); roles keep reaching it. To follow new hosts again, open it and use "Turn into a rule";
+- each host's tags become **labels** (`key:value`), which never affect access, groups or rule assignment;
+- **IP rules** need the host's address, which the platform records from the host's heartbeats: until each host has sent one after the upgrade, an `ip` condition does not match it (an unknown fact never matches).
+
 ## Live check
 
-`scripts/test-console-e2e.sh` (real console, throwaway database) runs the two-team journey of spec §15 (`web/e2e/live/teams.spec.ts`): an Administrator makes "Linux team" and "Windows team" from the Analyst template, each on a host group made through the asset-group API (`scripts/console-e2e-server.sh` seeds two enrolled hosts tagged `os=linux` and two `os=windows`, each with one finding and one alarm); each person sees only their two hosts in Hosts, Compliance and Alarms and has no Roles tab; the Linux person's bulk triage changes linux-1 and leaves windows-1 as it was; with a Team lead role on Linux (plus `access.users`) the Linux person adds someone with "Linux team", is not offered "Windows team", and the API refuses it with "You can only give roles that fit inside your own access (… is outside it)". A role on a group with no hosts sees the empty Alarms view.
+`scripts/test-console-e2e.sh` (real console, throwaway database) runs the two-team journey of spec §15 (`web/e2e/live/teams.spec.ts`): an Administrator makes "Linux team" and "Windows team" from the Analyst template, each on a rule group ("hostname matches `linux-*`" / "`windows-*`") made through `POST /api/v1/host-groups` (`scripts/console-e2e-server.sh` seeds two enrolled Linux hosts and two Windows hosts with their facts, each with one finding and one alarm); each person sees only their two hosts in Hosts, Compliance and Alarms and has no Roles tab; the Linux person's bulk triage changes linux-1 and leaves windows-1 as it was; with a Team lead role on Linux (plus `access.users`) the Linux person adds someone with "Linux team", is not offered "Windows team", and the API refuses it with "You can only give roles that fit inside your own access (… is outside it)". A role on a group with no hosts sees the empty Alarms view.

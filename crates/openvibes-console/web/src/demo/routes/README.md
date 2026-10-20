@@ -11,9 +11,10 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 | `cases.ts` | Cases and their items, notes and timeline. |
 | `dashboards.ts` | Dashboards and each user's home dashboard. |
 | `findings.ts` | Compliance findings: groups by rule, host matches, history and triage. |
-| `hosts.ts` | Hosts (agents), their tags and enrolling new ones. |
+| `groups.ts` | Host groups: list, page, hosts, preview, create, edit and delete, with the server's refusals. |
+| `hosts.ts` | Hosts (agents), their labels and enrolling new ones. |
 | `metrics.ts` | Counts, their history and the ranked-hosts list. |
-| `roles.ts` | The permission catalogue, templates, roles (create, edit, delete) and host groups. |
+| `roles.ts` | The permission catalogue, templates and roles (create, edit, delete). |
 | `rules.ts` | Rule sets, bundles, site rule drafts, ATT&CK coverage and per-host rule sets. |
 | `session.ts` | The session, password changes and the About page. |
 | `settings.ts` | The audit log, its retention and the assistant's internet access. |

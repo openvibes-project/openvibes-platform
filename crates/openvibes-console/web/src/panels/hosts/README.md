@@ -9,6 +9,7 @@ The panels that open on a host, or on something found across hosts (package, por
 | `compare.ts` | Logic for ComparePanel.tsx: the difference between two lists, unit-tested. |
 | `HostExport.tsx` | Exports chosen sections of one host to CSV. |
 | `HostHardening.tsx` | The host's Hardening line: which rule sets run there and why. |
+| `HostLabels.tsx` | The "Groups and labels" card: the host's groups and its editable labels. |
 | `HostServices.tsx` | One host's open ports and running services. |
 | `PackagePanel.tsx` | One package across the fleet: versions and hosts. |
 | `PortPanel.tsx` | One port or service unit across the fleet and the hosts that have it. |

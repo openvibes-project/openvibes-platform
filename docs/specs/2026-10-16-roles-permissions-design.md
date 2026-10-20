@@ -297,8 +297,9 @@ give roles that fit inside your own access (Revoke a host is outside it)".
     `Windows`) or a new distribution and release (`Debian 12`,
     `Fedora 44`, from `os_id` and `os_release`) reports, a group is
     created. It is recorded in the audit log as made by OpenVIBES.
-  - Deleting one records its key in `console_host_group_dismissed`, so it
-    is not made again.
+  - Deleting or editing one records its key in
+    `console_host_group_dismissed`, so it is not made again (an edited one
+    becomes the person's rule group).
   - An automatic group whose last host leaves stays, with 0 hosts.
 - **Rules:**
   - A rule is a list of **conditions, all of which must match**.
@@ -310,6 +311,11 @@ give roles that fit inside your own access (Revoke a host is outside it)".
     - `hostname` (a pattern; `*` matches any run of characters,
       case-insensitive);
     - `ip` (CIDR ranges).
+  - A condition may be negated ("is not", "does not match", "is not
+    in"), as on the approved screen 10 (plan ruling, 2026-10-19).
+  - A host whose fact is unknown (no hostname, no address, no OS
+    reported yet) never satisfies a condition on that field, negated or
+    not (plan ruling, 2026-10-19).
   - Labels are never a field.
   - At most 16 conditions, and 64 values per condition.
 - **The IP address** is the source address of the agent's last mTLS
@@ -327,6 +333,13 @@ give roles that fit inside your own access (Revoke a host is outside it)".
 
 Group names are unique regardless of case, 1–128 characters, and have an
 optional description.
+
+**Who may change groups** (plan ruling, 2026-10-19): changing a group's
+membership changes access for everyone whose role reaches it, so creating,
+editing or deleting a group needs `host_groups.manage` **and** `hosts.read`
+on all hosts (Administrators qualify). Everyone else may view groups.
+Host lists and counts on group pages show only hosts the viewer reaches
+with `hosts.read`.
 
 Rule-set assignment (`rule_set_group_assignment`, spec 2026-10-14)
 already refers to groups by ID; it works unchanged with every kind.

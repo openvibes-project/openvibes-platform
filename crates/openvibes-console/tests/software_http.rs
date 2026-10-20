@@ -605,9 +605,8 @@ async fn latest_findings_by_host_stay_inside_the_callers_scope() {
                 VALUES ('{other}', 'active', now(), 'web-02', now());
              INSERT INTO console_asset_groups VALUES
                 ('33333333-3333-4333-8333-333333333333', 'Prod', now(), 'test');
-             INSERT INTO console_asset_group_selectors VALUES
-                ('33333333-3333-4333-8333-333333333333', 'env', 'prod', now());
-             INSERT INTO console_agent_tags VALUES ('{AGENT}', 'env', 'prod', now(), 'test');"
+             INSERT INTO console_host_group_members VALUES
+                ('33333333-3333-4333-8333-333333333333', '{AGENT}', now(), 'test');"
         ))
         .await
         .unwrap();

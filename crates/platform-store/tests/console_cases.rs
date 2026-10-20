@@ -97,10 +97,8 @@ async fn setup() -> Fx {
             "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at) VALUES
                 ('{WEB}', 'active', now(), 'web-01', now()),
                 ('{DB}', 'active', now(), 'db-01', now());
-             INSERT INTO console_agent_tags VALUES
-                ('{WEB}', 'env', 'prod', now(), 't'), ('{DB}', 'env', 'dev', now(), 't');
              INSERT INTO console_asset_groups VALUES ('{PROD}', 'prod', now(), 't');
-             INSERT INTO console_asset_group_selectors VALUES ('{PROD}', 'env', 'prod', now());
+             INSERT INTO console_host_group_members VALUES ('{PROD}', '{WEB}', now(), 't');
              INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id,
                 rule_version, severity, first_observed_at, last_observed_at, last_observed_day,
                 scan_id, confidence, message, evidence, received_at, origin, authenticated)

@@ -99,14 +99,3 @@ impl Drop for OneTimePassword {
         self.one_time_password.zeroize();
     }
 }
-
-/// A host group, for the Host groups tab and the role reach picker.
-#[derive(Serialize, ToSchema)]
-pub struct HostGroupView {
-    pub asset_group_id: String,
-    pub name: String,
-    /// Exact `key=value` selectors.
-    pub selectors: Vec<String>,
-    /// How many roles reach the group.
-    pub roles: i64,
-}

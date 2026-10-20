@@ -16,10 +16,11 @@ import { RoleBar } from "./RoleBar";
 import { RoleEditor, refusal, saveRole } from "./RolePage";
 import { type RoleState, blank, fromRole, reduce, saveBody } from "./roleState";
 
-const groups: HostGroup[] = [
-  { asset_group_id: "g-win", name: "WindowsServers", selectors: ["os=windows"], roles: 1 },
-  { asset_group_id: "g-lin", name: "LinuxServers", selectors: ["os=linux"], roles: 0 },
-];
+const group = (asset_group_id: string, name: string): HostGroup => ({
+  asset_group_id, name, kind: "rule", description: "", conditions: [], membership: "", picked: 0, hosts: 0,
+  online: 0, open_alarms: 0, critical: 0, roles: [], people: 0, upgraded_from_tags: false, version: 1,
+});
+const groups: HostGroup[] = [group("g-win", "WindowsServers"), group("g-lin", "LinuxServers")];
 /** Rendered for someone holding access.roles. */
 const render = (role: Role | undefined, initial?: RoleState) => renderToStaticMarkup(
   <SessionContext.Provider value={{ session: undefined, demo: false, can: () => true, canEverywhere: () => true }}>

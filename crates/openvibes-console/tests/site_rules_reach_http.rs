@@ -33,13 +33,11 @@ async fn a_role_reaching_one_group_tests_and_sees_only_its_hosts() {
         .batch_execute(&format!(
             "INSERT INTO console_asset_groups VALUES ('{LAB}', 'lab', now(), 'test'),
                                                      ('{PROD}', 'prod', now(), 'test');
-             INSERT INTO console_asset_group_selectors VALUES ('{LAB}', 'env', 'lab', now()),
-                                                              ('{PROD}', 'env', 'prod', now());
              INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at) VALUES
                 ('{LAB_HOST}', 'active', now(), 'lab-01', now()),
                 ('{PROD_HOST}', 'active', now(), 'prod-01', now());
-             INSERT INTO console_agent_tags VALUES ('{LAB_HOST}', 'env', 'lab', now(), 'test'),
-                                                   ('{PROD_HOST}', 'env', 'prod', now(), 'test');
+             INSERT INTO console_host_group_members VALUES ('{LAB}', '{LAB_HOST}', now(), 'test'),
+                                                           ('{PROD}', '{PROD_HOST}', now(), 'test');
              UPDATE agents SET health_at = now(), health = '{{\"rule_sets\":[]}}';"
         ))
         .await
@@ -104,10 +102,9 @@ async fn the_host_rule_set_view_stays_within_the_callers_groups() {
         .unwrap()
         .batch_execute(&format!(
             "INSERT INTO console_asset_groups VALUES ('{LAB}', 'lab', now(), 'test');
-             INSERT INTO console_asset_group_selectors VALUES ('{LAB}', 'env', 'lab', now());
              INSERT INTO agents (agent_id, status, enrolled_at) VALUES
                 ('{LAB_HOST}', 'active', now()), ('{PROD_HOST}', 'active', now());
-             INSERT INTO console_agent_tags VALUES ('{LAB_HOST}', 'env', 'lab', now(), 'test');"
+             INSERT INTO console_host_group_members VALUES ('{LAB}', '{LAB_HOST}', now(), 'test');"
         ))
         .await
         .unwrap();

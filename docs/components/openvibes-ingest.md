@@ -82,6 +82,7 @@ The usual request limits apply. Test: `tests/ca.rs`.
   to `agents` at most every 5 minutes (every heartbeat also updates the live
   `agent_presence` row, which online/offline reads) unless the hostname, the capabilities or the
   health report's `rule_sets` changed;
+  the connection's remote IP (`PeerAddr`) is stored as `agents.last_address`, and a changed address is also written at once;
   an absent hostname keeps the stored one. Capabilities name the agent's
   enabled collectors (`collector.processes`, `collector.packages`,
   `collector.ports`; protocol P7), and each list replaces the stored one.
@@ -111,7 +112,10 @@ The usual request limits apply. Test: `tests/ca.rs`.
   stored); an unchanged inventory writes nothing, otherwise
   the host's inventory is replaced in one transaction and the vulnerability
   service is notified (`inventory_changed`). Each package's `source` and
-  `source_version` (protocol P10) are stored with it. 204.
+  `source_version` (protocol P10) are stored with it. The same transaction
+  makes the automatic host groups for the host's OS family and distribution
+  when missing and not dismissed (`host_group_facts::ensure_automatic_groups`,
+  platform-store.md "Host groups"). 204.
 - `POST /v1/inventory/changes` (authenticated, protocol P11):
   `InventoryChanges`, usually gzip-compressed; `agent_id` must be the
   authenticated agent's (else 400). Under the host's row lock the change

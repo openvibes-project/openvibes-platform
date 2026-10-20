@@ -18,8 +18,8 @@ const EXPLAIN = "A host runs it when any of its groups has it on; otherwise when
 const LIST = "/api/v1/rule-set-assignments";
 const NOTE_BOX = { display: "block", border: "1px solid var(--line-strong)", borderRadius: 8, padding: "10px 12px" } as const;
 
-const Tags = ({ selectors }: { selectors: readonly string[] }) => (
-  <span className="row row--wrap">{selectors.map((s) => <span key={s} className="tag">{s}</span>)}</span>
+const Summary = ({ text }: { text: string | undefined }) => (
+  <span className="subtle">{text ?? "—"}</span>
 );
 
 export function WhereItRuns({ assignment, groups, canChange }: { assignment: RuleSetAssignment; groups: readonly AssignableGroup[]; canChange: boolean }) {
@@ -113,7 +113,7 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
               {assignment.groups.map((o) => (
                 <tr key={o.asset_group_id}>
                   <td><div className="truncate" style={{ maxWidth: 220 }} title={o.name}>{o.name}</div></td>
-                  <td><Tags selectors={byId.get(o.asset_group_id)?.selectors ?? []} /></td>
+                  <td><Summary text={byId.get(o.asset_group_id)?.summary} /></td>
                   <td className="num subtle">{byId.get(o.asset_group_id)?.hosts ?? "—"}</td>
                   <td className="num">
                     <span className="row" style={{ justifyContent: "flex-end", gap: 6 }}>
@@ -131,7 +131,7 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
               {adding && (
                 <tr ref={addRow}>
                   <td><Select small label="Group" value={adding.group} onChange={(group) => setAdding({ ...adding, group })} options={free.map((g) => ({ value: g.asset_group_id, label: g.name }))} /></td>
-                  <td><Tags selectors={chosen?.selectors ?? []} /></td>
+                  <td><Summary text={chosen?.summary} /></td>
                   <td className="num subtle">{chosen?.hosts ?? 0}</td>
                   <td className="num">
                     <Segmented label="Runs" value={adding.on ? "on" : "off"} onChange={(v) => setAdding({ ...adding, on: v === "on" })}

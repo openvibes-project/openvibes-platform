@@ -12,7 +12,7 @@ describe("demo rule-set assignment", () => {
     expect(l1).toMatchObject({ rule_set_id: "hardening-linux-l1", default_enabled: true, published: true, groups: [{ asset_group_id: "grp-prod", name: "Production", enabled: false }] });
     expect(l2).toMatchObject({ rule_set_id: "hardening-linux-l2", default_enabled: false, published: false, groups: [] });
     const prod = view.asset_groups.find((g) => g.name === "Production");
-    expect(prod?.selectors).toEqual(["env=prod"]);
+    expect(prod).toMatchObject({ kind: "manual", summary: expect.stringMatching(/^\d+ hosts picked by hand$/) });
     expect(l1?.hosts_off).toBe(prod?.hosts);
     expect((l1?.hosts_on ?? 0) + (l1?.hosts_off ?? 0)).toBe(l2?.hosts_off);
   });
@@ -61,8 +61,8 @@ describe("demo rule-set assignment", () => {
   it("with several groups on a host, on wins and the first on group by name decides", async () => {
     const server = createDemoServer({ persona: "admin" });
     const add = async (name: string) => {
-      await new Promise((r) => setTimeout(r, 3)); // group ids come from the clock
-      return ((await (await server.handle("POST", "/api/v1/access-control/asset-groups", { name, selectors: [{ key: "env", value: "prod" }] })).json()) as { asset_group_id: string }).asset_group_id;
+      const prod = { field: "hostname", negate: false, values: ["*.prod.example.test"] };
+      return ((await (await server.handle("POST", "/api/v1/host-groups", { name, kind: "rule", conditions: [prod] })).json()) as { asset_group_id: string }).asset_group_id;
     };
     const zeta = await add("Zeta");
     const alpha = await add("Alpha");

@@ -56,18 +56,9 @@ pub async fn agent_ids_in_scope(
 pub(crate) fn agent_visibility(agent_id: &str, global: &str, groups: &str) -> String {
     format!(
         "({global}::boolean OR EXISTS (
-            SELECT 1 FROM console_asset_group_selectors s
-            WHERE s.asset_group_id::text = ANY({groups}::text[])
-              AND NOT EXISTS (
-                SELECT 1 FROM console_asset_group_selectors required
-                WHERE required.asset_group_id = s.asset_group_id
-                  AND NOT EXISTS (
-                    SELECT 1 FROM console_agent_tags t
-                    WHERE t.agent_id = {agent_id}
-                      AND t.tag_key = required.tag_key
-                      AND t.tag_value = required.tag_value
-                  )
-              )
+            SELECT 1 FROM console_asset_groups vg
+            WHERE vg.asset_group_id::text = ANY({groups}::text[])
+              AND console_host_in_group({agent_id}, vg.asset_group_id)
         )) AND ({global}::boolean OR a.status <> 'imported')"
     )
 }
@@ -541,9 +532,11 @@ pub async fn agent_summary_in_scope(
     let threshold = now - Duration::minutes(OFFLINE_AFTER_MINUTES);
     let groups = scope.group_ids();
     let global = scope.is_global();
+    let visible = agent_visibility("a.agent_id", "$2", "$3");
     let row = client
         .query_one(
-            "SELECT count(*),
+            &format!(
+                "SELECT count(*),
                     count(*) FILTER (WHERE a.status = 'active'
                         AND agent_seen_at(a.agent_id, a.last_seen_at) IS NOT NULL AND agent_seen_at(a.agent_id, a.last_seen_at) >= $1),
                     count(*) FILTER (WHERE a.status = 'active'
@@ -551,20 +544,7 @@ pub async fn agent_summary_in_scope(
                     count(*) FILTER (WHERE a.status = 'revoked'),
                     count(*) FILTER (WHERE a.status = 'imported')
              FROM agents a
-             WHERE ($2::boolean OR EXISTS (
-                    SELECT 1 FROM console_asset_group_selectors s
-                    WHERE s.asset_group_id::text = ANY($3::text[])
-                      AND NOT EXISTS (
-                        SELECT 1 FROM console_asset_group_selectors required
-                        WHERE required.asset_group_id = s.asset_group_id
-                          AND NOT EXISTS (
-                            SELECT 1 FROM console_agent_tags t
-                            WHERE t.agent_id = a.agent_id
-                              AND t.tag_key = required.tag_key
-                              AND t.tag_value = required.tag_value
-                          )
-                      )
-             )) AND ($2::boolean OR a.status <> 'imported')",
+             WHERE {visible}"),
             &[&threshold, &global, &groups],
         )
         .await?;
@@ -621,9 +601,11 @@ pub async fn agents_in_scope(
     let cursor_id = query.after.as_ref().map(|cursor| cursor.agent_id.as_str());
     let groups = scope.group_ids();
     let global = scope.is_global();
+    let visible = agent_visibility("a.agent_id", "$7", "$8");
     let rows = client
         .query(
-            "SELECT a.agent_id, a.hostname,
+            &format!(
+                "SELECT a.agent_id, a.hostname,
                     CASE WHEN a.status = 'imported' THEN 'imported'
                          WHEN a.status = 'revoked' THEN 'revoked'
                          WHEN agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $1 THEN 'stale'
@@ -639,27 +621,14 @@ pub async fn agents_in_scope(
                         AND (agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $1)) OR
                     ($2 = 'revoked' AND a.status = 'revoked') OR
                     ($2 = 'imported' AND a.status = 'imported'))
-               AND ($7::boolean OR EXISTS (
-                    SELECT 1 FROM console_asset_group_selectors s
-                    WHERE s.asset_group_id::text = ANY($8::text[])
-                      AND NOT EXISTS (
-                        SELECT 1 FROM console_asset_group_selectors required
-                        WHERE required.asset_group_id = s.asset_group_id
-                          AND NOT EXISTS (
-                            SELECT 1 FROM console_agent_tags t
-                            WHERE t.agent_id = a.agent_id
-                              AND t.tag_key = required.tag_key
-                              AND t.tag_value = required.tag_value
-                          )
-                      )
-               )) AND ($7::boolean OR a.status <> 'imported')
+               AND {visible}
                AND ($5::boolean = false OR
                     ($3::timestamptz IS NOT NULL AND
                         (agent_seen_at(a.agent_id, a.last_seen_at) < $3 OR (agent_seen_at(a.agent_id, a.last_seen_at) = $3 AND a.agent_id > $4)
                          OR agent_seen_at(a.agent_id, a.last_seen_at) IS NULL)) OR
                     ($3::timestamptz IS NULL AND agent_seen_at(a.agent_id, a.last_seen_at) IS NULL AND a.agent_id > $4))
              ORDER BY agent_seen_at(a.agent_id, a.last_seen_at) DESC NULLS LAST, a.agent_id ASC
-             LIMIT $6",
+             LIMIT $6"),
             &[
                 &threshold,
                 &state,
@@ -705,9 +674,11 @@ pub async fn agent_in_scope(
     let threshold = now - Duration::minutes(OFFLINE_AFTER_MINUTES);
     let groups = scope.group_ids();
     let global = scope.is_global();
+    let visible = agent_visibility("a.agent_id", "$3", "$4");
     let row = client
         .query_opt(
-            "SELECT a.agent_id, a.hostname,
+            &format!(
+                "SELECT a.agent_id, a.hostname,
                     CASE WHEN a.status = 'imported' THEN 'imported'
                          WHEN a.status = 'revoked' THEN 'revoked'
                          WHEN agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $2 THEN 'stale'
@@ -716,20 +687,7 @@ pub async fn agent_in_scope(
                     a.os_id, a.os_version, a.running_kernel, a.inventory_at,
                     a.health -> 'rule_sets', a.health_at, a.health -> 'alarms'
              FROM agents a WHERE a.agent_id = $1
-               AND ($3::boolean OR EXISTS (
-                    SELECT 1 FROM console_asset_group_selectors s
-                    WHERE s.asset_group_id::text = ANY($4::text[])
-                      AND NOT EXISTS (
-                        SELECT 1 FROM console_asset_group_selectors required
-                        WHERE required.asset_group_id = s.asset_group_id
-                          AND NOT EXISTS (
-                            SELECT 1 FROM console_agent_tags t
-                            WHERE t.agent_id = a.agent_id
-                              AND t.tag_key = required.tag_key
-                              AND t.tag_value = required.tag_value
-                          )
-                      )
-               )) AND ($3::boolean OR a.status <> 'imported')",
+               AND {visible}"),
             &[&agent_id, &threshold, &global, &groups],
         )
         .await?;
@@ -793,31 +751,21 @@ pub async fn certificates_in_scope(
     let serial = after.map(|cursor| cursor.serial.as_slice());
     let groups = scope.group_ids();
     let global = scope.is_global();
+    let visible = agent_visibility("a.agent_id", "$6", "$7");
     let rows = client
         .query(
-            "SELECT c.serial, c.not_before, c.not_after, c.issued_at FROM certificates c
+            &format!(
+                "SELECT c.serial, c.not_before, c.not_after, c.issued_at FROM certificates c
              WHERE c.agent_id = $1
                AND EXISTS (
                    SELECT 1 FROM agents a
                    WHERE a.agent_id = c.agent_id
-                     AND ($6::boolean OR EXISTS (
-                        SELECT 1 FROM console_asset_group_selectors s
-                        WHERE s.asset_group_id::text = ANY($7::text[])
-                          AND NOT EXISTS (
-                            SELECT 1 FROM console_asset_group_selectors required
-                            WHERE required.asset_group_id = s.asset_group_id
-                              AND NOT EXISTS (
-                                SELECT 1 FROM console_agent_tags t
-                                WHERE t.agent_id = a.agent_id
-                                  AND t.tag_key = required.tag_key
-                                  AND t.tag_value = required.tag_value
-                              )
-                          )
-                     )) AND ($6::boolean OR a.status <> 'imported')
+                     AND {visible}
                )
                AND ($4::boolean = false OR c.issued_at < $2
                     OR (c.issued_at = $2 AND c.serial > $3))
-             ORDER BY c.issued_at DESC, c.serial ASC LIMIT $5",
+             ORDER BY c.issued_at DESC, c.serial ASC LIMIT $5"
+            ),
             &[
                 &agent_id,
                 &issued,

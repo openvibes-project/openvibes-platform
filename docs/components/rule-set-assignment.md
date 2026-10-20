@@ -1,7 +1,7 @@
 # Rule-set assignment
 
 Which of the project's assignable rule sets run on which hosts, switched per
-asset group in the console with no host-side step. Spec:
+host group in the console with no host-side step. Spec:
 [`../specs/2026-10-14-rule-set-assignment-design.md`](../specs/2026-10-14-rule-set-assignment-design.md).
 
 ## Purpose
@@ -17,12 +17,12 @@ saying why).
 **Tables (schema 49).** `rule_set_assignment` has one row per assignable set
 with its default: `hardening-linux-l1` on, `hardening-linux-l2` off (the row
 exists before the rules are published). `rule_set_group_assignment` holds
-on/off overrides per asset group; deleting a group deletes its rows.
+on/off overrides per host group (`asset_group_id`); deleting a group deletes its rows.
 
 **A host's state for a set:** on if any group the host matches says on (on
 wins); else off if any of its groups says off; else the default. A host
-matches a group when it carries every selector tag; a group without
-selectors matches no host (as for access).
+is in a group when `console_host_in_group` says so, as for access
+(platform-store.md "Host groups").
 
 **Distribution.** `POST /v1/rule-bundle` answers `410 Gone` with no body for an
 assignable set that is off on the asking host, checked after the 404 cases
@@ -63,7 +63,7 @@ writes triage history).
 
 **Store (`platform_store::rule_assignment`).** `overview` (sets, overrides,
 whether a live bundle is published, Linux hosts on and off per set, every
-group with its `key=value` selectors and Linux host count; a Linux host is an
+group with its kind, rule, picked-host count and Linux host count); a Linux host is an
 active agent, stale included, revoked and imported not, whose inventory
 reported os-release), `for_agent` (per set: state, the group that decided it,
 the first by name when several agree, and whether the set is published),
@@ -79,9 +79,9 @@ outcome from `agents.health` and `agents.hardening_facts_ok_at` (schema 50).
 `assigned(agent, set)` (distribution) and `for_agent(scope, agent)` (the
 console's host view, `None` outside the caller's scope) share one SQL
 resolution (`HOST_STATE`). A set that is not assignable is always
-assigned. Grants: `openvibes-distribution` may read the two tables and only
-`console_agent_tags (agent_id, tag_key, tag_value)` and
-`console_asset_group_selectors (asset_group_id, tag_key, tag_value)`.
+assigned. Grants: `openvibes-distribution` may read the two tables, the
+group conditions and members, `console_asset_groups (asset_group_id, kind)`
+and the agent facts membership uses; not labels or group names.
 
 ## Console API
 
@@ -97,7 +97,9 @@ All answers carry `Cache-Control: no-store`; errors are
 | `GET /api/v1/agents/{agent_id}/rule-set-assignments` | `hosts.read` (scoped) | none | `HostRuleSetAssignmentsView` |
 
 Shapes: `RuleSetAssignmentsView { items: [RuleSetAssignmentView],
-asset_groups: [{asset_group_id, name, selectors: ["key=value"], hosts}] }`;
+asset_groups: [{asset_group_id, name, kind, summary, hosts}] }` (`kind`
+automatic, rule or manual; `summary` the membership sentence, e.g. "Hosts
+where OS family is Linux" or "3 hosts picked by hand");
 `RuleSetAssignmentView { rule_set_id, default_enabled, published, hosts_on,
 hosts_off, groups: [{asset_group_id, name, enabled}] }`;
 `HostRuleSetAssignmentsView { items: [{rule_set_id, enabled, source:
@@ -178,7 +180,7 @@ Toasts: "<set> is now on/off by default", "<set> is now on/off for
 <group>", "<group> follows the default again"; errors show the API's title
 ("Asset group not found" when the group was deleted meanwhile). "+ Add
 group" is disabled with "No asset groups yet: create one under Settings ›
-Access." or "Every asset group is listed.".
+Host groups." or "Every asset group is listed.".
 `npm test -- src/panels/WhereItRuns.test.tsx src/app/registry.test.tsx`
 covers the markup and the menu access; `e2e/demo/where-it-runs-focus.spec.ts`
 the focus, single-send and failed-Add behaviour; clicks and toasts are in the e2e.

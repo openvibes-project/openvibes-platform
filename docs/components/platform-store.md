@@ -574,8 +574,8 @@ matches this binary exactly; empty, old, and newer schemas remain unready.
 
 Migration 15 adds the persistent local identity boundary used by C3: users and
 Argon2id credential slots, hash-only pre-auth and session state, bounded login
-throttle buckets, idempotency records, role/permission bindings, exact-tag
-asset groups, service accounts and hashed tokens, finding-triage state/history,
+throttle buckets, idempotency records, role/permission bindings, asset
+groups (exact-tag until schema 53, host groups since), service accounts and hashed tokens, finding-triage state/history,
 structured audit columns, and a versioned 365-day audit-retention policy.
 `audit::cleanup_expired_events` removes at most 10,000 events older than the
 stored policy cutoff per call; repeated maintenance runs drain larger backlogs.
@@ -619,7 +619,7 @@ permissions.
 ## Console write grants (schema 22)
 
 Migration 22 grants `openvibes-console` DELETE for idempotency and
-selector/tag replacement and INSERT for published rule bundles. It grants
+selector/tag replacement (tables dropped in schema 53) and INSERT for published rule bundles. It grants
 column-level UPDATE only for the agent fields used by revoke and one low-impact
 column on each table that console code locks (`current_findings`, `rule_sets`,
 and `rule_trust_keys`). The role cannot UPDATE those tables as a whole, and a
@@ -875,5 +875,151 @@ shares, and `console_users` `email`, `display_name` and `last_sign_in_at`.
 `audit_log_actor_recent_idx` (`actor_id`, `at DESC`) serves a person's recent
 activity. People reads and writes and role gifts live in `console_people`.
 Interface and guards: [console-auth-store.md](console-auth-store.md).
-Tests: `tests/custom_roles.rs` (upgrade) and `tests/role_writes.rs`; tests that bind a former built-in id create
-it first with `common::seed_role`.
+Tests: `tests/custom_roles.rs` (upgrade, run to 52 only with
+`common::step_to`) and `tests/role_writes.rs`; tests that bind a former
+built-in id create it first with `common::seed_role`.
+
+## Host groups and labels (schema 53)
+
+Spec 2026-10-16-roles-permissions-design.md §5, §12 part 4. Migration 53
+(needs-backup) gives `console_asset_groups` a `kind` (`automatic`, `rule`,
+`manual`), `description` (≤ 500), `auto_key` (`os_family:linux`,
+`distribution:debian 12`; set exactly for automatic groups), `version`,
+`changed_at`/`changed_by` and `upgraded_from_tags`; names are unique
+regardless of case. `agents` gains `last_address inet` and the generated,
+indexed `os_family` (`windows` or `linux`) and `distribution`
+(`lower(os_id || ' ' || os_version)`, Rocky and AlmaLinux cut to the major
+release). New tables: `console_host_group_conditions` (≤ 16 per group,
+`field` os_family/distribution/hostname/ip, `negate`, 1–64 `vals`, no NULL
+value, `ip` values must parse as `inet`),
+`console_host_group_members` (manual groups), `console_host_group_dismissed`
+(deleted automatic keys) and `console_host_labels` (1–64 characters).
+
+**Membership is one SQL function**, `console_host_in_group(agent, group)`,
+evaluated when queried: only active hosts; a manual group holds its
+members; a rule or automatic group holds hosts satisfying every condition,
+a condition holding when any value matches (or none does, when negated). A
+fact the host has not reported never satisfies a condition, negated or not;
+a group without conditions holds no one; a condition that evaluates to
+unknown counts as not holding (fail closed). Hostname patterns are
+case-insensitive with `*` the only wildcard (`console_glob_like`); `ip`
+values are CIDRs or single addresses, v4 or v6. `agent_visibility`,
+`revoke_agent_in_scope` and rule-set assignment (`FLEET`, `HOST_STATE`) all
+call it. `console_os_family_name` and `console_distribution_name` give the
+display names of automatic groups (Debian, Ubuntu, Fedora, Rocky Linux,
+AlmaLinux, other ids capitalised, plus the release).
+`console_free_group_name(display, suffix, keep)` returns a free name of at
+most 128 characters: `display`, else `display (suffix)`, `(suffix 2)`, …
+(with suffix `''`: ` (2)`, ` (3)`, …), cutting `display` so the suffix fits.
+It sees only committed or earlier-statement names, so insert one group per
+statement (the migration loops; ingest's automatic groups must too).
+
+**Upgrade:** names that differed only in case (allowed before) are made
+unique first: the oldest keeps its name, later ones get ` (2)`, ` (3)`, …,
+recorded as `renamed_from`/`renamed_to` in their `host_group.migrated` row.
+Each existing asset group becomes a manual group of the active
+hosts its selectors matched (a group without selectors holds none), with
+`upgraded_from_tags` and a description naming its tags, and one
+`host_group.migrated` audit row; each tag `k=v` becomes the label `k:v` (cut to 64 characters; a host whose
+tags were cut, or fell together into one label, gets one
+`host.labels_migrated` row listing them);
+automatic groups are made for the OS families and distributions active hosts
+already report (`host_group.created_automatically`; named through
+`console_free_group_name(…, 'automatic')`). `console_agent_tags` and `console_asset_group_selectors` are
+dropped with their grants. Revoked hosts leave every group, the one access
+change. Grants: the console role reads and writes the new tables and may
+delete groups; distribution reads conditions, members, `kind` and the agent
+facts; ingest may create groups and conditions and read dismissals.
+
+Tests: `tests/host_groups_membership.rs` (the function),
+`tests/host_groups_upgrade.rs` (every role reaches the same hosts after the
+upgrade). Fixtures make groups with `common::manual_group` and
+`common::rule_group`.
+
+Agent facts: `ingest::heartbeat` takes the peer `address` and stores it as
+`last_address` (written at once when it changes, like the hostname).
+`host_group_facts::ensure_automatic_groups` (called by `inventory::finish` in
+the inventory transaction with the row's generated `os_family`/`distribution`)
+makes the missing, undismissed automatic groups, one statement each, under the
+transaction advisory lock `AUTO_GROUP_LOCK` (0x4F564847) taken only
+when a group is missing; names come from `console_free_group_name`, and the
+Rust display map must equal the migration's. Hardening (agents report their own os-release): a distribution gets a group
+only when its os id is one of debian, ubuntu, fedora, rocky, almalinux and the
+release is a dotted number `[0-9]{1,4}(\.[0-9]{1,4}){0,2}` (`12`, `24.04`;
+never a word such as `prod-servers`), and an OS family only when linux or windows
+(unknown ids get no group at all, so a hostile agent cannot fill the cap or
+squat a name; users make rule groups for them); there are at most 20
+automatic distribution groups per os id and 200 automatic groups in all
+(OS family groups are made first; at a cap nothing is created, a line goes to
+stderr, the agent gets no error); the name functions of an unknown id (not reachable from ingest) return it raw
+lowercase, never capitalised. Migration 53's name functions and its backfill
+(same ids and pattern, 20 per os id, 200 at most) agree.
+Test: `tests/host_group_facts.rs`.
+
+### Host-group store API
+
+- `host_groups::list(scope)` / `detail(id, scope)` return `GroupSummary`
+  (kind, description, ordered `conditions`, `picked` (active picked hosts
+  inside the scope), version, changed
+  at/by, `upgraded_from_tags`). Host counts, `online` (seen within
+  `OFFLINE_AFTER_MINUTES`), `open_alarms` (agent alarms in state `open`)
+  and `critical` (`host_vulnerability_counts.critical`) count only active
+  member hosts inside the caller's `AgentScope` (`agent_visibility`); every
+  group is listed whatever the scope. `roles` are those in
+  `console_role_groups`; `people` the distinct enabled users bound to them.
+- `host_groups::hosts(id, scope, after, limit)` pages member hosts by
+  hostname (cursor: the last agent id; an unknown cursor id, or one outside
+  the scope, yields an
+  empty page; limit 1–100) with display
+  distribution, address, labels, last seen, online, problems and `why`
+  ("Matches the rule" / "Picked by hand"). `recent_changes(id, scope, limit)`
+  reads the group's audit rows (`target_kind = 'host_group'`), newest first;
+  for a scoped caller the `picked` and `hosts` details are dropped so no
+  host outside its reach is named or counted. `picked_ids(id)` lists the
+  active hosts picked by hand (what a rename of a manual group keeps);
+  non-active members are left out, so a manual update drops them.
+- `host_group_writes::create` / `update` / `delete` run in one transaction
+  under the access-binding advisory lock (the one role writes take, so a
+  role cannot start using a group being deleted). They check the version
+  (`Stale`), refuse a malformed name, description or condition (`Invalid`
+  naming the part: `invalid_part` checks the field is one of the four,
+  1–64 values, `os_family` linux/windows, `ip` an address or CIDR, at most
+  16 conditions), a picked id that is missing or not active
+  (`UnknownHost`), and a name taken regardless of case (`NameTaken`, from
+  the unique index). `update` takes `expected_roles`: when given (the
+  console passes the roles it share-checked a membership change against),
+  the write is `Stale` unless exactly those roles reach the group, read
+  under the lock. The kind follows the content; updating an automatic
+  group clears its `auto_key` and records the key as dismissed, making it
+  the person's (the next inventory does not make it again).
+  Manual members keep their `added_at` across updates. A delete refuses
+  while roles reach the group (`InUse` with their names), remembers an
+  automatic key in `console_host_group_dismissed`, and cascades rule-set
+  switches. Audit: `host_group.created` / `updated` (`{name, kind,
+  conditions | picked}`), `host_group.deleted` (`{name, kind,
+  overrides_removed}`).
+- `host_group_writes::preview(id, proposed)` (module `host_group_preview`)
+  returns `PreviewOutcome::Invalid(part)` for a malformed rule
+  (`invalid_content`, the checks writes use) and `NotFound` for a missing
+  group; otherwise `Ready(Preview)`. It compares today's membership with the proposed rule (evaluated with
+  `console_condition_holds` over active hosts) or picked list; `proposed`
+  None previews a delete and counts `overrides_removed`. `gains` / `loses`
+  are the enabled people bound to roles reaching the group who get the
+  joining / lose the leaving hosts, except those holding a role on all
+  hosts (simplified: their other groups are not checked). Lists hold at
+  most 50 entries; `joins_total`, `leaves_total`, `people_total` count all.
+- `host_labels::labels` / `add_label` / `remove_label`: trimmed, 1–64
+  characters, no control characters, not `.` or `..` (they cannot be a URL
+  path segment), at most 32 per active host (`TooMany`;
+  the agent row lock, `FOR NO KEY UPDATE`, serialises adds), `AlreadyThere` for a repeat,
+  `NotFound` for a missing or non-active host, `Invalid` otherwise. Audit
+  `host.label_added` / `host.label_removed` (`{label}`). Labels are never a
+  membership field.
+- `host_labels::reachable(scope, agent_id)`: a non-revoked host inside the
+  scope. `host_labels::host_labels(scope, agent_id)`: its labels and the
+  groups holding it (id, name, kind), `None` when not reachable.
+- `rule_assignment::overview` lists every group with its `kind`, rule
+  `conditions` and `picked` count, for the console's membership sentence.
+
+Tests: `tests/host_group_reads.rs`, `tests/host_group_writes.rs`,
+`tests/host_labels.rs` (fixtures in `tests/common/groups.rs`).

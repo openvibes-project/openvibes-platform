@@ -175,4 +175,5 @@ export function registerRuleRoutes(ctx: DemoContext) {
     const agent = agentById(id);
     return agent ? json(assignments.host(agent)) : problem(404, "agent_not_found", "Agent not found");
   });
+  return { overridesOf: assignments.overridesOf, dropGroup: assignments.dropGroup };
 }

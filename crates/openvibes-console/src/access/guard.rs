@@ -72,7 +72,7 @@ pub(crate) async fn authenticated_permission(
 }
 
 /// The scope `capabilities` give `permission`, if they hold it.
-fn scope_of(
+pub(crate) fn scope_of(
     capabilities: &[crate::EffectiveCapability],
     permission: crate::Permission,
 ) -> Option<platform_store::console_read::AgentScope> {

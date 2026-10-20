@@ -103,11 +103,54 @@ in the OpenAPI document, with no session and with a forced-change one.
 | `POST /api/v1/users/{id}/disable`, `/enable` | `access.users` and the share; never oneself | 204; 409 `last_administrator` |
 | `POST /api/v1/users/{id}/reset-password` | `access.users` and the share; never oneself (403 `use_change_password`) | `{one_time_password}` (`no-store`); sets `password_must_change`, ends their sessions, `user.password_reset` |
 | `PUT`/`DELETE /api/v1/users/{id}/roles/{role}` | `access.grant`, the whole role inside the share; never one's own | 204 (idempotent); 409 `last_administrator` |
-| `GET /api/v1/host-groups` | `access.read` or `host_groups.manage` | `[{asset_group_id, name, selectors, roles}]` |
 
 People routes take browser sessions only (bearer tokens get 403). Someone
 outside the editor's share answers 404, exactly like someone who does not
 exist. Tests: `tests/people_http.rs` and `tests/people_share_http.rs` (fixture in `tests/common/people.rs`).
+
+### Host groups and labels (spec §5, §13; `src/hosts/groups.rs`, `labels.rs`)
+
+Reads need `access.read` or `host_groups.manage`; host counts and host
+lists count only hosts inside the caller's `hosts.read` reach (none
+without it). Writes and previews change access for everyone whose role
+reaches the group, so they need `host_groups.manage` **and** `hosts.read`
+on all hosts (CSRF); otherwise 403 "Changing host groups needs access to
+every host". Reads and writes take browser sessions only: bearer tokens
+are refused (403). A membership change (`conditions` or `agent_ids` in a
+PATCH) also needs every role reaching the group to fit inside the editor's
+share on all hosts: each role's host-scope permissions must be held on
+every host (Administrators pass), else 403 `permission_denied` with the
+share refusal message; a rename or new description skips this. The store
+rechecks under its lock that the same roles still reach the group, else
+409 `stale_group`. A preview's `gains`/`loses` name, for a
+non-administrator, only people the people routes would show them (their
+own share); `people_total` still counts everyone.
+
+| Route | Answer |
+|---|---|
+| `GET /api/v1/host-groups` | `[HostGroupView]`: summary, `conditions`, `membership` sentence, `picked`, `hosts`, `online`, `open_alarms`, `critical`, `roles` (names), `people`, `version` |
+| `POST /api/v1/host-groups` | `{name, description?, kind: "rule"\|"manual", conditions?, agent_ids?}` → 201 `HostGroupView` |
+| `GET /api/v1/host-groups/{id}` | `HostGroupView` plus `recent` (newest 10 audit changes; no host lists or counts for a caller without global `hosts.read`) |
+| `GET /api/v1/host-groups/{id}/hosts?after=&limit=` | `[GroupHostView]`, by hostname, 1–100 (50) |
+| `PATCH /api/v1/host-groups/{id}` | `{name?, description?, conditions?, agent_ids?, version}`; a left-out field is unchanged; an automatic group edited becomes a rule group and its key is dismissed → `HostGroupView` |
+| `DELETE /api/v1/host-groups/{id}?version=` | 204; removes its rule-set switches |
+| `POST /api/v1/host-groups/{id}/preview` | `{conditions}` or `{agent_ids}`, or `{}` for a delete → `{joins, leaves, gains, loses, joins_total, leaves_total, people_total, overrides_removed}` |
+| `POST /api/v1/host-groups/preview` | the same for a new group (joins only) |
+| `GET /api/v1/hosts/{agent_id}/labels` | `hosts.read` on that host → `{labels, groups: [{asset_group_id, name, kind}]}` |
+| `PUT`/`DELETE /api/v1/hosts/{agent_id}/labels/{label}` | `hosts.label` on that host, CSRF → 204 (idempotent) |
+
+Rules: 1–16 conditions on `os_family` (`linux`, `windows`),
+`distribution` (`<id> <release>`, lowercase), `hostname` (pattern, `*`
+any run) or `ip` (address or CIDR); 1–64 values of 1–255 characters.
+Refusals: 400 `invalid_group` (name 1–128, description ≤ 500, body);
+422 `invalid_condition` (`field_errors[0].field` names the field, or
+`conditions`), `unknown_host`; 404 `group_not_found`, `host_not_found`
+(a host outside reach reads the same as a missing one); 409
+`group_name_taken`, `stale_group`, `group_in_use` (with `roles`: the
+names), `too_many_labels` (32 per host); 400 `invalid_label` (also for `.` and `..`, which the web app refuses before sending). The old
+`/api/v1/access-control/asset-groups*` and `/api/v1/agents/{id}/tags*`
+routes are gone (404). Tests: `tests/host_groups_http.rs`,
+`tests/host_labels_http.rs`.
 
 ### Users and passwords (#85)
 

@@ -11,7 +11,6 @@ import { WidgetGalleryPanel, WidgetSettingsPanel } from "../dashboards/panels";
 import { editorState } from "../dashboards/editor";
 import { widgetDefs } from "../dashboards/widgets";
 import { ComparePanel } from "../panels/hosts/ComparePanel";
-import { AssetGroupPanel } from "../panels/admin/AssetGroupPanel";
 import { AuditEventPanel, RetentionPanel } from "../panels/admin/AuditPanels";
 import { EnrollmentTokenPanel } from "../panels/admin/EnrollmentTokenPanel";
 import { PublishBundle, RuleSetPanel } from "../panels/rules/RuleSetPanel";
@@ -105,6 +104,5 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   "rule-bundle": { label: "Rule bundle", icon: "rules", title: () => "Publish bundle", render: () => <PublishBundle /> },
   "widget-gallery": { label: "Add widget", icon: "plus", title: () => "Add widget", render: () => <WidgetGalleryPanel /> },
   widget: { label: "Widget", icon: "pencil", title: (id) => `Edit widget · ${(widgetDefs as Partial<Record<string, { label: string }>>)[editorState().draft?.widgets.find((w) => w.id === id)?.type ?? ""]?.label ?? "Widget"}`, render: (id) => <WidgetSettingsPanel id={id} /> },
-  "asset-group": { label: "Asset group", icon: "access", title: (id) => id === "new" ? "New group" : id, render: (id) => <AssetGroupPanel id={id} /> },
   "audit-retention": { label: "Audit log", icon: "audit", title: () => "Retention", render: () => <RetentionPanel /> },
 };

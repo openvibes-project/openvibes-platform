@@ -301,10 +301,14 @@ test("rule-set switches: a group is added, a failed change keeps the switch and 
   await page.goto("/settings?tab=host-groups");
   await page.getByRole("button", { name: "New group" }).click();
   const group = `Lab ${info.project.name}`;
-  await page.getByLabel("Name").fill(group);
-  await page.getByLabel("Selectors (one key=value per line)").fill("env=lab");
+  await page.getByRole("textbox", { name: "Name" }).fill(group);
+  await page.getByRole("combobox", { name: "Field of condition 1" }).click();
+  await page.getByRole("option", { name: "Hostname", exact: true }).click();
+  const values = page.getByRole("textbox", { name: "Values of condition 1" });
+  await values.fill("lab-*");
+  await values.press("Enter");
   await page.getByRole("button", { name: "Create group" }).click();
-  await expect(page.locator(".group-card", { hasText: group })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: group })).toBeVisible();
 
   await page.goto("/settings?tab=rule-sets");
   const l2 = page.getByRole("table", { name: "Rule sets" }).locator("tbody tr").filter({ hasText: "hardening-linux-l2" });
@@ -328,7 +332,7 @@ test("rule-set switches: a group is added, a failed change keeps the switch and 
   await expect(byDefault).toHaveAttribute("aria-checked", "false");
   await page.unroute(setPath);
 
-  // A group deleted elsewhere (no console route deletes one): the change answers 404.
+  // A group deleted meanwhile: the change answers 404.
   const groupPath = "**/api/v1/rule-set-assignments/hardening-linux-l2/groups/*";
   await page.route(groupPath, (route) => route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ status: 404, code: "asset_group_not_found", title: "Asset group not found" }) }));
   const labSwitch = inspector.getByRole("switch", { name: `Runs for ${group}` });

@@ -3,8 +3,8 @@
 # TLS 1.3 with a throwaway self-signed certificate) on a fresh throwaway
 # database for the browser tests: schema migrated, users
 # alex (admin) and sam (analyst), imported findings for six hosts, and
-# four enrolled hosts tagged os=linux or os=windows, one finding and one
-# alarm each. Needs
+# four enrolled hosts with their facts (OS, version, hostname, address), one
+# finding and one alarm each. Needs
 # OPENVIBES_TEST_DATABASE_URL (scripts/test-db.sh locally; the CI job sets it)
 # and the binaries built by scripts/test-console-e2e.sh.
 set -euo pipefail
@@ -84,14 +84,14 @@ admin import "${work}/exports" >/dev/null
 # limited to host groups never reaches imported hosts), each with one low
 # finding and one low alarm of their own rules, so the other tests' findings
 # stay as they are.
-# The journey makes its groups through the asset-group API.
+# The journey makes its rule groups through the host-group API.
 psql -qX -v ON_ERROR_STOP=1 "${database_url}" >/dev/null <<'SQL'
-INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version, hostname)
-SELECT 'agent.00000000-0000-4000-8000-00000000000' || n, 'active', now() - interval '1 day', now(), '0.4.2', name
-FROM (VALUES (1, 'linux-1.example.test'), (2, 'linux-2.example.test'),
-             (3, 'windows-1.example.test'), (4, 'windows-2.example.test')) AS hosts (n, name);
-INSERT INTO console_agent_tags (agent_id, tag_key, tag_value, changed_at, changed_by)
-SELECT agent_id, 'os', split_part(hostname, '-', 1), now(), 'e2e' FROM agents WHERE status = 'active';
+INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version, hostname, os_id, os_version, last_address)
+SELECT 'agent.00000000-0000-4000-8000-00000000000' || n, 'active', now() - interval '1 day', now(), '0.4.2', name, os, version,
+    ('192.0.2.' || n)::inet
+FROM (VALUES (1, 'linux-1.example.test', 'debian', '12'), (2, 'linux-2.example.test', 'debian', '12'),
+             (3, 'windows-1.example.test', 'windows', '11'), (4, 'windows-2.example.test', 'windows', '11'))
+     AS hosts (n, name, os, version);
 INSERT INTO current_findings
 SELECT (jsonb_populate_record(c, jsonb_build_object('agent_id', a.agent_id, 'origin', 'online', 'authenticated', true,
     'rule_set_id', 'e2e', 'rule_id', 'e2e.team_host', 'severity', 'low', 'message', 'Seeded for the two-team journey'))).*

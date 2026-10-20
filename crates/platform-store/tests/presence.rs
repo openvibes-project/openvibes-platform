@@ -53,6 +53,7 @@ async fn heartbeats_keep_an_agent_online_between_saved_writes() {
         None,
         &[],
         None,
+        None,
         now - Duration::minutes(1),
     )
     .await
@@ -102,6 +103,7 @@ async fn heartbeats_keep_an_agent_online_between_saved_writes() {
         "0.1.0",
         None,
         &[],
+        None,
         None,
         now - Duration::minutes(2),
     )

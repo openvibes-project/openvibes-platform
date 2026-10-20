@@ -114,10 +114,8 @@ pub(super) async fn seed() -> (TestDb, DateTime<Utc>) {
             "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at) VALUES
                 ('{WEB}', 'active', now(), 'web-01', now()),
                 ('{DB}', 'active', now(), 'db-01', now());
-             INSERT INTO console_agent_tags VALUES
-                ('{WEB}', 'env', 'prod', now(), 't'), ('{DB}', 'env', 'dev', now(), 't');
              INSERT INTO console_asset_groups VALUES ('{PROD}', 'prod', now(), 't');
-             INSERT INTO console_asset_group_selectors VALUES ('{PROD}', 'env', 'prod', now());
+             INSERT INTO console_host_group_members VALUES ('{PROD}', '{WEB}', now(), 't');
              INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
              VALUES ('FEDORA-2026-1', 'fedora-44', 'fedora', '44', 'important', 'openssh', 'u');
              INSERT INTO advisory_cves VALUES ('FEDORA-2026-1', 'CVE-2026-0001');

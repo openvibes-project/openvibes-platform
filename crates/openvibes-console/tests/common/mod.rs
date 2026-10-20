@@ -164,3 +164,55 @@ pub async fn scope_bindings(client: &mut Client, filter: &str, group_id: &str) {
             .unwrap();
     }
 }
+
+/// A manual host group holding exactly `agent_ids`; returns its id.
+pub async fn manual_group(client: &Client, name: &str, agent_ids: &[&str]) -> String {
+    let id: String = client
+        .query_one(
+            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind)
+             VALUES (gen_random_uuid(), $1, now(), 'test', 'manual') RETURNING asset_group_id::text",
+            &[&name],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    client
+        .execute(
+            "INSERT INTO console_host_group_members (asset_group_id, agent_id, added_at, added_by)
+             SELECT $1::text::uuid, unnest($2::text[]), now(), 'test'",
+            &[&id, &agent_ids],
+        )
+        .await
+        .unwrap();
+    id
+}
+
+/// A rule host group: every condition (field, negated, values) must hold;
+/// returns its id.
+pub async fn rule_group(
+    client: &Client,
+    name: &str,
+    conditions: &[(&str, bool, &[&str])],
+) -> String {
+    let id: String = client
+        .query_one(
+            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind)
+             VALUES (gen_random_uuid(), $1, now(), 'test', 'rule') RETURNING asset_group_id::text",
+            &[&name],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    for (position, (field, negate, values)) in conditions.iter().enumerate() {
+        let position = i16::try_from(position).unwrap();
+        client
+            .execute(
+                "INSERT INTO console_host_group_conditions (asset_group_id, position, field, negate, vals)
+                 VALUES ($1::text::uuid, $2, $3, $4, $5)",
+                &[&id, &position, field, negate, values],
+            )
+            .await
+            .unwrap();
+    }
+    id
+}

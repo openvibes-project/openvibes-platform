@@ -229,8 +229,7 @@ async fn setup() -> (TestDb, axum::Router) {
         "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at) VALUES
             ('{A}', 'active', now(), 'host-a', now()), ('{B}', 'active', now(), 'host-b', now());
          INSERT INTO console_asset_groups VALUES ('{GROUP_A}', 'A', now(), 'test');
-         INSERT INTO console_asset_group_selectors VALUES ('{GROUP_A}', 'env', 'a', now());
-         INSERT INTO console_agent_tags VALUES ('{A}', 'env', 'a', now(), 'test');"
+         INSERT INTO console_host_group_members VALUES ('{GROUP_A}', '{A}', now(), 'test');"
     );
     for day in [
         "(now() AT TIME ZONE 'UTC')::date - 2",

@@ -42,7 +42,7 @@ test("L2 is switched on for Lab from the panel, by keyboard too", async ({ page 
   await inspector.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.locator(".toast").last()).toContainText("hardening-linux-l2 is now on for Lab");
   const lab = inspector.getByRole("table", { name: "Group overrides" }).locator("tbody tr").filter({ hasText: "Lab" });
-  await expect(lab).toContainText("env=lab");
+  await expect(lab).toContainText("Hosts where hostname matches *.lab.example.test");
   const labSwitch = lab.getByRole("switch", { name: "Runs for Lab" });
   await expect(labSwitch).toHaveAttribute("aria-checked", "true");
   await expect(row(page, "hardening-linux-l2")).toContainText("Off · 1 group on");

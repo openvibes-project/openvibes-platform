@@ -279,6 +279,7 @@ async fn heartbeats_are_throttled_and_findings_stored_once() {
                 hostname,
                 &[],
                 None,
+                None,
                 now + Duration::minutes(minutes),
             )
             .await
@@ -476,7 +477,7 @@ async fn changed_capabilities_are_written_at_once() {
     ];
     let fewer = ["collector.processes".to_owned()];
     assert!(
-        ingest::heartbeat(&client, id, "0.2.0", None, &all, None, now)
+        ingest::heartbeat(&client, id, "0.2.0", None, &all, None, None, now)
             .await
             .unwrap()
     );
@@ -487,6 +488,7 @@ async fn changed_capabilities_are_written_at_once() {
             "0.2.0",
             None,
             &all,
+            None,
             None,
             now + Duration::minutes(1)
         )
@@ -503,6 +505,7 @@ async fn changed_capabilities_are_written_at_once() {
             "0.2.0",
             None,
             &fewer,
+            None,
             None,
             now + Duration::minutes(2)
         )
@@ -558,7 +561,7 @@ async fn health_follows_the_heartbeat_throttle() {
             row.get::<_, Option<chrono::DateTime<Utc>>>(2),
         )
     };
-    ingest::heartbeat(&client, id, "0.2.0", None, &[], Some(&report(1)), now)
+    ingest::heartbeat(&client, id, "0.2.0", None, &[], Some(&report(1)), None, now)
         .await
         .unwrap();
     assert_eq!(
@@ -573,6 +576,7 @@ async fn health_follows_the_heartbeat_throttle() {
         None,
         &[],
         Some(&report(2)),
+        None,
         now + Duration::minutes(1),
     )
     .await
@@ -586,6 +590,7 @@ async fn health_follows_the_heartbeat_throttle() {
         None,
         &[],
         Some(&report(3)),
+        None,
         now + Duration::minutes(6),
     )
     .await
@@ -599,6 +604,7 @@ async fn health_follows_the_heartbeat_throttle() {
         "0.2.0",
         None,
         &[],
+        None,
         None,
         now + Duration::minutes(12),
     )
@@ -651,6 +657,7 @@ async fn a_changed_rule_set_skips_the_heartbeat_throttle() {
                 None,
                 &[],
                 Some(&health),
+                None,
                 now + Duration::minutes(minutes),
             )
             .await

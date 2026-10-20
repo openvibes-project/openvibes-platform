@@ -6,7 +6,7 @@ certificate metadata, latest and grouped findings, finding summaries, and retain
 history. The console crate converts these records to its HTTP DTOs and applies
 authentication and scope rules before calling them. The unscoped functions
 are global read primitives. `agents_in_scope` and `agent_in_scope` enforce
-agent visibility in SQL for the supplied global or asset-group scope.
+agent visibility in SQL for the supplied global or host-group scope.
 
 ## Interfaces
 
@@ -15,11 +15,13 @@ agent visibility in SQL for the supplied global or asset-group scope.
 - `agents` uses a stable cursor over last-seen time descending, nulls last, and
   agent ID ascending. The state filter is allow-listed and stale state is
   computed against the supplied time.
-- `AgentScope::AssetGroups` matches an agent when every exact tag selector in
-  any authorized asset group matches. Empty group sets match no agents.
+- `AgentScope::AssetGroups` matches an agent that is a member of any
+  authorized host group, decided by the SQL function `console_host_in_group`
+  (schema 53; see platform-store.md "Host groups"). Revoked and imported
+  hosts are in no group. Empty group sets match no agents.
   `agent_summary_in_scope`, `agents_in_scope`, and `agent_in_scope` apply that
   predicate before aggregation, status filtering, cursor traversal, ordering,
-  and limiting. Imported installations are excluded from asset-group scopes
+  and limiting. Imported installations are excluded from host-group scopes
   until an association contract exists; global readers can see them.
   `agent_in_scope` hides out-of-scope IDs as absent.
 - `certificates_in_scope` verifies the owning agent's scope in the same SQL
@@ -27,7 +29,7 @@ agent visibility in SQL for the supplied global or asset-group scope.
   empty page.
 - `finding_summary_in_scope`, `latest_findings_in_scope`,
   `latest_finding_in_scope`, `finding_history_in_scope`, and
-  `finding_event_in_scope` enforce the same selector conjunction directly in
+  `finding_event_in_scope` enforce the same membership predicate directly in
   SQL before aggregate, filter, cursor, and detail operations. Hidden detail
   rows are returned as absent. The authenticated console does not expose
   production data routes until these store functions are wired to permission

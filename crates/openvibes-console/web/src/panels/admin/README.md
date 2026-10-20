@@ -5,7 +5,6 @@ The admin panels opened from Settings and the audit log. Each is registered as a
 | File | What it does |
 |---|---|
 | `ServiceAccountPanel.tsx` | A service account, creating one, and issuing its tokens. |
-| `AssetGroupPanel.tsx` | An asset group: the hosts it selects and its role bindings. |
 | `EnrollmentTokenPanel.tsx` | An enrollment token, and creating a new one. |
 | `tokens.ts` | Enrollment token state shared by the list and the panel. |
 | `AuditPanels.tsx` | An audit event, and the audit retention policy. |

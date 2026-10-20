@@ -341,11 +341,11 @@ async fn finish(
     sha256: [u8; 32],
     now: DateTime<Utc>,
 ) -> Result<(), StoreError> {
-    transaction
-        .execute(
+    let facts = transaction
+        .query_one(
             "UPDATE agents SET os_id = $2, os_version = $3, inventory_sha256 = $4,
                  inventory_at = $5, running_kernel = $6, vulnerability_match_version = 0
-             WHERE agent_id = $1",
+             WHERE agent_id = $1 RETURNING os_family, distribution",
             &[
                 &agent_id,
                 &os_id,
@@ -356,6 +356,13 @@ async fn finish(
             ],
         )
         .await?;
+    crate::host_group_facts::ensure_automatic_groups(
+        &transaction,
+        &facts.get::<_, String>(0),
+        &facts.get::<_, String>(1),
+        now,
+    )
+    .await?;
     transaction
         .execute("SELECT pg_notify('inventory_changed', $1)", &[&agent_id])
         .await?;

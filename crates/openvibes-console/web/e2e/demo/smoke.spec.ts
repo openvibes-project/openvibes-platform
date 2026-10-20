@@ -135,11 +135,14 @@ test("audit retention changes from its panel", async ({ page }) => {
 test("a host group is created from the Host groups tab", async ({ page }) => {
   await page.goto("/settings?tab=host-groups");
   await page.getByRole("button", { name: "New group" }).click();
-  await page.getByLabel("Name").fill("Web servers");
-  await page.getByLabel("Selectors (one key=value per line)").fill("role=web");
+  await page.getByRole("textbox", { name: "Name" }).fill("Web servers");
+  await page.getByRole("combobox", { name: "Field of condition 1" }).click();
+  await page.getByRole("option", { name: "Hostname", exact: true }).click();
+  await page.getByRole("textbox", { name: "Values of condition 1" }).fill("web-*");
+  await page.getByRole("textbox", { name: "Values of condition 1" }).press("Enter");
   await page.getByRole("button", { name: "Create group" }).click();
-  await expect(page.locator(".panel-header__title")).toContainText("Web servers");
-  await expect(page.locator(".group-card", { hasText: "Web servers" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Web servers" })).toBeVisible();
+  await expect(page.getByText("Hosts where hostname matches web-*")).toBeVisible();
 });
 
 test("a finding mitigated on every open host leaves the default Findings list (board #83)", async ({ page }) => {

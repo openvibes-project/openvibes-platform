@@ -147,7 +147,6 @@
 .legend__dot.high { background: var(--bad); }
 .legend__dot.medium { background: var(--warn); }
 .legend__dot.low { background: var(--info); }
-.group-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 
 .persona-note {
   position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 80; display: flex; gap: 6px; align-items: center;
@@ -191,8 +190,6 @@
   .dashboard-phone-only { display: block; }
   .view .table-wrap { margin: 0 8px 16px; }
 }
-.group-card { display: grid; gap: 6px; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color var(--fast); }
-.group-card:hover, .group-card[aria-pressed="true"] { border-color: var(--accent); }
 
 /* Settings › Roles: the role page (views/admin/roles). */
 .role-page__title { display: grid; gap: 2px; }
@@ -307,4 +304,51 @@
   .person-page__cols { padding: 0 16px 32px; }
   .person-page__error { margin: 0 16px 16px; }
   .person-access__area { grid-template-columns: 1fr; gap: 4px; }
+}
+
+/* Settings › Host groups and a group's page (views/admin/groups), in the
+   person page's shared layout (approved screens 9–10c). */
+.badge--outline { background: transparent; border: 1px solid var(--line-strong); color: var(--text-2); }
+.host-groups__intro { margin: 0 0 8px; }
+.host-groups__name { gap: 8px; }
+.group-problems { gap: 4px; flex-wrap: nowrap; white-space: nowrap; }
+.group-page__icon { display: grid; place-items: center; width: 56px; height: 56px; flex: none; border-radius: 14px; background: var(--accent-soft); color: var(--accent); }
+.group-page__count { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.group-page__desc { margin: 0 0 12px; }
+.group-page__fields { gap: 10px; margin-bottom: 14px; }
+.group-page__roles { gap: 10px; }
+.group-page__role { gap: 6px; }
+.group-page__person { cursor: default; gap: 6px; }
+.group-page__initials { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 9.5px; font-weight: 650; }
+.group-page__membership { gap: 10px; }
+.group-page__note { margin: 0; background: var(--accent-soft); color: var(--text); align-items: center; }
+.group-page__note svg { color: var(--accent); flex: none; }
+.group-page__preview { margin: 0; }
+.group-page__reason { margin: 0 24px 12px; }
+.group-page__new { gap: 16px; padding: 0 24px 40px; max-width: 900px; }
+.rule-editor { gap: 10px; }
+.rule-row { gap: 4px; }
+.rule-row__line { gap: 8px; flex-wrap: wrap; }
+.rule-row__join { width: 44px; flex: none; }
+.rule-row__field { width: 150px; }
+.rule-row__op { width: 140px; }
+.rule-row__cell { display: inline-flex; align-items: center; min-height: 32px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--r-2); background: var(--surface); }
+.rule-row__values { min-width: 190px; }
+.rule-row__hint { padding-left: 52px; font-size: 12.5px; }
+.rule-editor__note { font-size: 12.5px; }
+.rule-values { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; flex: 1 1 190px; min-height: 32px; padding: 2px 4px; border: 1px solid var(--line-strong); border-radius: var(--r-2); background: var(--surface); }
+.rule-values__chip, .picked-hosts__chip { gap: 4px; padding-right: 4px; cursor: default; }
+.rule-values__input { flex: 1 1 80px; min-width: 80px; border: 0; height: 26px; box-shadow: none; }
+.picked-hosts { gap: 10px; }
+.picked-hosts__search { position: relative; }
+.picked-hosts__results { margin-top: 4px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); }
+.view .table-wrap.group-hosts { margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+.group-hosts .cell-two > * + * { font-size: 12px; }
+.group-hosts__filter { width: 240px; }
+.group-hosts__labels { gap: 4px; }
+.group-hosts__label { cursor: default; height: 22px; }
+@media (max-width: 720px) {
+  .group-page__new { padding: 0 16px 32px; }
+  .group-hosts__filter { width: 100%; }
+  .rule-row__hint { padding-left: 0; }
 }

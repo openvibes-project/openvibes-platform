@@ -153,9 +153,8 @@ async fn upgraded(with_ci: bool) -> (common::TestDb, Client, Access) {
     let client = common::at_version(&db, 51).await;
     seed_v51(&client, with_ci).await;
     let before = access_v51(&client).await;
-    drop(client);
-    let mut client = db.pool.get().await.unwrap();
-    assert_eq!(platform_store::migrate(&mut client).await.unwrap(), 52);
+    // Only migration 52: 53 drops the tag tables these checks read.
+    common::step_to(&client, 52).await;
     (db, client, before)
 }
 

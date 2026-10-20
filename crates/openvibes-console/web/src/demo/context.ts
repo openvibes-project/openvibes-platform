@@ -1,7 +1,8 @@
 // The demo server's shared context: the persona's data, permissions and
 // visibility, the helpers more than one area uses, and the route registrar.
-import type { AuditEvent, FindingGroup, Permission, TriageCounts } from "../api/types";
+import type { Agent, AuditEvent, FindingGroup, Permission, TriageCounts } from "../api/types";
 import { buildDemoData } from "./data";
+import { type HostFacts, inGroup } from "./hostGroups";
 import { problem, severityRank } from "./http";
 import type { Persona } from "./personas";
 import { ADMIN_ROLE, resolveCapabilities } from "./share";
@@ -28,22 +29,29 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
   // Rule sets and history (rules.read), their switches (rules.assignment.read) and coverage (rules.coverage.read), globally (the real API's rule).
   const readsRules = (permission: Permission = "rules.read") => capabilities.some((c) => c.permission === permission && c.scope.kind === "global");
 
+  /** What group membership reads of a host. */
+  const facts = (agent: Agent): HostFacts => ({ ...agent, last_address: data.addresses.get(agent.id) ?? null });
+  /** Whether a host is in one of these groups (console_host_in_group). */
+  const inAnyGroup = (agentId: string, groupIds: readonly string[]) => {
+    const agent = data.agents.find((a) => a.id === agentId);
+    return !!agent && data.access.host_groups.some((g) => groupIds.includes(g.asset_group_id) && inGroup(facts(agent), g));
+  };
+  /** Whether the persona holds `permission` on this host (agent_visibility: scoped readers never see imported hosts). */
+  const reaches = (permission: Permission, agentId: string) => {
+    const scope = capabilities.find((c) => c.permission === permission)?.scope;
+    return scope?.kind === "global" || (scope?.kind === "asset_groups" && inAnyGroup(agentId, scope.asset_group_ids));
+  };
   // ponytail: one host scope for everything (that of hosts.read), where the
   // server scopes each permission; per-permission scopes if a persona needs them.
   const hostScope = capabilities.find((c) => c.permission === "hosts.read")?.scope;
   const scoped = hostScope?.kind !== "global";
-  const inGroup = (agentId: string, groupId: string) => {
-    const selectors = data.access.asset_groups.find((g) => g.asset_group_id === groupId)?.selectors ?? [];
-    return selectors.length > 0 && selectors.every((s) => (data.tags.get(agentId) ?? []).some((t) => `${t.key}=${t.value}` === s));
-  };
-  const visible = (agentId: string) =>
-    hostScope?.kind === "global" || (hostScope?.kind === "asset_groups" && hostScope.asset_group_ids.some((g) => inGroup(agentId, g)));
+  const visible = (agentId: string) => reaches("hosts.read", agentId);
   const agentById = (id: string) => data.agents.find((agent) => agent.id === id && visible(id));
-  const audit = (action: string, target: string, targetKind: string) => {
+  const audit = (action: string, target: string, targetKind: string, targetId = target) => {
     const event: AuditEvent = {
       id: String(Number(data.audit[0]?.id ?? 0) + 1), action, actor, actor_id: me, actor_kind: "user",
       at: iso(), authentication_method: "local_password", result: "success", reason_code: null,
-      request_id: `demo-${Date.now().toString(36)}`, target, target_id: target, target_kind: targetKind,
+      request_id: `demo-${Date.now().toString(36)}`, target, target_id: targetId, target_kind: targetKind,
     };
     data.audit.unshift(event);
   };
@@ -158,7 +166,7 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
   };
 
   return {
-    now, data, iso, rolesOf, permissions, scoped, capabilities, readsRules, actor, me, visible, agentById, audit, triageKey,
+    now, data, iso, rolesOf, permissions, scoped, capabilities, readsRules, actor, me, visible, reaches, facts, agentById, audit, triageKey,
     findings, vulnerabilities, groups, setTriage, triageProblem, alarmList, addSuppression, hostPackages, hosts, routes, route, send,
   };
 }

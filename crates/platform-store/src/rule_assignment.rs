@@ -3,7 +3,10 @@
 //! on/off overrides per asset group; console writes are audited
 //! (`rules.assignment.change`) with the old and new value.
 
-use crate::{Client, StoreError};
+use crate::{
+    Client, StoreError,
+    host_groups::{Condition, GroupKind},
+};
 use chrono::{DateTime, Utc};
 
 /// One asset group's override for a set.
@@ -41,8 +44,12 @@ pub struct GroupName {
     pub asset_group_id: String,
     /// Its name.
     pub name: String,
-    /// Its selectors, `key=value`, sorted.
-    pub selectors: Vec<String>,
+    /// How it gets its hosts.
+    pub kind: GroupKind,
+    /// Its rule, in order (empty for manual groups).
+    pub conditions: Vec<Condition>,
+    /// Active hosts picked by hand (manual groups).
+    pub picked: i64,
     /// Linux hosts it matches.
     pub hosts: i64,
 }
@@ -70,21 +77,13 @@ pub enum Change {
 /// Linux hosts and their group memberships, as a CTE prefix for the
 /// console's counts. A Linux host is an active agent (stale included;
 /// revoked and imported not) whose inventory reported os-release (`os_id`).
-/// A host is a member of a group with selectors whose every tag it carries,
-/// as for access.
+/// Membership is `console_host_in_group`, as for access.
 // ponytail: agents x groups per overview call; precompute if a fleet of many thousand hosts makes the panel slow.
 const FLEET: &str = "
     WITH linux AS (SELECT agent_id FROM agents WHERE status = 'active' AND os_id IS NOT NULL),
     member AS (
         SELECT l.agent_id, g.asset_group_id FROM linux l CROSS JOIN console_asset_groups g
-        WHERE EXISTS (SELECT 1 FROM console_asset_group_selectors s
-                      WHERE s.asset_group_id = g.asset_group_id)
-          AND NOT EXISTS (
-              SELECT 1 FROM console_asset_group_selectors r
-              WHERE r.asset_group_id = g.asset_group_id
-                AND NOT EXISTS (SELECT 1 FROM console_agent_tags t
-                                WHERE t.agent_id = l.agent_id AND t.tag_key = r.tag_key
-                                  AND t.tag_value = r.tag_value)))";
+        WHERE console_host_in_group(l.agent_id, g.asset_group_id))";
 
 /// Every assignable set with its overrides, and every asset group.
 pub async fn overview(client: &Client) -> Result<Overview, StoreError> {
@@ -107,7 +106,13 @@ pub async fn overview(client: &Client) -> Result<Overview, StoreError> {
         .await?;
     let groups = client
         .query(
-            "SELECT asset_group_id::text, name FROM console_asset_groups ORDER BY name",
+            "SELECT g.asset_group_id::text, g.name, g.kind,
+                    COALESCE((SELECT jsonb_agg(jsonb_build_object('field', c.field, 'negate', c.negate, 'values', c.vals)
+                                               ORDER BY c.position)
+                              FROM console_host_group_conditions c WHERE c.asset_group_id = g.asset_group_id), '[]'),
+                    (SELECT count(*) FROM console_host_group_members m JOIN agents a USING (agent_id)
+                     WHERE m.asset_group_id = g.asset_group_id AND a.status = 'active')
+             FROM console_asset_groups g ORDER BY g.name",
             &[],
         )
         .await?;
@@ -131,13 +136,6 @@ pub async fn overview(client: &Client) -> Result<Overview, StoreError> {
     let group_hosts = client
         .query(
             &format!("{FLEET} SELECT asset_group_id::text, count(*) FROM member GROUP BY 1"),
-            &[],
-        )
-        .await?;
-    let selectors = client
-        .query(
-            "SELECT asset_group_id::text, tag_key || '=' || tag_value
-             FROM console_asset_group_selectors ORDER BY 2",
             &[],
         )
         .await?;
@@ -173,11 +171,9 @@ pub async fn overview(client: &Client) -> Result<Overview, StoreError> {
             .map(|row| {
                 let asset_group_id: String = row.get(0);
                 GroupName {
-                    selectors: selectors
-                        .iter()
-                        .filter(|s| s.get::<_, &str>(0) == asset_group_id)
-                        .map(|s| s.get(1))
-                        .collect(),
+                    kind: GroupKind::parse(row.get(2)),
+                    conditions: serde_json::from_value(row.get(3)).unwrap_or_default(),
+                    picked: row.get(4),
                     hosts: group_hosts
                         .iter()
                         .find(|h| h.get::<_, &str>(0) == asset_group_id)
@@ -373,9 +369,8 @@ pub struct HostAssignment {
 /// Per assignable set for agent `$1`: (set, enabled, decided by a group, ids of
 /// the host's groups saying on, saying off).
 /// `bool_or` over the overrides of the host's groups is true when any says
-/// on, false when all say off, NULL when none applies (then the default). A
-/// group matches when it has selectors and the host carries every one, as
-/// for access (`console_read::agent_visibility`).
+/// on, false when all say off, NULL when none applies (then the default).
+/// Membership is `console_host_in_group`, as for access.
 const HOST_STATE: &str = "
     SELECT a.rule_set_id, COALESCE(bool_or(o.enabled), a.default_enabled),
            bool_or(o.enabled) IS NOT NULL,
@@ -383,14 +378,7 @@ const HOST_STATE: &str = "
            array_agg(o.asset_group_id::text) FILTER (WHERE NOT o.enabled)
     FROM rule_set_assignment a
     LEFT JOIN rule_set_group_assignment o ON o.rule_set_id = a.rule_set_id
-     AND EXISTS (SELECT 1 FROM console_asset_group_selectors s
-                 WHERE s.asset_group_id = o.asset_group_id)
-     AND NOT EXISTS (
-         SELECT 1 FROM console_asset_group_selectors r
-         WHERE r.asset_group_id = o.asset_group_id
-           AND NOT EXISTS (SELECT 1 FROM console_agent_tags t
-                           WHERE t.agent_id = $1 AND t.tag_key = r.tag_key
-                             AND t.tag_value = r.tag_value))
+     AND console_host_in_group($1, o.asset_group_id)
     GROUP BY a.rule_set_id, a.default_enabled";
 
 /// Whether `agent_id` runs `set`. A set that is not assignable is always

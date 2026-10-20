@@ -591,6 +591,8 @@ async fn known_browser_routes_serve_the_no_store_spa_entry() {
         "/settings/roles/new",
         "/settings/roles/analyst",
         "/settings/people/3f2b9c1e-6a4d-4e2f-9b1a-7c5d8e0f1a2b",
+        "/settings/host-groups/new",
+        "/settings/host-groups/3f2b9c1e-6a4d-4e2f-9b1a-7c5d8e0f1a2b",
     ] {
         let response = public_router()
             .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())

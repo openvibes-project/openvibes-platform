@@ -11,7 +11,11 @@ use tokio::{net::TcpListener, sync::Semaphore};
 use tokio_rustls::TlsAcceptor;
 
 use crate::{
-    MAX_BODY_BYTES, ServerError, auth::Peer, health, limits::Limits, stall::WriteDeadline,
+    MAX_BODY_BYTES, ServerError,
+    auth::{Peer, PeerAddr},
+    health,
+    limits::Limits,
+    stall::WriteDeadline,
     tls::server_config,
 };
 
@@ -128,10 +132,10 @@ pub async fn run(
             // the kernel backlog instead of consuming descriptors and tasks.
             permit = connections.clone().acquire_owned() => {
                 let Ok(permit) = permit else { break };
-                let tcp = tokio::select! {
+                let (tcp, ip) = tokio::select! {
                     () = &mut shutdown => break,
                     accepted = listener.accept() => match accepted {
-                        Ok((tcp, _)) => no_delay(tcp),
+                        Ok((tcp, addr)) => (no_delay(tcp), canonical_ip(addr)),
                         Err(_) => {
                             // For example EMFILE: back off instead of spinning.
                             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -153,7 +157,7 @@ pub async fn run(
                         .peer_certificates()
                         .and_then(|chain| chain.first().cloned())
                         .map(|leaf| leaf.into_owned());
-                    let service = TowerToHyperService::new(router.layer(Extension(Peer(peer))));
+                    let service = TowerToHyperService::new(router.layer(Extension(Peer(peer))).layer(Extension(PeerAddr(ip))));
                     let connection = hyper::server::conn::http1::Builder::new()
                         .timer(TokioTimer::new())
                         .header_read_timeout(timeout)
@@ -170,8 +174,23 @@ pub async fn run(
     Ok(())
 }
 
+/// The peer's IP with an IPv4-mapped IPv6 address (what a dual-stack `[::]`
+/// listener reports for an IPv4 client) turned back into plain IPv4, so
+/// `ip` rules in CIDR ranges of IPv4 match it.
+fn canonical_ip(addr: SocketAddr) -> std::net::IpAddr {
+    addr.ip().to_canonical()
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn mapped_v4_becomes_v4_and_plain_v6_stays() {
+        let mapped = "[::ffff:10.0.0.5]:1".parse().unwrap();
+        assert_eq!(super::canonical_ip(mapped).to_string(), "10.0.0.5");
+        let v6 = "[2001:db8::1]:1".parse().unwrap();
+        assert_eq!(super::canonical_ip(v6).to_string(), "2001:db8::1");
+    }
+
     use tokio::net::{TcpListener, TcpStream};
 
     #[tokio::test]

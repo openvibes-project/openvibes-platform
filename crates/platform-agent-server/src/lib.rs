@@ -14,7 +14,7 @@ mod serve;
 mod stall;
 mod tls;
 
-pub use auth::AuthenticatedAgent;
+pub use auth::{AuthenticatedAgent, PeerAddr};
 pub use error::{ApiError, ServerError};
 pub use request::{
     INVENTORY_PATHS, MAX_BODY_BYTES, MAX_INVENTORY_BYTES, body_limit, decoded_body, parse,
