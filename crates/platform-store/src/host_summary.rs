@@ -15,7 +15,7 @@ use crate::{
     host_labels,
     host_list::{HostScopes, HostStatus},
     status::OFFLINE_AFTER_MINUTES,
-    vulns::{ListFilter, VulnRow, list_in_scope},
+    vulns::{ListFilter, VulnRow, list_for_agents},
 };
 
 /// Items in each top list.
@@ -187,8 +187,8 @@ pub async fn summary(
     if scopes.compliance.is_some_and(|c| s.reaches(c)) {
         s.top_failing = Some(top_failing(client, agent_id).await?);
     }
-    if let Some(scope) = scopes.vulnerabilities.filter(|v| s.reaches(v)) {
-        s.top_vulnerabilities = Some(top_vulnerabilities(client, agent_id, scope).await?);
+    if scopes.vulnerabilities.is_some_and(|v| s.reaches(v)) {
+        s.top_vulnerabilities = Some(top_vulnerabilities(client, agent_id).await?);
     }
     Ok(Some(s))
 }
@@ -252,11 +252,7 @@ const LIST_MIN_CONFIDENCE: u8 = 80;
 /// open), so the tile, the card and `/vulnerabilities?host=` show the same
 /// advisories; the list's "Lower confidence" and "Include resolved" chips
 /// show more there.
-async fn top_vulnerabilities(
-    client: &Client,
-    agent_id: &str,
-    scope: &AgentScope,
-) -> Result<Top<VulnRow>, StoreError> {
+async fn top_vulnerabilities(client: &Client, agent_id: &str) -> Result<Top<VulnRow>, StoreError> {
     let filter = ListFilter {
         host: Some(agent_id),
         advisory: None,
@@ -267,7 +263,7 @@ async fn top_vulnerabilities(
         reboot_needed: None,
         min_confidence: Some(LIST_MIN_CONFIDENCE),
     };
-    let mut rows = list_in_scope(client, &filter, scope).await?;
+    let mut rows = list_for_agents(client, &filter, Some(&[agent_id.to_owned()])).await?;
     // The host filter also matches a hostname: keep this agent's rows.
     rows.retain(|r| r.agent_id == agent_id);
     let pairs: Vec<_> = rows

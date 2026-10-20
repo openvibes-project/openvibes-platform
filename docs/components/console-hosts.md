@@ -147,6 +147,12 @@ The demo's group pages count critical with the same `listedCritical`
 - A refused saved-view or column change is shown (an alert or a toast) and
   the server's copy stays.
 
+## Upgrading
+
+Saved views that searched by agent version (`q=0.4.2`) now match nothing:
+the search covers host name, IP and agent ID. Re-save the view with the
+Agent filter instead.
+
 ## How to test
 
 - Unit: `views/investigate/Hosts.test.tsx`,

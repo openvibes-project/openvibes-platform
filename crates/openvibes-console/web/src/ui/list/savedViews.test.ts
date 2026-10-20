@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, apiMessage, configureDemo, request } from "../../api/client";
 import type { SavedViewList } from "../../api/types";
+import { toast } from "../toast";
 import { deleteView, importBrowserViews, saveView, setHiddenColumns } from "./savedViews";
 
 function stubStorage(initial: Record<string, string> = {}) {
@@ -14,11 +15,12 @@ function stubStorage(initial: Record<string, string> = {}) {
   });
   return store;
 }
+vi.mock("../toast", () => ({ toast: vi.fn() }));
 const views = async () => (await request<SavedViewList>("GET", "/api/v1/saved-views?page=hosts")).items;
 const LEGACY = "openvibes.v2.views./agents";
 const toOnline = (query: string) => query.replace("status=active", "status=online");
 
-beforeEach(() => configureDemo("admin"));
+beforeEach(() => { configureDemo("admin"); vi.mocked(toast).mockClear(); });
 afterEach(() => { vi.unstubAllGlobals(); configureDemo(undefined); });
 
 describe("saved views", () => {
@@ -84,11 +86,33 @@ describe("importBrowserViews", () => {
     expect(store.has(LEGACY)).toBe(false);
   });
 
-  it("keeps the key while a view could not be saved (too many, invalid), for the next visit", async () => {
+  it("gives up on a view the console refuses for good: one toast naming it, key removed, no retry", async () => {
     for (let i = 0; i < 50; i += 1) await saveView("hosts", `View ${i}`, "");
+    const store = stubStorage({ [LEGACY]: JSON.stringify([{ name: "Active", query: "status=active" }, { name: "Linux", query: "os=linux" }]) });
+    await importBrowserViews("hosts", LEGACY, toOnline);
+    expect(store.has(LEGACY)).toBe(false);
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith("These saved views couldn't be moved to your account: Active, Linux", true);
+    await importBrowserViews("hosts", LEGACY, toOnline);
+    expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the key on a server error, for the next visit", async () => {
+    configureDemo(undefined);
+    vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => Promise.resolve(init.method === "GET"
+      ? new Response(JSON.stringify({ items: [] }), { status: 200 })
+      : new Response(JSON.stringify({ code: "unavailable", title: "down" }), { status: 503 }))));
     const store = stubStorage({ [LEGACY]: JSON.stringify([{ name: "Active", query: "status=active" }]) });
     await importBrowserViews("hosts", LEGACY, toOnline);
     expect(store.has(LEGACY)).toBe(true);
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it("runs once at a time: two calls make one set of requests", async () => {
+    const store = stubStorage({ [LEGACY]: JSON.stringify([{ name: "Active", query: "status=active" }]) });
+    await Promise.all([importBrowserViews("hosts", LEGACY, toOnline), importBrowserViews("hosts", LEGACY, toOnline)]);
+    expect((await views()).map((v) => v.name)).toEqual(["Active"]);
+    expect(store.has(LEGACY)).toBe(false);
   });
 
   it("keeps the key when the console cannot be reached, to try again next time", async () => {

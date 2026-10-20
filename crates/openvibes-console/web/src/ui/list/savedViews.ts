@@ -2,6 +2,7 @@
 // (/api/v1/saved-views, /api/v1/list-columns/{page}).
 import { ApiError, invalidate, prime, request, useResource } from "../../api/client";
 import type { ListColumns, SavedView, SavedViewList } from "../../api/types";
+import { toast } from "../toast";
 import { viewQuery } from "./filters";
 
 const viewsPath = (page: string) => `/api/v1/saved-views?page=${encodeURIComponent(page)}`;
@@ -42,15 +43,27 @@ const SUFFIX = " (imported)";
 /** At most `max` characters (code points, as the server counts), no outer spaces. */
 const clip = (name: string, max = 60) => [...name.trim()].slice(0, max).join("").trimEnd();
 
+const running = new Map<string, Promise<void>>();
+const FINAL = new Set(["invalid_saved_view", "too_many_views", "view_name_taken"]);
+
 /**
  * Moves the views a page kept in this browser (before saved views lived on
  * the console) to the console: `mapQuery` turns an old query into today's,
  * stored normalised (`viewQuery`) so the view shows as active. A name taken
- * by a different view is retried once as "name (imported)". The key is
- * removed only once every view is saved or already there (same name, same
- * query); otherwise it stays and the next visit tries again.
+ * by a different view is retried once as "name (imported)". One run per key
+ * at a time (every mount calls this). The key is removed once every view is
+ * saved, already there, or refused for good (invalid, too many, name taken
+ * twice: one toast names those); a transient error keeps it for the next visit.
  */
-export async function importBrowserViews(page: string, legacyKey: string, mapQuery: (query: string) => string): Promise<void> {
+export function importBrowserViews(page: string, legacyKey: string, mapQuery: (query: string) => string): Promise<void> {
+  const active = running.get(legacyKey);
+  if (active) return active;
+  const run = importOnce(page, legacyKey, mapQuery).finally(() => running.delete(legacyKey));
+  running.set(legacyKey, run);
+  return run;
+}
+
+async function importOnce(page: string, legacyKey: string, mapQuery: (query: string) => string): Promise<void> {
   let old: unknown;
   try {
     const raw = localStorage.getItem(legacyKey);
@@ -60,13 +73,15 @@ export async function importBrowserViews(page: string, legacyKey: string, mapQue
     old = undefined; // no storage, or not JSON: nothing to import
   }
   const views = Array.isArray(old) ? old.filter((v): v is { name: string; query: string } => typeof v?.name === "string" && typeof v?.query === "string") : [];
-  let all = true;
+  const refused: string[] = [];
+  let transient = false;
   try {
     const existing = views.length > 0 ? (await request<SavedViewList>("GET", viewsPath(page))).items : [];
     for (const view of views) {
       const query = viewQuery(new URLSearchParams(mapQuery(view.query)));
       const base = clip(view.name) || "Imported view";
       let done = false;
+      let final = false;
       for (const name of [base, `${clip(base, 60 - SUFFIX.length)}${SUFFIX}`]) {
         if (existing.some((v) => v.name.toLowerCase() === name.toLowerCase() && v.query === query)) { done = true; break; }
         try {
@@ -74,17 +89,21 @@ export async function importBrowserViews(page: string, legacyKey: string, mapQue
           done = true;
           break;
         } catch (error) {
-          if (!(error instanceof ApiError && error.code === "view_name_taken")) break;
+          const code = error instanceof ApiError ? error.code : undefined;
+          final = code !== undefined && FINAL.has(code);
+          if (code !== "view_name_taken") break;
         }
       }
-      all &&= done;
+      if (done) continue;
+      if (final) refused.push(base); else transient = true;
     }
   } catch {
     return; // unreachable or signed out: try again next time
   } finally {
     if (views.length > 0) invalidate(viewsPath(page));
   }
-  if (!all) return;
+  if (refused.length > 0) toast(`These saved views couldn't be moved to your account: ${refused.join(", ")}`, true);
+  if (transient) return;
   try { localStorage.removeItem(legacyKey); } catch { /* storage gone: nothing left to remove */ }
 }
 

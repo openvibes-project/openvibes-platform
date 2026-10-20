@@ -153,6 +153,24 @@ async fn top_three_are_most_severe_then_newest_and_total_counts_all() {
         (ids, vulns.total),
         (vec!["ADV-CRIT", "ADV-IMP", "ADV-MOD"], 4)
     );
+    // A scoped viewer whose group holds the host sees the same advisories.
+    let app = AgentScope::AssetGroups(vec![common::manual_group(&c, "App", &[host]).await]);
+    let scoped = HostScopes {
+        hosts: &app,
+        alarms: None,
+        vulnerabilities: Some(&app),
+        compliance: None,
+    };
+    let seen = get(&c, host, &scoped)
+        .await
+        .unwrap()
+        .top_vulnerabilities
+        .unwrap();
+    let ids: Vec<_> = seen.items.iter().map(|v| v.advisory_id.as_str()).collect();
+    assert_eq!(
+        (ids, seen.total),
+        (vec!["ADV-CRIT", "ADV-IMP", "ADV-MOD"], 4)
+    );
     db.drop().await;
 }
 
