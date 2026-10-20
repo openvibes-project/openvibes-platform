@@ -4,11 +4,10 @@
 
 use zeroize::Zeroizing;
 
-use crate::journal::step_suffix;
-
 use crate::{
     CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged, SETUP_FILE,
     Secret, Service, ServiceAction, ServiceStatus, Unit,
+    journal::step_suffix,
     runner::{
         Program::{Admin, Curl, Df, Dnf, Getent, Ip, Logger, Rpm, Ss, Sudo, Systemctl},
         Runner,
@@ -263,7 +262,7 @@ impl<R: Runner> Host for Native<R> {
         let journal = verb.journal();
         match journal.split_once(' ') {
             Some((action, target)) => {
-                let suffix = step_suffix(action, &out.stdout);
+                let suffix = step_suffix(action, target, &out.stdout);
                 self.journal_detail(action, target, outcome, &suffix);
             }
             // One-word verbs: `setup-status` only reads, so it is journalled

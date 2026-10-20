@@ -876,6 +876,10 @@ fn free_space_is_dfs_avail_column() {
 }
 
 fn step_journal(detail: &str) -> String {
+    step_journal_of(Step::Firewall, detail)
+}
+
+fn step_journal_of(step: Step, detail: &str) -> String {
     let host = fake(vec![
         (
             vec![
@@ -892,11 +896,8 @@ fn step_journal(detail: &str) -> String {
         ),
         (vec!["/usr/bin/logger"], out(0, "", "")),
     ]);
-    host.privileged(
-        Privileged::SetupStep(Step::Firewall),
-        &Secret::new("pw".into()),
-    )
-    .unwrap();
+    host.privileged(Privileged::SetupStep(step), &Secret::new("pw".into()))
+        .unwrap();
     let calls = host.runner.calls.borrow();
     let call = calls.iter().find(|c| c[0] == "/usr/bin/logger").unwrap();
     call[3].clone()
@@ -914,4 +915,19 @@ fn a_step_journal_line_carries_the_detail() {
         long.ends_with(&format!("ok: {}", "é".repeat(300))),
         "{long}"
     );
+}
+
+#[test]
+fn a_step_detail_that_may_hold_a_secret_is_withheld() {
+    let line = step_journal_of(
+        Step::Console,
+        "console admin: admin, password hunter2 (shown only now)",
+    );
+    assert!(
+        line.ends_with("setup-step console ok: (detail withheld)"),
+        "{line}"
+    );
+    assert!(!line.contains("hunter2"), "{line}");
+    let line = step_journal("enrollment Token abc");
+    assert!(line.ends_with("ok: (detail withheld)"), "{line}");
 }
