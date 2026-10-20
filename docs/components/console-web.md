@@ -470,6 +470,55 @@ triage on alarms and findings stays as it is.
 - On a phone, Software sits under More (`phoneMore`), so the bar keeps five
   labelled slots.
 
+## Shared list and detail pieces
+
+Built once for every list and detail page (roles spec §10.3; approved
+screens 16 and 17, and the shared layout). Hosts is the first user; the
+other list pages move to them in step 5. `ui/ViewHeader.tsx` keeps working
+for the pages not yet moved; its saved views stay in the browser.
+
+- **FilterBar** (`ui/list/FilterBar.tsx`): the search box (`q` in the URL,
+  "/" focuses it) and one chip per `ListFilter`
+  (`{ param, label, values: {value, label, count}[] }`, `ui/list/filters.ts`).
+  A chip is a Select drawn as a button (`aria-haspopup="listbox"`,
+  `aria-expanded`, the Select's keyboard and search); its options show each
+  value's count. A chosen value becomes a chip "Status: Online" with an ×
+  ("Remove filter Status: Online"); focus moves to the chip that replaces
+  the one used. On the right: **Clear all** (every parameter but `sort` and
+  `dir`), **Save view** (only with something set and not already saved; a
+  refusal such as "You already have a view with that name" is a
+  `role="alert"` tied to the name field) and **Columns**. Saved views are
+  chips: a click applies one (its parameters replace today's); × asks
+  "Delete the view “…”?" before deleting.
+- **Columns** (`ui/list/ColumnsMenu.tsx`): a disclosure button with a
+  checkbox per column; the first (Host) is checked and disabled. Each change
+  is a `PUT /api/v1/list-columns/{page}`; a refusal is a toast.
+- **Saved views** (`ui/list/savedViews.ts`): `useSavedViews(page)` and
+  `useHiddenColumns(page)` over `GET /api/v1/saved-views?page=` and
+  `GET /api/v1/list-columns/{page}`; `saveView`, `deleteView` and
+  `setHiddenColumns`. `importBrowserViews(page, legacyKey, mapQuery)` moves
+  a page's old browser-only views to the console once, mapping each query,
+  then removes the key; views the console refuses (409, 422) are dropped,
+  any other failure keeps the key for the next visit.
+- **SummaryLine** (`ui/list/SummaryLine.tsx`): `{count, text}` parts joined
+  with " · ", zeros left out with `skipZero`; a `role="status"` paragraph
+  that is always present, so a change is announced.
+- **DetailPage** (`ui/detail/DetailPage.tsx`): optional crumb; header with
+  icon, title, status, a facts line (joined with " · ", empty facts left
+  out) and actions; an error callout (`role="alert"`); tiles; a narrow left
+  and a wide right column (one column fills the width). An empty slot draws
+  nothing. `Card` (a card of either column) lives here too; the person,
+  group and settings pages use it. **Tile**
+  (`ui/detail/Tile.tsx`): a link to the full list, named "Open alarms: 3".
+- **Demo** (`demo/routes/lists.ts`): the same routes, codes, caps (60
+  characters, 1000-character query, 50 views per page, case-blind names, no
+  Host column) and messages as `src/lists/saved_views.rs`, kept per person
+  in the browser (`openvibes.v2.demo.lists.<user>`) and checked on load.
+- **Tests:** `ui/list/FilterBar.test.tsx`, `ui/list/savedViews.test.ts`,
+  `ui/detail/DetailPage.test.tsx`, `demo/routes/lists.test.ts`. Vitest has
+  no DOM: the bar is checked as markup and its actions as the helpers it
+  calls; click and key flows are in the Hosts e2e.
+
 ## Interfaces
 
 - **Entry:** `web/index.html` → `src/main.tsx` → `shell/App.tsx`.

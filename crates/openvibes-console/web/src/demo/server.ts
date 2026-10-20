@@ -14,6 +14,7 @@ import { registerDashboardRoutes } from "./routes/dashboards";
 import { registerFindingRoutes } from "./routes/findings";
 import { registerGroupRoutes } from "./routes/groups";
 import { registerHostRoutes } from "./routes/hosts";
+import { registerListRoutes } from "./routes/lists";
 import { registerMetricRoutes } from "./routes/metrics";
 import { registerRoleRoutes } from "./routes/roles";
 import { registerRuleRoutes } from "./routes/rules";
@@ -31,6 +32,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   const { permissions, routes } = ctx;
   registerSessionRoutes(ctx);
   registerHostRoutes(ctx);
+  registerListRoutes(ctx);
   registerFindingRoutes(ctx);
   const settings = registerSettingsRoutes(ctx);
   const suppressions = createSuppressions(ctx, () => settings.value("suppressions.require_approval") === true);

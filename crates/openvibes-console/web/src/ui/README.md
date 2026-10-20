@@ -7,7 +7,9 @@ Shared building blocks used by views, panels and dashboards. They know nothing a
 | `DataTable.tsx` | The one table every view uses: sort, keyboard, selection, open-in-inspector. |
 | `table.ts` | Logic for DataTable.tsx: stable sort and text filter. |
 | `selection.ts` | Row selection for bulk actions: ranges, all on screen, all matching. |
-| `ViewHeader.tsx` | Header of a list view: title, count, text filter, quick filters, saved views. |
+| `ViewHeader.tsx` | Header of a list view: title, count, text filter, quick filters, saved views (in the browser; pages move to `list/`). |
+| `list/` | A list page's FilterBar, columns menu, summary line and saved views kept by the console. |
+| `detail/` | The detail page layout and its tiles. |
 | `bits.tsx` | Small pieces: badges, object links, loading, empty and error states. |
 | `panel.tsx` | Panel layout pieces: sections, tabs, inline confirm. |
 | `Select.tsx` | The console's own dropdown (never the browser's native one). |

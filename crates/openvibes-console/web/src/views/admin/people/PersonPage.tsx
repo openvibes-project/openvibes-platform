@@ -1,7 +1,7 @@
 // A person's page (/settings/people/{id}; approved screen 7), one page, no
 // tabs: the header, Details and Recent activity on the left, Roles and the
 // Access they add up to on the right.
-import { type MouseEvent, type ReactNode, useRef, useState } from "react";
+import { type MouseEvent, useRef, useState } from "react";
 
 import { request, useResource } from "../../../api/client";
 import type { PersonView } from "../../../api/types";
@@ -9,6 +9,7 @@ import { nav } from "../../../app/nav";
 import { useSession } from "../../../app/session";
 import { auditActionLabel } from "../../../ui/auditActions";
 import { Ago, ErrorBox, Loading } from "../../../ui/bits";
+import { Card } from "../../../ui/detail/DetailPage";
 import { ago, date, plural } from "../../../ui/format";
 import { Icon } from "../../../ui/Icon";
 import { toast } from "../../../ui/toast";
@@ -28,14 +29,6 @@ export function PersonPage({ userId }: { userId: string }) {
 function link(view: string, params?: Record<string, string>) {
   return { href: nav.href(view, params), onClick: (e: MouseEvent) => { e.preventDefault(); nav.view(view, params); } };
 }
-
-/** A card of the shared detail-page layout (approved screen 11); `flush` drops the body padding (a table). */
-export const Card = ({ title, aside, flush, children }: { title: ReactNode; aside?: ReactNode; flush?: boolean; children: ReactNode }) => (
-  <section className="card person-card">
-    <div className="row row--between person-card__head"><h2 className="section-title">{title}</h2>{aside}</div>
-    <div className={flush ? undefined : "person-card__body"}>{children}</div>
-  </section>
-);
 
 export function PersonBody({ person, error, onError }: { person: PersonView; error?: string | undefined; onError: (message: string | undefined) => void }) {
   const { session, can } = useSession();
