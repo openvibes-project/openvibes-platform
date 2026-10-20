@@ -192,23 +192,25 @@ pub async fn insert_batch(
             &[&agent_id, &dropped],
         )
         .await?;
-    let rule_sets: Vec<&str> = alarms
+    // The batch's (rule set, rule) pairs, so group rows of other rules are
+    // never evaluated.
+    let (rule_sets, rules): (Vec<&str>, Vec<&str>) = alarms
         .iter()
-        .map(|alarm| alarm.rule_set_id.as_str())
+        .map(|alarm| (alarm.rule_set_id.as_str(), alarm.rule_id.as_str()))
         .collect::<BTreeSet<_>>()
         .into_iter()
-        .collect();
+        .unzip();
     let suppressions: Vec<Suppression> = transaction
         .query(
             "SELECT id, rule_set_id, rule_id, scope, agent_id, exe, args_sha256
              FROM alarm_suppressions
              WHERE state = 'active'
                AND (expires_at IS NULL OR expires_at > $3)
-               AND rule_set_id = ANY($1)
+               AND (rule_set_id, rule_id) IN (SELECT * FROM unnest($1::text[], $4::text[]))
                AND (agent_id IS NULL OR agent_id = $2)
                AND (host_group_id IS NULL OR console_host_in_group($2, host_group_id))
              ORDER BY id",
-            &[&rule_sets, &agent_id, &now],
+            &[&rule_sets, &agent_id, &now, &rules],
         )
         .await?
         .iter()

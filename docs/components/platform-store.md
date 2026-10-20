@@ -465,8 +465,9 @@ Code over these tables:
 
 - `alarms` (ingest): `row` checks one alarm (time, skew, retention,
   partition); `insert_batch` upserts with `GREATEST` on count and last
-  seen, applies active, unexpired suppressions on the alarm's host, group
-  or all hosts (`suppression_matches`, first by id), reopens a mitigated alarm or an
+  seen, applies active, unexpired suppressions of the batch's rules on the
+  alarm's host, group or all hosts (`suppression_matches`, first by id),
+  reopens a mitigated alarm or an
   expired accepted risk on recurrence, and keeps `alarms_dropped_total`.
   `args_sha256` is the `command` suppression hash (SHA-256 of the args'
   JSON array).
@@ -580,8 +581,11 @@ caller's rights).
 - `list(client, read, &ListFilter { state, alarm_id }, now)`: waiting
   (oldest first), active including expired (`expired` is derived at `now`)
   and rejected rows, at most 500 each. A waiting row carries
-  `would_close`: the alarms last seen in the 7 days before `now` it would
-  have closed, counted with ingest's matcher (at most 10,000 scanned). Reach (`in_reach`): a host row if
+  `would_close`: the alarms on hosts the reader reaches, last seen in the
+  7 days before `now`, it would have closed, counted with ingest's matcher
+  over the newest 10,000 of the same rule and program
+  (`would_close_capped` when there were more, so the page says "at
+  least"). Args that are not a list of strings never match. Reach (`in_reach`): a host row if
   the host is visible, a group row if the group is in the scope, an
   all-hosts row for every reader but only a global caller for decide and
   remove, a device or signature row for a global caller only. Approving a

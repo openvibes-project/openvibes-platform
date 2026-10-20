@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use chrono::{DateTime, Duration, SubsecRound, Utc};
 use common::groups::Ready as _;
 use common::groups::{A1, A2};
-use common::{TestDb, manual_group, migrated, seed_agent};
+use common::{TestDb, manual_group, migrated, rule_group, seed_agent};
 use openvibes_core::{Alarm, AlarmProcess, Confidence, Identifier, Severity};
 use platform_store::{
     Client,
@@ -199,8 +199,8 @@ async fn ingest_role_can_match_groups() {
     db.drop().await;
 }
 
-/// A stored alarm last seen `days_ago`, with `args`.
-async fn seed_seen(c: &Client, days_ago: i64, args: &[&str]) {
+/// A stored `NOISY` alarm from `agent` last seen `days_ago`, with `args`.
+async fn seed_seen(c: &Client, agent: &str, days_ago: i64, args: serde_json::Value) {
     let seen = now() - Duration::days(days_ago);
     let process = serde_json::json!({ "exe": NOISY, "args": args });
     c.execute(
@@ -209,7 +209,7 @@ async fn seed_seen(c: &Client, days_ago: i64, args: &[&str]) {
             process, ancestors, received_at, state)
          VALUES (($2 AT TIME ZONE 'UTC')::date, $1, md5(random()::text), 'baseline', 1,
             'web-server-spawns-shell', 1, 'high', 50, 'm', $2, $2, 1, $3, '[]', $2, 'open')",
-        &[&A1, &seen, &process],
+        &[&agent, &seen, &process],
     )
     .await
     .unwrap();
@@ -223,9 +223,11 @@ async fn would_close_counts_the_last_7_days() {
         .unwrap();
     let args = ["noisy", "--loud"];
     for days in [1, 6, 8] {
-        seed_seen(&c, days, &args).await;
+        seed_seen(&c, A1, days, serde_json::json!(args)).await;
     }
-    seed_seen(&c, 1, &["noisy", "--quiet"]).await;
+    seed_seen(&c, A1, 1, serde_json::json!(["noisy", "--quiet"])).await;
+    // Args that are not a list of strings never count (not hashed as []).
+    seed_seen(&c, A1, 1, serde_json::json!("noisy --loud")).await;
     let hash = alarms::args_sha256(&args.map(String::from));
     c.execute(
         "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, exe, args_sha256, note,
@@ -299,5 +301,92 @@ async fn deleting_a_group_ends_its_suppressions() {
         .unwrap()
         .get(0);
     assert_eq!(detail, 2);
+    db.drop().await;
+}
+
+/// A waiting all-hosts program suppression of `NOISY`.
+async fn waiting_program(c: &Client) {
+    c.execute(
+        "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, exe, note, created_by,
+            created_at, state)
+         VALUES ('baseline', 'web-server-spawns-shell', 'program', $1, 'noisy', 'alice', now(),
+            'waiting')",
+        &[&NOISY],
+    )
+    .await
+    .unwrap();
+}
+
+/// (`would_close`, `would_close_capped`) of the one waiting row `read` sees.
+async fn counted(db: &TestDb, read: &AgentScope) -> (Option<i64>, bool) {
+    let console = as_role(db, "openvibes-console").await;
+    let filter = ListFilter {
+        state: Some(State::Waiting),
+        alarm_id: None,
+    };
+    let rows = store::list(&console, read, &filter, now()).await.unwrap();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    (rows[0].would_close, rows[0].would_close_capped)
+}
+
+#[tokio::test]
+async fn would_close_counts_only_hosts_the_reader_reaches() {
+    let (db, c) = fleet().await;
+    let mine = manual_group(&c, "Mine", &[A1]).await;
+    seed_seen(&c, A1, 1, serde_json::json!(["noisy"])).await;
+    seed_seen(&c, A2, 1, serde_json::json!(["noisy"])).await;
+    waiting_program(&c).await;
+    assert_eq!(counted(&db, &AgentScope::Global).await, (Some(2), false));
+    let scoped = AgentScope::AssetGroups(vec![mine]);
+    assert_eq!(counted(&db, &scoped).await, (Some(1), false));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn would_close_says_when_it_hit_the_cap() {
+    let (db, c) = fleet().await;
+    let process = serde_json::json!({ "exe": NOISY, "args": ["noisy"] });
+    c.execute(
+        "INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version,
+            rule_id, rule_version, severity, confidence, message, first_seen, last_seen, count,
+            process, ancestors, received_at, state)
+         SELECT (now() AT TIME ZONE 'UTC')::date, $1, 'alarm.' || n, 'baseline', 1,
+            'web-server-spawns-shell', 1, 'high', 50, 'm', now(), now(), 1, $2, '[]', now(), 'open'
+         FROM generate_series(1, 10001) n",
+        &[&A1, &process],
+    )
+    .await
+    .unwrap();
+    waiting_program(&c).await;
+    assert_eq!(
+        counted(&db, &AgentScope::Global).await,
+        (Some(10_000), true)
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_rule_group_suppression_matches_and_ends_with_its_group() {
+    let (db, mut c) = fleet().await;
+    c.batch_execute(&format!(
+        "UPDATE agents SET hostname = 'web-01' WHERE agent_id = '{A1}';
+         UPDATE agents SET hostname = 'db-01' WHERE agent_id = '{A2}';"
+    ))
+    .await
+    .unwrap();
+    let web = rule_group(&c, "Web", &[("hostname", false, &["web-*"])]).await;
+    let id = suppress(&c, "active", None, Some(&web), None).await;
+    assert_eq!(send(&mut c, A1).await, "false_positive");
+    assert_eq!(send(&mut c, A2).await, "open");
+    host_group_writes::delete(&mut c, &web, 1, "ann", now())
+        .await
+        .unwrap();
+    let state: String = c
+        .query_one("SELECT state FROM alarm_suppressions WHERE id = $1", &[&id])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(state, "removed");
+    assert_eq!(send(&mut c, A1).await, "open");
     db.drop().await;
 }

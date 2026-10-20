@@ -139,9 +139,11 @@ pub struct Suppression {
     pub decision_reason: Option<String>,
     /// The source alarm's platform id; `None` for rows made before schema 55.
     pub alarm_id: Option<i64>,
-    /// For a waiting row: alarms of the last 7 days it would have closed
-    /// (counted when [`list`] reads it).
+    /// For a waiting row: alarms of the last 7 days, on hosts the reader
+    /// reaches, it would have closed (counted when [`list`] reads it).
     pub would_close: Option<i64>,
+    /// `would_close` stopped at 10,000 alarms: there may be more.
+    pub would_close_capped: bool,
 }
 
 /// Outcome of a write.
@@ -217,6 +219,7 @@ fn suppression(row: &tokio_postgres::Row) -> Suppression {
         decision_reason: row.get(20),
         alarm_id: row.get(21),
         would_close: None,
+        would_close_capped: false,
     }
 }
 
@@ -293,55 +296,78 @@ pub async fn list(
     let mut list: Vec<Suppression> = rows.iter().map(suppression).collect();
     for row in &mut list {
         if row.state == State::Waiting {
-            row.would_close = Some(would_close(client, row, now).await?);
+            let (count, capped) = would_close(client, row, (&global, &groups), now).await?;
+            row.would_close = Some(count);
+            row.would_close_capped = capped;
         }
     }
     Ok(list)
 }
 
-/// Alarms last seen in the 7 days before `now` that `s` would have closed,
-/// with ingest's matcher.
-pub(crate) async fn would_close(
+/// Most alarms [`would_close`] counts per waiting row.
+const WOULD_CLOSE_CAP: usize = 10_000;
+
+/// Alarms on hosts the reader reaches (`$7`/`$8`, as [`params`]) last
+/// seen in the 7 days before `now` that `s` would have closed, with
+/// ingest's matcher, and whether the scan hit [`WOULD_CLOSE_CAP`].
+async fn would_close(
     client: &impl GenericClient,
     s: &Suppression,
+    (global, groups): (&bool, &Vec<String>),
     now: DateTime<Utc>,
-) -> Result<i64, StoreError> {
-    // ponytail: scans at most 10,000 alarms per waiting row, so a very noisy
-    // rule shows at most 10,000; count in SQL if that ever misleads.
+) -> Result<(i64, bool), StoreError> {
+    // ponytail: counts the newest 10,000 candidates (same rule and program)
+    // per waiting row and flags the cap so the page says "at least"; count
+    // in SQL if exact large numbers ever matter.
+    let query = format!(
+        "SELECT al.agent_id, al.process->'args' FROM alarms al
+         JOIN agents a ON a.agent_id = al.agent_id
+         WHERE al.rule_set_id = $1 AND al.rule_id = $2
+           AND al.last_seen > $3::timestamptz - interval '7 days'
+           AND ($4::text IS NULL OR al.agent_id = $4)
+           AND ($5::text IS NULL OR console_host_in_group(al.agent_id, $5::text::uuid))
+           AND al.process->>'exe' = $6 AND {}
+         ORDER BY al.last_seen DESC LIMIT $9",
+        agent_visibility("al.agent_id", "$7", "$8")
+    );
+    let limit = i64::try_from(WOULD_CLOSE_CAP + 1).unwrap_or(i64::MAX);
     let rows = client
         .query(
-            "SELECT al.agent_id, al.process->>'exe', al.process->'args' FROM alarms al
-             WHERE al.rule_set_id = $1 AND al.rule_id = $2 AND al.agent_id IS NOT NULL
-               AND al.last_seen > $3::timestamptz - interval '7 days'
-               AND ($4::text IS NULL OR al.agent_id = $4)
-               AND ($5::text IS NULL OR console_host_in_group(al.agent_id, $5::text::uuid))
-             LIMIT 10000",
+            &query,
             &[
                 &s.rule_set_id,
                 &s.rule_id,
                 &now,
                 &s.agent_id,
                 &s.host_group_id,
+                &s.exe,
+                global,
+                groups,
+                &limit,
             ],
         )
         .await?;
-    let matching = rows.iter().filter(|row| {
+    let capped = rows.len() > WOULD_CLOSE_CAP;
+    let exe = s.exe.as_deref().unwrap_or_default();
+    let matching = rows.iter().take(WOULD_CLOSE_CAP).filter(|row| {
         let agent: String = row.get(0);
-        let exe: Option<String> = row.get(1);
-        let args: Option<serde_json::Value> = row.get(2);
-        let args: Vec<String> = args
-            .and_then(|args| serde_json::from_value(args).ok())
-            .unwrap_or_default();
+        // Args that are not a list of strings never match a command.
+        let Some(args) = row
+            .get::<_, Option<serde_json::Value>>(1)
+            .and_then(|args| serde_json::from_value::<Vec<String>>(args).ok())
+        else {
+            return false;
+        };
         suppression_matches(
             &s.scope,
             s.exe.as_deref(),
             s.args_sha256.as_deref(),
             s.agent_id.as_deref(),
             &agent,
-            (exe.as_deref().unwrap_or_default(), &args_sha256(&args)),
+            (exe, &args_sha256(&args)),
         )
     });
-    Ok(i64::try_from(matching.count()).unwrap_or(i64::MAX))
+    Ok((i64::try_from(matching.count()).unwrap_or(i64::MAX), capped))
 }
 
 /// `host`, `group`, `all` or `device`.
