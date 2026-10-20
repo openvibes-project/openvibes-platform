@@ -7,7 +7,7 @@
 use std::{
     fs,
     io::Write,
-    os::unix::fs::PermissionsExt,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -20,8 +20,11 @@ use std::{
 /// Where the progress file lives under the root.
 pub const FILE: &str = "run/openvibes-admin/model-progress";
 
-/// The pinned model's size (2.74 GB for Qwen3.5-4B Q4_K_M), known locally so
-/// no request is needed for the total.
+/// The pinned model's file and size (Qwen3.5-4B Q4_K_M, 2.74 GB), known
+/// locally so no request is needed for the total. Update both with
+/// `packaging/llm/model.pin` (a test checks the name).
+#[cfg(test)]
+pub const MODEL_FILE: &str = "Qwen3.5-4B-Q4_K_M.gguf";
 pub const MODEL_BYTES: u64 = 2_740_000_000;
 
 const EVERY: Duration = Duration::from_millis(500);
@@ -44,7 +47,14 @@ fn done_bytes(models: &Path, name: &str) -> u64 {
 
 fn write(file: &Path, done: u64, total: u64) -> std::io::Result<()> {
     let tmp = file.with_extension("tmp");
-    let mut out = fs::File::create(&tmp)?;
+    // The directory is root's, but never follow a link at the name.
+    let mut out = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o644)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&tmp)?;
     out.set_permissions(fs::Permissions::from_mode(0o644))?;
     writeln!(out, "{done} {total}")?;
     fs::rename(&tmp, file)
@@ -62,7 +72,10 @@ impl Watch {
     /// made just means no progress is shown.
     pub fn start(root: &Path, models: PathBuf, name: String, total: u64) -> Self {
         let file = root.join(FILE);
-        let _ = fs::create_dir_all(file.parent().unwrap_or(root));
+        // Explicitly 0755 (as `Ctx::job_begin`): a umask must not hide it.
+        let dir = file.parent().unwrap_or(root);
+        let _ = fs::create_dir_all(dir);
+        let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o755));
         let stop = Arc::new(AtomicBool::new(false));
         let thread = {
             let (file, stop) = (file.clone(), stop.clone());
@@ -131,6 +144,23 @@ mod tests {
         wait_for(&root, "60 100\n");
         drop(watch);
         assert!(read(&root).is_none());
+    }
+
+    #[test]
+    fn the_constants_describe_the_pinned_file() {
+        let pin = crate::model_fetch::embedded_pin().unwrap();
+        assert_eq!(pin.file, MODEL_FILE, "update MODEL_FILE and MODEL_BYTES");
+    }
+
+    #[test]
+    fn a_link_planted_at_the_temporary_name_is_not_followed() {
+        let (root, models) = dirs("link");
+        let target = root.join("victim");
+        fs::write(&target, "keep").unwrap();
+        fs::create_dir_all(root.join(FILE).parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&target, root.join(FILE).with_extension("tmp")).unwrap();
+        drop(Watch::start(&root, models, "m.gguf".into(), 1));
+        assert_eq!(fs::read_to_string(&target).unwrap(), "keep");
     }
 
     #[test]

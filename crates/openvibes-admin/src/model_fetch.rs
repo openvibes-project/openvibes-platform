@@ -27,8 +27,8 @@ use std::{
 use openvibes_llm::{is_model_name, is_sha256_hex};
 
 /// Space the 4B model needs, with headroom for the temporary copy's peak.
-// The pinned file (2.74 GB for Qwen3.5-4B Q4_K_M) and a little room.
-const NEEDED_BYTES: u64 = 2_800_000_000;
+// The pinned file (`model_progress::MODEL_BYTES`) and 60 MB of room.
+const NEEDED_BYTES: u64 = crate::model_progress::MODEL_BYTES + 60_000_000;
 const CURL: &str = "/usr/bin/curl";
 const STAT: &str = "/usr/bin/stat";
 

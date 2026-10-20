@@ -29,7 +29,7 @@ fn progress_text(progress: Option<(u64, u64)>) -> String {
     let gb = |n: u64| format!("{:.1}", n as f64 / 1e9);
     match progress {
         Some((done, 0)) => format!("{} GB downloaded", gb(done)),
-        Some((done, total)) => format!("{} of {} GB", gb(done), gb(total)),
+        Some((done, total)) => format!("{} of {} GB", gb(done.min(total)), gb(total)),
         None => "about 2.7 GB".into(),
     }
 }

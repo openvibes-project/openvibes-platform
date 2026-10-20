@@ -7,7 +7,9 @@
 # its bytes. To update: pick a model, check its
 # licence allows redistribution, set all values, and run
 # `openvibes-admin assistant eval` against it before merging, and add the
-# old LLM_MODEL_FILE to past-models (updates switch hosts over, #264).
+# old LLM_MODEL_FILE to past-models (updates switch hosts over, #264), and
+# also update MODEL_BYTES and MODEL_FILE in
+# crates/openvibes-admin/src/model_progress.rs.
 #
 # Qwen3.5-4B (Apache 2.0): Qwen publishes no GGUF of it, so this is
 # unsloth's Q4_K_M of Qwen/Qwen3.5-4B, the exact file the eval passed on
