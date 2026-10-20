@@ -291,3 +291,10 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: UpdateStep, args: &UpdateArgs) -> Step
 #[cfg(test)]
 #[path = "update_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "update_migrate_tests.rs"]
+mod migrate_tests;
+#[cfg(test)]
+#[path = "update_pg_tests.rs"]
+mod pg_tests;

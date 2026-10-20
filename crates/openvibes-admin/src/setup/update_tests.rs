@@ -9,44 +9,13 @@ use crate::setup::{
     plan::Component::*,
 };
 
-const ADMIN: [&str; 5] = [
+pub(super) const ADMIN: [&str; 5] = [
     "/usr/sbin/runuser",
     "-u",
     "openvibes-admin",
     "--",
     "/usr/bin/openvibes-admin",
 ];
-
-const RPM_Q: &[&str] = &["/usr/bin/rpm", "-q", "--quiet", "postgresql-server"];
-
-/// PostgreSQL installed, its data folder there (major 18), and running.
-fn healthy(fake: &Fake) {
-    fake.file(PG_VERSION, "18\n");
-    fake.answer(&["/usr/bin/rpm", "-q", "--qf"], 0, "18.6");
-    fake.answer(RPM_Q, 0, "");
-    fake.answer(
-        &["/usr/bin/systemctl", "is-active", "--quiet", "postgresql"],
-        0,
-        "",
-    );
-}
-
-/// Like `healthy`, but the server package was removed by hand.
-fn server_removed(fake: &Fake) {
-    fake.answer(RPM_Q, 1, "");
-    fake.answer(&["/usr/bin/dnf", "install"], 0, "");
-    fake.answer(&["/usr/bin/systemctl", "enable"], 0, "");
-    healthy(fake);
-}
-
-/// The index of the first call starting with `prefix`.
-fn at(fake: &Fake, prefix: &[&str]) -> usize {
-    fake.calls
-        .borrow()
-        .iter()
-        .position(|call| call.iter().zip(prefix).all(|(a, b)| a == b) && call.len() >= prefix.len())
-        .unwrap_or_else(|| panic!("no call {prefix:?}"))
-}
 
 #[test]
 fn without_a_backup_path_the_backup_is_skipped() {
@@ -210,173 +179,6 @@ fn a_local_folder_upgrades_from_its_files() {
             "/srv/new/openvibes-admin-0.2.0-1.fc44.x86_64.rpm",
             "/srv/new/openvibes-ingest-0.2.0-1.fc44.x86_64.rpm"
         ]
-    );
-}
-
-#[test]
-fn migrate_runs_migrate_and_maintenance() {
-    let fake = Fake::new("update-migrate");
-    healthy(&fake);
-    fake.answer(
-        &[&ADMIN[..], &["migrate"]].concat(),
-        0,
-        "schema version 25\n",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["maintenance"]].concat(),
-        0,
-        "created 0 partitions\n",
-    );
-    let plan = plan(&[Ingest]);
-    let state = run(
-        &fake.ctx(&plan),
-        UpdateStep::Migrate,
-        &UpdateArgs::default(),
-    );
-    assert_eq!(
-        state,
-        StepState::Done("schema version 25; created 0 partitions".into())
-    );
-}
-
-#[test]
-fn migrate_flattens_multi_line_maintenance_output() {
-    let fake = Fake::new("update-migrate-flat");
-    healthy(&fake);
-    fake.answer(
-        &[&ADMIN[..], &["migrate"]].concat(),
-        0,
-        "schema version 25\n",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["maintenance"]].concat(),
-        0,
-        "created 0 partitions\nrecorded history for 2 hosts, deleted 0 old rows\n",
-    );
-    let plan = plan(&[Ingest]);
-    let state = run(
-        &fake.ctx(&plan),
-        UpdateStep::Migrate,
-        &UpdateArgs::default(),
-    );
-    assert_eq!(
-        state,
-        StepState::Done(
-            "schema version 25; created 0 partitions; recorded history for 2 hosts, deleted 0 old rows"
-                .into()
-        )
-    );
-}
-
-#[test]
-fn migrate_publishes_a_newer_rules_package() {
-    let fake = Fake::new("update-rules");
-    healthy(&fake);
-    fake.answer(
-        &[&ADMIN[..], &["migrate"]].concat(),
-        0,
-        "schema version 26\n",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["maintenance"]].concat(),
-        0,
-        "created 0 partitions\n",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["rules", "list"]].concat(),
-        0,
-        "baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n",
-    );
-    fake.answer(
-        &["/usr/bin/rpm", "-q", "--quiet", "openvibes-rules-baseline"],
-        0,
-        "",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["rules", "trust", "add"]].concat(),
-        0,
-        "already trusted\n",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["rules", "publish"]].concat(),
-        0,
-        "published baseline v2\n",
-    );
-    fake.file(
-        "/usr/share/openvibes/rules/baseline.key",
-        "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
-    );
-    fake.file(
-        "/usr/share/openvibes/rules/baseline.json",
-        "{\"rule_set_version\":2}",
-    );
-    let plan = plan(&[Ingest, Distribution, Rules]);
-    let state = run(
-        &fake.ctx(&plan),
-        UpdateStep::Migrate,
-        &UpdateArgs::default(),
-    );
-    assert_eq!(
-        state,
-        StepState::Done(
-            "schema version 26; created 0 partitions; rule set baseline published".into()
-        )
-    );
-}
-
-#[test]
-fn a_failing_rules_publish_never_stops_the_update() {
-    let fake = Fake::new("update-rules-fail");
-    healthy(&fake);
-    fake.answer(
-        &[&ADMIN[..], &["migrate"]].concat(),
-        0,
-        "schema version 26\n",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["maintenance"]].concat(),
-        0,
-        "created 0 partitions\n",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["rules", "list"]].concat(),
-        0,
-        "baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n",
-    );
-    fake.answer(
-        &["/usr/bin/rpm", "-q", "--quiet", "openvibes-rules-baseline"],
-        0,
-        "",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["rules", "trust", "add"]].concat(),
-        0,
-        "already trusted\n",
-    );
-    fake.answer(
-        &[&ADMIN[..], &["rules", "publish"]].concat(),
-        1,
-        "openvibes-admin: the envelope expired\n",
-    );
-    fake.file(
-        "/usr/share/openvibes/rules/baseline.key",
-        "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
-    );
-    fake.file(
-        "/usr/share/openvibes/rules/baseline.json",
-        "{\"rule_set_version\":2}",
-    );
-    let plan = plan(&[Ingest, Distribution, Rules]);
-    let state = run(
-        &fake.ctx(&plan),
-        UpdateStep::Migrate,
-        &UpdateArgs::default(),
-    );
-    // The services still start: Health and Repair show the rules problem.
-    assert!(matches!(state, StepState::Done(_)), "{state:?}");
-    assert!(
-        state.detail().contains("rules not published: "),
-        "{state:?}"
     );
 }
 
@@ -571,80 +373,33 @@ fn the_agent_is_never_left_stopped() {
     assert!(!later.root.join("run/openvibes-admin/update-agent").exists());
 }
 
-#[test]
-fn a_missing_postgresql_stops_the_update_before_anything_stops() {
-    let fake = Fake::new("update-pg-gone");
-    fake.answer(RPM_Q, 1, "");
-    let plan = plan(&[Ingest]);
-    let state = run(&fake.ctx(&plan), UpdateStep::Backup, &UpdateArgs::default());
-    assert!(
-        matches!(&state, StepState::Failed(text) if text.contains("data folder")),
-        "{state:?}"
-    );
-    assert!(!fake.called(&["/usr/bin/systemctl", "stop"]));
-    assert!(crate::setup::system::job_guard(&fake.root, "setup").is_ok());
-}
+pub(super) const RPM_Q: &[&str] = &["/usr/bin/rpm", "-q", "--quiet", "postgresql-server"];
 
-#[test]
-fn the_backup_step_puts_postgresql_back() {
-    let fake = Fake::new("update-pg-backup");
-    server_removed(&fake);
-    let plan = plan(&[Ingest]);
-    let state = run(&fake.ctx(&plan), UpdateStep::Backup, &UpdateArgs::default());
-    assert!(
-        matches!(&state, StepState::Skipped(text) if text.starts_with("PostgreSQL was missing or stopped") && text.ends_with("no backup chosen")),
-        "{state:?}"
-    );
-    assert!(fake.called(&["/usr/bin/dnf", "install", "-y", "postgresql-server"]));
-    assert!(!fake.called(&["/usr/bin/systemctl", "stop"]));
-}
-
-#[test]
-fn migrate_puts_postgresql_back_first() {
-    let fake = Fake::new("update-pg-migrate");
-    server_removed(&fake);
-    fake.file("run/openvibes-admin/job", "update\n");
+/// PostgreSQL installed, its data folder there (major 18), and running.
+pub(super) fn healthy(fake: &Fake) {
+    fake.file(PG_VERSION, "18\n");
+    fake.answer(&["/usr/bin/rpm", "-q", "--qf"], 0, "18.6");
+    fake.answer(RPM_Q, 0, "");
     fake.answer(
-        &[&ADMIN[..], &["migrate"]].concat(),
-        0,
-        "schema version 25\n",
-    );
-    fake.answer(&[&ADMIN[..], &["maintenance"]].concat(), 0, "ok\n");
-    let plan = plan(&[Ingest]);
-    let state = run(
-        &fake.ctx(&plan),
-        UpdateStep::Migrate,
-        &UpdateArgs::default(),
-    );
-    assert!(
-        matches!(&state, StepState::Done(text) if text.starts_with("PostgreSQL was missing or stopped")),
-        "{state:?}"
-    );
-    assert!(at(&fake, &["/usr/bin/dnf", "install"]) < at(&fake, &ADMIN));
-}
-
-#[test]
-fn an_enabled_unit_that_was_down_starts_again() {
-    let fake = Fake::new("update-enabled-down");
-    fake.answer(
-        &[
-            "/usr/bin/systemctl",
-            "is-enabled",
-            "--quiet",
-            "openvibes-ingest.service",
-        ],
+        &["/usr/bin/systemctl", "is-active", "--quiet", "postgresql"],
         0,
         "",
     );
-    fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
-    fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
-    fake.answer(&["/usr/bin/systemctl", "start"], 0, "");
-    let plan = plan(&[Ingest, Distribution]);
-    let ctx = fake.ctx(&plan);
-    run(&ctx, UpdateStep::Stop, &UpdateArgs::default());
-    run(&ctx, UpdateStep::Start, &UpdateArgs::default());
-    assert_eq!(
-        fake.call(&["/usr/bin/systemctl", "start"]),
-        ["/usr/bin/systemctl", "start", "openvibes-ingest.service"]
-    );
+}
+
+/// Like `healthy`, but the server package was removed by hand.
+pub(super) fn server_removed(fake: &Fake) {
+    fake.answer(RPM_Q, 1, "");
+    fake.answer(&["/usr/bin/dnf", "install"], 0, "");
+    fake.answer(&["/usr/bin/systemctl", "enable"], 0, "");
+    healthy(fake);
+}
+
+/// The index of the first call starting with `prefix`.
+pub(super) fn at(fake: &Fake, prefix: &[&str]) -> usize {
+    fake.calls
+        .borrow()
+        .iter()
+        .position(|call| call.iter().zip(prefix).all(|(a, b)| a == b) && call.len() >= prefix.len())
+        .unwrap_or_else(|| panic!("no call {prefix:?}"))
 }
