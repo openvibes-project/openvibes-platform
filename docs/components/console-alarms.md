@@ -108,18 +108,22 @@ missing alarm and one on a host out of reach (404) show "No such alarm".
   bar, with `can.triage`), Suppress… (screen 12, with `can.suppress`; not
   while a request waits or once suppressed), Ask about this (ruling 6,
   `can.ask`), and ⋯ with Export (ruling 7, `can.export`: a CSV of the
-  alarm and its siblings) and Copy link.
+  alarm and its siblings) and Copy link (the address without its anchor;
+  an error toast when the clipboard refuses). Assign ▾ offers other people
+  only with the page's per-host `can.assign`.
 - **Tiles:** starts matched (to Last 24 hours), different commands (to
-  Commands seen), first seen and confidence.
+  Commands seen), first seen (any command) and confidence.
 - **Left:** What happened (the rule's `explain`, then `check`, as plain text
   with line breaks kept; until the rule has them, its title and message;
   then the evidence, "Why it triggered"); Details (a closed alarm's
-  decision with Reopen; rule and set with versions, ATT&CK, last seen,
+  decision with Reopen; rule and set with versions, ATT&CK, this alarm's
+  first seen, last seen,
   received, assignee, case with Add to case, and the suppression: the one
   that closed it, or a waiting request with Withdraw); History.
 - **Right:** Commands seen (every sibling, most starts first; each links to
   its page; the usual one has "Suppress this command…", the screen-12 form
-  for *that sibling's* id, preset to the exact command; one seen once is
+  for *that sibling's* id, preset to the exact command, or "A request for
+  this command is waiting for approval" when one already waits; one seen once is
   highlighted with Add to case for that sibling); the process chain; Last
   24 hours (`HourlyBars`); Related (other open alarms on the host,
   vulnerabilities with `vulnerabilities.read`, and the same rule elsewhere

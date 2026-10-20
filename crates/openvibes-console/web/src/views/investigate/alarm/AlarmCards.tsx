@@ -8,6 +8,7 @@ import { apiMessage, invalidate, request, useResource } from "../../../api/clien
 import type { AlarmDetail, AlarmProcess, AlarmSummaryPage, AlarmSuppression } from "../../../api/types";
 import { alarmPath } from "../../../app/location";
 import { viewLink } from "../../../app/nav";
+import { useSession } from "../../../app/session";
 import { AddToCase } from "../../../panels/cases/AddToCase";
 import { caseNumber } from "../../../panels/cases/cases";
 import { DetectionEvidence } from "../../../panels/alarms/DetectionEvidence";
@@ -103,6 +104,7 @@ export function DetailsCard({ page, waiting, waitingError }: { page: Page; waiti
           <dt>Rule</dt><dd className="mono">{alarm.rule_id} <span className="subtle">v{alarm.rule_version}</span></dd>
           <dt>Rule set</dt><dd className="mono">{alarm.rule_set_id} <span className="subtle">v{alarm.rule_set_version}</span></dd>
           {alarm.techniques.length > 0 && <><dt>ATT&CK</dt><dd className="row row--wrap">{alarm.techniques.map((t) => <a key={t} className="tag" {...viewLink("/coverage", { technique: t })}>{t}</a>)}</dd></>}
+          <dt>First seen</dt><dd>{date(alarm.first_seen)}</dd>
           <dt>Last seen</dt><dd><Ago value={alarm.last_seen} /></dd>
           <dt>Received</dt><dd>{date(alarm.received_at)}</dd>
           <dt>Assignee</dt><dd>{alarm.assignee?.name ?? <span className="subtle">Unassigned</span>}</dd>
@@ -120,13 +122,31 @@ export const HistoryCard = ({ id }: { id: number }) => (
   <Card title="History"><HistoryTab showHost={false} query={`kind=alarm&id=${encodeURIComponent(String(id))}`} /></Card>
 );
 
-/** "Suppress this command…": the screen-12 form for THIS sibling's command line, not the opened alarm's. */
+/** "Suppress this command…": the screen-12 form for THIS sibling's command line, not the opened alarm's.
+ * A request already waiting for that sibling is said instead of a second form. */
 function SuppressCommand({ command }: { command: Command }) {
+  const { can } = useSession();
   const [open, setOpen] = useState(false);
+  const [waits, setWaits] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const id = String(command.id);
+  const press = async () => {
+    if (!can("alarms.suppressions.read")) { setOpen(true); return; }
+    setBusy(true);
+    try {
+      const found = await request<{ items: AlarmSuppression[] }>("GET", `/api/v1/alarm-suppressions?alarm_id=${encodeURIComponent(id)}&state=waiting`);
+      if (found.items.length > 0) setWaits(true); else setOpen(true);
+    } catch (error) {
+      toast(apiMessage(error, "Could not check for a waiting request"), true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (waits) return <span className="subtle" role="status">A request for this command is waiting for approval</span>;
   return (
     <>
-      <button type="button" className="button button--small" onClick={() => setOpen(true)}>Suppress this command…</button>
-      {open && <SuppressDialog alarmId={String(command.id)} initial={{ what: "command" }} onClose={() => setOpen(false)} />}
+      <button type="button" className="button button--small" disabled={busy} onClick={() => void press()}>Suppress this command…</button>
+      {open && <SuppressDialog alarmId={id} initial={{ what: "command" }} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -155,12 +175,12 @@ export function CommandsCard({ page }: { page: Page }) {
                 <td className="num">{c.count.toLocaleString()}</td>
                 <td className="subtle nowrap"><Ago value={c.last_seen} /></td>
                 <td><TriageBadge state={c.state} /></td>
-                <td className="row row--wrap">
+                <td><div className="row row--wrap">
                   {index === 0 && can.suppress && c.suppressed_by == null && <SuppressCommand command={c} />}
                   {c.suppressed_by != null && <span className="subtle">Suppressed #{c.suppressed_by}</span>}
                   {once && can.add_to_case ? <AddToCase compact={c.case == null} kind="alarm" id={String(c.id)} label={line} inCase={c.case?.number} />
                     : c.case && <ObjectLink to={{ kind: "case", id: c.case.id }}>{caseNumber(c.case.number)}</ObjectLink>}
-                </td>
+                </div></td>
               </tr>
             );
           })}
@@ -184,6 +204,8 @@ function Process({ process, current }: { process: AlarmProcess; current: boolean
 }
 
 export function ProcessCard({ page }: { page: Page }) {
+  // The same (cached) record What happened reads for its evidence.
+  const detail = useResource<AlarmDetail>(`/api/v1/alarms/${encodeURIComponent(String(page.alarm.id))}`).data;
   // Ancestors arrive nearest first; the tree reads top-down.
   const tree = [...(page.alarm.ancestors as unknown as AlarmProcess[])].reverse();
   return (
@@ -193,7 +215,7 @@ export function ProcessCard({ page }: { page: Page }) {
           {tree.map((process, index) => <Process key={`${index}-${process.pid}`} process={process} current={false} />)}
           <Process process={page.alarm.process as unknown as AlarmProcess} current />
         </ol>
-        <p className="subtle">Repeated starts are counted; every occurrence is not retained. Command-line secrets may be masked.</p>
+        <p className="subtle">{detail && (detail.detection ? "Process sample from the recorded evidence time. " : "Recorded process sample; its individual timestamp was not retained. ")}Repeated starts are counted; every occurrence is not retained. Command-line secrets may be masked.</p>
       </div>
     </Card>
   );

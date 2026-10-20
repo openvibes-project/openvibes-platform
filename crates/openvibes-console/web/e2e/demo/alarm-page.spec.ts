@@ -58,6 +58,24 @@ test("suppress_this_command_uses_that_line: the usual command's Suppress this co
   await expect(row.getByRole("link", { name: "Open alarm" })).toHaveAttribute("href", /\/alarms\/9008$/);
 });
 
+test("with a request for the usual command waiting, Suppress this command… says so instead of a second form", async ({ page }) => {
+  await page.goto("/settings?tab=general");
+  await page.getByRole("switch", { name: "Suppressions need approval" }).click();
+  await expect(page.getByText("Saved · recorded in the audit log").first()).toBeVisible();
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("menuitemradio", { name: "analyst", exact: true }).click();
+  await page.goto("/alarms/9000");
+  const press = () => commands(page).first().getByRole("button", { name: "Suppress this command…" }).click();
+  await press();
+  const form = page.getByRole("dialog", { name: "Suppress alarms like this" });
+  await form.getByRole("textbox", { name: "Reason (required)" }).fill("load balancer health check");
+  await form.getByRole("button", { name: "Request" }).click();
+  await expect(page.locator(".toast").last()).toContainText("Requested · waiting for approval");
+  await press();
+  await expect(commands(page).first()).toContainText("A request for this command is waiting for approval");
+  await expect(form).toHaveCount(0);
+});
+
 test("Set state from the header closes the alarm, and Reopen opens it again", async ({ page }) => {
   await page.goto("/alarms/9000");
   await page.locator(".person-page__actions").getByRole("button", { name: /^Set state/ }).click();

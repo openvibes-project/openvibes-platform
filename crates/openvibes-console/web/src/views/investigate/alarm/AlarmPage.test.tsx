@@ -10,8 +10,9 @@ vi.hoisted(() => {
 
 import type { AlarmSummaryPage, AlarmSuppression, Session } from "../../../api/types";
 import { SessionContext } from "../../../app/session";
+import { date } from "../../../ui/format";
 import { WaitingRequest } from "./AlarmCards";
-import { AlarmView, exportRows } from "./AlarmPage";
+import { AlarmView, exportRows, moreActions } from "./AlarmPage";
 
 const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -56,7 +57,9 @@ describe("alarm page", () => {
     expect(html).toMatch(/<a [^>]*href="#commands"[^>]*aria-label="Different commands: 3"/);
     expect(html).toContain('id="commands"');
     expect(html).toMatch(/aria-label="Starts matched: 16"/);
-    expect(text(html)).toContain("First seen");
+    expect(text(html)).toContain("First seen (any command)");
+    // This alarm's own first start, in Details.
+    expect(text(html)).toContain(`First seen${date(fixture().alarm.first_seen)}`);
     expect(text(html)).toContain("80%Confidence");
   });
 
@@ -92,6 +95,14 @@ describe("alarm page", () => {
     const none = render(fixture({ can: { triage: false, assign: false, suppress: false, add_to_case: false, ask: false, export: false } }), false);
     for (const action of ["Set state", "Suppress…", "Suppress this command…", "Ask about this", "Add to case"]) expect(text(none)).not.toContain(action);
     expect(none).toContain('aria-label="More actions"');
+  });
+
+  it("follows the summary's can, not the session: everything allowed by the session, nothing on this host", () => {
+    const none = { triage: false, assign: false, suppress: false, add_to_case: false, ask: false, export: false };
+    const t = text(render(fixture({ can: none })));
+    for (const action of ["Set state", "Suppress…", "Suppress this command…", "Ask about this", "Add to case", "Reopen"]) expect(t).not.toContain(action);
+    expect(moreActions(none).map((m) => m.label)).toEqual(["Copy link"]);
+    expect(moreActions({ ...none, export: true }).map((m) => m.label)).toEqual(["Export", "Copy link"]);
   });
 
   it("names the suppression that closed it, and offers no Suppress…", () => {

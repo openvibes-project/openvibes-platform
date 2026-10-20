@@ -74,7 +74,7 @@ export function AlarmView({ page }: { page: AlarmSummaryPage }) {
       tiles={[
         <Tile key="starts" label="Starts matched" value={tiles.starts} to="#timeline" />,
         <Tile key="commands" label="Different commands" value={tiles.different_commands} to="#commands" />,
-        <FactTile key="first" label="First seen" value={shortDate(tiles.first_seen)} />,
+        <FactTile key="first" label="First seen (any command)" value={shortDate(tiles.first_seen)} />,
         <FactTile key="confidence" label="Confidence" value={`${tiles.confidence}%`} />,
       ]}
       left={<>
@@ -92,23 +92,37 @@ export function AlarmView({ page }: { page: AlarmSummaryPage }) {
   );
 }
 
+/** ⋯: Export with `can.export` (ruling 7), and Copy link. */
+export const moreActions = (can: AlarmSummaryPage["can"]) => [
+  ...(can.export ? [{ value: "export", label: "Export", description: "This alarm and its other commands, as CSV" }] : []),
+  { value: "copy", label: "Copy link" },
+];
+
+/** Copies the page's address (no #anchor); says so only once the clipboard took it. */
+export async function copyLink() {
+  try {
+    if (!navigator.clipboard) throw new Error("no clipboard");
+    await navigator.clipboard.writeText(window.location.origin + window.location.pathname);
+    toast("Link copied");
+  } catch {
+    toast("The link could not be copied", true);
+  }
+}
+
 /** Set state ▾ and Assign ▾ (the inline bulk bar), Suppress…, Ask about this, and ⋯ with Export and Copy link. */
 function AlarmActions({ page, canSuppress }: { page: AlarmSummaryPage; canSuppress: boolean }) {
   const { alarm, can } = page;
   const [suppressing, setSuppressing] = useState(false);
   const id = String(alarm.id);
-  const more = [
-    ...(can.export ? [{ value: "export", label: "Export", description: "This alarm and its other commands, as CSV" }] : []),
-    { value: "copy", label: "Copy link" },
-  ];
+  const more = moreActions(can);
   const pick = (value: string) => {
     if (value === "export") downloadCsv(`openvibes-alarm-${id}.csv`, exportRows(page));
-    else { void navigator.clipboard?.writeText(window.location.href); toast("Link copied"); }
+    else void copyLink();
   };
   return (
     <>
       {can.triage && <BulkBar inline kind="alarms" noun="alarm" count={1} onClear={() => undefined} items={() => [{ id }]} without={["case", "suppress"]}
-        assignee={alarm.triage.assigned_to ?? null} newCase={() => ({ title: alarm.message, severity: alarm.severity })} />}
+        assignee={alarm.triage.assigned_to ?? null} assignPeople={can.assign} newCase={() => ({ title: alarm.message, severity: alarm.severity })} />}
       {can.suppress && canSuppress && !alarm.suppressed && <button type="button" className="button" onClick={() => setSuppressing(true)}>Suppress…</button>}
       {can.ask && <button type="button" className="button" onClick={() => assistant.askAbout({ kind: "alarm", id }, alarm.message)}><Icon name="sparkles" size={14} /> Ask about this</button>}
       <MenuButton label="More actions" icon="more" compact items={more} onPick={pick} />
