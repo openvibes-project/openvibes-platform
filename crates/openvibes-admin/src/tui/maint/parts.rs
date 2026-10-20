@@ -361,11 +361,8 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
     ));
     lines.push(Line::raw(""));
     if run.ok() {
-        let Kind::Parts { done, .. } = &run.work.kind else {
-            return;
-        };
         lines.push(Line::styled(
-            format!("    ✓ {} ({})", done, run.took()),
+            format!("    ✓ {} ({})", run.work.kind.done(), run.took()),
             t.green(),
         ));
     } else if let Some(at) = run.stopped_at() {
@@ -443,6 +440,13 @@ impl<H: Host> App<H> {
 
     fn ask_parts(&mut self) {
         let (add, remove) = self.maint.parts.changes();
+        if add.is_empty() && remove.is_empty() {
+            return;
+        }
+        if let Some(why) = super::blocked_by_half_done(self) {
+            self.outcome = Some((false, why));
+            return;
+        }
         // Question and detail fit 40 columns, so the buttons always show.
         let which = |parts: &[Part]| match parts {
             [one] => format!("the {}", one.name()),

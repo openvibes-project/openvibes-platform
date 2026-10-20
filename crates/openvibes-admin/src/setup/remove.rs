@@ -392,9 +392,11 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
         ));
     }
     // A half-done Update must not block an uninstall (#292); any other mark does.
-    let after_update = ctx
-        .read("/run/openvibes-admin/job")
-        .is_ok_and(|mark| mark.lines().next() == Some("update"));
+    // A part removal is refused under any mark.
+    let after_update = !part::is_part_removal(ctx.plan, &args.components)
+        && ctx
+            .read("/run/openvibes-admin/job")
+            .is_ok_and(|mark| mark.lines().next() == Some("update"));
     if !after_update && let Err(error) = super::system::job_guard(ctx.root, "uninstall") {
         return StepState::Failed(error);
     }
@@ -431,9 +433,13 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
         }
         // Always called: a no-op unless an Update left its records.
         RemoveStep::Stop => {
-            super::update::abandon(ctx, args.components.contains(&Component::Agent));
+            let part = part::is_part_removal(ctx.plan, &args.components);
+            // A part removal never touches an update's records.
+            if !part {
+                super::update::abandon(ctx, args.components.contains(&Component::Agent));
+            }
             // A part removal is not a half-done whole uninstall: no mark.
-            if part::is_part_removal(ctx.plan, &args.components) {
+            if part {
                 stop(ctx, args)
             } else {
                 ctx.job_begin(match args.confirm {

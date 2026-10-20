@@ -182,6 +182,14 @@ pub fn row_of(name: &str) -> usize {
         .expect("a Maintenance entry")
 }
 
+/// Why a change to the plan must wait: a half-done update or uninstall
+/// (Repair's words). `None` when nothing is half done.
+pub(super) fn blocked_by_half_done<H: Host>(app: &App<H>) -> Option<String> {
+    let kind = app.half_done.as_deref()?;
+    let (what, todo) = repair::half_note(kind);
+    Some(format!("{what}{todo}"))
+}
+
 /// "3.1 GB", "42 MB", "1 KB".
 pub fn human(bytes: u64) -> String {
     let mb = bytes as f64 / (1024.0 * 1024.0);

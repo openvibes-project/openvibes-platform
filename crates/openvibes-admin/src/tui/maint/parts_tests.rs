@@ -140,17 +140,8 @@ fn apply_saves_the_whole_plan_then_repairs() {
     );
     assert_eq!(calls[1], "setup-step packages --repair");
     // Every step once; the model comes before Ready on this page.
-    let mut repairs: Vec<&String> = calls
-        .iter()
-        .filter(|c| c.starts_with("setup-step"))
-        .collect();
-    repairs.sort();
-    let mut all: Vec<String> = Step::ALL
-        .iter()
-        .map(|s| format!("setup-step {} --repair", s.name()))
-        .collect();
-    all.sort();
-    assert_eq!(repairs, all.iter().collect::<Vec<_>>());
+    let (made, all) = repairs(&calls);
+    assert_eq!(made, all);
     assert_eq!(calls.last().unwrap(), "setup-status");
     let text = screen(&app);
     for want in [
@@ -312,13 +303,8 @@ fn adding_only_the_agent_leaves_the_model_to_ready() {
         "{text}"
     );
     assert!(!text.contains("Download the model"), "{text}");
-    assert_eq!(
-        calls(&app)
-            .iter()
-            .filter(|c| c.starts_with("setup-step"))
-            .count(),
-        Step::ALL.len()
-    );
+    let (made, all) = repairs(&calls(&app));
+    assert_eq!(made, all);
 }
 
 #[test]
@@ -465,4 +451,26 @@ fn an_unreadable_plan_offers_no_choices() {
     let text = screen(&app);
     assert!(text.contains("The plan cannot be read"), "{text}");
     assert!(!text.contains("Space"), "{text}");
+}
+
+#[test]
+fn a_half_done_job_blocks_apply_with_repairs_words() {
+    for (kind, want) in [
+        ("update", "An update stopped half way: finish it first."),
+        ("uninstall", "An uninstall stopped half way:"),
+    ] {
+        let mut app = page(vec![]);
+        app.half_done = Some(kind.into());
+        tick(&mut app, 1);
+        apply(&mut app);
+        assert!(app.question.is_none() && app.asking.is_none());
+        assert!(calls(&app).is_empty());
+        let text = screen(&app);
+        assert!(text.contains(want), "{text}");
+    }
+    // Nothing changed: still silent.
+    let mut app = page(vec![]);
+    app.half_done = Some("update".into());
+    apply(&mut app);
+    assert!(app.outcome.is_none());
 }

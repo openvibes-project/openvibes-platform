@@ -126,7 +126,7 @@ fn a_keep_data_uninstall_still_keeps_everything() {
 }
 
 #[test]
-fn a_part_removal_clears_the_job_mark() {
+fn a_part_removal_runs_all_its_steps_and_is_refused_under_any_job_mark() {
     let fake = Fake::new("part-job");
     seed(&fake);
     let plan = plan(&[Ingest]);
@@ -136,6 +136,22 @@ fn a_part_removal_clears_the_job_mark() {
         assert!(state.finished(), "{step:?}: {state:?}");
     }
     assert!(!fake.root.join("run/openvibes-admin/job").exists());
+    // A half-done update: refused, and its records stay.
+    let fake = Fake::new("part-under-update");
+    seed(&fake);
+    fake.file("run/openvibes-admin/job", "update");
+    fake.file(
+        "run/openvibes-admin/update-active",
+        "openvibes-agent.service\n",
+    );
+    let state = run(&fake.ctx(&plan), RemoveStep::Backup, &args);
+    assert!(
+        matches!(&state, StepState::Failed(why) if why.contains("update is half done")),
+        "{state:?}"
+    );
+    let state = run(&fake.ctx(&plan), RemoveStep::Stop, &args);
+    assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+    assert!(fake.root.join("run/openvibes-admin/update-active").exists());
 }
 
 #[test]

@@ -145,7 +145,7 @@ fn entries(steps: &[(Step, StepState)], half: Option<&str>) -> Vec<(Do, String, 
 }
 
 /// The entry and page that finish a half-done job.
-fn finishing(kind: &str) -> Option<(&'static str, Page)> {
+pub(super) fn finishing(kind: &str) -> Option<(&'static str, Page)> {
     match kind {
         "update" => Some(("Finish the update", Page::Update)),
         "uninstall" => Some(("Finish the uninstall", Page::Uninstall)),
@@ -154,7 +154,7 @@ fn finishing(kind: &str) -> Option<(&'static str, Page)> {
 }
 
 /// What a half-done job is, and what finishes it.
-fn half_note(kind: &str) -> (String, &'static str) {
+pub(super) fn half_note(kind: &str) -> (String, &'static str) {
     match kind {
         "update" => ("An update stopped half way:".into(), " finish it first."),
         "uninstall" => (
