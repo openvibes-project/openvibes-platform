@@ -14,7 +14,7 @@ use super::{
 use crate::{
     setup::{
         plan::{Plan, plan_of},
-        ports::{CONSOLE_DEFAULT, RESERVED},
+        ports::{CONSOLE_DEFAULT, Problem, Which, port_problem},
     },
     tui::{
         app::{App, Key, Question},
@@ -74,33 +74,35 @@ pub fn port_note<H: Host>(
     let Ok(port) = typed.parse::<u16>() else {
         return Err("✗ a port is a number from 1 to 65535.".into());
     };
-    if let Some(other) = PortRow::ALL
-        .iter()
-        .find(|r| **r != row && r.of(plan) == port)
-    {
-        return Err(format!(
-            "✗ {port} is already used here for {}.",
-            other.name()
-        ));
-    }
-    if port == 0 {
-        return Err("✗ a port is a number from 1 to 65535.".into());
-    }
-    if RESERVED.contains(&port) {
-        return Err(format!(
-            "✗ {port} is not allowed for {}: 18430 and 18480-18484 are the platform's own.",
-            row.name()
-        ));
-    }
-    // Only the console's unit may bind below 1024.
-    match row {
-        PortRow::Ingest if port < 1024 => {
-            return Err("✗ Agent connections need a port from 1024 up.".into());
-        }
-        PortRow::Distribution if port < 1024 => {
-            return Err("✗ Rule distribution needs a port from 1024 up.".into());
-        }
-        _ => {}
+    let mut asked = plan.clone();
+    row.set(&mut asked, port);
+    let named = |w: Which| match w {
+        Which::Console => PortRow::Console,
+        Which::Ingest => PortRow::Ingest,
+        Which::Distribution => PortRow::Distribution,
+    };
+    if let Some((which, problem)) = port_problem(
+        asked.console_port,
+        asked.ingest_port,
+        asked.distribution_port,
+    ) {
+        let at = named(which);
+        return Err(match problem {
+            Problem::Zero => "✗ a port is a number from 1 to 65535.".to_owned(),
+            Problem::Reserved => format!(
+                "✗ {} is not allowed for {}: 18430 and 18480-18484 are the platform's own.",
+                at.of(&asked),
+                at.name()
+            ),
+            Problem::Below1024 if at == PortRow::Ingest => {
+                "✗ Agent connections need a port from 1024 up.".to_owned()
+            }
+            Problem::Below1024 => "✗ Rule distribution needs a port from 1024 up.".to_owned(),
+            Problem::Same(w) => {
+                let other = if at == row { named(w) } else { at };
+                format!("✗ {port} is already used here for {}.", other.name())
+            }
+        });
     }
     if port != row.of(plan) {
         let seen = host.listeners(port).map_err(|e| format!("✗ {e}."))?;

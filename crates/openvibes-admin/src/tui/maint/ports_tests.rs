@@ -245,3 +245,19 @@ fn refusals_name_the_row_and_a_swap_waits_for_apply() {
         screen(&app)
     );
 }
+
+#[test]
+fn the_page_and_check_ports_agree() {
+    use crate::setup::ports::check_ports;
+    // (typed in Agent connections, console, distribution)
+    for typed in ["18430", "80", "18424", "0"] {
+        let mut app = page();
+        type_agent_port(&mut app, typed);
+        let refused = check_ports(443, typed.parse().unwrap(), 18424).is_err();
+        assert!(refused, "check_ports accepts {typed}");
+        assert!(screen(&app).contains('✗'), "{typed}: {}", screen(&app));
+    }
+    let mut app = page();
+    type_agent_port(&mut app, "18500");
+    assert!(check_ports(443, 18500, 18424).is_ok() && !screen(&app).contains('✗'));
+}
