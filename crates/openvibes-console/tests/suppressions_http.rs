@@ -285,6 +285,15 @@ async fn bearer_token_cannot_approve() {
             .await
             .unwrap();
     assert_eq!(response.status(), StatusCode::OK, "a token may read");
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let list: Value = serde_json::from_slice(&bytes).unwrap();
+    let row = &list["items"][0];
+    assert_eq!(row["status"], "waiting", "{list}");
+    for flag in ["can_decide", "can_withdraw", "can_remove"] {
+        assert_eq!(row[flag], false, "a token reads no {flag}");
+    }
     assert_eq!(s.row(&s.analyst, &id).await.unwrap()["status"], "waiting");
     s.done().await;
 }
@@ -339,5 +348,41 @@ async fn bulk_suppress_waits_and_says_requested() {
         "Suppression requested, waiting for approval"
     );
     assert_eq!(s.rows(&s.fx.admin).await[0]["status"], "waiting");
+    s.done().await;
+}
+
+#[tokio::test]
+async fn waiting_row_of_a_deleted_group_cannot_be_decided() {
+    let Some(s) = setup().await else { return };
+    let id = s.waiting().await;
+    assert_eq!(s.row(&s.fx.admin, &id).await.unwrap()["can_decide"], true);
+    let client = s.fx.db.pool.get().await.unwrap();
+    // As a race with the group's delete would leave it (a delete through
+    // the API withdraws it).
+    for table in ["console_role_groups", "console_asset_groups"] {
+        let sql = format!("DELETE FROM {table} WHERE asset_group_id::text = $1");
+        client.execute(&sql, &[&s.linux]).await.unwrap();
+    }
+    drop(client);
+    let row = s.row(&s.fx.admin, &id).await.unwrap();
+    assert_eq!(row["can_decide"], false, "approve would answer 422 group");
+    let (status, body) = s.act(&s.fx.admin, &id, "approve", None).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    s.done().await;
+}
+
+#[tokio::test]
+async fn bulk_suppress_names_an_invalid_note() {
+    let Some(s) = setup().await else { return };
+    let note = "x".repeat(4001);
+    let body = json!({"action": "suppress", "note": note, "items": [{"id": s.linux_alarm}]});
+    let (status, answer) = s
+        .call(&s.fx.admin, "POST", "/api/v1/alarms/bulk", Some(body))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    assert_eq!(
+        answer["skipped"][0]["reason"],
+        "the note must be 1 to 4,000 characters"
+    );
     s.done().await;
 }

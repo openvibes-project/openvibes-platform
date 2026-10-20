@@ -319,7 +319,8 @@ pub struct Facts {
     pub requested_by: String,
     /// The decider's display name, likewise.
     pub decided_by: Option<String>,
-    /// Within the caller's `alarms.suppressions.approve` reach.
+    /// Within the caller's `alarms.suppressions.approve` reach, and its
+    /// group (if any) still exists.
     pub approvable: bool,
     /// Within the caller's `alarms.suppress` reach (ruling 6).
     pub removable: bool,
@@ -341,7 +342,8 @@ pub async fn facts(
         "SELECT s.id, h.hostname,
             COALESCE(NULLIF(ru.display_name, ''), ru.username, s.created_by),
             COALESCE(NULLIF(du.display_name, ''), du.username, s.decided_by),
-            {}, {}
+            {} AND (s.host_group_id IS NULL OR EXISTS (SELECT 1 FROM console_asset_groups g
+                WHERE g.asset_group_id = s.host_group_id)), {}
          FROM alarm_suppressions s
          LEFT JOIN agents h ON h.agent_id = s.agent_id
          LEFT JOIN console_users ru ON ru.user_id::text = s.created_by

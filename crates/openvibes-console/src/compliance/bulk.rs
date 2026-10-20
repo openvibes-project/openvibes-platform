@@ -439,9 +439,8 @@ async fn add_to_case(
 }
 
 /// One `program` suppression per distinct rule and program among the
-/// selected alarms. Activation closes only each representative alarm;
-/// new matching alarms are closed as they arrive. With approval on, each
-/// waits and is listed as requested, not changed.
+/// selected alarms; activation closes each representative alarm, later
+/// ones close as they arrive. With approval on each waits (skipped).
 async fn suppress(
     client: &mut platform_store::Client,
     scope: &AgentScope,
@@ -473,25 +472,28 @@ async fn suppress(
             for_days: None,
             reason: note,
         };
-        match alarm_suppressions::request(client, scope, &request, user_id, now).await {
+        let made = alarm_suppressions::request(client, scope, &request, user_id, now).await;
+        let skipped = match made {
+            Err(_) => return unavailable_auth(),
             // Approval on: requested, not yet quieting anything.
             Ok(Change::Done(made)) if made.state == SuppressionState::Waiting => {
-                result.skipped.push((
-                    id.to_string(),
-                    "Suppression requested, waiting for approval",
-                ));
+                "Suppression requested, waiting for approval"
             }
-            Ok(Change::Done(_)) => result.changed += 1,
-            Ok(Change::NeedsGlobalScope) => {
-                result
-                    .skipped
-                    .push((id.to_string(), "program suppressions need global scope"));
+            Ok(Change::Done(_)) => {
+                result.changed += 1;
+                continue;
             }
-            Ok(_) => result
-                .skipped
-                .push((id.to_string(), "not found or out of scope")),
-            Err(_) => return unavailable_auth(),
-        }
+            Ok(Change::NeedsGlobalScope) => "program suppressions need global scope",
+            Ok(Change::NotInReach) => "outside your suppress reach",
+            Ok(Change::Invalid(field)) if field == "reason" => {
+                "the note must be 1 to 4,000 characters"
+            }
+            Ok(Change::Invalid(_)) => "this alarm can't be suppressed",
+            Ok(Change::NotFound | Change::WrongState | Change::OwnRequest) => {
+                "not found or out of scope"
+            }
+        };
+        result.skipped.push((id.to_string(), skipped));
     }
     respond(result, None)
 }

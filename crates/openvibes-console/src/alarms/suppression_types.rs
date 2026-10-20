@@ -16,7 +16,12 @@ use utoipa::ToSchema;
 
 use crate::{
     FieldError, Permission, ProblemDetails,
-    access::{editor::authenticated_editor, guard::scope_of, guard::unavailable_auth},
+    access::{
+        auth::{PresentedCredentials, presented_credentials},
+        editor::authenticated_editor,
+        guard::scope_of,
+        guard::unavailable_auth,
+    },
     http::problem::problem_response,
 };
 
@@ -172,8 +177,9 @@ fn time(at: DateTime<Utc>) -> String {
     at.to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
-fn view(s: Suppression, facts: Facts, me: &str) -> AlarmSuppressionView {
-    let waiting = s.state == State::Waiting;
+/// `writes`: the caller may act at all (a session, not a bearer token).
+fn view(s: Suppression, facts: Facts, me: &str, writes: bool) -> AlarmSuppressionView {
+    let waiting = writes && s.state == State::Waiting;
     let own = s.created_by == me;
     let status = if s.expired {
         "expired"
@@ -215,31 +221,53 @@ fn view(s: Suppression, facts: Facts, me: &str) -> AlarmSuppressionView {
         would_close_capped: s.would_close_capped,
         can_decide: waiting && !own && facts.approvable,
         can_withdraw: waiting && own,
-        can_remove: s.state == State::Active && facts.removable,
+        can_remove: writes && s.state == State::Active && facts.removable,
     }
 }
 
-/// `rows` as caller `me` sees them, with its flags.
+/// `rows` as caller `me` sees them, with its flags. A bearer token gets
+/// every `can_*` false: every write refuses it.
 pub(super) async fn views(
     client: &Client,
     headers: &HeaderMap,
     me: &str,
     rows: Vec<Suppression>,
 ) -> Result<Vec<AlarmSuppressionView>, StoreError> {
-    let caps = authenticated_editor(client, headers, me)
-        .await?
-        .capabilities;
-    let approve = scope_of(&caps, Permission::AlarmsSuppressionsApprove);
-    let suppress = scope_of(&caps, Permission::AlarmsSuppress);
+    let writes = !matches!(
+        presented_credentials(headers),
+        Ok(PresentedCredentials::Bearer(_))
+    );
+    let (approve, suppress) = if writes {
+        let caps = authenticated_editor(client, headers, me)
+            .await?
+            .capabilities;
+        (
+            scope_of(&caps, Permission::AlarmsSuppressionsApprove),
+            scope_of(&caps, Permission::AlarmsSuppress),
+        )
+    } else {
+        (None, None)
+    };
     let ids: Vec<i64> = rows.iter().map(|row| row.id).collect();
     let mut facts = store::facts(client, &ids, approve.as_ref(), suppress.as_ref()).await?;
     Ok(rows
         .into_iter()
         .map(|row| {
             let facts = facts.remove(&row.id).unwrap_or_default();
-            view(row, facts, me)
+            view(row, facts, me, writes)
         })
         .collect())
+}
+
+/// The view of a committed write when its facts could not be read: the
+/// write stands, so it answers with no `can_*` and stored ids for names.
+fn bare_view(row: Suppression, me: &str) -> AlarmSuppressionView {
+    let facts = Facts {
+        requested_by: row.created_by.clone(),
+        decided_by: row.decided_by.clone(),
+        ..Facts::default()
+    };
+    view(row, facts, me, false)
 }
 
 /// The answer to a write: `done` with the view (no body for 204), or the
@@ -256,10 +284,12 @@ pub(super) async fn answer(
         Err(_) => return unavailable_auth(),
         Ok(Change::Done(_)) if done == StatusCode::NO_CONTENT => return done.into_response(),
         Ok(Change::Done(row)) => {
-            return match views(client, headers, me, vec![row]).await {
-                Ok(mut views) => (done, Json(views.remove(0))).into_response(),
-                Err(_) => unavailable_auth(),
+            // The write committed: a failed lookup must not answer 503.
+            let view = match views(client, headers, me, vec![row.clone()]).await {
+                Ok(mut views) => views.remove(0),
+                Err(_) => bare_view(row, me),
             };
+            return (done, Json(view)).into_response();
         }
         Ok(Change::NotFound) => {
             ProblemDetails::not_found(missing, "Alarm or suppression not found")
@@ -310,4 +340,46 @@ pub(super) fn invalid(field: &str) -> Response {
         .to_owned(),
     }]);
     problem_response(problem)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bare_view_offers_no_action() {
+        let now = Utc::now();
+        let row = Suppression {
+            id: 7,
+            rule_set_id: "baseline".into(),
+            rule_id: "r".into(),
+            scope: "program".into(),
+            agent_id: None,
+            exe: Some("/usr/bin/sh".into()),
+            args_sha256: None,
+            device_id: None,
+            note: "noise".into(),
+            created_by: "me".into(),
+            created_at: now,
+            state: State::Waiting,
+            expired: false,
+            host_group_id: None,
+            host_group_name: None,
+            for_days: Some(7),
+            activated_at: None,
+            expires_at: None,
+            decided_by: None,
+            decided_at: None,
+            decision_reason: None,
+            alarm_id: Some(1),
+            would_close: None,
+            would_close_capped: false,
+        };
+        let view = bare_view(row, "me");
+        assert_eq!(
+            (view.status.as_str(), view.requested_by.as_str()),
+            ("waiting", "me")
+        );
+        assert!(!view.can_withdraw && !view.can_decide && !view.can_remove);
+    }
 }

@@ -326,7 +326,9 @@ stay in the low thousands.
     id), `would_close` for waiting rows, and the caller's `can_decide`
     (waiting, not their own, within their approve reach), `can_withdraw`
     (their own waiting request) and `can_remove` (active, within their
-    suppress reach).
+    suppress reach). A waiting group row whose group was deleted is never
+    `can_decide` (approving it answers 422 `group`). A bearer token reads
+    every `can_*` as false: every write refuses it.
   - `GET /api/v1/alarm-suppressions/options` (`alarms.suppress`):
     `{require_approval, all_hosts, groups[{id, name}]}`, the groups the
     caller's suppress reach covers (all when global).
@@ -349,7 +351,9 @@ stay in the low thousands.
   - `DELETE …/{id}` (`alarms.suppress` on the row's where): 204; the row
     stays as `removed` history. Every transition is audited
     (`alarm.suppression.requested`, `.created`, `.approved`, `.rejected`,
-    `.withdrawn`, `.removed`).
+    `.withdrawn`, `.removed`). Once a write has committed, a failure
+    reading the caller's flags or names still answers its 200/201 with the
+    view, every `can_*` false and stored ids for names, never 503.
 - Alarms are not offered to the assistant in P14.
 
 Draft site rules (`rules/drafts.rs`, `rules/draft_publish.rs`; list, fleet and changes need `site_rules.read`, check, save and delete `site_rules.write`, test `site_rules.test`, all global; the
@@ -550,7 +554,10 @@ Spec `docs/specs/2026-10-10-bulk-triage-design.md` (#237, #239, #240).
   new case opens when nothing is left) and, for alarms, `suppress` (one `program`
   suppression on all hosts per distinct rule and program; with approval
   on, each waits and is listed in `skipped` as "Suppression requested,
-  waiting for approval"). Needs the kind's triage
+  waiting for approval"; other refusals are skipped with their own reason:
+  "program suppressions need global scope", "outside your suppress
+  reach", "the note must be 1 to 4,000 characters", "this alarm can't be
+  suppressed", or "not found or out of scope"). Needs the kind's triage
   permission (`alarms.triage`, `compliance.triage`,
   `vulnerabilities.triage`), plus `cases.write` for `case` and
   `alarms.suppress` for `suppress`. Answers `{changed, skipped[{id,
