@@ -542,6 +542,15 @@ the throttled write, so its own freshness limit is the separate
 "did the online set change" check for the console's event stream (not scoped,
 carries no agent identity).
 
+## General settings (`console_settings::…`, schema 54)
+
+Table `console_settings (key, value jsonb, changed_at, changed_by)`: one row
+per changed key; a key with no row has its default (kept in the console).
+`all`, `set` (one transaction: lock the row, upsert, audit `settings.changed`
+with `{key, old, new}`; returns the old value), `recent` (newest change
+audits) and `require_approval(&impl GenericClient)` (false when the row is
+absent or not a bool). Tests: `tests/console_settings.rs`.
+
 ## Status
 
 `status(&client, now) -> Status`: schema version; active, offline (no

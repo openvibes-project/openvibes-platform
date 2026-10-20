@@ -7624,6 +7624,108 @@
         }
       }
     },
+    "/api/v1/settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Every general setting with its value, and the last five changes.",
+        "operationId": "list_settings",
+        "responses": {
+          "200": {
+            "description": "Settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs settings.manage",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/{key}": {
+      "patch": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Sets one setting; the change is recorded in the audit log.",
+        "operationId": "update_setting",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSetting"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs settings.manage",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "setting_not_found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_setting: wrong type or out of range",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/site-rules/fleet": {
       "get": {
         "tags": [
@@ -15064,6 +15166,132 @@
         },
         "additionalProperties": false
       },
+      "SettingChangeView": {
+        "type": "object",
+        "description": "One recorded change.",
+        "required": [
+          "at",
+          "actor",
+          "key",
+          "old",
+          "new"
+        ],
+        "properties": {
+          "actor": {
+            "type": "string",
+            "description": "Who."
+          },
+          "at": {
+            "type": "string",
+            "description": "When (RFC 3339)."
+          },
+          "key": {
+            "type": "string",
+            "description": "The key."
+          },
+          "new": {
+            "description": "The value after."
+          },
+          "old": {
+            "description": "The value before; null when it had its default."
+          }
+        }
+      },
+      "SettingView": {
+        "type": "object",
+        "description": "One setting with its current value.",
+        "required": [
+          "key",
+          "section",
+          "label",
+          "help",
+          "kind",
+          "default",
+          "value"
+        ],
+        "properties": {
+          "changed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it was last changed (RFC 3339), if ever."
+          },
+          "changed_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who last changed it, if anyone."
+          },
+          "default": {
+            "description": "The value when nobody changed it."
+          },
+          "help": {
+            "type": "string",
+            "description": "One-sentence explanation."
+          },
+          "key": {
+            "type": "string",
+            "description": "The key, such as `sso.remove_inactive_days`."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`bool` or `int`."
+          },
+          "label": {
+            "type": "string",
+            "description": "Short name."
+          },
+          "max": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Largest allowed value (`int` only)."
+          },
+          "min": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Smallest allowed value (`int` only)."
+          },
+          "section": {
+            "type": "string",
+            "description": "The section it is shown under."
+          },
+          "value": {
+            "description": "The value now."
+          }
+        }
+      },
+      "SettingsView": {
+        "type": "object",
+        "description": "All settings and the latest changes.",
+        "required": [
+          "items",
+          "recent"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettingView"
+            },
+            "description": "Every setting, in display order."
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettingChangeView"
+            },
+            "description": "The last five changes, newest first."
+          }
+        }
+      },
       "Severity": {
         "type": "string",
         "description": "Severity attached to the latest observation for a rule.",
@@ -16112,6 +16340,18 @@
           "state": {
             "$ref": "#/components/schemas/UpdateState",
             "description": "Outcome of the check."
+          }
+        }
+      },
+      "UpdateSetting": {
+        "type": "object",
+        "description": "The new value.",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "description": "A boolean or whole number, as the setting's kind says."
           }
         }
       },

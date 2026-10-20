@@ -1551,6 +1551,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every general setting with its value, and the last five changes. */
+        get: operations["list_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Sets one setting; the change is recorded in the audit log. */
+        patch: operations["update_setting"];
+        trace?: never;
+    };
     "/api/v1/site-rules/fleet": {
         parameters: {
             query?: never;
@@ -4313,6 +4347,57 @@ export interface components {
             /** @description On or off for the group's hosts. */
             enabled: boolean;
         };
+        /** @description One recorded change. */
+        SettingChangeView: {
+            /** @description Who. */
+            actor: string;
+            /** @description When (RFC 3339). */
+            at: string;
+            /** @description The key. */
+            key: string;
+            /** @description The value after. */
+            new: unknown;
+            /** @description The value before; null when it had its default. */
+            old: unknown;
+        };
+        /** @description One setting with its current value. */
+        SettingView: {
+            /** @description When it was last changed (RFC 3339), if ever. */
+            changed_at?: string | null;
+            /** @description Who last changed it, if anyone. */
+            changed_by?: string | null;
+            /** @description The value when nobody changed it. */
+            default: unknown;
+            /** @description One-sentence explanation. */
+            help: string;
+            /** @description The key, such as `sso.remove_inactive_days`. */
+            key: string;
+            /** @description `bool` or `int`. */
+            kind: string;
+            /** @description Short name. */
+            label: string;
+            /**
+             * Format: int64
+             * @description Largest allowed value (`int` only).
+             */
+            max?: number | null;
+            /**
+             * Format: int64
+             * @description Smallest allowed value (`int` only).
+             */
+            min?: number | null;
+            /** @description The section it is shown under. */
+            section: string;
+            /** @description The value now. */
+            value: unknown;
+        };
+        /** @description All settings and the latest changes. */
+        SettingsView: {
+            /** @description Every setting, in display order. */
+            items: components["schemas"]["SettingView"][];
+            /** @description The last five changes, newest first. */
+            recent: components["schemas"]["SettingChangeView"][];
+        };
         /**
          * @description Severity attached to the latest observation for a rule.
          * @enum {string}
@@ -4757,6 +4842,11 @@ export interface components {
             release_url?: string | null;
             /** @description Outcome of the check. */
             state: components["schemas"]["UpdateState"];
+        };
+        /** @description The new value. */
+        UpdateSetting: {
+            /** @description A boolean or whole number, as the setting's kind says. */
+            value: unknown;
         };
         /**
          * @description Outcome of comparing against the latest published release.
@@ -10669,6 +10759,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsView"];
+                };
+            };
+            /** @description Needs settings.manage */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_setting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSetting"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingView"];
+                };
+            };
+            /** @description Needs settings.manage */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description setting_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_setting: wrong type or out of range */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

@@ -12,7 +12,7 @@ use crate::access::{
     session::session,
 };
 use crate::{
-    about, access, alarms, assistant, audit, cases, compliance, dashboards, hosts, rules,
+    about, access, alarms, assistant, audit, cases, compliance, dashboards, hosts, rules, settings,
     vulnerabilities,
 };
 
@@ -38,6 +38,7 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         .merge(rules::routes())
         .merge(dashboards::routes())
         .merge(cases::routes())
+        .merge(settings::routes())
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
 }

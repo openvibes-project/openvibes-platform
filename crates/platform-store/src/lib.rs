@@ -37,6 +37,8 @@ pub mod console_people;
 pub mod console_read;
 /// Console roles with a host reach, and what a principal holds (schema 52).
 pub mod console_roles;
+/// General console settings: typed values, audited changes.
+pub mod console_settings;
 /// Versioned analyst workflow state and history for current findings.
 pub mod console_triage;
 /// CPE matching: NVD applicability ranges and lower-confidence findings (schema 39).

@@ -850,3 +850,8 @@ Also renamed: the cases API's item kind `finding` is now `compliance_finding`
 `invalid_kind`); the problem code `finding_not_found` is now
 `compliance_finding_not_found`; the page `/findings` is now `/compliance`
 (old links and saved views carry over).
+
+## General settings
+
+`GET /api/v1/settings` and `PATCH /api/v1/settings/{key}` (both need
+`settings.manage`); see [console-settings.md](console-settings.md).
