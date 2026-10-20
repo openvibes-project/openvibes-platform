@@ -8,7 +8,6 @@ impl Plan {
     /// SUDO_USER). The root key file is passed as saved: the helper only
     /// checks that it is an absolute path; whether the file exists is
     /// the CA step's concern, as for the plan already on disk.
-    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
     pub fn args(&self) -> Vec<String> {
         let components: Vec<_> = self.components.iter().map(|c| c.name()).collect();
         let mut args = vec![

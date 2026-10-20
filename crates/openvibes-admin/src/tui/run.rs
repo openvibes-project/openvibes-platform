@@ -21,7 +21,6 @@ pub enum Call {
     Repair(Step),
     Update(UpdateStep, Vec<String>),
     Remove(RemoveStep, Vec<String>),
-    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
     /// `setup-plan` with these arguments (the whole plan: see `Plan::args`).
     SetupPlan(Vec<String>),
     /// A database command (no password).
@@ -50,7 +49,6 @@ pub enum Kind {
     },
     /// The Database page's reads.
     Report,
-    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
     /// Optional parts added or removed; `what` is the title.
     Parts {
         what: String,
@@ -157,7 +155,6 @@ impl Work {
     }
 
     /// Several calls under one row each.
-    #[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
     pub fn grouped(kind: Kind, groups: Vec<(String, Vec<Call>)>) -> Work {
         let mut calls = Vec::new();
         let mut labels = Vec::new();
@@ -372,7 +369,6 @@ impl Run {
     }
 }
 
-#[allow(dead_code)] // used by the plan pages (2b-1 tasks 3-5)
 /// Each label's state: the last call's when all its calls finished, the
 /// first that did not finish, `None` before it is reached.
 pub fn label_states(run: &Run) -> Vec<Option<StepState>> {
