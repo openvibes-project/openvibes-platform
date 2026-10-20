@@ -6,7 +6,7 @@
 import { type FormEvent, useState } from "react";
 
 import { ApiError, invalidate, request, useResource } from "../../../api/client";
-import type { Agent, HostSummary } from "../../../api/types";
+import type { AgentDetail, HostSummary } from "../../../api/types";
 import { assistant } from "../../../app/assistant";
 import { hostPath } from "../../../app/location";
 import { nav, viewLink } from "../../../app/nav";
@@ -40,15 +40,15 @@ export function NoSuchHost() {
 
 export function HostPage({ id }: { id: string }) {
   const summary = useResource<HostSummary>(summaryPath(id));
-  const agent = useResource<Agent>(agentPath(id));
+  const agent = useResource<AgentDetail>(agentPath(id));
   useProvideTitle({ kind: "agent", id }, summary.data?.host.hostname ?? undefined);
   if (summary.error?.status === 404) return <NoSuchHost />;
   if (summary.error) return <div className="view"><div className="view-pad"><ErrorBox error={summary.error} /></div></div>;
   if (!summary.data) return <div className="view"><Loading /></div>;
-  return <HostView summary={summary.data} agent={agent.data} />;
+  return <HostView summary={summary.data} agent={agent.data} agentError={agent.error} />;
 }
 
-export function HostView({ summary, agent }: { summary: HostSummary; agent: Agent | undefined }) {
+export function HostView({ summary, agent, agentError }: { summary: HostSummary; agent: AgentDetail | undefined; agentError?: ApiError | undefined }) {
   const { host, tiles, can } = summary;
   const name = host.hostname ?? host.id;
   const [error, setError] = useState<string>();
@@ -78,9 +78,9 @@ export function HostView({ summary, agent }: { summary: HostSummary; agent: Agen
       left={<>
         <DetailsCard host={host} />
         <ProtectionCard summary={summary} agent={agent} />
-        {host.status !== "imported" && <RuleSetsCard agent={agent} />}
+        {host.status !== "imported" && <RuleSetsCard agent={agent} error={agentError} />}
         <HostLabels id={host.id} labels={summary.labels} groups={summary.groups} editable={can.label} />
-        <CertificatesCard summary={summary} />
+        <CertificatesCard summary={summary} agent={agent} />
       </>}
       right={<>
         <TopCards summary={summary} />
@@ -91,7 +91,7 @@ export function HostView({ summary, agent }: { summary: HostSummary; agent: Agen
 }
 
 /** Compare, Export, Add to case, Ask about this, and ⋯ with Revoke. */
-function HostActions({ summary, agent, name, onError }: { summary: HostSummary; agent: Agent | undefined; name: string; onError: (message: string | undefined) => void }) {
+function HostActions({ summary, agent, name, onError }: { summary: HostSummary; agent: AgentDetail | undefined; name: string; onError: (message: string | undefined) => void }) {
   const { host, can } = summary;
   const [revoking, setRevoking] = useState(false);
   return (

@@ -218,3 +218,111 @@ async fn actions_need_their_permission_on_this_host() {
     assert_eq!(w1["groups"][0]["id"], WIN);
     fx.db.drop().await;
 }
+
+/// `/compliance?host=` reads `GET /api/v1/compliance/groups?agent_id=`:
+/// one host's findings, still inside the caller's scope, with their triage;
+/// a finding triaged away is not failing on the host page either.
+#[tokio::test]
+async fn compliance_groups_filter_by_host_inside_the_scope() {
+    let Some(fx) = Fx::new().await else { return };
+    seed(&fx).await;
+    let client = fx.db.pool.get().await.unwrap();
+    client
+        .batch_execute(&format!(
+            "INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id, rule_version, severity,
+                                           first_observed_at, last_observed_at, last_observed_day, scan_id,
+                                           confidence, message, evidence, received_at, origin, authenticated)
+                VALUES ('{L1}', 'set', 'ssh-root', 'f-2', 1, 'high', now(), now(), (now() AT TIME ZONE 'UTC')::date,
+                        's', 50, 'Root login over SSH', '{{}}', now(), 'online', false),
+                       ('{L1}', 'set', 'tmp-noexec', 'f-3', 1, 'low', now(), now(), (now() AT TIME ZONE 'UTC')::date,
+                        's', 50, '/tmp allows exec', '{{}}', now(), 'online', false)"
+        ))
+        .await
+        .unwrap();
+    let groups = |body: &Value| -> Vec<(String, u64, u64)> {
+        body["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| {
+                (
+                    g["rule_id"].as_str().unwrap().to_owned(),
+                    g["endpoint_count"].as_u64().unwrap(),
+                    g["triage_counts"]["open"].as_u64().unwrap(),
+                )
+            })
+            .collect()
+    };
+    let (status, all) = fx
+        .call(&fx.admin, "GET", "/api/v1/compliance/groups", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{all}");
+    assert!(groups(&all).contains(&("ssh-root".into(), 2, 2)));
+    let (_, one) = fx
+        .call(
+            &fx.admin,
+            "GET",
+            &format!("/api/v1/compliance/groups?agent_id={L1}"),
+            None,
+        )
+        .await;
+    let mut got = groups(&one);
+    got.sort();
+    assert_eq!(
+        got,
+        [("ssh-root".into(), 1, 1), ("tmp-noexec".into(), 1, 1)]
+    );
+
+    // A person reaching only `win` asking for L1 gets nothing, not L1's findings.
+    let role = fx
+        .role(
+            "Win compliance",
+            &["hosts.read", "compliance.read"],
+            Reach::Groups(vec![WIN.into()]),
+        )
+        .await;
+    fx.db.user("wc", &role, 3).await;
+    let wc = common::http::sign_in(&fx.router, "wc").await;
+    let (status, body) = fx
+        .call(
+            &wc,
+            "GET",
+            &format!("/api/v1/compliance/groups?agent_id={L1}"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(groups(&body), []);
+    let (status, _) = fx
+        .call(
+            &fx.admin,
+            "GET",
+            "/api/v1/compliance/groups?agent_id=bad%01id",
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Mitigated on W1: the host's group shows it closed, the page counts 0.
+    client
+        .batch_execute(&format!(
+            "INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state, rule_version, note,
+                                                 version, updated_at, updated_by)
+                VALUES ('{W1}', 'set', 'ssh-root', 'mitigated', 1, 'patched', 1, now(), 'test')"
+        ))
+        .await
+        .unwrap();
+    let (_, w1) = fx
+        .call(
+            &fx.admin,
+            "GET",
+            &format!("/api/v1/compliance/groups?agent_id={W1}"),
+            None,
+        )
+        .await;
+    assert_eq!(groups(&w1), [("ssh-root".into(), 1, 0)]);
+    let (_, summary) = fx.call(&fx.admin, "GET", &url(W1), None).await;
+    assert_eq!(summary["tiles"]["compliance_failing"], 0);
+    assert_eq!(summary["top_failing"]["total"], 0);
+    fx.db.drop().await;
+}

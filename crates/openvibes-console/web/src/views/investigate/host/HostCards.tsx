@@ -3,17 +3,17 @@
 // failing checks and vulnerabilities (the left menu's order, #118), and the software, ports and services
 // summary on the right. Each reads the host's summary; Rule sets and the
 // hardening row keep their own routes (plan ruling 10).
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
-import { useResource } from "../../../api/client";
-import type { Agent, HostRuleSetAssignments, HostSummary, RuleSet } from "../../../api/types";
+import { type ApiError, useResource } from "../../../api/client";
+import type { Agent, AgentDetail, HostRuleSetAssignments, HostSummary, RuleSet } from "../../../api/types";
 import { hostPath } from "../../../app/location";
 import { viewLink } from "../../../app/nav";
 import { useSession } from "../../../app/session";
 import { readsRules } from "../../../panels/rules/ruleAssignment";
 import { AddToCase } from "../../../panels/cases/AddToCase";
 import { vulnerabilityRef } from "../../../panels/cases/cases";
-import { Ago, Empty, Loading, ObjectLink, SeverityBadge, StatusBadge } from "../../../ui/bits";
+import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, StatusBadge } from "../../../ui/bits";
 import { Card } from "../../../ui/detail/DetailPage";
 import { date } from "../../../ui/format";
 import { Icon } from "../../../ui/Icon";
@@ -86,11 +86,11 @@ export function ProtectionCard({ summary, agent }: { summary: HostSummary; agent
 }
 
 /** What an agent holds of each rule set, against what the platform has published. */
-export function RuleSetsCard({ agent }: { agent: Agent | undefined }) {
+export function RuleSetsCard({ agent, error }: { agent: Agent | undefined; error?: ApiError | undefined }) {
   const { can } = useSession();
   const published = useResource<{ items: RuleSet[] }>(agent && readsRules(can) ? "/api/v1/rule-sets" : null);
   const host = useResource<HostRuleSetAssignments>(agent ? hostAssignmentsPath(agent) : null);
-  if (!agent) return <Card title="Rule sets"><Loading rows={2} /></Card>;
+  if (!agent) return <Card title="Rule sets">{error ? <ErrorBox error={error} /> : <Loading rows={2} />}</Card>;
   const decided = new Map((host.data?.items ?? []).map((item) => [item.rule_set_id, item]));
   const current = new Map((published.data?.items ?? []).map((set) => [set.rule_set_id, set.current_version ?? null]));
   const sets = agent.rule_sets;
@@ -124,12 +124,17 @@ export function RuleSetsCard({ agent }: { agent: Agent | undefined }) {
   );
 }
 
-export function CertificatesCard({ summary }: { summary: HostSummary }) {
-  const { certificates, certificate_count: total } = summary;
+/** The five newest from the summary; "Show all n" lists every one from the agent's record. */
+export function CertificatesCard({ summary, agent }: { summary: HostSummary; agent: AgentDetail | undefined }) {
+  const [all, setAll] = useState(false);
+  const total = summary.certificate_count;
+  const certificates = all && agent ? agent.certificates : summary.certificates;
   return (
-    <Card title="Certificates">
+    <Card title="Certificates" aside={total > summary.certificates.length && agent && (
+      <button type="button" className="link-button detail-more" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show the newest 5" : `Show all ${total.toLocaleString()}`}</button>
+    )}>
       {certificates.length === 0 ? <p className="subtle">None</p> : (
-        <ul className="list list--plain">
+        <ul className="list list--plain" aria-label="Certificates">
           {certificates.map((c, index) => (
             <li key={c.serial} className="list__row list__row--static">
               <span className="mono truncate">{c.serial}</span>
@@ -196,8 +201,8 @@ export function TopCards({ summary }: { summary: HostSummary }) {
           more={<ShowAll n={vulns.total} what="vulnerabilities" view="/vulnerabilities" params={q} />}>
           {vulns.items.map((v) => (
             <tr key={v.advisory}>
-              <td><span className="row"><ObjectLink to={{ kind: "advisory", id: v.advisory }}>{v.advisory}</ObjectLink>
-                {v.kev && <span className="badge badge--critical badge--plain" title="Known to be exploited"><Icon name="flame" size={12} /> Exploited</span>}</span></td>
+              <td><span className="row" title={v.title}><ObjectLink to={{ kind: "advisory", id: v.advisory }}>{v.advisory}</ObjectLink>
+                {v.exploited && <span className="badge badge--critical badge--plain" title="Known to be exploited"><Icon name="flame" size={12} /> Exploited</span>}</span></td>
               <td><SeverityBadge severity={v.severity} /></td>
               {can.add_to_case && <td className="num"><AddToCase compact kind="vulnerability" id={vulnerabilityRef(summary.host.id, v.advisory)} label={v.advisory} /></td>}
             </tr>

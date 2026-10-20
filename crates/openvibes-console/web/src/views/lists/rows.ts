@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 
 import { type ApiError, useAllPages, useResource } from "../../api/client";
-import type { Agent, AuditEvent, Finding, FindingGroup, Vulnerability, VulnerabilityPage } from "../../api/types";
+import type { Agent, AuditEvent, FindingGroup, Vulnerability, VulnerabilityPage } from "../../api/types";
 import type { PanelRef } from "../../app/location";
 import { auditSince, capitalise, severityOrder } from "../../ui/format";
 import { matches } from "../../ui/table";
@@ -47,15 +47,11 @@ export function activeCount(group: Pick<FindingGroup, "triage_counts">): number 
   return group.triage_counts.open;
 }
 
-/** One host's current findings (`/compliance?host=`) as Compliance rows: one
- * per rule, failing on that host. The per-host triage state is not in the
- * list, so each counts as open, as the host page's "Compliance failing" does. */
-export function hostFindingRows(findings: readonly Finding[]): FindingGroup[] {
-  return findings.map((f) => ({
-    rule_set_id: f.rule_set_id, rule_id: f.rule_id, severity: f.severity, latest_message: f.message, rule_versions: [f.rule_version],
-    endpoint_count: 1, older_endpoint_count: 0, first_observed_at: f.first_observed_at, last_observed_at: f.last_observed_at,
-    triage_counts: { open: 1, mitigated: 0, accepted_risk: 0, false_positive: 0 },
-  }));
+/** The Compliance list's groups: every host in scope, or one with `host=`
+ * (the host page's "Show all n"), with that host's triage states. */
+export function complianceGroupsPath(params: URLSearchParams): string {
+  const host = params.get("host");
+  return host ? `/api/v1/compliance/groups?agent_id=${encodeURIComponent(host)}` : "/api/v1/compliance/groups";
 }
 
 export function selectFindings(all: readonly FindingGroup[], params: URLSearchParams): FindingGroup[] {

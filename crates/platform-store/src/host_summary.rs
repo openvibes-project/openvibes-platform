@@ -226,9 +226,11 @@ async fn top_failing(client: &Client, agent_id: &str) -> Result<Top<TopFailing>,
     let rows = client
         .query(
             &format!(
-                "SELECT rule_set_id, rule_id, severity, message, count(*) OVER () FROM current_findings
-                 WHERE agent_id = $1
-                 ORDER BY {RANK}, last_observed_at DESC, rule_set_id, rule_id LIMIT 3"
+                "SELECT c.rule_set_id, c.rule_id, c.severity, c.message, count(*) OVER ()
+                 FROM current_findings c
+                 LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
+                 WHERE c.agent_id = $1 AND COALESCE(t.state, 'open') = 'open'
+                 ORDER BY {RANK}, c.last_observed_at DESC, c.rule_set_id, c.rule_id LIMIT 3"
             ),
             &[&agent_id],
         )
@@ -241,8 +243,15 @@ async fn top_failing(client: &Client, agent_id: &str) -> Result<Top<TopFailing>,
     }))
 }
 
-/// The Vulnerabilities list's own query with this host as its filter, so
-/// the tile, the card and `/vulnerabilities?host=` always agree.
+/// What the Vulnerabilities list shows by default (`views/lists/rows.ts`):
+/// mappings at or above this confidence.
+const LIST_MIN_CONFIDENCE: u8 = 80;
+
+/// The Vulnerabilities list's own query with this host as its filter and
+/// the list's defaults (confidence at least [`LIST_MIN_CONFIDENCE`], triage
+/// open), so the tile, the card and `/vulnerabilities?host=` show the same
+/// advisories; the list's "Lower confidence" and "Include resolved" chips
+/// show more there.
 async fn top_vulnerabilities(
     client: &Client,
     agent_id: &str,
@@ -256,13 +265,25 @@ async fn top_vulnerabilities(
         fixed: false,
         exploited: None,
         reboot_needed: None,
-        min_confidence: None,
+        min_confidence: Some(LIST_MIN_CONFIDENCE),
     };
+    let mut rows = list_in_scope(client, &filter, scope).await?;
+    // The host filter also matches a hostname: keep this agent's rows.
+    rows.retain(|r| r.agent_id == agent_id);
+    let pairs: Vec<_> = rows
+        .iter()
+        .map(|r| (r.agent_id.clone(), r.advisory_id.clone()))
+        .collect();
+    let triage = crate::vulnerability_triage::states(client, &pairs).await?;
+    rows.retain(|r| {
+        triage
+            .get(&(r.agent_id.clone(), r.advisory_id.clone()))
+            .is_none_or(|t| t.state == "open")
+    });
     // One row per advisory: a host can hold an advisory both as a fixable
     // row and through a package version without a fix. Rows come in
     // priority order, so the first of each advisory stays.
     let mut seen = std::collections::HashSet::new();
-    let mut rows = list_in_scope(client, &filter, scope).await?;
     rows.retain(|r| seen.insert(r.advisory_id.clone()));
     let total = i64::try_from(rows.len()).unwrap_or(i64::MAX);
     rows.truncate(TOP);

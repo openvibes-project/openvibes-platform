@@ -172,7 +172,9 @@ return CVE enrichment only if at least one affected host is visible to the
 caller.
 
 `GET /api/v1/compliance/groups` shows each rule set and rule once in the recent
-window, after scope filtering. Its endpoint route pages visible current
+window, after scope filtering; `agent_id` narrows it to one host's findings
+(still inside the scope; its cursor is bound to it), for the host page's
+`/compliance?host=`. Its endpoint route pages visible current
 reporters with a cursor-bound window (the response's `since` is reused for
 subsequent pages) and can include older matches on request. Triage counts are
 typed by state in OpenAPI. `~unknown` represents
@@ -929,10 +931,12 @@ permission (`hosts.label`, `hosts.revoke`, `hosts.export`, `cases.write`,
 `assistant.use`) reaching this host, and `label` and `revoke` also need an
 enrolled, unrevoked host. A missing host and one outside the caller's
 `hosts.read` reach are the same 404 `host_not_found`; a revoked host still
-answers. A store failure is 503. The vulnerability tile and list count
-open advisories, one per advisory, so the tile can be lower than the
-number of rows on `/vulnerabilities?host=` when an advisory reaches the
-host both as a fixable row and through a package without a fix. The
+answers. A store failure is 503. Each count is what its list shows by
+default: open alarms; failing checks whose triage is open (the Hosts
+list's `failing` count too); and advisories, one per advisory, mapped at
+confidence 80 or more with this host's triage open, as
+`/vulnerabilities?host=` groups its rows. A vulnerability item carries
+`advisory`, `severity`, `kev`, `exploited` (KEV or EUVD) and `title`. The
 list's summary line schema is `HostSummaryLineView`, and its group items
 are `HostListGroupView` (`id`, `name`, `kind`); `api_contract` fails when
 two registered schemas share a name. Tests: `tests/host_summary_http.rs`.

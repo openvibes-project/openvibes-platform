@@ -157,7 +157,9 @@ fn base() -> String {
          CASE WHEN {vulns} THEN COALESCE((SELECT v.critical FROM host_vulnerability_counts v
                                            WHERE v.agent_id = a.agent_id), 0)::bigint END AS critical,
          CASE WHEN {compliance} THEN (SELECT count(*) FROM current_findings cf
-                                        WHERE cf.agent_id = a.agent_id) END AS failing
+                                        LEFT JOIN console_finding_triage ct USING (agent_id, rule_set_id, rule_id)
+                                        WHERE cf.agent_id = a.agent_id
+                                          AND COALESCE(ct.state, 'open') = 'open') END AS failing
   FROM agents a CROSS JOIN LATERAL (SELECT agent_seen_at(a.agent_id, a.last_seen_at) AS seen) s
   WHERE {hosts}
     AND ($11::text IS NULL OR strpos(lower(a.hostname), lower($11)) > 0

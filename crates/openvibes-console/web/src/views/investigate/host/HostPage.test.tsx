@@ -8,7 +8,8 @@ vi.hoisted(() => {
   Object.assign(globalThis, { window: { location: { pathname: "/", search: "" }, history: { replaceState() {} }, addEventListener() {}, removeEventListener() {} } });
 });
 
-import type { Agent, HostSummary, Session } from "../../../api/types";
+import { ApiError } from "../../../api/client";
+import type { AgentDetail, HostSummary, Session } from "../../../api/types";
 import { SessionContext } from "../../../app/session";
 import { ago } from "../../../ui/format";
 import { HostView, shortDate } from "./HostPage";
@@ -26,17 +27,18 @@ const summary = (over: Partial<HostSummary> = {}): HostSummary => ({
   groups: [{ id: "grp-prod", name: "Production", kind: "rule" }], labels: ["pci"],
   certificates: [{ serial: "01AB", issued_at: "2026-10-03T09:00:00Z", not_before: "2026-10-03T09:00:00Z", not_after: "2027-10-03T09:00:00Z" }], certificate_count: 1,
   top_alarms: { total: 3, items: [{ id: 7, rule_id: "r-1", message: "A web server started a shell", severity: "high", last_seen: iso(now - 60_000) }] },
-  top_vulnerabilities: { total: 12, items: [{ advisory: "DSA-5501-1", severity: "critical", kev: true }] },
+  top_vulnerabilities: { total: 12, items: [{ advisory: "DSA-5501-1", severity: "critical", kev: false, exploited: true, title: "openssl security update" }] },
   top_failing: { total: 7, items: [{ rule_set_id: "baseline", rule_id: "ssh-root", severity: "high", message: "SSH allows root login" }] },
   inventory: { packages: 412, listening_ports: 9, exposed_ports: 4, services: 23 },
   can: { label: true, revoke: true, export: true, add_to_case: true, ask: true },
   ...over,
 });
-const agent = { id: "agent-00005", hostname: "web-01", status: "active", rule_sets: [], capabilities: [] } as unknown as Agent;
+const cert = (n: number) => ({ serial: `C${n}`, issued_at: "2026-10-03T09:00:00Z", not_before: "2026-10-03T09:00:00Z", not_after: "2027-10-03T09:00:00Z" });
+const agent = { id: "agent-00005", hostname: "web-01", status: "active", rule_sets: [], capabilities: [], certificates: [1, 2, 3, 4, 5, 6, 7].map(cert) } as unknown as AgentDetail;
 const session = { principal: { id: "u-me", display_name: "Me" }, capabilities: [] } as unknown as Session;
-const render = (s: HostSummary) => renderToStaticMarkup(
+const render = (s: HostSummary, a: AgentDetail | null = agent, agentError?: ApiError) => renderToStaticMarkup(
   <SessionContext.Provider value={{ session, demo: false, can: () => true, canEverywhere: () => true }}>
-    <HostView summary={s} agent={agent} />
+    <HostView summary={s} agent={a ?? undefined} agentError={agentError} />
   </SessionContext.Provider>,
 ).replace(/<!-- -->/g, "");
 const text = (html: string) => html.replace(/<[^>]+>/g, "");
@@ -93,5 +95,26 @@ describe("host page", () => {
     const html = text(render(summary()));
     for (const s of ["Details", "Running kernel", "6.1.0", "Capabilities", "findings", "Protection", "Threat alarms", "eBPF", "Last test",
       "openvibes-test alarm", "Rule sets", "Groups and labels", "Production", "pci", "Certificates", "01AB", "Current"]) expect(html).toContain(s);
+  });
+
+  it("offers every certificate past the five newest", () => {
+    const html = render(summary({ certificates: [1, 2, 3, 4, 5].map(cert), certificate_count: 7 }));
+    expect(html).toMatch(/<button [^>]*aria-expanded="false"[^>]*>Show all 7<\/button>/);
+    expect(text(html)).toContain("The 5 newest of 7.");
+    // Without the agent's record (still loading or refused) there is nothing more to show.
+    expect(render(summary({ certificates: [1, 2, 3, 4, 5].map(cert), certificate_count: 7 }), null)).not.toContain("Show all 7<");
+  });
+
+  it("says why Rule sets is missing when the agent's record fails, and offers no Export", () => {
+    const html = render(summary(), null, new ApiError(500, "unavailable", "The console could not read the agent"));
+    expect(html).toContain("The console could not read the agent");
+    expect(html).not.toContain('aria-label="Loading"');
+    expect(html).not.toContain(" Export</button>");
+  });
+
+  it("flags an exploited advisory (KEV or EUVD) and names it on hover", () => {
+    const html = render(summary());
+    expect(html).toContain('title="openssl security update"');
+    expect(html).toContain("Exploited");
   });
 });

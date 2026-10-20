@@ -24,9 +24,9 @@ test("software lists packages across hosts and opens the hosts that run one", as
   await expect(inspector.locator(".panel-header__kind")).toContainText("Software");
   await expect(inspector.getByRole("heading", { name: "Versions in use" }).or(inspector.getByText("Versions in use"))).toBeVisible();
   await expect(inspector.getByText("Vulnerabilities (", { exact: false })).toBeVisible();
-  // A host is a page (approved screen 17); the package's panel stays open over it.
+  // A host is a whole page (approved screen 17): the package's panel closes.
   await inspector.getByRole("list", { name: "Hosts that have it" }).locator("a").first().click();
-  await expect(page).toHaveURL(/\/hosts\/agent-\d{5}\?/);
+  await expect(page).toHaveURL(/\/hosts\/agent-\d{5}$/);
   await expect(page.locator(".detail-page h1")).toBeVisible();
   await settled(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -88,7 +88,7 @@ test("fleet Ports and Services rows open the hosts that have them, linking to th
   await settled(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await listening.locator("li a").first().click();
-  await expect(page).toHaveURL(/\/hosts\/agent-\d{5}\?/);
+  await expect(page).toHaveURL(/\/hosts\/agent-\d{5}$/);
   await expect(page.locator(".detail-page h1")).toBeVisible();
   await page.goto("/services");
   await page.locator(".view tbody tr").filter({ hasText: "chronyd.service" }).first().locator("td").first().click();

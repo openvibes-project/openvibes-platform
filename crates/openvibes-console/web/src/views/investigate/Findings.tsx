@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { useAllPages } from "../../api/client";
-import type { Finding, FindingGroup } from "../../api/types";
+import type { FindingGroup } from "../../api/types";
 import { nav, useLocation } from "../../app/nav";
 import { TriageBar } from "../../panels/findings/FindingPanel";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
@@ -11,7 +11,7 @@ import { highest } from "../../panels/triage/bulk";
 import { DataTable } from "../../ui/DataTable";
 import { filterKey, useSelection } from "../../ui/selection";
 import { severityOrder } from "../../ui/format";
-import { activeCount, hostFindingRows, selectFindings } from "../lists/rows";
+import { activeCount, complianceGroupsPath, selectFindings } from "../lists/rows";
 import { ViewHeader } from "../../ui/ViewHeader";
 import { filterChips } from "../lists/filters";
 import { HostChip } from "../lists/HostChip";
@@ -19,13 +19,11 @@ import { isTest } from "../lists/testRules";
 
 export function Findings() {
   const { params, panels } = useLocation();
-  // Filtered to one host (plan ruling 9): that host's current findings, one row per rule.
+  // Filtered to one host (plan ruling 9): its findings by rule, with its own triage.
   const host = params.get("host");
-  const fleet = useAllPages<FindingGroup>(host ? null : "/api/v1/compliance/groups");
-  const one = useAllPages<Finding>(host ? `/api/v1/compliance/latest?agent_id=${encodeURIComponent(host)}` : null);
-  const groups = host ? one : fleet;
+  const groups = useAllPages<FindingGroup>(complianceGroupsPath(params));
   const onlyOpen = params.get("state") !== "all";
-  const all = useMemo(() => (host ? hostFindingRows(one.data ?? []) : fleet.data ?? []), [host, one.data, fleet.data]);
+  const all = useMemo(() => groups.data ?? [], [groups.data]);
   // Filtered to one host, an action touches that host only.
   const on = host ? { agent_id: host } : {};
   const rows = useMemo(() => selectFindings(all, params), [all, params]);

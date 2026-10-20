@@ -21,6 +21,8 @@ use crate::{
 #[serde(deny_unknown_fields)]
 pub(crate) struct FindingGroupsParams {
     since: Option<String>,
+    /// One host's findings only.
+    agent_id: Option<String>,
     cursor: Option<String>,
     limit: Option<u16>,
 }
@@ -39,6 +41,9 @@ pub(crate) struct FindingGroupEndpointsParams {
 struct FindingGroupCursorToken {
     since: String,
     scope: platform_store::console_read::AgentScope,
+    /// The host filter the page was read with; a cursor never crosses filters.
+    #[serde(default)]
+    agent_id: Option<String>,
     last_observed_at: String,
     rule_set_id: String,
     rule_id: String,
@@ -56,7 +61,7 @@ struct FindingGroupEndpointCursorToken {
     agent_id: String,
 }
 
-#[utoipa::path(get, path="/api/v1/compliance/groups", tag = "compliance", params(("since"=Option<String>, Query), ("cursor"=Option<String>, Query), ("limit"=Option<u16>, Query)), responses((status=200, description="Recent scope-filtered findings grouped by rule", body=crate::FindingGroupPage)))]
+#[utoipa::path(get, path="/api/v1/compliance/groups", tag = "compliance", params(("since"=Option<String>, Query), ("agent_id"=Option<String>, Query, description="One host's findings only"), ("cursor"=Option<String>, Query), ("limit"=Option<u16>, Query)), responses((status=200, description="Recent scope-filtered findings grouped by rule", body=crate::FindingGroupPage)))]
 pub(crate) async fn authenticated_finding_groups(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -76,6 +81,13 @@ pub(crate) async fn authenticated_finding_groups(
         Ok(v) => v,
         Err(_) => return invalid_finding_query(),
     };
+    let agent_id = params.agent_id.filter(|id| !id.is_empty());
+    if agent_id
+        .as_deref()
+        .is_some_and(|id| !crate::http::validate::valid_agent_id(id))
+    {
+        return invalid_finding_query();
+    }
     let cursor_token = match params.cursor.as_deref() {
         None => None,
         Some(encoded) if encoded.len() <= crate::MAX_CURSOR_LENGTH => {
@@ -111,7 +123,9 @@ pub(crate) async fn authenticated_finding_groups(
     };
     let after = match cursor_token {
         None => None,
-        Some(token) if token.since == since_text && token.scope == scope => {
+        Some(token)
+            if token.since == since_text && token.scope == scope && token.agent_id == agent_id =>
+        {
             let timestamp = match chrono::DateTime::parse_from_rfc3339(&token.last_observed_at) {
                 Ok(v) => v.with_timezone(&Utc),
                 Err(_) => return invalid_finding_query(),
@@ -134,6 +148,7 @@ pub(crate) async fn authenticated_finding_groups(
             since,
             after,
             limit,
+            agent_id: agent_id.clone(),
         },
         &scope,
     )
@@ -185,6 +200,7 @@ pub(crate) async fn authenticated_finding_groups(
         Some(c) => match serde_json::to_vec(&FindingGroupCursorToken {
             since: since_text.clone(),
             scope,
+            agent_id,
             last_observed_at: c
                 .last_observed_at
                 .to_rfc3339_opts(SecondsFormat::Micros, true),

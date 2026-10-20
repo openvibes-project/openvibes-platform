@@ -53,4 +53,25 @@ describe("demo host summary", () => {
     expect(body.can.label).toBe(false);
     expect(body.can.revoke).toBe(false);
   });
+
+  it("counts what the lists show by default: a triaged advisory or check leaves the tile, the list and the Compliance view", async () => {
+    const server = createDemoServer();
+    const call = async (method: string, path: string, body?: unknown) => (await server.handle(method, path, body)).json() as Promise<Record<string, unknown>>;
+    const before = (await call("GET", "/api/v1/hosts/agent-00005/summary")) as unknown as HostSummary;
+    const advisory = before.top_vulnerabilities?.items[0]?.advisory ?? "";
+    const check = before.top_failing?.items[0];
+    expect(advisory).not.toBe("");
+    expect(check).toBeDefined();
+    await call("POST", "/api/v1/vulnerabilities/bulk", { action: "state", state: "accepted_risk", note: "later", accepted_until: new Date(Date.now() + 86_400_000 * 30).toISOString(), items: [{ advisory_id: advisory, agent_id: "agent-00005" }] });
+    await call("POST", "/api/v1/compliance/bulk", { action: "state", state: "mitigated", note: "patched", items: [{ rule_set_id: check?.rule_set_id, rule_id: check?.rule_id, agent_id: "agent-00005" }] });
+    const after = (await call("GET", "/api/v1/hosts/agent-00005/summary")) as unknown as HostSummary;
+    expect(after.tiles.vulnerabilities).toBe((before.tiles.vulnerabilities ?? 0) - 1);
+    expect(after.top_vulnerabilities?.items.map((v) => v.advisory)).not.toContain(advisory);
+    expect(after.tiles.compliance_failing).toBe((before.tiles.compliance_failing ?? 0) - 1);
+    const row = ((await call("GET", "/api/v1/hosts?q=agent-00005")).items as { problems: { failing: number } }[])[0];
+    expect(row?.problems.failing).toBe(after.tiles.compliance_failing);
+    const groups = (await call("GET", "/api/v1/compliance/groups?agent_id=agent-00005")).items as { rule_id: string; endpoint_count: number; triage_counts: { open: number } }[];
+    expect(groups.every((g) => g.endpoint_count === 1)).toBe(true);
+    expect(groups.filter((g) => g.triage_counts.open > 0)).toHaveLength(after.tiles.compliance_failing ?? -1);
+  });
 });

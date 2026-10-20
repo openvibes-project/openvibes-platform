@@ -5300,10 +5300,14 @@ export interface components {
         TopVulnerabilityView: {
             /** @description Advisory id. */
             advisory: string;
+            /** @description Known to be exploited (KEV or EUVD), as the Vulnerabilities list flags it. */
+            exploited: boolean;
             /** @description On the known-exploited list. */
             kev: boolean;
             /** @description Severity. */
             severity: string;
+            /** @description The advisory's title. */
+            title: string;
         };
         /** @description One triage change. */
         TriageEventView: {
@@ -8119,6 +8123,8 @@ export interface operations {
         parameters: {
             query?: {
                 since?: string;
+                /** @description One host's findings only */
+                agent_id?: string;
                 cursor?: string;
                 limit?: number;
             };

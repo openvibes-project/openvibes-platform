@@ -3252,6 +3252,15 @@
             }
           },
           {
+            "name": "agent_id",
+            "in": "query",
+            "description": "One host's findings only",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,
@@ -17735,12 +17744,18 @@
         "required": [
           "advisory",
           "severity",
-          "kev"
+          "kev",
+          "exploited",
+          "title"
         ],
         "properties": {
           "advisory": {
             "type": "string",
             "description": "Advisory id."
+          },
+          "exploited": {
+            "type": "boolean",
+            "description": "Known to be exploited (KEV or EUVD), as the Vulnerabilities list flags it."
           },
           "kev": {
             "type": "boolean",
@@ -17749,6 +17764,10 @@
           "severity": {
             "type": "string",
             "description": "Severity."
+          },
+          "title": {
+            "type": "string",
+            "description": "The advisory's title."
           }
         }
       },

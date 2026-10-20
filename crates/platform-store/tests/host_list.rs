@@ -400,3 +400,24 @@ async fn alarms_off_marks_only_online_hosts_off_by_a_fault() {
     assert_eq!(off, ["web-01"]);
     db.drop().await;
 }
+
+/// A failing check triaged away (mitigated) is not counted, as the
+/// Compliance list and the host page do not show it by default.
+#[tokio::test]
+async fn a_triaged_finding_is_not_failing() {
+    let (db, c) = common::migrated().await;
+    fleet(&c).await;
+    c.execute(
+        "INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state, rule_version,
+             note, version, updated_at, updated_by)
+         VALUES ($1, '', 'rule-1', 'mitigated', 1, 'patched', 1, now(), 'test')",
+        &[&id(1)],
+    )
+    .await
+    .unwrap();
+    let page = run(&c, &query(), &everywhere(), None).await;
+    let row = |n: u8| page.rows.iter().find(|r| r.agent_id == id(n)).unwrap();
+    assert_eq!(row(1).failing, Some(0));
+    assert_eq!(row(5).failing, Some(1));
+    db.drop().await;
+}

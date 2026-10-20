@@ -28,7 +28,7 @@ export function registerFindingRoutes(ctx: DemoContext) {
     return json({ total: open.length, impacted_agents: new Set(open.map((f) => f.agent_id)).size, critical: count("critical"), high: count("high"), medium: count("medium"), low: count("low") });
   });
   route("GET", "/api/v1/compliance/groups", "compliance.read", (_, query) =>
-    json({ ...page(groups(), query), generated_at: iso(), since: iso(Date.now() - 30 * 86_400_000) }));
+    json({ ...page(groups(query.get("agent_id") || undefined), query), generated_at: iso(), since: iso(Date.now() - 30 * 86_400_000) }));
   route("GET", "/api/v1/compliance/groups/{set}/{rule}/endpoints", "compliance.read", ({ set = "", rule = "" }, query) =>
     json({ ...page(endpoints(set, rule), query), generated_at: iso(), since: iso(Date.now() - 30 * 86_400_000) }));
   route("POST", "/api/v1/compliance/groups/{set}/{rule}/triage", "compliance.triage", ({ set = "", rule = "" }, _, body) => {

@@ -111,17 +111,27 @@ async fn top_three_are_most_severe_then_newest_and_total_counts_all() {
              message, evidence, received_at, origin, authenticated)
          SELECT '{host}', 'set', 'c' || n, 'f' || n, 1, s, now(), now() - (n || ' minutes')::interval,
                 (now() AT TIME ZONE 'UTC')::date, 's', 50, 'm' || n, '{{}}', now(), 'online', false
-         FROM (VALUES (1, 'medium'), (2, 'high'), (3, 'low'), (4, 'high')) v(n, s);
+         FROM (VALUES (1, 'medium'), (2, 'high'), (3, 'low'), (4, 'high'), (5, 'critical')) v(n, s);
          INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url) VALUES
-             ('ADV-LOW', 's', 'rocky', '9', 'low', 't', 'u'),
-             ('ADV-CRIT', 's', 'rocky', '9', 'critical', 't', 'u'),
-             ('ADV-MOD', 's', 'rocky', '9', 'moderate', 't', 'u'),
-             ('ADV-IMP', 's', 'rocky', '9', 'important', 't', 'u'),
-             ('ADV-FIXED', 's', 'rocky', '9', 'critical', 't', 'u');
+             ('ADV-LOW', 'rocky', 'rocky', '9', 'low', 't', 'u'),
+             ('ADV-CRIT', 'rocky', 'rocky', '9', 'critical', 't', 'u'),
+             ('ADV-MOD', 'rocky', 'rocky', '9', 'moderate', 't', 'u'),
+             ('ADV-IMP', 'rocky', 'rocky', '9', 'important', 't', 'u'),
+             ('ADV-FIXED', 'rocky', 'rocky', '9', 'critical', 't', 'u'),
+             -- An unrecognised source maps at confidence 50, under the list's 80.
+             ('ADV-ODD', 'elsewhere', 'rocky', '9', 'critical', 't', 'u'),
+             ('ADV-RISK', 'rocky', 'rocky', '9', 'critical', 't', 'u');
          INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, last_evaluated_at, fixed_at)
          VALUES ('{host}', 'ADV-LOW', '[]', now(), now(), NULL), ('{host}', 'ADV-CRIT', '[]', now(), now(), NULL),
                 ('{host}', 'ADV-MOD', '[]', now(), now(), NULL), ('{host}', 'ADV-IMP', '[]', now(), now(), NULL),
-                ('{host}', 'ADV-FIXED', '[]', now(), now(), now());
+                ('{host}', 'ADV-FIXED', '[]', now(), now(), now()), ('{host}', 'ADV-ODD', '[]', now(), now(), NULL),
+                ('{host}', 'ADV-RISK', '[]', now(), now(), NULL);
+         -- Accepted risk: off the list by default, so off the page.
+         INSERT INTO vulnerability_triage (agent_id, advisory_id, state, note, accepted_until, version, updated_at, updated_by)
+         VALUES ('{host}', 'ADV-RISK', 'accepted_risk', 'later', now() + interval '30 days', 1, now(), 'test');
+         -- A triaged failing check is not failing on the page.
+         INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state, rule_version, note, version, updated_at, updated_by)
+         VALUES ('{host}', 'set', 'c5', 'false_positive', 1, 'noise', 1, now(), 'test');
          -- ADV-CRIT again, through a package version without a fix: one advisory.
          INSERT INTO package_versions (manager, name, version) VALUES ('rpm', 'openssl', '3');
          INSERT INTO host_packages (agent_id, package_version_id) SELECT '{host}', id FROM package_versions;

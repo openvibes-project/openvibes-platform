@@ -174,6 +174,8 @@ fn view(s: HostSummary, can: HostActionsView) -> HostSummaryView {
                     advisory: v.advisory_id,
                     severity: v.severity,
                     kev: v.kev,
+                    exploited: v.exploited,
+                    title: v.title,
                 })
                 .collect(),
         }),

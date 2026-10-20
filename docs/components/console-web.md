@@ -474,12 +474,13 @@ triage on alarms and findings stays as it is.
   is kept (spec §10.2). A row of the Hosts list, any host link
   (`ObjectLink`, whose href is the page), the palette, an assistant
   citation and `nav.open({kind: "agent"})` (in `app/nav.ts`, so every call
-  site follows) open it; the `agent` panel kind is gone, and old
+  site follows) open it and close any open panels (a host is a whole page); the `agent` panel kind is gone, and old
   `?open=agent:ID` addresses on any view read as the page (other panels
   stay open). A host window popped out before is dropped. A malformed or
   unreachable address says "No such host". It reads
   `GET /api/v1/hosts/{id}/summary` (what this person may see and do on
-  this host) and `GET /api/v1/agents/{id}` (rule sets, hardening, Export).
+  this host) and `GET /api/v1/agents/{id}` (rule sets, hardening, Export,
+  all certificates); if that fails, Rule sets says why and Export is not offered.
   - **Header:** an OS badge (LX, WIN), the name and status; the facts line
     "agent ID · system · IP · agent version (older, in amber) · last
     heartbeat · enrolled 3 Oct"; Compare (opens the compare panel), Export
@@ -495,9 +496,11 @@ triage on alarms and findings stays as it is.
     capabilities); Protection (threat alarms, the hardening row, last
     test); Rule sets; Groups and labels (labels with × and "Add a label"
     with `can.label`, never on a revoked or imported host); Certificates
-    (the five newest, the first marked Current).
+    (the five newest, the first marked Current; "Show all n" lists every
+    one from the agent's record, up to 100).
   - **Right column**, in the left menu's order (#118): the top three open
-    alarms, failing checks and vulnerabilities (with Add to case each),
+    alarms, failing checks and vulnerabilities (Exploited for KEV or EUVD,
+    the title on hover, Add to case each),
     each with "Show all n" to the filtered list; then "Software, ports and
     services" with counts and links to the host's lists.
   - **The host's lists** (`/hosts/{id}/software|ports|services`,
@@ -507,10 +510,13 @@ triage on alarms and findings stays as it is.
   - **The host filter:** Alarms, Compliance and Vulnerabilities take
     `host=ID` (`views/lists/HostChip.tsx`), shown as a removable chip
     "Host: web-01 ×" and sent as `agent_id` (alarms) or `host`
-    (vulnerabilities); Compliance then lists that host's current findings
-    (`/compliance/latest?agent_id=`), one row per rule, each counted as
-    failing there, as the host page does. Bulk actions then name the host
-    (`agent_id`), so they touch it alone.
+    (vulnerabilities); Compliance reads `/compliance/groups?agent_id=`,
+    that host's findings by rule with its own triage (Include resolved,
+    Reopen and bulk close work as usual). Bulk actions then name the host
+    (`agent_id`), so they touch it alone. The page counts what these lists
+    show by default: open-triaged alarms, checks and advisories, and
+    vulnerabilities mapped at confidence 80 or more; the Hosts list's
+    failing count is open-triaged checks too.
   **Last test** shows when the host last raised the harmless test alarm
   and test finding (`openvibes-test alarm|finding`, from `last_test` in
   the summary), with both commands; test alarms and findings carry a

@@ -84,6 +84,10 @@ pub(crate) struct TopVulnerabilityView {
     pub severity: String,
     /// On the known-exploited list.
     pub kev: bool,
+    /// Known to be exploited (KEV or EUVD), as the Vulnerabilities list flags it.
+    pub exploited: bool,
+    /// The advisory's title.
+    pub title: String,
 }
 
 /// A failing check in the top three.

@@ -65,11 +65,11 @@ export const nav = {
     if (guard && !guard()) return;
     go({ view, panels: snapshot.panels, params: new URLSearchParams(params) });
   },
-  /** A host is a page, not a panel (approved screen 17): opening one goes there. */
+  /** A host is a whole page (approved screen 17): opening one goes there and closes the panels. */
   open(panel: PanelRef, fromList = false) {
     if (panel.kind !== "agent") { go(pushPanel(snapshot, panel, fromList)); return; }
     if (guard && !guard()) return;
-    go({ view: hostPath(panel.id), panels: fromList ? [] : snapshot.panels, params: new URLSearchParams() });
+    go({ view: hostPath(panel.id), panels: [], params: new URLSearchParams() });
   },
   back() { go(popPanel(snapshot)); },
   closeAll() { go({ ...snapshot, panels: [] }); },
