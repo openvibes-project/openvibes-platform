@@ -214,3 +214,22 @@ fn registered_schema_names_are_unique() {
     }
     assert!(seen.len() > 100, "parsed {} schemas", seen.len());
 }
+
+/// A parameter "in": "path" must be a `{placeholder}` of its path; an
+/// `IntoParams` query struct without `parameter_in = Query` lands there.
+#[test]
+fn path_parameters_are_placeholders_of_their_path() {
+    let doc: serde_json::Value = serde_json::from_str(&openapi_json().unwrap()).unwrap();
+    let mut wrong = Vec::new();
+    for (path, methods) in doc["paths"].as_object().unwrap() {
+        for (method, operation) in methods.as_object().unwrap() {
+            for parameter in operation["parameters"].as_array().into_iter().flatten() {
+                let name = parameter["name"].as_str().unwrap();
+                if parameter["in"] == "path" && !path.contains(&format!("{{{name}}}")) {
+                    wrong.push(format!("{method} {path} {name}"));
+                }
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "query parameters declared in the path: {wrong:?}");
+}

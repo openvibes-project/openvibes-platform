@@ -487,38 +487,29 @@
           },
           {
             "name": "q",
-            "in": "path",
+            "in": "query",
             "description": "Case-insensitive substring of the name (at most 128 bytes).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -1102,86 +1093,65 @@
         "parameters": [
           {
             "name": "agent_id",
-            "in": "path",
+            "in": "query",
             "description": "Exact agent.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "rule_id",
-            "in": "path",
+            "in": "query",
             "description": "Exact rule.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "severity",
-            "in": "path",
+            "in": "query",
             "description": "Exact severity.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "state",
-            "in": "path",
+            "in": "query",
             "description": "Exact triage state, or `active` (open).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "suppressed",
-            "in": "path",
+            "in": "query",
             "description": "Include alarms closed by a suppression (default false).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": "boolean"
             }
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -2169,74 +2139,56 @@
         "parameters": [
           {
             "name": "status",
-            "in": "path",
+            "in": "query",
             "description": "`open`, `investigating`, `closed` or `all`; open and investigating\nwhen absent.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "severity",
-            "in": "path",
+            "in": "query",
             "description": "Exact severity.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "assignee",
-            "in": "path",
+            "in": "query",
             "description": "A user id, `me`, or `none` for unassigned.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "q",
-            "in": "path",
+            "in": "query",
             "description": "Text in the title, or a case number such as `C-104`.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -2411,7 +2363,7 @@
         "parameters": [
           {
             "name": "kind",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -2531,7 +2483,7 @@
         "parameters": [
           {
             "name": "kind",
-            "in": "path",
+            "in": "query",
             "description": "`alarm`, `finding`, `vulnerability`, `host` or `software`.",
             "required": true,
             "schema": {
@@ -2540,7 +2492,7 @@
           },
           {
             "name": "ref",
-            "in": "path",
+            "in": "query",
             "description": "The object's id (see `CaseItemView.ref`).",
             "required": true,
             "schema": {
@@ -5325,134 +5277,101 @@
         "parameters": [
           {
             "name": "q",
-            "in": "path",
+            "in": "query",
             "description": "Host name (contains), agent id or address prefix, or CIDR range.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "status",
-            "in": "path",
+            "in": "query",
             "description": "online, offline, revoked or imported.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "os",
-            "in": "path",
+            "in": "query",
             "description": "linux or windows.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "group",
-            "in": "path",
+            "in": "query",
             "description": "A host group id.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "label",
-            "in": "path",
+            "in": "query",
             "description": "A label.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "problems",
-            "in": "path",
+            "in": "query",
             "description": "critical, alarms or none.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "agent",
-            "in": "path",
+            "in": "query",
             "description": "older or latest.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "sort",
-            "in": "path",
+            "in": "query",
             "description": "host, heartbeat, version or problems.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "dir",
-            "in": "path",
+            "in": "query",
             "description": "asc or desc.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "offset",
-            "in": "path",
+            "in": "query",
             "description": "Rows to skip, 0 to 100000.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size, 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -6002,26 +5921,20 @@
         "parameters": [
           {
             "name": "metric",
-            "in": "path",
+            "in": "query",
             "description": "Catalogue id, for example `vulns.open.critical`.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "days",
-            "in": "path",
+            "in": "query",
             "description": "Window in days: 7, 30, 90 or 365 (default 30).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -6088,14 +6001,11 @@
         "parameters": [
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "How many hosts, 1 to 10 (default 6).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -6196,14 +6106,11 @@
         "parameters": [
           {
             "name": "exposed",
-            "in": "path",
+            "in": "query",
             "description": "Only ports exposed on at least one host.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": "boolean"
             }
           }
         ],
@@ -6282,26 +6189,20 @@
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -7643,7 +7544,7 @@
         "parameters": [
           {
             "name": "page",
-            "in": "path",
+            "in": "query",
             "description": "The list page, such as `hosts`.",
             "required": true,
             "schema": {
@@ -8235,26 +8136,20 @@
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -8549,62 +8444,47 @@
         "parameters": [
           {
             "name": "q",
-            "in": "path",
+            "in": "query",
             "description": "Case-insensitive substring of the name (at most 128 bytes).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "fixable",
-            "in": "path",
+            "in": "query",
             "description": "Only packages with an open vulnerability with a fix on at least\none visible host.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": "boolean"
             }
           },
           {
             "name": "multiple_versions",
-            "in": "path",
+            "in": "query",
             "description": "Only packages in use in more than one version.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": "boolean"
             }
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -8679,26 +8559,20 @@
           },
           {
             "name": "cursor",
-            "in": "path",
+            "in": "query",
             "description": "Opaque continuation cursor.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size from 1 to 100 (default 50).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -8767,7 +8641,7 @@
         "parameters": [
           {
             "name": "kind",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -8775,46 +8649,34 @@
           },
           {
             "name": "id",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "rule_set_id",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "rule_id",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "advisory_id",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],

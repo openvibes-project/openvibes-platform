@@ -56,6 +56,7 @@ pub(crate) struct SaveViewRequest {
 
 /// The page whose views to list.
 #[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct PageQuery {
     /// The list page, such as `hosts`.
     page: String,

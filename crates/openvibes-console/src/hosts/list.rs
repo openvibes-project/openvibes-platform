@@ -25,6 +25,7 @@ use crate::{
 
 /// Filters, sort and page. Empty values count as absent.
 #[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HostListParams {
     /// Host name (contains), agent id or address prefix, or CIDR range.

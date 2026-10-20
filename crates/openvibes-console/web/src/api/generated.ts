@@ -6046,16 +6046,17 @@ export interface operations {
     };
     list_host_packages: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Case-insensitive substring of the name (at most 128 bytes). */
+                q?: string;
+                /** @description Opaque continuation cursor. */
+                cursor?: string;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit?: number;
+            };
             header?: never;
             path: {
                 agent_id: string;
-                /** @description Case-insensitive substring of the name (at most 128 bytes). */
-                q: string | null;
-                /** @description Opaque continuation cursor. */
-                cursor: string | null;
-                /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
             };
             cookie?: never;
         };
@@ -6526,24 +6527,24 @@ export interface operations {
     };
     list_alarms: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Exact agent. */
-                agent_id: string | null;
+                agent_id?: string;
                 /** @description Exact rule. */
-                rule_id: string | null;
+                rule_id?: string;
                 /** @description Exact severity. */
-                severity: string | null;
+                severity?: string;
                 /** @description Exact triage state, or `active` (open). */
-                state: string | null;
+                state?: string;
                 /** @description Include alarms closed by a suppression (default false). */
-                suppressed: boolean | null;
+                suppressed?: boolean;
                 /** @description Opaque continuation cursor. */
-                cursor: string | null;
+                cursor?: string;
                 /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
+                limit?: number;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7250,25 +7251,25 @@ export interface operations {
     };
     list_cases: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /**
                  * @description `open`, `investigating`, `closed` or `all`; open and investigating
                  *     when absent.
                  */
-                status: string | null;
+                status?: string;
                 /** @description Exact severity. */
-                severity: string | null;
+                severity?: string;
                 /** @description A user id, `me`, or `none` for unassigned. */
-                assignee: string | null;
+                assignee?: string;
                 /** @description Text in the title, or a case number such as `C-104`. */
-                q: string | null;
+                q?: string;
                 /** @description Opaque continuation cursor. */
-                cursor: string | null;
+                cursor?: string;
                 /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
+                limit?: number;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7411,11 +7412,11 @@ export interface operations {
     };
     active_items: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 kind: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7516,14 +7517,14 @@ export interface operations {
     };
     cases_for_item: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 /** @description `alarm`, `finding`, `vulnerability`, `host` or `software`. */
                 kind: string;
                 /** @description The object's id (see `CaseItemView.ref`). */
                 ref: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -9613,32 +9614,32 @@ export interface operations {
     };
     list_hosts: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Host name (contains), agent id or address prefix, or CIDR range. */
-                q: string | null;
+                q?: string;
                 /** @description online, offline, revoked or imported. */
-                status: string | null;
+                status?: string;
                 /** @description linux or windows. */
-                os: string | null;
+                os?: string;
                 /** @description A host group id. */
-                group: string | null;
+                group?: string;
                 /** @description A label. */
-                label: string | null;
+                label?: string;
                 /** @description critical, alarms or none. */
-                problems: string | null;
+                problems?: string;
                 /** @description older or latest. */
-                agent: string | null;
+                agent?: string;
                 /** @description host, heartbeat, version or problems. */
-                sort: string | null;
+                sort?: string;
                 /** @description asc or desc. */
-                dir: string | null;
+                dir?: string;
                 /** @description Rows to skip, 0 to 100000. */
-                offset: string | null;
+                offset?: string;
                 /** @description Page size, 1 to 100 (default 50). */
-                limit: string | null;
+                limit?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -10087,14 +10088,14 @@ export interface operations {
     };
     history: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Catalogue id, for example `vulns.open.critical`. */
-                metric: string | null;
+                metric?: string;
                 /** @description Window in days: 7, 30, 90 or 365 (default 30). */
-                days: string | null;
+                days?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -10148,12 +10149,12 @@ export interface operations {
     };
     top_hosts: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description How many hosts, 1 to 10 (default 6). */
-                limit: string | null;
+                limit?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -10236,12 +10237,12 @@ export interface operations {
     };
     list_ports: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Only ports exposed on at least one host. */
-                exposed: boolean | null;
+                exposed?: boolean;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -10286,16 +10287,17 @@ export interface operations {
     };
     get_port: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque continuation cursor. */
+                cursor?: string;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit?: number;
+            };
             header?: never;
             path: {
                 /** @description `tcp` or `udp` */
                 protocol: string;
                 port: number;
-                /** @description Opaque continuation cursor. */
-                cursor: string | null;
-                /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
             };
             cookie?: never;
         };
@@ -11318,12 +11320,12 @@ export interface operations {
     };
     list_views: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 /** @description The list page, such as `hosts`. */
                 page: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -11790,14 +11792,15 @@ export interface operations {
     };
     get_unit: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque continuation cursor. */
+                cursor?: string;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit?: number;
+            };
             header?: never;
             path: {
                 unit: string;
-                /** @description Opaque continuation cursor. */
-                cursor: string | null;
-                /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
             };
             cookie?: never;
         };
@@ -12050,23 +12053,23 @@ export interface operations {
     };
     list_software: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Case-insensitive substring of the name (at most 128 bytes). */
-                q: string | null;
+                q?: string;
                 /**
                  * @description Only packages with an open vulnerability with a fix on at least
                  *     one visible host.
                  */
-                fixable: boolean | null;
+                fixable?: boolean;
                 /** @description Only packages in use in more than one version. */
-                multiple_versions: boolean | null;
+                multiple_versions?: boolean;
                 /** @description Opaque continuation cursor. */
-                cursor: string | null;
+                cursor?: string;
                 /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
+                limit?: number;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -12111,15 +12114,16 @@ export interface operations {
     };
     get_software: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque continuation cursor. */
+                cursor?: string;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit?: number;
+            };
             header?: never;
             path: {
                 manager: string;
                 name: string;
-                /** @description Opaque continuation cursor. */
-                cursor: string | null;
-                /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
             };
             cookie?: never;
         };
@@ -12174,15 +12178,15 @@ export interface operations {
     };
     triage_history: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 kind: string;
-                id: string | null;
-                rule_set_id: string | null;
-                rule_id: string | null;
-                advisory_id: string | null;
+                id?: string;
+                rule_set_id?: string;
+                rule_id?: string;
+                advisory_id?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
