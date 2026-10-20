@@ -1,11 +1,11 @@
 // A person's page (/settings/people/{id}; approved screen 7), one page, no
 // tabs: the header, Details and Recent activity on the left, Roles and the
 // Access they add up to on the right.
-import { type MouseEvent, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { request, useResource } from "../../../api/client";
 import type { PersonView } from "../../../api/types";
-import { nav } from "../../../app/nav";
+import { viewLink } from "../../../app/nav";
 import { useSession } from "../../../app/session";
 import { auditActionLabel } from "../../../ui/auditActions";
 import { Ago, ErrorBox, Loading } from "../../../ui/bits";
@@ -26,9 +26,7 @@ export function PersonPage({ userId }: { userId: string }) {
   return <PersonBody person={person.data} error={error} onError={setError} />;
 }
 
-function link(view: string, params?: Record<string, string>) {
-  return { href: nav.href(view, params), onClick: (e: MouseEvent) => { e.preventDefault(); nav.view(view, params); } };
-}
+const link = viewLink;
 
 export function PersonBody({ person, error, onError }: { person: PersonView; error?: string | undefined; onError: (message: string | undefined) => void }) {
   const { session, can } = useSession();

@@ -49,7 +49,7 @@ export function DetailPage({ crumb, icon, title, status, facts = [], actions, er
         {present(actions) && <div className="row person-page__actions">{actions}</div>}
       </header>
       {error && <div className="callout callout--bad person-page__error" role="alert"><Icon name="alert" size={16} /><span>{error}</span></div>}
-      {shownTiles.length > 0 && <div className="detail-tiles">{shownTiles}</div>}
+      {shownTiles.length > 0 && <div className="detail-tiles">{shownTiles.map((t, i) => <Fragment key={i}>{t}</Fragment>)}</div>}
       {cols.length > 0 && (
         <div className={`person-page__cols${cols.length === 1 ? " detail-page__cols--one" : ""}`}>
           {present(left) && <div className="stack person-page__col">{left}</div>}

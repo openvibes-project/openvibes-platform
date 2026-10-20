@@ -36,9 +36,29 @@ export function viewQuery(params: URLSearchParams): string {
   return sorted.toString();
 }
 
-/** Applying a saved view: its parameters replace all of today's. */
-export function applyViewChanges(params: URLSearchParams, query: string): Record<string, string | null> {
+/** Applying a saved view: its parameters replace all of today's; only the
+ * page's filters, `q`, `sort` and `dir` are taken from it (a view saved
+ * before a filter was dropped does not set a parameter nothing reads). */
+export function applyViewChanges(params: URLSearchParams, query: string, filters: readonly ListFilter[]): Record<string, string | null> {
+  const known = new Set(["q", ...ORDER, ...filters.map((f) => f.param)]);
   const changes: Record<string, string | null> = Object.fromEntries([...params.keys()].map((k) => [k, null]));
-  for (const [k, v] of new URLSearchParams(query)) changes[k] = v;
+  for (const [k, v] of new URLSearchParams(query)) if (known.has(k)) changes[k] = v;
   return changes;
+}
+
+/** Calls `fn` with the last value `ms` after the last `set`; `flush` calls it now. */
+export function debounce<T>(fn: (value: T) => void, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let waiting: { value: T } | undefined;
+  const flush = () => {
+    clearTimeout(timer);
+    const w = waiting;
+    waiting = undefined;
+    if (w) fn(w.value);
+  };
+  return {
+    set(value: T) { waiting = { value }; clearTimeout(timer); timer = setTimeout(flush, ms); },
+    flush,
+    cancel() { clearTimeout(timer); waiting = undefined; },
+  };
 }

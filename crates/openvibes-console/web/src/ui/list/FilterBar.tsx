@@ -12,7 +12,7 @@ import { Icon } from "../Icon";
 import { Select } from "../Select";
 import { toast } from "../toast";
 import { ColumnsMenu, type ListColumn } from "./ColumnsMenu";
-import { type ListFilter, applyViewChanges, chosenFilters, clearAllChanges, hasFilters, valueOptions, viewQuery } from "./filters";
+import { type ListFilter, applyViewChanges, chosenFilters, clearAllChanges, debounce, hasFilters, valueOptions, viewQuery } from "./filters";
 import { deleteView, saveView, useHiddenColumns, useSavedViews } from "./savedViews";
 
 type Props = {
@@ -58,7 +58,8 @@ export function SavedViewChip({ view, active, confirming, onApply, onAsk, onDele
 }) {
   if (confirming) {
     return (
-      <span className="saved-view saved-view--confirm" role="group" aria-label={`Delete the view ${view.name}`}>
+      <span className="saved-view saved-view--confirm" role="group" aria-label={`Delete the view ${view.name}`}
+        onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onCancel(); } }}>
         <span className="saved-view__ask">Delete the view “{view.name}”?</span>
         <button type="button" className="saved-view__delete" onClick={onDelete}>Delete</button>
         <button type="button" autoFocus onClick={onCancel}>Cancel</button>
@@ -74,12 +75,20 @@ export function SavedViewChip({ view, active, confirming, onApply, onAsk, onDele
 }
 
 export function FilterBarBody({ page, label, placeholder = "Search…", filters, columns = [], params, views, hidden }: Props & {
-  params: URLSearchParams; views: readonly SavedView[]; hidden: readonly string[];
+  params: URLSearchParams; views: readonly SavedView[]; hidden: readonly string[] | undefined;
 }) {
   const [naming, setNaming] = useState(false);
   const [error, setError] = useState<string>();
   const [confirming, setConfirming] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  // The search reaches the URL 250 ms after the last key (at once on Enter,
+  // leaving the field or the page); until then the field shows what was typed.
+  const [typed, setTyped] = useState<string>();
+  const [search] = useState(() => debounce((q: string) => {
+    nav.setParams({ q });
+    setTyped((t) => (t === q ? undefined : t));
+  }, 250));
+  useEffect(() => () => search.flush(), [search]);
   // What gets focus once the chip it names is drawn again (a chip turns into its chosen form and back).
   const refocus = useRef<string | null>(null);
   const focusIn = (key: string, selector: string) => (el: HTMLElement | null) => {
@@ -100,13 +109,17 @@ export function FilterBarBody({ page, label, placeholder = "Search…", filters,
   const filtered = hasFilters(params);
   const chosen = new Map(chosenFilters(filters, params).map((c) => [c.param, c.text]));
   const set = (param: string, value: string | null) => { refocus.current = param; nav.setParams({ [param]: value }); };
+  const replace = (changes: Record<string, string | null>) => { search.cancel(); setTyped(undefined); nav.setParams(changes); };
   const stopNaming = () => { setNaming(false); setError(undefined); refocus.current = "save"; };
   const save = (name: string) => {
-    saveView(page, name, current).then(() => { setNaming(false); setError(undefined); toast(`View “${name}” saved`); },
+    saveView(page, name, current).then(() => { refocus.current = "views"; setNaming(false); setError(undefined); toast(`View “${name}” saved`); },
       (e: unknown) => setError(apiMessage(e, "The view could not be saved.")));
   };
   const remove = (view: SavedView) => {
-    deleteView(page, view.id).then(() => { setConfirming(null); toast(`View “${view.name}” deleted`); },
+    deleteView(page, view.id).then(() => {
+      // Focus goes to the views left, or to the search when none is.
+      if (views.length > 1) refocus.current = "views"; else input.current?.focus();
+      setConfirming(null); toast(`View “${view.name}” deleted`); },
       (e: unknown) => toast(apiMessage(e, "The view could not be deleted."), true));
   };
 
@@ -115,8 +128,9 @@ export function FilterBarBody({ page, label, placeholder = "Search…", filters,
       <label className="search filter-bar__search">
         <Icon name="search" size={15} />
         <span className="sr-only">{label}</span>
-        <input ref={input} className="input" type="search" placeholder={placeholder} value={params.get("q") ?? ""}
-          onChange={(event) => nav.setParams({ q: event.target.value })} />
+        <input ref={input} className="input" type="search" placeholder={placeholder} value={typed ?? params.get("q") ?? ""}
+          onChange={(event) => { setTyped(event.target.value); search.set(event.target.value); }}
+          onKeyDown={(event) => { if (event.key === "Enter") search.flush(); }} onBlur={() => search.flush()} />
         <span className="kbd view-header__kbd" aria-hidden="true">/</span>
       </label>
       {filters.length > 0 && (
@@ -140,18 +154,19 @@ export function FilterBarBody({ page, label, placeholder = "Search…", filters,
         </div>
       )}
       {views.length > 0 && (
-        <div className="row row--wrap" role="group" aria-label="Saved views">
+        <div className="row row--wrap filter-bar__views" role="group" aria-label="Saved views" tabIndex={-1}
+          ref={(el) => { if (el && refocus.current === "views") { refocus.current = null; el.focus(); } }}>
           {views.map((v) => (
             <span key={`${v.id}:${confirming === v.id}`} ref={focusIn(`view:${v.id}`, "button:last-of-type")}>
               <SavedViewChip view={v} active={v.query === current} confirming={confirming === v.id}
-                onApply={() => nav.setParams(applyViewChanges(params, v.query))} onAsk={() => setConfirming(v.id)}
+                onApply={() => replace(applyViewChanges(params, v.query, filters))} onAsk={() => setConfirming(v.id)}
                 onDelete={() => remove(v)} onCancel={() => { refocus.current = `view:${v.id}`; setConfirming(null); }} />
             </span>
           ))}
         </div>
       )}
       <div className="row filter-bar__end">
-        {filtered && <button type="button" className="button button--ghost button--small" onClick={() => nav.setParams(clearAllChanges(params))}>Clear all</button>}
+        {filtered && <button type="button" className="button button--ghost button--small" onClick={() => replace(clearAllChanges(params))}>Clear all</button>}
         {naming ? <SaveViewForm error={error} onSave={save} onCancel={stopNaming} /> : (
           filtered && !views.some((v) => v.query === current) && (
             <button type="button" className="button button--small" onClick={() => setNaming(true)}

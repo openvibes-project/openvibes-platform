@@ -2,7 +2,7 @@
 // the bar is checked as markup from react-dom/server against real URLs, its
 // actions as the pure helpers it calls. Click and key flows: the Hosts e2e.
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // nav.ts reads the location when loaded; replaceState moves it like a browser.
 vi.hoisted(() => {
@@ -15,8 +15,8 @@ import type { SavedView } from "../../api/types";
 import { nav } from "../../app/nav";
 import { ColumnList } from "./ColumnsMenu";
 import { FilterBarBody, SavedViewChip, SaveViewForm } from "./FilterBar";
-import { type ListFilter, applyViewChanges, chosenFilters, clearAllChanges, valueOptions, viewQuery } from "./filters";
-import { toggleHidden } from "./savedViews";
+import { type ListFilter, applyViewChanges, chosenFilters, clearAllChanges, debounce, valueOptions, viewQuery } from "./filters";
+import { columnSaver, toggleHidden } from "./savedViews";
 
 const status: ListFilter = { param: "status", label: "Status", values: [{ value: "online", label: "Online", count: 9 }, { value: "offline", label: "Offline", count: 1234 }] };
 const os: ListFilter = { param: "os", label: "OS", values: [{ value: "linux", label: "Linux", count: 8 }] };
@@ -33,6 +33,7 @@ const render = (views: SavedView[] = []) => renderToStaticMarkup(
 );
 
 beforeEach(() => url(""));
+afterEach(() => vi.useRealTimers());
 
 describe("FilterBar", () => {
   it("renders a chip per filter that opens its values with counts", () => {
@@ -88,8 +89,12 @@ describe("FilterBar", () => {
     const html = render([online]);
     expect(html).toContain(">Online</button>");
     expect(html).toContain('aria-label="Delete saved view Online"');
-    expect(applyViewChanges(new URLSearchParams("q=web&os=linux&sort=name"), "status=online"))
+    expect(applyViewChanges(new URLSearchParams("q=web&os=linux&sort=name"), "status=online", [status, os]))
       .toEqual({ q: null, os: null, sort: null, status: "online" });
+    // Only the page's filters, q and the order come from a view: a dropped filter is not set.
+    expect(applyViewChanges(new URLSearchParams(""), "old=1&q=db&dir=desc&os=linux", [status, os]))
+      .toEqual({ q: "db", dir: "desc", os: "linux" });
+    expect(html).toMatch(/role="group" aria-label="Saved views" tabindex="-1"/);
     const asking = renderToStaticMarkup(<SavedViewChip view={online} active={false} confirming onApply={noop} onAsk={noop} onDelete={noop} onCancel={noop} />);
     expect(asking).toContain("Delete the view “Online”?");
     expect(asking).toContain(">Delete</button>");
@@ -102,7 +107,51 @@ describe("FilterBar", () => {
     expect(html).toMatch(/<input(?=[^>]*checked="")(?=[^>]*disabled="")[^>]*>[^<]*<span>Host<\/span>/);
     expect(html).toMatch(/<input[^>]*checked=""[^>]*>[^<]*<span>OS<\/span>/);
     expect(html).not.toMatch(/<input[^>]*checked=""[^>]*>[^<]*<span>Labels<\/span>/);
+    // Until the person's columns load, nothing can be toggled (a toggle then would wipe them).
+    const loading = renderToStaticMarkup(<ColumnList columns={columns} hidden={undefined} onToggle={noop} />);
+    expect(loading.match(/disabled=""/g)).toHaveLength(3);
     expect(toggleHidden(["labels"], "os")).toEqual(["labels", "os"]);
     expect(toggleHidden(["labels", "os"], "labels")).toEqual(["os"]);
+  });
+
+  it("sends the search to the URL 250 ms after the last key, or at once on flush", () => {
+    vi.useFakeTimers();
+    const sent: string[] = [];
+    const search = debounce((q: string) => sent.push(q), 250);
+    search.set("w");
+    vi.advanceTimersByTime(200);
+    search.set("we");
+    vi.advanceTimersByTime(249);
+    expect(sent).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(sent).toEqual(["we"]);
+    search.set("web");
+    search.flush();
+    search.flush();
+    expect(sent).toEqual(["we", "web"]);
+    search.set("x");
+    search.cancel();
+    vi.advanceTimersByTime(500);
+    expect(sent).toEqual(["we", "web"]);
+  });
+
+  it("saves quick column toggles in order, each with the full set", async () => {
+    const puts: string[][] = [];
+    let release: () => void = noop;
+    const shown: (string[] | undefined)[] = [];
+    const save = columnSaver("hosts", (p) => shown.push(p), noop, (_, hidden) => {
+      puts.push(hidden);
+      return new Promise<void>((resolve) => { release = resolve; });
+    });
+    save(["labels"], "os");
+    save(["labels"], "agent"); // the server's copy has not caught up yet
+    await Promise.resolve();
+    expect(puts).toEqual([["labels", "os"]]);
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(puts).toEqual([["labels", "os"], ["labels", "os", "agent"]]);
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(shown).toEqual([["labels", "os"], ["labels", "os", "agent"], undefined]);
   });
 });

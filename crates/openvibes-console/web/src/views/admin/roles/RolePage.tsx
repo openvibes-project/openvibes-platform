@@ -1,11 +1,11 @@
 // The role page (/settings/roles/new and /settings/roles/{id}), full width:
 // 1 Name and 2 Start from side by side, then Permissions (the matrix) and
 // Hosts, with a sticky bar that sums up the role and saves it.
-import { type MouseEvent, type ReactNode, useReducer, useState } from "react";
+import { type ReactNode, useReducer, useState } from "react";
 
 import { ApiError, apiMessage, invalidate, request, useResource } from "../../../api/client";
 import type { HostGroup, Role, SaveRole } from "../../../api/types";
-import { nav } from "../../../app/nav";
+import { nav, viewLink } from "../../../app/nav";
 import { CATALOGUE, TEMPLATES } from "../../../app/permissions";
 import { useSession } from "../../../app/session";
 import { Select } from "../../../ui/Select";
@@ -52,9 +52,7 @@ const Step = ({ n, title, aside }: { n: number; title: ReactNode; aside?: ReactN
   </div>
 );
 
-function link(view: string, params?: Record<string, string>) {
-  return { href: nav.href(view, params), onClick: (e: MouseEvent) => { e.preventDefault(); nav.view(view, params); } };
-}
+const link = viewLink;
 
 export function RoleEditor({ role, groups, initial, error, onError = () => {} }: {
   role: Role | undefined; groups: readonly HostGroup[]; initial?: RoleState; error?: string | undefined; onError?: (message: string | undefined) => void;

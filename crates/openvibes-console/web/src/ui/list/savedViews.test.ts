@@ -51,21 +51,44 @@ describe("saved views", () => {
 });
 
 describe("importBrowserViews", () => {
-  it("imports the old views once, mapped, then removes the key", async () => {
-    const store = stubStorage({ [LEGACY]: JSON.stringify([{ name: "Active", query: "status=active" }, { name: "Bad" }, { name: "Linux", query: "os=linux" }]) });
+  it("imports the old views once, mapped and normalised, then removes the key", async () => {
+    const store = stubStorage({ [LEGACY]: JSON.stringify([{ name: "Active", query: "status=active&os=linux" }, { name: "Bad" }, { name: "Linux", query: "os=linux" }]) });
     await importBrowserViews("hosts", LEGACY, toOnline);
-    expect((await views()).map((v) => [v.name, v.query])).toEqual([["Active", "status=online"], ["Linux", "os=linux"]]);
+    // Stored sorted (viewQuery), so the FilterBar shows it as the active view.
+    expect((await views()).map((v) => [v.name, v.query])).toEqual([["Active", "os=linux&status=online"], ["Linux", "os=linux"]]);
     expect(store.has(LEGACY)).toBe(false);
     await importBrowserViews("hosts", LEGACY, toOnline);
     expect(await views()).toHaveLength(2);
   });
 
-  it("skips views the server refuses (a taken name) and still removes the key", async () => {
+  it("renames a clash with a different view, skips an exact duplicate, and shortens long names", async () => {
     await saveView("hosts", "Active", "status=offline");
-    const store = stubStorage({ [LEGACY]: JSON.stringify([{ name: "active", query: "status=active" }]) });
+    await saveView("hosts", "Linux", "os=linux");
+    const long = `${"é".repeat(59)}xyz`;
+    const store = stubStorage({ [LEGACY]: JSON.stringify([
+      { name: "active", query: "status=active" }, { name: "LINUX", query: "os=linux" }, { name: long, query: "q=a" }, { name: "  ", query: "q=b" },
+    ]) });
     await importBrowserViews("hosts", LEGACY, toOnline);
-    expect((await views()).map((v) => v.query)).toEqual(["status=offline"]);
+    const byName = new Map((await views()).map((v) => [v.name, v.query]));
+    expect(byName.get("Active")).toBe("status=offline");
+    expect(byName.get("active (imported)")).toBe("status=online");
+    expect(byName.get("Linux")).toBe("os=linux");
+    expect(byName.get(`${"é".repeat(59)}x`)).toBe("q=a");
+    expect(byName.get("Imported view")).toBe("q=b");
+    expect(byName.size).toBe(5);
     expect(store.has(LEGACY)).toBe(false);
+    // A second run (say the key came back) finds every view already there.
+    store.set(LEGACY, JSON.stringify([{ name: "active", query: "status=active" }]));
+    await importBrowserViews("hosts", LEGACY, toOnline);
+    expect(await views()).toHaveLength(5);
+    expect(store.has(LEGACY)).toBe(false);
+  });
+
+  it("keeps the key while a view could not be saved (too many, invalid), for the next visit", async () => {
+    for (let i = 0; i < 50; i += 1) await saveView("hosts", `View ${i}`, "");
+    const store = stubStorage({ [LEGACY]: JSON.stringify([{ name: "Active", query: "status=active" }]) });
+    await importBrowserViews("hosts", LEGACY, toOnline);
+    expect(store.has(LEGACY)).toBe(true);
   });
 
   it("keeps the key when the console cannot be reached, to try again next time", async () => {

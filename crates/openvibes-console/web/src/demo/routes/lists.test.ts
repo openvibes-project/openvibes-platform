@@ -37,10 +37,13 @@ describe("demo saved views", () => {
     expect(created.body).toMatchObject({ page: "hosts", name: "linux", query: "os=linux" });
     expect(typeof created.body.id).toBe("string");
     await save(server, "Critical", "problems=critical");
-    expect((await list(server)).map((v) => v.name)).toEqual(["Critical", "linux"]);
+    await save(server, "Éclair");
+    await save(server, "zed");
+    // The server's lower(name) order: code units, no locale (É after z).
+    expect((await list(server)).map((v) => v.name)).toEqual(["Critical", "linux", "zed", "Éclair"]);
     expect((await call(server, "DELETE", `/api/v1/saved-views/${created.body.id}`)).status).toBe(204);
     expect(await call(server, "DELETE", `/api/v1/saved-views/${created.body.id}`)).toMatchObject({ status: 404, body: { code: "saved_view_not_found" } });
-    expect((await list(server)).map((v) => v.name)).toEqual(["Critical"]);
+    expect((await list(server)).map((v) => v.name)).toEqual(["Critical", "zed", "Éclair"]);
   });
 
   it("refuses a taken name (any case), bad fields, unknown pages and a 51st view", async () => {
@@ -56,6 +59,8 @@ describe("demo saved views", () => {
     expect((await call(server, "POST", "/api/v1/saved-views", { page: "hosts", name: 3, query: "" })).status).toBe(400);
     for (let i = 1; i < 50; i += 1) expect((await save(server, `View ${i}`)).status).toBe(201);
     expect(await save(server, "One too many")).toMatchObject({ status: 409, body: { code: "too_many_views", title: "You can keep at most 50 views on this page" } });
+    // Full is checked before the name, as the store does.
+    expect(await save(server, "Online")).toMatchObject({ status: 409, body: { code: "too_many_views" } });
   });
 
   it("keeps each person's views in their own storage and drops what does not fit on load", async () => {

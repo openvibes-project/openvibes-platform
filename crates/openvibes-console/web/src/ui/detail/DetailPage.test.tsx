@@ -7,6 +7,7 @@ vi.hoisted(() => {
   Object.assign(globalThis, { window: { location: { pathname: "/", search: "" }, history: { replaceState() {} }, addEventListener() {}, removeEventListener() {} } });
 });
 
+import { viewLink } from "../../app/nav";
 import { SummaryLine } from "../list/SummaryLine";
 import { DetailPage } from "./DetailPage";
 import { Tile } from "./Tile";
@@ -34,6 +35,12 @@ describe("DetailPage", () => {
     expect(html).toMatch(/^<a [^>]*href="\/alarms\?host=agent-1"/);
     expect(html).toContain('aria-label="Open alarms: 3"');
     expect(renderToStaticMarkup(<Tile label="Software" value={1234} to={{ view: "/software" }} />)).toContain('aria-label="Software: 1,234"');
+    // A modified or middle click is left to the browser (a new tab or window).
+    const click = (extra: object) => { const e = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, preventDefault: vi.fn(), ...extra }; viewLink("/x").onClick(e); return e.preventDefault; };
+    expect(click({ ctrlKey: true })).not.toHaveBeenCalled();
+    expect(click({ metaKey: true })).not.toHaveBeenCalled();
+    expect(click({ shiftKey: true })).not.toHaveBeenCalled();
+    expect(click({ button: 1 })).not.toHaveBeenCalled();
   });
 
   it("renders nothing for empty slots", () => {

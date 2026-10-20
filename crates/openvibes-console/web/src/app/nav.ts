@@ -77,6 +77,21 @@ export const nav = {
   },
 };
 
+type Click = { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; preventDefault(): void };
+
+/** An in-console link's props: a plain left click navigates in place; with a
+ * modifier key or another button the browser opens the href (new tab, window). */
+export function viewLink(view: string, params?: Record<string, string>) {
+  return {
+    href: nav.href(view, params),
+    onClick: (e: Click) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      nav.view(view, params);
+    },
+  };
+}
+
 /** The panel on top of the stack: the one a list highlights as open. */
 export function useTopPanel() {
   const { panels } = useLocation();

@@ -11,6 +11,8 @@ const CONTROL = /\p{Cc}/u;
 
 const validName = (name: string) => { const n = [...name].length; return n >= 1 && n <= 60 && !CONTROL.test(name); };
 const validQuery = (query: string) => [...query].length <= 1000 && !CONTROL.test(query);
+/** The server's ORDER BY lower(name), name, view_id: plain order, no locale. */
+const byUnits = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const invalid = (code: string, field: string, message: string) =>
   problem(422, code, message, { field_errors: [{ field, code: "invalid", message }] });
@@ -48,7 +50,7 @@ export function registerListRoutes(ctx: DemoContext) {
     const page = query.get("page") ?? "";
     if (!known(page)) return pageNotFound();
     const items = views.filter((v) => v.page === page)
-      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+      .sort((a, b) => byUnits(a.name.toLowerCase(), b.name.toLowerCase()) || byUnits(a.name, b.name) || byUnits(a.id, b.id));
     return json({ items });
   });
   route("POST", "/api/v1/saved-views", null, (_, __, body) => {
@@ -59,8 +61,8 @@ export function registerListRoutes(ctx: DemoContext) {
     if (!validName(name)) return invalid("invalid_saved_view", "name", "The name must be 1 to 60 characters");
     if (!validQuery(query)) return invalid("invalid_saved_view", "query", "The view is too long to save");
     const onPage = views.filter((v) => v.page === page);
-    if (onPage.some((v) => sameName(v.name, name))) return problem(409, "view_name_taken", "You already have a view with that name");
     if (onPage.length >= MAX_VIEWS) return problem(409, "too_many_views", "You can keep at most 50 views on this page");
+    if (onPage.some((v) => sameName(v.name, name))) return problem(409, "view_name_taken", "You already have a view with that name");
     const view: SavedView = { id: crypto.randomUUID(), page, name, query, created_at: iso() };
     views.push(view);
     save();

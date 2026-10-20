@@ -477,7 +477,8 @@ screens 16 and 17, and the shared layout). Hosts is the first user; the
 other list pages move to them in step 5. `ui/ViewHeader.tsx` keeps working
 for the pages not yet moved; its saved views stay in the browser.
 
-- **FilterBar** (`ui/list/FilterBar.tsx`): the search box (`q` in the URL,
+- **FilterBar** (`ui/list/FilterBar.tsx`): the search box (`q` in the URL
+  250 ms after the last key, at once on Enter, blur or leaving the page;
   "/" focuses it) and one chip per `ListFilter`
   (`{ param, label, values: {value, label, count}[] }`, `ui/list/filters.ts`).
   A chip is a Select drawn as a button (`aria-haspopup="listbox"`,
@@ -488,18 +489,26 @@ for the pages not yet moved; its saved views stay in the browser.
   `dir`), **Save view** (only with something set and not already saved; a
   refusal such as "You already have a view with that name" is a
   `role="alert"` tied to the name field) and **Columns**. Saved views are
-  chips: a click applies one (its parameters replace today's); × asks
-  "Delete the view “…”?" before deleting.
+  chips: a click applies one (its parameters replace today's; only the
+  page's filters, `q`, `sort` and `dir` are taken from it); × asks
+  "Delete the view “…”?" before deleting (Escape cancels). After a save or
+  delete, focus goes to the saved views, or to the search when none is left.
 - **Columns** (`ui/list/ColumnsMenu.tsx`): a disclosure button with a
-  checkbox per column; the first (Host) is checked and disabled. Each change
-  is a `PUT /api/v1/list-columns/{page}`; a refusal is a toast.
+  checkbox per column; the first (Host) is checked and disabled, and all are
+  disabled until the person's columns have loaded. Each change is a
+  `PUT /api/v1/list-columns/{page}` carrying the full set after every
+  toggle so far (`columnSaver` queues them, so quick toggles never undo
+  each other); a refusal is a toast.
 - **Saved views** (`ui/list/savedViews.ts`): `useSavedViews(page)` and
-  `useHiddenColumns(page)` over `GET /api/v1/saved-views?page=` and
+  `useHiddenColumns(page)` (undefined until loaded) over `GET /api/v1/saved-views?page=` and
   `GET /api/v1/list-columns/{page}`; `saveView`, `deleteView` and
   `setHiddenColumns`. `importBrowserViews(page, legacyKey, mapQuery)` moves
-  a page's old browser-only views to the console once, mapping each query,
-  then removes the key; views the console refuses (409, 422) are dropped,
-  any other failure keeps the key for the next visit.
+  a page's old browser-only views to the console, mapping each query and
+  storing it normalised (so it shows as active). Names are cut to 60
+  characters; a name taken by a different view is retried once as
+  "name (imported)". The key is removed only when every view is saved or
+  already there (same name, same query); otherwise it stays and the next
+  visit tries again.
 - **SummaryLine** (`ui/list/SummaryLine.tsx`): `{count, text}` parts joined
   with " · ", zeros left out with `skipZero`; a `role="status"` paragraph
   that is always present, so a change is announced.
@@ -510,6 +519,9 @@ for the pages not yet moved; its saved views stay in the browser.
   nothing. `Card` (a card of either column) lives here too; the person,
   group and settings pages use it. **Tile**
   (`ui/detail/Tile.tsx`): a link to the full list, named "Open alarms: 3".
+  Tiles and the settings pages' links use `viewLink` (`app/nav.ts`): a
+  plain left click navigates in place, a modified or middle click is left
+  to the browser.
 - **Demo** (`demo/routes/lists.ts`): the same routes, codes, caps (60
   characters, 1000-character query, 50 views per page, case-blind names, no
   Host column) and messages as `src/lists/saved_views.rs`, kept per person
