@@ -389,7 +389,7 @@ export function buildDemoData(now = Date.now()) {
       ancestors: [proc(1102, "/usr/sbin/nginx", ["nginx: worker process"], 33, "/")] },
     // Closed by a suppression, so the Suppressed filter has something to show.
     { rule: "download-and-run", severity: "medium", message: "A shell downloaded a program and ran it", count: 7, minutes: 900, state: "false_positive", suppressed: "900",
-      process: proc(88990, "/usr/bin/curl", ["curl", "-fsSL", "-o", "/tmp/agent.sh", "https://updates.example.test/agent.sh"], 0, "/root"),
+      process: proc(88990, "/usr/bin/curl", ["curl", "-fsSL", "-o", "/root/agent.sh", "https://updates.example.test/agent.sh"], 0, "/root"),
       ancestors: [proc(9010, "/usr/bin/bash", ["bash", "/etc/cron.daily/update"], 0, "/")] },
   ];
   const alarms = alarmSpecs.map((spec, index) => {

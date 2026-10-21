@@ -52,7 +52,7 @@ export function registerAlarmSummaryRoute(ctx: DemoContext & { cases: ReturnType
       },
       tiles: {
         starts: siblings.reduce((n, s) => n + s.count, 0), different_commands: siblings.length,
-        first_seen: siblings.map((s) => s.first_seen).sort()[0] ?? alarm.first_seen, confidence: alarm.confidence,
+        first_seen: siblings.map((s) => s.first_seen).sort((a, b) => a.localeCompare(b))[0] ?? alarm.first_seen, confidence: alarm.confidence,
       },
       // The demo's rules are all indexed, titled by their message (as GET /alarms/{id}/rule answers).
       rule: { title: alarm.message, message: alarm.message, explain: null, check: null, techniques: row.techniques },
