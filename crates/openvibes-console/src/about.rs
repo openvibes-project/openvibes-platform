@@ -8,7 +8,10 @@
 //! wait on the network.
 
 use std::{
-    sync::OnceLock,
+    sync::{
+        Arc, OnceLock, RwLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -199,6 +202,21 @@ impl UpdateChecker {
         Self::with_urls(LATEST_RELEASE_URL, AGENT_RELEASE_URL)
     }
 
+    /// The last successful agent lookup, never blanked by a refresh. When
+    /// none is known it starts one background lookup (one at a time; a
+    /// failure is remembered for `FAILED_TTL`) and returns `None`.
+    pub(crate) fn agent_version_now(self: &Arc<Self>) -> Option<String> {
+        let known = self.agent.known.read().ok()?.clone();
+        if known.is_none() && !self.agent.refreshing.swap(true, Ordering::AcqRel) {
+            let checker = Arc::clone(self);
+            tokio::spawn(async move {
+                checker.agent.latest().await;
+                checker.agent.refreshing.store(false, Ordering::Release);
+            });
+        }
+        known
+    }
+
     fn with_urls(platform: &str, agent: &str) -> Self {
         Self {
             platform: ReleaseFeed::new(platform, RELEASE_PAGE_PREFIX),
@@ -215,12 +233,21 @@ impl UpdateChecker {
     }
 }
 
+/// The last-known latest agent release, with no network call on the
+/// caller's path; see [`UpdateChecker::agent_version_now`].
+pub(crate) fn latest_agent_version(state: &AuthHttpState) -> Option<String> {
+    state.update_checker.as_ref()?.agent_version_now()
+}
+
 /// One repository's latest release, cached.
 struct ReleaseFeed {
     url: String,
     prefix: &'static str,
     agent: ureq::Agent,
     cache: Mutex<Option<(Instant, Option<Latest>)>>,
+    /// The last version a fetch found, readable while `cache` is locked.
+    known: RwLock<Option<String>>,
+    refreshing: AtomicBool,
 }
 
 impl ReleaseFeed {
@@ -234,6 +261,8 @@ impl ReleaseFeed {
             prefix,
             agent: config.into(),
             cache: Mutex::new(None),
+            known: RwLock::new(None),
+            refreshing: AtomicBool::new(false),
         }
     }
 
@@ -256,6 +285,9 @@ impl ReleaseFeed {
                 .await
                 .ok()
                 .flatten();
+            if let (Some(found), Ok(mut known)) = (&latest, self.known.write()) {
+                *known = Some(found.version.clone());
+            }
             *cache = Some((Instant::now(), latest));
         }
         cache.as_ref().and_then(|(_, latest)| latest.clone())

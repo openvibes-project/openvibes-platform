@@ -371,7 +371,7 @@ pub async fn list_in_scope(
     list_for_agents(client, filter, agents.as_deref()).await
 }
 
-async fn list_for_agents(
+pub(crate) async fn list_for_agents(
     client: &Client,
     filter: &ListFilter<'_>,
     scoped_agents: Option<&[String]>,

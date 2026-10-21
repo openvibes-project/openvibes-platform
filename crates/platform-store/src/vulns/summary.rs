@@ -203,5 +203,46 @@ pub async fn refresh_counts(
             &[&agents, &now],
         )
         .await?;
+    refresh_listed_critical(client, agents).await
+}
+
+/// The Hosts list's critical count (`host_listed_critical`, migration 58):
+/// critical advisories as the Vulnerabilities list and the host page show
+/// them by default, one per advisory, fixable or without a fix, reboot
+/// pending or not, mapped at confidence 80 or more (`confidence.rs`: a
+/// known distribution's advisory, or a package without a fix), triage open.
+async fn refresh_listed_critical(client: &Client, agents: &[String]) -> Result<(), StoreError> {
+    // One upsert, like `host_vulnerability_counts`: a DELETE then INSERT
+    // pair let two concurrent recounts of one host (a console triage and a
+    // re-match) collide on the primary key or briefly show 0.
+    client
+        .execute(
+            "INSERT INTO host_listed_critical (agent_id, critical)
+             SELECT h.agent_id, COALESCE(c.critical, 0)
+             FROM unnest($1::text[]) AS h(agent_id)
+             LEFT JOIN (
+                 SELECT y.agent_id, count(DISTINCT y.advisory_id)::int AS critical
+                 FROM (SELECT v.agent_id, v.advisory_id
+                       FROM vulnerabilities v JOIN advisories a ON a.advisory_id = v.advisory_id
+                       WHERE v.agent_id = ANY($1) AND v.fixed_at IS NULL AND a.severity = 'critical'
+                         AND (split_part(a.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
+                              OR (jsonb_typeof(v.packages) = 'array' AND jsonb_array_length(v.packages) > 0
+                                  AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v.packages) p
+                                                  WHERE p ? 'fixed'
+                                                    AND jsonb_typeof(p->'fixed') IS DISTINCT FROM 'null')))
+                       UNION ALL
+                       SELECT hp.agent_id, vv.advisory_id
+                       FROM host_packages hp
+                       JOIN version_vulnerabilities vv ON vv.package_version_id = hp.package_version_id
+                       JOIN advisories a ON a.advisory_id = vv.advisory_id
+                       WHERE hp.agent_id = ANY($1) AND a.severity = 'critical') y
+                 WHERE NOT EXISTS (SELECT 1 FROM vulnerability_triage t
+                                   WHERE t.agent_id = y.agent_id AND t.advisory_id = y.advisory_id
+                                     AND t.state <> 'open')
+                 GROUP BY y.agent_id) c ON c.agent_id = h.agent_id
+             ON CONFLICT (agent_id) DO UPDATE SET critical = EXCLUDED.critical",
+            &[&agents],
+        )
+        .await?;
     Ok(())
 }

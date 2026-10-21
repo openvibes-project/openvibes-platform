@@ -258,7 +258,7 @@ export function buildDemoData(now = Date.now()) {
   const people = [
     ["u-admin", "admin", "Alex Admin"], ["u-sam", "sam", "Sam Analyst"], ["u-ola", "ola", "Ola Operator"],
     ["u-vic", "vic", "Vic Viewer"], ["u-pia", "pia", "Pia Prodops"], ["u-wen", "wen", "Wen Windows"],
-    ["u-lee", "lee", "Lee Lead"],
+    ["u-lee", "lee", "Lee Lead"], ["u-rae", "rae", "Rae Rules"],
   ] as const;
   // The People and Roles API's data (routes/access.ts, routes/roles.ts), in
   // the store's shape: roles with their reach, and who holds which.
@@ -274,13 +274,15 @@ export function buildDemoData(now = Date.now()) {
       role("role-winlead", "Windows lead", "Team lead", { kind: "groups", asset_group_ids: ["grp-win"] }),
       role("role-opprod", "Operator (Prod)", "Operator", { kind: "groups", asset_group_ids: ["grp-prod"] }),
       role("role-pilotlead", "Pilot lead", "Team lead", { kind: "groups", asset_group_ids: ["grp-pilot"] }),
+      // Reads hosts but no alarms, vulnerabilities or compliance (the host page's sections follow).
+      role("rule-author", "Rule author", "Rule author", { kind: "all" }),
     ],
     users: people.map(([user_id, username, display_name], index) => ({
       user_id: user_id as string, username: username as string, display_name: display_name as string, email: null as string | null, enabled: true, auth_source: "password",
       last_sign_in_at: iso(now - (index + 1) * 3 * 3_600_000) as string | null, created_at: iso(now - (90 - index * 10) * DAY),
     })),
     host_groups: groups,
-    bindings: [["u-admin", ADMIN_ROLE], ["u-sam", "analyst"], ["u-ola", "operator"], ["u-vic", "viewer"], ["u-pia", "role-opprod"], ["u-wen", "role-winlead"], ["u-lee", "role-pilotlead"]]
+    bindings: [["u-admin", ADMIN_ROLE], ["u-sam", "analyst"], ["u-ola", "operator"], ["u-vic", "viewer"], ["u-pia", "role-opprod"], ["u-wen", "role-winlead"], ["u-lee", "role-pilotlead"], ["u-rae", "rule-author"]]
       .map(([user_id, role_id]) => ({ user_id: user_id as string, role_id: role_id as string })),
   };
 

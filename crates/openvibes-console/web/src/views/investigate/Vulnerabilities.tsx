@@ -16,6 +16,7 @@ import { Icon } from "../../ui/Icon";
 import { ViewHeader } from "../../ui/ViewHeader";
 import { type AdvisoryRow, groupByAdvisory, selectAdvisories, vulnerabilityQuery } from "../lists/rows";
 import { filterChips } from "../lists/filters";
+import { HostChip } from "../lists/HostChip";
 
 export function Vulnerabilities() {
   const { params, panels } = useLocation();
@@ -29,6 +30,7 @@ export function Vulnerabilities() {
   return (
     <div className="view">
       <ViewHeader title="Vulnerabilities" count={rows.length} refresh="/api/v1/vulnerabilities" placeholder="Filter by package, advisory or CVE…"
+        filters={<HostChip id={params.get("host")} />}
         chips={[
           ...filterChips("/vulnerabilities"),
         ]} />
@@ -62,20 +64,22 @@ export function Vulnerabilities() {
             { key: "reboot", header: "Reboot", numeric: true, width: "80px", hideBelow: 950, sort: (r) => r.reboot, render: (r) => r.reboot > 0 ? <span className="num">{r.reboot}</span> : <span className="subtle">—</span> },
           ]} />
       )}
-      <AdvisoryBulkBar rows={rows} selected={selected} onClear={() => setSelected(new Set())} partial={list.data?.more_available === true} />
+      <AdvisoryBulkBar rows={rows} selected={selected} onClear={() => setSelected(new Set())} partial={list.data?.more_available === true} host={params.get("host")} />
     </div>
   );
 }
 
 /** The bulk bar for selected advisories: each acts on its hosts in scope;
  * a close leaves the ones already closed alone. */
-function AdvisoryBulkBar({ rows, selected, onClear, partial }: Readonly<{ rows: AdvisoryRow[]; selected: Set<string>; onClear: () => void; partial: boolean }>) {
+function AdvisoryBulkBar({ rows, selected, onClear, partial, host }: Readonly<{ rows: AdvisoryRow[]; selected: Set<string>; onClear: () => void; partial: boolean; host: string | null }>) {
   const chosen = () => rows.filter((r) => selected.has(r.id));
+  // Filtered to one host, an action touches that host only.
+  const on = host ? { agent_id: host } : {};
   return (
     <BulkBar kind="vulnerabilities" noun={selected.size === 1 ? "advisory" : "advisories"} count={selected.size} partial={partial} onClear={onClear}
-      items={() => chosen().map((r) => ({ advisory_id: r.id }))}
+      items={() => chosen().map((r) => ({ advisory_id: r.id, ...on }))}
       closed={chosen().filter((r) => r.hosts > r.open).length}
-      reopenItems={() => chosen().filter((r) => r.hosts > r.open).map((r) => ({ advisory_id: r.id }))}
+      reopenItems={() => chosen().filter((r) => r.hosts > r.open).map((r) => ({ advisory_id: r.id, ...on }))}
       newCase={() => { const c = chosen(); return { title: `${c.length} advisories: ${c[0]?.title ?? ""}`, severity: highest(c.map((r) => r.severity)) }; }} />
   );
 }

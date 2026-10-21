@@ -1032,6 +1032,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Hosts list. */
+        get: operations["list_hosts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hosts/{agent_id}/labels": {
         parameters: {
             query?: never;
@@ -1065,6 +1082,41 @@ export interface paths {
         post?: never;
         /** Removes a label; removing one that is not there is fine. */
         delete: operations["remove_label"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hosts/{agent_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The host page's summary. */
+        get: operations["host_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/list-columns/{page}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The columns the person hid on a page. */
+        get: operations["get_columns"];
+        /** Sets the columns the person hides on a page. */
+        put: operations["put_columns"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1452,6 +1504,41 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's saved views on a page. */
+        get: operations["list_views"];
+        put?: never;
+        /** Saves a view. */
+        post: operations["create_view"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-views/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Deletes one of the person's own views. */
+        delete: operations["delete_view"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2913,6 +3000,16 @@ export interface components {
             answer: string;
             question: string;
         };
+        /** @description A filter value and how many hosts have it. */
+        CountView: {
+            /**
+             * Format: int64
+             * @description Hosts matching with the other filters applied.
+             */
+            count: number;
+            /** @description The URL value. */
+            value: string;
+        };
         /** @description One rule and what it covers. */
         CoverageRule: {
             /** @description Its pairs; empty when the rule is not mapped. */
@@ -3524,6 +3621,20 @@ export interface components {
              */
             values: string[];
         };
+        /** @description A group filter value. */
+        GroupCountView: {
+            /**
+             * Format: int64
+             * @description Hosts in the group in the viewer's reach.
+             */
+            count: number;
+            /** @description How the group gets its hosts. */
+            kind: components["schemas"]["HostGroupKind"];
+            /** @description Group name. */
+            name: string;
+            /** @description Group id. */
+            value: string;
+        };
         /** @description A member host on the group page. */
         GroupHostView: {
             agent_id: string;
@@ -3586,6 +3697,70 @@ export interface components {
         HomeDashboard: {
             /** @description Visible dashboard id, or `null`. */
             dashboard_id?: string | null;
+        };
+        /** @description What the caller may do on this host. */
+        HostActionsView: {
+            /** @description Add to a case (`cases.write`). */
+            add_to_case: boolean;
+            /** @description Ask the assistant (`assistant.use`). */
+            ask: boolean;
+            /** @description Export (`hosts.export`). */
+            export: boolean;
+            /** @description Add and remove labels (`hosts.label`, not on a revoked or imported host). */
+            label: boolean;
+            /** @description Revoke (`hosts.revoke`, not on a revoked or imported host). */
+            revoke: boolean;
+        };
+        /** @description The host's agent. */
+        HostAgentView: {
+            /** @description Older than the latest release; absent when unknown. */
+            older?: boolean | null;
+            /** @description Agent version. */
+            version?: string | null;
+        };
+        /** @description Per-value counts for every filter. */
+        HostCountsView: {
+            /** @description By agent age. */
+            agent: components["schemas"]["CountView"][];
+            /** @description By group. */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description By label. */
+            label: components["schemas"]["CountView"][];
+            /** @description By OS family. */
+            os: components["schemas"]["CountView"][];
+            /** @description By problems. */
+            problems: components["schemas"]["CountView"][];
+            /** @description By status. */
+            status: components["schemas"]["CountView"][];
+        };
+        /** @description The header and Details facts. */
+        HostFactsView: {
+            /** @description Address of the last connection. */
+            address?: string | null;
+            /** @description Older than the latest agent release; absent when unknown. */
+            agent_older?: boolean | null;
+            /** @description Reported agent capabilities. */
+            capabilities: string[];
+            /** @description RFC 3339. */
+            enrolled_at: string;
+            /** @description Host name. */
+            hostname?: string | null;
+            /** @description Agent id. */
+            id: string;
+            /** @description Last inventory, RFC 3339. */
+            inventory_at?: string | null;
+            /** @description Last heartbeat, RFC 3339. */
+            last_seen_at?: string | null;
+            /** @description Operating system. */
+            os: components["schemas"]["HostOsView"];
+            /** @description RFC 3339. */
+            revoked_at?: string | null;
+            /** @description Running kernel. */
+            running_kernel?: string | null;
+            /** @description Agent version. */
+            scanner_version?: string | null;
+            /** @description `online`, `offline`, `revoked` or `imported`. */
+            status: string;
         };
         /** @description A group's page: the group and its recent changes. */
         HostGroupDetail: components["schemas"]["HostGroupView"] & {
@@ -3690,12 +3865,73 @@ export interface components {
              */
             version: number;
         };
+        /** @description Software, ports and services counts. */
+        HostInventoryView: {
+            /**
+             * Format: int64
+             * @description Listening ports reachable from outside the host.
+             */
+            exposed_ports: number;
+            /**
+             * Format: int64
+             * @description Listening ports.
+             */
+            listening_ports: number;
+            /**
+             * Format: int64
+             * @description Installed packages.
+             */
+            packages: number;
+            /**
+             * Format: int64
+             * @description Running services.
+             */
+            services: number;
+        };
         /** @description A host's labels and the groups it is in. */
         HostLabelsView: {
             /** @description By name. */
             groups: components["schemas"]["HostGroupRef"][];
             /** @description In byte order. */
             labels: string[];
+        };
+        /** @description A group a host belongs to. */
+        HostListGroupView: {
+            /** @description Group id. */
+            id: string;
+            /** @description How the group gets its hosts. */
+            kind: components["schemas"]["HostGroupKind"];
+            /** @description Group name. */
+            name: string;
+        };
+        /** @description One page of the Hosts list. */
+        HostListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["HostCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["HostRowView"][];
+            /** @description Latest agent release, when known. */
+            latest_agent_version?: string | null;
+            /** @description Summary over the matching hosts. */
+            summary: components["schemas"]["HostSummaryLineView"];
+            /**
+             * Format: int64
+             * @description Hosts matching every filter.
+             */
+            total: number;
+        };
+        /** @description A host's operating system. */
+        HostOsView: {
+            /** @description Display name, such as `Debian 12`. */
+            distribution?: string | null;
+            /** @description `linux` or `windows`. */
+            family?: string | null;
+            /** @description OS id, such as `debian`. */
+            id?: string | null;
+            /** @description OS version. */
+            version?: string | null;
         };
         /** @description A page of a host's packages, by name. */
         HostPackagePage: {
@@ -3723,6 +3959,63 @@ export interface components {
             release: string;
             /** @description Version. */
             version: string;
+        };
+        /** @description Problem counts; absent where the viewer may not read that kind for the host. */
+        HostProblemsView: {
+            /**
+             * Format: int64
+             * @description Critical vulnerabilities.
+             */
+            critical?: number | null;
+            /**
+             * Format: int64
+             * @description Failing compliance checks.
+             */
+            failing?: number | null;
+            /**
+             * Format: int64
+             * @description Open agent alarms.
+             */
+            open_alarms?: number | null;
+        };
+        /** @description Protection: threat alarms and the latest test. */
+        HostProtectionView: {
+            /** @description The latest test alarm and finding. */
+            last_test: components["schemas"]["LastTest"];
+            threat_alarms?: null | components["schemas"]["AgentAlarmsView"];
+        };
+        /** @description One row of the Hosts list. */
+        HostRowView: {
+            /** @description Address of the last connection. */
+            address?: string | null;
+            /** @description Agent. */
+            agent: components["schemas"]["HostAgentView"];
+            /**
+             * @description Online with threat alarms off by a fault (not by choice): the list
+             *     warns "Alarms off".
+             */
+            alarms_off: boolean;
+            /**
+             * Format: int64
+             * @description All its groups.
+             */
+            group_count: number;
+            /** @description The first two groups by name. */
+            groups: components["schemas"]["HostListGroupView"][];
+            /** @description Host name. */
+            hostname?: string | null;
+            /** @description Agent id. */
+            id: string;
+            /** @description Labels. */
+            labels: string[];
+            /** @description Last heartbeat, RFC 3339. */
+            last_seen_at?: string | null;
+            /** @description Operating system. */
+            os: components["schemas"]["HostOsView"];
+            /** @description Problem counts. */
+            problems: components["schemas"]["HostProblemsView"];
+            /** @description `online`, `offline`, `revoked` or `imported`. */
+            status: string;
         };
         /** @description One assignable set's state on a host, as the platform decides it. */
         HostRuleSetAssignmentView: {
@@ -3782,6 +4075,74 @@ export interface components {
              */
             truncated: boolean;
         };
+        /** @description The line above the list. */
+        HostSummaryLineView: {
+            /**
+             * Format: int64
+             * @description Hosts with a critical vulnerability.
+             */
+            critical: number;
+            /**
+             * Format: int64
+             * @description Hosts with an older agent.
+             */
+            older_agent: number;
+            /**
+             * Format: int64
+             * @description Online hosts.
+             */
+            online: number;
+        };
+        /** @description Everything above the fold on a host's page. */
+        HostSummaryView: {
+            /** @description Allowed actions. */
+            can: components["schemas"]["HostActionsView"];
+            /**
+             * Format: int64
+             * @description All its certificates.
+             */
+            certificate_count: number;
+            /** @description The five newest certificates. */
+            certificates: components["schemas"]["CertificateView"][];
+            /** @description Groups holding the host, by name. */
+            groups: components["schemas"]["HostListGroupView"][];
+            /** @description Header and Details facts. */
+            host: components["schemas"]["HostFactsView"];
+            /** @description Counts behind the software, ports and services sub-pages. */
+            inventory: components["schemas"]["HostInventoryView"];
+            /** @description Labels. */
+            labels: string[];
+            /** @description Protection. */
+            protection: components["schemas"]["HostProtectionView"];
+            /** @description Tiles. */
+            tiles: components["schemas"]["HostTilesView"];
+            top_alarms?: null | components["schemas"]["TopAlarmsView"];
+            top_failing?: null | components["schemas"]["TopFailingListView"];
+            top_vulnerabilities?: null | components["schemas"]["TopVulnerabilitiesView"];
+        };
+        /** @description The four tiles; each absent without its permission on this host. */
+        HostTilesView: {
+            /**
+             * Format: int64
+             * @description Failing compliance checks (`compliance.read`).
+             */
+            compliance_failing?: number | null;
+            /**
+             * Format: int64
+             * @description Open agent alarms (`alarms.read`).
+             */
+            open_alarms?: number | null;
+            /**
+             * Format: int64
+             * @description Installed packages (`hosts.read`).
+             */
+            software?: number | null;
+            /**
+             * Format: int64
+             * @description Open vulnerabilities (`vulnerabilities.read`).
+             */
+            vulnerabilities?: number | null;
+        };
         /** @description A recorded input, a scalar or a summarized list. */
         InputView: {
             /** @description Complete source list length, when summarized. */
@@ -3819,6 +4180,16 @@ export interface components {
             alarm_at?: string | null;
             /** @description Latest test finding observation (RFC 3339). */
             finding_at?: string | null;
+        };
+        /** @description The columns to hide on a page. */
+        ListColumnsRequest: {
+            /** @description Column keys, at most 32, none twice; never `host`. */
+            hidden: string[];
+        };
+        /** @description The columns a person hid on a page. */
+        ListColumnsView: {
+            /** @description Hidden column keys. */
+            hidden: string[];
         };
         /** @description One listening socket on a host. */
         ListenerView: {
@@ -4380,6 +4751,33 @@ export interface components {
              */
             version?: number | null;
         };
+        /** @description A view to save. */
+        SaveViewRequest: {
+            /** @description 1–60 characters, unique per person and page regardless of case. */
+            name: string;
+            /** @description The list page, such as `hosts`. */
+            page: string;
+            /** @description The URL query string, at most 1000 characters. */
+            query: string;
+        };
+        /** @description The person's views on a page, by name. */
+        SavedViewList: {
+            /** @description The views. */
+            items: components["schemas"]["SavedViewView"][];
+        };
+        /** @description One saved view. */
+        SavedViewView: {
+            /** @description RFC 3339 creation time. */
+            created_at: string;
+            /** @description Stable UUID. */
+            id: string;
+            /** @description 1–60 characters. */
+            name: string;
+            /** @description The list page. */
+            page: string;
+            /** @description The URL query string (at most 1000 characters). */
+            query: string;
+        };
         /** @description Bounded service-account inventory. */
         ServiceAccountPage: {
             /** @description Accounts sorted by name. */
@@ -4819,6 +5217,53 @@ export interface components {
             /** @description The tactics it belongs to. */
             tactics: string[];
         };
+        /** @description An open alarm in the top three. */
+        TopAlarmView: {
+            /**
+             * Format: int64
+             * @description Alarm id.
+             */
+            id: number;
+            /** @description Latest match, RFC 3339. */
+            last_seen: string;
+            /** @description Message. */
+            message: string;
+            /** @description Rule. */
+            rule_id: string;
+            /** @description Severity. */
+            severity: string;
+        };
+        /** @description Open alarms, most severe then newest first. */
+        TopAlarmsView: {
+            /** @description Up to three. */
+            items: components["schemas"]["TopAlarmView"][];
+            /**
+             * Format: int64
+             * @description All of them.
+             */
+            total: number;
+        };
+        /** @description Failing checks, most severe then newest first. */
+        TopFailingListView: {
+            /** @description Up to three. */
+            items: components["schemas"]["TopFailingView"][];
+            /**
+             * Format: int64
+             * @description All of them.
+             */
+            total: number;
+        };
+        /** @description A failing check in the top three. */
+        TopFailingView: {
+            /** @description Message. */
+            message: string;
+            /** @description Rule. */
+            rule_id: string;
+            /** @description Rule set. */
+            rule_set_id: string;
+            /** @description Severity. */
+            severity: string;
+        };
         /** @description One host in the ranking. */
         TopHostItem: {
             /** @description The host's agent id. */
@@ -4840,6 +5285,29 @@ export interface components {
         TopHosts: {
             /** @description Most exposed first. */
             items: components["schemas"]["TopHostItem"][];
+        };
+        /** @description Open vulnerabilities, in the Vulnerabilities list's priority order. */
+        TopVulnerabilitiesView: {
+            /** @description Up to three. */
+            items: components["schemas"]["TopVulnerabilityView"][];
+            /**
+             * Format: int64
+             * @description All of them.
+             */
+            total: number;
+        };
+        /** @description An open vulnerability in the top three. */
+        TopVulnerabilityView: {
+            /** @description Advisory id. */
+            advisory: string;
+            /** @description Known to be exploited (KEV or EUVD), as the Vulnerabilities list flags it. */
+            exploited: boolean;
+            /** @description On the known-exploited list. */
+            kev: boolean;
+            /** @description Severity. */
+            severity: string;
+            /** @description The advisory's title. */
+            title: string;
         };
         /** @description One triage change. */
         TriageEventView: {
@@ -5582,16 +6050,17 @@ export interface operations {
     };
     list_host_packages: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Case-insensitive substring of the name (at most 128 bytes). */
+                q?: string;
+                /** @description Opaque continuation cursor. */
+                cursor?: string;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit?: number;
+            };
             header?: never;
             path: {
                 agent_id: string;
-                /** @description Case-insensitive substring of the name (at most 128 bytes). */
-                q: string | null;
-                /** @description Opaque continuation cursor. */
-                cursor: string | null;
-                /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
             };
             cookie?: never;
         };
@@ -6062,24 +6531,24 @@ export interface operations {
     };
     list_alarms: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Exact agent. */
-                agent_id: string | null;
+                agent_id?: string;
                 /** @description Exact rule. */
-                rule_id: string | null;
+                rule_id?: string;
                 /** @description Exact severity. */
-                severity: string | null;
+                severity?: string;
                 /** @description Exact triage state, or `active` (open). */
-                state: string | null;
+                state?: string;
                 /** @description Include alarms closed by a suppression (default false). */
-                suppressed: boolean | null;
+                suppressed?: boolean;
                 /** @description Opaque continuation cursor. */
-                cursor: string | null;
+                cursor?: string;
                 /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
+                limit?: number;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6786,25 +7255,25 @@ export interface operations {
     };
     list_cases: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /**
                  * @description `open`, `investigating`, `closed` or `all`; open and investigating
                  *     when absent.
                  */
-                status: string | null;
+                status?: string;
                 /** @description Exact severity. */
-                severity: string | null;
+                severity?: string;
                 /** @description A user id, `me`, or `none` for unassigned. */
-                assignee: string | null;
+                assignee?: string;
                 /** @description Text in the title, or a case number such as `C-104`. */
-                q: string | null;
+                q?: string;
                 /** @description Opaque continuation cursor. */
-                cursor: string | null;
+                cursor?: string;
                 /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
+                limit?: number;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6947,11 +7416,11 @@ export interface operations {
     };
     active_items: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 kind: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7052,14 +7521,14 @@ export interface operations {
     };
     cases_for_item: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 /** @description `alarm`, `finding`, `vulnerability`, `host` or `software`. */
                 kind: string;
                 /** @description The object's id (see `CaseItemView.ref`). */
                 ref: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7654,6 +8123,8 @@ export interface operations {
         parameters: {
             query?: {
                 since?: string;
+                /** @description One host's findings only */
+                agent_id?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -9147,6 +9618,85 @@ export interface operations {
             };
         };
     };
+    list_hosts: {
+        parameters: {
+            query?: {
+                /** @description Host name (contains), agent id or address prefix, or CIDR range. */
+                q?: string;
+                /** @description online, offline, revoked or imported. */
+                status?: string;
+                /** @description linux or windows. */
+                os?: string;
+                /** @description A host group id. */
+                group?: string;
+                /** @description A label. */
+                label?: string;
+                /** @description critical, alarms or none. */
+                problems?: string;
+                /** @description older or latest. */
+                agent?: string;
+                /** @description host, heartbeat, version or problems. */
+                sort?: string;
+                /** @description asc or desc. */
+                dir?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of hosts in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     host_labels: {
         parameters: {
             query?: never;
@@ -9283,6 +9833,158 @@ export interface operations {
             };
         };
     };
+    host_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent id */
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The host page above the fold */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostSummaryView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description host_not_found: missing or outside reach */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_columns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Hidden columns */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListColumnsView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description list_page_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    put_columns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListColumnsRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListColumnsView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description list_page_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_columns */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_home: {
         parameters: {
             query?: never;
@@ -9392,14 +10094,14 @@ export interface operations {
     };
     history: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Catalogue id, for example `vulns.open.critical`. */
-                metric: string | null;
+                metric?: string;
                 /** @description Window in days: 7, 30, 90 or 365 (default 30). */
-                days: string | null;
+                days?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -9453,12 +10155,12 @@ export interface operations {
     };
     top_hosts: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description How many hosts, 1 to 10 (default 6). */
-                limit: string | null;
+                limit?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -9541,12 +10243,12 @@ export interface operations {
     };
     list_ports: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Only ports exposed on at least one host. */
-                exposed: boolean | null;
+                exposed?: boolean;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -9591,16 +10293,17 @@ export interface operations {
     };
     get_port: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque continuation cursor. */
+                cursor?: string;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit?: number;
+            };
             header?: never;
             path: {
                 /** @description `tcp` or `udp` */
                 protocol: string;
                 port: number;
-                /** @description Opaque continuation cursor. */
-                cursor: string | null;
-                /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
             };
             cookie?: never;
         };
@@ -10621,6 +11324,145 @@ export interface operations {
             };
         };
     };
+    list_views: {
+        parameters: {
+            query: {
+                /** @description The list page, such as `hosts`. */
+                page: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Views by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewList"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description list_page_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveViewRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description list_page_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description view_name_taken or too_many_views */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description invalid_saved_view */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description saved_view_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     authenticated_service_accounts: {
         parameters: {
             query?: never;
@@ -10956,14 +11798,15 @@ export interface operations {
     };
     get_unit: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque continuation cursor. */
+                cursor?: string;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit?: number;
+            };
             header?: never;
             path: {
                 unit: string;
-                /** @description Opaque continuation cursor. */
-                cursor: string | null;
-                /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
             };
             cookie?: never;
         };
@@ -11216,23 +12059,23 @@ export interface operations {
     };
     list_software: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Case-insensitive substring of the name (at most 128 bytes). */
-                q: string | null;
+                q?: string;
                 /**
                  * @description Only packages with an open vulnerability with a fix on at least
                  *     one visible host.
                  */
-                fixable: boolean | null;
+                fixable?: boolean;
                 /** @description Only packages in use in more than one version. */
-                multiple_versions: boolean | null;
+                multiple_versions?: boolean;
                 /** @description Opaque continuation cursor. */
-                cursor: string | null;
+                cursor?: string;
                 /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
+                limit?: number;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -11277,15 +12120,16 @@ export interface operations {
     };
     get_software: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Opaque continuation cursor. */
+                cursor?: string;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit?: number;
+            };
             header?: never;
             path: {
                 manager: string;
                 name: string;
-                /** @description Opaque continuation cursor. */
-                cursor: string | null;
-                /** @description Page size from 1 to 100 (default 50). */
-                limit: number | null;
             };
             cookie?: never;
         };
@@ -11340,15 +12184,15 @@ export interface operations {
     };
     triage_history: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 kind: string;
-                id: string | null;
-                rule_set_id: string | null;
-                rule_id: string | null;
-                advisory_id: string | null;
+                id?: string;
+                rule_set_id?: string;
+                rule_id?: string;
+                advisory_id?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

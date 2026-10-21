@@ -1,4 +1,4 @@
-//! Hosts: the agent list, summary, detail and certificates, revoking an
+//! Hosts: the agent list, summary, detail, the host page's summary and certificates, revoking an
 //! agent, enrollment tokens, the agent install package and command, software,
 //! ports and services, live presence, the site rule-set fleet, host groups
 //! and host labels.
@@ -20,11 +20,15 @@ pub(crate) mod groups;
 pub(crate) mod groups_types;
 pub(crate) mod install;
 pub(crate) mod labels;
+pub(crate) mod list;
+pub(crate) mod list_types;
 pub(crate) mod ports;
 pub(crate) mod presence;
 pub(crate) mod site_fleet;
 pub(crate) mod software;
 mod software_types;
+pub(crate) mod summary;
+pub(crate) mod summary_types;
 mod types;
 
 pub use types::{
@@ -50,6 +54,7 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
             "/v1/agents/summary",
             get(agents::authenticated_agent_summary),
         )
+        .route("/v1/hosts", get(list::list_hosts))
         .route("/v1/agents/events", get(presence::agent_events))
         .route("/v1/agents", get(agents::authenticated_agents))
         .route(
@@ -108,6 +113,7 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
             "/v1/host-groups/{group_id}/preview",
             post(groups::preview_group),
         )
+        .route("/v1/hosts/{agent_id}/summary", get(summary::host_summary))
         .route("/v1/hosts/{agent_id}/labels", get(labels::host_labels))
         .route(
             "/v1/hosts/{agent_id}/labels/{label}",

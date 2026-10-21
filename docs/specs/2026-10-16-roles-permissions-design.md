@@ -684,6 +684,52 @@ deep links to a panel redirect to the page.
 send, and what each permission allows. A page shows a card or action only
 when the viewer holds its permission on those hosts (§6).
 
+### Plan rulings, 2026-10-20
+
+These fill gaps in §10.
+
+1. **Paths:** the list moves from `/agents` to `/hosts`, and the page is `/hosts/{agent_id}`.
+   - Old URLs redirect:
+     - `/agents?…` → `/hosts?…`, with `status=active` → `online` and `stale` → `offline`;
+     - `?open=agent:ID` and `/agents?agent=ID` → `/hosts/ID`.
+   - Every `nav.open({kind:"agent"})` goes to the page.
+   - The assistant's citation links point at `/hosts/{id}`.
+2. **Status values:** online, offline, revoked and imported. Today's list shows all four, and the spec's online/offline are the two a person filters by most.
+3. **Each filter takes one value,** a single URL parameter. Filters AND together.
+4. **Problems:**
+   - "has critical" means at least one critical vulnerability;
+   - "has open alarms" means at least one open agent alarm;
+   - "none open" means no open alarm, no critical vulnerability and no failing compliance check.
+
+   Each problem count is shown only for hosts in the viewer's reach for that kind: `alarms.read`, `vulnerabilities.read` and `compliance.read` respectively. Elsewhere it is "—" and is not counted in that filter.
+5. **The group filter** lists groups with at least one host the viewer can see, plus the group currently chosen. It never names a group only on hosts out of reach. The label filter lists the 50 most-used labels on visible hosts, plus the label currently chosen.
+6. **Paging is by offset:** `offset` 0..=100000, `limit` 1..=100, default 50. Order is the chosen sort (host name, heartbeat, agent version or problems, ascending or descending), ties broken by agent ID.
+7. **Agent version:**
+   - "Older" uses the same rules as today's web check (`olderThan` in `views/lists/rows.ts`): numeric segments compared, a pre-release is older than its release, build metadata is ignored.
+   - It is computed in SQL by `console_version_older(v, latest)`, which returns null for unknown. Its Rust twin is tested against the same table.
+   - The latest version is the update checker's `latest_agent_version`. When that is unknown, both values count 0 and the column has no amber.
+8. **Saved views and columns:**
+   - A saved view stores the URL query (at most 1000 characters) under a name (1–60 characters, unique per person and page regardless of case), at most 50 per person and page.
+   - Hidden columns are stored per person and page, and the Host column cannot be hidden.
+   - The routes are `GET/POST/DELETE /v1/saved-views` and `GET/PUT /v1/list-columns/{page}`. They need a signed-in browser session; writes check CSRF.
+   - Pages are a fixed list in code; `hosts` is the first.
+   - Views saved in the browser under `openvibes.v2.views./agents` are imported once into the server and then removed from the browser.
+9. **Full lists from the host page:**
+   - Open alarms, Compliance failing and Vulnerabilities link to `/alarms?host=ID`, `/compliance?host=ID` and `/vulnerabilities?host=ID`. Those views gain a `host` filter shown as a removable chip with the host name, and their APIs already accept it.
+   - Software, ports and services link to `/hosts/{id}/software`, `/hosts/{id}/ports` and `/hosts/{id}/services`. These sub-pages show today's per-host tables at full width.
+10. **The summary route** covers:
+    - the header facts;
+    - the tiles;
+    - Details;
+    - Protection's threat alarms and last test;
+    - groups and labels;
+    - certificates;
+    - the top-three lists;
+    - the software, ports and services counts.
+
+    The Rule sets card and the hardening row keep their existing components and routes (`/agents/{id}/rule-set-assignments`, `/rule-sets`), which are already permission-aware.
+11. **`DetailPage` builds only what screen 17 uses:** the header, four tiles and the two columns. The hosts table with segment chips and the Related card come with step 5's first page that needs them.
+
 ## 11. Dashboards
 
 - **Storage:** `console_dashboards.shared_role_id` becomes a visibility:

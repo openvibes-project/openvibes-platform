@@ -72,15 +72,20 @@ pub async fn serve(
                 .transpose()?
                 .flatten();
             crate::about::mark_started();
+            let update_checker = config
+                .update_check
+                .then(|| std::sync::Arc::new(crate::about::UpdateChecker::new()));
+            // Warm the agent version so the Hosts list knows "older" soon after start.
+            if let Some(checker) = &update_checker {
+                checker.agent_version_now();
+            }
             (
                 crate::http::authenticated_router_with_assistant(
                     pool.clone(),
                     public_origin.as_str(),
                     hosts.clone(),
                     assistant_runtime,
-                    config
-                        .update_check
-                        .then(|| std::sync::Arc::new(crate::about::UpdateChecker::new())),
+                    update_checker,
                     config.agent_install.clone(),
                     (None, None),
                 ),

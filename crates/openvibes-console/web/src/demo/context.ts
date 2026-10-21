@@ -14,7 +14,7 @@ type Route = { method: string; pattern: RegExp; keys: string[]; permission: Perm
 export type DemoContext = ReturnType<typeof createDemoContext>;
 
 // Who each persona signs in as; what they may do comes from that person's roles.
-const PERSON: Record<Persona, string> = { admin: "u-admin", analyst: "u-sam", operator: "u-ola", scoped_operator: "u-pia", team_lead: "u-lee", viewer: "u-vic" };
+const PERSON: Record<Persona, string> = { admin: "u-admin", analyst: "u-sam", operator: "u-ola", scoped_operator: "u-pia", team_lead: "u-lee", viewer: "u-vic", rule_author: "u-rae" };
 
 export function createDemoContext({ persona, now }: { persona: Persona; now: number }) {
   const data = buildDemoData(now);
@@ -59,9 +59,10 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
   const findings = () => data.findings.filter((finding) => visible(finding.agent_id));
   const vulnerabilities = () => data.vulnerabilities.filter((item) => visible(item.agent_id) && item.fixed_at == null);
 
-  const groups = (): FindingGroup[] => {
+  /** Findings by rule, all visible hosts or one (`agent_id`, the host page's `/compliance?host=`). */
+  const groups = (agentId?: string): FindingGroup[] => {
     const byRule = new Map<string, FindingGroup>();
-    for (const finding of findings()) {
+    for (const finding of findings().filter((f) => agentId === undefined || f.agent_id === agentId)) {
       const key = `${finding.rule_set_id}/${finding.rule_id}`;
       const counts: TriageCounts = byRule.get(key)?.triage_counts ?? { open: 0, mitigated: 0, accepted_risk: 0, false_positive: 0 };
       const state = data.triage.get(triageKey(finding.agent_id, finding.rule_set_id, finding.rule_id))?.state ?? "open";

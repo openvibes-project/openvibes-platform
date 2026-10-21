@@ -3,7 +3,7 @@ import type { MouseEvent, ReactNode } from "react";
 
 import type { ApiError } from "../api/client";
 import { nav } from "../app/nav";
-import type { PanelRef } from "../app/location";
+import { type PanelRef, hostPath } from "../app/location";
 import { ago, triageLabel, when } from "./format";
 import { Icon, type IconName } from "./Icon";
 
@@ -27,8 +27,8 @@ export function ConfidenceBar({ value, wide }: { value: number; wide?: boolean }
   );
 }
 
-const statusTone: Record<string, string> = { active: "ok", stale: "warn", revoked: "bad", imported: "info" };
-const statusText: Record<string, string> = { active: "Online", stale: "Stale", revoked: "Revoked", imported: "Imported" };
+const statusTone: Record<string, string> = { active: "ok", online: "ok", stale: "warn", offline: "warn", revoked: "bad", imported: "info" };
+const statusText: Record<string, string> = { active: "Online", online: "Online", stale: "Stale", offline: "Offline", revoked: "Revoked", imported: "Imported" };
 
 export function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge--${statusTone[status] ?? "plain"}`}>{statusText[status] ?? status}</span>;
@@ -56,7 +56,9 @@ export function ObjectLink({ to, children, fromList = false, className }: { to: 
   };
   const params = new URLSearchParams(nav.location.params);
   params.append("open", `${to.kind}:${to.id}`);
-  return <a className={className ?? "object-link"} href={`?${params.toString()}`} onClick={onClick}>{children}</a>;
+  // A host is a page: a new tab opens it directly.
+  const href = to.kind === "agent" ? nav.href(hostPath(to.id)) : `?${params.toString()}`;
+  return <a className={className ?? "object-link"} href={href} onClick={onClick}>{children}</a>;
 }
 
 export function Loading({ rows = 6 }: { rows?: number }) {

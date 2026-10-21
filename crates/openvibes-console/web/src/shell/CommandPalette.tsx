@@ -8,7 +8,7 @@ import type { Agent, DashboardPage, FindingGroup, VulnerabilityPage } from "../a
 import { assistant } from "../app/assistant";
 import type { PanelRef } from "../app/location";
 import { nav } from "../app/nav";
-import { objectTitle, panels, views } from "../app/registry";
+import { objectIcon, objectTitle, panels, views } from "../app/registry";
 import { useSession } from "../app/session";
 import { windowsStore } from "../app/windows";
 import { Icon, type IconName } from "../ui/Icon";
@@ -57,8 +57,9 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
     out.push({ id: "a-density", group: "Actions", icon: "filter", label: "Toggle compact rows", run: () => setDensity(currentDensity() === "compact" ? "comfortable" : "compact") });
     if (query.trim() === "") {
       for (const ref of recent()) {
-        const def = panels[ref.kind];
-        if (def) out.push({ id: `r${ref.kind}:${ref.id}`, group: "Recent", icon: def.icon, label: objectTitle(ref), hint: def.label, run: openObject(ref) });
+        // A host is a page (approved screen 17), still a recent object.
+        const hint = ref.kind === "agent" ? "Host" : panels[ref.kind]?.label;
+        if (hint) out.push({ id: `r${ref.kind}:${ref.id}`, group: "Recent", icon: objectIcon(ref.kind), label: objectTitle(ref), hint, run: openObject(ref) });
       }
       return out;
     }

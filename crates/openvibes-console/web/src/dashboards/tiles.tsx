@@ -102,7 +102,7 @@ export function BreakdownTile({ widget }: WidgetProps) {
       { key: "info", label: "info", value: Math.max(0, (alarmCounts[4] ?? 0) - alarmCounts.slice(0, 4).reduce<number>((n, v) => n + (v ?? 0), 0)), tone: "unrated", go: () => nav.view("/alarms", { severity: "info" }) }]
       : source === "compliance" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/compliance", { severity: s }) }))
       : source === "vulnerabilities" ? (vulns.data?.by_severity ?? []).map((row) => ({ key: row.severity, label: row.severity, value: row.count, tone: row.severity, go: () => nav.view("/vulnerabilities", { severity: row.severity }) }))
-        : (["active", "stale", "revoked", "imported"] as const).map((s) => ({ key: s, label: s, value: agents.data?.[s] ?? 0, tone: { active: "low", stale: "medium", revoked: "high", imported: "unrated" }[s], go: () => nav.view("/agents", { status: s }) }));
+        : (["active", "stale", "revoked", "imported"] as const).map((s) => ({ key: s, label: s, value: agents.data?.[s] ?? 0, tone: { active: "low", stale: "medium", revoked: "high", imported: "unrated" }[s], go: () => nav.view("/hosts", { status: { active: "online", stale: "offline", revoked: "revoked", imported: "imported" }[s] }) }));
   return (
     <div className="stack">
       <div className="bar" role="img" aria-label={parts.map((p) => `${p.value} ${p.label}`).join(", ")}>

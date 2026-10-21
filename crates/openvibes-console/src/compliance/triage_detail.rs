@@ -52,6 +52,7 @@ pub struct TriageHistoryView {
 /// Whose history: `kind=alarm&id=`, `kind=compliance&rule_set_id=&rule_id=`
 /// or `kind=vulnerability&advisory_id=`.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HistoryParams {
     kind: String,

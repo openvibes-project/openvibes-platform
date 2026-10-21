@@ -326,7 +326,9 @@ fn agent_view(agent: platform_store::console_read::Agent) -> crate::AgentView {
     }
 }
 
-fn alarms_view(status: platform_store::alarms_status::AlarmsStatus) -> crate::AgentAlarmsView {
+pub(super) fn alarms_view(
+    status: platform_store::alarms_status::AlarmsStatus,
+) -> crate::AgentAlarmsView {
     use platform_store::alarms_status::AlarmsStatus;
     match status {
         AlarmsStatus::On { source } => crate::AgentAlarmsView {

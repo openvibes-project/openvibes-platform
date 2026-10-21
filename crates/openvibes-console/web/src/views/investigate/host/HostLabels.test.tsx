@@ -5,10 +5,10 @@ vi.hoisted(() => {
   Object.assign(globalThis, { window: { location: { pathname: "/", search: "" }, history: { replaceState() {} }, addEventListener() {}, removeEventListener() {} } });
 });
 
-import { ApiError } from "../../api/client";
+import { ApiError } from "../../../api/client";
 import { INVALID_LABEL, LabelsCard, MAX_LABELS, addRequest, labelError, nextLabel, refusedLabel, removeRequest } from "./HostLabels";
 
-const groups = [{ asset_group_id: "g1", name: "Production", kind: "rule" as const }, { asset_group_id: "g2", name: "All hosts", kind: "automatic" as const }];
+const groups = [{ id: "g1", name: "Production", kind: "rule" as const }, { id: "g2", name: "All hosts", kind: "automatic" as const }];
 const card = (editable: boolean, error?: string) => renderToStaticMarkup(
   <LabelsCard labels={["db", "eu"]} groups={groups} editable={editable} error={error} onAdd={() => undefined} onRemove={() => {}} />);
 

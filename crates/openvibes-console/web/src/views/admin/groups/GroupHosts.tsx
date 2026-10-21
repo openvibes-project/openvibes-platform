@@ -6,7 +6,7 @@ import type { GroupHost } from "../../../api/types";
 import { Ago, ObjectLink } from "../../../ui/bits";
 import { Icon } from "../../../ui/Icon";
 import { matches } from "../../../ui/table";
-import { Card } from "../people/PersonPage";
+import { Card } from "../../../ui/detail/DetailPage";
 import { Problems } from "./badges";
 
 export function GroupHosts({ hosts }: { hosts: readonly GroupHost[] }) {

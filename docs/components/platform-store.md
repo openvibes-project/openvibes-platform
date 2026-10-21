@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 42; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 58; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -550,6 +550,83 @@ per changed key; a key with no row has its default (kept in the console).
 with `{key, old, new}`; returns the old value), `recent` (newest change
 audits) and `require_approval(&impl GenericClient)` (false when the row is
 absent or not a bool). Tests: `tests/console_settings.rs`.
+
+## Saved views and list columns (`saved_views::…`, schema 56)
+
+Tables `console_saved_views` (name unique per person and page regardless of
+case, query at most 1000 characters) and `console_list_columns` (hidden keys
+per person and page, at most 32), both `ON DELETE CASCADE` from the person.
+`list` (by name), `create` (one transaction under a row lock on the person:
+count, then insert; returns `Saved`, `NameTaken` or `TooMany` at 50),
+`delete` (own views only; false when none), `hidden_columns` and
+`set_hidden_columns`. Page and column keys are validated by the console.
+Tests: `tests/saved_views.rs`. See [saved-views.md](saved-views.md).
+
+## The Hosts list (`host_list::hosts`, schema 57)
+
+`hosts(client, &HostQuery, &HostScopes, latest, now) -> HostListPage`: one
+statement returns the page rows, the total, the count for every value of
+every filter with the other filters applied (status, OS family, group,
+label, problems, agent age), and the summary line (online, older agent,
+critical), so the numbers always agree (roles spec §10.1, §10.3; plan
+rulings 2–7). Search `q` matches the host name (contains, any case), the
+start of the agent ID (any case) or of the IP address, or, when it parses
+as a CIDR, containment. Each row's `alarms_off` is true when the host is
+online and `alarms_status` of its last health report is off by a fault. Each
+filter takes one value; `offset` is held to 0–100000 and `limit` to 1–100;
+sorts (host, heartbeat, version, problems) break ties by agent ID.
+
+Failing checks are those whose triage is open. Critical is
+`host_listed_critical` (migration 58, a derived table; no row is 0),
+recounted by `refresh_counts` with the matcher and after each triage change
+(one upsert per call that writes 0 rather than deleting, so two recounts of
+one host at once never collide): critical
+advisories as the Vulnerabilities list and the host page show them by
+default, one per advisory, fixable or without a fix, reboot pending or
+not, mapped at confidence 80 or more (a known distribution's advisory or a
+package without a fix, as `vulns/confidence.rs`) and triage open. The
+group pages (`host_groups` list, detail and hosts) count it too. The
+older `critical` column (fixable, no reboot pending) still feeds the fleet
+summary and its history.
+
+Scope (spec §6): rows, total, counts and summary come only from hosts in
+`HostScopes.hosts`. Open alarms, critical vulnerabilities and failing
+checks are each counted only where `alarms`, `vulnerabilities` or
+`compliance` reaches the host (`None` on the row otherwise, and not counted
+in that problem value); "none open" needs at least one kind in reach. Group
+values are groups with a host in scope (plus the chosen one, if it has
+one); label values are the 50 most used on hosts in scope (plus the chosen
+one, if present there). Group membership is evaluated in one pass
+(`host_list_sql::members`), the same rule as `console_host_in_group`,
+pinned by the tests.
+
+Migration 57 adds `console_version_parts(v) -> int[]` and
+`console_version_older(v, latest) -> boolean` (NULL when either is
+unknown; numeric segments, pre-release older than its release, build
+ignored, as the web's `olderThan`), with the Rust twin
+`version_order::older` checked against the same table; and
+`console_condition_holds_prepared` / `console_condition_likes`, an
+inlinable form of the group rule check. `console_condition_holds` keeps its
+answers and now calls the prepared form. Tests: `tests/host_list.rs`,
+`tests/version_order.rs`; the 20,000-host timing (`tests/host_list_timing.rs`) is in console-read.md.
+
+## The host page summary (`host_summary::summary`)
+
+`summary(client, agent_id, &HostScopes, latest, now) -> Option<HostSummary>`:
+`None` when `scopes.hosts` does not reach the host (missing and out of
+reach look the same). A few small queries on one host: `agent_in_scope`,
+one facts row (address, distribution, OS family, status, agent age, and the
+package, listening and exposed port, service and certificate counts),
+`host_labels::of_host` (groups and labels; a revoked host keeps its labels and is in
+no group), the five newest certificates, `rules::last_tests`, and the top
+three of each problem kind with its total: open agent alarms and failing
+checks most severe then newest first, and open vulnerabilities through
+`vulns::list_in_scope` with the host as its filter, one item per advisory
+(first in priority order). Groups and labels come from
+`host_labels::of_host`, which skips the reach check `host_labels` makes. Each problem list is `None` unless its scope
+reaches the host. `HostSummary::reaches(scope)` applies the
+`agent_visibility` rule from the groups already read; the console uses it
+for its `can` flags. Tests: `tests/host_summary.rs`.
 
 ## Suppressions with approval (`alarm_suppressions::…`, schema 55)
 

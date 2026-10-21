@@ -190,3 +190,49 @@ fn read_model_dtos_have_stable_wire_names() {
     assert_eq!(finding_page["items"][0]["authenticated"], true);
     assert_eq!(finding_page["next_cursor"], "opaque");
 }
+
+/// utoipa names a schema by its type's last path segment, so two types
+/// with the same name collapse into one and the later silently wins (the
+/// generated client then types one of them wrongly). Every registered
+/// schema name must belong to one type, and each appears once.
+#[test]
+fn registered_schema_names_are_unique() {
+    let source = include_str!("../src/http/openapi.rs");
+    let start = source.find("components(schemas(").unwrap();
+    let block = &source[start..];
+    let block = &block[..block.find("\n    )),").unwrap()];
+    let mut seen = std::collections::HashMap::new();
+    for path in block
+        .lines()
+        .skip(1)
+        .map(|l| l.trim().trim_end_matches(','))
+    {
+        let name = path.rsplit("::").next().unwrap();
+        if let Some(other) = seen.insert(name, path) {
+            panic!("schema {name} is registered twice: {other} and {path}");
+        }
+    }
+    assert!(seen.len() > 100, "parsed {} schemas", seen.len());
+}
+
+/// A parameter "in": "path" must be a `{placeholder}` of its path; an
+/// `IntoParams` query struct without `parameter_in = Query` lands there.
+#[test]
+fn path_parameters_are_placeholders_of_their_path() {
+    let doc: serde_json::Value = serde_json::from_str(&openapi_json().unwrap()).unwrap();
+    let mut wrong = Vec::new();
+    for (path, methods) in doc["paths"].as_object().unwrap() {
+        for (method, operation) in methods.as_object().unwrap() {
+            for parameter in operation["parameters"].as_array().into_iter().flatten() {
+                let name = parameter["name"].as_str().unwrap();
+                if parameter["in"] == "path" && !path.contains(&format!("{{{name}}}")) {
+                    wrong.push(format!("{method} {path} {name}"));
+                }
+            }
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "query parameters declared in the path: {wrong:?}"
+    );
+}

@@ -172,7 +172,10 @@ return CVE enrichment only if at least one affected host is visible to the
 caller.
 
 `GET /api/v1/compliance/groups` shows each rule set and rule once in the recent
-window, after scope filtering. Its endpoint route pages visible current
+window, after scope filtering; `agent_id` narrows it to one host's findings
+(still inside the scope; its cursor is bound to it), for the host page's
+`/compliance?host=`; with `agent_id`, `since` may be any past time (the host
+page asks from 1970 for every current finding), otherwise at most 90 days back. Its endpoint route pages visible current
 reporters with a cursor-bound window (the response's `since` is reused for
 subsequent pages) and can include older matches on request. Triage counts are
 typed by state in OpenAPI. `~unknown` represents
@@ -888,6 +891,62 @@ Also renamed: the cases API's item kind `finding` is now `compliance_finding`
 `invalid_kind`); the problem code `finding_not_found` is now
 `compliance_finding_not_found`; the page `/findings` is now `/compliance`
 (old links and saved views carry over).
+
+## Hosts list
+
+`GET /api/v1/hosts` (needs `hosts.read`; session or bearer) pages the Hosts
+list. Filters `q` (host name contains, agent id or address starts with, or a
+CIDR range), `status`, `os`, `group`, `label`, `problems`
+(`critical|alarms|none`) and `agent` (`older|latest`) each take one value and
+AND together; `sort` (`host|heartbeat|version|problems`), `dir`, `offset`
+(0..=100000) and `limit` (1..=100, default 50). An invalid value or an
+unknown parameter is 400 `invalid_query` naming the parameter; an unknown
+`group` is an empty result. Each `counts` value is spelled as its URL
+parameter takes it (`problems` counts are `critical`, `alarms`, `none`), so
+a chosen value filters. Rows, per-filter `counts` and the `summary` line
+are inside the caller's `hosts.read` reach; open-alarm, critical and failing
+counts are null for hosts outside the caller's `alarms.read`,
+`vulnerabilities.read` or `compliance.read` reach. `alarms_off` is true for an online
+host whose threat alarms are off by a fault (the rule of the host's
+`alarms` status; off by choice is false). `latest_agent_version` is
+the update checker's last-known agent release (null when the checker is off
+or has not found one yet); it is looked up in the background at start, so it
+fills a few seconds after start, and the route never waits on the network. A store failure is 503.
+
+## Host page summary
+
+`GET /api/v1/hosts/{agent_id}/summary` (needs `hosts.read`; session or
+bearer) answers everything above the fold on the host page (plan ruling
+10): `host` (header and Details facts), `tiles` (`open_alarms`,
+`compliance_failing`, `vulnerabilities`, `software`), `protection` (threat
+alarms and the last test), `groups`, `labels`, the five newest
+`certificates` with `certificate_count`, the `top_alarms`,
+`top_vulnerabilities` and `top_failing` lists (three items and a `total`;
+alarms and checks most severe then newest first, vulnerabilities in the
+Vulnerabilities list's priority order), `inventory` (packages, listening
+and exposed ports, services) and `can` (`label`, `revoke`, `export`,
+`add_to_case`, `ask`). The alarms, compliance and vulnerability tiles and
+lists are null unless `alarms.read`, `compliance.read` or
+`vulnerabilities.read` reaches this host; each `can` flag needs its
+permission (`hosts.label`, `hosts.revoke`, `hosts.export`, `cases.write`,
+`assistant.use`) reaching this host, and `label` and `revoke` also need an
+enrolled, unrevoked host. A missing host and one outside the caller's
+`hosts.read` reach are the same 404 `host_not_found`; a revoked host still
+answers. A store failure is 503. Each count is what its list shows by
+default: open alarms; failing checks whose triage is open (the Hosts
+list's `failing` count too); and advisories, one per advisory, mapped at
+confidence 80 or more with this host's triage open, as
+`/vulnerabilities?host=` groups its rows. A vulnerability item carries
+`advisory`, `severity`, `kev`, `exploited` (KEV or EUVD) and `title`. The
+list's summary line schema is `HostSummaryLineView`, and its group items
+are `HostListGroupView` (`id`, `name`, `kind`); `api_contract` fails when
+two registered schemas share a name. Tests: `tests/host_summary_http.rs`.
+
+## Saved views and list columns
+
+`GET/POST /api/v1/saved-views`, `DELETE /api/v1/saved-views/{id}` (a name or query with control characters is 422 `invalid_saved_view`) and
+`GET/PUT /api/v1/list-columns/{page}` (signed-in session, own data only);
+see [saved-views.md](saved-views.md).
 
 ## General settings
 

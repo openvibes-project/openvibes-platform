@@ -6,13 +6,16 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 |---|---|
 | `access.ts` | People (list, page, create, edit, disable, enable, reset, roles) and service accounts, inside the share. |
 | `alarms.ts` | Threat alarms, their triage and suppressions. |
-| `assets.ts` | Packages, open ports, running services and software across the fleet. |
+| `assets.ts` | Packages, open ports, running services and software across the fleet; `hostServices` is one host's report. |
 | `assistant.ts` | The assistant's answers. |
 | `cases.ts` | Cases and their items, notes and timeline. |
 | `dashboards.ts` | Dashboards and each user's home dashboard. |
 | `findings.ts` | Compliance findings: groups by rule, host matches, history and triage. |
 | `groups.ts` | Host groups: list, page, hosts, preview, create, edit and delete, with the server's refusals. |
+| `hostList.ts` | The Hosts list (`GET /api/v1/hosts`): filters, per-value counts, summary, sort and paging inside the persona's reach. |
 | `hosts.ts` | Hosts (agents), their labels and enrolling new ones. |
+| `hostSummary.ts` | A host's page summary (`GET /api/v1/hosts/{id}/summary`): each section and action only where its permission reaches the host. |
+| `lists.ts` | Each person's saved views and hidden columns per list page, kept in the browser and checked on load. |
 | `metrics.ts` | Counts, their history and the ranked-hosts list. |
 | `roles.ts` | The permission catalogue, templates and roles (create, edit, delete). |
 | `rules.ts` | Rule sets, bundles, site rule drafts, ATT&CK coverage and per-host rule sets. |

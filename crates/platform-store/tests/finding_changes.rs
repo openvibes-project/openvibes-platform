@@ -563,6 +563,7 @@ async fn scale_hourly_refresh_and_console_list() {
         since: now - Duration::hours(24),
         after: None,
         limit: platform_store::console_read::PageLimit::new(50).unwrap(),
+        agent_id: None,
     };
     let started = std::time::Instant::now();
     let page = platform_store::console_read::finding_groups_in_scope(

@@ -68,9 +68,8 @@ test("a group a role uses is refused, naming the role", async ({ page }) => {
 });
 
 test("a host's labels are added and removed", async ({ page }) => {
-  await page.goto("/agents?open=agent%3Aagent-00003");
-  await page.getByRole("tab", { name: "Details" }).click();
-  const card = page.locator(".panel-section").filter({ has: page.getByRole("heading", { name: "Groups and labels" }) });
+  await page.goto("/hosts/agent-00003");
+  const card = page.locator(".person-card").filter({ has: page.getByRole("heading", { name: "Groups and labels" }) });
   await expect(card.getByLabel("Groups")).toContainText("Production");
   await card.getByRole("textbox", { name: "Add a label" }).fill("rack-c4");
   await card.getByRole("textbox", { name: "Add a label" }).press("Enter");

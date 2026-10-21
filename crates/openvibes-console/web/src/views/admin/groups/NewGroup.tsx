@@ -9,7 +9,7 @@ import { ErrorBox, Loading } from "../../../ui/bits";
 import { Icon } from "../../../ui/Icon";
 import { Segmented } from "../../../ui/Segmented";
 import { toast } from "../../../ui/toast";
-import { Card } from "../people/PersonPage";
+import { Card } from "../../../ui/detail/DetailPage";
 import { PreviewNote } from "./badges";
 import { MAX_PICKED, groupPath, link, picks, refreshGroups, saveGroup, toList, usePreview, useWriteAccess } from "./groupApi";
 import { type Draft, type Kind, blankDraft, createBody, fromGroup, previewBody, reduce, refusal } from "./groupState";

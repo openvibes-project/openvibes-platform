@@ -34,6 +34,7 @@ pub use super::software_types::{
 const MAX_QUERY: usize = 128;
 /// Name filter and paging for a host's packages.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HostPackageParams {
     /// Case-insensitive substring of the name (at most 128 bytes).
@@ -46,6 +47,7 @@ pub(crate) struct HostPackageParams {
 
 /// Filters and paging for the fleet's software.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SoftwareParams {
     /// Case-insensitive substring of the name (at most 128 bytes).
@@ -63,6 +65,7 @@ pub(crate) struct SoftwareParams {
 
 /// Paging for one package's hosts.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SoftwareDetailParams {
     /// Opaque continuation cursor.
