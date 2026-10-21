@@ -154,7 +154,7 @@ fn finishing(kind: &str) -> Option<(&'static str, Page)> {
 }
 
 /// What a half-done job is, and what finishes it.
-fn half_note(kind: &str) -> (String, &'static str) {
+pub(super) fn half_note(kind: &str) -> (String, &'static str) {
     match kind {
         "update" => ("An update stopped half way:".into(), " finish it first."),
         "uninstall" => (

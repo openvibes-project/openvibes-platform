@@ -78,10 +78,6 @@ fn bad_plans_are_refused() {
             "signer needs console and distribution",
         ),
         (
-            args(&[Ingest], "Platform.example.com", &[]),
-            "lowercase DNS name",
-        ),
-        (
             args(&[Ingest], "platform..example.com", &[]),
             "lowercase DNS name",
         ),
@@ -244,4 +240,35 @@ fn the_model_is_fetched_by_default_with_the_assistant_and_skip_leaves_it_out() {
     assert_eq!(skip.plan(None).unwrap().model, ModelChoice::Skip);
     let none = args(&[Ingest], "p.example.com", &[]).plan(None).unwrap();
     assert_eq!(none.model, ModelChoice::Skip);
+}
+
+#[test]
+fn names_are_stored_lowercase() {
+    let plan = args(
+        &[Component::Ingest],
+        "LimeBox.LAN",
+        &["Foo.lan", "10.0.0.5"],
+    )
+    .plan(None)
+    .unwrap();
+    assert_eq!(plan.hostname, "limebox.lan");
+    assert_eq!(plan.sans, ["foo.lan", "10.0.0.5"]);
+    assert_eq!(plan_of(&toml::to_string(&plan).unwrap()).unwrap(), plan);
+}
+
+#[test]
+fn names_differing_only_in_case_are_stored_once() {
+    let plan = args(&[Component::Ingest], "a.lan", &["Foo.lan", "foo.lan"])
+        .plan(None)
+        .unwrap();
+    assert_eq!(plan.sans, ["foo.lan"]);
+}
+
+#[test]
+fn a_plan_without_its_port_keys_is_from_an_older_version() {
+    let old = "components = [\"ingest\"]\nhostname = \"a\"\nca = \"quick\"\n";
+    assert!(lacks_ports(old));
+    assert!(lacks_ports(&format!("{old}console_port = 443\n")));
+    let plan = args(&[Component::Ingest], "a", &[]).plan(None).unwrap();
+    assert!(!lacks_ports(&toml::to_string(&plan).unwrap()));
 }

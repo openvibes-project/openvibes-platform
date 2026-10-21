@@ -187,12 +187,12 @@ fn rules_bring_distribution_and_the_finished_screen_shows_the_login() {
 }
 
 #[test]
-fn a_set_up_host_offers_the_maintenance_actions() {
+fn a_set_up_host_offers_no_part_or_port_changes_here() {
     let mut app = set_up(vec![]);
     app.open(Tab::Setup);
     let text = screen(&app);
-    for want in ["m components", "p ports"] {
-        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    for gone in ["m components", "p ports"] {
+        assert!(!text.contains(gone), "{gone:?} in\n{text}");
     }
     assert!(
         !text.contains("x uninstall"),
@@ -227,7 +227,7 @@ fn components_after_a_stopped_first_install_install_again() {
 fn changing_components_installs_then_removes_the_unticked_ones() {
     let mut app = set_up(vec![]);
     app.open(Tab::Setup);
-    app.key(Key::Char('m'));
+    app.change_components(); // m is gone from a set-up host (Maintenance has it)
     assert_eq!(app.setup.phase, Phase::Form);
     assert_eq!(app.setup.hostname, "platform.example.com");
     while app.setup.row != 3 {
@@ -323,8 +323,7 @@ fn a_free_443_is_the_console_port() {
 /// A set-up host whose console already moved to 8443 (board #69).
 fn set_up_on_8443() -> App<SetupHost> {
     let mut app = set_up(vec![]);
-    app.host.plan =
-        format!("{PLAN}console_port = 8443\ningest_port = 18423\ndistribution_port = 18424\n");
+    app.host.plan = PLAN.replace("console_port = 443", "console_port = 8443");
     app.open(Tab::Setup);
     app
 }
@@ -333,7 +332,7 @@ fn set_up_on_8443() -> App<SetupHost> {
 fn a_set_up_host_changes_its_ports_from_the_tui() {
     // Board #69: the port rows existed only before the first install.
     let mut app = set_up_on_8443();
-    app.key(Key::Char('p'));
+    app.change_ports(); // p is gone from a set-up host
     assert_eq!(app.setup.phase, Phase::Form);
     assert_eq!(
         app.setup.row,
@@ -363,7 +362,7 @@ fn a_set_up_host_changes_its_ports_from_the_tui() {
 #[test]
 fn changing_components_keeps_the_saved_ports() {
     let mut app = set_up_on_8443();
-    app.key(Key::Char('m'));
+    app.change_components(); // m is gone from a set-up host (Maintenance has it)
     assert_eq!(app.setup.console_port, "8443");
     assert_eq!(app.setup.agent_ports, "18423, 18424");
 }
@@ -371,7 +370,7 @@ fn changing_components_keeps_the_saved_ports() {
 #[test]
 fn moving_an_agent_port_asks_for_a_second_enter() {
     let mut app = set_up_on_8443();
-    app.key(Key::Char('p'));
+    app.change_ports(); // p is gone from a set-up host
     app.key(Key::Down); // agent ports
     app.key(Key::Enter);
     for _ in 0..5 {
@@ -404,7 +403,7 @@ fn moving_an_agent_port_asks_for_a_second_enter() {
 fn the_ports_form_says_what_holds_the_default_and_keeps_the_ca() {
     let mut app = set_up_on_8443();
     app.host.taken = vec![443];
-    app.key(Key::Char('p'));
+    app.change_ports(); // p is gone from a set-up host
     let text = screen(&app);
     assert!(
         text.contains("Console port:  8443  (443 is in use)"),
@@ -437,12 +436,10 @@ fn a_default_port_held_while_our_unit_is_down_is_named() {
     };
     for (active, noted) in [("activating", true), ("failed", true), ("active", false)] {
         let mut app = set_up(vec![]);
-        app.host.plan =
-            format!("{PLAN}console_port = 443\ningest_port = 18423\ndistribution_port = 18424\n");
         app.host.taken = vec![443];
         app.services = vec![status(active)];
         app.open(Tab::Setup);
-        app.key(Key::Char('p'));
+        app.change_ports(); // p is gone from a set-up host
         let text = screen(&app);
         assert_eq!(
             text.contains("Console port:  443  (443 is in use by another program)"),

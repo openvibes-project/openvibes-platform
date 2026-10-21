@@ -7,7 +7,7 @@ use std::fs;
 use platform_host::{
     StepState,
     runner::{
-        Program::{Admin, Ip},
+        Program::{Admin, Ip, Systemctl},
         Runner,
     },
 };
@@ -329,13 +329,23 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
             ctx.copy(&key, tls.key, Some((tls.owner, tls.owner)), 0o600)?;
         }
     }
+    remove_stage(ctx)?;
+    // The services read their certificate at start (none reloads it).
+    // try-restart leaves a stopped service alone, so a first install is
+    // not started early. Before the names are written: a failed restart
+    // leaves the check Todo, so the next Repair tries again.
+    let units: Vec<String> = chosen(ctx)
+        .map(|tls| format!("openvibes-{}", tls.stem))
+        .collect();
+    let mut args = vec!["try-restart"];
+    args.extend(units.iter().map(String::as_str));
+    ctx.ok(Systemctl, &args)?;
     ctx.put(
         TLS_NAMES,
         format!("{}\n", names.join("\n")).as_bytes(),
         None,
         0o644,
     )?;
-    remove_stage(ctx)?;
     Ok(StepState::Done(format!(
         "server certificates for {} (valid 90 days)",
         names.join(", ")

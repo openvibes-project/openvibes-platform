@@ -28,6 +28,8 @@ mod service_tests;
 mod services_text;
 mod setup;
 #[cfg(test)]
+mod setup_done_tests;
+#[cfg(test)]
 mod setup_tests;
 mod setup_view;
 mod status;

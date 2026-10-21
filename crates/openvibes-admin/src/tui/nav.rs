@@ -78,8 +78,8 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Maint(page) => format!(" · Maintenance › {}", page.title()),
         Screen::Help(_) => " · Help".into(),
         Screen::Legacy => match app.tab {
-            Tab::Setup if !app.setup_done() => " · Install".into(),
-            Tab::Setup => " · Maintenance › Components and ports".into(),
+            // Only a first install reaches Setup now (Maintenance has the rest).
+            Tab::Setup => " · Install".into(),
             Tab::Configuration => " · Maintenance › Settings files".into(),
         },
     };

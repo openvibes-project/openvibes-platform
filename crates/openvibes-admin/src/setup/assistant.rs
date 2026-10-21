@@ -121,6 +121,20 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             remove_staged(path);
         }
     }
+    // The root helper downloads the model inside this call; the operator's
+    // TUI reads its progress from a file that goes when the call ends.
+    let _progress = if installed(ctx) {
+        None
+    } else {
+        crate::model_fetch::pin_or_embedded().ok().map(|pin| {
+            crate::model_progress::Watch::start(
+                ctx.root,
+                ctx.path("/var/lib/openvibes-llm/models"),
+                pin.file,
+                crate::model_progress::MODEL_BYTES,
+            )
+        })
+    };
     // The command's own text is internal: only what it said is shown.
     let out = ctx
         .ok(Admin, &["helper", "assistant-setup"])
@@ -166,6 +180,25 @@ mod tests {
             fake.call(&["/usr/bin/openvibes-admin"]),
             ["/usr/bin/openvibes-admin", "helper", "assistant-setup"]
         );
+    }
+
+    #[test]
+    fn the_progress_file_is_gone_after_apply_whatever_happened() {
+        for fail in [false, true] {
+            let fake = Fake::new(&format!("model-progress-{fail}"));
+            fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
+            let helper = ["/usr/bin/openvibes-admin", "helper", "assistant-setup"];
+            if fail {
+                fake.fail(&helper, "no space left");
+            } else {
+                fake.answer(&helper, 0, "");
+            }
+            let mut plan = plan(&[Ingest, Assistant]);
+            plan.model = ModelChoice::Fetch;
+            let _ = super::apply(&fake.ctx(&plan));
+            let file = fake.root.join(crate::model_progress::FILE);
+            assert!(!file.exists() && !file.with_extension("tmp").exists());
+        }
     }
 
     #[test]

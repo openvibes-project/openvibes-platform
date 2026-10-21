@@ -32,6 +32,9 @@ pub(super) struct SetupHost {
     pub(super) root: bool,
     /// `df` calls made (the backup folder's check).
     pub(super) free_calls: Cell<usize>,
+    /// Real certificates for `certificates()` (path, PEM); empty: the
+    /// stand-in below.
+    pub(super) pems: Vec<(&'static str, String)>,
 }
 
 impl Host for SetupHost {
@@ -57,6 +60,9 @@ impl Host for SetupHost {
         !self.root
     }
     fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
+        if !self.pems.is_empty() {
+            return self.pems.iter().map(|(p, t)| (*p, Ok(t.clone()))).collect();
+        }
         // A set-up host has its CA; a plan left by a first install that
         // stopped before the CA step does not (#87).
         if self.plan.is_empty() || self.plan.contains("# no ca") {
@@ -120,6 +126,7 @@ pub(super) fn app_taken(
         taken,
         root: false,
         free_calls: Cell::new(0),
+        pems: Vec::new(),
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -150,7 +157,7 @@ pub(super) fn type_text(app: &mut App<SetupHost>, text: &str) {
     }
 }
 
-pub(super) const PLAN: &str = "components = [\"ingest\", \"console\", \"distribution\", \"vulns\", \"rules\", \"agent\"]\nhostname = \"platform.example.com\"\nsans = []\nca = \"quick\"\noperator = \"alice\"\n";
+pub(super) const PLAN: &str = "components = [\"ingest\", \"console\", \"distribution\", \"vulns\", \"rules\", \"agent\"]\nhostname = \"platform.example.com\"\nsans = []\nca = \"quick\"\noperator = \"alice\"\nconsole_port = 443\ningest_port = 18423\ndistribution_port = 18424\n";
 
 pub(super) fn set_up(answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
     let mut app = app(true, answers);

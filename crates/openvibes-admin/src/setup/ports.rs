@@ -31,27 +31,74 @@ pub const DISTRIBUTION_DEFAULT: u16 = 18424;
 /// vulns and netlog.
 pub const RESERVED: [u16; 6] = [18430, 18480, 18481, 18482, 18483, 18484];
 
+/// One of the three listen ports.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Which {
+    Console,
+    Ingest,
+    Distribution,
+}
+
+/// Why a listen port is refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Problem {
+    Zero,
+    /// One of `RESERVED`.
+    Reserved,
+    /// Ingest and distribution cannot bind below 1024.
+    Below1024,
+    /// The same port as this other one.
+    Same(Which),
+}
+
+/// The first rule the three ports break, and the port it is about: the one
+/// source of the rules for the CLI (`check_ports`) and the admin pages.
+pub fn port_problem(console: u16, ingest: u16, distribution: u16) -> Option<(Which, Problem)> {
+    use Which::{Console, Distribution, Ingest};
+    let all = [
+        (Console, console),
+        (Ingest, ingest),
+        (Distribution, distribution),
+    ];
+    for (which, port) in all {
+        if port == 0 {
+            return Some((which, Problem::Zero));
+        }
+        if RESERVED.contains(&port) {
+            return Some((which, Problem::Reserved));
+        }
+    }
+    for (i, (a, pa)) in all.iter().enumerate() {
+        if let Some((b, _)) = all[i + 1..].iter().find(|(_, pb)| pb == pa) {
+            return Some((*a, Problem::Same(*b)));
+        }
+    }
+    // Only the console's unit may bind below 1024 (CAP_NET_BIND_SERVICE).
+    all[1..]
+        .iter()
+        .find(|(_, port)| *port < 1024)
+        .map(|(which, _)| (*which, Problem::Below1024))
+}
+
 /// The plan's three listen ports: each a real port, none of the fixed
 /// ones, all different.
 pub fn check_ports(console: u16, ingest: u16, distribution: u16) -> Result<(), String> {
-    for (what, port) in [
-        ("console", console),
-        ("ingest", ingest),
-        ("distribution", distribution),
-    ] {
-        if port == 0 {
-            return Err(format!("{what} port 0 is not a port"));
-        }
-        if RESERVED.contains(&port) {
-            return Err(format!(
-                "{what} port {port} is not allowed (18430 and 18480-18484 are the platform's own)"
-            ));
-        }
-    }
-    if console == ingest || console == distribution || ingest == distribution {
-        return Err("the console, ingest and distribution ports must differ".into());
-    }
-    Ok(())
+    let Some((which, problem)) = port_problem(console, ingest, distribution) else {
+        return Ok(());
+    };
+    let (what, port) = match which {
+        Which::Console => ("console", console),
+        Which::Ingest => ("ingest", ingest),
+        Which::Distribution => ("distribution", distribution),
+    };
+    Err(match problem {
+        Problem::Zero => format!("{what} port 0 is not a port"),
+        Problem::Reserved => format!(
+            "{what} port {port} is not allowed (18430 and 18480-18484 are the platform's own)"
+        ),
+        Problem::Below1024 => format!("{what} port {port} must be 1024 or higher"),
+        Problem::Same(_) => "the console, ingest and distribution ports must differ".into(),
+    })
 }
 
 /// Who listens on TCP `port` on any address, IPv4 or IPv6, `None` when

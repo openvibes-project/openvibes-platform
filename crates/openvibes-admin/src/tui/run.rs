@@ -5,7 +5,7 @@
 //! the services again) may follow. Without a worker (tests) the calls run
 //! at once on the TUI's own host.
 
-use std::{sync::mpsc::Receiver, time::Instant};
+use std::{ops::Range, sync::mpsc::Receiver, time::Instant};
 
 use platform_host::{
     Database, Host, HostError, Privileged, RemoveStep, Secret, Step, StepState, Unit, UpdateStep,
@@ -21,6 +21,8 @@ pub enum Call {
     Repair(Step),
     Update(UpdateStep, Vec<String>),
     Remove(RemoveStep, Vec<String>),
+    /// `setup-plan` with these arguments (the whole plan: see `Plan::args`).
+    SetupPlan(Vec<String>),
     /// A database command (no password).
     Database(Database),
     /// The database's disk: `size<TAB>percent<TAB>free`, empty when unknown.
@@ -47,6 +49,24 @@ pub enum Kind {
     },
     /// The Database page's reads.
     Report,
+    /// Optional parts added or removed; `what` is the title.
+    Parts {
+        what: String,
+        /// The result line, without how long it took.
+        done: String,
+    },
+    /// Ports moved; `what` is the title.
+    Ports {
+        what: String,
+        /// The result line, without how long it took.
+        done: String,
+    },
+    /// New certificates for changed names; `what` is the title.
+    Names {
+        what: String,
+        /// The result line, without how long it took.
+        done: String,
+    },
 }
 
 impl Kind {
@@ -65,6 +85,9 @@ impl Kind {
             Kind::Fix => "Repairing".into(),
             Kind::Uninstall { .. } => "Uninstalling".into(),
             Kind::Report => "Reading the database".into(),
+            Kind::Parts { what, .. } => what.clone(),
+            Kind::Ports { what, .. } => what.clone(),
+            Kind::Names { what, .. } => what.clone(),
         }
     }
     pub fn done(&self) -> String {
@@ -78,6 +101,9 @@ impl Kind {
             Kind::Fix => "Repaired".into(),
             Kind::Uninstall { .. } => "OpenVIBES is removed".into(),
             Kind::Report => "Read".into(),
+            Kind::Parts { done, .. } => done.clone(),
+            Kind::Ports { done, .. } => done.clone(),
+            Kind::Names { done, .. } => done.clone(),
         }
     }
     pub fn stopped(&self) -> String {
@@ -88,6 +114,9 @@ impl Kind {
             Kind::Fix => "The repair stopped".into(),
             Kind::Uninstall { .. } => "The uninstall stopped".into(),
             Kind::Report => "The database could not be read".into(),
+            Kind::Parts { .. } => "The change stopped".into(),
+            Kind::Ports { .. } => "The move stopped".into(),
+            Kind::Names { .. } => "The change stopped".into(),
         }
     }
     /// What Enter does once the password is typed.
@@ -99,6 +128,7 @@ impl Kind {
             Kind::Fix => "Fix",
             Kind::Uninstall { .. } => "Uninstall",
             Kind::Report => "Read",
+            Kind::Parts { .. } | Kind::Ports { .. } | Kind::Names { .. } => "Apply",
         }
     }
 }
@@ -115,14 +145,37 @@ pub struct Rescue {
 pub struct Work {
     pub kind: Kind,
     pub calls: Vec<Call>,
+    /// The step list's rows: a title and the calls (indices) it covers.
+    pub labels: Vec<(String, Range<usize>)>,
     pub rescue: Option<Rescue>,
 }
 
 impl Work {
+    /// Every call is its own row (the caller titles them).
     pub fn new(kind: Kind, calls: Vec<Call>) -> Work {
+        let labels = (0..calls.len())
+            .map(|i| (String::new(), i..i + 1))
+            .collect();
         Work {
             kind,
             calls,
+            labels,
+            rescue: None,
+        }
+    }
+
+    /// Several calls under one row each.
+    pub fn grouped(kind: Kind, groups: Vec<(String, Vec<Call>)>) -> Work {
+        let mut calls = Vec::new();
+        let mut labels = Vec::new();
+        for (title, group) in groups {
+            labels.push((title, calls.len()..calls.len() + group.len()));
+            calls.extend(group);
+        }
+        Work {
+            kind,
+            calls,
+            labels,
             rescue: None,
         }
     }
@@ -143,6 +196,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::Repair(step) => host.privileged(Privileged::Repair(*step), secret),
         Call::Update(step, args) => host.privileged(Privileged::Update(*step, args), secret),
         Call::Remove(step, args) => host.privileged(Privileged::Remove(*step, args), secret),
+        Call::SetupPlan(args) => host.privileged(Privileged::SetupPlan(args), secret),
         Call::Database(command) => host.database(*command),
         Call::Disk => host.disk().map(|disks| {
             disks
@@ -323,6 +377,42 @@ impl Run {
         }
         false
     }
+}
+
+/// Each label's state: the first call that did not finish; when all
+/// finished, Done if one call did the work (Skipped only when every call
+/// was); `None` before it is reached. The optional
+/// model's call is left out of a label that holds other calls: it never
+/// stops a run, so it must not turn them red.
+pub fn label_states(run: &Run) -> Vec<Option<StepState>> {
+    let model = Call::Repair(Step::AssistantModel);
+    run.work
+        .labels
+        .iter()
+        .map(|(_, calls)| {
+            let mut own: Vec<&Option<StepState>> = calls
+                .clone()
+                .filter(|i| run.work.calls[*i] != model)
+                .map(|i| &run.states[i])
+                .collect();
+            if own.is_empty() {
+                own = run.states[calls.clone()].iter().collect();
+            }
+            own.iter()
+                .copied()
+                .flatten()
+                .find(|s| !s.finished())
+                .or_else(|| {
+                    // Finished: one call that did the work makes the row done.
+                    own.iter().all(|s| s.is_some()).then(|| {
+                        let mut all = own.iter().copied().flatten();
+                        let first = all.clone().next();
+                        all.find(|s| matches!(s, StepState::Done(_))).or(first)
+                    })?
+                })
+                .cloned()
+        })
+        .collect()
 }
 
 /// The password for a run, typed in the bar.

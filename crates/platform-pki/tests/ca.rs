@@ -137,3 +137,19 @@ fn an_intermediate_never_outlives_its_root() {
         Err(PkiError::IssuerExpired)
     );
 }
+
+#[test]
+fn issuer_common_name_reads_the_signer() {
+    let now = Utc::now();
+    let root = generate_root(now).unwrap();
+    let (csr, _) = intermediate_request().unwrap();
+    let cert = sign_intermediate(&root, &csr, now).unwrap();
+    assert_eq!(
+        platform_pki::issuer_common_name(&cert).unwrap().as_deref(),
+        Some("OpenVIBES Root CA")
+    );
+    assert_eq!(
+        platform_pki::issuer_common_name("nope"),
+        Err(PkiError::InvalidPem)
+    );
+}

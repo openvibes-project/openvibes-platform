@@ -65,21 +65,22 @@ pub fn work(to: &str, others: Option<String>, backup: Option<&str>, finish: bool
         .iter()
         .map(|s| Call::Update(*s, args.clone()))
         .collect();
-    Work {
-        kind: Kind::Update {
+    let mut work = Work::new(
+        Kind::Update {
             to: to.to_owned(),
             others,
         },
         calls,
-        rescue: (!finish).then(|| Rescue {
-            from: 1,
-            to: 3,
-            calls: vec![
-                Call::Update(UpdateStep::Start, args.clone()),
-                Call::Update(UpdateStep::Ready, args),
-            ],
-        }),
-    }
+    );
+    work.rescue = (!finish).then(|| Rescue {
+        from: 1,
+        to: 3,
+        calls: vec![
+            Call::Update(UpdateStep::Start, args.clone()),
+            Call::Update(UpdateStep::Ready, args),
+        ],
+    });
+    work
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -300,6 +300,22 @@ impl Plan {
     }
 }
 
+/// The plan in `setup.toml`'s text (what `Host::setup_plan` returns).
+pub fn plan_of(text: &str) -> Result<Plan, String> {
+    toml::from_str(text).map_err(|error| format!("setup.toml: {error}"))
+}
+
+/// A plan from before the port choices (0.1.1): its ports are the ones
+/// the services use, which only root can read (`Plan::load_filled`);
+/// Repair saves them into the plan.
+pub fn lacks_ports(text: &str) -> bool {
+    toml::from_str::<toml::Table>(text).is_ok_and(|table| {
+        ["console_port", "ingest_port", "distribution_port"]
+            .iter()
+            .any(|key| !table.contains_key(*key))
+    })
+}
+
 /// Setup's arguments, shared by `helper setup-plan` and `setup --quick`.
 #[derive(clap::Args, Clone, Debug)]
 pub struct PlanArgs {
@@ -367,7 +383,11 @@ pub fn check_name(name: &str) -> Result<(), String> {
     }
 }
 
-fn check_san(san: &str) -> Result<(), String> {
+/// Most extra names a plan holds.
+pub(crate) const MAX_SANS: usize = 16;
+
+/// An IP address or a lowercase DNS name.
+pub(crate) fn check_san(san: &str) -> Result<(), String> {
     if san.parse::<IpAddr>().is_ok() {
         Ok(())
     } else {
@@ -409,7 +429,15 @@ impl PlanArgs {
             return Err("the signer needs console and distribution (it signs the console's rules for agents to fetch)".into());
         }
         let assistant = components.contains(&Component::Assistant);
-        check_name(&self.hostname)?;
+        // Names are stored lowercase (DNS ignores case; approved.md 52).
+        let hostname = self.hostname.to_ascii_lowercase();
+        let mut sans: Vec<String> = Vec::new();
+        for san in self.san.iter().map(|s| s.to_ascii_lowercase()) {
+            if !sans.contains(&san) {
+                sans.push(san);
+            }
+        }
+        check_name(&hostname)?;
         let (console_port, ingest_port, distribution_port) = (
             self.console_port.unwrap_or(super::ports::CONSOLE_DEFAULT),
             self.ingest_port.unwrap_or(super::ports::INGEST_DEFAULT),
@@ -417,10 +445,10 @@ impl PlanArgs {
                 .unwrap_or(super::ports::DISTRIBUTION_DEFAULT),
         );
         super::ports::check_ports(console_port, ingest_port, distribution_port)?;
-        if self.san.len() > 16 {
-            return Err("at most 16 --san".into());
+        if self.san.len() > MAX_SANS {
+            return Err(format!("at most {MAX_SANS} --san"));
         }
-        for san in &self.san {
+        for san in &sans {
             check_san(san)?;
         }
         for path in [
@@ -437,8 +465,8 @@ impl PlanArgs {
         }
         Ok(Plan {
             components,
-            hostname: self.hostname.clone(),
-            sans: self.san.clone(),
+            hostname,
+            sans,
             ca: self.ca,
             root_key_out: self.root_key_out.clone(),
             admin_password_file: self.admin_password_file.clone(),

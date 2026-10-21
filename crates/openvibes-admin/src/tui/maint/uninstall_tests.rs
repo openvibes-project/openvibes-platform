@@ -66,12 +66,12 @@ fn help_on_every_maintenance_page_is_not_cut_at_the_edge() {
 #[test]
 fn maintenance_values_keep_clear_of_the_longest_name() {
     let mut app = set_up(vec![]);
-    for key in [Key::Down, Key::Enter, Key::Down, Key::Down] {
-        app.key(key);
-    }
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    (0..super::row_of("Ports and addresses")).for_each(|_| app.key(Key::Down));
     let text = screen(&app);
     assert!(
-        text.contains("Components and ports   agent"),
+        text.contains("Ports and addresses    console"),
         "the values start clear of the longest name:\n{text}"
     );
 }

@@ -250,6 +250,9 @@ fn packages_to_remove<'a, R: Runner>(ctx: &Ctx<R>, record: &'a str) -> Vec<&'a s
 }
 
 fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String> {
+    if part::is_part_removal(ctx.plan, &args.components) {
+        return part::purge(ctx, &args.components);
+    }
     let Some(confirm) = &args.confirm else {
         return Ok(StepState::Skipped("data kept".into()));
     };
@@ -388,10 +391,20 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
             ctx.plan.hostname
         ));
     }
+    // A part removal is refused under any mark, an uninstall's too: it
+    // leaves no mark of its own, so it must not finish someone else's job.
+    let part = part::is_part_removal(ctx.plan, &args.components);
+    if part && ctx.read("/run/openvibes-admin/job").is_ok() {
+        let why = super::system::job_guard(ctx.root, "").err();
+        return StepState::Failed(
+            why.unwrap_or_else(|| "a job is half done on this host: finish it first".into()),
+        );
+    }
     // A half-done Update must not block an uninstall (#292); any other mark does.
-    let after_update = ctx
-        .read("/run/openvibes-admin/job")
-        .is_ok_and(|mark| mark.lines().next() == Some("update"));
+    let after_update = !part
+        && ctx
+            .read("/run/openvibes-admin/job")
+            .is_ok_and(|mark| mark.lines().next() == Some("update"));
     if !after_update && let Err(error) = super::system::job_guard(ctx.root, "uninstall") {
         return StepState::Failed(error);
     }
@@ -428,18 +441,32 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
         }
         // Always called: a no-op unless an Update left its records.
         RemoveStep::Stop => {
-            super::update::abandon(ctx, args.components.contains(&Component::Agent));
-            ctx.job_begin(match args.confirm {
-                Some(_) => "uninstall\neverything",
-                None => "uninstall",
-            })
-            .and_then(|()| stop(ctx, args))
+            let part = part::is_part_removal(ctx.plan, &args.components);
+            // A part removal never touches an update's records.
+            if !part {
+                super::update::abandon(ctx, args.components.contains(&Component::Agent));
+            }
+            // A part removal is not a half-done whole uninstall: no mark.
+            if part {
+                stop(ctx, args)
+            } else {
+                ctx.job_begin(match args.confirm {
+                    Some(_) => "uninstall\neverything",
+                    None => "uninstall",
+                })
+                .and_then(|()| stop(ctx, args))
+            }
         }
         RemoveStep::Firewall => firewall(ctx, args),
         RemoveStep::Packages => remove_packages(ctx, args),
         RemoveStep::Purge => purge(ctx, args),
         RemoveStep::Admin => {
-            admin::remove_admin(ctx, args).inspect(|state| admin::finish(ctx, state))
+            let whole = !part::is_part_removal(ctx.plan, &args.components);
+            admin::remove_admin(ctx, args).inspect(|state| {
+                if whole {
+                    admin::finish(ctx, state);
+                }
+            })
         }
     };
     result.unwrap_or_else(StepState::Failed)
@@ -447,7 +474,12 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
 
 #[path = "remove_admin.rs"]
 mod admin;
+#[path = "remove_part.rs"]
+mod part;
 
+#[cfg(test)]
+#[path = "remove_part_tests.rs"]
+mod part_tests;
 #[cfg(test)]
 #[path = "remove_tests.rs"]
 mod tests;
