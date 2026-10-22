@@ -30,8 +30,6 @@ pub enum Call {
     /// The unit's last journal lines, joined (no password).
     Logs(Unit, u16),
     /// `admin-reset`: a new one-time password for the console's `admin`.
-    // ponytail: the Console sign-in page (2b-2 Task 2) constructs it; drop the allow then.
-    #[allow(dead_code)]
     AdminReset,
 }
 
@@ -53,6 +51,8 @@ pub enum Kind {
     },
     /// The Database page's reads.
     Report,
+    /// A new one-time password for the console's admin.
+    SignIn,
     /// Optional parts added or removed; `what` is the title.
     Parts {
         what: String,
@@ -89,6 +89,7 @@ impl Kind {
             Kind::Fix => "Repairing".into(),
             Kind::Uninstall { .. } => "Uninstalling".into(),
             Kind::Report => "Reading the database".into(),
+            Kind::SignIn => "Resetting the admin password".into(),
             Kind::Parts { what, .. } => what.clone(),
             Kind::Ports { what, .. } => what.clone(),
             Kind::Names { what, .. } => what.clone(),
@@ -105,6 +106,7 @@ impl Kind {
             Kind::Fix => "Repaired".into(),
             Kind::Uninstall { .. } => "OpenVIBES is removed".into(),
             Kind::Report => "Read".into(),
+            Kind::SignIn => "Admin password reset".into(),
             Kind::Parts { done, .. } => done.clone(),
             Kind::Ports { done, .. } => done.clone(),
             Kind::Names { done, .. } => done.clone(),
@@ -118,6 +120,7 @@ impl Kind {
             Kind::Fix => "The repair stopped".into(),
             Kind::Uninstall { .. } => "The uninstall stopped".into(),
             Kind::Report => "The database could not be read".into(),
+            Kind::SignIn => "The reset failed".into(),
             Kind::Parts { .. } => "The change stopped".into(),
             Kind::Ports { .. } => "The move stopped".into(),
             Kind::Names { .. } => "The change stopped".into(),
@@ -132,6 +135,7 @@ impl Kind {
             Kind::Fix => "Fix",
             Kind::Uninstall { .. } => "Uninstall",
             Kind::Report => "Read",
+            Kind::SignIn => "Reset",
             Kind::Parts { .. } | Kind::Ports { .. } | Kind::Names { .. } => "Apply",
         }
     }

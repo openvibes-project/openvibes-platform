@@ -291,6 +291,7 @@ impl<H: Host> App<H> {
                 self.nav.go(Screen::Help(from));
             }
             Key::Esc => {
+                self.signin_left();
                 self.nav.pop();
                 // A note from another screen is not news here.
                 self.message = None;

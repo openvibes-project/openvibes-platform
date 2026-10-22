@@ -376,6 +376,7 @@ fn every_screen_has_exactly_one_empty_line_under_its_title() {
         super::maint::Page::Parts,
         super::maint::Page::Ports,
         super::maint::Page::Certificates,
+        super::maint::Page::SignIn,
     ] {
         app.open_page(page);
         one_gap_after(&super::script_host::screen(&app), rule, page.title());
@@ -394,6 +395,7 @@ fn the_menu_lists_the_2b1_entries_in_order() {
             "Ports and addresses",
             "Certificates",
             "Database",
+            "Console sign-in",
             "Back up",
             "Settings files",
             "Uninstall",
