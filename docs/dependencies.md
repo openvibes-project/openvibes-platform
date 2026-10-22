@@ -8,8 +8,32 @@ chose ourselves; the indirect ones they pull in are counted, not listed.
 full, exact sets.
 
 Checked against `main` on 2026-10-22. Update this page in the same change
-that adds, removes or bumps a dependency; the commands under
+that adds, removes or bumps a dependency, and update everything before
+each release ([Before each release](#before-each-release)); the commands under
 [Refreshing this page](#refreshing-this-page) print the current state.
+
+## Before each release
+
+Every release brings all dependencies up to date first, in a pull request
+of its own that merges before the tag. Its CI and the local gate must be
+green, including `cargo audit` and `npm audit`.
+
+1. Rust crates: raise every version in the `Cargo.toml` files to the newest
+   release, then `cargo update`.
+2. The Rust toolchain in `rust-toolchain.toml` (and `rust-version`) to the
+   newest stable.
+3. Console npm packages (`npm outdated` in `crates/openvibes-console/web`),
+   and the pinned Node.js version.
+4. The agent revision of `openvibes-core`, `openvibes-rules` and
+   `openvibes-transport`.
+5. llama.cpp (`packaging/llm/llama-cpp.pin`), and a check for a newer model
+   (`packaging/llm/model.pin`).
+6. CI: the commit pins of the GitHub Actions, `cargo-audit`, and the
+   container images.
+
+A dependency may stay behind only with the reason written next to it on
+this page. The same pull request then updates this page: versions,
+counts and the date.
 
 ## 1. In the finished builds
 
