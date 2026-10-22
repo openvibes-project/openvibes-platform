@@ -40,7 +40,7 @@ const MAIN: &str =
     "r.lc = ($6::text IS NOT DISTINCT FROM 'lowconf') AND r.grp = ($8::text IS NOT NULL)";
 
 /// Severities, most severe first; `r.sev` is a position in it.
-const SEVERITIES: &str = "ARRAY['critical','important','moderate','low','unrated']";
+pub(crate) const SEVERITIES: &str = "ARRAY['critical','important','moderate','low','unrated']";
 
 /// A row filter over an `r` row.
 fn filter(facet: Facet) -> &'static str {
@@ -91,14 +91,14 @@ const ASSIGNEE_OK: &str = "(($11::text IS NULL AND NOT $12::boolean) OR ($12 AND
 
 /// A fixable pair's state: fixed is `resolved`; open, or an accepted risk
 /// expired by `$13`, is `open` (over `v` and its triage `t`).
-const PAIR_STATE: &str = "CASE WHEN v.fixed_at IS NOT NULL THEN 'resolved'
+pub(crate) const PAIR_STATE: &str = "CASE WHEN v.fixed_at IS NOT NULL THEN 'resolved'
               WHEN t.state = 'accepted_risk' AND t.accepted_until <= ($13::date)::timestamp AT TIME ZONE 'UTC'
                 THEN 'open'
               ELSE t.state END";
 
 /// A fixable pair mapped below confidence 80 (`vulns/confidence.rs`): an
 /// advisory `a` from an unknown feed (every fixable pair has a fix).
-const LOW_CONFIDENCE: &str =
+pub(crate) const LOW_CONFIDENCE: &str =
     "split_part(a.source, '-', 1) NOT IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')";
 
 /// The agents in the scope (`$1`, `$2`, as the Alarms list) and the host

@@ -727,6 +727,41 @@ else reads that small cube. Timing (console-read.md): 1.90 s at full
 reach, 1.53 s scoped, within ruling 13's 2 s. Tests: `tests/vuln_list.rs`,
 `tests/vuln_list_pairs.rs`; the timing in `tests/vuln_list_timing.rs`.
 
+## A vulnerability's page (`vuln_summary`, `vuln_hosts`)
+
+`vuln_summary(client, key, &PageScopes, today) -> Lookup<VulnPageSummary>`
+and `vuln_hosts(client, key, &AgentScope, HostSegment, offset, limit, today)
+-> Lookup<VulnHostsPage>` (step 5b rulings 2, 7, 9, 12). The key resolves
+first: a CVE is its page; an advisory with one CVE answers as that CVE
+(`key` is the CVE); an advisory without CVEs is its own page; an advisory
+with several answers `Lookup::SeveralCves` (sorted) when a pair is in
+reach; a `CPE:` key, an unknown key and a key with no pair in the
+`vulnerabilities.read` scope are `Lookup::Missing`. The pairs follow the
+list (`vuln_summary_sql::pairs`, reusing `vuln_list_sql`'s `PAIR_STATE` and
+`LOW_CONFIDENCE`) but are expanded host by host, as one key has few:
+fixable rows, no-fix packages of the host's release (one pair per host and
+advisory while a fixable row is unfixed), and the CVE's CPE matches.
+Lower-confidence pairs count only when the key has no other, as the list
+shows them only under their signal. The summary is one statement returning
+JSON: header (title of the advisory with most pairs, worst severity,
+names, fixed versions, open and total, assignee of open pairs, KEV due and
+ransomware), tiles (fix: `All`, `Some(n, m)` distributions or `None`; EPSS,
+CVSS), what to do per distribution (OS id and version: its advisory with
+most pairs, that advisory's names and fixed versions, hosts not fixed,
+reboot), details (advisories, earliest issue date, confidence min/max with
+the least sure basis from `vulns::confidence`, CVSS vector, CWE,
+description), the last 50 triage changes on hosts in reach (newest first,
+actor's display name), `also_covers` and `agents` (hosts in reach).
+`vuln_related` adds the Related card: open alarms on those hosts that
+`PageScopes::alarms` reaches (top three and total), open cases holding a
+pair whose host `PageScopes::cases` reaches, and other keys in reach on the
+same package names (via `advisory_packages`) per worst severity;
+`reaches_any(client, agents, scope)` answers the page's `can` flags. The
+Hosts table sorts by host name, agent id and advisory; segments are
+`open`, `mitigated` and `resolved` (fixed, accepted risk, false positive),
+each pair in one, `all` their sum; `triage_version` is null where triage
+does not apply (a no-fix or CPE pair). Tests: `tests/vuln_summary.rs`.
+
 ## The host page summary (`host_summary::summary`)
 
 `summary(client, agent_id, &HostScopes, latest, now) -> Option<HostSummary>`:

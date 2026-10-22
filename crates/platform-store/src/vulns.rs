@@ -8,10 +8,10 @@ use serde_json::Value;
 use crate::{Client, StoreError};
 
 mod candidates;
-mod confidence;
+pub(crate) mod confidence;
 mod feeds;
 pub(crate) mod summary;
-use candidates::INSTALLED;
+pub(crate) use candidates::INSTALLED;
 pub use candidates::*;
 pub use feeds::*;
 pub use summary::{
