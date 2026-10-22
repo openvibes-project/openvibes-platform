@@ -267,6 +267,13 @@ fn review_install_asks_password_in_bar_once() {
     let text = screen(&app);
     assert!(text.contains("Your password (sudo):"), "{text}");
     assert!(text.contains("Enter  Install"), "{text}");
+    // Asked over Review (full_advanced.py 12); Esc on it stays there.
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Step(4)));
+    assert!(text.contains("· Install › Review"), "{text}");
+    app.key(Key::Esc);
+    assert!(app.asking.is_none());
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Step(4)));
+    app.key(Key::Enter);
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     let calls = calls(&app);

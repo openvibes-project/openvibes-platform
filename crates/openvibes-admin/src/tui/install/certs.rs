@@ -308,6 +308,15 @@ impl<H: Host> App<H> {
             (Key::Char(' ') | Key::Enter, 0 | 1) => {
                 self.install.ca = if row == 0 { Ca::Own } else { Ca::OpenVibes };
                 self.install.error = None;
+                // Your own CA's certificates never go with OpenVIBES's own CA.
+                if self.install.ca == Ca::OpenVibes {
+                    let install = &mut self.install;
+                    install.request = None;
+                    install.signed = None;
+                    install.cert = None;
+                    install.root_pem = None;
+                    install.root_added = None;
+                }
                 if let Key::Enter = key {
                     self.nav.row = self.install.choice_rows() - 1;
                 }

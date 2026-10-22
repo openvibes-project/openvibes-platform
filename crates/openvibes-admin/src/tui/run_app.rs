@@ -63,6 +63,7 @@ impl<H: Host> App<H> {
     }
 
     fn start(&mut self, work: Work, from: usize, secret: Secret, resume: bool) {
+        self.install_started(&work.kind);
         let now = Instant::now();
         let background = work.kind.background();
         let slot = if background {

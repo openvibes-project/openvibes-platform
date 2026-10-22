@@ -9,22 +9,30 @@ use crate::tui::{
     app::{App, Key},
     maint::failure,
     nav::{Nav, Screen},
-    run::{Run, is_model, label_states},
+    run::{Kind, Run, is_model, label_states},
     ui::{bar::Bar, frame, logo::Header, steps},
 };
 
 impl<H: Host> App<H> {
-    /// Review's Install: the password, then the work on the worker.
+    /// Review's Install: the password, asked over the screen it was
+    /// started from, then the work on the worker (Installing opens as it
+    /// starts: `install_started`).
     pub(crate) fn start_install(&mut self) {
         // Esc after a failure goes back here: Quick install or Review.
         self.install.origin = match self.nav.screen {
             Screen::Install(Stage::Quick) => Stage::Quick,
             _ => Stage::Step(4),
         };
-        self.nav.screen = Screen::Install(Stage::Running);
         self.run = None;
         let work = self.install.work();
         self.begin(work, 0);
+    }
+
+    /// The install starts (password taken, or none needed): Installing.
+    pub(in crate::tui) fn install_started(&mut self, kind: &Kind) {
+        if *kind == Kind::Install {
+            self.nav.screen = Screen::Install(Stage::Running);
+        }
     }
 
     /// A run ended on the Installing screen: a good one shows Finished.

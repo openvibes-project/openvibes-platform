@@ -457,3 +457,43 @@ fn restart_with_signed_request_shows_added() {
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Install(Stage::Step(3)));
 }
+
+/// Own CA accepted, then OpenVIBES makes one: Finished shows no "signed by".
+#[test]
+fn switching_to_openvibes_ca_forgets_the_signed_certificates() {
+    let pki = pki();
+    let mut app = requested(&pki);
+    paste(&mut app, Which::Signed, &pki.cert);
+    app.key(Key::Enter);
+    answer(&app, Ok(format!("signed\tOpenVIBES Root CA\n{}", pki.csr)));
+    paste(&mut app, Which::Root, &pki.root);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app.key(Key::Esc);
+    app.key(Key::Down);
+    app.key(Key::Char(' '));
+    assert_eq!(app.install.ca, Ca::OpenVibes);
+    assert!(app.install.signed.is_none() && app.install.cert.is_none());
+    assert!(app.install.root_pem.is_none() && app.install.root_added.is_none());
+    let key = format!("{}/root.key", folder("switch"));
+    app.install.root_key_out = key.clone();
+    // The plan, then Packages to Schema, then the CA step's own detail.
+    answer(&app, Ok("written\n".into()));
+    (0..5).for_each(|_| answer(&app, Ok("done\tok\n".into())));
+    answer(
+        &app,
+        Ok(format!(
+            "done\troot key saved to {key}: keep it offline; root certificate x\n"
+        )),
+    );
+    app.nav.screen = Screen::Install(Stage::Step(4));
+    app.nav.row = 4;
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Finished));
+    let text = screen(&app);
+    assert!(text.contains("Root key"), "{text}");
+    assert!(!text.contains("signed by"), "{text}");
+}

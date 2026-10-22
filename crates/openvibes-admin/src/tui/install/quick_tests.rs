@@ -213,6 +213,9 @@ fn quick_install_starts_with_quick_ca_and_core_components() {
     let key = app.install.root_key_out.clone();
     down(&mut app, 4);
     app.key(Key::Enter);
+    // The password is asked over Quick install.
+    assert!(app.asking.is_some());
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Quick));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     assert_eq!(

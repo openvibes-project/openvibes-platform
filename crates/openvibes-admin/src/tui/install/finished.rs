@@ -136,7 +136,13 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run:
     );
     let states = step_states(run);
     let mut out = vec![Line::raw("")];
-    out.extend(lines(finished_rows(&states, app.install.signed.as_deref())));
+    // "signed by X" only for your own CA.
+    let signed = app
+        .install
+        .signed
+        .as_deref()
+        .filter(|_| app.install.ca == super::Ca::Own);
+    out.extend(lines(finished_rows(&states, signed)));
     out.push(Line::raw(""));
     out.push(Line::styled(
         if done(&states, Step::Console)
