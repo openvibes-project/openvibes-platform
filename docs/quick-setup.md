@@ -15,7 +15,7 @@ On the platform host, as your own user (not root):
 sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"
 ```
 
-(Piped as `curl … | sudo sh`, it installs but cannot open Setup, because a
+(Piped as `curl … | sudo sh`, it installs but cannot open the Install screens, because a
 pipe is not a terminal; it then tells you to run `sudo openvibes-admin`.)
 
 Prefer to read it first: `curl -fsSLO https://openvibes-project.github.io/install.sh`,
@@ -31,7 +31,8 @@ distribution, vulnerabilities, rules and an agent on this host, with
 OpenVIBES's own CA and the default ports) and **Choose what to install**
 (five steps: optional parts, names, certificates, ports, review; use it
 for your own CA). The defaults are right for a first install: enter the
-hostname the other hosts will use to reach this one and choose `Install`. The console port is 443 unless another web server already holds
+hostname the other hosts will use to reach this one and choose `Install`.
+The console port is 443 unless another web server already holds
 it; then the install proposes the first free port from 8443 and says so, and
 the console is at `https://HOST:PORT`. The agent ports (18423, 18424) move
 the same way, and the install command and package the console hands out
@@ -39,14 +40,14 @@ the same way, and the install command and package the console hands out
 port later: `sudo openvibes-admin setup --repair --console-port N` (or
 `--ingest-port`, `--distribution-port`, which also need
 `--move-agent-ports`: agents on other hosts then need their install line
-run again). Setup asks for
+run again). Install asks for
 your password once and then shows each step as it runs: packages,
 PostgreSQL, database, CA, certificates, console, services, firewall
 (the console and agent ports), agent, readiness and the assistant model. A port another
-process holds stops Setup before any service starts, naming the process. If a step fails, fix the cause
+process holds stops the install before any service starts, naming the process. If a step fails, fix the cause
 and press `Enter` (Try again) to continue from it.
 
-**The CA's root key.** In the default (quick) CA mode, Setup writes the
+**The CA's root key.** In the default (quick) CA mode, Install writes the
 root key once to the *Root key file*, by default
 `~/openvibes-root-ca.key`, and keeps no other copy. It is the only way to
 issue a new intermediate certificate later, so copy it to offline
@@ -65,8 +66,8 @@ security references (level 1) and search the web through your own SearXNG
 switch shows what leaves your network. See the
 [admin guide](components/openvibes-admin.md#assistant-internet-lookups-risk-levels).
 
-**Adding the assistant later:** open Setup (`sudo openvibes-admin`), turn the
-assistant on with `m` (change components) and answer **Y**.
+**Adding the assistant later:** open `sudo openvibes-admin`, then Maintenance › Optional parts:
+tick Assistant and choose Apply. It downloads the 2.7 GB model.
 
 The last screen shows, once:
 
@@ -95,7 +96,7 @@ Instead of step 1, for a platform host with no internet. Details:
 2. Copy both to the server, into the same folder.
 3. Run `tar xf openvibes-platform-<v>-offline-fedora44.tar && sudo ./openvibes-offline/install`.
 
-Setup opens at the end; continue with step 2. If you copied the model, Setup installs it.
+The Install screens open at the end; continue with step 2. If you copied the model, Install installs it.
 
 ## 3. Add a second host
 
@@ -162,8 +163,8 @@ from `/etc/openvibes/pki/` into the browser to stop the warning).
 ## Next
 
 - Other hosts: repeat step 3; `openvibes-admin agent list` shows them all.
-- Check, repair, update, change components or uninstall: the Setup tab
-  (`c`, `r`, `u`, `m`, `x`).
+- Check, repair, update, change components or uninstall: Maintenance
+  (Update, Repair, Optional parts, Uninstall).
 - Services and configuration: the Services and Configuration tabs. Setup
   added you to `openvibes-operators`; log in again before using them.
 - Hosts without network access: the agent's `export`, then

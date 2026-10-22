@@ -99,9 +99,9 @@ addresses, and certificates once the host is set up.
 - *Welcome*: "This host does not run OpenVIBES yet." with Choose what to
   install, Quick install and Quit.
 - *Quick install*: only what OpenVIBES cannot know, edited in place: the
-  host name, other names and the root key file. Everything else is the
-  defaults: OpenVIBES's own CA, the default ports, the agent on this host,
-  no assistant. The root key file defaults to the first free name in the
+  host name, other names, the root key file and whether the agent runs on
+  this host (ticked; Space). Everything else is the defaults: OpenVIBES's
+  own CA, the default ports, no assistant. The root key file defaults to the first free name in the
   home directory (`openvibes-root-ca.key`, then `-2`, `-3`…), since Remove
   everything keeps the old key. Enter on Install asks for the password.
 - *Choose what to install*, five steps on a steps line (Enter on Next goes
