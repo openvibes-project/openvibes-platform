@@ -211,6 +211,32 @@ Task 1 writes the user's decisions and these rulings into spec §10.3 as "Plan r
 
 ---
 
+### Task 2a: Stored group membership (user decision, 2026-10-22)
+
+Task 2 measured 12.7 s at full reach (2.9 s scoped) on the sizing fleet. The cause is that group membership is computed per (host, rule condition) in every query, in a CTE that keeps the plan single-threaded. The user chose to store membership.
+
+**Files:**
+- Create: `migrations/0061_host_group_membership.sql`. Set `SCHEMA_VERSION = 61`.
+  - The table is `console_host_group_membership (asset_group_id uuid, agent_id text, PRIMARY KEY (asset_group_id, agent_id))`, with an index on `(agent_id)`.
+  - It holds every group kind: manual, rule and automatic. The rule is the same as `console_host_in_group` (migration 53): active hosts only, a manual group holds its picked hosts, and a rule or automatic group holds a host when it has conditions and every one holds.
+  - **It is kept by triggers in the same transaction, never by a job:**
+    - on `agents`, for INSERT, DELETE, and UPDATE of the columns conditions read or that make a host active, only when a value changes (the trigger must not fire work on every heartbeat);
+    - on `console_host_group_conditions`;
+    - on `console_host_group_members`;
+    - on `console_asset_groups` (insert, delete and kind change).
+  - The migration backfills the table, and grants SELECT to every role that reads groups or scope today.
+- Modify: `console_host_in_group`, `host_list_sql::members` and the scope helpers (`console_read`'s agent scope and every `agent_visibility` path) to read the table. Remove the per-request evaluation, and update the ponytail note.
+- Tests: `crates/platform-store/tests/host_group_membership.rs`:
+  - `membership_matches_the_rule_after_every_change`: for each change path (enrol, fact change, revoke or reactivate, condition add, edit and remove, manual member add and remove, group create, delete and kind change), the table equals the live rule (keep the old SQL as the test oracle);
+  - a heartbeat that changes no relevant column writes no membership rows;
+  - scope parity: the scoped results of host_list, alarm_list and vuln_list are unchanged.
+
+Then Task 2's query joins the table (and may `SET LOCAL work_mem` for its statement). The re-measured timing test must meet ruling 13.
+
+- [ ] **Step 1: Write the failing tests.** **Step 2: Implement.** **Step 3: Run platform-store, console and ingest tests.** **Step 4: Commit.**
+
+---
+
 ### Task 3: `GET /v1/vulnerability-list`, and vulnerabilities as a saved-views page
 
 **Files:**
