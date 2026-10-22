@@ -669,7 +669,7 @@ case, assignee and techniques) and a per-host rollup for groups and the
 alarms-off part. Tests: `tests/alarm_list.rs`; the 200,000-alarm timing
 (`tests/alarm_list_timing.rs`) is in console-read.md.
 
-## The Vulnerabilities list (`vuln_list::vuln_list`, schema 60)
+## The Vulnerabilities list (`vuln_list::vuln_list`, schema 62)
 
 `vuln_list(client, &VulnQuery, &AgentScope, actor_id, today) -> VulnListPage`:
 one statement returns one row per CVE (or per advisory without a CVE), the
@@ -710,16 +710,22 @@ without a fix, with no open pair assigned.
 How: the fixable pairs in reach are counted per advisory, state and
 assignee in one parallel pass (hosts, group side and group mask come from
 the stored membership, `console_host_group_membership`, in a subquery
-written in place: a CTE would keep the scan serial); package names and
-fixed versions come from the covering advisories' `advisory_packages`
-entries installed on a host in reach. Pairs without a fix are counted
-through host profiles (hosts with the same affected package versions, by
-fingerprint), so the 27 M no-fix pairs of the sizing fleet are never
-expanded; a host that also has a fixable row for that advisory holds one
-pair, the fixable one. Everything else reads that small cube. Timing
-(console-read.md): 1.44 s at full reach, 1.36 s scoped, within ruling
-13's 2 s. Tests: `tests/vuln_list.rs`; the timing in
-`tests/vuln_list_timing.rs`.
+written in place: a CTE would keep the scan serial). Package names and
+fixed versions are those of the pairs (ruling 2): an advisory with one
+(name, fixed) entry in `advisory_packages` gives it to every pair, one
+with several (a Fedora bundle, OSV ranges) is read from the `packages` of
+its pairs in reach on the chosen group side, through
+`vulnerabilities_advisory` (schema 62); the package filter and counts use
+the same names. Pairs without a fix are counted through host profiles
+(hosts with the same affected package versions, by fingerprint), so the
+27 M no-fix pairs of the sizing fleet are never expanded. A host that also
+has an unfixed fixable row for that advisory holds one pair, the fixable
+one: those hosts are counted per profile, group side and mask class and
+taken out of the profile's counts and masks; once the fixable row is
+fixed, a package still without a fix is an open pair again. Everything
+else reads that small cube. Timing (console-read.md): 1.90 s at full
+reach, 1.53 s scoped, within ruling 13's 2 s. Tests: `tests/vuln_list.rs`,
+`tests/vuln_list_pairs.rs`; the timing in `tests/vuln_list_timing.rs`.
 
 ## The host page summary (`host_summary::summary`)
 

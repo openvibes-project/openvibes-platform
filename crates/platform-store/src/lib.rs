@@ -108,6 +108,8 @@ pub mod version_order;
 /// The Vulnerabilities list: one row per CVE, filters, per-value counts,
 /// summary and paging in scope.
 pub mod vuln_list;
+/// Its no-fix pairs, through host profiles.
+mod vuln_list_profiles;
 /// The SQL of the Vulnerabilities list's one statement.
 mod vuln_list_sql;
 pub mod vulnerability_triage;

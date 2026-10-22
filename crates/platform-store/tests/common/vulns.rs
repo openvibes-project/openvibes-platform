@@ -13,6 +13,7 @@ use super::hosts::id;
 
 pub const ANN: &str = "00000000-0000-4000-8000-0000000000a1";
 pub const BOB: &str = "00000000-0000-4000-8000-0000000000b2";
+pub const CID: &str = "00000000-0000-4000-8000-0000000000c3";
 
 /// Hosts 1, 2 (Debian 12) and 3 (Fedora 44) are in group Web, the scope;
 /// host 4 (Debian 12) only in Other; Alpha holds host 1.

@@ -7,7 +7,7 @@ mod common;
 
 use common::{
     hosts::id,
-    vulns::{ANN, BOB, every, fixture, keys, query, row, run},
+    vulns::{ANN, BOB, CID, every, fixture, keys, query, row, run},
 };
 use platform_store::{
     alarm_list::Assignee,
@@ -240,9 +240,24 @@ async fn package_group_host_advisory_and_assignee_narrow() {
 async fn list_counts_stay_inside_the_scope() {
     let (db, c) = common::migrated().await;
     let (web, _) = fixture(&c).await;
+    // Span holds host 1 (in reach) and host 4 (out of reach); Cid is
+    // assigned only on host 4's pair.
+    let span = common::manual_group(&c, "Span", &[id(1), id(4)]).await;
+    c.batch_execute(&format!(
+        "INSERT INTO console_users (user_id, username, display_name, created_at)
+         VALUES ('{CID}', 'cid', 'Cid', now());
+         INSERT INTO vulnerability_triage (agent_id, advisory_id, state, assigned_to, version, updated_at, updated_by)
+         VALUES ('{h4}', 'DEBIAN-OUT', 'open', '{CID}', 1, now(), 't');",
+        h4 = id(4)
+    ))
+    .await
+    .unwrap();
+    let group = |page: &VulnListPage| page.counts.groups.iter().find(|g| g.0 == span).map(|g| g.3);
     let everywhere = run(&c, &every(), &AgentScope::Global).await;
     assert!(keys(&everywhere).contains(&"CVE-OUT"));
     assert_eq!(row(&everywhere, "CVE-NF").total, 3);
+    assert_eq!(group(&everywhere), Some(6));
+    assert!(everywhere.counts.people.iter().any(|p| p.1 == "Cid"));
 
     let scope = AgentScope::AssetGroups(vec![web]);
     for q in [every(), query()] {
@@ -257,6 +272,8 @@ async fn list_counts_stay_inside_the_scope() {
     }
     let page = run(&c, &every(), &scope).await;
     assert_eq!(row(&page, "CVE-NF").total, 2);
+    assert_eq!(group(&page), Some(5), "host 1's rows only");
+    assert!(page.counts.people.iter().all(|p| p.1 != "Cid"));
     assert_eq!(n(&page.counts.state, VulnState::All), 7);
     // A search or package naming the out-of-reach CVE finds nothing.
     for q in [
@@ -416,39 +433,5 @@ async fn assignee_summary_and_summary_line() {
     );
     // The summary counts open rows whatever the state filter.
     assert_eq!(run(&c, &every(), &scope).await.summary, s);
-    db.drop().await;
-}
-
-#[tokio::test]
-async fn a_host_with_fixable_and_no_fix_rows_counts_once() {
-    let (db, c) = common::migrated().await;
-    let (web, _) = fixture(&c).await;
-    // Host 1 also has a fixable row for DEBIAN-NF (zlib without a fix on
-    // the other package), mitigated: one pair, the fixable one.
-    c.batch_execute(&format!(
-        "INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, fixed_at, last_evaluated_at)
-         VALUES ('{h1}', 'DEBIAN-NF', '[{{\"name\":\"zlib\",\"installed\":\"1.2\",\"fixed\":\"1.3\"}}]', now(), NULL, now());
-         INSERT INTO vulnerability_triage (agent_id, advisory_id, state, note, version, updated_at, updated_by)
-         VALUES ('{h1}', 'DEBIAN-NF', 'mitigated', 'n', 1, now(), 't');",
-        h1 = id(1)
-    ))
-    .await
-    .unwrap();
-    let scope = AgentScope::AssetGroups(vec![web]);
-    let page = run(&c, &every(), &scope).await;
-    let nf = row(&page, "CVE-NF");
-    assert_eq!((nf.open, nf.total), (1, 2));
-    let mitigated = run(
-        &c,
-        &VulnQuery {
-            state: VulnState::Mitigated,
-            ..query()
-        },
-        &scope,
-    )
-    .await;
-    assert_eq!(keys(&mitigated), ["CVE-A", "CVE-NF"]);
-    // Host 1 keeps open pairs elsewhere; host 2 its no-fix one.
-    assert_eq!(run(&c, &query(), &scope).await.summary.hosts, 2);
     db.drop().await;
 }

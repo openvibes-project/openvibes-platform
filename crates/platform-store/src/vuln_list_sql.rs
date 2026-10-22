@@ -13,7 +13,7 @@
 //! group, `$9` host, `$10` advisory, `$11` assignee user id (text), `$12`
 //! unassigned, `$13` today, `$14` limit, `$15` offset.
 
-use crate::vuln_list::VulnSort;
+use crate::{vuln_list::VulnSort, vuln_list_profiles::profiles};
 
 /// One filter whose own condition the counts of its values leave out. The
 /// host filter narrows the pairs themselves; the group filter picks the
@@ -108,7 +108,7 @@ const LOW_CONFIDENCE: &str =
 /// join it can run in parallel workers, and never pulled up, so its
 /// columns are worked out once per agent. The group ids are read from the
 /// table each time (not from `glist`): a CTE would keep the scans serial.
-const HOSTS: &str = "(SELECT a.agent_id, a.os_id, a.os_release,
+pub(crate) const HOSTS: &str = "(SELECT a.agent_id, a.os_id, a.os_release,
          $8::text IS NULL OR COALESCE(bool_or(g.asset_group_id::text = lower($8)), false) AS in_group,
          COALESCE(bit_or(rpad(lpad('1', array_position((SELECT COALESCE(array_agg(DISTINCT asset_group_id::text), '{}') FROM console_host_group_membership), g.asset_group_id::text), '0'),
                               cardinality((SELECT COALESCE(array_agg(DISTINCT asset_group_id::text), '{}') FROM console_host_group_membership)), '0')::varbit),
@@ -132,10 +132,13 @@ hosts AS MATERIALIZED (SELECT * FROM {HOSTS} h)"
 
 /// `fix`: the fixable pairs in reach per advisory, state and assignee
 /// (triage is joined, most pairs have none), counted, masked and
-/// reboot-flagged per group side, in parallel workers; `apnames`: the
-/// package names (and fixed versions) of those advisories installed on a
-/// host in reach. Grouping the pairs by their package list instead cost
-/// 2.3–6 s (a jsonb key that spills or runs in one process).
+/// reboot-flagged per group side, in parallel workers; `fnames`: their
+/// package names and fixed versions (ruling 2: per pair). An advisory with
+/// one (name, fixed) entry in `advisory_packages` gives it to every pair;
+/// one with several (`multi`: a Fedora bundle, OSV ranges) is read from the
+/// `packages` of its pairs in reach, per group side (schema 62's index).
+/// Grouping every pair by its package list instead cost 2.3–6 s (a jsonb
+/// key that spills or runs in one process).
 fn fixable() -> String {
     let side = |(cond, name): (&str, &str)| {
         format!(
@@ -150,73 +153,20 @@ fn fixable() -> String {
   FROM vulnerabilities v JOIN {HOSTS} h ON h.agent_id = v.agent_id
   LEFT JOIN vulnerability_triage t ON t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
   GROUP BY 1, 2, 3),
-apnames AS MATERIALIZED (
-  SELECT DISTINCT ap.advisory_id, ap.name, ap.fixed
-  FROM (SELECT DISTINCT advisory_id FROM fix) f
-  JOIN advisory_packages ap ON ap.advisory_id = f.advisory_id
-  WHERE EXISTS (SELECT 1 FROM package_versions pv JOIN host_packages hp ON hp.package_version_id = pv.id
-                WHERE pv.name = ap.name AND hp.agent_id IN (SELECT agent_id FROM hosts))
-     OR EXISTS (SELECT 1 FROM package_versions pv JOIN host_packages hp ON hp.package_version_id = pv.id
-                WHERE pv.source = ap.name AND hp.agent_id IN (SELECT agent_id FROM hosts)))"
-    )
-}
-
-/// `prof`: hosts grouped by release and the package versions they have
-/// that a no-fix advisory or a CPE match names (by a fingerprint of the
-/// set: count, sum and xor of hashes), counted and masked on each side of
-/// the group filter, with one sample host; `pv_adv`: each profile's version
-/// pairs (no-fix advisories of the host's release, and CPE matches as
-/// `CPE:<cve>:<product>`, never triaged, so open and unassigned) with
-/// their package names as `[{name}]`. A host with a fixable row for an
-/// advisory also without a fix (`overlap`) holds one pair: the fixable one;
-/// those advisories' no-fix pairs are listed per host (`vx`) without it.
-// ponytail: a fingerprint collision (two package-version sets with equal
-// count, sum and 64-bit xor-hash) would merge two profiles; vanishingly
-// unlikely. Profiles scale with distinct affected-package sets: 3 on the
-// sizing fleet, up to one per host on a fleet where every host differs.
-fn profiles() -> String {
-    format!(
-        "overlap AS MATERIALIZED (
-  SELECT advisory_id FROM fix
-  INTERSECT SELECT advisory_id FROM version_vulnerabilities),
-vx AS MATERIALIZED (
-  SELECT h.agent_id, vv.advisory_id, h.in_group, h.mask,
-         jsonb_agg(DISTINCT jsonb_build_object('name', vv.package)) AS packages
-  FROM overlap b JOIN version_vulnerabilities vv ON vv.advisory_id = b.advisory_id
-  JOIN advisories a ON a.advisory_id = vv.advisory_id
-  JOIN host_packages hp ON hp.package_version_id = vv.package_version_id
-  JOIN hosts h ON h.agent_id = hp.agent_id AND h.os_id = a.os_id AND h.os_release = a.os_version
-  WHERE NOT EXISTS (SELECT 1 FROM vulnerabilities v WHERE v.agent_id = h.agent_id AND v.advisory_id = vv.advisory_id)
-  GROUP BY h.agent_id, vv.advisory_id, h.in_group, h.mask),
-hostfp AS (
-  SELECT hp.agent_id, count(*) AS c, sum(hp.package_version_id) AS s,
-         bit_xor(hashint8extended(hp.package_version_id, 0)) AS x
-  FROM host_packages hp
-  WHERE (($1::boolean AND $9::text IS NULL) OR hp.agent_id IN (SELECT h.agent_id FROM {HOSTS} h))
-    AND hp.package_version_id IN (SELECT package_version_id FROM version_vulnerabilities
-                                  UNION SELECT package_version_id FROM cpe_findings)
-  GROUP BY hp.agent_id),
-prof AS MATERIALIZED (
-  SELECT row_number() OVER () AS id, h.os_id, h.os_release, min(f.agent_id) AS sample,
-         count(*) FILTER (WHERE h.in_group) AS n_in, count(*) FILTER (WHERE NOT h.in_group) AS n_out,
-         bit_or(h.mask) FILTER (WHERE h.in_group) AS mask_in, bit_or(h.mask) FILTER (WHERE NOT h.in_group) AS mask_out,
-         array_agg(h.agent_id) FILTER (WHERE h.in_group) AS agents
-  FROM hostfp f JOIN hosts h ON h.agent_id = f.agent_id
-  GROUP BY h.os_id, h.os_release, f.c, f.s, f.x),
-pv_adv AS MATERIALIZED (
-  SELECT p.id AS prof, vv.advisory_id, NULL::text AS cve, false AS lc, NULL::real AS cvss,
-         jsonb_agg(DISTINCT jsonb_build_object('name', vv.package)) AS packages
-  FROM prof p JOIN host_packages hp ON hp.agent_id = p.sample
-  JOIN version_vulnerabilities vv ON vv.package_version_id = hp.package_version_id
-  JOIN advisories a ON a.advisory_id = vv.advisory_id AND a.os_id = p.os_id AND a.os_version = p.os_release
-  WHERE vv.advisory_id NOT IN (SELECT advisory_id FROM overlap)
-  GROUP BY p.id, vv.advisory_id
-  UNION ALL
-  SELECT p.id, 'CPE:' || f.cve_id || ':' || f.product, f.cve_id, max(f.confidence) < 80, max(f.cvss),
-         jsonb_agg(DISTINCT jsonb_build_object('name', f.package))
-  FROM prof p JOIN host_packages hp ON hp.agent_id = p.sample
-  JOIN cpe_findings f ON f.package_version_id = hp.package_version_id AND f.os_version = p.os_release
-  GROUP BY p.id, f.cve_id, f.product)"
+multi AS MATERIALIZED (
+  SELECT ap.advisory_id FROM advisory_packages ap
+  WHERE ap.advisory_id IN (SELECT advisory_id FROM fix) AND ap.fixed IS NOT NULL
+  GROUP BY ap.advisory_id HAVING count(DISTINCT (ap.name, ap.fixed)) > 1),
+fnames AS MATERIALIZED (
+  SELECT ap.advisory_id, true AS in_group, ap.name, ap.fixed
+  FROM advisory_packages ap
+  WHERE ap.advisory_id IN (SELECT advisory_id FROM fix) AND ap.fixed IS NOT NULL
+    AND ap.advisory_id NOT IN (SELECT advisory_id FROM multi)
+  UNION
+  SELECT v.advisory_id, h.in_group, e ->> 'name', e ->> 'fixed'
+  FROM vulnerabilities v JOIN {HOSTS} h ON h.agent_id = v.agent_id
+  CROSS JOIN jsonb_array_elements(v.packages) e
+  WHERE v.advisory_id = ANY((SELECT array_agg(advisory_id) FROM multi)::text[]))"
     )
 }
 
@@ -239,11 +189,13 @@ fn cube() -> String {
          sum(s.n), bit_or(s.mask), false, false
   FROM pv_adv pa JOIN prof p ON p.id = pa.prof
   CROSS JOIN LATERAL (VALUES (true, p.n_in, p.mask_in), (false, p.n_out, p.mask_out)) s(in_group, n, mask)
-  WHERE s.n > 0
+  WHERE s.n > 0 AND pa.advisory_id NOT IN (SELECT advisory_id FROM dup)
   GROUP BY pa.advisory_id, pa.cve, s.in_group, pa.lc, pa.packages
   UNION ALL
-  SELECT x.advisory_id, NULL, NULL, 'open', NULL, x.in_group, false, x.packages, count(*), bit_or(x.mask), false, false
-  FROM vx x GROUP BY x.advisory_id, x.in_group, x.packages),
+  SELECT pa.advisory_id, pa.cve, max(pa.cvss), 'open', NULL::uuid, e.in_group, pa.lc, pa.packages,
+         sum(e.n), bit_or(e.mask), false, false
+  FROM ded e JOIN pv_adv pa ON pa.prof = e.prof AND pa.advisory_id = e.advisory_id
+  GROUP BY pa.advisory_id, pa.cve, e.in_group, pa.lc, pa.packages),
 keyed AS MATERIALIZED (
   SELECT COALESCE(c.cve, ac.cve_id, c.advisory_id) AS key, gs.grp, c.*
   FROM cube c LEFT JOIN advisory_cves ac ON c.cve IS NULL AND ac.advisory_id = c.advisory_id
@@ -281,7 +233,8 @@ knames AS MATERIALIZED (
   FROM (SELECT c.key, c.lc, c.grp, p ->> 'name' AS name, NULL::text AS fixed
         FROM keyed c CROSS JOIN jsonb_array_elements(c.packages) p WHERE c.packages IS NOT NULL
         UNION ALL
-        SELECT ka.key, ka.lc, ka.grp, n.name, n.fixed FROM kadv ka JOIN apnames n ON n.advisory_id = ka.advisory_id
+        SELECT ka.key, ka.lc, ka.grp, n.name, n.fixed
+        FROM kadv ka JOIN fnames n ON n.advisory_id = ka.advisory_id AND (NOT ka.grp OR n.in_group)
         WHERE ka.fix) x
   WHERE x.name IS NOT NULL GROUP BY x.key, x.lc, x.grp),
 r AS MATERIALIZED (
@@ -378,14 +331,23 @@ fn summary() -> String {
     let assignee = ASSIGNEE_OK.replace("c.assignee", "t.assigned_to");
     format!(
         "sum_adv AS MATERIALIZED (SELECT DISTINCT unnest(r.advisories) AS advisory_id FROM r WHERE {rows}),
-counted AS MATERIALIZED (
+counted1 AS MATERIALIZED (
   SELECT unnest(p.agents) AS agent_id FROM prof p
   WHERE p.n_in > 0 AND $11::text IS NULL
     AND EXISTS (SELECT 1 FROM pv_adv pa WHERE pa.prof = p.id AND pa.lc = {lc}
-                  AND pa.advisory_id IN (SELECT advisory_id FROM sum_adv))
-  UNION
-  SELECT x.agent_id FROM vx x
-  WHERE x.in_group AND $11::text IS NULL AND NOT {lc} AND x.advisory_id IN (SELECT advisory_id FROM sum_adv)),
+                  AND pa.advisory_id IN (SELECT advisory_id FROM sum_adv)
+                  AND pa.advisory_id NOT IN (SELECT advisory_id FROM dup))),
+counted AS MATERIALIZED (
+  SELECT agent_id FROM counted1
+  UNION ALL
+  SELECT hp.agent_id FROM hostprof hp
+  WHERE hp.in_group AND $11::text IS NULL AND hp.agent_id NOT IN (SELECT agent_id FROM counted1)
+    AND EXISTS (SELECT 1 FROM pv_adv pa
+                WHERE pa.prof = hp.prof AND pa.lc = {lc}
+                  AND pa.advisory_id IN (SELECT advisory_id FROM dup)
+                  AND pa.advisory_id IN (SELECT advisory_id FROM sum_adv)
+                  AND NOT EXISTS (SELECT 1 FROM vulnerabilities v WHERE v.agent_id = hp.agent_id
+                                    AND v.advisory_id = pa.advisory_id AND v.fixed_at IS NULL))),
 summary AS (
   SELECT jsonb_build_object(
     'open_rows', count(*),

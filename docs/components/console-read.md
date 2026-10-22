@@ -131,15 +131,17 @@ group membership pass; the counts read a small cube, not the alarms.
 Vulnerabilities list (2026-10-22, same cluster, `nice -n 19`, default
 PostgreSQL settings, 2 parallel workers): the `docs/sizing.md` fleet
 generated in SQL (10,000 Debian 12 hosts with 389 packages, 3.2 M fixable
-pairs, 27.5 M pairs without a fix, 1 % of open pairs triaged, ten manual
-and five rule groups). The default list (open, by priority, 50 rows, every
-count and the summary) measured a median of 1.44 s over 5 runs
-(1.43–1.47 s) at full reach (4,382 rows, 10,000 hosts) and 1.36 s
-(1.35–1.40 s) scoped to two manual groups (966 hosts). Run it with
+pairs, 27.5 M pairs without a fix, 100 advisories with both a fixed and an
+unfixed package, 1 % of open pairs triaged, ten manual and five rule
+groups). The default list (open, by priority, 50 rows, every count and
+the summary) measured a median of 1.90 s over 5 runs (1.86–1.95 s) at full
+reach (4,382 rows, 10,000 hosts) and 1.53 s (1.47–1.55 s) scoped to two
+manual groups. Run it with
 `cargo test -p platform-store --test vuln_list_timing -- --ignored --nocapture`;
-it fails above 2 s. The cost is two parallel passes: the fixable pairs
-joined to the hosts in reach (about 1.0 s) and the per-host package
-fingerprints (about 0.5 s, skipped filtering at full reach). Before the
-stored group membership the same list took 12.7 s: scans joined to a
-membership CTE ran without workers, and grouping pairs by their package
-list spilled to disk.
+it fails above 2 s. The cost is two parallel passes, the fixable pairs
+joined to the hosts in reach (about 0.85 s) and the per-host package
+fingerprints (about 0.45 s), plus about 0.3 s taking the 180,000 unfixed
+fixable pairs of the 100 mixed advisories out of the no-fix counts (0.45 s
+before their advisory ids were sorted bytewise). The margin is small: a
+fleet with more mixed advisories, or a busier host, can pass 2 s. Before
+the stored group membership the same list took 12.7 s.

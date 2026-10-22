@@ -21,7 +21,9 @@ const ANN: &str = "00000000-0000-4000-8000-0000000000a1";
 /// each. Advisories 1–1600 have a fix (host `n` has those with
 /// `i % 5 = n % 5`, every tenth fixed, every fiftieth waiting for a
 /// reboot), 2001–4750 none (every host has them), the rest of the 46,222
-/// none on any host. About 1 % of open pairs are triaged; ten manual
+/// none on any host. Advisories 1–100 also name a second package without
+/// a fix, which every host has (fixable and no-fix pairs of one advisory).
+/// About 1 % of open pairs are triaged; ten manual
 /// groups of about 500 hosts and five host-name rule groups.
 async fn sizing_fleet(c: &Client) {
     c.batch_execute(&format!(
@@ -57,6 +59,12 @@ async fn sizing_fleet(c: &Client) {
          INSERT INTO version_vulnerabilities (package_version_id, advisory_id, package, first_seen_at)
          SELECT pv.id, 'DEBIAN-CVE-2026-' || lpad(i::text, 5, '0'), pv.source, now()
          FROM generate_series(2001, 4750) i JOIN package_versions pv ON pv.name = 'pkg-' || (i % 389);
+         INSERT INTO version_vulnerabilities (package_version_id, advisory_id, package, first_seen_at)
+         SELECT pv.id, 'DEBIAN-CVE-2026-' || lpad(i::text, 5, '0'), pv.source, now()
+         FROM generate_series(1, 100) i JOIN package_versions pv ON pv.name = 'pkg-' || ((i + 200) % 389);
+         INSERT INTO advisory_packages (advisory_id, name, arch, scheme, match_on, fixed)
+         SELECT 'DEBIAN-CVE-2026-' || lpad(i::text, 5, '0'), 'pkg-' || ((i + 200) % 389), '', 'dpkg', 'source', NULL
+         FROM generate_series(1, 100) i;
          INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, fixed_at, last_evaluated_at, reboot_needed)
          SELECT g.agent_id, 'DEBIAN-CVE-2026-' || lpad(i::text, 5, '0'),
                 jsonb_build_array(jsonb_build_object('name', 'pkg-' || (i % 389), 'installed', '1.0-' || (g.n % 20), 'fixed', '1.1')),
