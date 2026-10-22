@@ -165,7 +165,7 @@ They pull in **237 indirect packages** (250 in all).
 | typescript | 5.8.3 | Apache-2.0 | Type checking |
 | typescript-eslint | 8.70.1 | MIT | Lint for TypeScript |
 | vite | 7.3.7 | MIT | Dev server and bundler |
-| vitest | 5.0.1 | MIT | Unit tests |
+| vitest | 5.0.5 | MIT | Unit tests |
 
 ### Continuous integration
 
