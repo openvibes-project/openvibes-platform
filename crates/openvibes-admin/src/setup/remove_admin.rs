@@ -1,14 +1,14 @@
 //! The last remove step, `admin`: the tool itself, what rpm kept of it, the
 //! repository and its signing key. Split from `remove.rs` (size).
 
-use std::{fs, io::ErrorKind, path::Path};
+use std::{fs, io::ErrorKind};
 
 use platform_host::{
     StepState,
     runner::{Program::Rpm, Runner},
 };
 
-use super::{Ctx, RemoveArgs, installed};
+use super::{Ctx, RemoveArgs, installed, remove_file_or_dir};
 
 /// The package repository install.sh writes, and the signing key file it
 /// installs next to it (removed once no other OpenVIBES package is left).
@@ -25,20 +25,6 @@ const CACHES: [&str; 2] = ["/var/cache/libdnf5", "/var/cache/dnf"];
 const DNF4_FILES: [&str; 2] = ["openvibes.solv", "openvibes-filenames.solvx"];
 /// Automatic pre-migration dumps (auto_migrate.rs).
 pub(super) const BACKUPS: &str = "/var/backups/openvibes";
-
-fn remove_path(path: &Path) -> Result<(), String> {
-    let result = if path.is_dir() {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
-    };
-    match result {
-        Err(error) if error.kind() != ErrorKind::NotFound => {
-            Err(format!("{}: {error}", path.display()))
-        }
-        _ => Ok(()),
-    }
-}
 
 /// Removes every entry of `dir` that `ours` accepts; their paths. A missing
 /// directory is fine; any other error stops the step.
@@ -57,7 +43,7 @@ fn remove_matching<R: Runner>(
         let entry = entry.map_err(|error| format!("{dir}: {error}"))?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if ours(&name) {
-            remove_path(&entry.path())?;
+            remove_file_or_dir(&entry.path())?;
             gone.push(format!("{dir}/{name}"));
         }
     }
@@ -101,7 +87,7 @@ pub fn remove_admin<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSt
             n.starts_with("openvibes") && n.ends_with(".repo")
         })?);
         if ctx.exists(KEY_FILE) {
-            remove_path(&ctx.path(KEY_FILE))?;
+            remove_file_or_dir(&ctx.path(KEY_FILE))?;
             done.push(KEY_FILE.to_owned());
         }
         for cache in CACHES {
@@ -141,8 +127,8 @@ pub fn remove_admin<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSt
         ));
     }
     if args.confirm.is_some() {
-        remove_path(&ctx.path("/var/lib/openvibes-admin"))?;
-        remove_path(&ctx.path(BACKUPS))?;
+        remove_file_or_dir(&ctx.path("/var/lib/openvibes-admin"))?;
+        remove_file_or_dir(&ctx.path(BACKUPS))?;
         // Everything in /etc/openvibes except what the retry and rpm need.
         done.extend(remove_matching(ctx, "/etc/openvibes", |n| {
             n != "admin.toml" && n != "setup.toml"
@@ -167,7 +153,7 @@ pub fn remove_admin<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSt
         let _ = remove_matching(ctx, "/etc/sudoers.d", |n| {
             n.starts_with("openvibes-operators")
         });
-        let _ = remove_path(&ctx.path("/etc/openvibes"));
+        let _ = remove_file_or_dir(&ctx.path("/etc/openvibes"));
         // systemd's "last ran" stamp of the nightly clean-up timer.
         let _ = remove_matching(ctx, "/var/lib/systemd/timers", |n| {
             n.starts_with("stamp-openvibes-")

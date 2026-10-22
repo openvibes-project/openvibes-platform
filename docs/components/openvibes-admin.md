@@ -38,7 +38,7 @@ They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. A set-up host opens on Home (Status, Maintenance,
 Quit); `Enter` opens the highlighted entry, `Esc` goes back one screen, `?`
-shows the keys, and `q` quits from Home. Maintenance lists, in this order, Update OpenVIBES, Repair, Optional parts, Ports and addresses, Certificates, Database, Back up, Settings files (today's Configuration screen, until the console's admin pages hold its fields, spec §12 step 6) and Uninstall; later entries are added by their pages. Today's screens keep their own keys, and `Esc` leaves them only when nothing is being typed or asked (unsaved settings ask first). A host not set up
+shows the keys, and `q` quits from Home. Maintenance lists, in this order, Update OpenVIBES, Repair, Optional parts, Ports and addresses, Certificates, Database, Console sign-in, Back up, Settings files (today's Configuration screen, until the console's admin pages hold its fields, spec §12 step 6), Shell and Uninstall; later entries are added by their pages. Today's screens keep their own keys, and `Esc` leaves them only when nothing is being typed or asked (unsaved settings ask first). A host not set up
 opens on the install form, which `Esc` does not leave. In any field being
 edited, `Ctrl+U` empties it (other Ctrl chords are ignored, never typed as
 letters). Every new screen (Home, Status, Service, the full log,
@@ -110,8 +110,7 @@ runs (a step blocks the screen while it runs, e.g. dnf); while one runs, the
 footer says keys wait, and the package step says it can take a few minutes.
 The first step that fails or waits
 stops the run and drops the password; `r` asks for it again and continues
-from that step, and every other action (`c`, `m`, `x`, below) still
-works from there; `Esc` returns to them without retrying (#73). Three
+from that step, and `Esc` leaves without retrying (#87, below). Three
 wrong passwords close the prompt. The finished screen
 of an install is a few labelled rows (install walkthrough, 2026-10-08):
 `Console` (the address), `Sign in` (admin and the generated password, shown
@@ -120,38 +119,40 @@ offline), then "Next: sign in, change the password, then add hosts under
 Enrollment" and, when it applies, that the operator can run openvibes-admin
 without sudo after logging in again. A detail in a wording the screen does
 not know is shown as it is. No agent install line: hosts are added from the
-console; `agent command` prints one for scripts. Repair, update and remove
-runs end on every step's outcome. Today's Setup screen is reached only by a
-first install now (location ` · Install`; Optional parts, Ports and addresses
-and Certificates replace it in Maintenance; its code goes in 2b-2). Once the
-host is set up (it has `setup.toml` and its CA), `m` and `p` do nothing and
-the bar no longer shows them, and Enter or Esc on the Finished screen goes
-Home: their form would remove unticked parts without asking. Before that,
-`m` changes components (the form filled from `setup.toml`;
-added components are installed, unticked ones removed keeping data, ports
-included) and `p` changes ports (the same form, on the port rows, #69; it says when a
-default port is held by another program ("443 is in use"; "443 is in use by
-another program" when the plan still has 443 and our unit is not running),
-and shows the CA
-as kept, with no root key row; moving
-the agent ports takes a second Enter on Start, since agents on other hosts
-keep calling the old ones until their install line is re-run; the ports a
-plan moves away from are recorded in `/etc/openvibes/setup-moved-from` by
-`helper setup-plan` and closed in firewalld once Readiness is done, as the
-CLI's Repair does; only ports the Firewall step itself opened are closed, as
-recorded in `/etc/openvibes/setup-opened-ports` (one open before Setup ran is
-never Setup's; installs from before the record close nothing), and one another
-program listens on, per `ss`, stays open with who uses it).
+console; `agent command` prints one for scripts. Today's Setup screen is
+reached only by a first install (location ` · Install`) and keeps only the
+install (2b-2): no `m`, `p`, repair or remove runs; Optional parts, Ports
+and addresses and Certificates are in Maintenance. Once the host is set up
+(it has `setup.toml` and its CA), Enter or Esc on the Finished screen goes
+Home. On the form, a default port another program holds is noted on its
+row ("443 is in use"; "443 is in use by another program" when the plan
+still has 443 and our unit is not running). The ports a plan moves away
+from (Maintenance › Ports and addresses) are recorded in
+`/etc/openvibes/setup-moved-from` by `helper setup-plan` and closed in
+firewalld once Readiness is done, as the CLI's Repair does; only ports the
+Firewall step itself opened are closed, as recorded in
+`/etc/openvibes/setup-opened-ports` (one open before Setup ran is never
+Setup's; installs from before the record close nothing), and one another
+program listens on, per `ss`, stays open with who uses it.
 The root key file defaults to the first free name in the home directory
 (`openvibes-root-ca.key`, then `-2`, `-3`…), since Remove everything keeps
-the old key; and `m` after a first install that stopped before the CA step
-offers the install again, not a Repair (#87).
+the old key. A host with `setup.toml` but no
+`/etc/openvibes/pki/intermediate.crt` (a first install that stopped before
+its CA step) starts on the install form, filled from the plan with a free
+root key name, and installs again, not a Repair, which refuses to make a CA
+(#87). Not while a job is half done (`/run/openvibes-admin/job`): a Remove
+everything that stopped after deleting the CA but before `setup.toml`
+starts on Home, whose Status offers to finish it. The CA's presence is read
+at start, on each refresh and after each Setup step, not on every draw. A plan that does not parse shows its error on an unfilled form. Esc
+on that form goes Home (whose Maintenance › Uninstall still works; Repair
+refuses to make the CA), and the next start opens the form again; a fresh
+host's form has no Home to go to. After
+a stopped run, Esc goes to that filled form while there is no CA, and Home
+once there is (Maintenance › Repair finishes it).
 As root no password is asked (#82): the TUI started with `sudo openvibes-admin` runs
 its helper directly, keeping `SUDO_USER` so Setup still names the person who
 started it (operators group, root key owner); otherwise the password prompt
-suggests starting it that way (#92). Each runs one step
-per refresh like the install, asking for the password
-once. The steps are those of
+suggests starting it that way (#92). The install's steps are those of
 `setup --quick` (below).
 
 **Boot state**: `helper unit-enable` (through the user's own sudo; polkit cannot
@@ -202,6 +203,10 @@ to the journal (`config-write SERVICE ok|failed`, never the content).
 **Repair** (Maintenance): it asks for the password and checks every step first (`helper setup-status`), then lists the steps that need attention with why. The ones that pass fold into one line ("✓ 11 other steps in order"), since 14 do not fit 80×24. Fix N problems runs every step with `--repair` (never a new CA) on the worker, then checks again; the bar says what is left. A step that stops is marked ✗ with its error, and Try again goes on from it. Check again re-reads. A half-done update blocks repair runs (`job_guard`), so Repair says so and offers no Fix until the update is finished in Update OpenVIBES, and a half-done uninstall the same way in Uninstall (each has its "Finish the …" entry there). Tests: `src/tui/maint/repair_tests.rs`.
 
 A repaired step reads "repaired: ..." in the list, and the journal line of each setup, update and remove step carries its detail (first 300 characters), e.g. `setup-step firewall --repair ok: repaired: open: 18423/tcp` (#292).
+
+**Console sign-in** (Maintenance › Console sign-in): for when nobody can sign in to the console any more. Enter asks "Reset the admin password?" ("old one stops", Yes first), then the sudo password, and runs the helper's `admin-reset` on the worker: a new one-time password for `admin` (4 groups of 4 characters, no look-alikes), which also clears the account's lock and re-enables it (`--recover`). The page then shows `Sign in as admin` and the password with "shown only now"; the bar is Enter Done. The password is moved out of the run's result into a `Zeroizing<String>` the moment the run ends and dropped when the page is left (Enter or Esc); it is never journalled, and opening the page again shows the entry, not the password. When the helper fails (no `admin` user, the database down, `setup.toml` unreadable) its words show in red as `✗ <text>` (e.g. "There is no local account named admin.", or the database error with "Repair first."), no password shows, and Enter is Try again; a `done` with no password counts as failed. Tests: `src/tui/maint/signin_tests.rs`.
+
+**Shell** (Maintenance › Shell, second to last): the operating system's command line, for experts. It has no page: Enter on the menu row (bar `Enter Open the shell`) asks "Open a shell?" ("for experts; logged", Yes first), then "Your login password:" in the bar (Enter Open, Esc Cancel; the same sudo password, said as the operator knows it). The password runs the helper's `shell-open` on the worker, which does nothing but is checked by sudo and journalled and audit-noted as `shell-open OPERATOR`; while it runs the bar spins over Maintenance. Under `sudo openvibes-admin` no password is asked. When the run is done, the main loop restores the terminal, prints `OpenVIBES shell · type exit to go back to the menu. Logged as USER, HH:MM.` (USER is the name the journal records) (teal) and `Changes here are yours: Repair can put OpenVIBES' own files right again.` (dim; both plain under `NO_COLOR`), runs `Host::shell` (the `SUDO_USER`'s login shell through `runuser -l` under sudo, otherwise the user's own), then takes the terminal back and redraws Maintenance with Shell highlighted. A shell that cannot start shows `✗ The shell could not start: <error>`; three wrong passwords show `✗ The shell did not open: three wrong passwords: nothing more was run` and open nothing; while other work runs the Yes is refused with "Wait: other work is still running". The finished run is dropped, so Home shows no result for it. Tests: `src/tui/maint/shell_tests.rs`.
 
 **Back up** (Maintenance › Back up): what a backup holds, Save in folder and Back up now. The folder is typed in place and checked as typed: a full path (text only, on every key), then, once the typing pauses (or on Enter), on its own thread: that it exists, is a folder, is not reached through a symbolic link (the real path is named), is writable for you (a probe file) and how much space is left (`df`). That thread gives up after 5 seconds, so a dead mount cannot freeze the screen. Tab browses folders instead (Enter opens, Use this folder picks, ? is Help; symbolic links are not listed; the listing itself still runs on the UI thread). No folder is shown or assumed until you choose one; the helper remembers it after the first backup written there (`/etc/openvibes/backup.toml`; a remembered folder that is not a full path, or holds control characters, is ignored). Every backup gets a new name, `openvibes-<version>-<date>-<HHMM>.dump` (`-2`, `-3`... within the same minute, or when a stray `.dump.roles.sql` of that name exists). It runs `helper update-step backup --backup FILE` on the worker, then shows the file and its size, and says to copy it off this host. The helper refuses a folder whose path goes through a symbolic link, and removes the dump again if its `.roles.sql` cannot be written, so no half backup is left. *Ceiling:* a root-squashed NFS folder passes the check (you can write there) but the helper, as root, cannot: the backup then fails with that error and nothing else runs.
 
@@ -271,7 +276,7 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 | `user list` | lists usernames, status, active role names, display names, and last activity; never reads or prints password hashes | tab-separated rows |
 | `user disable USERNAME` | disables the account and revokes its sessions atomically | `disabled local user NAME` |
 | `user unlock USERNAME` | clears an active per-account login lock and audits the recovery; source-address throttles remain active | `unlocked local user NAME` |
-| `user reset-password USERNAME` | replaces the password and revokes all sessions atomically; does not enable a disabled account | prompts twice without terminal echo |
+| `user reset-password USERNAME [--password-stdin] [--must-change] [--recover]` | replaces the password and revokes all sessions atomically; it does not enable a disabled account; `--recover` (break-glass, passed only by `helper admin-reset`) then also enables a disabled account (`user.enabled`) and clears an account lock (`user.unlocked`), after the password is replaced, so a failed replace leaves a disabled account disabled; `--must-change` makes the password one-time (the user sets their own at the next console sign-in), without it the user is not asked to change it | prompts twice without terminal echo; with `--password-stdin`, reads one line from standard input instead, same password rules |
 
 Usernames are normalized to lowercase ASCII and limited to 64 characters.
 Passwords use the same console NFC normalization, 15–128 Unicode-character
@@ -664,11 +669,14 @@ refused while one works):
   PostgreSQL goes too, but only when Setup installed it (Setup's Postgres
   step records that in `/etc/openvibes/setup-installed-postgresql`, as
   `setup-opened-ports` does for ports) and the cluster holds no database
-  besides `postgres`, `template0`, `template1` and `openvibes`: then the
+  besides `postgres`, `template0`, `template1` and `openvibes`, and no
+  data in the `postgres` database itself (tables, partitioned tables,
+  materialized views and foreign tables outside `pg_catalog`,
+  `information_schema` and `pg_toast*`, plus large objects): then the
   service is disabled, `postgresql-server` (and `postgresql` and
   `postgresql-private-libs`, whichever Setup installed too: the record lists each
   one that was absent before) removed with `rpm -e`, and `/var/lib/pgsql` deleted. With
-  other databases, when another package needs it (`rpm -e --test` refuses,
+  other databases or such data ("the postgres database holds 3 objects"), when another package needs it (`rpm -e --test` refuses,
   e.g. `postgresql-upgrade`), or without the record, it stays, the step says
   why and Purge finishes; `--keep-data` never removes it. Once the checks pass
   a mark (`/etc/openvibes/postgresql-removing`) is written; a retry with the
@@ -728,7 +736,18 @@ password (no sudoers entry): `helper setup-plan PLANARGS` (writes
 (`STATE<TAB>DETAIL`, exit 0 whatever the state), `helper update-step STEP
 [--backup PATH] [--repo-dir DIR] [--remember-choice]`, `helper remove-step STEP (backup, stop, firewall, packages, purge, admin) --components
 LIST [--backup PATH] [--confirm HOSTNAME] [--remember-choice]`, `helper unit-enable UNIT`,
-`helper unit-disable UNIT`. Arguments are checked before the root check.
+`helper unit-disable UNIT`, `helper admin-reset` (the console's `admin`
+gets a new one-time password, 4 groups of 4 characters without 0/O/1/l/I,
+through `user reset-password admin --password-stdin --must-change --recover` as
+`openvibes-admin`; prints `done<TAB>PASSWORD` or `failed<TAB>WHY`, the
+CLI's own words without the command line, "There is no local account
+named admin." for a missing admin, and "Repair first." after a database
+error; the
+journal line is only `admin-reset admin ok`, never the password;
+`src/setup/admin_reset.rs`), `helper shell-open` (does nothing and
+prints `done<TAB>opened`: sudo's password check and the journal line are
+the point, before Maintenance › Shell opens the operator's shell).
+Arguments are checked before the root check.
 
 ## CA commands
 

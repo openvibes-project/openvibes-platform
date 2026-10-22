@@ -8,6 +8,7 @@ pub mod native;
 pub mod runner;
 pub mod service;
 pub mod setup;
+pub mod shell;
 pub mod unit;
 
 pub use service::{CONFIG_DIR, Service};
@@ -221,6 +222,11 @@ pub trait Host {
     fn listeners(&self, port: u16) -> Result<String, HostError> {
         let _ = port;
         Ok(String::new())
+    }
+    /// Opens the operator's login shell on this terminal and returns when
+    /// it exits (Maintenance › Shell).
+    fn shell(&self) -> Result<(), HostError> {
+        Err(HostError::Failed("this host has no shell".into()))
     }
 }
 

@@ -233,7 +233,7 @@ impl<H: Host> App<H> {
             return Bar::Typing {
                 note: (failures > 0)
                     .then(|| format!("Wrong password, {} tries left.", 3 - failures)),
-                label: "Your password (sudo)".into(),
+                label: asking.work.kind.password_label().into(),
                 shown: asking.prompt.masked(),
                 done: asking.work.kind.verb().into(),
             };

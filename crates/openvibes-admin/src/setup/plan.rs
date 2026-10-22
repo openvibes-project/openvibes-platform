@@ -488,13 +488,5 @@ impl PlanArgs {
 /// The person who ran Setup, from sudo's `SUDO_USER` (not root).
 pub fn operator_from_env() -> Option<String> {
     let user = std::env::var("SUDO_USER").ok()?;
-    let valid = !user.is_empty()
-        && user.len() <= 32
-        && user != "root"
-        && user.bytes().enumerate().all(|(i, b)| {
-            b.is_ascii_lowercase()
-                || b == b'_'
-                || (i > 0 && (b.is_ascii_digit() || b == b'-' || b == b'.'))
-        });
-    valid.then_some(user)
+    platform_host::shell::valid_user(&user).then_some(user)
 }

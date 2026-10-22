@@ -137,7 +137,7 @@ fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         && ctx.path(&out.display().to_string()).exists()
     {
         return Err(format!(
-            "{} already exists (a root key kept from an earlier install?); set another Root key file (m opens the form, or --root-key-out)",
+            "{} already exists (a root key kept from an earlier install?); set another Root key file (Esc opens the form, or --root-key-out)",
             out.display()
         ));
     }

@@ -117,6 +117,9 @@ pub struct App<H: Host> {
     /// Checks the backup folder on another thread (`run` sets it; tests leave it out).
     pub checker: Option<super::maint::folder::Checker>,
     pub(super) tick_count: usize,
+    /// The CA exists (`ca_exists`), read at start, on refresh and after
+    /// each Setup step, not on every draw.
+    pub(super) ca: bool,
 }
 
 impl<H: Host> App<H> {
@@ -138,7 +141,7 @@ impl<H: Host> App<H> {
         let home = crate::setup::plan::operator_from_env()
             .and_then(|user| host.user_home(&user))
             .or_else(|| std::env::var("HOME").ok());
-        let mut setup = Setup::new(set_up, hostname.clone(), home);
+        let mut setup = Setup::new(hostname.clone(), home);
         if !set_up {
             setup.propose_ports(&host);
         }
@@ -178,11 +181,29 @@ impl<H: Host> App<H> {
             root: std::path::PathBuf::from("/"),
             checker: None,
             tick_count: 0,
+            ca: false,
         };
         app.refresh();
+        app.start_screen();
         app.load_logs();
         app.files_changed();
         app
+    }
+
+    /// #87 (ruling 6): set up but stopped before its CA, the host opens
+    /// the install form, filled from its plan; unless a job is half done
+    /// (Remove everything deletes the CA before `setup.toml`): Home, whose
+    /// Status offers to finish it.
+    pub(super) fn start_screen(&mut self) {
+        if !self.host.is_set_up() {
+            return;
+        }
+        if !self.ca && self.half_done.is_none() {
+            self.nav = Nav::new(Screen::Legacy);
+            self.fill_from_plan();
+        } else {
+            self.nav = Nav::new(Screen::Home);
+        }
     }
 
     /// Reloads the unit states (the periodic refresh). Logs are reloaded
@@ -190,6 +211,7 @@ impl<H: Host> App<H> {
     /// sudo, which writes to the auth log.
     pub fn refresh(&mut self) {
         self.files_changed();
+        self.ca = self.ca_exists();
         // The highlighted Status item stays highlighted if it is still there.
         let held = (self.nav.screen == Screen::Status)
             .then(|| self.status_items().get(self.nav.row).cloned())
@@ -227,9 +249,16 @@ impl<H: Host> App<H> {
         };
     }
 
-    /// Set up already, or being changed from a set-up host.
+    /// Set up, CA included: a host whose first install stopped before its
+    /// CA is still installing (#87), so its form quits with q as on a
+    /// fresh host.
     pub fn setup_done(&self) -> bool {
-        self.setup.previous.is_some() || self.host.is_set_up()
+        self.host.is_set_up() && self.ca_exists()
+    }
+
+    /// `setup_done` for drawing: the CA as last read (`ca`), no file reads.
+    pub fn setup_done_seen(&self) -> bool {
+        self.host.is_set_up() && self.ca
     }
 
     /// Opens Status, with fresh health checks.
@@ -291,6 +320,9 @@ impl<H: Host> App<H> {
                 self.nav.go(Screen::Help(from));
             }
             Key::Esc => {
+                if self.nav.screen == Screen::Maint(super::maint::Page::SignIn) {
+                    self.signin_left();
+                }
                 self.nav.pop();
                 // A note from another screen is not news here.
                 self.message = None;

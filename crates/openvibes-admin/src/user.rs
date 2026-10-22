@@ -6,8 +6,8 @@ use openvibes_console::{NormalizedPassword, hash_password};
 use platform_store::{
     Client,
     console_auth::{
-        self, AuditContext, DisableOutcome, NewLocalUser, disable_local_user, list_local_users,
-        replace_password, unlock_local_user,
+        self, AuditContext, DisableOutcome, NewLocalUser, disable_local_user, enable_local_user,
+        list_local_users, replace_password, unlock_local_user,
     },
     console_roles,
 };
@@ -50,11 +50,24 @@ pub enum UserCommand {
         /// Local username.
         username: String,
     },
-    /// Replace a user's password and revoke every active session.
+    /// Replace a user's password and revoke every active session; a
+    /// disabled or locked user is enabled and unlocked too (break-glass).
     #[command(name = "reset-password")]
     ResetPassword {
         /// Local username.
         username: String,
+        /// Read the password from one line of standard input instead of
+        /// prompting twice (for scripts and the TUI's Console sign-in).
+        #[arg(long)]
+        password_stdin: bool,
+        /// Make the user set their own password at the next console
+        /// sign-in (treat the given password as one-time).
+        #[arg(long)]
+        must_change: bool,
+        /// Break-glass (`helper admin-reset`): also enable the account and
+        /// clear its sign-in lock.
+        #[arg(long)]
+        recover: bool,
     },
 }
 
@@ -240,7 +253,12 @@ pub async fn run(
                 });
             (result, Some(username))
         }
-        UserCommand::ResetPassword { username } => {
+        UserCommand::ResetPassword {
+            username,
+            password_stdin,
+            must_change,
+            recover,
+        } => {
             let username = match canonical_username(username) {
                 Ok(username) => username,
                 Err(error) => return (Err(error), None),
@@ -255,7 +273,12 @@ pub async fn run(
                 }
                 Err(error) => return (Err(error.to_string()), Some(username)),
             };
-            let password = match confirmed_password() {
+            let password = if *password_stdin {
+                password_from_stdin()
+            } else {
+                confirmed_password()
+            };
+            let password = match password {
                 Ok(password) => password,
                 Err(error) => return (Err(error), Some(username)),
             };
@@ -268,27 +291,47 @@ pub async fn run(
                     );
                 }
             };
-            let changed = replace_password(
+            let now = Utc::now();
+            // The password first: a failed replace leaves a disabled
+            // account disabled.
+            match replace_password(
                 client,
                 &credential.user_id,
                 password_hash.as_str(),
-                Utc::now(),
+                *must_change,
+                now,
                 &AuditContext::default(),
                 actor,
                 "local_admin",
             )
             .await
-            .map_err(|error| error.to_string());
-            let result = changed.and_then(|changed| {
-                changed
-                    .then(|| {
-                        format!(
-                            "reset password for local user {username}; all sessions were revoked\n"
-                        )
-                    })
-                    .ok_or_else(|| format!("local user {username} no longer exists"))
-            });
-            (result, Some(username))
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    return (
+                        Err(format!("local user {username} no longer exists")),
+                        Some(username),
+                    );
+                }
+                Err(error) => return (Err(error.to_string()), Some(username)),
+            }
+            // Break-glass: a reset that left the account disabled or locked
+            // would fail exactly when nobody can sign in (ruling 2).
+            if *recover {
+                let recovered = async {
+                    enable_local_user(client, &username, now, actor, "local_admin").await?;
+                    unlock_local_user(client, &username, now, actor, "local_admin").await
+                };
+                if let Err(error) = recovered.await {
+                    return (Err(error.to_string()), Some(username));
+                }
+            }
+            (
+                Ok(format!(
+                    "reset password for local user {username}; all sessions were revoked\n"
+                )),
+                Some(username),
+            )
         }
     }
 }

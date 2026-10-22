@@ -116,8 +116,8 @@ impl<H: Host> App<H> {
     /// The legacy screen has nothing typed, asked or running.
     pub fn legacy_at_rest(&self) -> bool {
         match self.tab {
-            // A stopped run's Esc is its own: back to Setup's status (#73).
-            Tab::Setup => matches!(self.setup.phase, Phase::Status | Phase::Finished),
+            // A stopped run's Esc is its own (#87).
+            Tab::Setup => self.setup.phase == Phase::Finished,
             Tab::Configuration => self.config.editing.is_none() && self.config.prompt.is_none(),
         }
     }

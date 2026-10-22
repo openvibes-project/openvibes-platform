@@ -10,7 +10,6 @@ mod database;
 mod database_tests;
 pub mod form;
 mod home;
-mod jobs;
 mod maint;
 mod nav;
 #[cfg(test)]
@@ -29,6 +28,9 @@ mod services_text;
 mod setup;
 #[cfg(test)]
 mod setup_done_tests;
+mod setup_form;
+#[cfg(test)]
+mod setup_form_tests;
 #[cfg(test)]
 mod setup_tests;
 mod setup_view;
@@ -195,6 +197,20 @@ pub fn run() -> ExitCode {
         {
             app.refresh();
             refreshed = Instant::now();
+        }
+        if app.take_shell() {
+            // The operator's login shell gets the terminal until it exits.
+            ratatui::restore();
+            let [first, second] = app.shell_header(chrono::Local::now());
+            if app.theme.color {
+                println!("\x1b[1;38;2;54;185;224m{first}\x1b[0m\n\x1b[2m{second}\x1b[0m");
+            } else {
+                println!("{first}\n{second}");
+            }
+            app.run_shell();
+            terminal = ratatui::init();
+            // Whatever the shell left on screen is drawn over in full.
+            let _ = terminal.clear();
         }
         if app.reopen {
             ratatui::restore();

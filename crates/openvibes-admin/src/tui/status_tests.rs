@@ -224,13 +224,14 @@ fn service_rows_say_since_and_ok_checks_are_rows_under_checks() {
     // The first ok check, highlighted, scrolls Checks into view.
     let n_ok = app.database.health.iter().filter(|c| !c.problem).count();
     assert!(n_ok > 0, "the fake host has ok checks");
-    app.nav.row = app.status_items().len() - 1;
+    // Ok checks are the last rows: select the first of them.
+    app.nav.row = app.status_items().len() - n_ok;
     let text = screen(&app, 80, 24);
     assert!(
         text.contains("Checks") && text.contains(&format!("{n_ok} ok")),
         "{text}"
     );
-    let ok = app.database.health.iter().rfind(|c| !c.problem).unwrap();
+    let ok = app.database.health.iter().find(|c| !c.problem).unwrap();
     assert!(!text.contains("checks ok"), "{text}");
     assert!(
         text.lines()

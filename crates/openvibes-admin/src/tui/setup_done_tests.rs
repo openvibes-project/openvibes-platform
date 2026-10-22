@@ -7,18 +7,13 @@ use super::{
     app::{App, Key},
     nav::Screen,
     script_host::*,
-    setup::{Phase, START_ROW},
+    setup::Phase,
 };
 
 /// A first install run to its Finished screen; setup.toml then exists.
 fn finished() -> App<SetupHost> {
     let mut app = app(false, vec![]);
-    while app.setup.row != START_ROW {
-        app.key(Key::Down);
-    }
-    app.key(Key::Enter);
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
+    start(&mut app, "pw");
     for _ in Step::ALL {
         app.setup_tick();
     }
@@ -29,7 +24,7 @@ fn finished() -> App<SetupHost> {
 }
 
 #[test]
-fn a_finished_install_offers_no_part_or_port_changes() {
+fn no_m_or_p_on_a_finished_install() {
     let mut app = finished();
     let text = screen(&app);
     assert!(
@@ -42,6 +37,8 @@ fn a_finished_install_offers_no_part_or_port_changes() {
         assert_eq!(app.setup.phase, Phase::Finished, "{key}");
     }
     assert!(app.host.calls.borrow().len() == 1 + Step::ALL.len());
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Home);
 }
 
 #[test]

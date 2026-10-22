@@ -7,8 +7,8 @@ use common::TestDb;
 use platform_store::console_auth::{
     NewLocalUser, NewPreauth, NewSession, clear_login_throttle, consume_preauth,
     create_enrollment_token, create_local_user, create_preauth, create_session,
-    credential_by_username, disable_local_user, list_enrollment_tokens, list_local_users,
-    login_is_throttled, record_login_failure, rehash_password, replace_password,
+    credential_by_username, disable_local_user, enable_local_user, list_enrollment_tokens,
+    list_local_users, login_is_throttled, record_login_failure, rehash_password, replace_password,
     revoke_enrollment_token, revoke_user_sessions, session, touch_session, unlock_local_user,
     user_role_bindings,
 };
@@ -202,6 +202,92 @@ async fn administrative_user_listing_and_unlock_are_non_secret_and_audited() {
     db.drop().await;
 }
 
+async fn must_change(client: &platform_store::Client) -> (bool, bool) {
+    let row = client
+        .query_one(
+            "SELECT c.must_change, u.password_must_change
+             FROM console_credentials c JOIN console_users u USING (user_id)
+             WHERE u.user_id = $1::text::uuid",
+            &[&USER_ID],
+        )
+        .await
+        .unwrap();
+    (row.get(0), row.get(1))
+}
+
+#[tokio::test]
+async fn a_reset_with_must_change_makes_the_user_change_it() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    new_user(&mut client, now).await;
+    let audit = platform_store::console_auth::AuditContext::default();
+    let phc = "$argon2id$v=19$m=19456,t=2,p=1$reset-salt$reset-hash";
+    for must in [true, false] {
+        assert!(
+            replace_password(
+                &mut client,
+                USER_ID,
+                phc,
+                must,
+                now,
+                &audit,
+                "root",
+                "local_admin"
+            )
+            .await
+            .unwrap()
+        );
+        assert_eq!(must_change(&client).await, (must, must));
+    }
+    drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn enable_local_user_enables_and_audits() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    new_user(&mut client, now).await;
+    client
+        .execute(
+            "UPDATE console_users SET enabled = false, disabled_at = $1",
+            &[&now],
+        )
+        .await
+        .unwrap();
+    assert!(
+        enable_local_user(&mut client, "alice", now, "root", "local_admin")
+            .await
+            .unwrap()
+    );
+    let user = credential_by_username(&client, "alice")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(user.enabled);
+    let audit = client
+        .query_one(
+            "SELECT actor_kind, target_kind, target_id FROM audit_log WHERE action = 'user.enabled'",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(audit.get::<_, &str>(0), "local_admin");
+    assert_eq!(audit.get::<_, &str>(1), "user");
+    assert_eq!(audit.get::<_, &str>(2), USER_ID);
+    assert!(
+        !enable_local_user(&mut client, "alice", now, "root", "local_admin")
+            .await
+            .unwrap()
+    );
+    drop(client);
+    db.drop().await;
+}
+
 #[tokio::test]
 async fn credentials_sessions_and_password_reset_revocation_round_trip() {
     let db = TestDb::create().await;
@@ -389,6 +475,7 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
             &mut client,
             USER_ID,
             "$argon2id$v=19$m=19456,t=2,p=1$new-salt$new-hash",
+            false,
             now + Duration::minutes(3),
             &platform_store::console_auth::AuditContext::default(),
             USER_ID,

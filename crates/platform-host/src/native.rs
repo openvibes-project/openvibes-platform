@@ -385,6 +385,10 @@ impl<R: Runner> Host for Native<R> {
             .or_else(|| crate::passwd_home(&std::fs::read_to_string("/etc/passwd").ok()?, user))
     }
 
+    fn shell(&self) -> Result<(), HostError> {
+        crate::shell::open(&self.runner)
+    }
+
     fn listeners(&self, port: u16) -> Result<String, HostError> {
         let filter = format!(":{port}");
         let out = self.run(Ss, &["-ltnpH", "sport", "=", &filter])?;
@@ -475,16 +479,7 @@ fn upgrades_args(root: bool) -> Vec<&'static str> {
 /// of `Uid:` in `/proc/self/status` (no `unsafe` libc call). Unreadable
 /// means not root, so the prompt is shown.
 fn effective_root() -> bool {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|status| {
-            status
-                .lines()
-                .find_map(|line| line.strip_prefix("Uid:"))
-                .and_then(|ids| ids.split_whitespace().nth(1))
-                .map(|euid| euid == "0")
-        })
-        .unwrap_or(false)
+    crate::shell::euid() == Some(0)
 }
 
 #[cfg(test)]

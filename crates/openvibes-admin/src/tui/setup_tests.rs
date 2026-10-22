@@ -1,6 +1,6 @@
 //! The Setup tab against a scripted host.
 
-use platform_host::{HostError, Step, Unit};
+use platform_host::{HostError, Step};
 use ratatui::{Terminal, backend::TestBackend};
 
 use super::{
@@ -10,16 +10,6 @@ use super::{
     script_host::*,
     setup::Phase,
 };
-
-/// From the form: Start, then the password.
-fn start(app: &mut App<SetupHost>, password: &str) {
-    while app.setup.row != super::setup::START_ROW {
-        app.key(Key::Down);
-    }
-    app.key(Key::Enter);
-    type_text(app, password);
-    app.key(Key::Enter);
-}
 
 #[test]
 fn a_new_host_opens_on_setup_with_the_components() {
@@ -187,266 +177,16 @@ fn rules_bring_distribution_and_the_finished_screen_shows_the_login() {
 }
 
 #[test]
-fn a_set_up_host_offers_no_part_or_port_changes_here() {
-    let mut app = set_up(vec![]);
-    app.open(Tab::Setup);
-    let text = screen(&app);
-    for gone in ["m components", "p ports"] {
-        assert!(!text.contains(gone), "{gone:?} in\n{text}");
-    }
-    assert!(
-        !text.contains("x uninstall"),
-        "Uninstall moved to Maintenance"
+fn after_a_failed_step_r_retries() {
+    let mut app = app(
+        false,
+        vec![Ok("written\n".into()), Ok("failed\tdnf\n".into())],
     );
-}
-
-/// #87: a plan from a first install that stopped before the CA step is
-/// not a set-up host: `m` offers a fresh install with a root key file.
-#[test]
-fn components_after_a_stopped_first_install_install_again() {
-    let mut app = set_up(vec![]);
-    app.host.plan = format!("{PLAN}# no ca\n");
-    // The failed run's CA step wrote the default key after the TUI started.
-    let home = std::env::temp_dir().join(format!("ov-87-{}", std::process::id()));
-    std::fs::create_dir_all(&home).unwrap();
-    std::fs::write(home.join("openvibes-root-ca.key"), "x").unwrap();
-    app.setup.home = Some(home.display().to_string());
-    app.open(Tab::Setup);
-    app.key(Key::Char('m'));
-    assert_eq!(app.setup.phase, Phase::Form);
-    assert!(app.setup.previous.is_none(), "install, not repair");
-    assert_eq!(
-        app.setup.root_key_out,
-        home.join("openvibes-root-ca-2.key").display().to_string(),
-        "the name taken since startup is skipped"
-    );
-    std::fs::remove_dir_all(&home).unwrap();
-}
-
-#[test]
-fn changing_components_installs_then_removes_the_unticked_ones() {
-    let mut app = set_up(vec![]);
-    app.open(Tab::Setup);
-    app.change_components(); // m is gone from a set-up host (Maintenance has it)
-    assert_eq!(app.setup.phase, Phase::Form);
-    assert_eq!(app.setup.hostname, "platform.example.com");
-    while app.setup.row != 3 {
-        app.key(Key::Down); // vulns
-    }
-    app.key(Key::Char(' '));
     start(&mut app, "pw");
-    for _ in 0..Step::ALL.len() {
-        app.setup_tick();
-    }
     app.setup_tick();
-    let calls = app.host.calls.borrow();
-    assert!(
-        calls[0]
-            .0
-            .starts_with("setup-plan --components ingest,console,distribution,rules,agent"),
-        "{}",
-        calls[0].0
-    );
-    assert_eq!(
-        calls.last().unwrap().0,
-        "remove-step backup --components vulns"
-    );
-    // The install part runs in repair mode: it may add packages, never a new CA.
-    assert_eq!(calls[1].0, "setup-step packages --repair");
-}
-
-#[test]
-fn after_a_failed_step_r_retries_and_esc_goes_back() {
-    let stopped = || {
-        let mut app = set_up(vec![]);
-        app.open(Tab::Setup);
-        app.setup.phase = Phase::Stopped(0);
-        app
-    };
-    let mut app = stopped();
-    app.key(Key::Esc);
-    assert_eq!(app.setup.phase, Phase::Status);
-    let mut app = stopped();
+    assert_eq!(app.setup.phase, Phase::Stopped(0));
     app.key(Key::Char('r'));
     assert!(matches!(app.setup.phase, Phase::Password(_)));
-}
-
-#[test]
-fn a_taken_console_port_is_replaced_by_a_free_one_and_said_so() {
-    let mut app = app_taken(false, vec![], vec![443, 8443]);
-    let text = screen(&app);
-    assert!(
-        text.contains("Console port:  8444  (443 is in use)"),
-        "{text}"
-    );
-    assert!(text.contains("Start"), "the form fits 80×24:\n{text}");
-    // The operator may type another port.
-    while app.setup.row != super::setup::PORT_ROW {
-        app.key(Key::Down);
-    }
-    app.key(Key::Enter);
-    app.key(Key::Backspace);
-    app.key(Key::Backspace);
-    type_text(&mut app, "50");
-    app.key(Key::Enter);
-    let args = app.setup.plan_args().join(" ");
-    assert!(args.contains("--console-port 8450"), "{args}");
-}
-
-#[test]
-fn a_taken_ingest_port_moves_to_a_free_one_and_distribution_keeps_its_own() {
-    let app = app_taken(false, vec![], vec![18423]);
-    let text = screen(&app);
-    assert!(
-        text.contains("Agent ports (ingest, distribution):  18425, 18424  (18423 is in use)"),
-        "{text}"
-    );
-    let args = app.setup.plan_args().join(" ");
-    assert!(
-        args.ends_with("--console-port 443 --ingest-port 18425 --distribution-port 18424"),
-        "{args}"
-    );
-}
-
-#[test]
-fn a_free_443_is_the_console_port() {
-    let app = app(false, vec![]);
-    let text = screen(&app);
-    assert!(text.contains("Console port:  443"), "{text}");
-    assert!(
-        text.contains("Agent ports (ingest, distribution):  18423, 18424"),
-        "{text}"
-    );
-    assert!(!text.contains("is taken"), "{text}");
-}
-
-/// A set-up host whose console already moved to 8443 (board #69).
-fn set_up_on_8443() -> App<SetupHost> {
-    let mut app = set_up(vec![]);
-    app.host.plan = PLAN.replace("console_port = 443", "console_port = 8443");
-    app.open(Tab::Setup);
-    app
-}
-
-#[test]
-fn a_set_up_host_changes_its_ports_from_the_tui() {
-    // Board #69: the port rows existed only before the first install.
-    let mut app = set_up_on_8443();
-    app.change_ports(); // p is gone from a set-up host
-    assert_eq!(app.setup.phase, Phase::Form);
-    assert_eq!(
-        app.setup.row,
-        super::setup::PORT_ROW,
-        "the cursor is on the ports"
-    );
-    let text = screen(&app);
-    assert!(
-        text.contains("Console port:  8443"),
-        "the saved port, not 443:\n{text}"
-    );
-    app.key(Key::Enter);
-    app.key(Key::Backspace);
-    type_text(&mut app, "4");
-    app.key(Key::Enter);
-    start(&mut app, "pw");
-    let calls = app.host.calls.borrow();
-    assert!(
-        calls[0]
-            .0
-            .ends_with("--console-port 8444 --ingest-port 18423 --distribution-port 18424"),
-        "{}",
-        calls[0].0
-    );
-}
-
-#[test]
-fn changing_components_keeps_the_saved_ports() {
-    let mut app = set_up_on_8443();
-    app.change_components(); // m is gone from a set-up host (Maintenance has it)
-    assert_eq!(app.setup.console_port, "8443");
-    assert_eq!(app.setup.agent_ports, "18423, 18424");
-}
-
-#[test]
-fn moving_an_agent_port_asks_for_a_second_enter() {
-    let mut app = set_up_on_8443();
-    app.change_ports(); // p is gone from a set-up host
-    app.key(Key::Down); // agent ports
-    app.key(Key::Enter);
-    for _ in 0..5 {
-        app.key(Key::Backspace);
-    }
-    type_text(&mut app, "18500");
-    app.key(Key::Enter);
-    while app.setup.row != super::setup::START_ROW {
-        app.key(Key::Down);
-    }
-    app.key(Key::Enter);
-    assert_eq!(
-        app.setup.phase,
-        Phase::Form,
-        "not yet: the operator is warned first"
-    );
-    let message = app.message.clone().unwrap_or_default();
-    assert!(message.contains("agents on other hosts"), "{message}");
-    app.key(Key::Enter);
-    assert!(
-        matches!(app.setup.phase, Phase::Password(_)),
-        "{:?}",
-        app.setup.phase
-    );
-}
-
-/// Reviewer's #106 drive: the `p` form said nothing about why the console
-/// is not on 443, and showed first-install CA and root-key text.
-#[test]
-fn the_ports_form_says_what_holds_the_default_and_keeps_the_ca() {
-    let mut app = set_up_on_8443();
-    app.host.taken = vec![443];
-    app.change_ports(); // p is gone from a set-up host
-    let text = screen(&app);
-    assert!(
-        text.contains("Console port:  8443  (443 is in use)"),
-        "{text}"
-    );
-    assert!(text.contains("CA:  kept (this host is set up)"), "{text}");
-    assert!(!text.contains("root created here"), "{text}");
-    assert!(!text.contains("Root key file"), "{text}");
-    // One k from the ports skips the hidden root key row to the CA row,
-    // which does not toggle on a set-up host.
-    assert_eq!(app.setup.row, super::setup::PORT_ROW);
-    app.key(Key::Up);
-    assert_eq!(app.setup.row, super::setup::CA_ROW, "no invisible focus");
-    let before = app.setup.ca;
-    app.key(Key::Char(' '));
-    assert_eq!(app.setup.ca, before);
-}
-
-/// Reviewer on #115, the user's own moment: the console still set to 443,
-/// nginx holding 443, our console not running.
-#[test]
-fn a_default_port_held_while_our_unit_is_down_is_named() {
-    let status = |active: &str| platform_host::ServiceStatus {
-        unit: Unit::Console,
-        installed: true,
-        enabled: true,
-        active: active.into(),
-        ready: None,
-        since: None,
-    };
-    for (active, noted) in [("activating", true), ("failed", true), ("active", false)] {
-        let mut app = set_up(vec![]);
-        app.host.taken = vec![443];
-        app.services = vec![status(active)];
-        app.open(Tab::Setup);
-        app.change_ports(); // p is gone from a set-up host
-        let text = screen(&app);
-        assert_eq!(
-            text.contains("Console port:  443  (443 is in use by another program)"),
-            noted,
-            "{active}:\n{text}"
-        );
-    }
 }
 
 /// Board #78: long step details wrapped, and the list ran off the bottom
@@ -455,10 +195,8 @@ fn a_default_port_held_while_our_unit_is_down_is_named() {
 #[test]
 fn every_step_fits_and_the_failure_is_in_full() {
     use platform_host::StepState;
-    let mut app = set_up(vec![]);
-    app.open(Tab::Setup);
-    app.setup.job = super::jobs::Job::Repair;
-    let steps = app.setup.job.titles().len();
+    let mut app = app(false, vec![]);
+    let steps = Step::ALL.len();
     let long = "a detail long enough to wrap twice on a wide terminal, ".repeat(4);
     app.setup.states = (0..steps)
         .map(|index| Some(StepState::Done(format!("{index} {long}"))))
@@ -478,7 +216,7 @@ fn every_step_fits_and_the_failure_is_in_full() {
                 + "\n"
         })
         .collect();
-    for title in app.setup.job.titles() {
+    for title in Step::ALL.map(|step| step.title()) {
         assert!(text.contains(title), "missing step {title:?} in\n{text}");
     }
     assert!(text.contains("END"), "the failure in full:\n{text}");
@@ -621,62 +359,6 @@ fn an_unknown_detail_is_shown_as_it_is() {
     );
 }
 
-/// Each form row is its own cursor position: the rows after the components
-/// start after the last one (the signer row once shared row 7 with the
-/// hostname: both were highlighted, and space there ticked the signer).
-#[test]
-fn every_form_row_is_its_own_cursor_position() {
-    use crate::setup::plan::Component;
-    assert_eq!(super::setup::HOSTNAME_ROW, Component::ALL.len());
-    let mut app = app(false, vec![]);
-    while app.setup.row != super::setup::HOSTNAME_ROW {
-        app.key(Key::Down);
-    }
-    let before = app.setup.components.clone();
-    app.key(Key::Char(' '));
-    assert_eq!(
-        app.setup.components, before,
-        "space on Hostname ticks nothing"
-    );
-}
-
-/// The form says what the selected row means (walkthrough, 2026-10-08: the
-/// CA and root key fields were unexplained), and always-installed
-/// components do not look like boxes to untick.
-#[test]
-fn the_form_explains_the_selected_row() {
-    let mut app = app(false, vec![]);
-    let text = screen(&app);
-    assert!(
-        text.contains("[•] ingest") && text.contains("[•] console"),
-        "{text}"
-    );
-    assert!(text.contains("always installed"), "{text}");
-    for (row, want) in [
-        (
-            super::setup::CA_ROW,
-            "made here; its key is written once to the file below",
-        ),
-        (
-            super::setup::KEY_ROW,
-            "the only copy of the root key; move it offline after Setup",
-        ),
-        (
-            super::setup::START_ROW,
-            "installs the ticked components; takes a few minutes",
-        ),
-    ] {
-        while app.setup.row != row {
-            app.key(Key::Down);
-        }
-        let text = screen(&app);
-        assert!(
-            text.contains(want),
-            "row {row}: missing {want:?} in\n{text}"
-        );
-    }
-}
-
 /// Review (setup-ux): a step after the console's failing must not hide the
 /// password generated before it; the stopped screen shows it.
 #[test]
@@ -744,55 +426,6 @@ fn the_root_key_note_stays_on_the_finished_screen() {
         text.contains("still owned by root: move it with sudo"),
         "{text}"
     );
-}
-
-#[test]
-fn the_assistant_asks_before_downloading_its_model_and_n_skips_it() {
-    let mut app = app(false, vec![Ok("setup.toml written\n".into())]);
-    app.setup
-        .components
-        .insert(crate::setup::plan::Component::Assistant);
-    while app.setup.row != super::setup::START_ROW {
-        app.key(Key::Down);
-    }
-    app.key(Key::Enter);
-    assert_eq!(app.setup.phase, Phase::Model);
-    let text = screen(&app);
-    assert!(
-        text.contains("Download the assistant's model (2.7 GB from Hugging Face)?"),
-        "{text}"
-    );
-    assert!(
-        text.contains("Licence:") && text.contains("https://huggingface.co/"),
-        "{text}"
-    );
-    assert!(!text.contains("sudo openvibes-admin assistant"), "{text}");
-    app.key(Key::Char('n'));
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    assert!(app.host.calls.borrow()[0].0.contains("--model skip"));
-}
-
-#[test]
-fn y_downloads_the_model_and_no_assistant_means_no_question() {
-    let mut app = app(false, vec![Ok("setup.toml written\n".into())]);
-    app.setup
-        .components
-        .insert(crate::setup::plan::Component::Assistant);
-    while app.setup.row != super::setup::START_ROW {
-        app.key(Key::Down);
-    }
-    app.key(Key::Enter);
-    app.key(Key::Char('y'));
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    assert!(app.host.calls.borrow()[0].0.contains("--model fetch"));
-    let mut plain = app_taken(false, vec![], vec![]);
-    while plain.setup.row != super::setup::START_ROW {
-        plain.key(Key::Down);
-    }
-    plain.key(Key::Enter);
-    assert!(matches!(plain.setup.phase, Phase::Password(_)));
 }
 
 #[test]

@@ -162,10 +162,20 @@ impl Host for FakeHost {
         }
     }
     fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
-        vec![(
-            "/etc/openvibes/tls/ingest.crt",
-            Err(HostError::Failed("permission denied".into())),
-        )]
+        // A set-up host has its CA (#87: without one it opens the install form).
+        static CA: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let ca = CA.get_or_init(|| {
+            platform_pki::generate_root(chrono::Utc::now())
+                .unwrap()
+                .cert_pem
+        });
+        vec![
+            (
+                "/etc/openvibes/tls/ingest.crt",
+                Err(HostError::Failed("permission denied".into())),
+            ),
+            ("/etc/openvibes/pki/intermediate.crt", Ok(ca.clone())),
+        ]
     }
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
         self.disk_calls.set(self.disk_calls.get() + 1);

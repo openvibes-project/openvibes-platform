@@ -263,7 +263,11 @@ fn after(run: &Run, skip: usize) -> String {
         (1 | 2, _) if skip == 1 => "The services stay stopped until the update is finished: \
                                      Try again."
             .into(),
-        (1 | 2, _) if (0..2).all(|j| run.rescued(j).is_some_and(StepState::finished)) => {
+        // Stopped at Stop services: no package was touched.
+        (1, _) if (0..2).all(|j| run.rescued(j).is_some_and(StepState::finished)) => {
+            "The services are started again; nothing was updated: Try again.".into()
+        }
+        (2, _) if (0..2).all(|j| run.rescued(j).is_some_and(StepState::finished)) => {
             "The services are started again; the packages may be partly updated: Try again.".into()
         }
         (1 | 2, _) if (0..2).all(|j| run.rescued(j).is_some()) => {

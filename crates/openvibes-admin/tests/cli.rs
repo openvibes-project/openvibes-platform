@@ -341,3 +341,92 @@ async fn user_create_reads_one_password_line_from_stdin() {
     assert_eq!(fixture.count(&must_change("admin")).await, 0);
     fixture.drop().await;
 }
+
+#[tokio::test]
+async fn reset_password_reads_stdin_and_sets_must_change() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let create = [
+        "user",
+        "create",
+        "--username",
+        "admin",
+        "--display-name",
+        "Administrator",
+        "--password-stdin",
+    ];
+    assert!(
+        fixture
+            .run_input(&create, "violet quartz lantern 2026\n")
+            .status
+            .success()
+    );
+    // A locked, disabled admin.
+    let client = platform_store::connect(&fixture.url)
+        .await
+        .unwrap()
+        .get()
+        .await
+        .unwrap();
+    client
+        .batch_execute(
+            "UPDATE console_users SET enabled = false, disabled_at = now() WHERE username = 'admin';
+             INSERT INTO console_auth_throttle
+                 (bucket_sha256, window_started_at, failures, locked_until, updated_at)
+             VALUES (sha256(convert_to('openvibes-console-login-throttle-v1', 'UTF8')
+                     || '\\x00'::bytea || convert_to('account', 'UTF8')
+                     || '\\x00'::bytea || convert_to('admin', 'UTF8')),
+                     now(), 10, now() + interval '1 hour', now())",
+        )
+        .await
+        .unwrap();
+    drop(client);
+    let reset = |extra: &'static [&'static str]| {
+        let mut args = vec![
+            "user",
+            "reset-password",
+            "admin",
+            "--password-stdin",
+            "--must-change",
+        ];
+        args.extend_from_slice(extra);
+        let out = fixture.run_input(&args, "Tz4m-W8qH-n2cR-7kLp\n");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    let disabled = "SELECT count(*) FROM console_users WHERE username = 'admin' AND NOT enabled";
+    let locked = "SELECT count(*) FROM console_auth_throttle WHERE locked_until > now()";
+    // A plain reset changes the password only.
+    reset(&[]);
+    assert_eq!(fixture.count(disabled).await, 1);
+    assert_eq!(fixture.count(locked).await, 1);
+    // Break-glass (ruling 2, `helper admin-reset`): --recover brings a
+    // locked, disabled admin back too.
+    reset(&["--recover"]);
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM console_users WHERE username = 'admin' AND enabled AND password_must_change").await,
+        1
+    );
+    assert_eq!(fixture.count(locked).await, 0);
+    // The password is replaced first: a failed replace leaves a disabled
+    // account disabled.
+    assert_eq!(
+        fixture
+            .count(
+                "SELECT count(*) FROM audit_log a JOIN audit_log b
+                   ON a.action = 'auth.password.changed' AND b.action = 'user.enabled'
+                  AND a.id < b.id
+                  AND a.id = (SELECT max(id) FROM audit_log WHERE action = 'auth.password.changed')"
+            )
+            .await,
+        1
+    );
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM audit_log WHERE action IN ('user.enabled', 'user.unlocked', 'auth.password.changed')").await,
+        4
+    );
+    fixture.drop().await;
+}

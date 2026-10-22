@@ -165,6 +165,26 @@ fn a_failed_upgrade_starts_the_services_again_and_says_so() {
 }
 
 #[test]
+fn a_stop_at_stop_services_says_nothing_was_updated() {
+    let mut app = update_app(vec![
+        Ok("skipped\tno backup chosen\n".into()),
+        Ok("failed\tcould not stop openvibes-ingest.service\n".into()),
+        Ok("done\tstarted again\n".into()),
+        Ok("done\tready\n".into()),
+    ]);
+    app.open_page(Page::Update);
+    app.nav.row = 1;
+    app.key(Key::Enter);
+    yes_and_password(&mut app);
+    let text = screen(&app);
+    assert!(
+        text.contains("The services are started again; nothing was updated: Try again."),
+        "{text}"
+    );
+    assert!(!text.contains("partly updated"), "{text}");
+}
+
+#[test]
 fn a_failed_migration_keeps_the_services_stopped_and_says_why() {
     let mut app = update_app(vec![
         Ok("skipped\tno backup chosen\n".into()),

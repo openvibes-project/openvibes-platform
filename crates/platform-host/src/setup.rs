@@ -324,6 +324,12 @@ pub enum Privileged<'a> {
     UnitEnable(Unit),
     /// `unit-disable UNIT`: do not start at boot.
     UnitDisable(Unit),
+    /// `admin-reset`: a new one-time password for the console's `admin`,
+    /// printed as `done<TAB>PASSWORD` and never journalled.
+    AdminReset,
+    /// `shell-open`: does nothing itself; sudo checks the password and the
+    /// call is journalled before Maintenance › Shell opens a shell.
+    ShellOpen,
 }
 
 impl Privileged<'_> {
@@ -353,6 +359,8 @@ impl Privileged<'_> {
             }
             Privileged::UnitEnable(unit) => vec!["unit-enable".into(), unit.name().into()],
             Privileged::UnitDisable(unit) => vec!["unit-disable".into(), unit.name().into()],
+            Privileged::AdminReset => vec!["admin-reset".into()],
+            Privileged::ShellOpen => vec!["shell-open".into()],
         }
     }
 
@@ -363,6 +371,9 @@ impl Privileged<'_> {
             Privileged::SetupPlan(_) => "setup-plan".into(),
             Privileged::Update(step, _) => format!("update-step {}", step.name()),
             Privileged::Remove(step, _) => format!("remove-step {}", step.name()),
+            // Two words: no step detail, so the password stays out (journal.rs).
+            Privileged::AdminReset => "admin-reset admin".into(),
+            Privileged::ShellOpen => format!("shell-open {}", crate::shell::operator()),
             other => other.args().join(" "),
         }
     }

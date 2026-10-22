@@ -3,6 +3,7 @@
 //! `setup --quick` (as root). Every step checks first, so re-running is
 //! safe and resumes.
 
+pub(crate) mod admin_reset;
 mod assistant;
 mod auto_agent;
 mod auto_migrate;

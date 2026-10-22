@@ -59,10 +59,26 @@ themselves and other deployments (pods, Kubernetes) can plug in later
 - `runner::Runner` / `SystemRunner`: every command is one of a closed set of
   `Program`s (`/usr/bin/systemctl`, `sudo`, `logger`, `curl`) with an
   argument vector, never a shell; `run_with_input` also writes stdin (the
-  config save). `SystemRunner` is the one place this
+  config save). `SystemRunner` is one of the two places this
   crate starts processes (the workspace's clippy rule forbids
   `std::process::Command` elsewhere); because `Program` is closed, the
   exception cannot be used to run anything else.
+- `Host::shell` (Maintenance › Shell, spec §10.9; `src/shell.rs`, the
+  other place): runs the operator's login shell on the inherited terminal
+  (stdin, stdout and stderr not captured) and returns when it exits; the
+  shell's own exit status is not an error, only a shell that cannot start
+  is (`HostError::Io`). Under sudo (effective uid 0 with a `SUDO_USER`
+  other than root) it is `/usr/sbin/runuser -l USER`, never root's shell:
+  a malformed `SUDO_USER`, or one with no passwd entry, is an error
+  ("cannot tell whose shell to open");
+  otherwise the passwd entry's shell for the effective uid (`getent passwd
+  -- UID`, then `/etc/passwd`; `/bin/sh` without one) with `-l`; root
+  logged in directly gets root's own. `shell_argv(uid, sudo_user,
+  passwd_shell)` is the pure choice and `operator_of` the journal's
+  name (both tested in `tests/shell.rs`); the spawn is checked in the
+  lab. The trait's default is `Err(HostError::Failed("this host has no
+  shell"))`. The caller (the TUI) gives the terminal back before and takes
+  it again after.
 
 ### Setup (admin TUI spec §3, §6)
 
@@ -74,7 +90,13 @@ themselves and other deployments (pods, Kubernetes) can plug in later
 - `Secret`: the user's password for one Setup run, zeroed on drop
   (`zeroize`), `Debug` prints `Secret(..)`.
 - `Privileged`: the password-gated helper verbs `setup-plan ARGS…`,
-  `setup-status`, `setup-step STEP`, `unit-enable UNIT`, `unit-disable UNIT`.
+  `setup-status`, `setup-step STEP`, `unit-enable UNIT`, `unit-disable UNIT`,
+  `admin-reset` (journalled as `admin-reset admin`, with no detail: its
+  stdout holds the new console password), `shell-open` (journalled and
+  audit-noted as `shell-open OPERATOR`, the operator being `SUDO_USER`
+  only when the process is root and the name is well formed (`shell::valid_user`,
+  shared with Setup's operator), else the real uid's passwd name; the helper does nothing else, so sudo's password check and
+  the journal line are what it is for).
   `Host::privileged` runs `sudo -S -k -p '' /usr/bin/openvibes-admin helper
   VERB…` with the password on stdin only (never in argv or the journal),
   journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns
