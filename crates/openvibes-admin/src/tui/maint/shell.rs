@@ -77,18 +77,10 @@ impl<H: Host> App<H> {
         false
     }
 
-    /// The two lines printed above the shell (shell.py #3).
+    /// The two lines printed above the shell (shell.py #3), naming the
+    /// person the journal names (`SUDO_USER` trusted only as root).
     pub fn shell_header(&self, now: DateTime<Local>) -> [String; 2] {
-        let user = crate::setup::plan::operator_from_env()
-            .or_else(|| std::env::var("USER").ok().filter(|u| !u.is_empty()))
-            .unwrap_or_else(|| "unknown".into());
-        [
-            format!(
-                "OpenVIBES shell · type exit to go back to the menu. Logged as {user}, {}.",
-                now.format("%H:%M")
-            ),
-            "Changes here are yours: Repair can put OpenVIBES' own files right again.".into(),
-        ]
+        header_for(&platform_host::shell::operator(), now)
     }
 
     /// Runs the shell on the terminal (the caller restored it) until it
@@ -98,6 +90,17 @@ impl<H: Host> App<H> {
             self.outcome = Some((false, format!("The shell could not start: {error}")));
         }
     }
+}
+
+/// The two lines printed above the shell for `user` at `now`.
+pub fn header_for(user: &str, now: DateTime<Local>) -> [String; 2] {
+    [
+        format!(
+            "OpenVIBES shell · type exit to go back to the menu. Logged as {user}, {}.",
+            now.format("%H:%M")
+        ),
+        "Changes here are yours: Repair can put OpenVIBES' own files right again.".into(),
+    ]
 }
 
 /// Why a shell run stopped, in the helper's own words.

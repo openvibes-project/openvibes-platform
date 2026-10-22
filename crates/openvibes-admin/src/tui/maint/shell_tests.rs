@@ -192,16 +192,18 @@ fn the_bar_spins_while_the_shell_opens() {
 
 #[test]
 fn the_header_names_the_user_and_time() {
-    let app = menu(vec![]);
     let at = Local.with_ymd_and_hms(2026, 10, 10, 21, 42, 0).unwrap();
-    let user = crate::setup::plan::operator_from_env()
-        .or_else(|| std::env::var("USER").ok().filter(|u| !u.is_empty()))
-        .unwrap_or_else(|| "unknown".into());
+    assert_eq!(
+        super::shell::header_for("admin", at),
+        [
+            "OpenVIBES shell · type exit to go back to the menu. Logged as admin, 21:42.",
+            "Changes here are yours: Repair can put OpenVIBES' own files right again.",
+        ]
+    );
+    // The App names the person the journal names.
+    let app = menu(vec![]);
     assert_eq!(
         app.shell_header(at),
-        [
-            format!("OpenVIBES shell · type exit to go back to the menu. Logged as {user}, 21:42."),
-            "Changes here are yours: Repair can put OpenVIBES' own files right again.".into(),
-        ]
+        super::shell::header_for(&platform_host::shell::operator(), at)
     );
 }
