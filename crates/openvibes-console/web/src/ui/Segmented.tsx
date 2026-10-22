@@ -1,14 +1,15 @@
-// A button row for 2-4 choices: radiogroup, arrows move and wrap.
+// A button row for 2-4 choices: radiogroup, arrows move and wrap, Home and End
+// jump; an option may carry a suffix (a count).
 import { useRef } from "react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
-import { withUnknown, wrapStep } from "./segmented";
+import { keyTarget, withUnknown } from "./segmented";
 
 export function Segmented<T extends string | number>(props: {
   label: string;
   value: T;
   onChange: (v: T) => void;
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; suffix?: ReactNode }[];
   unknownLabel?: (v: T) => string;
 }) {
   const { label, value, onChange, unknownLabel = String } = props;
@@ -17,10 +18,9 @@ export function Segmented<T extends string | number>(props: {
   const current = options.findIndex((o) => o.value === value);
 
   const onKey = (e: KeyboardEvent) => {
-    const delta = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
-    if (!delta) return;
+    const next = keyTarget(e.key, current, options.length);
+    if (next === null) return;
     e.preventDefault();
-    const next = wrapStep(current, delta, options.length);
     const opt = options[next];
     if (opt) onChange(opt.value);
     refs.current[next]?.focus();
@@ -35,11 +35,11 @@ export function Segmented<T extends string | number>(props: {
           type="button"
           role="radio"
           aria-checked={i === current}
-          tabIndex={i === current ? 0 : -1}
+          tabIndex={i === current || (current < 0 && i === 0) ? 0 : -1}
           className="seg__opt"
           onClick={() => onChange(o.value)}
         >
-          {o.label}
+          {o.label}{o.suffix !== undefined && <> <span className="subtle num">{o.suffix}</span></>}
         </button>
       ))}
     </div>

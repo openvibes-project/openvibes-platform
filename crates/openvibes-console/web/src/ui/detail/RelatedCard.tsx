@@ -2,17 +2,21 @@
 // when it has an href. No sections, no card. (The alarm page keeps its own.)
 import type { ReactNode } from "react";
 
+import { viewLink } from "../../app/nav";
 import { Card } from "./DetailPage";
 
-export function RelatedCard({ sections }: Readonly<{ sections: { label: string; value: ReactNode; href?: string }[] }>) {
+/** In-page view link like Tile's, or a plain string for an anchor or an external link. */
+export type RelatedHref = string | { view: string; params?: Record<string, string> };
+
+export function RelatedCard({ sections }: Readonly<{ sections: { label: string; value: ReactNode; href?: RelatedHref }[] }>) {
   if (sections.length === 0) return null;
   return (
     <Card title="Related">
       <div className="stack">
-        {sections.map((s) => (
-          <div key={s.label}>
+        {sections.map((s, i) => (
+          <div key={`${i}:${s.label}`}>
             <h3 className="section-title">{s.label}</h3>
-            {s.href ? <a className="object-link" href={s.href}>{s.value}</a> : <div>{s.value}</div>}
+            {s.href ? <a className="object-link" {...(typeof s.href === "string" ? { href: s.href } : viewLink(s.href.view, s.href.params))}>{s.value}</a> : <div>{s.value}</div>}
           </div>
         ))}
       </div>
