@@ -140,15 +140,16 @@ the old key. A host with `setup.toml` but no
 `/etc/openvibes/pki/intermediate.crt` (a first install that stopped before
 its CA step) starts on the install form, filled from the plan with a free
 root key name, and installs again, not a Repair, which refuses to make a CA
-(#87). A plan that does not parse shows its error on an unfilled form. After
+(#87). A plan that does not parse shows its error on an unfilled form. Esc
+on that form goes Home (whose Maintenance › Uninstall still works; Repair
+refuses to make the CA), and the next start opens the form again; a fresh
+host's form has no Home to go to. After
 a stopped run, Esc goes to that filled form while there is no CA, and Home
 once there is (Maintenance › Repair finishes it).
 As root no password is asked (#82): the TUI started with `sudo openvibes-admin` runs
 its helper directly, keeping `SUDO_USER` so Setup still names the person who
 started it (operators group, root key owner); otherwise the password prompt
-suggests starting it that way (#92). Each runs one step
-per refresh like the install, asking for the password
-once. The steps are those of
+suggests starting it that way (#92). The install's steps are those of
 `setup --quick` (below).
 
 **Boot state**: `helper unit-enable` (through the user's own sudo; polkit cannot

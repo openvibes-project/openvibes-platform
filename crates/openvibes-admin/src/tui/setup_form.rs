@@ -251,6 +251,9 @@ impl<H: Host> App<H> {
             }
             Key::Enter if self.setup.row == START_ROW => self.start_plan(),
             Key::Enter if self.setup.field().is_some() => self.setup.editing = true,
+            // #87: a set-up host without its CA may still go Home (its
+            // Maintenance › Uninstall works); a fresh host has no Home.
+            Key::Esc if self.host.is_set_up() => self.back(),
             Key::Char('q') => self.quit = true,
             _ => {}
         }

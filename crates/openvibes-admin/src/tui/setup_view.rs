@@ -37,7 +37,15 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     .areas(area);
     let setup = &app.setup;
     let (lines, help): (Vec<Line>, String) = match setup.phase {
-        Phase::Form => (form(app), format!("{FORM_KEYS}  {}", leave(app))),
+        Phase::Form => (
+            form(app),
+            // #87's form (set up, no CA) goes Home on Esc and still quits.
+            if app.host.is_set_up() && !app.setup_done() {
+                format!("{FORM_KEYS}  Esc back  q quit")
+            } else {
+                format!("{FORM_KEYS}  {}", leave(app))
+            },
+        ),
         Phase::Password(_) => (
             vec![
                 Line::raw(format!(

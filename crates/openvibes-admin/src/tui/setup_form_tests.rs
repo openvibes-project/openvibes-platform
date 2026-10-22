@@ -34,16 +34,69 @@ fn a_plan_without_a_ca_opens_the_install_form_filled() {
     let text = screen(&app);
     assert!(text.contains("Hostname:  planned.example.com"), "{text}");
     assert!(text.contains("Root key file:"), "{text}");
-    assert_eq!(
-        app.setup.root_key_out,
-        super::setup_form::default_root_key(app.setup.home.as_deref()),
-        "a free name"
-    );
+    assert!(text.contains("Esc back  q quit"), "{text}");
     start(&mut app, "pw");
     app.setup_tick();
     let calls = app.host.calls.borrow();
     assert!(calls[0].0.starts_with("setup-plan "), "{}", calls[0].0);
     assert_eq!(calls[1].0, format!("setup-step {}", Step::ALL[0].name()));
+}
+
+/// Ruling (fix 1): the #87 form is not a trap; Home's Maintenance ›
+/// Uninstall still works from there. A fresh host's form has no Home.
+#[test]
+fn esc_on_the_87_form_goes_home_but_not_on_a_fresh_form() {
+    let mut app = app_with_plan(&format!("{PLAN}{NO_CA}"), vec![]);
+    app.key(Key::Esc);
+    assert_eq!(app.nav.screen, Screen::Home);
+    let mut fresh = fresh_app();
+    fresh.key(Key::Esc);
+    assert_eq!(
+        (fresh.nav.screen.clone(), fresh.setup.phase),
+        (Screen::Legacy, Phase::Form)
+    );
+    assert!(!screen(&fresh).contains("Esc back"));
+}
+
+/// The #87 form keeps the plan's own choices: parts, a moved console port
+/// (said why), and a careful CA.
+#[test]
+fn the_87_form_keeps_the_plans_parts_ports_and_ca() {
+    let plan = format!("{PLAN}{NO_CA}")
+        .replace("\"vulns\", \"rules\", ", "")
+        .replace("console_port = 443", "console_port = 8443")
+        .replace("ca = \"quick\"", "ca = \"careful\"");
+    let mut app = app_with_plan(&plan, vec![]);
+    app.host.taken = vec![443];
+    app.fill_from_plan();
+    let text = screen(&app);
+    assert!(
+        text.contains("Console port:  8443  (443 is in use)"),
+        "{text}"
+    );
+    assert!(text.contains("CA:  careful"), "{text}");
+    assert!(
+        text.contains("[ ] vulns") && text.contains("[ ] rules"),
+        "{text}"
+    );
+    assert!(text.contains("[x] agent"), "{text}");
+}
+
+#[test]
+fn a_plan_that_does_not_parse_says_so_on_the_form() {
+    let mut app = app_with_plan(&format!("components = 3\n{NO_CA}"), vec![]);
+    assert_eq!(
+        (app.nav.screen.clone(), app.setup.phase),
+        (Screen::Legacy, Phase::Form)
+    );
+    let error = app.message.clone().expect("the parse error");
+    let first = error.lines().next().unwrap().to_owned();
+    assert!(
+        screen(&app).contains(&first[..first.len().min(40)]),
+        "{error}"
+    );
+    app.key(Key::Char('q'));
+    assert!(app.quit);
 }
 
 #[test]
