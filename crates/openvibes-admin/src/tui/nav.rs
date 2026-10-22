@@ -28,6 +28,8 @@ pub enum Screen {
     Maint(super::maint::Page),
     Help(Box<Screen>),
     Legacy,
+    /// The first install (sub-project 3).
+    Install(super::install::Stage),
 }
 
 #[derive(Clone, Debug)]
@@ -77,6 +79,7 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Maintenance => " · Maintenance".into(),
         Screen::Maint(page) => format!(" · Maintenance › {}", page.title()),
         Screen::Help(_) => " · Help".into(),
+        Screen::Install(_) => " · Install".into(),
         Screen::Legacy => match app.tab {
             // Only a first install reaches Setup now (Maintenance has the rest).
             Tab::Setup => " · Install".into(),
@@ -102,6 +105,7 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
             let body = frame::legacy(frame, &app.theme, &head);
             super::legacy_view(frame, body, app);
         }
+        Screen::Install(stage) => super::install::draw(frame, &head, app, *stage),
         Screen::Home => home::draw(frame, &head, app),
         Screen::Maintenance => super::maint::draw_menu(frame, &head, app),
         Screen::Maint(page) => super::maint::draw(frame, &head, app, *page),

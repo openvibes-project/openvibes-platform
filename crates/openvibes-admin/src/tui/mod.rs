@@ -10,6 +10,7 @@ mod database;
 mod database_tests;
 pub mod form;
 mod home;
+mod install;
 mod maint;
 mod nav;
 #[cfg(test)]

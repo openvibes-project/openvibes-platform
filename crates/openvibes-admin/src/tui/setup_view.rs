@@ -12,6 +12,7 @@ use ratatui::{
 
 use super::{
     app::App,
+    install::finished::{admin_password, between, done},
     setup::{AGENT_PORTS_ROW, CA_ROW, HOSTNAME_ROW, KEY_ROW, PORT_ROW, Phase, SANS_ROW, START_ROW},
 };
 use crate::setup::plan::{CaMode, Component};
@@ -287,27 +288,6 @@ fn cut(text: &str, width: usize) -> String {
     let mut cut: String = text.chars().take(width.saturating_sub(1)).collect();
     cut.push('…');
     cut
-}
-
-/// The step's detail when it finished done.
-fn done(states: &[Option<StepState>], step: Step) -> Option<&str> {
-    let index = Step::ALL.iter().position(|s| *s == step)?;
-    match states.get(index)? {
-        Some(StepState::Done(detail)) => Some(detail),
-        _ => None,
-    }
-}
-
-/// The admin password a console detail carries (only when Setup generated
-/// one: `setup/console.rs`).
-fn admin_password(detail: &str) -> Option<&str> {
-    between(detail, ", password ", " (")
-}
-
-/// `text` between `start` and `end` (to its end when `end` is absent).
-fn between<'a>(text: &'a str, start: &str, end: &str) -> Option<&'a str> {
-    let rest = &text[text.find(start)? + start.len()..];
-    Some(rest.find(end).map_or(rest, |at| &rest[..at]))
 }
 
 /// The end of an install run: what to keep, labelled, and what to do next

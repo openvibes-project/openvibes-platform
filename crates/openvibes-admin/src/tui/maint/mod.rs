@@ -468,6 +468,7 @@ impl<H: Host> App<H> {
             self.names_ended();
             self.parts_ended();
             self.repair_ended();
+            self.install_ended();
         }
     }
 }

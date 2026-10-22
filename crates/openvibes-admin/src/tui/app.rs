@@ -54,6 +54,7 @@ pub struct App<H: Host> {
     pub host: H,
     pub tab: Tab,
     pub setup: Setup,
+    pub install: super::install::Install,
     pub config: Configuration,
     pub database: DatabaseScreen,
     pub services: Vec<ServiceStatus>,
@@ -141,6 +142,7 @@ impl<H: Host> App<H> {
         let home = crate::setup::plan::operator_from_env()
             .and_then(|user| host.user_home(&user))
             .or_else(|| std::env::var("HOME").ok());
+        let install = super::install::Install::new(hostname.clone(), home.clone());
         let mut setup = Setup::new(hostname.clone(), home);
         if !set_up {
             setup.propose_ports(&host);
@@ -149,6 +151,7 @@ impl<H: Host> App<H> {
             host,
             tab: Tab::Setup,
             setup,
+            install,
             config: Configuration::default(),
             database: DatabaseScreen::default(),
             services: Vec::new(),
@@ -313,6 +316,9 @@ impl<H: Host> App<H> {
         if self.prompt.is_some() {
             return self.prompt_key(key);
         }
+        if let Screen::Install(stage) = self.nav.screen {
+            return self.install_key(stage, key);
+        }
         match key {
             Key::Char('?') if !matches!(self.nav.screen, Screen::Help(_)) => {
                 self.hold_status_item();
@@ -343,7 +349,7 @@ impl<H: Host> App<H> {
                 Screen::Status => self.status_key(key),
                 Screen::Service(unit) => self.service_key(unit, key),
                 Screen::Log(_) => self.log_key(key),
-                Screen::Help(_) | Screen::Legacy => {}
+                Screen::Help(_) | Screen::Legacy | Screen::Install(_) => {}
             },
         }
     }
