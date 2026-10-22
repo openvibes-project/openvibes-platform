@@ -544,6 +544,9 @@ intermediate's last day.
 
 ## Releases
 
+Before the tag, a pull request of its own brings every dependency up to
+date ([Before each release](../dependencies.md#before-each-release)).
+
 A tag `vX.Y.Z` equal to the workspace version runs `.github/workflows/release.yml`
 (admins only create tags): the RPMs are built in `fedora:44`, signed with the
 OpenVIBES package key (organisation secrets `RPM_SIGNING_KEY`,
