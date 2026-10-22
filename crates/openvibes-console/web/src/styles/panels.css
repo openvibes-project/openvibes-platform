@@ -162,7 +162,7 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 /* Sign in */
 .signin { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: radial-gradient(1200px 600px at 20% -10%, var(--accent-soft), transparent), var(--canvas); }
 .signin__card { width: min(380px, 100%); display: grid; gap: 14px; padding: 28px; border-radius: var(--r-4); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-3); }
-.signin__logo { height: 30px; }
+.signin__logo { height: 35px; }
 .signin__card h1 { font-size: 20px; }
 .signin__card .link-button { justify-self: center; font-size: 13px; }
 

@@ -20,7 +20,7 @@
 .rail--pinned { width: var(--rail-open); }
 .rail__brand { display: flex; align-items: center; height: 36px; padding: 0 5px; margin-bottom: 8px; overflow: hidden; }
 .rail__mark { width: 28px; height: 28px; flex: none; }
-.rail__wordmark { height: 22px; display: none; }
+.rail__wordmark { height: 26px; display: none; }
 /* Open rail: the full logotype alone, centered; the small mark is only for the collapsed rail. */
 .rail:hover .rail__brand, .rail:has(:focus-visible) .rail__brand, .rail--pinned .rail__brand { justify-content: center; }
 .rail:hover .rail__mark, .rail:has(:focus-visible) .rail__mark, .rail--pinned .rail__mark { display: none; }
