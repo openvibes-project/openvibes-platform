@@ -5,6 +5,7 @@ use platform_host::HostError;
 use crate::tui::{
     app::{App, Key},
     maint::Page,
+    nav::Screen,
     script_host::{SetupHost, screen, set_up, type_text},
 };
 
@@ -12,6 +13,7 @@ const PASSWORD: &str = "Tz4m-W8qH-n2cR-7kLp";
 
 fn page(answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
     let mut app = set_up(answers);
+    app.nav.go(Screen::Maintenance);
     app.open_page(Page::SignIn);
     app
 }
@@ -32,6 +34,7 @@ fn ok() -> Vec<Result<String, HostError>> {
 fn the_page_offers_the_reset() {
     let text = screen(&page(vec![]));
     for want in [
+        "Enter  Reset the admin password",
         "For when nobody can sign in to the console any more.",
         "Reset the admin password",
         "a new password, shown once",
@@ -47,7 +50,8 @@ fn enter_asks_the_question() {
     let text = screen(&app);
     assert!(text.contains("Reset the admin password?"), "{text}");
     assert!(text.contains("old one stops"), "{text}");
-    assert!(text.contains("Yes"), "{text}");
+    assert!(text.contains(" Yes  [ No ]"), "Yes is highlighted: {text}");
+    assert_eq!(app.question.as_ref().map(|q| q.1), Some(true));
 }
 
 #[test]
@@ -74,6 +78,8 @@ fn the_password_is_gone_after_leaving() {
     let mut app = page(ok());
     reset(&mut app);
     app.key(Key::Enter);
+    assert!(app.maint.signin.is_none());
+    assert_eq!(app.nav.screen, Screen::Maintenance);
     app.open_page(Page::SignIn);
     let text = screen(&app);
     assert!(!text.contains(PASSWORD), "{text}");
@@ -82,9 +88,29 @@ fn the_password_is_gone_after_leaving() {
     let mut app = page(ok());
     reset(&mut app);
     app.key(Key::Esc);
+    assert!(app.maint.signin.is_none());
     app.open_page(Page::SignIn);
     assert!(!screen(&app).contains(PASSWORD));
-    assert!(app.maint.signin.is_none());
+}
+
+#[test]
+fn help_and_back_keep_the_password() {
+    let mut app = page(ok());
+    reset(&mut app);
+    app.key(Key::Char('?'));
+    app.key(Key::Esc);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::SignIn));
+    assert!(screen(&app).contains(PASSWORD));
+}
+
+#[test]
+fn a_password_that_arrived_while_away_is_shown_on_reopening() {
+    let mut app = page(ok());
+    reset(&mut app);
+    // The run ended while the page was off screen (no key clears it).
+    app.nav.pop();
+    app.open_page(Page::SignIn);
+    assert!(screen(&app).contains(PASSWORD));
 }
 
 #[test]

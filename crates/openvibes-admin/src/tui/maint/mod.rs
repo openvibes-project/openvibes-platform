@@ -162,7 +162,7 @@ pub struct Maint {
     /// Names: the saved plan, the edits, the name being typed.
     pub names: names::Names,
     /// Console sign-in: the new password, shown once; dropped on leaving.
-    pub signin: Option<zeroize::Zeroizing<String>>,
+    pub signin: Option<signin::Shown>,
 }
 
 impl Maint {

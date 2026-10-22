@@ -23,6 +23,15 @@ use crate::tui::{
     },
 };
 
+/// The new password; its `Debug` is redacted so no derive can print it.
+pub struct Shown(Zeroizing<String>);
+
+impl std::fmt::Debug for Shown {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Shown(..)")
+    }
+}
+
 pub fn work() -> Work {
     Work::new(Kind::SignIn, vec![Call::AdminReset])
 }
@@ -56,13 +65,12 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     match (run, shown) {
         (Some(r), Some(password)) if r.ok() => {
             lines.push(info("Sign in as", vec![Span::raw("admin")]));
-            lines.push(info(
-                "New password",
-                vec![
-                    Span::styled(password.as_str().to_owned(), t.bold()),
-                    Span::styled("  shown only now", t.dim()),
-                ],
-            ));
+            // Borrowed: no plain copy of the password is made per frame.
+            lines.push(Line::from(vec![
+                Span::raw(format!("    {:<26} ", "New password")),
+                Span::styled(password.0.as_str(), t.bold()),
+                Span::styled("  shown only now", t.dim()),
+            ]));
             lines.push(Line::raw(""));
             lines.push(Line::styled(
                 "    You are asked to change it at the next sign-in.",
@@ -94,10 +102,10 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
 
 impl<H: Host> App<H> {
     pub(super) fn open_signin(&mut self) {
-        self.maint.signin = None;
         self.nav.row = 0;
-        // A finished reset's result is not news the next time.
-        if signin_run(self).is_some_and(|r| !r.running()) {
+        // A password nobody has seen yet (the run ended while the page was
+        // off screen) is shown now; a seen result is not news.
+        if self.maint.signin.is_none() && signin_run(self).is_some_and(|r| !r.running()) {
             self.run = None;
         }
     }
@@ -149,7 +157,7 @@ impl<H: Host> App<H> {
             return;
         };
         if let Some(StepState::Done(text)) = run.states[0].as_mut() {
-            self.maint.signin = Some(Zeroizing::new(std::mem::take(text)));
+            self.maint.signin = Some(Shown(Zeroizing::new(std::mem::take(text))));
         }
     }
 }
