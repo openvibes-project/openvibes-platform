@@ -6,9 +6,9 @@ import { Fragment, type ReactNode } from "react";
 
 import { Icon } from "../Icon";
 
-/** A card of the shared detail-page layout (approved screen 11); `flush` drops the body padding (a table). */
-export const Card = ({ title, aside, flush, children }: { title: ReactNode; aside?: ReactNode; flush?: boolean; children: ReactNode }) => (
-  <section className="card person-card">
+/** A card of the shared detail-page layout (approved screen 11); `flush` drops the body padding (a table); `id` is a tile's anchor. */
+export const Card = ({ title, aside, flush, id, children }: { title: ReactNode; aside?: ReactNode; flush?: boolean; id?: string; children: ReactNode }) => (
+  <section className="card person-card" id={id}>
     <div className="row row--between person-card__head"><h2 className="section-title">{title}</h2>{aside}</div>
     <div className={flush ? undefined : "person-card__body"}>{children}</div>
   </section>

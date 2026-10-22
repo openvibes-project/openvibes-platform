@@ -11,7 +11,8 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use platform_store::{
     console_read::AgentScope,
     host_list::{HostScopes, HostStatus},
-    host_summary::{HostSummary, Top, summary},
+    host_summary::{HostSummary, Top, TopAlarm, summary},
+    vulns::VulnRow,
 };
 
 use super::LastTest;
@@ -94,13 +95,49 @@ pub(crate) async fn host_summary(
         revoke: changeable && here(Permission::HostsRevoke),
         export: here(Permission::HostsExport),
         add_to_case: here(Permission::CasesWrite),
-        ask: here(Permission::AssistantUse),
+        ask: state.assistant.is_some() && here(Permission::AssistantUse),
     };
     axum::Json(view(s, can)).into_response()
 }
 
 fn total<T>(top: Option<&Top<T>>) -> Option<i64> {
     top.map(|t| t.total)
+}
+
+/// Open alarms as the host page and an alarm's Related card show them.
+pub(crate) fn top_alarms_view(t: Top<TopAlarm>) -> TopAlarmsView {
+    TopAlarmsView {
+        total: t.total,
+        items: t
+            .items
+            .into_iter()
+            .map(|i| TopAlarmView {
+                id: i.id,
+                rule_id: i.rule_id,
+                message: i.message,
+                severity: i.severity,
+                last_seen: rfc(i.last_seen),
+            })
+            .collect(),
+    }
+}
+
+/// Open vulnerabilities as the host page and an alarm's Related card show them.
+pub(crate) fn top_vulnerabilities_view(t: Top<VulnRow>) -> TopVulnerabilitiesView {
+    TopVulnerabilitiesView {
+        total: t.total,
+        items: t
+            .items
+            .into_iter()
+            .map(|v| TopVulnerabilityView {
+                advisory: v.advisory_id,
+                severity: v.severity,
+                kev: v.kev,
+                exploited: v.exploited,
+                title: v.title,
+            })
+            .collect(),
+    }
 }
 
 fn view(s: HostSummary, can: HostActionsView) -> HostSummaryView {
@@ -151,34 +188,8 @@ fn view(s: HostSummary, can: HostActionsView) -> HostSummaryView {
         labels: s.labels,
         certificates: s.certificates.into_iter().map(certificate_view).collect(),
         certificate_count: s.certificate_count,
-        top_alarms: s.top_alarms.map(|t| TopAlarmsView {
-            total: t.total,
-            items: t
-                .items
-                .into_iter()
-                .map(|i| TopAlarmView {
-                    id: i.id,
-                    rule_id: i.rule_id,
-                    message: i.message,
-                    severity: i.severity,
-                    last_seen: rfc(i.last_seen),
-                })
-                .collect(),
-        }),
-        top_vulnerabilities: s.top_vulnerabilities.map(|t| TopVulnerabilitiesView {
-            total: t.total,
-            items: t
-                .items
-                .into_iter()
-                .map(|v| TopVulnerabilityView {
-                    advisory: v.advisory_id,
-                    severity: v.severity,
-                    kev: v.kev,
-                    exploited: v.exploited,
-                    title: v.title,
-                })
-                .collect(),
-        }),
+        top_alarms: s.top_alarms.map(top_alarms_view),
+        top_vulnerabilities: s.top_vulnerabilities.map(top_vulnerabilities_view),
         top_failing: s.top_failing.map(|t| TopFailingListView {
             total: t.total,
             items: t

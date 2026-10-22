@@ -19,8 +19,9 @@ test("an alarm opens the historical rule and evidence at a narrow width", async 
   await page.goto("/alarms");
   const row = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
   await row.locator("td").nth(2).click();
-  const panel = page.locator(".inspector");
-  await panel.getByRole("tab", { name: /^Evidence/ }).click();
+  // The alarm's page (screen 30): the evidence is in What happened.
+  await expect(page).toHaveURL(/\/alarms\/\d+$/);
+  const panel = page.locator(".view");
   await panel.getByRole("button", { name: "Show rule" }).click();
   await expect(panel.locator(".detection-code code").first()).toContainText('/usr/bin/postgres');
   await expect(panel.locator(".detection-inputs")).toContainText('/usr/bin/bash');

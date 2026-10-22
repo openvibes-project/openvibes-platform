@@ -81,9 +81,11 @@ async fn an_administrator_sees_every_section() {
     assert_eq!(body["inventory"]["packages"], 0);
     assert!(body["protection"]["last_test"].is_object());
     let can = &body["can"];
-    for key in ["label", "revoke", "export", "add_to_case", "ask"] {
+    for key in ["label", "revoke", "export", "add_to_case"] {
         assert_eq!(can[key], true, "{key}");
     }
+    // The assistant is off in tests, so "Ask" is not offered.
+    assert_eq!(can["ask"], false);
     fx.db.drop().await;
 }
 

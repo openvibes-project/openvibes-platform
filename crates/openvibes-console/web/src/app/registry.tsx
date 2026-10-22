@@ -16,7 +16,6 @@ import { EnrollmentTokenPanel } from "../panels/admin/EnrollmentTokenPanel";
 import { PublishBundle, RuleSetPanel } from "../panels/rules/RuleSetPanel";
 import { ServiceAccountPanel } from "../panels/admin/ServiceAccountPanel";
 import { AdvisoryPanel } from "../panels/findings/AdvisoryPanel";
-import { AlarmPanel } from "../panels/alarms/AlarmPanel";
 import { CasePanel, NewCasePanel } from "../panels/cases/CasePanel";
 import { SiteRulePanel } from "../panels/rules/SiteRulePanel";
 import { PackagePanel, splitPackageId } from "../panels/hosts/PackagePanel";
@@ -56,7 +55,7 @@ type ViewDef = {
 
 export const views: readonly ViewDef[] = [
   { path: "/", prefix: "/dashboards/", label: "Dashboards", short: "Home", icon: "overview", group: "Investigate", keys: "g d", access: [], render: () => <DashboardsView /> },
-  { path: "/alarms", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
+  { path: "/alarms", prefix: "/alarms/", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
   { path: "/compliance", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "compliance.read" }], render: () => <Findings /> },
   { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/hosts", prefix: "/hosts/", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "hosts.read" }], render: () => <Hosts /> },
@@ -80,8 +79,8 @@ type PanelDef = {
   render: (id: string) => ReactNode;
 };
 
-/** An object's icon; a host is a page, not a panel (approved screen 17). */
-export const objectIcon = (kind: string): IconName => panels[kind]?.icon ?? (kind === "agent" ? "agents" : "layers");
+/** An object's icon; a host and an alarm are pages, not panels (approved screens 17 and 30). */
+export const objectIcon = (kind: string): IconName => panels[kind]?.icon ?? (kind === "agent" ? "agents" : kind === "alarm" ? "alarm" : "layers");
 
 /** The best known name of an object: learned from its panel, else from its id. */
 export function objectTitle(ref: { kind: string; id: string }): string {
@@ -89,7 +88,6 @@ export function objectTitle(ref: { kind: string; id: string }): string {
 }
 
 export const panels: Readonly<Record<string, PanelDef>> = {
-  alarm: { label: "Alarm", icon: "alarm", title: (id) => `#${id}`, render: (id) => <AlarmPanel id={id} /> },
   case: { label: "Case", icon: "cases", title: (id) => id === "new" ? "New case" : "Case", render: (id) => id === "new" ? <NewCasePanel /> : <CasePanel id={id} /> },
   finding: { label: "Compliance finding", icon: "findings", title: (id) => splitFindingId(id)[1], render: (id) => <FindingPanel id={id} /> },
   package: { label: "Software", icon: "package", title: (id) => splitPackageId(id)[1], render: (id) => <PackagePanel id={id} /> },

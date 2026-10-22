@@ -7,7 +7,7 @@ vi.hoisted(() => {
 });
 
 import type { Permission, Session } from "../api/types";
-import { views } from "./registry";
+import { objectIcon, panels, views } from "./registry";
 import { allows } from "./session";
 
 const held = (permissions: Permission[]) =>
@@ -27,5 +27,13 @@ describe("menu access", () => {
   });
   it("a viewer without rules.coverage.read does not see Coverage", () => {
     expect(shows(held(["hosts.read"]), "Coverage")).toBe(false);
+  });
+});
+
+describe("pages, not panels", () => {
+  it("an alarm is a page (screen 30): no alarm panel, and it keeps its icon", () => {
+    expect(panels.alarm).toBeUndefined();
+    expect(objectIcon("alarm")).toBe("alarm");
+    expect(objectIcon("agent")).toBe("agents");
   });
 });

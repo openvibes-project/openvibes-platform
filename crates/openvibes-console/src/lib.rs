@@ -75,6 +75,9 @@ pub use http::{
     authenticated_router_with_agent_install, authenticated_router_with_fetch,
     authenticated_router_with_signer, development_router, health_router, public_router,
 };
+pub use rules::meta::{
+    Backfill as RuleMetaBackfill, backfill as backfill_rule_meta, index_bundle as index_rule_bundle,
+};
 pub use rules::{
     RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage, RuleSetView,
     SignedRuleEnvelopeRequest,

@@ -72,7 +72,7 @@ pub(crate) struct ListColumnsView {
 /// The columns to hide on a page.
 #[derive(Deserialize, ToSchema)]
 pub(crate) struct ListColumnsRequest {
-    /// Column keys, at most 32, none twice; never `host`.
+    /// Column keys, at most 32, none twice; never the page's first column.
     pub hidden: Vec<String>,
 }
 
@@ -302,7 +302,10 @@ pub(crate) async fn put_columns(
     };
     let allowed = hideable(&page);
     let hidden = request.hidden;
-    if hidden.iter().any(|c| c == "host") {
+    if hidden
+        .iter()
+        .any(|c| c == "host" && !allowed.contains(&"host"))
+    {
         return invalid(
             "invalid_columns",
             "hidden",

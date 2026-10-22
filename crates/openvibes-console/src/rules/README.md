@@ -14,6 +14,7 @@ Rules over `/api/v1`: rule sets and their signed bundles, which asset groups run
 | `draft_check.rs` | Checks a draft with the agent's own loader code and the program caps. |
 | `draft_publish.rs` | What publishing would change, and the signer round trip that publishes the drafts. |
 | `test_on_host.rs` | Tests a rule against one host's facts. |
+| `meta.rs` | The rule-metadata index: rows from verified stored bundles, the hook after each publish, the start-up backfill. |
 | `coverage.rs` | MITRE ATT&CK coverage of the published rules and the bundled catalog. |
 
 More: [docs/components/openvibes-console.md](../../../../docs/components/openvibes-console.md)

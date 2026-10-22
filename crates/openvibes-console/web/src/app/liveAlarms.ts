@@ -1,7 +1,8 @@
 // Alarms show up without a reload: while the console is visible it asks
 // for the newest active alarm every few seconds. When that changes, alarm
 // views refresh, a new alarm gets a toast, and the menu's Alarms count is
-// recounted. One small request per poll; no websocket.
+// recounted. One small request per poll; no websocket. The Alarms list
+// (a heavier query with counts) refreshes at most every 30 s.
 import { useEffect, useSyncExternalStore } from "react";
 
 import { invalidate, request, subscribe } from "../api/client";
@@ -12,6 +13,27 @@ import { toast } from "../ui/toast";
 const POLL_MS = 5000;
 
 const listeners = new Set<() => void>();
+
+/** Every alarm read (the old list, the Alarms list, an alarm's page) starts with this. */
+export const ALARMS_PREFIX = "/api/v1/alarm";
+
+/** What a change refreshes at once: the old list, an alarm's page, suppressions. */
+export const LIVE_PREFIXES = ["/api/v1/alarms", "/api/v1/alarm-suppressions"];
+
+/** The Alarms list, refreshed by a change at most every `LIST_MS`. */
+export const LIST_PREFIX = "/api/v1/alarm-list";
+export const LIST_MS = 30_000;
+
+/** When the list last refreshed, and whether a change since waits for it. */
+type ListClock = { due: boolean; at: number };
+
+/** Whether this poll (at `now`, the tab visible) refreshes the Alarms
+ *  list: a change, or one held back earlier, once `LIST_MS` has passed. */
+export function listRefresh(clock: ListClock, now: number, changed: boolean): { clock: ListClock; refresh: boolean } {
+  const due = clock.due || changed;
+  if (due && now - clock.at >= LIST_MS) return { clock: { due: false, at: now }, refresh: true };
+  return { clock: { due, at: clock.at }, refresh: false };
+}
 
 /** Active alarms for the menu's count: up to 100 (`more` beyond). */
 let active: { count: number; more: boolean } | undefined;
@@ -60,6 +82,8 @@ export function useLiveAlarms(enabled: boolean): void {
     if (!enabled) return;
     // The first answer is the baseline: only later changes are news.
     let last: Seen;
+    // The list loaded with the page: its first live refresh is 30 s on.
+    let list: ListClock = { due: false, at: Date.now() };
     let stopped = false;
     const poll = async () => {
       if (document.visibilityState !== "visible") return;
@@ -72,7 +96,10 @@ export function useLiveAlarms(enabled: boolean): void {
         // The count changes only with the newest alarm (or its going away).
         if (first || changed) void recount();
         last = seen;
-        if (changed) invalidate("/api/v1/alarms");
+        if (changed) for (const prefix of LIVE_PREFIXES) invalidate(prefix);
+        const step = listRefresh(list, Date.now(), changed);
+        list = step.clock;
+        if (step.refresh) invalidate(LIST_PREFIX);
         const top = page.items[0];
         if (fresh && top) {
           toast(`New alarm: ${top.message}${top.hostname ? ` on ${top.hostname}` : ""}`);

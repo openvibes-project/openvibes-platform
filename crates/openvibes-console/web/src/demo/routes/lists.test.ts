@@ -83,6 +83,12 @@ describe("demo saved views", () => {
 });
 
 describe("demo list columns", () => {
+  it("keeps the alarms page's columns, Host hideable there and Severity never", async () => {
+    const server = admin();
+    expect(await call(server, "PUT", "/api/v1/list-columns/alarms", { hidden: ["host", "case"] })).toMatchObject({ status: 200, body: { hidden: ["host", "case"] } });
+    expect((await call(server, "PUT", "/api/v1/list-columns/alarms", { hidden: ["severity"] })).status).toBe(422);
+  });
+
   it("remembers hidden columns, never Host, nothing unknown or repeated", async () => {
     const server = admin();
     expect((await call(server, "GET", "/api/v1/list-columns/hosts")).body).toEqual({ hidden: [] });

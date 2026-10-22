@@ -8,13 +8,19 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("overview lists what needs attention and opens it beside the page", async ({ page }) => {
-  const first = page.locator(".attention__row").first();
+  const first = page.locator('.attention__row[href*="open="]').first();
   await expect(first).toBeVisible();
   await first.click();
   await expect(page.locator(".inspector")).toBeVisible();
   await expect(page).toHaveURL(/open=/);
   await page.goBack();
   await expect(page.locator(".inspector")).toHaveCount(0);
+  // An alarm is a whole page (approved screen 30): its row goes there; Back returns.
+  await page.locator('.attention__row[href^="/alarms/"]').first().click();
+  await expect(page).toHaveURL(/\/alarms\/\d+$/);
+  await expect(page.locator(".detail-page h1")).toBeVisible();
+  await page.goBack();
+  await expect(page.locator(".attention__row").first()).toBeVisible();
 });
 
 test("a finding opens in the inspector, links stack, and Esc goes back", async ({ page }) => {

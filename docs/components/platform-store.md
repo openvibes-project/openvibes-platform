@@ -433,6 +433,26 @@ The `detail` column is never given secrets.
   partition" check); `partition_days_of(&client, table)` any of the three.
 - Partition names come only from table constants and dates, never from input.
 
+## Alarm hourly starts (schema 60)
+
+`0060_alarm_hourly_starts.sql`: `alarm_hourly_starts (alarm_row_id, hour,
+starts)`, PK `(alarm_row_id, hour)`, for the alarm page's "Last 24 hours"
+timeline. Not partitioned and no FK (the `alarms` key includes the partition
+day). `alarms::insert_batch` adds a new alarm's whole count, or a grown
+count's difference, to `date_trunc('hour', now)` in the same transaction; a
+repeated or shrinking count adds nothing. `prune_alarm_hourly(client, now)`
+(run by `openvibes-admin` maintenance) deletes hours older than 7 days.
+Grants: ingest SELECT/INSERT/UPDATE, console SELECT.
+
+**Alarms list** (`alarm_list::alarm_list`, roles 5a): one statement gives the
+page, total, per-value counts and the summary line, all inside the
+`alarms.read` scope. The summary ("N open", "critical or high", "on hosts with
+alarms off") counts OPEN alarms under every filter except state, so choosing
+`state=mitigated` never shows "0 open". The assignee user binds as text cast
+to uuid; "unassigned" is a separate flag, and text that is not a user id
+matches nobody. `limit` and `offset` are clamped (the console rejects values
+out of range first).
+
 ## Threat alarms (schema 29)
 
 `0029_alarms.sql` (additive; protocol P14, plan
@@ -610,6 +630,48 @@ inlinable form of the group rule check. `console_condition_holds` keeps its
 answers and now calls the prepared form. Tests: `tests/host_list.rs`,
 `tests/version_order.rs`; the 20,000-host timing (`tests/host_list_timing.rs`) is in console-read.md.
 
+## The Alarms list (`alarm_list::alarm_list`, schema 60)
+
+`alarm_list(client, &AlarmQuery, &AgentScope, hosts_read: Option<&AgentScope>, actor_id, now) -> AlarmListPage`:
+one statement returns the page rows, the total, the count for every value
+of every filter with the other filters applied, and the summary line, so
+the numbers always agree (roles spec §10.3; plan rulings 2–5). Only agent
+alarms (`source = 'agent'`) are listed. Filters (one value each, all
+combining): state (`None` is every state; the console's default is open),
+severity, suppressed (hidden unless `suppressed`), host (agent id), group,
+technique, case (in an open case or not) and assignee (`Me` is
+`actor_id`, `Unassigned`, or a user id; a value that is not a user id
+matches nothing). Search `q` matches the message, rule id, host name,
+program and parent program (contains, any case). `offset` is held to
+0–100000 and `limit` to 1–100; sorts (last seen, first seen, count,
+severity) break ties by alarm id in the same direction.
+
+Each row carries the host's OS family and distribution display name, the
+techniques of its rule from `console_rule_meta` (matched on rule set,
+set version, rule and rule version; empty when the rule is not indexed, so
+the technique filter never matches it), the assignee (id, display name),
+the open case holding it (id, number) and `suppressed_by`.
+
+The summary counts, over the alarms matching every filter: open; open and
+critical or high; open on hosts that are online with threat alarms off by
+a fault (the Hosts list's `alarms_off` rule: the statement returns each
+host's `health -> 'alarms'` with its counters zeroed, grouped, and
+`alarms_status` decides), counting only hosts also inside `hosts_read`
+(none when it is `None`). The console passes its `hosts.read` scope and
+shows the last part only with `hosts.read`.
+
+Scope (spec §6): the hosts are `agent_visibility`'s rule read from the
+one-pass group membership (`host_list_sql::members`, over every agent;
+calling `console_host_in_group` per agent and scope group cost 0.9 s at
+20,000 agents). Group values are groups holding a host with an alarm in
+reach (plus the chosen one when the scope reaches it); technique and
+person values come from alarms in reach, so no value is named from a host
+out of reach. The host filter has no value list. The counts come from a
+small `cube` (alarms per combination of state, severity, suppressed, in a
+case, assignee and techniques) and a per-host rollup for groups and the
+alarms-off part. Tests: `tests/alarm_list.rs`; the 200,000-alarm timing
+(`tests/alarm_list_timing.rs`) is in console-read.md.
+
 ## The host page summary (`host_summary::summary`)
 
 `summary(client, agent_id, &HostScopes, latest, now) -> Option<HostSummary>`:
@@ -627,6 +689,34 @@ checks most severe then newest first, and open vulnerabilities through
 reaches the host. `HostSummary::reaches(scope)` applies the
 `agent_visibility` rule from the groups already read; the console uses it
 for its `can` flags. Tests: `tests/host_summary.rs`.
+
+## An alarm's page (`alarm_summary::alarm_summary`, roles 5a)
+
+The web page it serves: [console-alarms.md](console-alarms.md).
+
+`alarm_summary(client, id, &alarms_scope, vulnerabilities_scope, now) ->
+Option<AlarmPageSummary>`: `None` when the alarm is missing or `alarms_scope`
+does not reach its host (`console_alarms::detail`). Otherwise: the alarm as
+an `AlarmListRow` (OS, techniques from `console_rule_meta`, assignee, open
+case) with its detail and triage; the rule's text from `rule_meta::get`, or
+the alarm's message as title and message with no explain, check or
+techniques when the rule is not indexed; the commands seen, which are the
+alarm and its siblings (agent alarms on the same host with the same rule
+set, rule, `process.exe` and `ancestors[0].exe`, user decision 1), most
+starts first, then by id, each with its masked `args`, count, first and last
+seen, state, suppression and open case; `hourly`, 24 sums of
+`alarm_hourly_starts` over those siblings from 23 hours before the current
+hour to the current hour, oldest first (hours cut by `date_trunc` as
+ingest cuts them); the host's other open agent alarms (five and the total,
+`host_summary::top_alarms`); the host's open advisories through
+`host_summary::top_vulnerabilities` when `vulnerabilities_scope` reaches
+the host, else `None`; and `elsewhere`, the other hosts in `alarms_scope`
+with an open, unsuppressed alarm from this rule set and rule, and their
+open alarms. The siblings share the host, so the scope that reached the
+alarm reaches them. `AlarmPageSummary::reaches(scope)` applies
+`agent_visibility`'s rule from the host's groups; the console uses it for
+its `can` flags. The sibling key groups NULL with NULL (no parent, or no
+exe). Tests: `tests/alarm_summary.rs`.
 
 ## Suppressions with approval (`alarm_suppressions::…`, schema 55)
 
@@ -1169,3 +1259,24 @@ Test: `tests/host_group_facts.rs`.
 
 Tests: `tests/host_group_reads.rs`, `tests/host_group_writes.rs`,
 `tests/host_labels.rs` (fixtures in `tests/common/groups.rs`).
+
+## Rule metadata (`rule_meta::…`, schema 59)
+
+`console_rule_meta` holds one row per rule of each stored rule bundle
+(primary key `rule_set_id, rule_set_version, rule_id`; `rule_version`,
+`title`, `message`, optional `explain` and `"check"` of at most 600
+characters each, `attack` as `[{tactic, technique}]` and `techniques`, the
+distinct technique ids). Rows go with their bundle (`ON DELETE CASCADE`).
+The console reads and writes it (SELECT, INSERT, UPDATE); the admin CLI
+writes as the owner. `check` is a reserved word: quote it in SQL.
+
+- `upsert_from_bundle(set, version, rows)` indexes one bundle in one
+  statement; storing it again rewrites its rows. The caller verifies the
+  bundle first (the console's `rules/meta.rs`); this module verifies nothing.
+- `get(set, set_version, rule_id, rule_version)` returns `RuleMeta`, or
+  `None` for a rule that was never indexed (old data, an unverifiable
+  bundle): the caller falls back to resolving the bundle.
+- `missing_bundles(limit)` lists stored bundles without a row, for the
+  console's start-up backfill. Unverifiable bundles stay listed.
+
+Tests: `tests/rule_meta.rs`.

@@ -6,5 +6,6 @@ The shared layout of a detail page (approved screens 11 and 17): header, tiles, 
 |---|---|
 | `DetailPage.tsx` | Header (icon, title, status, facts line, actions), an error callout, tiles, left and right columns; empty slots draw nothing; `Card`, one card of a column (the person, group and settings pages use it too). |
 | `Tile.tsx` | One number and its label, a link to the full list it counts ("Open alarms: 3"). |
+| `FactTile.tsx` | A tile that states a fact ("First seen", "Confidence"): label and value, no link. |
 
 More: [docs/components/console-web.md](../../../../../../docs/components/console-web.md)

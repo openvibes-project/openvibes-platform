@@ -12,6 +12,8 @@ type Server = ReturnType<typeof createDemoServer>;
 const LIST = "/api/v1/alarm-suppressions";
 // Alarm 9000 runs on a Pilot host (the team lead's reach); 9001 and 9002 do not.
 const PILOT_ALARM = "9000";
+/** The seed's own active suppression (it closed the seed's suppressed alarm). */
+const SEED = "900";
 
 async function call<T = Record<string, unknown>>(server: Server, method: string, url: string, body?: unknown) {
   const response = await server.handle(method, url, body);
@@ -51,10 +53,11 @@ describe("demo suppressions", () => {
     expect(first).toMatchObject({ status: "waiting", can_withdraw: true, can_decide: false, activated_at: null });
     expect((await alarm(analyst)).state).toBe("open");
     expect((await call(analyst, "POST", `${LIST}/${first.id}/withdraw`)).status).toBe(200);
-    expect(await rows(analyst)).toEqual([]);
+    expect((await rows(analyst)).filter((r) => r.id !== SEED)).toEqual([]);
     const again = (await ask(analyst)).body;
     const waiting = (await call<{ items: AlarmSuppression[] }>(as("admin"), "GET", `${LIST}?alarm_id=${PILOT_ALARM}&state=waiting`)).body.items;
-    expect(waiting).toMatchObject([{ id: again.id, can_decide: true, would_close: 1 }]);
+    // It would close the alarm and its two siblings on the same host (same rule and program).
+    expect(waiting).toMatchObject([{ id: again.id, can_decide: true, would_close: 3 }]);
     const admin = as("admin");
     const approved = await call<AlarmSuppression>(admin, "POST", `${LIST}/${again.id}/approve`);
     expect(approved.body).toMatchObject({ status: "active", decided_by: "Alex Admin" });
@@ -94,7 +97,7 @@ describe("demo suppressions", () => {
     localStorage.setItem("openvibes.v2.demo.suppressions", JSON.stringify([...stored, ...bad]));
     const list = await call<{ items: AlarmSuppression[] }>(as("admin"), "GET", LIST);
     expect(list.status).toBe(200);
-    expect(list.body.items.map((r) => r.id)).toEqual([made.id]);
+    expect(list.body.items.map((r) => r.id)).toEqual([made.id, SEED]);
   });
 
   it("shows rows by reach and offers the caller's groups", async () => {
@@ -125,7 +128,7 @@ describe("demo suppressions", () => {
 
   it("bulk Suppress closes every selected alarm of one rule and program, none while approval is on", async () => {
     type Row = { id: string; rule_set_id: string; rule_id: string; exe: string | null; state: string };
-    // The demo's two nginx health-check alarms share rule and program.
+    // The demo's four nginx shell alarms (two hosts) share rule and program.
     const pick = async () => {
       const items = (await call<{ items: Row[] }>(as("admin"), "GET", "/api/v1/alarms?limit=100")).body.items;
       return items.filter((a) => a.rule_id === "web-server-spawns-shell" && a.exe === "/usr/bin/sh").map((a) => a.id);
@@ -134,14 +137,14 @@ describe("demo suppressions", () => {
       (await call<{ changed: number; skipped: { reason: string }[] }>(as("admin"), "POST", "/api/v1/alarms/bulk", { action: "suppress", note: "noise", items: ids.map((id) => ({ id })) })).body;
     await approval(true);
     const ids = await pick();
-    expect(ids).toHaveLength(2);
+    expect(ids).toHaveLength(4);
     const waiting = await bulk(ids);
     expect(waiting.changed).toBe(0);
-    expect(waiting.skipped.map((s) => s.reason)).toEqual(Array(2).fill("Suppression requested, waiting for approval"));
+    expect(waiting.skipped.map((s) => s.reason)).toEqual(Array(4).fill("Suppression requested, waiting for approval"));
     for (const id of ids) expect((await alarm(as("admin"), id)).state).toBe("open");
     await approval(false);
     const done = await bulk(ids);
-    expect(done).toMatchObject({ changed: 2, skipped: [] });
+    expect(done).toMatchObject({ changed: 4, skipped: [] });
     for (const id of ids) expect((await alarm(as("admin"), id)).state).toBe("false_positive");
   });
 

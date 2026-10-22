@@ -48,7 +48,7 @@
 .rail__item[aria-current="page"]::before { content: ""; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
 /* Counts beside Findings, Alarms and Vulnerabilities (#117). */
 .rail__count { position: absolute; left: 22px; top: 3px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; background: var(--surface-2); color: var(--text-2); box-shadow: 0 0 0 2px var(--surface); font-variant-numeric: tabular-nums; }
-.rail__count--bad { background: var(--bad); color: #fff; }
+.rail__count--bad { background: var(--bad); color: var(--surface); } /* dark text on dark mode's light --bad */
 .rail__label { opacity: 0; transition: opacity var(--fast); }
 .rail:hover .rail__label, .rail:has(:focus-visible) .rail__label, .rail--pinned .rail__label { opacity: 1; }
 .rail__tip { display: none; }
@@ -401,3 +401,10 @@
 .suppression-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .suppression-row__chips, .suppression-row__actions { gap: 6px; flex-wrap: wrap; }
 .suppression-row__reject { gap: 8px; max-width: 60ch; }
+.hourly-bars { margin: 0; }
+/* An alarm's page (screen 30): rule text keeps its line breaks; a command seen once stands out. */
+.pre-line { white-space: pre-line; margin: 0; }
+.cmd-once { background: var(--warn-soft); }
+/* Subtle text stays readable on the highlighted row and the current process (axe, dark). */
+.cmd-once .subtle, .process--current .subtle { color: var(--text-2); }
+.alarm-command { overflow-wrap: anywhere; }

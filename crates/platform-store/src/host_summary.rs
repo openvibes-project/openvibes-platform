@@ -182,7 +182,7 @@ pub async fn summary(
         last_test: crate::rules::last_tests(client, agent_id).await?,
     };
     if scopes.alarms.is_some_and(|a| s.reaches(a)) {
-        s.top_alarms = Some(top_alarms(client, agent_id).await?);
+        s.top_alarms = Some(top_alarms(client, agent_id, None, 3).await?);
     }
     if scopes.compliance.is_some_and(|c| s.reaches(c)) {
         s.top_failing = Some(top_failing(client, agent_id).await?);
@@ -202,15 +202,23 @@ fn top<T>(rows: &[tokio_postgres::Row], item: impl Fn(&tokio_postgres::Row) -> T
     }
 }
 
-async fn top_alarms(client: &Client, agent_id: &str) -> Result<Top<TopAlarm>, StoreError> {
+/// The host's open agent alarms but `except`, most severe first: the first
+/// `limit` and the total (also the alarm page's Related card).
+pub(crate) async fn top_alarms(
+    client: &Client,
+    agent_id: &str,
+    except: Option<i64>,
+    limit: i64,
+) -> Result<Top<TopAlarm>, StoreError> {
     let rows = client
         .query(
             &format!(
                 "SELECT id, rule_id, message, severity, last_seen, count(*) OVER () FROM alarms
                  WHERE agent_id = $1 AND state = 'open' AND source = 'agent'
-                 ORDER BY {RANK}, last_seen DESC, id DESC LIMIT 3"
+                   AND id IS DISTINCT FROM $2
+                 ORDER BY {RANK}, last_seen DESC, id DESC LIMIT $3"
             ),
-            &[&agent_id],
+            &[&agent_id, &except, &limit],
         )
         .await?;
     Ok(top(&rows, |r| TopAlarm {
@@ -252,7 +260,10 @@ const LIST_MIN_CONFIDENCE: u8 = 80;
 /// open), so the tile, the card and `/vulnerabilities?host=` show the same
 /// advisories; the list's "Lower confidence" and "Include resolved" chips
 /// show more there.
-async fn top_vulnerabilities(client: &Client, agent_id: &str) -> Result<Top<VulnRow>, StoreError> {
+pub(crate) async fn top_vulnerabilities(
+    client: &Client,
+    agent_id: &str,
+) -> Result<Top<VulnRow>, StoreError> {
     let filter = ListFilter {
         host: Some(agent_id),
         advisory: None,

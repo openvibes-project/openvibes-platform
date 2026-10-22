@@ -22,6 +22,7 @@ mod model_upgrade;
 mod rules;
 mod rules_sign;
 mod rules_site;
+mod rules_store;
 #[cfg(unix)]
 mod run_as;
 mod setup;
@@ -600,6 +601,9 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             .await
             .map_err(fail)?;
             let dropped = platform_store::drop_partitions_before(client, cutoff)
+                .await
+                .map_err(fail)?;
+            platform_store::prune_alarm_hourly(client, Utc::now())
                 .await
                 .map_err(fail)?;
             let audit_deleted = platform_store::audit::cleanup_expired_events(client, Utc::now())

@@ -2,7 +2,7 @@
 // browser's back button closes panels and returns to earlier views.
 import { useSyncExternalStore } from "react";
 
-import { type AppLocation, type PanelRef, formatLocation, hostPath, parseLocation, popPanel, pushPanel, redirect } from "./location";
+import { type AppLocation, type PanelRef, formatLocation, pagePath, parseLocation, popPanel, pushPanel, redirect } from "./location";
 
 const base = import.meta.env.BASE_URL;
 const listeners = new Set<() => void>();
@@ -10,10 +10,10 @@ let snapshot: AppLocation = read();
 let snapshotKey = window.location.pathname + window.location.search;
 settle();
 
-/** An old /findings or /agents address, or an old host panel: show the URL
+/** An old /findings or /agents address, or an old host or alarm panel: show the URL
  * of the page it now opens, in place, so history keeps no dead entry (plan ruling 1). */
 function settle() {
-  if (!/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=agent(%3A|:)/i.test(window.location.search)) return;
+  if (!/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=(agent|alarm)(%3A|:)/i.test(window.location.search)) return;
   snapshotKey = formatLocation(snapshot, base);
   window.history.replaceState(null, "", snapshotKey);
 }
@@ -65,11 +65,12 @@ export const nav = {
     if (guard && !guard()) return;
     go({ view, panels: snapshot.panels, params: new URLSearchParams(params) });
   },
-  /** A host is a whole page (approved screen 17): opening one goes there and closes the panels. */
+  /** A host or an alarm is a whole page (approved screens 17 and 30): opening one goes there and closes the panels. */
   open(panel: PanelRef, fromList = false) {
-    if (panel.kind !== "agent") { go(pushPanel(snapshot, panel, fromList)); return; }
+    const page = pagePath(panel);
+    if (page === null) { go(pushPanel(snapshot, panel, fromList)); return; }
     if (guard && !guard()) return;
-    go({ view: hostPath(panel.id), panels: [], params: new URLSearchParams() });
+    go({ view: page, panels: [], params: new URLSearchParams() });
   },
   back() { go(popPanel(snapshot)); },
   closeAll() { go({ ...snapshot, panels: [] }); },

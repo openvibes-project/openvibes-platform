@@ -37,7 +37,8 @@ test("alarms are selected with a shift-click range and closed only with a note",
 test("selected alarms go into a new case and the row shows it", async ({ page }) => {
   await page.goto("/alarms");
   const free = page.locator(".view tbody tr").filter({ hasNot: page.locator(".badge--info") }).first();
-  const message = (await free.locator(".truncate").first().innerText()).trim();
+  // Several alarms share a message: the row is the one linking to this alarm.
+  const href = await free.locator("a").first().getAttribute("href");
   await free.getByRole("checkbox", { name: "Select row" }).check();
   await page.getByRole("region", { name: "Bulk actions" }).getByRole("button", { name: "Add to case" }).click();
   const dialog = page.getByRole("dialog", { name: "Add to case" });
@@ -46,7 +47,7 @@ test("selected alarms go into a new case and the row shows it", async ({ page })
   await expect(dialog.getByLabel("New case title")).toHaveValue(/^1 alarms: /);
   await dialog.getByRole("button", { name: "Add 1 alarm to the case" }).click();
   await expect(page.locator(".toast")).toContainText(/1 changed in C-\d+/);
-  await expect(page.locator(".view tbody tr").filter({ hasText: message }).locator(".badge--info")).toContainText(/C-\d+/);
+  await expect(page.locator(".view tbody tr").filter({ has: page.locator(`a[href="${href ?? ""}"]`) }).locator(".badge--info")).toContainText(/C-\d+/);
 });
 
 test("a finding's Hosts tab lists every host, never cut off, and selects them for the bulk bar", async ({ page }) => {

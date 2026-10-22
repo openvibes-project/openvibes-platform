@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatLocation, hostPath, hostsQuery, parseLocation, popPanel, pushPanel } from "./location";
+import { alarmPath, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel } from "./location";
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
-    const loc = parseLocation("/console/alarms", "?open=alarm%3A7&open=advisory%3ARHSA-2026%3A1&q=web", "/console/");
-    expect(loc.view).toBe("/alarms");
-    expect(loc.panels).toEqual([{ kind: "alarm", id: "7" }, { kind: "advisory", id: "RHSA-2026:1" }]);
+    const loc = parseLocation("/console/compliance", "?open=finding%3Ab%2FR-1&open=advisory%3ARHSA-2026%3A1&q=web", "/console/");
+    expect(loc.view).toBe("/compliance");
+    expect(loc.panels).toEqual([{ kind: "finding", id: "b/R-1" }, { kind: "advisory", id: "RHSA-2026:1" }]);
     expect(loc.params.get("q")).toBe("web");
   });
 
@@ -35,6 +35,23 @@ describe("location", () => {
     ["/compliance", "?open=agent%3Aagent-1&open=advisory%3AX-1", "/hosts/agent-1"],
   ])("reads an old host panel on %s%s as the host's page, %s", (view, search, want) => {
     expect(formatLocation(parseLocation(view, search, "/"), "/")).toBe(want);
+  });
+
+  it.each([
+    ["/alarms", "?open=alarm%3A7", "/alarms/7"],
+    ["/", "?open=alarm%3A9000", "/alarms/9000"],
+    ["/cases", "?status=open&open=case%3Ac-1&open=alarm%3A12", "/alarms/12"],
+  ])("old_alarm_links_open_the_page: an old alarm panel on %s%s is the alarm's page, %s", (view, search, want) => {
+    const loc = parseLocation(view, search, "/");
+    expect(loc.panels).toEqual([]);
+    expect(formatLocation(loc, "/")).toBe(want);
+  });
+
+  it("names the page an object opens instead of a panel", () => {
+    expect(alarmPath("7 /x")).toBe("/alarms/7%20%2Fx");
+    expect(pagePath({ kind: "alarm", id: "7" })).toBe("/alarms/7");
+    expect(pagePath({ kind: "agent", id: "a b" })).toBe("/hosts/a%20b");
+    expect(pagePath({ kind: "advisory", id: "X-1" })).toBeNull();
   });
 
   it("names a host's page", () => {

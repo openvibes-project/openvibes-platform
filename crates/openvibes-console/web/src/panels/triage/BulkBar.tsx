@@ -9,6 +9,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { apiMessage, invalidate, request, useAllPages, useResource } from "../../api/client";
 import type { CaseSummary, CaseUser } from "../../api/types";
+import { ALARMS_PREFIX } from "../../app/liveAlarms";
 import { useSession } from "../../app/session";
 import { SelectField } from "../../ui/Field";
 import { Icon } from "../../ui/Icon";
@@ -20,6 +21,8 @@ import { caseNumber } from "../cases/cases";
 import { noteRequired } from "./triage";
 
 const triagePermission = { alarms: "alarms.triage", compliance: "compliance.triage", vulnerabilities: "vulnerabilities.triage" } as const;
+/** What a change refreshes: for alarms, every alarm read (the Alarms list is /alarm-list). */
+const readsOf = (kind: BulkKind) => (kind === "alarms" ? ALARMS_PREFIX : `/api/v1/${kind}`);
 
 type Choice = { action: BulkAction; state?: string; label: string };
 const STATE_ITEMS: (MenuItem & { choice: Choice })[] = [
@@ -48,16 +51,18 @@ const avatar = (name: string | null) => <span className={name ? "initials" : "in
  * list holds only its first results; `inline` draws the actions for a
  * panel header (no count or Clear); `without` leaves out actions the panel
  * offers elsewhere. */
-export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [] }: Readonly<{
+export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople }: Readonly<{
   kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
   newCase: () => { title: string; severity?: string | undefined };
   closed?: number; reopenItems?: () => BulkItem[]; assignee?: string | null; stateLabel?: string;
   partial?: boolean; onClear: () => void; inline?: boolean; without?: BulkAction[];
+  /** Whether other people may be offered (an alarm page's per-host `can.assign`); else the session's `cases.assign`. */
+  assignPeople?: boolean;
 }>) {
   const { can, canEverywhere, session } = useSession();
   const [choice, setChoice] = useState<Choice | null>(null);
   const [busy, setBusy] = useState(false);
-  const people = useResource<{ items: CaseUser[] }>(can("cases.assign") ? "/api/v1/cases/assignees" : null).data?.items;
+  const people = useResource<{ items: CaseUser[] }>((assignPeople ?? can("cases.assign")) ? "/api/v1/cases/assignees" : null).data?.items;
   if (count === 0 || !can(triagePermission[kind])) return null;
 
   const menu = [...STATE_ITEMS, ...(kind === "alarms" && !inline && canEverywhere("alarms.suppress") && !without.includes("suppress") ? [SUPPRESS_ITEM] : [])];
@@ -82,7 +87,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
     try {
       const result = await request<BulkResult>("POST", `/api/v1/${kind}/bulk`, { ...body, items: rows });
       toast(resultText(result), result.changed === 0 && result.skipped.length > 0);
-      invalidate(`/api/v1/${kind}`);
+      invalidate(readsOf(kind));
       invalidate("/api/v1/triage-history");
       if (!inline) onClear();
     } catch (error) {
@@ -150,10 +155,9 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
       const result = await request<BulkResult>("POST", `/api/v1/${kind}/bulk`, bulkBody(form, items()));
       const where = result.case_number != null ? ` in ${caseNumber(result.case_number)}` : "";
       toast(`${resultText(result)}${where}`, result.changed === 0 && result.skipped.length > 0);
-      invalidate(`/api/v1/${kind}`);
+      invalidate(readsOf(kind));
       invalidate("/api/v1/triage-history");
       if (action === "case") invalidate("/api/v1/cases");
-      if (kind === "alarms") invalidate("/api/v1/alarm-suppressions");
       onClose();
       onDone();
     } catch (error) {

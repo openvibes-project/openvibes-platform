@@ -67,15 +67,13 @@ Show everything, without page changes for details:
   the ones already open. Rows in an open case show
   its badge (`panels/cases/CaseBadge.tsx`). Vulnerabilities count open hosts
   and hide advisories triaged everywhere unless Include resolved is on.
-- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding, an advisory
-  and an alarm share one layout: the triage actions on the panel header's
+- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding and an advisory
+  share one layout (an alarm is a page, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
   actions line (a finding or advisory: "Set state: N open", acting on its
   open hosts), a short summary, then the console's underline tabs
   (`Tabs`). Findings and advisories: Hosts (a `DataTable` with a state
   filter, selection and the bulk bar, never cut off), Evidence, History.
-  Alarms: Process, Evidence, History; a closed alarm shows its decision
-  (note, who, when) with Reopen, and the case button names the open case
-  holding it; plus Suppress… (or the waiting request). The Hosts table shows each
+  The Hosts table shows each
   host's assignee and, for accepted risk, the date it is accepted until
   (marked expired once past), and a `fixed <date>` badge (`about` when
   approximate) for a host whose agent reported the match ended (P13).
@@ -264,36 +262,9 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
 
 ## Threat alarms (P14)
 
-- **Alarms** (`/alarms`, `g m`, `alarms.read`): newest first; severity,
-  message with `parent → program`, host, count, triage, last seen. Resolved
-  and suppressed alarms are hidden unless their chips are on; the empty
-  state says agents report process starts by themselves and each host's page says whether its alarms are on. The list loads
-  the newest 100 with the filters sent to the API (`state=active` by
-  default) and **Load 100 more**; the text filter applies to what is
-  loaded. Each row has **Suppress…** (with `alarms.suppress`), which opens
-  the suppress form (approved screen 12, `panels/alarms/SuppressForm.tsx`):
-  - **What:** this program (its path) or this exact command (path and
-    masked arguments, shown).
-  - **Where:** this host, each group from
-    `GET /api/v1/alarm-suppressions/options`, then All hosts when the
-    caller's suppress reach is global.
-  - **For:** 7 days (the default), 30 days or until removed.
-  - **Reason:** required; the button stays off until it is filled.
-  With approval on, the note reads "Someone who can approve on those hosts
-  must accept it. Until then these alarms keep arriving." and the button
-  says Request; otherwise Suppress. An active result toasts "Suppressed ·
-  recorded in the audit log" (the server has closed the alarm); a waiting
-  one toasts "Requested · waiting for approval". Refusals show the
-  server's field message in `role="alert"`; the controls are disabled
-  while it sends. `bodyOf` (the POST body) and `whereChoices` are pure and
-  tested. Keys typed in a dialog opened from a row (or in any textarea)
-  never move the table cursor or open a row; closing the form returns
-  focus to the button that opened it (the shared `Modal`). A row's button
-  is labelled with the alarm and host. A row whose alarm has a waiting
-  request shows "Requested" (the viewer's own) or "Waiting for approval"
-  (someone else's) instead, like the panel; until the waiting list has
-  loaded, or if it fails, no row offers Suppress…, so the list never asks
-  twice.
+- **Alarms** (`/alarms`, `g m`, `alarms.read`), an alarm's page
+  (`/alarms/{id}`) and the suppress form (approved screen 12): see
+  [console-alarms.md](console-alarms.md).
 
 **Site rules** (`/site-rules`, with `site_rules.read`) lists the site's own
 compliance rules and alarm rules (drafts) with New rule. A rule opens in
@@ -312,17 +283,6 @@ unavailable here). A Hosts section at the bottom of Site rules counts the
 hosts the user may see running each set (current, behind, refused, not set up), lists the
 ones that aren't current, and shows the `[[rule_sets]]` lines to paste into
 an existing agent's `agent.toml`.
-- **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the
-  process: program, masked command line, uid and euid when they differ,
-  working directory, pid), rule and versions, first/last seen, count, in
-  the detail template (Process, Evidence, History tabs); the summary has
-  the triage actions and Suppress…. It fetches
-  `GET /api/v1/alarm-suppressions?alarm_id=<id>&state=waiting`; while a
-  request from this alarm waits, the summary shows "Suppression requested,
-  waiting for approval… these alarms keep arriving" instead, with
-  **Withdraw request** for the requester (`can_withdraw`, disabled while
-  it sends). If that fetch fails the panel shows the error, not
-  Suppress….
 - **Coverage** (`/coverage`, `g t`, global `rules.coverage.read`): an ATT&CK
   matrix (tactics as columns, covered techniques with rule counts; empty
   tactics stay as visible gaps) above the rule list. Chips: Kill chain
@@ -359,7 +319,6 @@ an existing agent's `agent.toml`.
   hands focus to its card. The menu item counts the waiting requests the
   viewer can decide (`GET /api/v1/alarm-suppressions?state=waiting`,
   fetched only with `alarms.suppressions.approve`; `app/menuCount.ts`).
-- Alarms are not offered to the assistant (no "Ask about" on the panel).
 - The demo serves alarms and suppressions with the server's rules
   (`demo/suppressions.ts`): the approval setting from Settings › General,
   waiting/active/rejected/withdrawn/removed states, every refusal code,
@@ -400,8 +359,8 @@ triage on alarms and findings stays as it is.
     disabled until the rules are met (`panels/cases/cases.ts`, `closeProblems`).
     A closed case offers **Reopen**;
   - **Items**: each row shows its kind, title, severity and host and opens
-    that object's own panel (alarm `alarm:<id>`, finding `finding:<rule
-    set>/<rule>`, vulnerability `advisory:<advisory>`, host `agent:<id>`,
+    that object's own panel or page (alarm: its page `/alarms/<id>`, finding `finding:<rule
+    set>/<rule>`, vulnerability `advisory:<advisory>`, host: its page,
     software `package:<manager>/<name>`). Alarms, findings and
     vulnerabilities take an outcome: resolved (offered only while the
     evidence is gone), false positive or accepted risk (a note is required).
@@ -411,7 +370,7 @@ triage on alarms and findings stays as it is.
     what.
   - Without `cases.write` the panel is read-only.
 - **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.write`): a button on
-  the alarm panel, on each host row of a finding and of an advisory, on the
+  an alarm's page (Details, and a command seen once), on each host row of a finding and of an advisory, on the
   host page and its top vulnerabilities, and on the software panel. Its dialog
   asks `/cases/for-item` first. An alarm, finding or vulnerability that is
   already in an open case shows that case (a link) and offers nothing else,
@@ -425,7 +384,7 @@ triage on alarms and findings stays as it is.
 - **The demo** (`demo/cases.ts`) serves the same routes, JSON, status codes
   and rules as the server: filters, `If-Match`, exclusivity, close rules,
   outcomes decided by the demo's own alarms and findings (mitigating an alarm
-  in the Alarm panel makes "resolved" available for it), the visibility rule
+  on its page makes "resolved" available for it), the visibility rule
   for a scoped viewer, and accepted risk that reopens when its date passes.
   It starts with four cases over real demo objects (an SSH and shell
   investigation, an exploited advisory on three hosts, web servers starting
@@ -501,7 +460,7 @@ for the pages not yet moved; its saved views stay in the browser.
   and a wide right column (one column fills the width). An empty slot draws
   nothing. `Card` (a card of either column) lives here too; the person,
   group and settings pages use it. **Tile**
-  (`ui/detail/Tile.tsx`): a link to the full list, named "Open alarms: 3".
+  (`ui/detail/Tile.tsx`): a link to the full list, named "Open alarms: 3". **FactTile** (`ui/detail/FactTile.tsx`): the same look for a fact, no link. **HourlyBars** (`ui/charts/HourlyBars.tsx`): 24 bars, a `<title>` each for hover, the SVG hidden from screen readers (`aria-hidden`); a visually hidden table with a caption carries the values. **BulkBar** on a server-paged list: it acts on the ids it is given (this page); the bulk route takes no filter, so `DataTable serverPaged` says "All n on this page are selected." and offers no "select all n matching". A `ListFilter` with `chipOnly` (the Alarms host) is drawn only while chosen.
   Tiles and the settings pages' links use `viewLink` (`app/nav.ts`): a
   plain left click navigates in place, a modified or middle click is left
   to the browser.
@@ -755,6 +714,17 @@ for the pages not yet moved; its saved views stay in the browser.
   redirect (`/agents?…` to the list, `?open=agent:ID` to the page). Views
   saved in the browser are imported to the person's account the first time
   they open Hosts; see [console-hosts.md](console-hosts.md).
+- **Roles step 5a (Alarms):** the alarm panel became the alarm's page
+  `/alarms/{id}`; old links (`?open=alarm:ID`) redirect to it. Its Last 24
+  hours timeline starts filling after the upgrade (ingest records hourly
+  starts from then on). Rules without `explain` and `check` text show their
+  title and message. The list no longer sorts by message, host or state.
+  List rows lost their own Suppress… and "Requested / Waiting for
+  approval" badge (both are on the alarm's page now), search no longer
+  matches the agent id, popped-out alarm windows are dropped, and "Load
+  more" became paging (Previous and Next).
+  Alarm views saved in the browser are moved to the person's account the
+  first time they open Alarms; see [console-alarms.md](console-alarms.md).
 
 ## Configuration
 

@@ -12,7 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use openvibes_core::{Identifier, ResourceLimits, Rule, SignedRuleEnvelope};
-use openvibes_rules::{LoadContext, RuleLoader, TrustedRuleKey};
+use openvibes_rules::{LoadContext, RuleLoader, TrustedRuleKey, VerifiedRuleSet};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -112,6 +112,50 @@ fn rule_view(rule: Rule) -> HistoricalRuleView {
     }
 }
 
+/// A loader trusting every key ever stored for `set`. Removed public keys
+/// remain in the store: stored bundles are verified as of their creation to
+/// read historical content, without reactivating them for distribution or
+/// execution.
+pub(crate) async fn stored_loader(
+    client: &platform_store::Client,
+    set_id: &Identifier,
+) -> Result<Option<RuleLoader>, platform_store::StoreError> {
+    let keys = platform_store::rules::trust_keys(client, Some(set_id.as_str())).await?;
+    let trusted = keys
+        .into_iter()
+        .filter_map(|key| {
+            TrustedRuleKey::new(
+                set_id.clone(),
+                Identifier::new(key.issuer_key_id).ok()?,
+                key.public_key,
+            )
+            .ok()
+        })
+        .collect();
+    Ok(RuleLoader::new(trusted, ResourceLimits::V1).ok())
+}
+
+/// A stored bundle's envelope and verified rules, verified at its creation
+/// time; `None` when it does not verify.
+pub(crate) fn verify_stored(
+    loader: &RuleLoader,
+    set_id: &Identifier,
+    bytes: &[u8],
+) -> Option<(SignedRuleEnvelope, VerifiedRuleSet)> {
+    let envelope = serde_json::from_slice::<SignedRuleEnvelope>(bytes).ok()?;
+    let bundle = loader
+        .load_json(
+            bytes,
+            LoadContext {
+                expected_rule_set_id: set_id,
+                now_unix_ms: envelope.created_at_unix_ms,
+                last_accepted: None,
+            },
+        )
+        .ok()?;
+    Some((envelope, bundle))
+}
+
 async fn resolve(
     client: &platform_store::Client,
     set: &str,
@@ -133,36 +177,12 @@ async fn resolve(
     if bundles.is_empty() || bundles.len() > 8 {
         return Ok(response);
     }
-    // Removed public keys remain in the store. Verify at creation time to read
-    // historical content, without reactivating it for distribution or execution.
-    let keys = platform_store::rules::trust_keys(client, Some(set)).await?;
-    let trusted = keys
-        .into_iter()
-        .filter_map(|key| {
-            TrustedRuleKey::new(
-                set_id.clone(),
-                Identifier::new(key.issuer_key_id).ok()?,
-                key.public_key,
-            )
-            .ok()
-        })
-        .collect();
-    let Ok(loader) = RuleLoader::new(trusted, ResourceLimits::V1) else {
+    let Some(loader) = stored_loader(client, &set_id).await? else {
         return Ok(response);
     };
     let mut selected: Option<Rule> = None;
     for bytes in bundles {
-        let Ok(envelope) = serde_json::from_slice::<SignedRuleEnvelope>(&bytes) else {
-            return Ok(response);
-        };
-        let Ok(bundle) = loader.load_json(
-            &bytes,
-            LoadContext {
-                expected_rule_set_id: &set_id,
-                now_unix_ms: envelope.created_at_unix_ms,
-                last_accepted: None,
-            },
-        ) else {
+        let Some((_, bundle)) = verify_stored(&loader, &set_id, &bytes) else {
             return Ok(response);
         };
         if hash.is_some_and(|hash| {

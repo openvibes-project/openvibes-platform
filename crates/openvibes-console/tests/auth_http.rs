@@ -796,6 +796,12 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let publishes:i64=rule_audit.query_one("SELECT count(*) FROM audit_log WHERE action='rule_bundle.published' AND target_id='baseline v1'",&[]).await.unwrap().get(0);
     assert_eq!(previews, 1);
     assert_eq!(publishes, 2);
+    // The upload indexes the bundle's rules for the alarm pages.
+    let indexed = platform_store::rule_meta::get(&rule_audit, "baseline", 1, "baseline.rule", 1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(indexed.title, "HTTP integration rule");
     let revoked_bearer = router
         .clone()
         .oneshot(

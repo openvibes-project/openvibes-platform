@@ -10,7 +10,7 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `about.rs` | The About page: versions and the newer-release check. |
 | `about_tests.rs` | Tests for the About page and the newer-version check. |
 | `access/` | Who may do what: sign-in, roles, users, service accounts, role bindings, asset groups, host tags. |
-| `alarms/` | Alarms: list, detail and triage, suppressions, detection evidence. |
+| `alarms/` | Alarms: list, the alarm page summary, detail and triage, suppressions, detection evidence. |
 | `assistant/` | The assistant: chat endpoints, runtime, lookups, internet switch. |
 | `audit/` | The audit trail: events, CSV export, retention. |
 | `cases/` | Cases: one investigation's record, split by list, items and lookups. |

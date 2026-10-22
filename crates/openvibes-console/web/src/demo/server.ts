@@ -6,7 +6,9 @@ import { createDemoContext } from "./context";
 import { MAX_PAGE, problem } from "./http";
 import type { Persona } from "./personas";
 import { registerAccessRoutes } from "./routes/access";
+import { registerAlarmListRoute } from "./routes/alarmList";
 import { registerAlarmRoutes } from "./routes/alarms";
+import { registerAlarmSummaryRoute } from "./routes/alarmSummary";
 import { registerAssetRoutes } from "./routes/assets";
 import { registerAssistantRoutes } from "./routes/assistant";
 import { registerCaseRoutes } from "./routes/cases";
@@ -50,10 +52,14 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   registerAssistantRoutes(ctx);
   registerDashboardRoutes(ctx);
   const cases = registerCaseRoutes(ctx);
+  registerAlarmListRoute({ ...ctx, cases });
+  registerAlarmSummaryRoute({ ...ctx, cases });
   registerTriageRoutes({ ...ctx, cases, suppressions });
 
   return {
     persona,
+    /** The demo data, for tests that add to it. */
+    data: ctx.data,
     async handle(method: string, url: string, body?: unknown, headers: Record<string, string> = {}): Promise<Response> {
       const parsed = new URL(url, "http://demo");
       const limit = parsed.searchParams.get("limit");

@@ -6,6 +6,12 @@
 
 /// Agent listing, inspection, and revocation.
 pub mod agents;
+/// The Alarms list: filters, per-value counts, summary and paging in scope.
+pub mod alarm_list;
+/// The SQL of the Alarms list's one statement.
+mod alarm_list_sql;
+/// An alarm's page above the fold: siblings, last 24 hours, rule text, related.
+pub mod alarm_summary;
 mod alarm_suppression_writes;
 /// Alarm suppressions (P14) as the console manages them: states, where
 /// and duration (roles spec §8).
@@ -86,6 +92,8 @@ mod migrate;
 pub mod rule_assignment;
 /// Draft rules for the site's own rule sets.
 pub mod rule_drafts;
+/// The rule-metadata index of stored bundles (schema 59).
+pub mod rule_meta;
 /// Rule sets, trust keys, and published bundles.
 pub mod rules;
 /// Saved views and hidden list columns per person and page (schema 56).
@@ -111,6 +119,7 @@ use tokio_postgres::NoTls;
 pub use deadpool_postgres::{Client, Pool};
 pub use maintenance::{
     drop_partitions_before, ensure_partitions, partition_days, partition_days_of,
+    prune_alarm_hourly,
 };
 pub use migrate::{
     NEEDS_BACKUP, SCHEMA_VERSION, migrate, migrate_additive, needs_backup_after, schema_version,

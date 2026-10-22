@@ -10,13 +10,16 @@ use crate::http::AuthHttpState;
 pub(crate) mod saved_views;
 
 /// The list pages that keep saved views and columns.
-pub(crate) const PAGES: &[&str] = &["hosts"];
+pub(crate) const PAGES: &[&str] = &["hosts", "alarms"];
 
 /// The column keys a person may hide on a page; the first column of every
-/// page (`host`) is never in the list.
+/// page (`host`; alarms: `severity`) is never in the list.
 pub(crate) fn hideable(page: &str) -> &'static [&'static str] {
     match page {
         "hosts" => &["os", "groups", "labels", "problems", "heartbeat", "agent"],
+        "alarms" => &[
+            "alarm", "host", "count", "seen", "state", "assignee", "case",
+        ],
         _ => &[],
     }
 }

@@ -913,6 +913,32 @@ the update checker's last-known agent release (null when the checker is off
 or has not found one yet); it is looked up in the background at start, so it
 fills a few seconds after start, and the route never waits on the network. A store failure is 503.
 
+## Alarms list
+
+`GET /api/v1/alarm-list` (needs `alarms.read`; session or bearer; roles 5a)
+pages the Alarms list over the store's `alarm_list`. The keyset-paged
+`GET /api/v1/alarms` stays for live alarms, dashboards and the host page.
+Filters (one value each, ANDed): `q` (message, rule id, host name, program or
+parent program), `state` (`open` by default, `mitigated`, `accepted_risk`,
+`false_positive`, or `all`, which the store sees as no state filter),
+`severity`, `suppressed` (`hidden` by default, `shown`), `host` (agent id),
+`group` (UUID), `technique`, `case` (`yes|no`) and `assignee` (`me`,
+`unassigned` or a user UUID, lowercased; `me` is the session user's id, so a
+bearer token's service-account id matches nobody). `sort` is
+`last_seen` (default), `first_seen`, `count` or `severity`; `dir` is `desc`
+by default; `offset` 0..=100000 and `limit` 1..=100 (default 50) outside
+those are 400 (the store clamps as defence). An invalid value or an unknown
+parameter is 400 `invalid_query` naming the parameter. Rows, per-value
+`counts` (each with the other filters applied; group, technique and person
+values come only from alarms in reach) and the `summary` are inside the
+caller's `alarms.read` reach. The summary counts OPEN alarms under every
+filter except state, so `state=mitigated` still shows the open count;
+`on_alarms_off_hosts` is null without `hosts.read` and counts only hosts
+inside both the `alarms.read` and `hosts.read` reach. Saved views and hidden
+columns accept the page `alarms` (hideable: `alarm`, `host`, `count`, `seen`,
+`state`, `assignee`, `case`; severity is the first column and never hidden).
+Tests: `tests/alarm_list_http.rs`; demo: `web/src/demo/routes/alarmList.ts`.
+
 ## Host page summary
 
 `GET /api/v1/hosts/{agent_id}/summary` (needs `hosts.read`; session or
@@ -941,6 +967,34 @@ confidence 80 or more with this host's triage open, as
 list's summary line schema is `HostSummaryLineView`, and its group items
 are `HostListGroupView` (`id`, `name`, `kind`); `api_contract` fails when
 two registered schemas share a name. Tests: `tests/host_summary_http.rs`.
+
+## An alarm's page summary
+
+`GET /api/v1/alarms/{id}/summary` (needs `alarms.read`; session or bearer;
+roles 5a) answers everything above the fold on an alarm's page over the
+store's `alarm_summary`: `alarm` (the Alarms list row fields plus
+`confidence`, `rule_set_version`, `rule_version`, `process`, `ancestors`,
+`received_at` and `triage`), `tiles` (`starts` and `first_seen` over the
+alarm and its siblings, `different_commands`, `confidence`), `rule`
+(`title`, `message`, `explain`, `check`, `techniques`; the alarm's message
+when the rule is not indexed, and `GET /alarms/{id}/rule` still resolves
+it), `commands` (the alarm and its siblings: same host, rule set, rule,
+program and parent; most starts first; each with `id`, masked `args`,
+`count`, `first_seen`, `last_seen`, `state`, `suppressed_by` and `case`),
+`hourly` (24 numbers, oldest first, ending with the current hour),
+`related` (`host_alarms`: up to five other open alarms on the host and the
+total; `host_vulnerabilities`: the host page's top three and total, null
+without `vulnerabilities.read` on the host; `same_rule_elsewhere`: other
+hosts in reach with an open, unsuppressed alarm from the rule, and their
+open alarms) and `can` (`triage`: `alarms.triage`; `assign`:
+`alarms.triage` and `cases.assign`; `suppress`: `alarms.suppress`;
+`add_to_case`: `cases.write`; `ask`: `assistant.use` with the assistant
+on; `export`: `alarms.export`; each on this host). A missing alarm, a bad
+id and one outside the caller's `alarms.read` reach are the same 404
+`alarm_not_found`; a store failure is 503. The schema is
+`AlarmSummaryPageView` (the list item of `GET /alarms` already holds the
+name `AlarmSummaryView`). Tests: `tests/alarm_summary_http.rs`; demo:
+`web/src/demo/routes/alarmSummary.ts`.
 
 ## Saved views and list columns
 

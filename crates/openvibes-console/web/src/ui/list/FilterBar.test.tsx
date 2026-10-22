@@ -57,6 +57,15 @@ describe("FilterBar", () => {
     expect(chosenFilters([status], new URLSearchParams("status=gone"))).toEqual([{ param: "status", text: "Status: gone" }]);
   });
 
+  it("draws a chip-only filter (Host) only while it is chosen, and a saved view restores it", () => {
+    const host: ListFilter = { param: "host", label: "Host", chipOnly: true, values: [{ value: "agent-1", label: "web-01", count: 3 }] };
+    const bar = () => renderToStaticMarkup(<FilterBarBody page="alarms" label="Search alarms" filters={[status, host]} params={nav.location.params} views={[]} hidden={[]} />);
+    expect(bar()).not.toContain('aria-label="Host"');
+    url("host=agent-1");
+    expect(bar()).toContain('aria-label="Remove filter Host: web-01"');
+    expect(applyViewChanges(new URLSearchParams(), "host=agent-1", [status, host])).toEqual({ host: "agent-1" });
+  });
+
   it("Clear all clears every filter but keeps the sort", () => {
     url("q=web&status=online&os=linux&sort=name&dir=desc");
     nav.setParams(clearAllChanges(nav.location.params));

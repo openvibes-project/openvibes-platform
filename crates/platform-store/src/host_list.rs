@@ -43,6 +43,7 @@ macro_rules! values {
         }
     };
 }
+pub(crate) use values;
 
 values!(
     /// A host's state (ruling 2).

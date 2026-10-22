@@ -32,11 +32,13 @@ type Props<T> = {
   compact?: boolean;
   /** The rows come sorted by the server (the sort is still set in the URL). */
   serverSort?: boolean;
+  /** The rows are one page of a server-paged list: selecting is per page, never "all matching". */
+  serverPaged?: boolean;
 };
 
 const STEP = 150;
 
-export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSort, selection, label, compact, serverSort }: Props<T>) {
+export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSort, selection, label, compact, serverSort, serverPaged }: Props<T>) {
   const { params } = useLocation();
   const sortKey = params.get("sort") ?? defaultSort?.key;
   const direction: Direction = (params.get("dir") as Direction | null) ?? defaultSort?.direction ?? "asc";
@@ -98,7 +100,10 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
 
   return (
     <div className="table-wrap" ref={wrap}>
-      {selection && pageSelected && sorted.length > onScreen.length && (
+      {selection && pageSelected && serverPaged && (
+        <output className="select-all-bar">All {onScreen.length.toLocaleString()} on this page are selected.</output>
+      )}
+      {selection && pageSelected && !serverPaged && sorted.length > onScreen.length && (
         <output className="select-all-bar">
           {everySelected
             ? <>All {Math.min(sorted.length, MAX_SELECTION).toLocaleString()} matching this filter are selected{sorted.length > MAX_SELECTION && ` (the first ${MAX_SELECTION.toLocaleString()}; narrow the filter for the rest)`}. </>

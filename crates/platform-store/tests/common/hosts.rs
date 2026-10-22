@@ -117,3 +117,52 @@ pub async fn in_group_counts(c: &Client) -> Vec<(String, i64)> {
     .map(|r| (r.get(0), r.get(1)))
     .collect()
 }
+
+/// 20,000 agents (every 29th revoked; five distributions; seen within 15
+/// hours) and 20 groups: 5 distribution and 5 host-name rule groups, 10
+/// manual groups of about 1,000 hosts. Shared by the timing tests.
+pub async fn large_fleet(c: &Client) {
+    c.batch_execute(
+        "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, hostname, os_id, os_version,
+                             last_address, scanner_version)
+         SELECT 'agent.' || gen_random_uuid()::text, CASE WHEN n % 29 = 0 THEN 'revoked' ELSE 'active' END,
+                now() - interval '180 days', now() - make_interval(mins => (n % 900)::int), 'host-' || n,
+                (ARRAY['debian','ubuntu','fedora','windows','rocky'])[n % 5 + 1], '12',
+                ('10.' || (n / 65536) || '.' || (n / 256 % 256) || '.' || (n % 256))::inet,
+                CASE WHEN n % 3 = 0 THEN '0.4.1' ELSE '0.4.2' END
+         FROM generate_series(1, 20000) n;",
+    )
+    .await
+    .unwrap();
+    for (i, os) in ["debian", "ubuntu", "fedora", "windows", "rocky"]
+        .iter()
+        .enumerate()
+    {
+        super::rule_group(
+            c,
+            &format!("os {i}"),
+            &[("distribution", false, &[&format!("{os} 12")])],
+        )
+        .await;
+        super::rule_group(
+            c,
+            &format!("name {i}"),
+            &[("hostname", false, &[&format!("host-{i}*")])],
+        )
+        .await;
+    }
+    for i in 0..10 {
+        let members: Vec<String> = c
+            .query(
+                "SELECT agent_id FROM agents WHERE abs(hashtext(agent_id || $1)) % 20 = 0",
+                &[&i.to_string()],
+            )
+            .await
+            .unwrap()
+            .iter()
+            .map(|r| r.get(0))
+            .collect();
+        let members: Vec<&str> = members.iter().map(String::as_str).collect();
+        super::manual_group(c, &format!("manual {i}"), &members).await;
+    }
+}

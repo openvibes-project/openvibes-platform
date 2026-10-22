@@ -51,6 +51,16 @@ export function createSuppressions(ctx: DemoContext, requireApproval: () => bool
   const loaded = storage?.load();
   // What storage holds could be anything: invalid rows are dropped.
   const rows: Stored[] = Array.isArray(loaded) ? loaded.filter(validRow) : [];
+  // The seed's suppressed alarm (demo/data.ts) was closed by this one: an
+  // active, exact-command suppression on its host, so its link leads somewhere.
+  const seeded = data.alarms.find((a) => a.suppressed_by !== null);
+  if (seeded?.suppressed_by && !rows.some((r) => r.id === seeded.suppressed_by)) {
+    const by = data.access.users[0]?.user_id ?? me;
+    rows.unshift({ id: seeded.suppressed_by, rule_set_id: seeded.rule_set_id, rule_id: seeded.rule_id, what: "command", exe: seeded.exe,
+      args: seeded.process.args, agent_id: seeded.agent_id, group_id: null, for_days: null, state: "active", reason: "nightly self-update from our own server",
+      created_by: by, created_at: seeded.last_seen, decided_by: null, decided_at: null, decision_reason: null,
+      activated_at: seeded.last_seen, expires_at: null, alarm_id: seeded.id });
+  }
   const save = () => storage?.save(rows);
   const scope = (permission: Permission) => capabilities.find((c) => c.permission === permission)?.scope;
   const groupOf = (id: string | null) => data.access.host_groups.find((g) => g.asset_group_id === id);

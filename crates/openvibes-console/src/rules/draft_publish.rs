@@ -340,16 +340,19 @@ pub(crate) async fn publish_drafts(
         published_by: &actor,
     };
     match platform_store::rules::publish_and_audit(&mut client, &bundle, &actor).await {
-        Ok(platform_store::rules::Published::Stored) => (
-            StatusCode::CREATED,
-            Json(PublishedDrafts {
-                rule_set_id,
-                version,
-                expires_at_ms: envelope.expires_at_unix_ms,
-                rules: rules.len(),
-            }),
-        )
-            .into_response(),
+        Ok(platform_store::rules::Published::Stored) => {
+            super::meta::index_published(&client, &rule_set_id, version).await;
+            (
+                StatusCode::CREATED,
+                Json(PublishedDrafts {
+                    rule_set_id,
+                    version,
+                    expires_at_ms: envelope.expires_at_unix_ms,
+                    rules: rules.len(),
+                }),
+            )
+                .into_response()
+        }
         Ok(_) => problem_response(ProblemDetails::new(
             StatusCode::CONFLICT,
             "stale_version",

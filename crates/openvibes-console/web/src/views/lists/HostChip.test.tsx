@@ -7,7 +7,6 @@ vi.hoisted(() => {
   Object.assign(globalThis, { window: { location: { pathname: "/", search: "" }, history: { replaceState() {} }, addEventListener() {}, removeEventListener() {} } });
 });
 
-import { alarmQuery } from "../investigate/Alarms";
 import { HostChip } from "./HostChip";
 
 describe("host filter", () => {
@@ -16,10 +15,5 @@ describe("host filter", () => {
     expect(html).toContain("Host: agent-00005");
     expect(html).toContain('aria-label="Remove filter Host: agent-00005"');
     expect(renderToStaticMarkup(<HostChip id={null} />)).toBe("");
-  });
-
-  it("asks the alarm list for that host's alarms", () => {
-    expect(alarmQuery(new URLSearchParams("host=a%2F1"))).toBe("/api/v1/alarms?state=active&agent_id=a%2F1");
-    expect(alarmQuery(new URLSearchParams())).toBe("/api/v1/alarms?state=active");
   });
 });

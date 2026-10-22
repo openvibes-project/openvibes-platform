@@ -84,11 +84,13 @@ function Menu({ kind, id, label, where, anchor, onClose }: { kind: CaseKind; id:
   const taken = exclusive ? holding[0]?.case : undefined;
   const style: CSSProperties = { ...(where.top !== undefined ? { top: where.top } : { bottom: where.bottom }), left: where.left, width: where.width, maxHeight: where.maxHeight };
 
-  /** Runs the change; its result is what to tell the user. A refusal may mean the lists are out of date, so they reload. */
+  /** Runs the change; its result is what to tell the user. A refusal may mean the lists are out of date, so they reload
+   * (with an alarm's, whose list and page show its case). */
+  const reload = () => { invalidate("/api/v1/case"); if (kind === "alarm") invalidate("/api/v1/alarm"); };
   const run = (change: () => Promise<string>) => {
     setBusy(true);
     setError(undefined);
-    change().then((done) => { invalidate("/api/v1/case"); toast(done); }, (e: unknown) => { setError(caseErrorText(e)); invalidate("/api/v1/case"); }).finally(() => setBusy(false));
+    change().then((done) => { reload(); toast(done); }, (e: unknown) => { setError(caseErrorText(e)); reload(); }).finally(() => setBusy(false));
   };
   const addTo = (c: CaseSummary) => run(async () => {
     await request("POST", `/api/v1/cases/${encodeURIComponent(c.case_id)}/items`, { kind, ref: id });

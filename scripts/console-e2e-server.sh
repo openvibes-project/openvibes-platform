@@ -3,8 +3,8 @@
 # TLS 1.3 with a throwaway self-signed certificate) on a fresh throwaway
 # database for the browser tests: schema migrated, users
 # alex (admin) and sam (analyst), imported findings for six hosts, and
-# seven enrolled hosts with their facts (OS, version, hostname, address), one
-# finding and one alarm each. Needs
+# eight enrolled hosts with their facts (OS, version, hostname, address), one
+# finding and one alarm each (page-1's alarm with two siblings). Needs
 # OPENVIBES_TEST_DATABASE_URL (scripts/test-db.sh locally; the CI job sets it)
 # and the binaries built by scripts/test-console-e2e.sh.
 set -euo pipefail
@@ -93,7 +93,7 @@ SELECT 'agent.00000000-0000-4000-8000-00000000000' || n, 'active', now() - inter
 FROM (VALUES (1, 'linux-1.example.test', 'debian', '12'), (2, 'linux-2.example.test', 'debian', '12'),
              (3, 'windows-1.example.test', 'windows', '11'), (4, 'windows-2.example.test', 'windows', '11'),
              (5, 'lin-sup-1.example.test', 'debian', '12'), (6, 'lin-sup-2.example.test', 'debian', '12'),
-             (7, 'lin-sup-3.example.test', 'debian', '12'))
+             (7, 'lin-sup-3.example.test', 'debian', '12'), (8, 'page-1.example.test', 'debian', '12'))
      AS hosts (n, name, os, version);
 INSERT INTO current_findings
 SELECT (jsonb_populate_record(c, jsonb_build_object('agent_id', a.agent_id, 'origin', 'online', 'authenticated', true,
@@ -106,6 +106,18 @@ SELECT (now() AT TIME ZONE 'UTC')::date, agent_id, md5(agent_id), 'e2e', 1, 'e2e
     'Team alarm on ' || split_part(hostname, '.', 1), now(), now(), 1,
     '{"exe": "/usr/local/bin/backup-job", "args": ["backup-job", "--nightly"]}', '[]', now(), 'open'
 FROM agents WHERE status = 'active';
+-- page-1's alarm has two siblings (same rule and program, other arguments)
+-- and this hour's starts, for an alarm's page (alarms.spec.ts).
+INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version, rule_id, rule_version,
+    severity, confidence, message, first_seen, last_seen, count, process, ancestors, received_at, state)
+SELECT (now() AT TIME ZONE 'UTC')::date, agent_id, md5(agent_id || flag), 'e2e', 1, 'e2e.team_alarm', 1, 'low', 50,
+    'Team alarm on page-1', now(), now(), n,
+    jsonb_build_object('exe', '/usr/local/bin/backup-job', 'args', jsonb_build_array('backup-job', flag)), '[]', now(), 'open'
+FROM agents, (VALUES ('--weekly', 5), ('--monthly', 2)) AS s (flag, n)
+WHERE hostname = 'page-1.example.test';
+INSERT INTO alarm_hourly_starts (alarm_row_id, hour, starts)
+SELECT id, date_trunc('hour', now()), count FROM alarms
+WHERE agent_id = (SELECT agent_id FROM agents WHERE hostname = 'page-1.example.test');
 SQL
 
 exec "${bin}/openvibes-console" --config "${work}/console.toml"

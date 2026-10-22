@@ -24,9 +24,11 @@ test("the list opens a case in the inspector, where a note joins the timeline", 
   await expect(inspector.getByRole("list", { name: /Timeline/ }).locator("li").first()).toContainText("Disabled password logins");
   await expect(page.locator(".toast")).toContainText("Note added");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  // The item opens its own panel on top.
+  // The item opens the alarm's page (screen 30), and the panels close.
   await inspector.getByRole("list", { name: "Items" }).getByRole("link", { name: "A database server started a shell" }).click();
-  await expect(page.locator(".panel-header__kind")).toContainText("Alarm");
+  await expect(page).toHaveURL(/\/alarms\/\d+$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("A database server started a shell");
+  await expect(page.locator(".inspector")).toHaveCount(0);
 });
 
 test("a case closes only once every alarm has an outcome", async ({ page }) => {
@@ -67,12 +69,17 @@ test("a case closes only once every alarm has an outcome", async ({ page }) => {
 });
 
 test("Add to case from an alarm opens a case, and then points at it", async ({ page }) => {
+  // An old panel link: it opens the alarm's page.
   await page.goto("/alarms?open=alarm%3A9002");
-  const inspector = page.locator(".inspector");
-  // Click once the inspector has slid in: a click during the slide makes
-  // Playwright scroll the inspector, and the menu closes when its anchor moves.
-  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"));
-  await inspector.getByRole("button", { name: "Add to case" }).click();
+  await expect(page).toHaveURL(/\/alarms\/9002$/);
+  // Once the evidence and history have loaded: the menu closes when its anchor moves.
+  await expect(page.locator(".detection-verdict")).toBeVisible();
+  await expect(page.getByText("No triage changes yet")).toBeVisible();
+  const add = page.locator(".person-card").filter({ has: page.getByRole("heading", { name: "Details" }) }).getByRole("button", { name: "Add to case" });
+  // Scrolled there first: a scroll right after the click would close the menu.
+  await add.scrollIntoViewIfNeeded();
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await add.click();
   const menu = page.getByRole("dialog", { name: /Add alarm to a case/ });
   await expect(menu.getByRole("button", { name: /C-103/ })).toBeVisible();
   await menu.getByRole("button", { name: "New case…" }).click();

@@ -161,6 +161,14 @@ jq -e '.parent_exe == "/tmp/fake-nginx" and .process.args == ["sh", "-c", "id"]
     { echo "$DETAIL" | jq . >&2; fail "the alarm's process tree"; }
 echo "ok: the alarm reads back from GET /api/v1/alarms/{id} with its process tree"
 
+# The alarm's page, before the next start (a sibling) adds to it: three
+# starts, all in one hour (two buckets if the run straddled an hour).
+SUMMARY=$(api GET "/api/v1/alarms/$ID/summary")
+jq -e '.tiles.starts == 3 and (.hourly | length) == 24 and (.hourly | add) == 3
+       and ([.hourly[] | select(. > 0)] == [3] or (.hourly[-2] > 0 and .hourly[-1] > 0))' \
+    <<<"$SUMMARY" >/dev/null || { echo "$SUMMARY" | jq . >&2; fail "the alarm's summary: 3 starts in one hour"; }
+echo "ok: GET /api/v1/alarms/{id}/summary counts 3 starts in the hourly bars"
+
 # "Don't alarm on this program again", then the same program with another
 # command line: stored, and closed by the suppression.
 SUPPRESSION=$(api POST /api/v1/alarm-suppressions \

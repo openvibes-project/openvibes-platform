@@ -142,6 +142,7 @@ export function FilterBarBody({ page, label, placeholder = "Search…", filters,
         <div className="row row--wrap filter-bar__chips" role="group" aria-label="Filters">
           {filters.map((f) => {
             const text = chosen.get(f.param);
+            if (f.chipOnly && text === undefined) return null;
             return (
               <span key={`${f.param}:${text !== undefined}`} ref={focusIn(f.param, "button")} className="filter-bar__chip">
                 {text !== undefined ? (
