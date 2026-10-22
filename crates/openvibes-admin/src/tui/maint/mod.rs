@@ -35,6 +35,7 @@ mod signin;
 #[cfg(test)]
 mod signin_tests;
 mod uninstall;
+mod uninstall_run;
 #[cfg(test)]
 mod uninstall_tests;
 mod update;

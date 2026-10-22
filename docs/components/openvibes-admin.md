@@ -666,11 +666,13 @@ refused while one works):
   PostgreSQL goes too, but only when Setup installed it (Setup's Postgres
   step records that in `/etc/openvibes/setup-installed-postgresql`, as
   `setup-opened-ports` does for ports) and the cluster holds no database
-  besides `postgres`, `template0`, `template1` and `openvibes`: then the
+  besides `postgres`, `template0`, `template1` and `openvibes`, and no
+  user table in the `postgres` database itself (counted in `pg_tables`
+  outside `pg_catalog` and `information_schema`): then the
   service is disabled, `postgresql-server` (and `postgresql` and
   `postgresql-private-libs`, whichever Setup installed too: the record lists each
   one that was absent before) removed with `rpm -e`, and `/var/lib/pgsql` deleted. With
-  other databases, when another package needs it (`rpm -e --test` refuses,
+  other databases or such tables ("the postgres database holds 3 tables"), when another package needs it (`rpm -e --test` refuses,
   e.g. `postgresql-upgrade`), or without the record, it stays, the step says
   why and Purge finishes; `--keep-data` never removes it. Once the checks pass
   a mark (`/etc/openvibes/postgresql-removing`) is written; a retry with the

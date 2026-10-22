@@ -17,7 +17,7 @@ use platform_host::{
 
 use super::{
     Ctx, backup,
-    base::{PG_MARK, PG_PACKAGES, PG_RECORD},
+    base::{PG_MARK, PG_RECORD},
     plan::{Component, check_name},
     run::ports_for,
 };
@@ -169,10 +169,14 @@ fn remove_packages<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSta
         argv.extend(&packages);
         ctx.ok(Dnf, &argv)?;
     }
+    // An Update's "start the agent once ready" mark must not outlive it.
+    if args.components.contains(&Component::Agent) {
+        remove_file_or_dir(&ctx.path(super::update::AGENT_PENDING))?;
+    }
     Ok(StepState::Done(format!("removed: {}", packages.join(" "))))
 }
 
-fn remove_file_or_dir(path: &std::path::Path) -> Result<(), String> {
+pub(super) fn remove_file_or_dir(path: &Path) -> Result<(), String> {
     match if path.is_dir() {
         fs::remove_dir_all(path)
     } else {
@@ -183,70 +187,6 @@ fn remove_file_or_dir(path: &std::path::Path) -> Result<(), String> {
         }
         _ => Ok(()),
     }
-}
-
-/// PostgreSQL goes only when Setup installed it (the record), the package
-/// is still installed and the cluster holds nothing but the system
-/// databases and `openvibes`. Everything that can refuse runs before the
-/// mark and before anything stops; after the mark, each part checks whether
-/// it is still to do, so a retry finishes. `/var/lib/pgsql` goes only under
-/// the mark, never on a record alone. The record goes last.
-fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
-    let Ok(record) = ctx.read(PG_RECORD) else {
-        return Ok("Setup has no record of installing PostgreSQL; it stays".into());
-    };
-    let others = ctx.as_postgres(&[
-        "/usr/bin/psql",
-        "-Atqc",
-        "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1','openvibes')",
-    ]);
-    // The mark is trusted only while the cluster does not answer: a stale
-    // one (Setup took PostgreSQL back) must never skip the checks (review I2).
-    if !ctx.exists(PG_MARK) || others.is_ok() {
-        if !installed(ctx, "postgresql-server") {
-            remove_file_or_dir(&ctx.path(PG_RECORD))?;
-            return Ok(
-                "the record of Setup installing PostgreSQL was stale, so PostgreSQL is not removed"
-                    .into(),
-            );
-        }
-        let count = others?.lines().filter(|l| !l.trim().is_empty()).count();
-        let mut test = vec!["-e", "--test"];
-        test.extend(packages_to_remove(ctx, &record));
-        let stays = if count > 0 {
-            Some(format!(
-                "PostgreSQL stays: it holds {count} other database{}",
-                if count == 1 { "" } else { "s" }
-            ))
-        } else {
-            // Another package needs it (review I1): it stays, Purge finishes.
-            ctx.ok(Rpm, &test)
-                .err()
-                .map(|why| format!("PostgreSQL stays: other packages need it ({why})"))
-        };
-        if let Some(stays) = stays {
-            remove_file_or_dir(&ctx.path(PG_MARK))?;
-            return Ok(stays);
-        }
-        ctx.put(PG_MARK, b"removing\n", None, 0o644)?;
-    }
-    if installed(ctx, "postgresql-server") {
-        ctx.ok(Systemctl, &["disable", "--now", "postgresql"])?;
-        let mut argv = vec!["-e"];
-        argv.extend(packages_to_remove(ctx, &record));
-        ctx.ok(Rpm, &argv)?;
-    }
-    remove_file_or_dir(&ctx.path("/var/lib/pgsql"))?;
-    remove_file_or_dir(&ctx.path(PG_MARK))?;
-    remove_file_or_dir(&ctx.path(PG_RECORD))?;
-    Ok("PostgreSQL removed: Setup installed it and nothing else uses it".into())
-}
-
-fn packages_to_remove<'a, R: Runner>(ctx: &Ctx<R>, record: &'a str) -> Vec<&'a str> {
-    record
-        .lines()
-        .filter(|p| PG_PACKAGES.contains(p) && installed(ctx, p))
-        .collect()
 }
 
 fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String> {
@@ -362,7 +302,7 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
         }
     }
     let postgresql = if server {
-        postgresql(ctx)?
+        pg::postgresql(ctx)?
     } else {
         remove_file_or_dir(&ctx.path(PG_RECORD))?;
         remove_file_or_dir(&ctx.path(PG_MARK))?;
@@ -476,6 +416,8 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
 mod admin;
 #[path = "remove_part.rs"]
 mod part;
+#[path = "remove_pg.rs"]
+mod pg;
 
 #[cfg(test)]
 #[path = "remove_part_tests.rs"]

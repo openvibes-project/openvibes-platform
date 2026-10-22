@@ -348,3 +348,19 @@ fn a_half_done_remove_everything_is_never_finished_as_keep_the_data() {
     let again = run(&fake.ctx(&plan), RemoveStep::Stop, &everything);
     assert!(matches!(again, StepState::Done(_)), "{again:?}");
 }
+
+#[test]
+fn removing_the_agent_clears_the_update_agent_mark() {
+    let fake = Fake::new("remove-agent-mark");
+    fake.file("/run/openvibes-admin/update-agent", "\n");
+    fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-agent"], 0, "");
+    fake.answer(&["/usr/bin/dnf", "remove"], 0, "");
+    let plan = plan(&[Ingest, Agent]);
+    let state = run(
+        &fake.ctx(&plan),
+        RemoveStep::Packages,
+        &args(&[Ingest, Agent], None),
+    );
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(!fake.root.join("run/openvibes-admin/update-agent").exists());
+}

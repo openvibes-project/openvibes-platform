@@ -65,14 +65,24 @@ pub(super) fn ensure<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> 
     // back themselves must not become Remove everything's to remove.
     let record = ctx.read(PG_RECORD).ok();
     let applied = postgres_apply(ctx);
-    match &record {
+    let restored = match &record {
         None => {
             let _ = std::fs::remove_file(ctx.path(PG_RECORD));
+            Ok(())
         }
-        Some(old) => ctx.put(PG_RECORD, old.as_bytes(), None, 0o644)?,
-    }
+        Some(old) => ctx.put(PG_RECORD, old.as_bytes(), None, 0o644),
+    };
     // A newer server refuses the old cluster, so its start fails too: say why.
-    applied.map_err(|error| mismatch(ctx).unwrap_or_else(|| format!("{found}: {error}")))?;
+    // The apply error comes first; a failed write-back is added, not swapped in.
+    let applied =
+        applied.map_err(|error| mismatch(ctx).unwrap_or_else(|| format!("{found}: {error}")));
+    match (applied, restored) {
+        (Err(error), Err(e)) => {
+            return Err(format!("{error}; could not restore the setup record: {e}"));
+        }
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => return Err(error),
+        (Ok(_), Ok(())) => {}
+    }
     if let Some(text) = mismatch(ctx) {
         return Err(text);
     }
@@ -218,5 +228,27 @@ mod tests {
         let plan = plan(&[]);
         assert!(matches!(ensure(&fake.ctx(&plan)), Ok(Some(_))));
         assert_eq!(fake.text(RECORD), "postgresql-server\n");
+    }
+
+    #[test]
+    fn a_failed_record_write_back_keeps_the_apply_error() {
+        let fake = fake("pgh-writeback", Some("18\n"));
+        fake.file(RECORD, "postgresql-server\n");
+        // A folder where the write-back's temp file goes: the write fails.
+        fake.file("/etc/openvibes/.setup-installed-postgresql.setup/x", "");
+        fake.answer(ACTIVE, 3, "");
+        fake.fail(&["/usr/bin/systemctl", "enable"], "unit failed to start");
+        rest(&fake);
+        let plan = plan(&[]);
+        let error = ensure(&fake.ctx(&plan)).unwrap_err();
+        assert!(
+            error.starts_with("PostgreSQL is not running: ")
+                && error.contains("unit failed to start"),
+            "{error}"
+        );
+        assert!(
+            error.contains("; could not restore the setup record: "),
+            "{error}"
+        );
     }
 }

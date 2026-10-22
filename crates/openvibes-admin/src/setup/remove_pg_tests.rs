@@ -14,6 +14,10 @@ fn others_query() -> Vec<&'static str> {
     [&OTHERS[..], &["/usr/bin/psql", "-Atqc", "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1','openvibes')"]].concat()
 }
 
+fn tables_query() -> Vec<&'static str> {
+    [&OTHERS[..], &["/usr/bin/psql", "-d", "postgres", "-Atqc", "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema')"]].concat()
+}
+
 /// A host where Remove everything's Purge runs; `others` is what the
 /// cluster lists besides openvibes and the system databases.
 fn purge_pg(name: &str, recorded: bool, others: &str, everything: bool) -> (Fake, StepState) {
@@ -34,6 +38,7 @@ fn purge_pg_with(fake: Fake, recorded: bool, others: &str, everything: bool) -> 
     }
     fake.file("/var/lib/pgsql/data/PG_VERSION", "17\n");
     fake.answer(&others_query(), 0, others);
+    fake.answer(&tables_query(), 0, "0\n");
     fake.answer(&[&PG[..], &["/usr/bin/psql"]].concat(), 0, "");
     fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
     fake.answer(&["/usr/sbin/userdel"], 0, "");
@@ -92,6 +97,23 @@ fn postgresql_stays_when_another_database_exists() {
     assert!(state.detail().contains("2 other databases"), "{state:?}");
 }
 
+/// User tables in the `postgres` database itself are data too.
+#[test]
+fn tables_in_the_postgres_database_keep_postgresql() {
+    let fake = Fake::new("pg-tables");
+    fake.answer(&tables_query(), 0, "3\n");
+    let (fake, state) = purge_pg_on(fake, "");
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(!fake.called(&["/usr/bin/rpm", "-e"]));
+    assert!(fake.root.join("var/lib/pgsql/data/PG_VERSION").exists());
+    assert!(
+        state
+            .detail()
+            .contains("the postgres database holds 3 tables"),
+        "{state:?}"
+    );
+}
+
 #[test]
 fn postgresql_stays_without_the_record() {
     let (fake, state) = purge_pg("pg-unrecorded", false, "", true);
@@ -121,6 +143,7 @@ fn postgresql_stays_when_another_package_needs_it() {
     fake.file("/etc/openvibes/setup.toml", "plan");
     fake.file(REC, "postgresql-server\n");
     fake.answer(&others_query(), 0, "");
+    fake.answer(&tables_query(), 0, "0\n");
     fake.answer(&[&PG[..], &["/usr/bin/psql"]].concat(), 0, "");
     fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
     fake.answer(&["/usr/sbin/userdel"], 0, "");
@@ -239,7 +262,8 @@ fn a_failed_package_removal_leaves_the_mark() {
     let fake = Fake::new("pg-mark");
     fake.file("/etc/openvibes/setup.toml", "plan");
     fake.file(REC, "postgresql-server\n");
-    fake.answer(&[&PG[..], &["/usr/bin/psql", "-Atqc", "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1','openvibes')"]].concat(), 0, "");
+    fake.answer(&others_query(), 0, "");
+    fake.answer(&tables_query(), 0, "0\n");
     fake.answer(&[&PG[..], &["/usr/bin/psql"]].concat(), 0, "");
     fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
     fake.answer(&["/usr/sbin/userdel"], 0, "");

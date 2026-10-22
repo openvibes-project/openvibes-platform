@@ -19,7 +19,7 @@ const AGENT: &str = "openvibes-agent.service";
 /// The agent was running before the update: Ready starts it once the
 /// platform answers (board #111: started together, it found distribution
 /// not listening and waited a scan interval without rules).
-const AGENT_PENDING: &str = "/run/openvibes-admin/update-agent";
+pub(super) const AGENT_PENDING: &str = "/run/openvibes-admin/update-agent";
 
 #[derive(clap::Args, Clone, Debug, Default)]
 pub struct UpdateArgs {
