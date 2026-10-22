@@ -2037,6 +2037,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vulnerabilities/{key}/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A vulnerability's Hosts table: one row per host and covering advisory. */
+        get: operations["vulnerability_hosts_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vulnerabilities/{key}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A vulnerability's page above the Hosts table. */
+        get: operations["vulnerability_summary_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vulnerability-list": {
         parameters: {
             query?: never;
@@ -5828,6 +5862,31 @@ export interface components {
          * @enum {string}
          */
         UpdateState: "disabled" | "unavailable" | "up_to_date" | "available";
+        /**
+         * @description Actions allowed, each when the viewer holds its permission on a host in
+         *     reach.
+         */
+        VulnActionsView: {
+            /** @description Add to case (`cases.write` and `cases.read`). */
+            add_to_case: boolean;
+            /** @description Ask about this (`assistant.use`, with the assistant on). */
+            ask: boolean;
+            /** @description Assign (`vulnerabilities.triage`). */
+            assign: boolean;
+            /** @description Export (`vulnerabilities.export`). */
+            export: boolean;
+            /** @description Set state (`vulnerabilities.triage`). */
+            triage: boolean;
+        };
+        /** @description A covering advisory. */
+        VulnAdvisoryRefView: {
+            /** @description Id (`CPE:<cve>:<product>` for a CPE match). */
+            id: string;
+            /** @description Feed source (`cpe` for a CPE match). */
+            source: string;
+            /** @description Link. */
+            url?: string | null;
+        };
         /** @description The Assignee filter's values. */
         VulnAssigneeCountsView: {
             /**
@@ -5857,6 +5916,33 @@ export interface components {
             /** @description Display name, for `one`. */
             name?: string | null;
         };
+        /** @description A case holding a pair. */
+        VulnCaseRefView: {
+            /** @description Case id. */
+            id: string;
+            /**
+             * Format: int64
+             * @description Case number.
+             */
+            number: number;
+            /** @description Title. */
+            title: string;
+        };
+        /** @description How sure the matches are. */
+        VulnConfidenceView: {
+            /** @description How the least sure one was made. */
+            basis: string;
+            /**
+             * Format: int32
+             * @description The surest, 0 to 100.
+             */
+            max: number;
+            /**
+             * Format: int32
+             * @description The least sure match, 0 to 100.
+             */
+            min: number;
+        };
         /** @description Rows per filter value, each with the other filters applied. */
         VulnCountsView: {
             /** @description By assignee. */
@@ -5872,6 +5958,56 @@ export interface components {
             /** @description By state. */
             state: components["schemas"]["CountView"][];
         };
+        /** @description The details card. */
+        VulnDetailsView: {
+            /** @description The covering advisories in reach, by id. */
+            advisories: components["schemas"]["VulnAdvisoryRefView"][];
+            /** @description Confidence. */
+            confidence: components["schemas"]["VulnConfidenceView"];
+            /** @description CVSS vector. */
+            cvss_vector?: string | null;
+            /** @description CWE ids. */
+            cwe: string[];
+            /** @description NVD's description. */
+            description?: string | null;
+            /** @description The earliest advisory issue date, RFC 3339. */
+            published?: string | null;
+        };
+        /** @description What to do on one distribution. */
+        VulnDistributionView: {
+            /** @description Its covering advisory with the most hosts. */
+            advisory_id: string;
+            /**
+             * Format: int64
+             * @description Hosts in reach not yet fixed.
+             */
+            hosts: number;
+            /** @description OS id. */
+            os_id: string;
+            /** @description OS version. */
+            os_version: string;
+            /** @description Packages to update, sorted. */
+            packages: components["schemas"]["VulnPackageFixView"][];
+            /** @description A fix waits for a reboot. */
+            reboot: boolean;
+            /** @description The advisory's link (none for a CPE match). */
+            url?: string | null;
+        };
+        /** @description Whether the distributions with pairs have a fix. */
+        VulnFixTileView: {
+            /** @description `all`, `some` (`n` of `of`) or `none`. */
+            kind: string;
+            /**
+             * Format: int32
+             * @description Distributions with a fix, for `some`.
+             */
+            n?: number | null;
+            /**
+             * Format: int32
+             * @description Distributions, for `some`.
+             */
+            of?: number | null;
+        };
         /** @description The fixed version under the package. */
         VulnFixedView: {
             /**
@@ -5886,6 +6022,75 @@ export interface components {
             kind: string;
             /** @description The fixed version, for `one`. */
             version?: string | null;
+        };
+        /** @description The header. */
+        VulnHeaderView: {
+            /** @description Who the open pairs are assigned to. */
+            assignee: components["schemas"]["VulnAssigneeView"];
+            /** @description The fixed version. */
+            fixed: components["schemas"]["VulnFixedView"];
+            /** @description KEV due date, `YYYY-MM-DD`. */
+            kev_due?: string | null;
+            /**
+             * Format: int64
+             * @description Open pairs (triage open, not fixed).
+             */
+            open: number;
+            /** @description Affected package names, sorted. */
+            packages: string[];
+            /** @description KEV lists known ransomware use. */
+            ransomware: boolean;
+            /** @description Worst severity among the covering advisories in reach. */
+            severity: string;
+            /** @description Title of the covering advisory with the most hosts in reach. */
+            title: string;
+            /**
+             * Format: int64
+             * @description Every pair, whatever its state.
+             */
+            total: number;
+        };
+        /** @description One triage change. */
+        VulnHistoryEventView: {
+            /** @description Who: a display name. */
+            actor: string;
+            /** @description The advisory changed. */
+            advisory_id: string;
+            /** @description The host. */
+            agent_id: string;
+            /** @description RFC 3339. */
+            at: string;
+            /** @description The state before. */
+            from_state?: string | null;
+            /** @description Its name. */
+            hostname?: string | null;
+            /** @description The note given. */
+            note?: string | null;
+            /** @description The state after. */
+            to_state: string;
+        };
+        /** @description One row of the Hosts table: a host and covering advisory. */
+        VulnHostRowView: {
+            /** @description Last address. */
+            address?: string | null;
+            /** @description The covering advisory. */
+            advisory_id: string;
+            /** @description Agent id. */
+            agent_id: string;
+            assignee?: null | components["schemas"]["AlarmListPersonView"];
+            /** @description Host name. */
+            hostname?: string | null;
+            /** @description Installed versions, comma-separated. */
+            installed: string;
+            /** @description Distribution, as the Hosts list names it. */
+            os?: string | null;
+            /** @description open, mitigated, accepted_risk, false_positive or resolved. */
+            state: string;
+            /**
+             * Format: int64
+             * @description The triage version for If-Match; null where triage does not apply.
+             */
+            triage_version?: number | null;
         };
         /** @description One row: a CVE, or an advisory without CVEs. */
         VulnListRowView: {
@@ -5958,6 +6163,54 @@ export interface components {
              */
             total: number;
         };
+        /** @description A package and its fixed version. */
+        VulnPackageFixView: {
+            /** @description Fixed version; none without a fix. */
+            fixed?: string | null;
+            /** @description Package name. */
+            name: string;
+        };
+        /** @description The Related card. */
+        VulnRelatedView: {
+            alarms?: null | components["schemas"]["TopAlarmsView"];
+            /** @description Open cases holding a pair; absent without `cases.read`. */
+            cases?: components["schemas"]["VulnCaseRefView"][] | null;
+            /** @description Same package. */
+            same_package: components["schemas"]["VulnSamePackageView"];
+        };
+        /** @description Other CVEs in reach on the same packages. */
+        VulnSamePackageView: {
+            /**
+             * Format: int64
+             * @description How many.
+             */
+            cves: number;
+            /** @description How many per severity, most severe first. */
+            severities: components["schemas"]["CountView"][];
+        };
+        /** @description Pairs per segment. */
+        VulnSegmentsView: {
+            /**
+             * Format: int64
+             * @description Every pair.
+             */
+            all: number;
+            /**
+             * Format: int64
+             * @description Mitigated.
+             */
+            mitigated: number;
+            /**
+             * Format: int64
+             * @description Triage open, not fixed.
+             */
+            open: number;
+            /**
+             * Format: int64
+             * @description Fixed by an update, accepted risk or false positive.
+             */
+            resolved: number;
+        };
         /**
          * @description The line above the list, over rows with an open pair matching every
          *     filter but state. Counts are rows, except `hosts`.
@@ -5994,12 +6247,56 @@ export interface components {
              */
             with_due: number;
         };
+        /** @description The tiles. */
+        VulnTilesView: {
+            /**
+             * Format: float
+             * @description CVSS base score.
+             */
+            cvss?: number | null;
+            /** @description CVSS version. */
+            cvss_version?: string | null;
+            /**
+             * Format: float
+             * @description EPSS score.
+             */
+            epss?: number | null;
+            /**
+             * Format: float
+             * @description EPSS percentile.
+             */
+            epss_percentile?: number | null;
+            /** @description Distributions with a fix. */
+            fix: components["schemas"]["VulnFixTileView"];
+            /**
+             * Format: int64
+             * @description Open pairs.
+             */
+            open: number;
+            /**
+             * Format: int64
+             * @description Every pair.
+             */
+            total: number;
+        };
         /** @description Advisory view and in-scope affected hosts. */
         VulnerabilityAdvisoryDetail: {
             /** @description CVE metadata for this visible advisory. */
             cves: components["schemas"]["CveDetailView"][];
             /** @description Affected host-advisory matches in the current scope. */
             hosts: components["schemas"]["VulnerabilityPage"];
+        };
+        /** @description One page of the Hosts table. */
+        VulnerabilityHostsPage: {
+            /** @description The page, by host name then agent id. */
+            rows: components["schemas"]["VulnHostRowView"][];
+            /** @description Every segment's count. */
+            segments: components["schemas"]["VulnSegmentsView"];
+            /**
+             * Format: int64
+             * @description Pairs in the chosen segment.
+             */
+            total: number;
         };
         /** @description Bounded prioritised vulnerability list for the current scope. */
         VulnerabilityPage: {
@@ -6056,6 +6353,30 @@ export interface components {
             reboot_hosts: number;
             /** @description Ten most affected hosts in scope. */
             top_hosts: components["schemas"]["VulnerabilityTopHost"][];
+        };
+        /** @description A vulnerability's page above the Hosts table. */
+        VulnerabilitySummaryView: {
+            /** @description Other CVEs the covering advisories in reach name, sorted. */
+            also_covers: string[];
+            /** @description Allowed actions. */
+            can: components["schemas"]["VulnActionsView"];
+            /** @description Details. */
+            details: components["schemas"]["VulnDetailsView"];
+            /** @description Header. */
+            header: components["schemas"]["VulnHeaderView"];
+            /** @description The last 50 triage changes of pairs in reach, newest first. */
+            history: components["schemas"]["VulnHistoryEventView"][];
+            /**
+             * @description The canonical key: the CVE, or the CVE-less advisory. The web
+             *     replaces the URL when it differs from the one asked for.
+             */
+            key: string;
+            /** @description Related. */
+            related: components["schemas"]["VulnRelatedView"];
+            /** @description Tiles. */
+            tiles: components["schemas"]["VulnTilesView"];
+            /** @description What to do, per distribution. */
+            what_to_do: components["schemas"]["VulnDistributionView"][];
         };
         /** @description Operator-facing top vulnerable host. */
         VulnerabilityTopHost: {
@@ -13450,6 +13771,158 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VulnerabilitySummary"];
+                };
+            };
+        };
+    };
+    vulnerability_hosts_page: {
+        parameters: {
+            query?: {
+                /** @description all (default), open, mitigated or resolved. */
+                segment?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path: {
+                /** @description A CVE id, or an advisory id */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the hosts in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VulnerabilityHostsPage"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs vulnerabilities.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description vulnerability_not_found: missing or outside reach */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description advisory_has_several_cves, listing them in field_errors (field `key`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    vulnerability_summary_page: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A CVE id, or an advisory id */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VulnerabilitySummaryView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs vulnerabilities.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description vulnerability_not_found: missing or outside reach */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description advisory_has_several_cves, listing them in field_errors (field `key`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

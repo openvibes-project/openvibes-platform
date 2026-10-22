@@ -965,6 +965,33 @@ page `vulnerabilities` (hideable: `package`, `cvss`, `epss`, `hosts`, `due`,
 `assignee`; Severity and Advisory are never hidden).
 Tests: `tests/vuln_list_http.rs`; demo: `web/src/demo/routes/vulnList.ts`.
 
+## A vulnerability's page
+
+`GET /api/v1/vulnerabilities/{key}/summary` and
+`GET /api/v1/vulnerabilities/{key}/hosts` (need `vulnerabilities.read`;
+session or bearer; roles 5b) answer a vulnerability's page over the store's
+`vuln_summary` and `vuln_hosts`. The key is a CVE or an advisory id (at
+most 256 characters, no control character; otherwise 404). An advisory with
+one CVE answers as that CVE, with `key` set to it so the web replaces the
+URL; an advisory with several answers 409 `advisory_has_several_cves`, each
+CVE in `field_errors` (field `key`, the CVE as `message`); a key missing,
+out of reach or of a CPE match answers 404 `vulnerability_not_found`. The
+summary carries `header`, `tiles` (`fix`: `kind` `all`, `some` with `n`
+and `of`, or `none`), `what_to_do` per distribution, `details`, `history`
+(50 newest changes on hosts in reach), `related` (`alarms` only with
+`alarms.read`, `cases` only with `cases.read`, `same_package` counts),
+`also_covers` and `can`: `triage` and `assign` (`vulnerabilities.triage`),
+`add_to_case` (`cases.write` and `cases.read`, as the bulk route), `ask`
+(`assistant.use`, with the assistant on) and `export`
+(`vulnerabilities.export`), each true when the permission reaches a host
+with a pair in reach. The Hosts route takes `segment` (`all` by default,
+`open`, `mitigated`, `resolved`), `offset` 0..=100000 and `limit` 1..=100
+(default 50); a bad or unknown parameter is 400 `invalid_query` naming it.
+Rows: `agent_id`, `hostname`, `os` (the Hosts list's distribution name),
+`address`, `installed`, `state`, `assignee`, `advisory_id`,
+`triage_version`; `segments` counts each. Tests: `tests/vuln_page_http.rs`;
+demo: `web/src/demo/routes/vulnSummary.ts`.
+
 ## Host page summary
 
 `GET /api/v1/hosts/{agent_id}/summary` (needs `hosts.read`; session or

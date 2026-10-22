@@ -9738,6 +9738,207 @@
         }
       }
     },
+    "/api/v1/vulnerabilities/{key}/hosts": {
+      "get": {
+        "tags": [
+          "vulnerabilities"
+        ],
+        "summary": "A vulnerability's Hosts table: one row per host and covering advisory.",
+        "operationId": "vulnerability_hosts_page",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "description": "A CVE id, or an advisory id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "segment",
+            "in": "query",
+            "description": "all (default), open, mitigated or resolved.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the hosts in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VulnerabilityHostsPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs vulnerabilities.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vulnerability_not_found: missing or outside reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "advisory_has_several_cves, listing them in field_errors (field `key`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vulnerabilities/{key}/summary": {
+      "get": {
+        "tags": [
+          "vulnerabilities"
+        ],
+        "summary": "A vulnerability's page above the Hosts table.",
+        "operationId": "vulnerability_summary_page",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "description": "A CVE id, or an advisory id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VulnerabilitySummaryView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs vulnerabilities.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vulnerability_not_found: missing or outside reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "advisory_has_several_cves, listing them in field_errors (field `key`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/vulnerability-list": {
       "get": {
         "tags": [
@@ -19339,6 +19540,64 @@
           "available"
         ]
       },
+      "VulnActionsView": {
+        "type": "object",
+        "description": "Actions allowed, each when the viewer holds its permission on a host in\nreach.",
+        "required": [
+          "triage",
+          "assign",
+          "add_to_case",
+          "ask",
+          "export"
+        ],
+        "properties": {
+          "add_to_case": {
+            "type": "boolean",
+            "description": "Add to case (`cases.write` and `cases.read`)."
+          },
+          "ask": {
+            "type": "boolean",
+            "description": "Ask about this (`assistant.use`, with the assistant on)."
+          },
+          "assign": {
+            "type": "boolean",
+            "description": "Assign (`vulnerabilities.triage`)."
+          },
+          "export": {
+            "type": "boolean",
+            "description": "Export (`vulnerabilities.export`)."
+          },
+          "triage": {
+            "type": "boolean",
+            "description": "Set state (`vulnerabilities.triage`)."
+          }
+        }
+      },
+      "VulnAdvisoryRefView": {
+        "type": "object",
+        "description": "A covering advisory.",
+        "required": [
+          "id",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id (`CPE:<cve>:<product>` for a CPE match)."
+          },
+          "source": {
+            "type": "string",
+            "description": "Feed source (`cpe` for a CPE match)."
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Link."
+          }
+        }
+      },
       "VulnAssigneeCountsView": {
         "type": "object",
         "description": "The Assignee filter's values.",
@@ -19403,6 +19662,57 @@
           }
         }
       },
+      "VulnCaseRefView": {
+        "type": "object",
+        "description": "A case holding a pair.",
+        "required": [
+          "id",
+          "number",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Case id."
+          },
+          "number": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Case number."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title."
+          }
+        }
+      },
+      "VulnConfidenceView": {
+        "type": "object",
+        "description": "How sure the matches are.",
+        "required": [
+          "min",
+          "max",
+          "basis"
+        ],
+        "properties": {
+          "basis": {
+            "type": "string",
+            "description": "How the least sure one was made."
+          },
+          "max": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The surest, 0 to 100.",
+            "minimum": 0
+          },
+          "min": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The least sure match, 0 to 100.",
+            "minimum": 0
+          }
+        }
+      },
       "VulnCountsView": {
         "type": "object",
         "description": "Rows per filter value, each with the other filters applied.",
@@ -19456,6 +19766,136 @@
           }
         }
       },
+      "VulnDetailsView": {
+        "type": "object",
+        "description": "The details card.",
+        "required": [
+          "advisories",
+          "confidence",
+          "cwe"
+        ],
+        "properties": {
+          "advisories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VulnAdvisoryRefView"
+            },
+            "description": "The covering advisories in reach, by id."
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/VulnConfidenceView",
+            "description": "Confidence."
+          },
+          "cvss_vector": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "CVSS vector."
+          },
+          "cwe": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "CWE ids."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "NVD's description."
+          },
+          "published": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The earliest advisory issue date, RFC 3339."
+          }
+        }
+      },
+      "VulnDistributionView": {
+        "type": "object",
+        "description": "What to do on one distribution.",
+        "required": [
+          "os_id",
+          "os_version",
+          "advisory_id",
+          "packages",
+          "hosts",
+          "reboot"
+        ],
+        "properties": {
+          "advisory_id": {
+            "type": "string",
+            "description": "Its covering advisory with the most hosts."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach not yet fixed."
+          },
+          "os_id": {
+            "type": "string",
+            "description": "OS id."
+          },
+          "os_version": {
+            "type": "string",
+            "description": "OS version."
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VulnPackageFixView"
+            },
+            "description": "Packages to update, sorted."
+          },
+          "reboot": {
+            "type": "boolean",
+            "description": "A fix waits for a reboot."
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The advisory's link (none for a CPE match)."
+          }
+        }
+      },
+      "VulnFixTileView": {
+        "type": "object",
+        "description": "Whether the distributions with pairs have a fix.",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`all`, `some` (`n` of `of`) or `none`."
+          },
+          "n": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Distributions with a fix, for `some`.",
+            "minimum": 0
+          },
+          "of": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Distributions, for `some`.",
+            "minimum": 0
+          }
+        }
+      },
       "VulnFixedView": {
         "type": "object",
         "description": "The fixed version under the package.",
@@ -19482,6 +19922,188 @@
               "null"
             ],
             "description": "The fixed version, for `one`."
+          }
+        }
+      },
+      "VulnHeaderView": {
+        "type": "object",
+        "description": "The header.",
+        "required": [
+          "title",
+          "severity",
+          "packages",
+          "fixed",
+          "open",
+          "total",
+          "assignee",
+          "ransomware"
+        ],
+        "properties": {
+          "assignee": {
+            "$ref": "#/components/schemas/VulnAssigneeView",
+            "description": "Who the open pairs are assigned to."
+          },
+          "fixed": {
+            "$ref": "#/components/schemas/VulnFixedView",
+            "description": "The fixed version."
+          },
+          "kev_due": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "KEV due date, `YYYY-MM-DD`."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open pairs (triage open, not fixed)."
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Affected package names, sorted."
+          },
+          "ransomware": {
+            "type": "boolean",
+            "description": "KEV lists known ransomware use."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Worst severity among the covering advisories in reach."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the covering advisory with the most hosts in reach."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every pair, whatever its state."
+          }
+        }
+      },
+      "VulnHistoryEventView": {
+        "type": "object",
+        "description": "One triage change.",
+        "required": [
+          "at",
+          "actor",
+          "agent_id",
+          "advisory_id",
+          "to_state"
+        ],
+        "properties": {
+          "actor": {
+            "type": "string",
+            "description": "Who: a display name."
+          },
+          "advisory_id": {
+            "type": "string",
+            "description": "The advisory changed."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "The host."
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "from_state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The state before."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its name."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The note given."
+          },
+          "to_state": {
+            "type": "string",
+            "description": "The state after."
+          }
+        }
+      },
+      "VulnHostRowView": {
+        "type": "object",
+        "description": "One row of the Hosts table: a host and covering advisory.",
+        "required": [
+          "agent_id",
+          "installed",
+          "state",
+          "advisory_id"
+        ],
+        "properties": {
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last address."
+          },
+          "advisory_id": {
+            "type": "string",
+            "description": "The covering advisory."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "assignee": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AlarmListPersonView",
+                "description": "Assignee."
+              }
+            ]
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name."
+          },
+          "installed": {
+            "type": "string",
+            "description": "Installed versions, comma-separated."
+          },
+          "os": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Distribution, as the Hosts list names it."
+          },
+          "state": {
+            "type": "string",
+            "description": "open, mitigated, accepted_risk, false_positive or resolved."
+          },
+          "triage_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The triage version for If-Match; null where triage does not apply."
           }
         }
       },
@@ -19637,6 +20259,114 @@
           }
         }
       },
+      "VulnPackageFixView": {
+        "type": "object",
+        "description": "A package and its fixed version.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "fixed": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Fixed version; none without a fix."
+          },
+          "name": {
+            "type": "string",
+            "description": "Package name."
+          }
+        }
+      },
+      "VulnRelatedView": {
+        "type": "object",
+        "description": "The Related card.",
+        "required": [
+          "same_package"
+        ],
+        "properties": {
+          "alarms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TopAlarmsView",
+                "description": "Open alarms on the hosts, the top three and the total; absent\nwithout `alarms.read`."
+              }
+            ]
+          },
+          "cases": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/VulnCaseRefView"
+            },
+            "description": "Open cases holding a pair; absent without `cases.read`."
+          },
+          "same_package": {
+            "$ref": "#/components/schemas/VulnSamePackageView",
+            "description": "Same package."
+          }
+        }
+      },
+      "VulnSamePackageView": {
+        "type": "object",
+        "description": "Other CVEs in reach on the same packages.",
+        "required": [
+          "cves",
+          "severities"
+        ],
+        "properties": {
+          "cves": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many."
+          },
+          "severities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "How many per severity, most severe first."
+          }
+        }
+      },
+      "VulnSegmentsView": {
+        "type": "object",
+        "description": "Pairs per segment.",
+        "required": [
+          "all",
+          "open",
+          "mitigated",
+          "resolved"
+        ],
+        "properties": {
+          "all": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every pair."
+          },
+          "mitigated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Mitigated."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Triage open, not fixed."
+          },
+          "resolved": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Fixed by an update, accepted risk or false positive."
+          }
+        }
+      },
       "VulnSummaryLineView": {
         "type": "object",
         "description": "The line above the list, over rows with an open pair matching every\nfilter but state. Counts are rows, except `hosts`.",
@@ -19681,6 +20411,62 @@
           }
         }
       },
+      "VulnTilesView": {
+        "type": "object",
+        "description": "The tiles.",
+        "required": [
+          "open",
+          "total",
+          "fix"
+        ],
+        "properties": {
+          "cvss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "CVSS base score."
+          },
+          "cvss_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "CVSS version."
+          },
+          "epss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "EPSS score."
+          },
+          "epss_percentile": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "EPSS percentile."
+          },
+          "fix": {
+            "$ref": "#/components/schemas/VulnFixTileView",
+            "description": "Distributions with a fix."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open pairs."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every pair."
+          }
+        }
+      },
       "VulnerabilityAdvisoryDetail": {
         "type": "object",
         "description": "Advisory view and in-scope affected hosts.",
@@ -19699,6 +20485,33 @@
           "hosts": {
             "$ref": "#/components/schemas/VulnerabilityPage",
             "description": "Affected host-advisory matches in the current scope."
+          }
+        }
+      },
+      "VulnerabilityHostsPage": {
+        "type": "object",
+        "description": "One page of the Hosts table.",
+        "required": [
+          "rows",
+          "total",
+          "segments"
+        ],
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VulnHostRowView"
+            },
+            "description": "The page, by host name then agent id."
+          },
+          "segments": {
+            "$ref": "#/components/schemas/VulnSegmentsView",
+            "description": "Every segment's count."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Pairs in the chosen segment."
           }
         }
       },
@@ -19815,6 +20628,68 @@
               "$ref": "#/components/schemas/VulnerabilityTopHost"
             },
             "description": "Ten most affected hosts in scope."
+          }
+        }
+      },
+      "VulnerabilitySummaryView": {
+        "type": "object",
+        "description": "A vulnerability's page above the Hosts table.",
+        "required": [
+          "key",
+          "header",
+          "tiles",
+          "what_to_do",
+          "details",
+          "history",
+          "related",
+          "also_covers",
+          "can"
+        ],
+        "properties": {
+          "also_covers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other CVEs the covering advisories in reach name, sorted."
+          },
+          "can": {
+            "$ref": "#/components/schemas/VulnActionsView",
+            "description": "Allowed actions."
+          },
+          "details": {
+            "$ref": "#/components/schemas/VulnDetailsView",
+            "description": "Details."
+          },
+          "header": {
+            "$ref": "#/components/schemas/VulnHeaderView",
+            "description": "Header."
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VulnHistoryEventView"
+            },
+            "description": "The last 50 triage changes of pairs in reach, newest first."
+          },
+          "key": {
+            "type": "string",
+            "description": "The canonical key: the CVE, or the CVE-less advisory. The web\nreplaces the URL when it differs from the one asked for."
+          },
+          "related": {
+            "$ref": "#/components/schemas/VulnRelatedView",
+            "description": "Related."
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/VulnTilesView",
+            "description": "Tiles."
+          },
+          "what_to_do": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VulnDistributionView"
+            },
+            "description": "What to do, per distribution."
           }
         }
       },
