@@ -672,6 +672,53 @@ case, assignee and techniques) and a per-host rollup for groups and the
 alarms-off part. Tests: `tests/alarm_list.rs`; the 200,000-alarm timing
 (`tests/alarm_list_timing.rs`) is in console-read.md.
 
+## The Vulnerabilities list (`vuln_list::vuln_list`, schema 60)
+
+`vuln_list(client, &VulnQuery, &AgentScope, actor_id, today) -> VulnListPage`:
+one statement returns one row per CVE (or per advisory without a CVE), the
+total, the count for every value of every filter with the other filters
+applied, and the summary line (roles spec §10.3; step 5b rulings 2–6).
+A row's pairs are the host and advisory pairs in the `vulnerabilities.read`
+scope whose advisory names that CVE: fixable ones (`vulnerabilities`), ones
+without a fix (`version_vulnerabilities` through `host_packages`, on hosts
+of the advisory's release) and, with the `lowconf` signal only, CPE matches
+(`cpe_findings`, keyed `CPE:<cve>:<product>`) and fixable pairs mapped
+below confidence 80 (`vulns/confidence.rs`); without it those are left out.
+A pair's state: fixed is `resolved`, an accepted risk past `today` is
+`open`, no triage row is `open`; pairs without a fix are never triaged.
+
+Filters (one value each, all combining): state (a row matches when one of
+its pairs is in it; `All` is every state), severity (the worst covering
+advisory's), signal (`exploited`, `due30`: KEV due within 30 days of
+`today`, overdue included, `nofix`, `reboot`, `lowconf`), package name,
+group and host (they narrow the pairs a row counts), advisory (rows of the
+CVEs it names) and assignee (`Assignee` from `alarm_list`; state and
+assignee must hold on the same pair). Search `q` matches the key, the
+covering advisory ids, the title and the package names. Sorts: priority
+(exploited, EPSS percentile, severity, CVSS), severity, CVSS, EPSS, open
+pairs and due; nulls last, ties by key in the same direction.
+
+Each row: title of the covering advisory with the most pairs, worst
+severity, KEV/EUVD, due, CVSS and EPSS of the CVE, package names, the fixed
+version (`One`, `Several(n)` or `None`), open and total pairs, reboot, the
+covering advisories, `also_covers` (other CVEs those advisories name, at
+most 10) and the assignee summary (`One` when one person holds the open
+pairs, `Several(n)`, `None`). Counts: per state, severity, signal, the 50
+package names with the most rows (plus the chosen one when in reach),
+groups (by a per-host group bit mask, rows with a pair on a member host),
+me, unassigned and people. The summary counts rows with an open pair over
+every filter but the state's: open rows, hosts, exploited, with a due date,
+without a fix, with no open pair assigned.
+
+How: fixable pairs without triage are grouped per advisory and package
+list, the few triaged ones per state and assignee too; pairs without a fix
+are counted through host profiles (hosts with the same affected package
+versions, by fingerprint), so the 27 M no-fix pairs of the sizing fleet are
+never expanded. Everything else reads that small cube. **Known limit:** it
+misses ruling 13's 2 s budget on the sizing fleet (12.7 s full reach,
+2.9 s scoped; console-read.md). Tests: `tests/vuln_list.rs`; the timing in
+`tests/vuln_list_timing.rs`.
+
 ## The host page summary (`host_summary::summary`)
 
 `summary(client, agent_id, &HostScopes, latest, now) -> Option<HostSummary>`:

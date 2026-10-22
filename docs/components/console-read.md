@@ -125,3 +125,18 @@ each (10,956 matching). Run it with
 it fails above 1 s at full reach. The cost is the one materialised pass
 over the alarms in reach (it spills past `work_mem` at this size) and the
 group membership pass; the counts read a small cube, not the alarms.
+
+Vulnerabilities list (2026-10-22, same cluster, `nice -n 19`, default
+PostgreSQL settings): the `docs/sizing.md` fleet generated in SQL (10,000
+Debian 12 hosts with 389 packages, 3.2 M fixable pairs, 27.5 M pairs
+without a fix, 1 % of open pairs triaged, ten manual and five rule groups).
+The default list (open, by priority, 50 rows, every count and the summary)
+measured a median of 12.7 s over 5 runs (12.6–12.9 s) at full reach
+(4,382 rows, 10,000 hosts) and 2.9 s scoped to two manual groups (946
+hosts). Ruling 13's budget is 2 s; the test
+(`cargo test -p platform-store --test vuln_list_timing -- --ignored --nocapture`)
+fails above it. The cost is the per-pair passes: the fixable pairs joined to
+the hosts in reach (3.5 s; a statement whose scans read CTEs runs without
+parallel workers), the per-host package fingerprints (1.7 s) and the
+default `work_mem` spilling those groupings to disk (6.1 s in all with
+128 MB).

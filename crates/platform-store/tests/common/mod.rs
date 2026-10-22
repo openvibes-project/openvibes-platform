@@ -3,6 +3,7 @@
 pub mod alarms;
 pub mod groups;
 pub mod hosts;
+pub mod vulns;
 
 use std::hash::{BuildHasher, Hasher};
 
