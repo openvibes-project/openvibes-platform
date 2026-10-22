@@ -31,6 +31,9 @@ pub enum Call {
     Logs(Unit, u16),
     /// `admin-reset`: a new one-time password for the console's `admin`.
     AdminReset,
+    /// `shell-open`: sudo checks the password and the call is journalled;
+    /// the shell itself opens once the run is done.
+    ShellOpen,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -53,6 +56,8 @@ pub enum Kind {
     Report,
     /// A new one-time password for the console's admin.
     SignIn,
+    /// Maintenance › Shell: the password, then the operator's shell.
+    Shell,
     /// Optional parts added or removed; `what` is the title.
     Parts {
         what: String,
@@ -90,6 +95,7 @@ impl Kind {
             Kind::Uninstall { .. } => "Uninstalling".into(),
             Kind::Report => "Reading the database".into(),
             Kind::SignIn => "Resetting the admin password".into(),
+            Kind::Shell => "Opening the shell".into(),
             Kind::Parts { what, .. } => what.clone(),
             Kind::Ports { what, .. } => what.clone(),
             Kind::Names { what, .. } => what.clone(),
@@ -107,6 +113,7 @@ impl Kind {
             Kind::Uninstall { .. } => "OpenVIBES is removed".into(),
             Kind::Report => "Read".into(),
             Kind::SignIn => "Admin password reset".into(),
+            Kind::Shell => "Shell opened".into(),
             Kind::Parts { done, .. } => done.clone(),
             Kind::Ports { done, .. } => done.clone(),
             Kind::Names { done, .. } => done.clone(),
@@ -121,9 +128,18 @@ impl Kind {
             Kind::Uninstall { .. } => "The uninstall stopped".into(),
             Kind::Report => "The database could not be read".into(),
             Kind::SignIn => "The reset failed".into(),
+            Kind::Shell => "The shell did not open".into(),
             Kind::Parts { .. } => "The change stopped".into(),
             Kind::Ports { .. } => "The move stopped".into(),
             Kind::Names { .. } => "The change stopped".into(),
+        }
+    }
+    /// The password bar's label (the bar adds the colon): the shell asks
+    /// for the same sudo password, as the operator knows it (shellflow.py).
+    pub fn password_label(&self) -> &'static str {
+        match self {
+            Kind::Shell => "Your login password",
+            _ => "Your password (sudo)",
         }
     }
     /// What Enter does once the password is typed.
@@ -136,6 +152,7 @@ impl Kind {
             Kind::Uninstall { .. } => "Uninstall",
             Kind::Report => "Read",
             Kind::SignIn => "Reset",
+            Kind::Shell => "Open",
             Kind::Parts { .. } | Kind::Ports { .. } | Kind::Names { .. } => "Apply",
         }
     }
@@ -216,6 +233,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         }),
         Call::Logs(unit, lines) => host.logs(*unit, *lines).map(|l| l.join("\n")),
         Call::AdminReset => host.privileged(Privileged::AdminReset, secret),
+        Call::ShellOpen => host.privileged(Privileged::ShellOpen, secret),
     }
 }
 
@@ -223,11 +241,16 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
 pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
     match (call, result) {
         (_, Err(error)) => StepState::Failed(error.to_string()),
-        (Call::Repair(_) | Call::Update(..) | Call::Remove(..) | Call::AdminReset, Ok(out)) => {
-            StepState::parse(out.trim_end()).unwrap_or_else(|| {
-                StepState::Failed(format!("unexpected helper output: {}", out.trim()))
-            })
-        }
+        (
+            Call::Repair(_)
+            | Call::Update(..)
+            | Call::Remove(..)
+            | Call::AdminReset
+            | Call::ShellOpen,
+            Ok(out),
+        ) => StepState::parse(out.trim_end()).unwrap_or_else(|| {
+            StepState::Failed(format!("unexpected helper output: {}", out.trim()))
+        }),
         (_, Ok(out)) => StepState::Done(out.clone()),
     }
 }

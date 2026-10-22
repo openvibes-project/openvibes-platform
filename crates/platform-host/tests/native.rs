@@ -985,3 +985,73 @@ fn the_reset_password_is_not_journalled() {
         "{calls:?}"
     );
 }
+
+#[test]
+fn shell_runs_the_sudo_users_login_shell() {
+    use platform_host::shell::shell_argv;
+    assert_eq!(
+        shell_argv(0, Some("alice"), "/bin/bash"),
+        ["/usr/sbin/runuser", "-l", "alice"]
+    );
+    assert_eq!(shell_argv(1000, None, "/bin/zsh"), ["/bin/zsh", "-l"]);
+    // A user that has used sudo still gets their own shell, not runuser.
+    assert_eq!(
+        shell_argv(1000, Some("alice"), "/bin/zsh"),
+        ["/bin/zsh", "-l"]
+    );
+    // Root logged in directly (or sudo from root): root's own shell.
+    assert_eq!(shell_argv(0, None, "/bin/bash"), ["/bin/bash", "-l"]);
+    assert_eq!(
+        shell_argv(0, Some("root"), "/bin/bash"),
+        ["/bin/bash", "-l"]
+    );
+    // No option smuggled in as a name; no shell in passwd: /bin/sh.
+    assert_eq!(shell_argv(0, Some("-c"), "/bin/bash"), ["/bin/bash", "-l"]);
+    assert_eq!(shell_argv(1000, None, ""), ["/bin/sh", "-l"]);
+}
+
+#[test]
+fn the_shell_open_verb_is_journalled_with_the_operator() {
+    let host = fake(vec![
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "shell-open",
+            ],
+            out(0, "done\topened\n", ""),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    let operator = platform_host::shell::operator();
+    assert!(
+        !operator.is_empty() && !operator.contains(' '),
+        "{operator}"
+    );
+    assert_eq!(Privileged::ShellOpen.args(), ["shell-open"]);
+    assert_eq!(
+        Privileged::ShellOpen.journal(),
+        format!("shell-open {operator}")
+    );
+    host.privileged(Privileged::ShellOpen, &Secret::new("pw".into()))
+        .unwrap();
+    let calls = host.runner.calls.borrow();
+    let journal = calls
+        .iter()
+        .find(|call| call[0] == "/usr/bin/logger")
+        .unwrap();
+    assert!(
+        journal[3].ends_with(&format!(" shell-open {operator} ok")),
+        "{journal:?}"
+    );
+    assert!(
+        calls.iter().any(|call| call
+            .ends_with(&["audit", "note", "shell-open", &operator, "ok"].map(String::from))),
+        "{calls:?}"
+    );
+}

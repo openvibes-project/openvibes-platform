@@ -398,6 +398,7 @@ fn the_menu_lists_the_2b1_entries_in_order() {
             "Console sign-in",
             "Back up",
             "Settings files",
+            "Shell",
             "Uninstall",
         ]
     );

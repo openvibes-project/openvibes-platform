@@ -28,6 +28,9 @@ mod ports_tests;
 mod repair;
 #[cfg(test)]
 mod repair_tests;
+mod shell;
+#[cfg(test)]
+mod shell_tests;
 mod signin;
 #[cfg(test)]
 mod signin_tests;
@@ -55,7 +58,6 @@ use super::{
     run::{Kind, Run},
     status::wrap,
     ui::{
-        bar::Bar,
         frame,
         list::{self, Row},
         logo::Header,
@@ -181,16 +183,19 @@ pub enum Then {
     Ports,
     Names,
     SignIn,
+    Shell,
 }
 
 #[derive(Clone, Copy)]
 enum Entry {
     Page(Page),
     Legacy(Tab),
+    /// Asked on the menu: no page (shell.py).
+    Shell,
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 10] = [
+const ENTRIES: [(Entry, &str); 11] = [
     (Entry::Page(Page::Update), "Update OpenVIBES"),
     (Entry::Page(Page::Repair), "Repair"),
     (Entry::Page(Page::Parts), "Optional parts"),
@@ -200,12 +205,14 @@ const ENTRIES: [(Entry, &str); 10] = [
     (Entry::Page(Page::SignIn), "Console sign-in"),
     (Entry::Page(Page::Backup), "Back up"),
     (Entry::Legacy(Tab::Configuration), "Settings files"),
+    (Entry::Shell, "Shell"),
     (Entry::Page(Page::Uninstall), "Uninstall"),
 ];
 
 fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
     match entry {
         Entry::Legacy(_) => "feeds, proxy, limits, database connection".into(),
+        Entry::Shell => "the operating system's command line, for experts".into(),
         Entry::Page(Page::Update) => match &app.update {
             Some(v) => format!("{v} is available"),
             None if update::updates_available(&app.packages) => "updates are available".into(),
@@ -259,8 +266,7 @@ pub fn names() -> Vec<&'static str> {
     ENTRIES.iter().map(|(_, n)| *n).collect()
 }
 
-/// The menu row of `name` (tests).
-#[cfg(test)]
+/// The menu row of `name`.
 pub fn row_of(name: &str) -> usize {
     ENTRIES
         .iter()
@@ -333,7 +339,10 @@ pub fn failure(theme: &Theme, why: &str, todo: &str) -> Vec<Line<'static>> {
 }
 
 pub fn draw_menu<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
-    let bar = app.bar(Bar::keys(&[("Enter", "Open")]));
+    let bar = app.bar(shell::menu_bar(
+        app,
+        matches!(ENTRIES[app.nav.row].0, Entry::Shell),
+    ));
     let area = frame::draw(frame, &app.theme, head, Some("Maintenance"), &bar);
     let rows: Vec<Row> = ENTRIES
         .iter()
@@ -370,6 +379,7 @@ impl<H: Host> App<H> {
         match ENTRIES[self.nav.row].0 {
             Entry::Legacy(tab) => self.open(tab),
             Entry::Page(page) => self.open_page(page),
+            Entry::Shell => self.ask_shell(),
         }
     }
 
@@ -441,6 +451,7 @@ impl<H: Host> App<H> {
             Then::Ports => self.ports_yes(),
             Then::Names => self.names_yes(),
             Then::SignIn => self.signin_yes(),
+            Then::Shell => self.shell_yes(),
         }
     }
 

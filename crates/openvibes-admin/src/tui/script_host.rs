@@ -35,6 +35,10 @@ pub(super) struct SetupHost {
     /// Real certificates for `certificates()` (path, PEM); empty: the
     /// stand-in below.
     pub(super) pems: Vec<(&'static str, String)>,
+    /// `shell()` calls made (Maintenance › Shell; nothing is spawned).
+    pub(super) shells: Cell<usize>,
+    /// `shell()` fails, as when the login shell cannot start.
+    pub(super) no_shell: bool,
 }
 
 impl Host for SetupHost {
@@ -92,6 +96,14 @@ impl Host for SetupHost {
             Ok(self.plan.clone())
         }
     }
+    fn shell(&self) -> Result<(), HostError> {
+        self.shells.set(self.shells.get() + 1);
+        if self.no_shell {
+            Err(HostError::Failed("no shell here".into()))
+        } else {
+            Ok(())
+        }
+    }
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
         self.calls
             .borrow_mut()
@@ -127,6 +139,8 @@ pub(super) fn app_taken(
         root: false,
         free_calls: Cell::new(0),
         pems: Vec::new(),
+        shells: Cell::new(0),
+        no_shell: false,
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
