@@ -17,12 +17,8 @@ export const LIST_FILTERS: Record<ListView, FilterDef[]> = {
     { param: "state", label: "Include resolved", kind: "flag", value: "all" },
     choice("severity", "Severity", severities("critical", "high", "medium", "low")),
   ],
+  // The Vulnerabilities view filters on the server with its own FilterBar (step 5b); a List tile keeps severity.
   "/vulnerabilities": [
-    { param: "state", label: "Include resolved", kind: "flag", value: "all" },
-    { param: "exploited", label: "Known exploited", kind: "flag", value: "true" },
-    { param: "reboot", label: "Reboot needed", kind: "flag", value: "true" },
-    { param: "nofix", label: "No fix yet", kind: "flag", value: "true" },
-    { param: "lowconf", label: "Lower confidence", kind: "flag", value: "true" },
     choice("severity", "Severity", severities("critical", "important", "moderate", "low")),
   ],
   "/agents": [

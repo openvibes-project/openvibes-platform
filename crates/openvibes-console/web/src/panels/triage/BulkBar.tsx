@@ -5,7 +5,7 @@
 // the count and Clear. Closing asks for a note in one small dialog whose
 // button names the count; the toast says what changed and why anything was
 // skipped (spec 2026-10-10-bulk-triage §3, §4).
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { apiMessage, invalidate, request, useAllPages, useResource } from "../../api/client";
 import type { CaseSummary, CaseUser } from "../../api/types";
@@ -21,10 +21,11 @@ import { caseNumber } from "../cases/cases";
 import { noteRequired } from "./triage";
 
 const triagePermission = { alarms: "alarms.triage", compliance: "compliance.triage", vulnerabilities: "vulnerabilities.triage" } as const;
-/** What a change refreshes: for alarms, every alarm read (the Alarms list is /alarm-list). */
-const readsOf = (kind: BulkKind) => (kind === "alarms" ? ALARMS_PREFIX : `/api/v1/${kind}`);
+/** What a change refreshes: for alarms, every alarm read (the Alarms list is /alarm-list);
+ * for vulnerabilities /vulnerabilities… and the list at /vulnerability-list. */
+const readsOf = (kind: BulkKind) => (kind === "alarms" ? ALARMS_PREFIX : kind === "vulnerabilities" ? "/api/v1/vulnerabilit" : `/api/v1/${kind}`);
 
-type Choice = { action: BulkAction; state?: string; label: string };
+type Choice = { action: BulkAction; state?: string; assignee?: string; label: string };
 const STATE_ITEMS: (MenuItem & { choice: Choice })[] = [
   { value: "mitigated", label: "Mitigate…", description: "Fixed or worked around; reopens if it comes back", dot: "var(--ok)",
     choice: { action: "state", state: "mitigated", label: "Mitigate" } },
@@ -50,14 +51,16 @@ const avatar = (name: string | null) => <span className={name ? "initials" : "in
  * `stateLabel` renames Set state ("Set state: 12 open"); `partial` says the
  * list holds only its first results; `inline` draws the actions for a
  * panel header (no count or Clear); `without` leaves out actions the panel
- * offers elsewhere. */
-export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople }: Readonly<{
+ * offers elsewhere; `confirm` says what a state change or an assignment
+ * will reach, and makes the assignment ask first too. */
+export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople, confirm }: Readonly<{
   kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
   newCase: () => { title: string; severity?: string | undefined };
   closed?: number; reopenItems?: () => BulkItem[]; assignee?: string | null; stateLabel?: string;
   partial?: boolean; onClear: () => void; inline?: boolean; without?: BulkAction[];
   /** Whether other people may be offered (an alarm page's per-host `can.assign`); else the session's `cases.assign`. */
   assignPeople?: boolean;
+  confirm?: ReactNode;
 }>) {
   const { can, canEverywhere, session } = useSession();
   const [choice, setChoice] = useState<Choice | null>(null);
@@ -96,7 +99,9 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
       setBusy(false);
     }
   };
-  const assign = (value: string) => void apply({ action: "assign", assignee: value === NOBODY ? null : value }, items());
+  const assign = (value: string) => confirm
+    ? setChoice({ action: "assign", assignee: value === NOBODY ? "" : value, label: value === NOBODY ? "Unassign" : "Assign" })
+    : void apply({ action: "assign", assignee: value === NOBODY ? null : value }, items());
   const reopen = () => void apply({ action: "state", state: "open" }, (reopenItems ?? items)());
 
   const actions = (
@@ -114,7 +119,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
           <Icon name="cases" size={15} />Add to case
         </button>
       )}
-      {choice && <BulkDialog kind={kind} noun={noun} choice={choice} items={items} count={count} newCase={newCase}
+      {choice && <BulkDialog kind={kind} noun={noun} choice={choice} items={items} count={count} newCase={newCase} confirm={confirm}
         onClose={() => setChoice(null)} onDone={inline ? () => undefined : onClear} />}
     </>
   );
@@ -129,14 +134,14 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
   );
 }
 
-function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone }: Readonly<{
-  kind: BulkKind; noun: string; choice: Choice; items: () => BulkItem[]; count: number;
+function BulkDialog({ kind, noun, choice, items, count, newCase, confirm, onClose, onDone }: Readonly<{
+  kind: BulkKind; noun: string; choice: Choice; items: () => BulkItem[]; count: number; confirm?: ReactNode;
   newCase: () => { title: string; severity?: string | undefined }; onClose: () => void; onDone: () => void;
 }>) {
   const { action } = choice;
   const [form, setForm] = useState<BulkForm>(() => {
     const suggested = newCase();
-    return { action, state: choice.state ?? "", note: "", acceptedUntil: day(90), assignee: "", caseId: "",
+    return { action, state: choice.state ?? "", note: "", acceptedUntil: day(90), assignee: choice.assignee ?? "", caseId: "",
       newCaseTitle: suggested.title.slice(0, 120), newCaseSeverity: suggested.severity };
   });
   const [busy, setBusy] = useState(false);
@@ -174,6 +179,7 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
       <form className="bulk-dialog stack" onSubmit={(event) => void submit(event)}>
         <div className="row row--between"><h2>{choice.label}: {count.toLocaleString()} {noun}</h2>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}><Icon name="close" size={16} /></button></div>
+        {confirm && (action === "state" || action === "assign") && <div className="stack">{confirm}</div>}
         {action === "state" && form.state === "accepted_risk" && (
           <label className="field"><span>Accepted until</span>
             <input className="input" type="date" required min={day(1)} max={day(365)} value={form.acceptedUntil} onChange={(event) => set({ acceptedUntil: event.target.value })} />

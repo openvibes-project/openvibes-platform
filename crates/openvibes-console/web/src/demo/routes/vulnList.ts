@@ -4,7 +4,7 @@
 // advisory pairs in the vulnerabilities.read reach, single-value filters that
 // AND together, each filter's counts with the others applied, the summary of
 // rows with an open pair under every filter but state, offset paging (plan
-// rulings 2-6).
+// rulings 2-6). Lower-confidence matches show only under the lowconf signal.
 import type { Vulnerability, VulnList, VulnListRow } from "../../api/types";
 import type { DemoContext } from "../context";
 import { hasControl, inGroup, isActive } from "../hostGroups";
@@ -60,13 +60,16 @@ export function registerVulnListRoute(ctx: DemoContext) {
     const cvesOf = new Map<string, string[]>();
     for (const p of pairs) cvesOf.set(p.advisory_id, p.cves);
 
-    /** The rows over the pairs of hosts passing `hostOk` (the Host chip and, per count, a group). */
-    const rowsOf = (hostOk: (p: Pair) => boolean): Row[] => {
+    // Lower-confidence matches (below 80: CPE ranges, unknown feeds) are a side of their own:
+    // shown only with the lowconf signal, and then only they (the store's `lc`).
+    const side = chosen.signal === "lowconf";
+    /** The rows over the pairs on one confidence side of hosts passing `hostOk` (the Host chip and, per count, a group). */
+    const rowsOf = (hostOk: (p: Pair) => boolean, lc = side): Row[] => {
       const byKey = new Map<string, Pair[]>();
-      for (const p of pairs.filter(hostOk)) for (const key of p.cves.length ? p.cves : [p.advisory_id]) byKey.set(key, [...(byKey.get(key) ?? []), p]);
-      return [...byKey].map(([key, ps]) => ({ row: buildRow(key, ps), pairs: ps }));
+      for (const p of pairs.filter((x) => hostOk(x) && (x.confidence < 80) === lc)) for (const key of p.cves.length ? p.cves : [p.advisory_id]) byKey.set(key, [...(byKey.get(key) ?? []), p]);
+      return [...byKey].map(([key, ps]) => ({ row: buildRow(key, ps, lc), pairs: ps }));
     };
-    const buildRow = (key: string, ps: Pair[]): VulnListRow => {
+    const buildRow = (key: string, ps: Pair[], lc: boolean): VulnListRow => {
       const open = ps.filter((p) => p.state === "open");
       const advisories = unique(ps.map((p) => p.advisory_id));
       const perAdvisory = advisories.map((id) => ({ id, n: ps.filter((p) => p.advisory_id === id).length, p: ps.find((p) => p.advisory_id === id) as Pair }));
@@ -82,7 +85,7 @@ export function registerVulnListRoute(ctx: DemoContext) {
         cvss: lead.cvss ?? null, epss: lead.epss ?? null, epss_percentile: lead.epss_percentile ?? null,
         packages: unique(ps.flatMap((p) => (Array.isArray(p.packages) ? (p.packages as { name: string }[]).map((k) => k.name) : []))),
         fixed: fixed.length === 0 ? { kind: "none" } : fixed.length === 1 ? { kind: "one", version: fixed[0] ?? "" } : { kind: "several", count: fixed.length },
-        open: open.length, total: ps.length, reboot: ps.some((p) => p.reboot_needed), low_confidence: false,
+        open: open.length, total: ps.length, reboot: ps.some((p) => p.reboot_needed), low_confidence: lc,
         advisories, also_covers: unique(advisories.flatMap((id) => cvesOf.get(id) ?? []).filter((c) => c !== key)).slice(0, 10),
         assignee: people.length === 0 ? { kind: "none" } : people.length === 1 && one ? { kind: "one", id: one.user_id, name: one.display_name } : { kind: "several", count: people.length },
       };
@@ -112,7 +115,8 @@ export function registerVulnListRoute(ctx: DemoContext) {
     };
     const FACETS: Facet[] = ["state", "severity", "signal", "package", "assignee", "advisory", "q"];
     const hostOnly = (p: Pair) => host === null || p.agent_id === host;
-    const base = rowsOf((p) => hostOnly(p) && (group === null || p.groups.includes(group)));
+    const baseOf = (lc: boolean) => rowsOf((p) => hostOnly(p) && (group === null || p.groups.includes(group)), lc);
+    const base = baseOf(side);
     const except = (...skip: Facet[]) => base.filter((r) => FACETS.every((f) => skip.includes(f) || holds(r, f)));
     const tally = (rows: Row[], keys: (r: Row) => string[]) => {
       const n = new Map<string, number>();
@@ -123,8 +127,11 @@ export function registerVulnListRoute(ctx: DemoContext) {
     const stateRows = except("state");
     const byState = (s: string) => (s === "all" ? stateRows.length : stateRows.filter((r) => r.pairs.some((p) => p.state === s)).length);
     const bySeverity = tally(except("severity"), (r) => [r.row.severity]);
-    const bySignal = except("signal");
-    const signalCount = (s: string) => bySignal.filter((r) => { const prev = chosen.signal; chosen.signal = s; const ok = holds(r, "signal"); chosen.signal = prev; return ok; }).length;
+    // Each signal counts on its own side: lowconf the lower-confidence rows, the others the rest.
+    const signalRows = (lc: boolean) => (lc === side ? base : baseOf(lc)).filter((r) => FACETS.every((f) => f === "signal" || holds(r, f)));
+    const bySignal = signalRows(false);
+    const signalCount = (s: string) => s === "lowconf" ? signalRows(true).length
+      : bySignal.filter((r) => { const prev = chosen.signal; chosen.signal = s; const ok = holds(r, "signal"); chosen.signal = prev; return ok; }).length;
     const packageRows = tally(except("package"), (r) => r.row.packages);
     const topPackages = [...packageRows].sort((a, b) => b[1] - a[1] || byteOrder(a[0], b[0])).slice(0, 50).map(([value, count]) => ({ value, count }));
     if (chosen.package !== null && !topPackages.some((t) => t.value === chosen.package)) topPackages.push({ value: chosen.package, count: packageRows.get(chosen.package) ?? 0 });

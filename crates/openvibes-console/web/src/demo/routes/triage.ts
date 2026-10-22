@@ -10,8 +10,9 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
   // Bulk triage (triage v2): the same rules as one item, applied to each;
   // what cannot change is skipped with the reason.
   type Triage = { state: string; assigned_to: string | null; note: string | null; accepted_until: string | null };
+  /** `openOnly`: a CVE row's advisory-wide pair, which a close or assign changes only while open (bulk_triage.rs). */
   type Target = { id: string; named: boolean; caseKind: "alarm" | "compliance_finding" | "vulnerability"; caseRef: string;
-    current: () => Triage; write: (next: Triage) => void };
+    current: () => Triage; write: (next: Triage) => void; openOnly?: boolean };
   type Picked = { found: Target[]; missing: string[] };
   type Skip = { id: string; reason: string };
   const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -46,10 +47,12 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     if (typeof item.advisory_id !== "string") return false;
     const agent = typeof item.agent_id === "string" ? item.agent_id : null;
     const advisory = item.advisory_id;
-    const hits = vulnerabilities().filter((v) => v.advisory_id === advisory && (agent === null || v.agent_id === agent));
+    // Only pairs with a fix are triaged (the store's `vulnerabilities` table); no-fix pairs and CPE matches are not.
+    const fixable = (v: { packages: unknown }) => Array.isArray(v.packages) && (v.packages as { fixed?: unknown }[]).some((p) => p?.fixed != null);
+    const hits = vulnerabilities().filter((v) => v.advisory_id === advisory && (agent === null || v.agent_id === agent) && fixable(v));
     if (hits.length === 0) into.missing.push(agent ? `${agent}/${advisory}` : advisory);
     for (const v of hits) {
-      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
+      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, openOnly: agent === null, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
         current: () => ({ state: v.triage_state, assigned_to: v.assigned_to ?? null, note: null, accepted_until: null }),
         write: (next) => { v.triage_state = next.state; v.assigned_to = next.assigned_to; v.triage_version += 1; } });
     }
@@ -65,6 +68,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     }
     let changed = 0;
     for (const t of picked.found) {
+      if (t.openOnly && state !== "open" && t.current().state !== "open") { skipped.push({ id: t.id, reason: "not open" }); continue; }
       // A rule or advisory's closed hosts keep their decision (as the server).
       if (state !== "open" && !t.named && t.current().state !== "open") { skipped.push({ id: t.id, reason: "already closed" }); continue; }
       if (state === "open" && !t.named && t.current().state === "open") { skipped.push({ id: t.id, reason: "already open" }); continue; }
@@ -78,6 +82,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     let changed = 0;
     for (const t of picked.found) {
       const current = t.current();
+      if (t.openOnly && current.state !== "open") { skipped.push({ id: t.id, reason: "not open" }); continue; }
       if (assignee !== null && triageProblem({ state: current.state, accepted_until: current.accepted_until, assigned_to: assignee }, triage)) {
         skipped.push({ id: t.id, reason: "assignee unavailable" });
         continue;

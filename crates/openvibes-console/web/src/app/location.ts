@@ -40,6 +40,23 @@ export function hostsQuery(query: string): string {
   return params.toString();
 }
 
+/** The old Vulnerabilities list's flags, in ruling 7's order: the first set wins as `signal`. */
+const OLD_SIGNALS = [["exploited", "exploited"], ["reboot", "reboot"], ["nofix", "nofix"], ["lowconf", "lowconf"]] as const;
+/** The old list's sorts that today's columns still have (it sorted in the browser). */
+const OLD_VULN_SORTS = new Set(["severity", "cvss", "epss", "hosts", "due"]);
+
+/** An old Vulnerabilities query as today's (roles 5b ruling 7): the flags
+ * become one `signal`, and sorts no column has any more go with their direction. */
+export function vulnerabilitiesQuery(query: string): string {
+  const params = new URLSearchParams(query);
+  const signal = OLD_SIGNALS.find(([flag]) => params.get(flag) === "true")?.[1];
+  for (const [flag] of OLD_SIGNALS) params.delete(flag);
+  if (signal) params.set("signal", signal);
+  const sort = params.get("sort");
+  if (sort !== null && !OLD_VULN_SORTS.has(sort)) { params.delete("sort"); params.delete("dir"); }
+  return params.toString();
+}
+
 /** A host's page (approved screen 17). */
 export const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
 
@@ -56,13 +73,15 @@ export function pagePath(panel: PanelRef): string | null {
  * Hosts list, and a host or alarm panel opened on any view
  * (`?open=agent:ID`, `?open=alarm:ID`, the assistant's `/agents?agent=ID`)
  * is that object's page, a whole page with no panels (as `nav.open` opens it).
- * A host panel wins over an alarm panel.
+ * A host panel wins over an alarm panel. The old Vulnerabilities flags are
+ * today's signals (roles 5b ruling 7).
  */
 export function redirect(location: AppLocation): AppLocation {
   const host = location.view === "/agents" ? location.params.get("agent") : null;
   const panel = location.panels.find((p) => p.kind === "agent") ?? (host ? { kind: "agent", id: host } : location.panels.find((p) => p.kind === "alarm"));
   const page = panel && pagePath(panel);
   if (page) return { view: page, panels: [], params: new URLSearchParams() };
+  if (location.view === "/vulnerabilities") return { ...location, params: new URLSearchParams(vulnerabilitiesQuery(location.params.toString())) };
   if (location.view !== "/agents") return location;
   return { ...location, view: "/hosts", params: new URLSearchParams(hostsQuery(location.params.toString())) };
 }

@@ -30,7 +30,25 @@ Show everything, without page changes for details:
   POSTs `/auth/v1/logout` with the session CSRF token.
 - **Views** (the same set v1 had):
   - findings with bulk triage and a 14-day trend of reporting hosts;
-  - vulnerabilities by advisory, with CVEs, EPSS and KEV;
+  - vulnerabilities, one row per CVE (screen 25, roles 5b): `views/investigate/Vulnerabilities.tsx`
+    over `GET /api/v1/vulnerability-list`, with the shared FilterBar (Severity,
+    State, Signals, Package, Group, Assignee, and Host and Advisory as chips
+    only while set), SummaryLine ("N open on N hosts · N known exploited · N
+    with a due date · N without a fix · N unassigned"), Columns (page
+    `vulnerabilities`; Severity and Advisory never hidden), saved views and
+    paging by offset. Columns: Severity; Advisory (the title a real link to
+    `/vulnerabilities/{key}`, Exploited, Lower confidence, the CVE id);
+    Package ("fixed in V", "fixed in n versions" or "no fix yet"); CVSS; EPSS;
+    Hosts ("n open of m" and a bar named "n open of m hosts"); Due (CISA's
+    date, amber within 30 days, red when overdue); Assignee. URL sorts
+    `severity`, `cvss`, `epss`, `hosts` (the API's `open`) and `due`; none is
+    the API's priority order. Old addresses keep their meaning in place
+    (`vulnerabilitiesQuery` in `app/location.ts`, applied by `redirect`):
+    `exploited`, `reboot`, `nofix` and `lowconf=true` become one `signal`
+    (the first in that order wins), and old sorts no column has go. Views
+    the old list kept in this browser (`openvibes.v2.views./vulnerabilities`)
+    are imported once with the same mapping. `/vulnerabilities/{key}` shows a
+    stand-in until the CVE's page arrives (step 5b task 8);
   - agents, with labels, host groups and revocation;
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
@@ -65,8 +83,15 @@ Show everything, without page changes for details:
   why the rest was skipped. A selected finding or advisory row acts on its
   hosts in scope; a close leaves the hosts already closed alone, a reopen
   the ones already open. Rows in an open case show
-  its badge (`panels/cases/CaseBadge.tsx`). Vulnerabilities count open hosts
-  and hide advisories triaged everywhere unless Include resolved is on.
+  its badge (`panels/cases/CaseBadge.tsx`). On the Vulnerabilities list a
+  ticked CVE row sends each of its covering advisories (`{advisory_id}`, plus
+  `agent_id` with the Host chip); the server changes only their open pairs
+  ("not open" for the rest) and skips pairs with no fix. There is no Reopen
+  there. `BulkBar`'s `confirm` puts what a change reaches in the Set state
+  dialog and makes Assign ask first too: "Changes up to N open hosts. Hosts
+  without a fix yet are left as they are…" and the other CVEs those
+  advisories also cover. A vulnerability change refreshes every
+  `/api/v1/vulnerabilit…` read, the list included.
 - **Detail template** (`panels/triage/TriageDetail.tsx`): a finding and an advisory
   share one layout (an alarm is a page, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
   actions line (a finding or advisory: "Set state: N open", acting on its
@@ -223,7 +248,8 @@ used.
 ### Filter catalogue
 
 `views/lists/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
-Hosts, Audit log): each filter is a flag (one fixed value) or a choice (a
+Hosts, Audit log; Vulnerabilities keeps only Severity, for the List tile, since
+the view has its own FilterBar): each filter is a flag (one fixed value) or a choice (a
 list of values), and each parameter holds one value. The list views build
 their chip bars from it and the List widget editor offers the same filters,
 so the two cannot drift. Runtime extras (compliance rule sets, counts) stay
@@ -434,7 +460,8 @@ for the pages not yet moved; its saved views stay in the browser.
   "Delete the view “…”?" before deleting (Escape cancels). After a save or
   delete, focus goes to the saved views, or to the search when none is left.
 - **Columns** (`ui/list/ColumnsMenu.tsx`): a disclosure button with a
-  checkbox per column; the first (Host) is checked and disabled, and all are
+  checkbox per column; the first (Host) and any marked `fixed` (the
+  Vulnerabilities Advisory) are checked and disabled, and all are
   disabled until the person's columns have loaded. Each change is a
   `PUT /api/v1/list-columns/{page}` carrying the full set after every
   toggle so far (`columnSaver` queues them, so quick toggles never undo

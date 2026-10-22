@@ -11,6 +11,7 @@ export function registerVulnerabilityRoutes(ctx: DemoContext) {
       (query.get("host") === null || item.agent_id === query.get("host")) &&
       (query.get("advisory") === null || item.advisory_id === query.get("advisory")) &&
       (query.get("severity") === null || item.severity === query.get("severity")) &&
+      (query.get("min_confidence") === null || item.confidence >= Number(query.get("min_confidence"))) &&
       (query.get("cve") === null || item.cves.includes(query.get("cve") ?? "")) &&
       (query.get("exploited") === "false" ? !item.exploited : !flag("exploited") || item.exploited) && (!flag("reboot_needed") || item.reboot_needed))
       .sort((a, b) => Number(b.exploited) - Number(a.exploited) || (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9) || (b.epss ?? 0) - (a.epss ?? 0));

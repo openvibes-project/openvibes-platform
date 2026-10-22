@@ -4,15 +4,19 @@ import { LIST_FILTERS, chipsOf, dropUnsupported, queryOf, setFilter } from "./fi
 
 describe("filters", () => {
   it("labels known chips and keeps unknown ones", () => {
-    const chips = chipsOf("/vulnerabilities", "severity=critical&exploited=true&bad=1");
+    const chips = chipsOf("/compliance", "severity=critical&state=all&bad=1");
     expect(chips.map((c) => [c.label, c.known])).toEqual([
-      ["Known exploited", true], ["Severity: Critical", true], ["bad=1", false],
+      ["Include resolved", true], ["Severity: Critical", true], ["bad=1", false],
     ]);
   });
   it("round-trips in catalogue order", () => {
-    const q = queryOf(chipsOf("/vulnerabilities", "severity=critical&bad=1&exploited=true"));
-    expect(q).toBe("exploited=true&severity=critical&bad=1");
-    expect(queryOf(chipsOf("/vulnerabilities", q))).toBe(q);
+    const q = queryOf(chipsOf("/compliance", "severity=critical&bad=1&state=all"));
+    expect(q).toBe("state=all&severity=critical&bad=1");
+    expect(queryOf(chipsOf("/compliance", q))).toBe(q);
+  });
+  it("offers a List tile of vulnerabilities only severity: the old flags are the view's signals now", () => {
+    expect(LIST_FILTERS["/vulnerabilities"].map((f) => f.param)).toEqual(["severity"]);
+    expect(chipsOf("/vulnerabilities", "exploited=true")[0]).toMatchObject({ known: false });
   });
   it("treats a value outside the catalogue as unknown", () => {
     expect(chipsOf("/agents", "status=gone")[0]).toMatchObject({ known: false, label: "status=gone" });

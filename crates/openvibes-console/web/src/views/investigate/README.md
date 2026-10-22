@@ -9,7 +9,7 @@ The lists you investigate from. A row opens its panel from `panels/` in the insp
 | `Alarms.tsx` | The Alarms list (screen 29): server filters with counts (Host as a chip), saved views, columns, summary line, paging and the bulk bar; routes `/alarms/{id}` to `alarm/`. |
 | `alarm/` | An alarm's page (screen 30); see its README. |
 | `Findings.tsx` | Compliance findings by rule; `host=` lists one host's current findings. |
-| `Vulnerabilities.tsx` | Vulnerabilities by advisory; `host=` filters to one host. |
+| `Vulnerabilities.tsx` | The Vulnerabilities list (screen 25): one row per CVE, server filters with counts (Host and Advisory as chips), saved views, columns, summary line, paging and the bulk bar; `/vulnerabilities/{key}` is a stand-in until the CVE's page. |
 | `Software.tsx` | Packages across the fleet. |
 | `Ports.tsx` | Open ports and running services across the fleet. |
 | `Cases.tsx` | Cases: the list of investigations. |

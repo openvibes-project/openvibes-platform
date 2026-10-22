@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { alarmPath, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel } from "./location";
+import { alarmPath, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
@@ -64,6 +64,27 @@ describe("location", () => {
     expect(hostsQuery("sort=seen&dir=desc")).toBe("sort=heartbeat&dir=desc");
     expect(hostsQuery("sort=version")).toBe("sort=agent");
     expect(hostsQuery("q=x&sort=enrolled&dir=desc")).toBe("q=x");
+  });
+
+  it.each([
+    ["?exploited=true", "/vulnerabilities?signal=exploited"],
+    ["?state=all&reboot=true&q=ssl", "/vulnerabilities?state=all&q=ssl&signal=reboot"],
+    ["?nofix=true", "/vulnerabilities?signal=nofix"],
+    ["?lowconf=true&severity=critical", "/vulnerabilities?severity=critical&signal=lowconf"],
+    // Several old flags: the first in ruling 7's order wins.
+    ["?lowconf=true&nofix=true&reboot=true&exploited=true", "/vulnerabilities?signal=exploited"],
+    ["?nofix=true&lowconf=true", "/vulnerabilities?signal=nofix"],
+    ["?severity=important&sort=cvss&dir=desc", "/vulnerabilities?severity=important&sort=cvss&dir=desc"],
+  ])("old_vulnerability_urls_keep_their_filters: /vulnerabilities%s reads as %s", (search, want) => {
+    expect(formatLocation(parseLocation("/vulnerabilities", search, "/"), "/")).toBe(want);
+  });
+
+  it("maps an old Vulnerabilities query's flags and sorts, and keeps today's", () => {
+    expect(vulnerabilitiesQuery("exploited=true&sort=priority&dir=asc")).toBe("signal=exploited");
+    expect(vulnerabilitiesQuery("q=x&sort=title&dir=desc")).toBe("q=x");
+    expect(vulnerabilitiesQuery("sort=confidence")).toBe("");
+    expect(vulnerabilitiesQuery("sort=hosts&dir=desc&exploited=false")).toBe("sort=hosts&dir=desc");
+    expect(vulnerabilitiesQuery("signal=due30&package=openssl")).toBe("signal=due30&package=openssl");
   });
 
   it("ignores malformed panel references", () => {

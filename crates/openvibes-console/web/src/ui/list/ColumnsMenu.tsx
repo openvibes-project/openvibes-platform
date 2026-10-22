@@ -7,19 +7,23 @@ import { Icon } from "../Icon";
 import { toast } from "../toast";
 import { columnSaver } from "./savedViews";
 
-export type ListColumn = { key: string; label: string };
+/** `fixed`: never hidden (the first column always is). */
+export type ListColumn = { key: string; label: string; fixed?: boolean };
 
-/** The checkboxes; the first column cannot be hidden. Until the person's columns load (`hidden` undefined) none can change. */
+/** The checkboxes; the first column and `fixed` ones cannot be hidden. Until the person's columns load (`hidden` undefined) none can change. */
 export function ColumnList({ columns, hidden, onToggle }: { columns: readonly ListColumn[]; hidden: readonly string[] | undefined; onToggle: (key: string) => void }) {
   return (
     <fieldset className="columns-menu__list">
       <legend className="sr-only">Shown columns</legend>
-      {columns.map((c, i) => (
-        <label key={c.key} className="columns-menu__row" title={i === 0 ? `The ${c.label} column can't be hidden` : undefined}>
-          <input type="checkbox" className="checkbox" checked={i === 0 || !hidden?.includes(c.key)} disabled={i === 0 || hidden === undefined}
-            onChange={() => onToggle(c.key)} /> <span>{c.label}</span>
-        </label>
-      ))}
+      {columns.map((c, i) => {
+        const fixed = i === 0 || c.fixed === true;
+        return (
+          <label key={c.key} className="columns-menu__row" title={fixed ? `The ${c.label} column can't be hidden` : undefined}>
+            <input type="checkbox" className="checkbox" checked={fixed || !hidden?.includes(c.key)} disabled={fixed || hidden === undefined}
+              onChange={() => onToggle(c.key)} /> <span>{c.label}</span>
+          </label>
+        );
+      })}
     </fieldset>
   );
 }

@@ -7,6 +7,7 @@ An in-browser implementation of /api/v1 over invented data, for the GitHub Pages
 | `server.ts` | Builds the demo server and registers every area's routes. |
 | `context.ts` | Shared context for the routes: the persona's data, permissions, helpers. |
 | `data.ts` | The synthetic fleet, findings and advisories (deterministic, example.test hosts). |
+| `vulnSeed.ts` | Hand-made vulnerabilities for the cases the Vulnerabilities list and page must show (shared CVEs, due dates, assignees, a fixed pair, a lower-confidence match). |
 | `personas.ts` | The personas the demo can be viewed as (each signs in as a seeded person). |
 | `share.ts` | The server's access rules: roles into capabilities (rbac.rs) and the share check (share.rs). |
 | `http.ts` | Helpers the routes share: responses, paging, ranking, browser storage. |
