@@ -143,9 +143,11 @@ impl<H: Host> App<H> {
             .and_then(|user| host.user_home(&user))
             .or_else(|| std::env::var("HOME").ok());
         let install = super::install::Install::new(hostname.clone(), home.clone());
+        let mut install = install;
         let mut setup = Setup::new(hostname.clone(), home);
         if !set_up {
             setup.propose_ports(&host);
+            install.port_note = super::install::fields::propose_ports(&host, &mut install);
         }
         let mut app = App {
             host,
@@ -160,7 +162,11 @@ impl<H: Host> App<H> {
             logs: Vec::new(),
             quit: false,
             theme: Theme::from_env(),
-            nav: Nav::new(if set_up { Screen::Home } else { Screen::Legacy }),
+            nav: Nav::new(if set_up {
+                Screen::Home
+            } else {
+                Screen::Install(super::install::Stage::Welcome)
+            }),
             hostname,
             update: None,
             versions_loaded: false,

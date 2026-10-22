@@ -6,9 +6,14 @@
 // Reached from Review, which Task 4 adds: until then only the tests start it.
 #![allow(dead_code)]
 
+pub(super) mod fields;
 pub(crate) mod finished;
+mod quick;
 mod run;
+mod welcome;
 pub(super) use run::draw;
+#[cfg(test)]
+mod quick_tests;
 #[cfg(test)]
 mod run_tests;
 
@@ -58,6 +63,10 @@ pub struct Install {
     pub console_port: String,
     pub ingest_port: String,
     pub distribution_port: String,
+    /// Why a default port moved ("443 is in use by nginx: the console uses 8443").
+    pub port_note: Option<String>,
+    /// The text of the field being edited in place, as it was.
+    pub editing: Option<String>,
     /// The request made for "Your own CA", as the helper reports it.
     pub request: Option<RequestState>,
     /// Who signed the intermediate (once added).
@@ -78,6 +87,8 @@ impl Install {
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             ingest_port: ports::INGEST_DEFAULT.to_string(),
             distribution_port: ports::DISTRIBUTION_DEFAULT.to_string(),
+            port_note: None,
+            editing: None,
             request: None,
             signed: None,
             root_added: None,

@@ -102,7 +102,7 @@ fn esc_while_typing_in_a_legacy_screen_cancels_the_field_not_the_screen() {
 
 #[test]
 fn a_fresh_host_opens_the_setup_form_and_esc_does_not_leave_it() {
-    let mut app = super::script_host::fresh_app();
+    let mut app = super::script_host::app(false, vec![]);
     assert_eq!(
         (app.nav.screen.clone(), app.tab),
         (Screen::Legacy, Tab::Setup)
@@ -423,7 +423,7 @@ fn no_legacy_screen_advertises_tab_and_q_only_on_the_fresh_install_form() {
         );
         assert!(footer.contains("Esc back"), "{tab:?}: {footer}");
     }
-    let fresh = super::script_host::fresh_app();
+    let fresh = super::script_host::app(false, vec![]);
     let text = super::script_host::screen(&fresh);
     assert!(text.contains("q quit") && !text.contains("Tab"), "{text}");
 }

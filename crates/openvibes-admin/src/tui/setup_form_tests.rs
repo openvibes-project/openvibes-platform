@@ -76,7 +76,7 @@ fn esc_on_the_87_form_goes_home_but_not_on_a_fresh_form() {
     let mut app = app_with_plan(&format!("{PLAN}{NO_CA}"), vec![]);
     app.key(Key::Esc);
     assert_eq!(app.nav.screen, Screen::Home);
-    let mut fresh = fresh_app();
+    let mut fresh = super::script_host::app(false, vec![]);
     fresh.key(Key::Esc);
     assert_eq!(
         (fresh.nav.screen.clone(), fresh.setup.phase),

@@ -69,34 +69,12 @@ impl Setup {
     }
 
     /// For each port another process holds, proposes the first free one
-    /// (from 8443 for the console, 18425 for ingest and distribution) and
-    /// notes it on the row. Unprivileged, so the holder is rarely known
-    /// here; Setup's own check (as root) names it if it is still there.
+    /// and notes it on the row (the choice is `install::fields::propose`).
     pub fn propose_ports<H: Host>(&mut self, host: &H) {
-        let taken = |port: u16| {
-            host.listeners(port)
-                .map(|lines| ports::parse(&lines).is_some())
-                .map_err(|error| error.to_string())
-        };
-        let defaults = [
-            ports::CONSOLE_DEFAULT,
-            ports::INGEST_DEFAULT,
-            ports::DISTRIBUTION_DEFAULT,
-        ];
-        let mut chosen: Vec<u16> = defaults.to_vec();
-        for (index, from) in [8443, 18425, 18425].into_iter().enumerate() {
-            let default = defaults[index];
-            // Free, or unknown: Setup checks again before starting.
-            let Ok(true) = taken(default) else {
-                continue;
-            };
-            let Ok(port) = ports::suggest(from, |port| Ok(chosen.contains(&port) || taken(port)?))
-            else {
-                continue;
-            };
-            chosen[index] = port;
-            let note = format!("{default} is in use");
-            if index == 0 {
+        let (chosen, moved) = super::install::fields::propose(host);
+        for m in moved {
+            let note = format!("{} is in use", m.default);
+            if m.index == 0 {
                 self.console_note = Some(note);
             } else {
                 let joined = self

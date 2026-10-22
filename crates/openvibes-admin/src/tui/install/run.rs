@@ -34,6 +34,8 @@ impl<H: Host> App<H> {
     pub(in crate::tui) fn install_key(&mut self, stage: Stage, key: Key) {
         let stopped = self.run.as_ref().is_none_or(|r| !r.running());
         match (stage, key) {
+            (Stage::Welcome, key) => self.welcome_key(key),
+            (Stage::Quick, key) => self.quick_key(key),
             (Stage::Finished, Key::Enter) => {
                 self.run = None;
                 self.nav = Nav::new(Screen::Home);
@@ -65,6 +67,8 @@ impl<H: Host> App<H> {
 pub(in crate::tui) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, stage: Stage) {
     match (stage, &app.run) {
         (Stage::Finished, Some(run)) => finished::draw(frame, head, app, run),
+        (Stage::Welcome, _) => super::welcome::draw(frame, head, app),
+        (Stage::Quick, _) => super::quick::draw(frame, head, app),
         (Stage::Running, run) => draw_running(frame, head, app, run.as_ref()),
         _ => {
             frame::draw(frame, &app.theme, head, None, &app.bar(Bar::act(&[])));

@@ -124,7 +124,7 @@ pub(super) fn app(set_up: bool, answers: Vec<Result<String, HostError>>) -> App<
 
 /// A host not set up yet, as the other fresh-host tests build it.
 pub(super) fn fresh_app() -> App<SetupHost> {
-    app(false, vec![])
+    built(false, vec![], vec![], String::new())
 }
 
 pub(super) fn app_taken(
@@ -135,6 +135,10 @@ pub(super) fn app_taken(
     // A set-up host has its plan (and so its CA) from the start.
     let plan = if set_up { PLAN.into() } else { String::new() };
     let mut app = built(set_up, answers, taken, plan);
+    // The old form's tests (Task 5 deletes them) start on it.
+    if !set_up {
+        app.nav = super::nav::Nav::new(super::nav::Screen::Legacy);
+    }
     app.setup.hostname = "platform.example.com".into();
     app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
     app

@@ -79,6 +79,7 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Maintenance => " · Maintenance".into(),
         Screen::Maint(page) => format!(" · Maintenance › {}", page.title()),
         Screen::Help(_) => " · Help".into(),
+        Screen::Install(super::install::Stage::Quick) => " · Install › Quick install".into(),
         Screen::Install(_) => " · Install".into(),
         Screen::Legacy => match app.tab {
             // Only a first install reaches Setup now (Maintenance has the rest).
