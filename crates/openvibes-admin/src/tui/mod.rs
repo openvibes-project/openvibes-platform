@@ -10,7 +10,6 @@ mod database;
 mod database_tests;
 pub mod form;
 mod home;
-mod jobs;
 mod maint;
 mod nav;
 #[cfg(test)]
@@ -29,6 +28,9 @@ mod services_text;
 mod setup;
 #[cfg(test)]
 mod setup_done_tests;
+mod setup_form;
+#[cfg(test)]
+mod setup_form_tests;
 #[cfg(test)]
 mod setup_tests;
 mod setup_view;

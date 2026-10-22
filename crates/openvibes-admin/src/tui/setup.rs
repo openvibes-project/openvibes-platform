@@ -4,11 +4,10 @@
 
 use std::collections::BTreeSet;
 
-use platform_host::{Host, HostError, Privileged, Secret, ServiceStatus, Step, StepState, Unit};
+use platform_host::{Host, HostError, Privileged, Secret, Step, StepState};
 
 use super::{
     app::{App, Key},
-    jobs::Job,
     password::{PasswordPrompt, Typed},
 };
 use crate::setup::{
@@ -42,8 +41,6 @@ pub enum Phase {
     Running(usize),
     Stopped(usize),
     Finished,
-    /// A set-up host: `c` checks every step.
-    Status,
 }
 
 pub struct Setup {
@@ -68,22 +65,11 @@ pub struct Setup {
     pub password: Option<Secret>,
     pub states: Vec<Option<StepState>>,
     pub phase: Phase,
-    /// What a run runs, and the helper arguments it passes.
-    pub job: Job,
-    pub job_args: Vec<String>,
-    /// Components unticked by Change components: removed after the install run.
-    pub then_remove: Option<Vec<String>>,
-    /// The components before Change components.
-    pub previous: Option<BTreeSet<Component>>,
-    /// The agent ports before Change ports, and whether moving them was
-    /// confirmed: agents elsewhere keep calling the old ones (#69).
-    pub previous_agent_ports: Option<String>,
-    pub move_confirmed: bool,
     pub home: Option<String>,
 }
 
 impl Setup {
-    pub fn new(set_up: bool, hostname: String, home: Option<String>) -> Setup {
+    pub fn new(hostname: String, home: Option<String>) -> Setup {
         use Component::*;
         let mut components: BTreeSet<Component> =
             [Ingest, Console, Distribution, Vulns, Rules].into();
@@ -100,7 +86,7 @@ impl Setup {
             model: ModelChoice::Fetch,
             model_present: crate::assistant_setup::model_installed()
                 || crate::model_fetch::staged_in(std::path::Path::new("/")).is_some(),
-            root_key_out: default_root_key(home.as_deref()),
+            root_key_out: super::setup_form::default_root_key(home.as_deref()),
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             agent_ports: format!("{}, {}", ports::INGEST_DEFAULT, ports::DISTRIBUTION_DEFAULT),
             console_note: None,
@@ -109,177 +95,8 @@ impl Setup {
             prompt: PasswordPrompt::default(),
             password: None,
             states: vec![None; Step::ALL.len()],
-            phase: if set_up { Phase::Status } else { Phase::Form },
-            job: Job::Install,
-            job_args: Vec::new(),
-            then_remove: None,
-            previous: None,
-            previous_agent_ports: None,
-            move_confirmed: false,
+            phase: Phase::Form,
             home,
-        }
-    }
-
-    pub fn plan_args(&self) -> Vec<String> {
-        let components: Vec<&str> = self.components.iter().map(|c| c.name()).collect();
-        let mut args = vec![
-            "--components".into(),
-            components.join(","),
-            "--hostname".into(),
-            self.hostname.trim().into(),
-        ];
-        for san in self
-            .sans
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
-            args.extend(["--san".into(), san.into()]);
-        }
-        args.extend([
-            "--ca".into(),
-            match self.ca {
-                CaMode::Quick => "quick",
-                CaMode::Careful => "careful",
-            }
-            .into(),
-        ]);
-        if self.ca == CaMode::Quick && !self.root_key_out.trim().is_empty() {
-            args.extend(["--root-key-out".into(), self.root_key_out.trim().into()]);
-        }
-        if self.components.contains(&Component::Assistant) {
-            args.extend([
-                "--model".into(),
-                match self.model {
-                    ModelChoice::Fetch => "fetch",
-                    ModelChoice::Skip => "skip",
-                }
-                .into(),
-            ]);
-        }
-        args.extend(["--console-port".into(), self.console_port.trim().into()]);
-        // Two numbers; anything else goes through as typed, so Setup's own
-        // check names what is wrong.
-        let mut agent = self.agent_ports.split([',', ' ']).filter(|p| !p.is_empty());
-        let ingest = agent.next().unwrap_or("").to_owned();
-        let distribution = agent.collect::<Vec<_>>().join(" ");
-        args.extend([
-            "--ingest-port".into(),
-            ingest,
-            "--distribution-port".into(),
-            distribution,
-        ]);
-        args
-    }
-
-    /// For each port another process holds, proposes the first free one
-    /// (from 8443 for the console, 18425 for ingest and distribution) and
-    /// notes it on the row. Unprivileged, so the holder is rarely known
-    /// here; Setup's own check (as root) names it if it is still there.
-    pub fn propose_ports<H: Host>(&mut self, host: &H) {
-        let taken = |port: u16| {
-            host.listeners(port)
-                .map(|lines| ports::parse(&lines).is_some())
-                .map_err(|error| error.to_string())
-        };
-        let defaults = [
-            ports::CONSOLE_DEFAULT,
-            ports::INGEST_DEFAULT,
-            ports::DISTRIBUTION_DEFAULT,
-        ];
-        let mut chosen: Vec<u16> = defaults.to_vec();
-        for (index, from) in [8443, 18425, 18425].into_iter().enumerate() {
-            let default = defaults[index];
-            // Free, or unknown: Setup checks again before starting.
-            let Ok(true) = taken(default) else {
-                continue;
-            };
-            let Ok(port) = ports::suggest(from, |port| Ok(chosen.contains(&port) || taken(port)?))
-            else {
-                continue;
-            };
-            chosen[index] = port;
-            let note = format!("{default} is in use");
-            if index == 0 {
-                self.console_note = Some(note);
-            } else {
-                let joined = self
-                    .agent_ports_note
-                    .take()
-                    .map_or(note.clone(), |n| format!("{n}; {note}"));
-                self.agent_ports_note = Some(joined);
-            }
-        }
-        self.console_port = chosen[0].to_string();
-        self.agent_ports = format!("{}, {}", chosen[1], chosen[2]);
-    }
-
-    /// On a set-up host: a default port another program holds, "443 is in
-    /// use" (why the port differs), or, when the plan still has the default
-    /// and our unit is not running, "443 is in use by another program": the
-    /// user's case, a console crash-looping on a port nginx holds
-    /// (reviewer's #106 drive). While our unit runs, the holder is ours.
-    fn note_taken_defaults<H: Host>(&mut self, host: &H, services: &[ServiceStatus]) {
-        let taken = |port: u16| {
-            host.listeners(port)
-                .is_ok_and(|lines| ports::parse(&lines).is_some())
-        };
-        let running = |unit: Unit| {
-            services
-                .iter()
-                .any(|status| status.unit == unit && status.active == "active")
-        };
-        let note = |default: u16, chosen: &str, unit: Unit| {
-            let chosen = chosen.trim().parse::<u16>().ok();
-            match (chosen == Some(default), taken(default)) {
-                (false, true) => Some(format!("{default} is in use")),
-                (true, true) if !running(unit) => {
-                    Some(format!("{default} is in use by another program"))
-                }
-                _ => None,
-            }
-        };
-        self.console_note = note(ports::CONSOLE_DEFAULT, &self.console_port, Unit::Console);
-        let mut agent: Vec<String> = self
-            .agent_ports
-            .split([',', ' '])
-            .filter(|p| !p.is_empty())
-            .map(str::to_owned)
-            .collect();
-        agent.resize(2, String::new());
-        let notes: Vec<String> = [
-            note(ports::INGEST_DEFAULT, &agent[0], Unit::Ingest),
-            note(ports::DISTRIBUTION_DEFAULT, &agent[1], Unit::Distribution),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        self.agent_ports_note = (!notes.is_empty()).then(|| notes.join("; "));
-    }
-
-    fn toggle(&mut self, component: Component) {
-        use Component::*;
-        if component.always() {
-            return;
-        }
-        if !self.components.remove(&component) {
-            self.components.insert(component);
-            if component == Rules {
-                self.components.insert(Distribution);
-            }
-        } else if component == Distribution {
-            self.components.remove(&Rules);
-        }
-    }
-
-    fn field(&mut self) -> Option<&mut String> {
-        match self.row {
-            HOSTNAME_ROW => Some(&mut self.hostname),
-            SANS_ROW => Some(&mut self.sans),
-            KEY_ROW => Some(&mut self.root_key_out),
-            PORT_ROW => Some(&mut self.console_port),
-            AGENT_PORTS_ROW => Some(&mut self.agent_ports),
-            _ => None,
         }
     }
 }
@@ -291,110 +108,25 @@ impl<H: Host> App<H> {
             Phase::Form => self.form_key(key),
             Phase::Model => self.model_key(key),
             Phase::Running(_) => {}
-            // A stopped run keeps every other action (#73): the user's
-            // "Uninstall doesn't work" was x ignored after a failed Repair.
+            // #87 (ruling 6): before the CA, the filled form again; after
+            // it, Home (Maintenance › Repair finishes the install).
             Phase::Stopped(at) => match key {
                 Key::Char('r') => self.ask_password(After::Run(at)),
-                Key::Esc => self.setup.phase = Phase::Status,
-                _ => self.setup_status_key(key),
+                Key::Esc if self.ca_exists() => self.back(),
+                Key::Esc => self.fill_from_plan(),
+                Key::Char('q') => self.quit = true,
+                _ => {}
             },
-            Phase::Finished | Phase::Status => self.setup_status_key(key),
+            Phase::Finished => match key {
+                Key::Enter if self.setup_done() => self.back(),
+                Key::Char('q') => self.quit = true,
+                _ => {}
+            },
         }
     }
 
-    fn setup_status_key(&mut self, key: Key) {
-        match key {
-            Key::Char('m') if self.may_change_setup() => self.change_components(),
-            Key::Char('p') if self.may_change_setup() => self.change_ports(),
-            // Finished on a set-up host: Maintenance has the changes.
-            Key::Enter if self.setup.phase == Phase::Finished && self.setup_done() => self.back(),
-            Key::Char('q') => self.quit = true,
-            _ => {}
-        }
-    }
-
-    /// `m` and `p`: only before the host is set up, or after a first
-    /// install that stopped before its CA (#87). A set-up host changes
-    /// parts and ports in Maintenance, which asks before removing.
-    pub(super) fn may_change_setup(&self) -> bool {
-        !self.setup_done() || !self.ca_exists()
-    }
-
-    fn ca_exists(&self) -> bool {
-        self.host
-            .certificates()
-            .iter()
-            .any(|(path, _)| *path == "/etc/openvibes/pki/intermediate.crt")
-    }
-
-    /// Back to the form, filled from `setup.toml`; what is unticked is
-    /// removed (keep data) after the install run.
-    pub(super) fn change_components(&mut self) {
-        let plan = match self
-            .host
-            .setup_plan()
-            .map_err(|e| e.to_string())
-            .and_then(|text| {
-                toml::from_str::<crate::setup::plan::Plan>(&text).map_err(|e| e.to_string())
-            }) {
-            Ok(plan) => plan,
-            Err(error) => {
-                self.message = Some(error);
-                return;
-            }
-        };
-        self.setup.components = plan.components.iter().copied().collect();
-        self.setup.hostname = plan.hostname.clone();
-        self.setup.sans = plan.sans.join(", ");
-        // #87: a plan from a first install that stopped before the CA is
-        // not a set-up host: run the install again (new CA, free key name)
-        // instead of a Repair that refuses to make a CA.
-        if self.ca_exists() {
-            self.setup.previous = Some(self.setup.components.clone());
-            self.setup.ca = plan.ca;
-            self.setup.root_key_out.clear(); // the CA exists; no new root key
-        } else {
-            self.setup.previous = None;
-            // Looked up now: a key written since the TUI started (by a CA
-            // step that then failed, or kept by Remove everything) is taken.
-            self.setup.root_key_out = default_root_key(self.setup.home.as_deref());
-        }
-        self.setup.console_port = plan.console_port.to_string();
-        self.setup.agent_ports = format!("{}, {}", plan.ingest_port, plan.distribution_port);
-        self.setup.console_note = None;
-        self.setup.agent_ports_note = None;
-        self.setup.note_taken_defaults(&self.host, &self.services);
-        self.setup.previous_agent_ports = Some(self.setup.agent_ports.clone());
-        self.setup.move_confirmed = false;
-        self.setup.row = 0;
-        self.setup.phase = Phase::Form;
-    }
-
-    /// Change ports (#69): the same form, on the port rows.
-    pub(super) fn change_ports(&mut self) {
-        self.change_components();
-        if self.setup.phase == Phase::Form {
-            self.setup.row = PORT_ROW;
-        }
-    }
-
-    /// Start, but a first Enter that would move the agent ports only says
-    /// what that means.
-    fn start_plan(&mut self) {
-        let moves_agents = self
-            .setup
-            .previous_agent_ports
-            .as_ref()
-            .is_some_and(|before| *before != self.setup.agent_ports);
-        if moves_agents && !self.setup.move_confirmed {
-            self.setup.move_confirmed = true;
-            self.message = Some(
-                "The agent ports change: agents on other hosts keep calling the old ones \
-                 until their install line is re-run. Enter on Start again to move them."
-                    .into(),
-            );
-            return;
-        }
+    /// Start: the model question first if needed, then the password.
+    pub(super) fn start_plan(&mut self) {
         // The model is a 2.7 GB download: asked first, unless it is there.
         if self.setup.components.contains(&Component::Assistant) && !self.setup.model_present {
             self.setup.phase = Phase::Model;
@@ -419,13 +151,6 @@ impl<H: Host> App<H> {
         self.ask_password(After::Plan);
     }
 
-    fn start_job(&mut self, job: Job, secret: Secret) {
-        self.setup.job = job;
-        self.setup.states = vec![None; job.steps()];
-        self.setup.password = Some(secret);
-        self.setup.phase = Phase::Running(0);
-    }
-
     /// Asks for the sudo password before `after`, or goes straight on as
     /// root, which sudo lets through without one (#82).
     pub(super) fn ask_password(&mut self, after: After) {
@@ -435,57 +160,6 @@ impl<H: Host> App<H> {
             self.setup.phase = Phase::Password(after);
         } else {
             self.with_password(after, Secret::new(String::new()));
-        }
-    }
-
-    fn form_key(&mut self, key: Key) {
-        if self.setup.editing {
-            let Some(field) = self.setup.field() else {
-                return;
-            };
-            match key {
-                Key::Char(c) if field.len() < 512 => field.push(c),
-                Key::Backspace => {
-                    field.pop();
-                }
-                Key::ClearLine => field.clear(),
-                Key::Enter | Key::Esc => self.setup.editing = false,
-                _ => {}
-            }
-            return;
-        }
-        match key {
-            Key::Char('j') | Key::Down if self.setup.row < START_ROW => {
-                self.setup.row += 1;
-                // A set-up host shows no root key row (#78): step over it.
-                if self.setup.previous.is_some() && self.setup.row == KEY_ROW {
-                    self.setup.row += 1;
-                }
-            }
-            Key::Char('k') | Key::Up => {
-                self.setup.row = self.setup.row.saturating_sub(1);
-                if self.setup.previous.is_some() && self.setup.row == KEY_ROW {
-                    self.setup.row -= 1;
-                }
-            }
-            Key::Char(' ') if self.setup.row < Component::ALL.len() => {
-                self.setup.toggle(Component::ALL[self.setup.row])
-            }
-            // A set-up host keeps its CA (and has no new root key to write).
-            Key::Char(' ') | Key::Enter
-                if self.setup.previous.is_some() && matches!(self.setup.row, CA_ROW | KEY_ROW) => {}
-            Key::Char(' ') | Key::Enter if self.setup.row == CA_ROW => {
-                self.setup.ca = match self.setup.ca {
-                    CaMode::Quick => CaMode::Careful,
-                    CaMode::Careful => CaMode::Quick,
-                };
-            }
-            Key::Enter if self.setup.row == START_ROW => self.start_plan(),
-            Key::Enter if self.setup.field().is_some() => self.setup.editing = true,
-            // A set-up host's change-components form: back to Setup's status.
-            Key::Esc if self.setup.previous.is_some() => self.setup.phase = Phase::Status,
-            Key::Char('q') => self.quit = true,
-            _ => {}
         }
     }
 
@@ -515,24 +189,9 @@ impl<H: Host> App<H> {
                 match self.host.privileged(Privileged::SetupPlan(&args), &secret) {
                     Ok(_) => {
                         self.setup.prompt.failures = 0;
-                        self.setup.job_args.clear();
-                        let job = if self.setup.previous.is_some() {
-                            Job::Repair
-                        } else {
-                            Job::Install
-                        };
-                        if let Some(previous) = self.setup.previous.take() {
-                            let removed: Vec<&str> = previous
-                                .difference(&self.setup.components)
-                                .map(|c| c.name())
-                                .collect();
-                            if !removed.is_empty() {
-                                self.setup.then_remove =
-                                    Some(vec!["--components".into(), removed.join(",")]);
-                            }
-                        }
-                        // Change components keeps the CA: repair mode.
-                        self.start_job(job, secret);
+                        self.setup.states = vec![None; Step::ALL.len()];
+                        self.setup.password = Some(secret);
+                        self.setup.phase = Phase::Running(0);
                     }
                     Err(HostError::WrongPassword) => self.wrong_password(after),
                     Err(error) => {
@@ -582,9 +241,10 @@ impl<H: Host> App<H> {
             self.setup.phase = Phase::Stopped(next);
             return;
         };
-        let args = self.setup.job_args.clone();
-        let verb = self.setup.job.verb(next, &args);
-        let state = match self.host.privileged(verb, password) {
+        let state = match self
+            .host
+            .privileged(Privileged::SetupStep(Step::ALL[next]), password)
+        {
             Ok(out) => StepState::parse(out.trim_end()).unwrap_or_else(|| {
                 StepState::Failed(format!("unexpected helper output: {}", out.trim()))
             }),
@@ -601,69 +261,15 @@ impl<H: Host> App<H> {
         self.setup.states[next] = Some(state);
         // The model step is last and optional: its failure still ends on
         // the Finished screen, which shows the URL and password.
-        let optional_last = matches!(self.setup.job, Job::Install | Job::Repair)
-            && Step::ALL.get(next) == Some(&Step::AssistantModel);
+        let optional_last = Step::ALL.get(next) == Some(&Step::AssistantModel);
         self.setup.phase = if !finished && !optional_last {
             self.setup.password = None;
             Phase::Stopped(next)
-        } else if next + 1 == self.setup.job.steps() {
-            if let Some(args) = self.setup.then_remove.take() {
-                // Components unticked in the form: removed, data kept.
-                self.setup.job = Job::Remove;
-                self.setup.job_args = args;
-                self.setup.states = vec![None; Job::Remove.steps()];
-                Phase::Running(0)
-            } else {
-                self.setup.password = None;
-                Phase::Finished
-            }
+        } else if next + 1 == Step::ALL.len() {
+            self.setup.password = None;
+            Phase::Finished
         } else {
             Phase::Running(next + 1)
         };
-    }
-}
-
-/// The free default root key file in `home`, or empty without a home.
-fn default_root_key(home: Option<&str>) -> String {
-    home.map(|home| free_root_key(home, |path| std::path::Path::new(path).exists()))
-        .unwrap_or_default()
-}
-
-/// `HOME/openvibes-root-ca.key`, or `-2`, `-3`… when taken: Remove
-/// everything keeps the old root key (it is the user's), so a new install
-/// must not stop on it (#87).
-fn free_root_key(home: &str, exists: impl Fn(&str) -> bool) -> String {
-    super::maint::backup::free_path(&format!("{home}/openvibes-root-ca"), "key", exists)
-}
-
-#[cfg(test)]
-mod root_key_tests {
-    #[test]
-    fn the_agent_is_ticked_only_with_the_package_or_a_repository() {
-        let dir = std::env::temp_dir().join(format!("ov-agent-default-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("etc/yum.repos.d")).unwrap();
-        std::fs::write(dir.join("etc/yum.repos.d/fedora.repo"), "").unwrap();
-        assert!(!crate::setup::agent_by_default(&dir));
-        std::fs::write(dir.join("etc/yum.repos.d/openvibes.repo"), "").unwrap();
-        assert!(crate::setup::agent_by_default(&dir));
-        std::fs::remove_file(dir.join("etc/yum.repos.d/openvibes.repo")).unwrap();
-        std::fs::create_dir_all(dir.join("usr/bin")).unwrap();
-        std::fs::write(dir.join("usr/bin/openvibes-agent"), "").unwrap();
-        assert!(crate::setup::agent_by_default(&dir));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn the_default_root_key_name_skips_taken_files() {
-        let taken = ["/h/openvibes-root-ca.key", "/h/openvibes-root-ca-2.key"];
-        assert_eq!(
-            super::free_root_key("/h", |p| taken.contains(&p)),
-            "/h/openvibes-root-ca-3.key"
-        );
-        assert_eq!(
-            super::free_root_key("/h", |_| false),
-            "/h/openvibes-root-ca.key"
-        );
     }
 }

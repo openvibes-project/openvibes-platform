@@ -110,8 +110,7 @@ runs (a step blocks the screen while it runs, e.g. dnf); while one runs, the
 footer says keys wait, and the package step says it can take a few minutes.
 The first step that fails or waits
 stops the run and drops the password; `r` asks for it again and continues
-from that step, and every other action (`c`, `m`, `x`, below) still
-works from there; `Esc` returns to them without retrying (#73). Three
+from that step, and `Esc` leaves without retrying (#87, below). Three
 wrong passwords close the prompt. The finished screen
 of an install is a few labelled rows (install walkthrough, 2026-10-08):
 `Console` (the address), `Sign in` (admin and the generated password, shown
@@ -120,32 +119,30 @@ offline), then "Next: sign in, change the password, then add hosts under
 Enrollment" and, when it applies, that the operator can run openvibes-admin
 without sudo after logging in again. A detail in a wording the screen does
 not know is shown as it is. No agent install line: hosts are added from the
-console; `agent command` prints one for scripts. Repair, update and remove
-runs end on every step's outcome. Today's Setup screen is reached only by a
-first install now (location ` · Install`; Optional parts, Ports and addresses
-and Certificates replace it in Maintenance; its code goes in 2b-2). Once the
-host is set up (it has `setup.toml` and its CA), `m` and `p` do nothing and
-the bar no longer shows them, and Enter or Esc on the Finished screen goes
-Home: their form would remove unticked parts without asking. Before that,
-`m` changes components (the form filled from `setup.toml`;
-added components are installed, unticked ones removed keeping data, ports
-included) and `p` changes ports (the same form, on the port rows, #69; it says when a
-default port is held by another program ("443 is in use"; "443 is in use by
-another program" when the plan still has 443 and our unit is not running),
-and shows the CA
-as kept, with no root key row; moving
-the agent ports takes a second Enter on Start, since agents on other hosts
-keep calling the old ones until their install line is re-run; the ports a
-plan moves away from are recorded in `/etc/openvibes/setup-moved-from` by
-`helper setup-plan` and closed in firewalld once Readiness is done, as the
-CLI's Repair does; only ports the Firewall step itself opened are closed, as
-recorded in `/etc/openvibes/setup-opened-ports` (one open before Setup ran is
-never Setup's; installs from before the record close nothing), and one another
-program listens on, per `ss`, stays open with who uses it).
+console; `agent command` prints one for scripts. Today's Setup screen is
+reached only by a first install (location ` · Install`) and keeps only the
+install (2b-2): no `m`, `p`, repair or remove runs; Optional parts, Ports
+and addresses and Certificates are in Maintenance. Once the host is set up
+(it has `setup.toml` and its CA), Enter or Esc on the Finished screen goes
+Home. On the form, a default port another program holds is noted on its
+row ("443 is in use"; "443 is in use by another program" when the plan
+still has 443 and our unit is not running). The ports a plan moves away
+from (Maintenance › Ports and addresses) are recorded in
+`/etc/openvibes/setup-moved-from` by `helper setup-plan` and closed in
+firewalld once Readiness is done, as the CLI's Repair does; only ports the
+Firewall step itself opened are closed, as recorded in
+`/etc/openvibes/setup-opened-ports` (one open before Setup ran is never
+Setup's; installs from before the record close nothing), and one another
+program listens on, per `ss`, stays open with who uses it.
 The root key file defaults to the first free name in the home directory
 (`openvibes-root-ca.key`, then `-2`, `-3`…), since Remove everything keeps
-the old key; and `m` after a first install that stopped before the CA step
-offers the install again, not a Repair (#87).
+the old key. A host with `setup.toml` but no
+`/etc/openvibes/pki/intermediate.crt` (a first install that stopped before
+its CA step) starts on the install form, filled from the plan with a free
+root key name, and installs again, not a Repair, which refuses to make a CA
+(#87). A plan that does not parse shows its error on an unfilled form. After
+a stopped run, Esc goes to that filled form while there is no CA, and Home
+once there is (Maintenance › Repair finishes it).
 As root no password is asked (#82): the TUI started with `sudo openvibes-admin` runs
 its helper directly, keeping `SUDO_USER` so Setup still names the person who
 started it (operators group, root key owner); otherwise the password prompt

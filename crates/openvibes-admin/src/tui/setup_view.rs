@@ -12,35 +12,19 @@ use ratatui::{
 
 use super::{
     app::App,
-    jobs::Job,
     setup::{AGENT_PORTS_ROW, CA_ROW, HOSTNAME_ROW, KEY_ROW, PORT_ROW, Phase, SANS_ROW, START_ROW},
 };
 use crate::setup::plan::{CaMode, Component};
 
 const FORM_KEYS: &str = "j/k move  space toggle  Enter edit/start";
-/// After a failed step: retry it, or any other action (#73); `leave` follows.
-/// Fits 80 columns.
-const RUN_KEYS: &str = "r retry  m components  p ports";
 /// While a step runs, keys wait for it (the loop runs one step per turn).
 const RUNNING_KEYS: &str = "Working: keys wait until this step ends";
-/// Fits 80 columns.
-const DONE_KEYS: &str = "m components  p ports";
-
-/// How to leave: `Esc` goes back on a set-up host; `q` quits the fresh-install form.
+/// How to leave: `Esc` goes back on a set-up host; `q` quits the install form.
 fn leave<H: Host>(app: &App<H>) -> &'static str {
     if app.setup_done() {
         "Esc back"
     } else {
         "q quit"
-    }
-}
-
-/// `m` and `p` only where they still work (`may_change_setup`).
-fn done_keys<H: Host>(app: &App<H>) -> String {
-    if app.may_change_setup() {
-        format!("{DONE_KEYS}  {}", leave(app))
-    } else {
-        leave(app).into()
     }
 }
 
@@ -70,19 +54,20 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
             "Enter confirm  Esc cancel".into(),
         ),
         Phase::Model => (model_prompt(), "Y download  N skip  Esc back".into()),
-        Phase::Running(_) | Phase::Stopped(_) | Phase::Status => (
+        Phase::Running(_) => (
             checklist(app, usize::from(body.width.saturating_sub(2))),
-            if matches!(setup.phase, Phase::Stopped(_)) && !app.may_change_setup() {
-                format!("r retry  {}", leave(app))
-            } else if matches!(setup.phase, Phase::Stopped(_)) {
-                format!("{RUN_KEYS}  {}", leave(app))
-            } else if matches!(setup.phase, Phase::Running(_)) {
-                RUNNING_KEYS.into()
+            RUNNING_KEYS.into(),
+        ),
+        // Esc: Home after the CA, the filled form before it (#87).
+        Phase::Stopped(_) => (
+            checklist(app, usize::from(body.width.saturating_sub(2))),
+            if app.setup_done() {
+                "r retry  Esc back".into()
             } else {
-                done_keys(app)
+                "r retry  Esc form  q quit".into()
             },
         ),
-        Phase::Finished => (finished(app), done_keys(app)),
+        Phase::Finished => (install_finished(&setup.states), leave(app).into()),
     };
     frame.render_widget(
         Paragraph::new(lines)
@@ -158,20 +143,14 @@ fn form<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
             edit(SANS_ROW)
         ),
     ));
-    // Changing a set-up host keeps its CA: no first-install choices.
-    let ca = match (setup.previous.is_some(), setup.ca) {
-        (true, _) => "kept (this host is set up)",
-        (false, CaMode::Quick) => "quick (root created here, key written once)",
-        (false, CaMode::Careful) => "careful (root stays offline)",
+    let ca = match setup.ca {
+        CaMode::Quick => "quick (root created here, key written once)",
+        CaMode::Careful => "careful (root stays offline)",
     };
     lines.push(mark(setup.row == CA_ROW, format!("CA:  {ca}")));
     lines.push(mark(
         setup.row == KEY_ROW,
-        if setup.previous.is_some() {
-            String::new()
-        } else {
-            format!("Root key file:  {}{}", setup.root_key_out, edit(KEY_ROW))
-        },
+        format!("Root key file:  {}{}", setup.root_key_out, edit(KEY_ROW)),
     ));
     let note = |note: &Option<String>| {
         note.as_ref()
@@ -213,7 +192,6 @@ fn help(setup: &super::setup::Setup) -> &'static str {
         }
         HOSTNAME_ROW => "The name agents and browsers use to reach this host.",
         SANS_ROW => "More names or IP addresses for its certificate, e.g. 10.0.0.5.",
-        CA_ROW if setup.previous.is_some() => "This host keeps the CA it was set up with.",
         CA_ROW => match setup.ca {
             CaMode::Quick => {
                 "Quick: the root CA is made here; its key is written once to the file below."
@@ -233,11 +211,9 @@ fn help(setup: &super::setup::Setup) -> &'static str {
 /// (#78: wrapped details pushed the last steps out of view); the step a run
 /// stopped at gets its whole detail under the list.
 fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
-    let mut lines: Vec<Line<'static>> = app
-        .setup
-        .job
-        .titles()
-        .into_iter()
+    let mut lines: Vec<Line<'static>> = Step::ALL
+        .iter()
+        .map(|step| step.title())
         .enumerate()
         .map(|(index, title)| {
             let state = app.setup.states.get(index).and_then(Option::as_ref);
@@ -263,7 +239,6 @@ fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
         })
         .collect();
     if let Phase::Running(next) = app.setup.phase
-        && matches!(app.setup.job, Job::Install | Job::Repair)
         && Step::ALL.get(next) == Some(&Step::Packages)
     {
         lines.push(Line::raw(""));
@@ -273,7 +248,6 @@ fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
         ));
     }
     if let Phase::Running(next) = app.setup.phase
-        && matches!(app.setup.job, Job::Install | Job::Repair)
         && Step::ALL.get(next) == Some(&Step::AssistantModel)
         && app.setup.components.contains(&Component::Assistant)
     {
@@ -305,25 +279,6 @@ fn cut(text: &str, width: usize) -> String {
     let mut cut: String = text.chars().take(width.saturating_sub(1)).collect();
     cut.push('…');
     cut
-}
-
-fn finished<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
-    let setup = &app.setup;
-    if setup.job != Job::Install {
-        // Repair, update, remove: every step's outcome.
-        let mut lines = vec![Line::raw("Finished.")];
-        for (index, title) in setup.job.titles().into_iter().enumerate() {
-            if let Some(Some(state)) = setup.states.get(index) {
-                lines.push(Line::raw(format!(
-                    "{title}: {} {}",
-                    state.label(),
-                    state.detail()
-                )));
-            }
-        }
-        return lines;
-    }
-    install_finished(&setup.states)
 }
 
 /// The step's detail when it finished done.

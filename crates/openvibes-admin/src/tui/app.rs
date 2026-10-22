@@ -138,7 +138,7 @@ impl<H: Host> App<H> {
         let home = crate::setup::plan::operator_from_env()
             .and_then(|user| host.user_home(&user))
             .or_else(|| std::env::var("HOME").ok());
-        let mut setup = Setup::new(set_up, hostname.clone(), home);
+        let mut setup = Setup::new(hostname.clone(), home);
         if !set_up {
             setup.propose_ports(&host);
         }
@@ -180,6 +180,12 @@ impl<H: Host> App<H> {
             tick_count: 0,
         };
         app.refresh();
+        // #87 (ruling 6): set up but stopped before its CA, the host opens
+        // the install form, filled from its plan.
+        if set_up && !app.ca_exists() {
+            app.nav = Nav::new(Screen::Legacy);
+            app.fill_from_plan();
+        }
         app.load_logs();
         app.files_changed();
         app
@@ -227,9 +233,11 @@ impl<H: Host> App<H> {
         };
     }
 
-    /// Set up already, or being changed from a set-up host.
+    /// Set up, CA included: a host whose first install stopped before its
+    /// CA is still installing (#87), so its form quits with q as on a
+    /// fresh host.
     pub fn setup_done(&self) -> bool {
-        self.setup.previous.is_some() || self.host.is_set_up()
+        self.host.is_set_up() && self.ca_exists()
     }
 
     /// Opens Status, with fresh health checks.

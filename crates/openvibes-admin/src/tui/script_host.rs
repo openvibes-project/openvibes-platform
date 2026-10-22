@@ -129,11 +129,31 @@ pub(super) fn app_taken(
     answers: Vec<Result<String, HostError>>,
     taken: Vec<u16>,
 ) -> App<SetupHost> {
+    // A set-up host has its plan (and so its CA) from the start.
+    let plan = if set_up { PLAN.into() } else { String::new() };
+    let mut app = built(set_up, answers, taken, plan);
+    app.setup.hostname = "platform.example.com".into();
+    app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
+    app
+}
+
+/// A set-up host whose `setup.toml` is `plan` from the start, so the start
+/// screen is chosen from it (#87).
+pub(super) fn app_with_plan(plan: &str, answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
+    built(true, answers, vec![], plan.into())
+}
+
+fn built(
+    set_up: bool,
+    answers: Vec<Result<String, HostError>>,
+    taken: Vec<u16>,
+    plan: String,
+) -> App<SetupHost> {
     let mut app = App::new(SetupHost {
         set_up,
         answers: RefCell::new(answers.into()),
         calls: RefCell::new(Vec::new()),
-        plan: String::new(),
+        plan,
         packages: Vec::new(),
         taken,
         root: false,
@@ -146,8 +166,6 @@ pub(super) fn app_taken(
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     app.root = std::env::temp_dir().join(format!("ov-tui-script-{}-{n}", std::process::id()));
     app.setup.model_present = false;
-    app.setup.hostname = "platform.example.com".into();
-    app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
     app
 }
 
@@ -163,6 +181,16 @@ pub(super) fn screen(app: &App<SetupHost>) -> String {
                 + "\n"
         })
         .collect()
+}
+
+/// From the form: Start, then the password.
+pub(super) fn start(app: &mut App<SetupHost>, password: &str) {
+    while app.setup.row != super::setup::START_ROW {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    type_text(app, password);
+    app.key(Key::Enter);
 }
 
 pub(super) fn type_text(app: &mut App<SetupHost>, text: &str) {
