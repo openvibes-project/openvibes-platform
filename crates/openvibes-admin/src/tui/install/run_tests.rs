@@ -55,15 +55,16 @@ fn install_rows_group_the_steps() {
             "Console",
             "Services",
             "Firewall",
+            "Baseline rules",
             "Ready"
         ]
     );
     install.agent = true;
     install.assistant = true;
     let all = titles(&install);
-    assert_eq!(all.len(), 11);
-    assert_eq!(all[8], "Agent on this host");
-    assert_eq!(all[10], "Assistant");
+    assert_eq!(all.len(), 12);
+    assert_eq!(all[9], "Agent on this host");
+    assert_eq!(all[11], "Assistant");
 }
 
 #[test]
@@ -77,13 +78,11 @@ fn install_runs_plan_then_every_step() {
     assert_eq!(calls[1], "setup-step packages");
     assert!(calls.iter().all(|c| !c.contains("--repair")));
     assert_eq!(calls.last().unwrap(), "setup-step assistant-model");
-    let mut steps: Vec<&str> = calls[1..]
+    let steps: Vec<&str> = calls[1..]
         .iter()
         .map(|c| c.strip_prefix("setup-step ").unwrap())
         .collect();
-    steps.sort_unstable();
-    let mut all: Vec<&str> = Step::ALL.iter().map(|s| s.name()).collect();
-    all.sort_unstable();
+    let all: Vec<&str> = Step::ALL.iter().map(|s| s.name()).collect();
     assert_eq!(steps, all);
     assert_eq!(app.nav.screen, Screen::Install(Stage::Finished));
 }
@@ -100,7 +99,7 @@ fn installing_shows_current_row_and_step_count() {
     app.run = Some(run);
     let text = screen(&app);
     assert!(text.contains("Installing"), "{text}");
-    assert!(text.contains("Step 2 of 9: PostgreSQL"), "{text}");
+    assert!(text.contains("Step 2 of 10: PostgreSQL"), "{text}");
 }
 
 fn fail_at_postgres() -> App<SetupHost> {

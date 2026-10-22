@@ -105,7 +105,7 @@ fn draw_running<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: Op
         None => Bar::act(&[("Enter", "Try again")]),
     };
     let area = frame::draw(frame, t, head, Some("Installing"), &app.bar(bar));
-    let mut lines = vec![Line::raw("")];
+    let mut lines = Vec::new();
     lines.extend(steps::lines(
         t,
         &titles,

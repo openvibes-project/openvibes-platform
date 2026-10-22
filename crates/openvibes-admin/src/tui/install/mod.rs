@@ -156,8 +156,9 @@ impl Install {
             one("Certificate authority", &[Step::Ca]),
             one("Certificates", &[Step::Certificates]),
             one("Console", &[Step::Console]),
-            one("Services", &[Step::Services, Step::Rules]),
+            one("Services", &[Step::Services]),
             one("Firewall", &[Step::Firewall]),
+            one("Baseline rules", &[Step::Rules]),
         ];
         if self.agent {
             rows.push(one("Agent on this host", &[Step::Agent]));
