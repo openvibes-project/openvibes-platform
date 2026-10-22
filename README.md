@@ -277,6 +277,8 @@ cargo test --locked --workspace --all-features
   implementation.
 - [`docs/plans/`](docs/plans/): implementation plans with progress.
 - [`docs/sizing.md`](docs/sizing.md): measured and estimated requirements.
+- [`docs/dependencies.md`](docs/dependencies.md): what the builds ship and
+  what development needs, with versions and licences.
 - [`docs/dev-setup.md`](docs/dev-setup.md): run the console interface locally
   with live reload.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md): how
