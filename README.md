@@ -22,13 +22,15 @@
 
 ## What OpenVIBES is
 
-OpenVIBES is an open-source, self-hosted vulnerability and configuration
-auditing system for fleets of **1,000 to 50,000 hosts**. A small, read-only
-agent on every host collects facts (running processes, installed packages,
-listening ports, operating system), evaluates signed audit rules against
-them, and reports the results to the platform over mutually authenticated
-TLS. The platform keeps agent identities, distributes rules, matches every
-host's packages against security advisories, and ranks what to fix.
+OpenVIBES is a free, open-source, self-hosted security tool for homelabs,
+small businesses and security enthusiasts, built to stay light as it grows
+to many agents. A small, read-only agent on every host collects facts
+(running processes, installed packages, listening ports and services,
+hardening settings, operating system), evaluates signed rules against them,
+raises threat alarms from program starts, and reports to the platform over
+mutually authenticated TLS. The platform keeps agent identities, hands out
+rules, matches every host's packages against security advisories, and
+ranks what to fix in one web console.
 
 Design principles, shared by every repository:
 
@@ -52,6 +54,7 @@ Design principles, shared by every repository:
 | [openvibes-agent](https://github.com/openvibes-project/openvibes-agent) | The endpoint agent (Rust; Linux, Windows, macOS): collectors, signed-rule evaluation, a durable local queue, and the mTLS client. |
 | **openvibes-platform** (this one) | The server side: ingest, rule distribution, vulnerability matching, the admin CLI, the built-in PKI, the web console with its AI assistant, and packaging. |
 | [openvibes-protocol](https://github.com/openvibes-project/openvibes-protocol) | The single source of truth for everything exchanged between agent and platform: the spec, JSON Schemas, shared valid and invalid fixtures, and the paired plan. |
+| [openvibes-rules](https://github.com/openvibes-project/openvibes-rules) | The project's signed rule sets (baseline, threat alarms, Linux hardening level 1), shipped as one RPM that Setup and upgrades publish. |
 
 ```
  openvibes-agent (every host)              openvibes-platform
@@ -59,7 +62,8 @@ Design principles, shared by every repository:
    evaluate signed rules  --- mTLS 1.3 -->                                   findings, inventory
    queue and send         <-- mTLS 1.3 ---   openvibes-distribution  :18424  signed rule bundles
                                              openvibes-vulns                 feeds > match > enrich > rank
-                                             openvibes-admin (CLI), openvibes-console (:443)
+ routers, firewalls  --- syslog UDP --->     openvibes-netlog        :514    IPS/IDS events > alarms
+                                             openvibes-admin (TUI, CLI), openvibes-console (:443)
                                                  all sharing one PostgreSQL database
 
  contracts, schemas, fixtures: openvibes-protocol (a submodule in both repositories)
@@ -89,6 +93,12 @@ Design principles, shared by every repository:
 - **Inventory:** package reports (operating system, packages, running
   kernel) arrive only when they change, as gzip-compressed change sets
   after the first full list, and are stored compactly.
+- **Network device alarms** (`openvibes-netlog`, UDP 514): registered
+  routers and firewalls (UniFi's SIEM export today) send their IPS/IDS
+  events; the ones that matter become alarms with the same triage, cases
+  and suppressions. It is not a SIEM: everything else is dropped and only
+  counted. The receiver is built; the console screens to add a device
+  come next.
 - **Operations:** per-connection and per-request limits, structured logs,
   health and readiness endpoints, and a graceful drain on shutdown.
 - **Scale:** horizontally scalable. Load-tested with the `openvibes-load`
@@ -102,6 +112,10 @@ Design principles, shared by every repository:
 - Agents poll for newer versions, and verify and refuse rollbacks
   themselves. A compromised platform therefore cannot make agents trust new
   rules.
+- **Rule-set assignment:** the project's own sets (baseline, alarms,
+  hardening) come with the agent package. Hardening sets are
+  switched per host group in the console; a host the set is not assigned
+  to gets `410`, and its open findings end.
 
 ### Vulnerability management (`openvibes-vulns`)
 
@@ -130,11 +144,15 @@ Design principles, shared by every repository:
 
 ### Administration (`openvibes-admin`)
 
-- **TUI:** `sudo openvibes-admin` opens host administration over SSH
-  (keyboard only): Setup (install, repair, update, uninstall, turning the
-  assistant on), configuration, database and health screens, and service
-  lifecycle, kept out of the web console by design. `setup --quick` runs
-  the same install unattended.
+- **TUI:** `openvibes-admin` opens host administration over SSH (keyboard
+  only, 80×24), kept out of the web console by design. One frame with Home,
+  Status (problems first, each with its fix), Service (start, stop, logs)
+  and Help; Maintenance holds Database, Back up, Update (with a backup
+  first, and recovery from a half-done update), Repair, Optional parts
+  (agent, assistant), Ports and addresses, Certificates and Names, Console
+  sign-in (reset the admin password), a logged Shell, and Uninstall. Members
+  of `openvibes-operators` use it without root. `setup --quick` installs
+  unattended.
 - **Upgrades run themselves:** `dnf upgrade` backs up and migrates the
   database, upgrades the console with the platform, publishes a newer rules
   package's rule sets, and tunes the assistant if it has not been tuned, with no command.
@@ -174,9 +192,14 @@ Design principles, shared by every repository:
 
 ### Web console (`openvibes-console`, port 443)
 
-- **Access:** local accounts first; OIDC, SAML, and MFA come later as
-  adapters. Access is role-based and scoped by asset group, and service
-  accounts get expiring tokens.
+- **Roles and people:** local accounts; custom roles built from 48
+  permissions, each with a reach (all hosts, some host groups, or none).
+  Service accounts get expiring tokens. OIDC, SAML and MFA come later.
+- **Host groups and labels:** automatic groups per operating system and
+  release, rule-based and manual groups, and free labels on hosts.
+- **Settings:** one page for people, roles, host groups and the general
+  settings; alarm suppressions can be set to need a second person's
+  approval (off by default).
 - **Compliance findings:** each finding is shown once however many
   endpoints report it, and its detail lists every endpoint. Analysts can
   triage and assign.
@@ -188,9 +211,15 @@ Design principles, shared by every repository:
   technique picker.
 - **Test triggers:** `openvibes-test` on a host raises a harmless test
   alarm or finding; the host page shows the last test.
-- **Hosts:** software, advisories per package, ports and services, and a
-  host compare view. Add hosts from Enrollment (Install package or Copy CLI
-  install).
+- **Hosts:** a list with a shared filter bar and saved views, and a host
+  page with software, advisories per package, ports and services, hardening
+  and the last test; a host compare view. Add hosts from Enrollment
+  (Install package or Copy CLI install).
+- **Alarms:** a list and an alarm page with why the rule fired, the
+  process tree, the commands seen beside it, and the rule's own
+  explanation and what to check.
+- **Hardening:** Linux level 1 rules (sshd, sysctls, file modes, mounts,
+  services and more), switched on per host group.
 - **Dashboards:** a built-in Overview with 30-day trends, plus your own grid
   dashboards (Graph, Trend, List and more), shareable with other users.
 - **Operations:** agents (seen recently, offline, revoked), enrollment
@@ -204,7 +233,9 @@ Design principles, shared by every repository:
   CVE-…?", answered from fixed, read-only lookups that run with the
   asking user's own permissions and scope. Every answer cites the
   agents and findings it is based on.
-- **Model:** runs on a local model by default. The optional
+- **Internet lookups (opt in):** OSV and Bodhi references and a SearXNG
+  web search, each with its own risk level; off by default.
+- **Model:** runs on a local model (Qwen3.5-4B) by default. The optional
   `openvibes-llm` package runs llama.cpp's `llama-server` from a pinned
   build: CPU or Vulkan GPU, loopback only, sandboxed. Setup downloads the
   model from its publisher, checked against a pinned SHA-256 (offline, it
@@ -217,12 +248,23 @@ Design principles, shared by every repository:
 
 ## In progress
 
-- **Hardening rules per OS** (protocol P19): Level 1 and Level 2 checks on
-  sshd, sysctls, file modes, mounts, services and more, from facts the
-  agent's root helper reads; console switches per asset group.
+The latest release is **0.2.9**. Hardening per host group, roles and
+people, host groups, settings with approval, the new Hosts and Alarms
+pages and most of the TUI rework are on `main` but not released yet: they ship as **0.3.0** (the agent
+too) once the work below is done.
+
+- **Admin TUI rework:** the last sub-projects of the rework spec
+  (`docs/specs/2026-10-10-tui-rework-design.md`), next the Install flow
+  that replaces today's Setup form.
+- **Console list and detail pages:** after Hosts and Alarms, the same
+  rework for Vulnerabilities (next), Compliance, Cases, Software, Services
+  and Ports; then dashboard sharing by role.
+- **Network device alarms in the console:** add a gateway and see its
+  alarms (the receiver is already in place).
 
 ## Planned
 
+- **Hardening level 2** rules, and hardening for more systems.
 - **Alpine** via OSV.dev.
 - **Assistant options:** an external AI provider, opt-in only, with host
   names and addresses pseudonymised before anything leaves the platform.
