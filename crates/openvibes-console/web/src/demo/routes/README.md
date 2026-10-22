@@ -24,6 +24,7 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 | `session.ts` | The session, password changes and the About page. |
 | `settings.ts` | The general settings, the audit log, its retention and the assistant's internet access. |
 | `triage.ts` | Bulk triage of alarms, findings and vulnerabilities. |
+| `vulnList.ts` | The Vulnerabilities list (`GET /api/v1/vulnerability-list`): one row per CVE, filters, counts with the others applied, the summary, sort and paging inside the persona's reach. |
 | `vulnerabilities.ts` | The vulnerability list, summary and one advisory's hosts. |
 
 More: [docs/components/console-web.md](../../../../../../docs/components/console-web.md)

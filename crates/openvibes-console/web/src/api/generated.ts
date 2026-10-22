@@ -2037,6 +2037,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vulnerability-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Vulnerabilities list. */
+        get: operations["list_vulnerability_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/v1/login": {
         parameters: {
             query?: never;
@@ -5811,6 +5828,172 @@ export interface components {
          * @enum {string}
          */
         UpdateState: "disabled" | "unavailable" | "up_to_date" | "available";
+        /** @description The Assignee filter's values. */
+        VulnAssigneeCountsView: {
+            /**
+             * Format: int64
+             * @description Rows assigned to the viewer (`assignee=me`).
+             */
+            me: number;
+            /** @description People with a pair in reach. */
+            people: components["schemas"]["PersonCountView"][];
+            /**
+             * Format: int64
+             * @description Rows with an unassigned pair (`assignee=unassigned`).
+             */
+            unassigned: number;
+        };
+        /** @description Who the open pairs are assigned to. */
+        VulnAssigneeView: {
+            /**
+             * Format: int32
+             * @description People, for `several`.
+             */
+            count?: number | null;
+            /** @description User id, for `one`. */
+            id?: string | null;
+            /** @description `none`, `one` (`id` and `name`) or `several` (`count` people). */
+            kind: string;
+            /** @description Display name, for `one`. */
+            name?: string | null;
+        };
+        /** @description Rows per filter value, each with the other filters applied. */
+        VulnCountsView: {
+            /** @description By assignee. */
+            assignee: components["schemas"]["VulnAssigneeCountsView"];
+            /** @description By group. */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description The 50 packages with the most rows, plus the chosen one. */
+            package: components["schemas"]["CountView"][];
+            /** @description By severity. */
+            severity: components["schemas"]["CountView"][];
+            /** @description By signal. */
+            signal: components["schemas"]["CountView"][];
+            /** @description By state. */
+            state: components["schemas"]["CountView"][];
+        };
+        /** @description The fixed version under the package. */
+        VulnFixedView: {
+            /**
+             * Format: int32
+             * @description The number of fixed versions, for `several`.
+             */
+            count?: number | null;
+            /**
+             * @description `one` (every pair with a fix names `version`), `several` (`count`
+             *     different fixed versions) or `none` (no pair has a fix).
+             */
+            kind: string;
+            /** @description The fixed version, for `one`. */
+            version?: string | null;
+        };
+        /** @description One row: a CVE, or an advisory without CVEs. */
+        VulnListRowView: {
+            /** @description The covering advisories in reach, sorted. */
+            advisories: string[];
+            /** @description Other CVEs those advisories name, sorted, at most 10. */
+            also_covers: string[];
+            /** @description Who the open pairs are assigned to. */
+            assignee: components["schemas"]["VulnAssigneeView"];
+            /**
+             * Format: float
+             * @description CVSS base score.
+             */
+            cvss?: number | null;
+            /** @description KEV due date, `YYYY-MM-DD`. */
+            due?: string | null;
+            /**
+             * Format: float
+             * @description EPSS score.
+             */
+            epss?: number | null;
+            /**
+             * Format: float
+             * @description EPSS percentile.
+             */
+            epss_percentile?: number | null;
+            /** @description On CISA KEV or EUVD's exploited list. */
+            exploited: boolean;
+            /** @description The fixed version. */
+            fixed: components["schemas"]["VulnFixedView"];
+            /** @description The CVE id, or the advisory id. */
+            key: string;
+            /** @description A lower-confidence match (shown with the `lowconf` signal). */
+            low_confidence: boolean;
+            /**
+             * Format: int64
+             * @description Open pairs (triage open, not fixed).
+             */
+            open: number;
+            /** @description Affected package names, sorted. */
+            packages: string[];
+            /** @description A pair waits for a reboot. */
+            reboot: boolean;
+            /**
+             * @description Worst severity among the covering advisories: `critical`,
+             *     `important`, `moderate`, `low` or `unrated`.
+             */
+            severity: string;
+            /** @description Title of the covering advisory with the most hosts in reach. */
+            title: string;
+            /**
+             * Format: int64
+             * @description Every pair, whatever its state.
+             */
+            total: number;
+        };
+        /** @description One page of the Vulnerabilities list. */
+        VulnListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["VulnCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["VulnListRowView"][];
+            /** @description Summary line. */
+            summary: components["schemas"]["VulnSummaryLineView"];
+            /**
+             * Format: int64
+             * @description Rows matching every filter.
+             */
+            total: number;
+        };
+        /**
+         * @description The line above the list, over rows with an open pair matching every
+         *     filter but state. Counts are rows, except `hosts`.
+         */
+        VulnSummaryLineView: {
+            /**
+             * Format: int64
+             * @description Of those rows, known exploited.
+             */
+            exploited: number;
+            /**
+             * Format: int64
+             * @description Hosts with an open pair in those rows.
+             */
+            hosts: number;
+            /**
+             * Format: int64
+             * @description Without a fix.
+             */
+            no_fix: number;
+            /**
+             * Format: int64
+             * @description Rows with an open pair.
+             */
+            open_rows: number;
+            /**
+             * Format: int64
+             * @description With no open pair assigned.
+             */
+            unassigned: number;
+            /**
+             * Format: int64
+             * @description With a KEV due date.
+             */
+            with_due: number;
+        };
         /** @description Advisory view and in-scope affected hosts. */
         VulnerabilityAdvisoryDetail: {
             /** @description CVE metadata for this visible advisory. */
@@ -13267,6 +13450,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VulnerabilitySummary"];
+                };
+            };
+        };
+    };
+    list_vulnerability_page: {
+        parameters: {
+            query?: {
+                /** @description CVE id, advisory id, title or package name (contains). */
+                q?: string;
+                /** @description open (default), mitigated, accepted_risk, false_positive, resolved or all. */
+                state?: string;
+                /** @description critical, important, moderate, low or unrated. */
+                severity?: string;
+                /** @description exploited, due30, nofix, reboot or lowconf. */
+                signal?: string;
+                /** @description A package name. */
+                package?: string;
+                /** @description A host group id. */
+                group?: string;
+                /** @description An agent id. */
+                host?: string;
+                /** @description An advisory id: the CVEs it names. */
+                advisory?: string;
+                /** @description me, unassigned or a user id. */
+                assignee?: string;
+                /** @description priority (default), severity, cvss, epss, open or due. */
+                sort?: string;
+                /** @description asc or desc (default). */
+                dir?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of vulnerabilities (CVEs) in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VulnListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs vulnerabilities.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

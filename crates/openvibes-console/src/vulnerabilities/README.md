@@ -7,6 +7,8 @@ Vulnerabilities in the console: the summary, the prioritised list and advisory d
 | `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `summary.rs` | The vulnerability summary. |
 | `list.rs` | The vulnerability list and the views its rows are built from. |
+| `list_page.rs` | `GET /v1/vulnerability-list`: the CVE list's parameters, validation and the call into the store. |
+| `list_page_types.rs` | The CVE list's response types. |
 | `cpe.rs` | CPE findings: matches of installed software against CPE names. |
 | `advisory.rs` | One advisory: its CVE enrichment and the hosts it affects. |
 | `types.rs` | Request and response types of vulnerabilities and advisories. |

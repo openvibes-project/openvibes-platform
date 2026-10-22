@@ -939,6 +939,32 @@ columns accept the page `alarms` (hideable: `alarm`, `host`, `count`, `seen`,
 `state`, `assignee`, `case`; severity is the first column and never hidden).
 Tests: `tests/alarm_list_http.rs`; demo: `web/src/demo/routes/alarmList.ts`.
 
+## Vulnerabilities list
+
+`GET /api/v1/vulnerability-list` (needs `vulnerabilities.read`; session or
+bearer; roles 5b) pages the Vulnerabilities list, one row per CVE (an
+advisory without CVEs is its own row), over the store's `vuln_list`.
+`GET /api/v1/vulnerabilities` stays as it is. Filters (one value each,
+ANDed): `q` (CVE, advisory id, title or package), `state` (`open` by
+default, `mitigated`, `accepted_risk`, `false_positive`, `resolved` or
+`all`), `severity` (`critical`, `important`, `moderate`, `low`,
+`unrated`), `signal` (`exploited`, `due30`, `nofix`, `reboot`, `lowconf`),
+`package`, `group` (UUID), `host` (agent id), `advisory` and `assignee`
+(`me` is the session user's id, `unassigned` or a user UUID). `sort` is
+`priority` (default), `severity`, `cvss`, `epss`, `open` or `due`; `dir` is
+`desc` by default; `offset` 0..=100000 and `limit` 1..=100 (default 50).
+An invalid value or an unknown parameter (the old list's `exploited=true`
+and the like, which the web maps) is 400 `invalid_query` naming the
+parameter. Rows carry `fixed` (`kind` `one` with `version`, `several` with
+`count`, or `none`), `assignee` (`none`, `one` with `id` and `name`,
+`several` with `count`), `open` and `total` pairs, `also_covers` and
+`advisories`. `counts` hold every filter's values with the other filters
+applied; `summary` counts rows with an open pair under every filter but
+state (`hosts` counts hosts). Saved views and hidden columns accept the
+page `vulnerabilities` (hideable: `package`, `cvss`, `epss`, `hosts`, `due`,
+`assignee`; Severity and Advisory are never hidden).
+Tests: `tests/vuln_list_http.rs`; demo: `web/src/demo/routes/vulnList.ts`.
+
 ## Host page summary
 
 `GET /api/v1/hosts/{agent_id}/summary` (needs `hosts.read`; session or

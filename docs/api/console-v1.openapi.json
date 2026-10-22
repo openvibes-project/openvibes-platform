@@ -9738,6 +9738,186 @@
         }
       }
     },
+    "/api/v1/vulnerability-list": {
+      "get": {
+        "tags": [
+          "vulnerabilities"
+        ],
+        "summary": "The Vulnerabilities list.",
+        "operationId": "list_vulnerability_page",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "CVE id, advisory id, title or package name (contains).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "open (default), mitigated, accepted_risk, false_positive, resolved or all.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "description": "critical, important, moderate, low or unrated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "signal",
+            "in": "query",
+            "description": "exploited, due30, nofix, reboot or lowconf.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "package",
+            "in": "query",
+            "description": "A package name.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "description": "A host group id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "description": "An agent id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "advisory",
+            "in": "query",
+            "description": "An advisory id: the CVEs it names.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "query",
+            "description": "me, unassigned or a user id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "priority (default), severity, cvss, epss, open or due.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc or desc (default).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of vulnerabilities (CVEs) in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VulnListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs vulnerabilities.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/v1/login": {
       "post": {
         "tags": [
@@ -19158,6 +19338,348 @@
           "up_to_date",
           "available"
         ]
+      },
+      "VulnAssigneeCountsView": {
+        "type": "object",
+        "description": "The Assignee filter's values.",
+        "required": [
+          "me",
+          "unassigned",
+          "people"
+        ],
+        "properties": {
+          "me": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows assigned to the viewer (`assignee=me`)."
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonCountView"
+            },
+            "description": "People with a pair in reach."
+          },
+          "unassigned": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows with an unassigned pair (`assignee=unassigned`)."
+          }
+        }
+      },
+      "VulnAssigneeView": {
+        "type": "object",
+        "description": "Who the open pairs are assigned to.",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "People, for `several`.",
+            "minimum": 0
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "User id, for `one`."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`none`, `one` (`id` and `name`) or `several` (`count` people)."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name, for `one`."
+          }
+        }
+      },
+      "VulnCountsView": {
+        "type": "object",
+        "description": "Rows per filter value, each with the other filters applied.",
+        "required": [
+          "state",
+          "severity",
+          "signal",
+          "package",
+          "group",
+          "assignee"
+        ],
+        "properties": {
+          "assignee": {
+            "$ref": "#/components/schemas/VulnAssigneeCountsView",
+            "description": "By assignee."
+          },
+          "group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCountView"
+            },
+            "description": "By group."
+          },
+          "package": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "The 50 packages with the most rows, plus the chosen one."
+          },
+          "severity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By severity."
+          },
+          "signal": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By signal."
+          },
+          "state": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By state."
+          }
+        }
+      },
+      "VulnFixedView": {
+        "type": "object",
+        "description": "The fixed version under the package.",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The number of fixed versions, for `several`.",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "description": "`one` (every pair with a fix names `version`), `several` (`count`\ndifferent fixed versions) or `none` (no pair has a fix)."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The fixed version, for `one`."
+          }
+        }
+      },
+      "VulnListRowView": {
+        "type": "object",
+        "description": "One row: a CVE, or an advisory without CVEs.",
+        "required": [
+          "key",
+          "title",
+          "severity",
+          "exploited",
+          "packages",
+          "fixed",
+          "open",
+          "total",
+          "reboot",
+          "low_confidence",
+          "advisories",
+          "also_covers",
+          "assignee"
+        ],
+        "properties": {
+          "advisories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The covering advisories in reach, sorted."
+          },
+          "also_covers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other CVEs those advisories name, sorted, at most 10."
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/VulnAssigneeView",
+            "description": "Who the open pairs are assigned to."
+          },
+          "cvss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "CVSS base score."
+          },
+          "due": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "KEV due date, `YYYY-MM-DD`."
+          },
+          "epss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "EPSS score."
+          },
+          "epss_percentile": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "EPSS percentile."
+          },
+          "exploited": {
+            "type": "boolean",
+            "description": "On CISA KEV or EUVD's exploited list."
+          },
+          "fixed": {
+            "$ref": "#/components/schemas/VulnFixedView",
+            "description": "The fixed version."
+          },
+          "key": {
+            "type": "string",
+            "description": "The CVE id, or the advisory id."
+          },
+          "low_confidence": {
+            "type": "boolean",
+            "description": "A lower-confidence match (shown with the `lowconf` signal)."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open pairs (triage open, not fixed)."
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Affected package names, sorted."
+          },
+          "reboot": {
+            "type": "boolean",
+            "description": "A pair waits for a reboot."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Worst severity among the covering advisories: `critical`,\n`important`, `moderate`, `low` or `unrated`."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the covering advisory with the most hosts in reach."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every pair, whatever its state."
+          }
+        }
+      },
+      "VulnListView": {
+        "type": "object",
+        "description": "One page of the Vulnerabilities list.",
+        "required": [
+          "items",
+          "total",
+          "counts",
+          "summary",
+          "generated_at"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/VulnCountsView",
+            "description": "Per-value counts."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VulnListRowView"
+            },
+            "description": "The page."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/VulnSummaryLineView",
+            "description": "Summary line."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching every filter."
+          }
+        }
+      },
+      "VulnSummaryLineView": {
+        "type": "object",
+        "description": "The line above the list, over rows with an open pair matching every\nfilter but state. Counts are rows, except `hosts`.",
+        "required": [
+          "open_rows",
+          "hosts",
+          "exploited",
+          "with_due",
+          "no_fix",
+          "unassigned"
+        ],
+        "properties": {
+          "exploited": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those rows, known exploited."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts with an open pair in those rows."
+          },
+          "no_fix": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Without a fix."
+          },
+          "open_rows": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows with an open pair."
+          },
+          "unassigned": {
+            "type": "integer",
+            "format": "int64",
+            "description": "With no open pair assigned."
+          },
+          "with_due": {
+            "type": "integer",
+            "format": "int64",
+            "description": "With a KEV due date."
+          }
+        }
       },
       "VulnerabilityAdvisoryDetail": {
         "type": "object",
