@@ -351,7 +351,7 @@ impl<H: Host> App<H> {
 
     pub(super) fn status_key(&mut self, key: Key) {
         let items = self.status_items();
-        if self.move_row(key, items.len()) || key != Key::Enter {
+        if self.move_row(&key, items.len()) || key != Key::Enter {
             return;
         }
         match items.get(self.nav.row) {

@@ -36,6 +36,10 @@ pub enum Call {
     /// `shell-open`: sudo checks the password and the call is journalled;
     /// the shell itself opens once the run is done.
     ShellOpen,
+    /// `ca-request [--copy PATH]`: the request for "Your own CA", made or reused.
+    CaRequest(Option<String>),
+    /// `ca-accept`: the signed certificate and your CA's, checked and kept.
+    CaAccept(String, String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -61,8 +65,11 @@ pub enum Kind {
     /// Maintenance › Shell: the password, then the operator's shell.
     Shell,
     /// The first install, run from the Install screens.
-    #[allow(dead_code)] // started from the Install screens (Task 4)
     Install,
+    /// Your own CA's request (`accept`: its two certificates), before install.
+    Ca {
+        accept: bool,
+    },
     /// Optional parts added or removed; `what` is the title.
     Parts {
         what: String,
@@ -102,6 +109,8 @@ impl Kind {
             Kind::SignIn => "Resetting the admin password".into(),
             Kind::Shell => "Opening the shell".into(),
             Kind::Install => "Installing".into(),
+            Kind::Ca { accept: false } => "Making the request".into(),
+            Kind::Ca { accept: true } => "Adding the certificates".into(),
             Kind::Parts { what, .. } => what.clone(),
             Kind::Ports { what, .. } => what.clone(),
             Kind::Names { what, .. } => what.clone(),
@@ -121,6 +130,8 @@ impl Kind {
             Kind::SignIn => "Admin password reset".into(),
             Kind::Shell => "Shell opened".into(),
             Kind::Install => "OpenVIBES is installed".into(),
+            Kind::Ca { accept: false } => "Request made".into(),
+            Kind::Ca { accept: true } => "Certificates added".into(),
             Kind::Parts { done, .. } => done.clone(),
             Kind::Ports { done, .. } => done.clone(),
             Kind::Names { done, .. } => done.clone(),
@@ -137,6 +148,8 @@ impl Kind {
             Kind::SignIn => "The reset failed".into(),
             Kind::Shell => "The shell did not open".into(),
             Kind::Install => "The install stopped".into(),
+            Kind::Ca { accept: false } => "The request failed".into(),
+            Kind::Ca { accept: true } => "The certificates were refused".into(),
             Kind::Parts { .. } => "The change stopped".into(),
             Kind::Ports { .. } => "The move stopped".into(),
             Kind::Names { .. } => "The change stopped".into(),
@@ -162,6 +175,8 @@ impl Kind {
             Kind::SignIn => "Reset",
             Kind::Shell => "Open",
             Kind::Install => "Install",
+            Kind::Ca { accept: false } => "Continue",
+            Kind::Ca { accept: true } => "Add",
             Kind::Parts { .. } | Kind::Ports { .. } | Kind::Names { .. } => "Apply",
         }
     }
@@ -244,6 +259,8 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::Logs(unit, lines) => host.logs(*unit, *lines).map(|l| l.join("\n")),
         Call::AdminReset => host.privileged(Privileged::AdminReset, secret),
         Call::ShellOpen => host.privileged(Privileged::ShellOpen, secret),
+        Call::CaRequest(copy) => host.privileged(Privileged::CaRequest(copy.as_deref()), secret),
+        Call::CaAccept(cert, root) => host.privileged(Privileged::CaAccept(cert, root), secret),
     }
 }
 

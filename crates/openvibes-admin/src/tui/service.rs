@@ -177,7 +177,7 @@ impl<H: Host> App<H> {
         if self.pending.is_some() && key == Key::Enter {
             return;
         }
-        if self.move_row(key, acts.len()) || key != Key::Enter {
+        if self.move_row(&key, acts.len()) || key != Key::Enter {
             return;
         }
         match acts.get(self.nav.row) {

@@ -149,7 +149,7 @@ impl<H: Host> App<H> {
             }
             return;
         }
-        if self.move_row(key, INSTALL + 1) {
+        if self.move_row(&key, INSTALL + 1) {
             return;
         }
         match (key, at) {

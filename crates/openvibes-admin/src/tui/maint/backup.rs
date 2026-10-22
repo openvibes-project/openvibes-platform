@@ -289,7 +289,7 @@ impl<H: Host> App<H> {
             }
             return;
         }
-        if self.move_row(key, 2) || key != Key::Enter {
+        if self.move_row(&key, 2) || key != Key::Enter {
             return;
         }
         if self.nav.row == 0 {

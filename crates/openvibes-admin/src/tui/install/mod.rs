@@ -1,25 +1,34 @@
 //! The Install screens (sub-project 3; install.py, full_advanced.py): the
 //! choices in `Install`, the plan they write, and the work that runs it.
-//! Installing and Finished are in `run.rs` and `finished.rs`; the install
-//! runs on the worker like every other long job.
+//! Installing and Finished are in `run.rs` and `finished.rs`; the five
+//! steps in `steps.rs`, `certs.rs` and `paste.rs`. The install runs on the
+//! worker like every other long job.
 
-// Reached from Review, which Task 4 adds: until then only the tests start it.
-#![allow(dead_code)]
-
+mod certs;
 pub(super) mod fields;
 pub(crate) mod finished;
+mod paste;
 mod quick;
+mod review;
 mod run;
+mod steps;
 mod welcome;
 pub(super) use run::draw;
+#[cfg(test)]
+mod certs_tests;
 #[cfg(test)]
 mod quick_tests;
 #[cfg(test)]
 mod run_tests;
+#[cfg(test)]
+mod steps_tests;
 
 use platform_host::Step;
 
-use super::run::{Call, Kind, Work};
+use super::{
+    maint::folder::Browse,
+    run::{Call, Kind, Work},
+};
 use crate::setup::{plan::Component, ports, request::RequestState};
 
 /// Who signs the platform's CA.
@@ -71,8 +80,30 @@ pub struct Install {
     pub request: Option<RequestState>,
     /// Who signed the intermediate (once added).
     pub signed: Option<String>,
-    /// The CA's certificate (once added).
+    /// The CA's certificate (once added): its name.
     pub root_added: Option<String>,
+    /// The operator's home: the root key and the request's copy go there.
+    pub home: Option<String>,
+    /// Where Esc returns after a failed install: Quick or Review.
+    pub origin: Stage,
+    /// Each port moved off its default (console, ingest, distribution),
+    /// and why: "443 is in use by nginx", until Enter keeps the proposal.
+    pub proposed: [Option<String>; 3],
+    /// Where the helper copies the request, chosen once.
+    pub copy: Option<String>,
+    /// The signed certificate added and its issuer, until the helper keeps it.
+    pub cert: Option<(String, String)>,
+    /// Your CA's certificate added, until the helper keeps it.
+    pub root_pem: Option<String>,
+    /// The paste box's text, while it is open.
+    pub paste: Option<String>,
+    /// The file browser of "From a file on this host", while it is open.
+    pub pick: Option<Browse>,
+    /// Why the helper refused the request or the certificates (or why a
+    /// #87 plan did not read).
+    pub error: Option<String>,
+    /// What the line under Ports says of the port being typed.
+    pub port_check: Option<Result<String, String>>,
 }
 
 impl Install {
@@ -84,6 +115,16 @@ impl Install {
             sans: String::new(),
             ca: Ca::Own,
             root_key_out: super::setup_form::default_root_key(home.as_deref()),
+            home,
+            origin: Stage::Step(4),
+            proposed: [None, None, None],
+            copy: None,
+            cert: None,
+            root_pem: None,
+            paste: None,
+            pick: None,
+            error: None,
+            port_check: None,
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             ingest_port: ports::INGEST_DEFAULT.to_string(),
             distribution_port: ports::DISTRIBUTION_DEFAULT.to_string(),
@@ -179,5 +220,18 @@ impl Install {
             rows.push(one("Assistant", &[Step::AssistantModel]));
         }
         Work::grouped(Kind::Install, rows)
+    }
+}
+
+/// The location line after the host name.
+pub(super) fn location(stage: Stage) -> String {
+    let certs = " · Install › Certificates ›";
+    match stage {
+        Stage::Quick => " · Install › Quick install".into(),
+        Stage::Step(at) => format!(" · Install › {}", steps::STEPS[usize::from(at.min(4))]),
+        Stage::Request => format!("{certs} Request"),
+        Stage::Add(Which::Signed) => format!("{certs} Signed certificate"),
+        Stage::Add(Which::Root) => format!("{certs} Your CA's certificate"),
+        Stage::Welcome | Stage::Running | Stage::Finished => " · Install".into(),
     }
 }

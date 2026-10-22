@@ -355,7 +355,7 @@ impl<H: Host> App<H> {
             Act::Retry(work, at) if key == Key::Enter => self.begin(work, at),
             Act::Check if key == Key::Enter => self.begin(check_work(), 0),
             Act::Rows(rows) => {
-                if self.move_row(key, rows.len()) || key != Key::Enter {
+                if self.move_row(&key, rows.len()) || key != Key::Enter {
                     return;
                 }
                 match rows.get(self.nav.row) {

@@ -16,6 +16,11 @@ use crate::tui::{
 impl<H: Host> App<H> {
     /// Review's Install: the password, then the work on the worker.
     pub(crate) fn start_install(&mut self) {
+        // Esc after a failure goes back here: Quick install or Review.
+        self.install.origin = match self.nav.screen {
+            Screen::Install(Stage::Quick) => Stage::Quick,
+            _ => Stage::Step(4),
+        };
         self.nav.screen = Screen::Install(Stage::Running);
         self.run = None;
         let work = self.install.work();
@@ -24,6 +29,7 @@ impl<H: Host> App<H> {
 
     /// A run ended on the Installing screen: a good one shows Finished.
     pub(in crate::tui) fn install_ended(&mut self) {
+        self.ca_ended();
         if self.nav.screen == Screen::Install(Stage::Running)
             && self.run.as_ref().is_some_and(Run::ok)
         {
@@ -36,6 +42,9 @@ impl<H: Host> App<H> {
         match (stage, key) {
             (Stage::Welcome, key) => self.welcome_key(key),
             (Stage::Quick, key) => self.quick_key(key),
+            (Stage::Step(at), key) => self.step_key(at, key),
+            (Stage::Request, key) => self.request_key(key),
+            (Stage::Add(which), key) => self.add_key(which, key),
             (Stage::Finished, Key::Enter) => {
                 self.run = None;
                 self.nav = Nav::new(Screen::Home);
@@ -48,13 +57,18 @@ impl<H: Host> App<H> {
                     self.begin(work, at);
                 }
             }
-            // Back to Review while there is no CA; Home once there is.
+            // Back where the install began while there is no CA (Quick
+            // install or Review); Home once there is.
             (Stage::Running, Key::Esc) if stopped => {
                 self.run = None;
                 if self.ca_exists() {
                     self.nav = Nav::new(Screen::Home);
                 } else {
-                    self.nav.screen = Screen::Install(Stage::Step(4));
+                    self.nav.row = 0;
+                    self.nav.screen = Screen::Install(self.install.origin);
+                    if self.install.origin == Stage::Step(4) {
+                        self.nav.row = 4;
+                    }
                 }
             }
             _ => {}
@@ -62,15 +76,16 @@ impl<H: Host> App<H> {
     }
 }
 
-/// Every stage but Installing and Finished waits for Task 4: a frame with
-/// the location line.
 pub(in crate::tui) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, stage: Stage) {
     match (stage, &app.run) {
         (Stage::Finished, Some(run)) => finished::draw(frame, head, app, run),
         (Stage::Welcome, _) => super::welcome::draw(frame, head, app),
         (Stage::Quick, _) => super::quick::draw(frame, head, app),
+        (Stage::Step(at), _) => super::steps::draw(frame, head, app, at),
+        (Stage::Request, _) => super::certs::draw_request(frame, head, app),
+        (Stage::Add(which), _) => super::certs::draw_add(frame, head, app, which),
         (Stage::Running, run) => draw_running(frame, head, app, run.as_ref()),
-        _ => {
+        (Stage::Finished, None) => {
             frame::draw(frame, &app.theme, head, None, &app.bar(Bar::act(&[])));
         }
     }

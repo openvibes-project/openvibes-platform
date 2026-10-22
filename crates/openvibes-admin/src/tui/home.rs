@@ -123,7 +123,7 @@ fn here(from: &Screen) -> &'static str {
 
 impl<H: Host> App<H> {
     /// ⭡⭣ (j/k) move the highlight; true when `key` was one of them.
-    pub(super) fn move_row(&mut self, key: Key, count: usize) -> bool {
+    pub(super) fn move_row(&mut self, key: &Key, count: usize) -> bool {
         match key {
             Key::Down | Key::Char('j') if self.nav.row + 1 < count => self.nav.row += 1,
             Key::Up | Key::Char('k') if self.nav.row > 0 => self.nav.row -= 1,
@@ -134,7 +134,7 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn home_key(&mut self, key: Key) {
-        if self.move_row(key, HOME.len()) {
+        if self.move_row(&key, HOME.len()) {
             return;
         }
         if key == Key::Enter {

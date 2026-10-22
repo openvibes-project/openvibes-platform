@@ -45,7 +45,7 @@ fn no_m_or_p_on_a_finished_install() {
 fn enter_or_esc_on_finished_goes_home() {
     for key in [Key::Enter, Key::Esc] {
         let mut app = finished();
-        app.key(key);
+        app.key(key.clone());
         assert_eq!(app.nav.screen, Screen::Home, "{key:?}");
     }
 }

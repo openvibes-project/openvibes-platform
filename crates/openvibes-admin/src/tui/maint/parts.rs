@@ -370,7 +370,7 @@ impl<H: Host> App<H> {
             }
             return;
         }
-        if self.maint.parts.plan.is_none() || self.move_row(key, 3) {
+        if self.maint.parts.plan.is_none() || self.move_row(&key, 3) {
             return;
         }
         let parts = &mut self.maint.parts;

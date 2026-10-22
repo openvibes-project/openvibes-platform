@@ -23,7 +23,7 @@ pub const LOG_LINES: u16 = 50;
 pub use super::work::{Pending, Question};
 
 /// A key press, as the event loop maps it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Key {
     Char(char),
     Up,
@@ -37,6 +37,8 @@ pub enum Key {
     Tab,
     /// Ctrl+U: empty the field being edited.
     ClearLine,
+    /// A whole bracketed paste (ruling 9): only the paste box takes it.
+    Paste(String),
 }
 
 /// Which of today's screens `Screen::Legacy` shows.
@@ -142,12 +144,12 @@ impl<H: Host> App<H> {
         let home = crate::setup::plan::operator_from_env()
             .and_then(|user| host.user_home(&user))
             .or_else(|| std::env::var("HOME").ok());
-        let install = super::install::Install::new(hostname.clone(), home.clone());
-        let mut install = install;
+        let mut install = super::install::Install::new(hostname.clone(), home.clone());
         let mut setup = Setup::new(hostname.clone(), home);
         if !set_up {
             setup.propose_ports(&host);
-            install.port_note = super::install::fields::propose_ports(&host, &mut install);
+            install.port_note =
+                super::install::fields::propose_ports(&host, &mut install, |_| false);
         }
         let mut app = App {
             host,
@@ -199,17 +201,16 @@ impl<H: Host> App<H> {
         app
     }
 
-    /// #87 (ruling 6): set up but stopped before its CA, the host opens
-    /// the install form, filled from its plan; unless a job is half done
-    /// (Remove everything deletes the CA before `setup.toml`): Home, whose
-    /// Status offers to finish it.
+    /// #87 (ruling 8): set up but stopped before its CA, the host opens
+    /// Choose what to install at step 1, filled from its plan; unless a
+    /// job is half done (Remove everything deletes the CA before
+    /// `setup.toml`): Home, whose Status offers to finish it.
     pub(super) fn start_screen(&mut self) {
         if !self.host.is_set_up() {
             return;
         }
         if !self.ca && self.half_done.is_none() {
-            self.nav = Nav::new(Screen::Legacy);
-            self.fill_from_plan();
+            self.open_steps_from_plan();
         } else {
             self.nav = Nav::new(Screen::Home);
         }
@@ -305,6 +306,19 @@ impl<H: Host> App<H> {
             }
             return;
         }
+        // Only the paste box takes a paste whole; elsewhere it is typed,
+        // as without bracketed paste.
+        if let Key::Paste(text) = &key
+            && !self.takes_paste()
+        {
+            for c in text.replace("\r\n", "\n").chars() {
+                self.key(match c {
+                    '\n' | '\r' => Key::Enter,
+                    c => Key::Char(c),
+                });
+            }
+            return;
+        }
         if self.asking.is_some() {
             return self.asking_key(key);
         }
@@ -358,6 +372,15 @@ impl<H: Host> App<H> {
                 Screen::Help(_) | Screen::Legacy | Screen::Install(_) => {}
             },
         }
+    }
+
+    /// The paste box is open and nothing is asked in the bar.
+    fn takes_paste(&self) -> bool {
+        matches!(
+            self.nav.screen,
+            Screen::Install(super::install::Stage::Add(_))
+        ) && self.install.paste.is_some()
+            && self.asking.is_none()
     }
 
     /// Takes the health checks and the update notice once they have been

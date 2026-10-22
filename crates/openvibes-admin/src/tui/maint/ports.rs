@@ -372,7 +372,7 @@ impl<H: Host> App<H> {
             return;
         }
         let count = self.maint.ports.count();
-        if self.maint.ports.now.is_none() || self.move_row(key, count) || key != Key::Enter {
+        if self.maint.ports.now.is_none() || self.move_row(&key, count) || key != Key::Enter {
             return;
         }
         match self.nav.row {

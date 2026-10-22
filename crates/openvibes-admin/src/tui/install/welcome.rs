@@ -49,7 +49,7 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
 
 impl<H: Host> App<H> {
     pub(super) fn welcome_key(&mut self, key: Key) {
-        if self.move_row(key, ENTRIES.len()) {
+        if self.move_row(&key, ENTRIES.len()) {
             return;
         }
         match (key, self.nav.row) {

@@ -91,20 +91,33 @@ pub(in crate::tui) struct Moved {
 /// and distribution). Unprivileged, so the holder is rarely known here;
 /// Setup's own check (as root) names it if it is still there.
 pub(in crate::tui) fn propose<H: Host>(host: &H) -> ([u16; 3], Vec<Moved>) {
-    let holder = |port: u16| {
-        host.listeners(port)
-            .map(|lines| ports::parse(&lines).map(|(who, _)| who))
-            .map_err(|error| error.to_string())
-    };
     let defaults = [
         ports::CONSOLE_DEFAULT,
         ports::INGEST_DEFAULT,
         ports::DISTRIBUTION_DEFAULT,
     ];
-    let mut chosen = defaults;
+    propose_from(host, defaults, |_| false)
+}
+
+/// As `propose`, from the ports in `start`; a port the platform's own
+/// service holds (`ours`) stays.
+fn propose_from<H: Host>(
+    host: &H,
+    start: [u16; 3],
+    ours: impl Fn(usize) -> bool,
+) -> ([u16; 3], Vec<Moved>) {
+    let holder = |port: u16| {
+        host.listeners(port)
+            .map(|lines| ports::parse(&lines).map(|(who, _)| who))
+            .map_err(|error| error.to_string())
+    };
+    let mut chosen = start;
     let mut moved = Vec::new();
     for (index, from) in [8443, 18425, 18425].into_iter().enumerate() {
-        let default = defaults[index];
+        let default = start[index];
+        if ours(index) {
+            continue;
+        }
         // Free, or unknown: Setup checks again before starting.
         let Ok(Some(who)) = holder(default) else {
             continue;
@@ -124,13 +137,27 @@ pub(in crate::tui) fn propose<H: Host>(host: &H) -> ([u16; 3], Vec<Moved>) {
     (chosen, moved)
 }
 
-/// Install's ports, moved off the defaults another program holds; the
-/// note for the Install row says which and why.
-pub fn propose_ports<H: Host>(host: &H, install: &mut Install) -> Option<String> {
-    let (chosen, moved) = propose(host);
+/// Install's ports, moved off the ones another program holds (not the
+/// platform's own running service: `ours`); each moved row says why, and
+/// the note for Quick install's Install row says which.
+pub fn propose_ports<H: Host>(
+    host: &H,
+    install: &mut Install,
+    ours: impl Fn(usize) -> bool,
+) -> Option<String> {
+    let start = [
+        &install.console_port,
+        &install.ingest_port,
+        &install.distribution_port,
+    ]
+    .map(|p| p.trim().parse::<u16>().unwrap_or(0));
+    let (chosen, moved) = propose_from(host, start, ours);
     install.console_port = chosen[0].to_string();
     install.ingest_port = chosen[1].to_string();
     install.distribution_port = chosen[2].to_string();
+    for m in &moved {
+        install.proposed[m.index] = Some(format!("{} is in use by {}", m.default, m.holder));
+    }
     let notes: Vec<String> = moved
         .iter()
         .map(|m| {

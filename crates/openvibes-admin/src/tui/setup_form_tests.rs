@@ -1,46 +1,7 @@
-//! The install form: where a run starts (#87) and what the form shows.
-
-use platform_host::{Step, Unit};
-
-use super::{
-    app::{Key, Tab},
-    nav::Screen,
-    script_host::*,
-    setup::Phase,
-};
+//! The install form (Task 5 deletes it): where #87 starts and what the form shows.
+use super::{app::Key, nav::Screen, script_host::*, setup::Phase};
 
 const NO_CA: &str = "# no ca\n";
-
-/// A home whose default root key name is taken: the free name is `-2`.
-fn taken_home(name: &str) -> std::path::PathBuf {
-    let home = std::env::temp_dir().join(format!("ov-87-{name}-{}", std::process::id()));
-    std::fs::create_dir_all(&home).unwrap();
-    std::fs::write(home.join("openvibes-root-ca.key"), "x").unwrap();
-    home
-}
-
-/// #87, ruling 6: a plan from a first install that stopped before its CA
-/// opens the install form, filled, with a free root key name; Start
-/// installs (never a Repair, which refuses to make a CA).
-#[test]
-fn a_plan_without_a_ca_opens_the_install_form_filled() {
-    let plan = format!("{PLAN}{NO_CA}").replace("platform.example.com", "planned.example.com");
-    let mut app = app_with_plan(&plan, vec![]);
-    assert_eq!(
-        (app.nav.screen.clone(), app.tab),
-        (Screen::Legacy, Tab::Setup)
-    );
-    assert_eq!(app.setup.phase, Phase::Form);
-    let text = screen(&app);
-    assert!(text.contains("Hostname:  planned.example.com"), "{text}");
-    assert!(text.contains("Root key file:"), "{text}");
-    assert!(text.contains("Esc back  q quit"), "{text}");
-    start(&mut app, "pw");
-    app.setup_tick();
-    let calls = app.host.calls.borrow();
-    assert!(calls[0].0.starts_with("setup-plan "), "{}", calls[0].0);
-    assert_eq!(calls[1].0, format!("setup-step {}", Step::ALL[0].name()));
-}
 
 /// A Remove everything that stopped after the CA went (purge) but before
 /// `setup.toml` did: Home, whose Status shows the half-done uninstall,
@@ -85,90 +46,9 @@ fn esc_on_the_87_form_goes_home_but_not_on_a_fresh_form() {
     assert!(!screen(&fresh).contains("Esc back"));
 }
 
-/// The #87 form keeps the plan's own choices: parts, a moved console port
-/// (said why), and a careful CA.
-#[test]
-fn the_87_form_keeps_the_plans_parts_ports_and_ca() {
-    let plan = format!("{PLAN}{NO_CA}")
-        .replace("\"vulns\", \"rules\", ", "")
-        .replace("console_port = 443", "console_port = 8443")
-        .replace("ca = \"quick\"", "ca = \"careful\"");
-    let mut app = app_with_plan(&plan, vec![]);
-    app.host.taken = vec![443];
-    app.fill_from_plan();
-    let text = screen(&app);
-    assert!(
-        text.contains("Console port:  8443  (443 is in use)"),
-        "{text}"
-    );
-    assert!(text.contains("CA:  careful"), "{text}");
-    assert!(
-        text.contains("[ ] vulns") && text.contains("[ ] rules"),
-        "{text}"
-    );
-    assert!(text.contains("[x] agent"), "{text}");
-}
-
-#[test]
-fn a_plan_that_does_not_parse_says_so_on_the_form() {
-    let mut app = app_with_plan(&format!("components = 3\n{NO_CA}"), vec![]);
-    assert_eq!(
-        (app.nav.screen.clone(), app.setup.phase),
-        (Screen::Legacy, Phase::Form)
-    );
-    let error = app.message.clone().expect("the parse error");
-    let first = error.lines().next().unwrap().to_owned();
-    assert!(
-        screen(&app).contains(&first[..first.len().min(40)]),
-        "{error}"
-    );
-    app.key(Key::Char('q'));
-    assert!(app.quit);
-}
-
 #[test]
 fn a_set_up_host_with_a_ca_starts_on_home() {
     let app = app_with_plan(PLAN, vec![]);
-    assert_eq!(app.nav.screen, Screen::Home);
-}
-
-/// A run stopped at its first step, on a host whose plan is `plan`.
-fn stopped(plan: &str) -> super::app::App<SetupHost> {
-    let mut app = app_with_plan(
-        plan,
-        vec![Ok("written\n".into()), Ok("failed\tdnf\n".into())],
-    );
-    assert_eq!(app.nav.screen, Screen::Legacy, "starts on the form");
-    start(&mut app, "pw");
-    app.setup_tick();
-    assert_eq!(app.setup.phase, Phase::Stopped(0));
-    app
-}
-
-#[test]
-fn esc_after_a_stop_before_the_ca_returns_to_the_filled_form() {
-    let mut app = stopped(&format!("{PLAN}{NO_CA}"));
-    // The failed run's CA step wrote the default key after the TUI started.
-    let home = taken_home("esc");
-    app.setup.home = Some(home.display().to_string());
-    app.setup.hostname = "typed.example.com".into();
-    app.key(Key::Esc);
-    assert_eq!(app.nav.screen, Screen::Legacy);
-    assert_eq!(app.setup.phase, Phase::Form);
-    assert_eq!(app.setup.hostname, "platform.example.com", "from the plan");
-    assert_eq!(
-        app.setup.root_key_out,
-        home.join("openvibes-root-ca-2.key").display().to_string(),
-        "the name taken since startup is skipped"
-    );
-    std::fs::remove_dir_all(&home).unwrap();
-}
-
-#[test]
-fn esc_after_a_stop_after_the_ca_goes_home() {
-    let mut app = stopped(&format!("{PLAN}{NO_CA}"));
-    app.host.plan = PLAN.into(); // the CA step ran before the stop
-    app.key(Key::Esc);
     assert_eq!(app.nav.screen, Screen::Home);
 }
 
@@ -219,32 +99,6 @@ fn a_free_443_is_the_console_port() {
         "{text}"
     );
     assert!(!text.contains("is taken"), "{text}");
-}
-
-/// Reviewer on #115, the user's own moment: the console still set to 443,
-/// nginx holding 443, our console not running; the #87 form says so.
-#[test]
-fn a_default_port_held_while_our_unit_is_down_is_named() {
-    let status = |active: &str| platform_host::ServiceStatus {
-        unit: Unit::Console,
-        installed: true,
-        enabled: true,
-        active: active.into(),
-        ready: None,
-        since: None,
-    };
-    for (active, noted) in [("activating", true), ("failed", true), ("active", false)] {
-        let mut app = app_with_plan(&format!("{PLAN}# no ca\n"), vec![]);
-        app.host.taken = vec![443];
-        app.services = vec![status(active)];
-        app.fill_from_plan();
-        let text = screen(&app);
-        assert_eq!(
-            text.contains("Console port:  443  (443 is in use by another program)"),
-            noted,
-            "{active}:\n{text}"
-        );
-    }
 }
 
 /// Each form row is its own cursor position: the rows after the components
