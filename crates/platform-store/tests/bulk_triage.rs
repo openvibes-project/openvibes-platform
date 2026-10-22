@@ -389,14 +389,29 @@ async fn bulk_on_cve_rows_changes_only_open_pairs() {
         ("mitigated".into(), Some("n".into()))
     );
     assert_eq!(triage_of(&c, h4, "DEBIAN-A").await.0, "none");
-    // An expired accepted risk counts as open: DEBIAN-EXP closes on h1 and h2.
+    // An expired accepted risk counts as open: DEBIAN-EXP (h1 open, h2 expired)
+    // takes an assignee on both, then closes on both.
     let exp = [("DEBIAN-EXP".to_owned(), None)];
+    let done = bulk::vulnerabilities(
+        &mut c,
+        &scope,
+        &exp,
+        BulkChange::Assign(Some("ann")),
+        "ann",
+        now,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!((done.changed, done.skipped.len()), (2, 0), "{done:?}");
+    assert_eq!(triage_of(&c, h2, "DEBIAN-EXP").await.0, "open");
     let done = bulk::vulnerabilities(&mut c, &scope, &exp, mitigate(Some("x")), "ann", now)
         .await
         .unwrap()
         .unwrap();
     assert_eq!((done.changed, done.skipped.len()), (2, 0), "{done:?}");
-    // A reopen keeps its rule: it reopens the closed pairs.
+    // A reopen keeps its rule: it reopens the closed pairs (h1 closed above,
+    // h2 mitigated by the fixture; the test depends on the close above).
     let reopen = BulkChange::State {
         state: "open",
         note: None,
@@ -441,6 +456,29 @@ async fn triage_on_one_cve_shows_on_its_siblings() {
         .unwrap();
     assert_eq!(done.changed, 1);
     assert_eq!(open(&run(&c, &every(), &scope).await), (1, 0));
+    drop(c);
+    db.drop().await;
+}
+
+/// Pairs with no fix (`version_vulnerabilities`) have no triage: they are
+/// always open in the list and never expanded, so a bulk item for a no-fix
+/// advisory finds nothing and the list does not move.
+#[tokio::test]
+async fn no_fix_pairs_are_not_reached_by_bulk() {
+    let (db, mut c) = common::migrated().await;
+    let (web, _) = fixture(&c).await;
+    let scope = AgentScope::AssetGroups(vec![web]);
+    let nf = [("DEBIAN-NF".to_owned(), None)];
+    let done = bulk::vulnerabilities(&mut c, &scope, &nf, mitigate(Some("x")), "ann", Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(done.changed, 0);
+    assert_eq!(
+        done.skipped,
+        [("DEBIAN-NF".to_owned(), "not found or out of scope")]
+    );
+    assert_eq!(row(&run(&c, &every(), &scope).await, "CVE-NF").open, 2);
     drop(c);
     db.drop().await;
 }

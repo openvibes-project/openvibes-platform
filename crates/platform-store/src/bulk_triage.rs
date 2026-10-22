@@ -328,6 +328,14 @@ pub async fn vulnerabilities(
                 note.map(str::to_owned),
                 accepted_until,
             ),
+            // An expired accepted risk is open: write it back open, as the
+            // update refuses a past expiry.
+            BulkChange::Assign(to) if effective == "open" && now_state.state != "open" => (
+                "open".to_owned(),
+                to.map(str::to_owned),
+                now_state.note.clone(),
+                None,
+            ),
             BulkChange::Assign(to) => (
                 now_state.state.clone(),
                 to.map(str::to_owned),
