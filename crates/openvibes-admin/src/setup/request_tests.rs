@@ -62,11 +62,17 @@ fn request_copy_is_written_once() {
     let csr = csr_of(request(&fake.ctx(&plan), Some(copy)).unwrap());
     assert_eq!(fake.text("/home/alice/openvibes-request.csr"), csr);
     assert_eq!(mode(&fake, "/home/alice/openvibes-request.csr"), 0o644);
+    // The same request again (reused): fine, nothing rewritten.
+    request(&fake.ctx(&plan), Some(copy)).unwrap();
+    assert_eq!(fake.text("/home/alice/openvibes-request.csr"), csr);
     fake.file(
         "/home/alice/openvibes-request.csr",
         "the operator's own file",
     );
-    request(&fake.ctx(&plan), Some(copy)).unwrap();
+    assert_eq!(
+        request(&fake.ctx(&plan), Some(copy)).unwrap_err(),
+        "That file already exists: /home/alice/openvibes-request.csr. Choose another name."
+    );
     assert_eq!(
         fake.text("/home/alice/openvibes-request.csr"),
         "the operator's own file"
@@ -113,7 +119,17 @@ fn accept_refuses_other_request_and_writes_nothing() {
     let (cert, _) = signed(&fake);
     let wrong = platform_pki::generate_root(chrono::Utc::now()).unwrap();
     let error = accept(&fake.ctx(&plan), &cert, &wrong.cert_pem).unwrap_err();
-    assert!(error.contains("add your root CA's certificate"), "{error}");
+    assert_eq!(
+        error,
+        "Your CA's certificate must be the root that signed this certificate directly: \
+         paste that root, not another CA."
+    );
+    // The certificate itself as the root: not self-signed.
+    assert_eq!(
+        accept(&fake.ctx(&plan), &cert, &cert).unwrap_err(),
+        "This is not a root CA (self-signed): OpenVIBES needs the root that signed the \
+         request directly, with no CA in between."
+    );
     let both = format!("{cert}{}", root.cert_pem);
     assert_eq!(
         accept(&fake.ctx(&plan), &both, &root.cert_pem).unwrap_err(),

@@ -755,16 +755,18 @@ the point, before Maintenance › Shell opens the operator's shell),
 `ca-request` makes the intermediate's key and request in
 `/etc/openvibes/pki/request/` (root, 0700; `intermediate.key` 0600,
 `intermediate.csr`), or reuses them so a request already sent stays valid,
-and writes the request to `--copy` (absolute, 0644, the operator's) only if
-nothing is there. `ca-accept` checks the certificate against the stored
+and writes the request to `--copy` (absolute, 0644, the operator's); a file
+already there is left alone, and refused ("That file already exists: PATH.
+Choose another name.") unless it holds this same request. `ca-accept` checks the certificate against the stored
 request and the root against the certificate (platform-pki
 `check_signed_request`, `check_root_signed`) and only then writes
 `intermediate.crt` and `root.crt` there. Both print line 1 `request` or
 `signed<TAB>ISSUER`, then the request; a refused certificate exits 1 with
 one plain sentence (e.g. "This certificate was signed for a different
 request: sign the request shown here.", "That is 2 certificates: paste only
-the one signed for OpenVIBES."). The journal line is only `ca-request` or
-`ca-accept`, never the PEM. The folder survives reboots; the CA step removes
+the one signed for OpenVIBES.", "Your CA's certificate must be the root
+that signed this certificate directly: paste that root, not another CA."). The journal line is `ca-request` or `ca-accept`
+with the request folder as target, never the copy path or the PEM. The folder survives reboots; the CA step removes
 it after installing from it, Remove everything deletes it with
 `/etc/openvibes`. Arguments are checked before the root check.
 

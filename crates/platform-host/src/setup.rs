@@ -334,7 +334,7 @@ pub enum Privileged<'a> {
     /// install; prints `request` or `signed<TAB>ISSUER`, then the request.
     CaRequest(Option<&'a str>),
     /// `ca-accept --cert PEM --root-cert PEM`: checks and keeps the CA's
-    /// answer; journalled as `ca-accept` (no PEM).
+    /// answer; journalled as `ca-accept /etc/openvibes/pki/request` (no PEM).
     CaAccept(&'a str, &'a str),
 }
 
@@ -395,8 +395,10 @@ impl Privileged<'_> {
             // Two words: no step detail, so the password stays out (journal.rs).
             Privileged::AdminReset => "admin-reset admin".into(),
             Privileged::ShellOpen => format!("shell-open {}", crate::shell::operator()),
-            Privileged::CaRequest(_) => "ca-request".into(),
-            Privileged::CaAccept(..) => "ca-accept".into(),
+            // Two words: the request folder is the audit target, never
+            // the copy path or the PEM.
+            Privileged::CaRequest(_) => "ca-request /etc/openvibes/pki/request".into(),
+            Privileged::CaAccept(..) => "ca-accept /etc/openvibes/pki/request".into(),
             other => other.args().join(" "),
         }
     }
@@ -413,12 +415,15 @@ mod tests {
             Privileged::CaRequest(Some("/home/alice/openvibes-request.csr")).args(),
             ["ca-request", "--copy", "/home/alice/openvibes-request.csr"]
         );
-        assert_eq!(Privileged::CaRequest(Some("/x")).journal(), "ca-request");
+        assert_eq!(
+            Privileged::CaRequest(Some("/x")).journal(),
+            "ca-request /etc/openvibes/pki/request"
+        );
         let accept = Privileged::CaAccept("CERT PEM", "ROOT PEM");
         assert_eq!(
             accept.args(),
             ["ca-accept", "--cert", "CERT PEM", "--root-cert", "ROOT PEM"]
         );
-        assert_eq!(accept.journal(), "ca-accept");
+        assert_eq!(accept.journal(), "ca-accept /etc/openvibes/pki/request");
     }
 }

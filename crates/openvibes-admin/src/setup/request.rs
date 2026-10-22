@@ -47,13 +47,12 @@ pub fn message(e: &PkiError) -> String {
             "This certificate is not valid today (expired or not yet valid): check its dates."
                 .into()
         }
-        PkiError::NotSignedBy => {
-            "This is not the certificate of the CA that signed it: add your root CA's certificate."
-                .into()
-        }
-        PkiError::NotRoot => {
-            "This is not a root CA (self-signed): add your root CA's certificate.".into()
-        }
+        PkiError::NotSignedBy => "Your CA's certificate must be the root that signed this \
+                                  certificate directly: paste that root, not another CA."
+            .into(),
+        PkiError::NotRoot => "This is not a root CA (self-signed): OpenVIBES needs the root that \
+                              signed the request directly, with no CA in between."
+            .into(),
         PkiError::Several(n) => {
             format!("That is {n} certificates: paste only the one signed for OpenVIBES.")
         }
@@ -66,7 +65,7 @@ pub fn message(e: &PkiError) -> String {
 }
 
 /// Makes the key and request, or reuses them, and writes `copy` (absolute,
-/// 0644, the operator's) unless something is there already.
+/// 0644, the operator's); another file already at `copy` is refused.
 pub fn request<R: Runner>(ctx: &Ctx<R>, copy: Option<&Path>) -> Result<RequestState, String> {
     let copy = copy
         .map(|path| {
@@ -104,7 +103,7 @@ pub fn request<R: Runner>(ctx: &Ctx<R>, copy: Option<&Path>) -> Result<RequestSt
 }
 
 /// Creates `abs` with the request, 0644, owned by the operator; a file
-/// already there is left alone.
+/// already there is never overwritten (refused unless it holds this request).
 fn write_copy<R: Runner>(ctx: &Ctx<R>, abs: &str, csr: &str) -> Result<(), String> {
     let fail = |error: std::io::Error| format!("{abs}: {error}");
     let mut file = match OpenOptions::new()
@@ -114,7 +113,17 @@ fn write_copy<R: Runner>(ctx: &Ctx<R>, abs: &str, csr: &str) -> Result<(), Strin
         .open(ctx.path(abs))
     {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Ok(()),
+        // The same request written earlier is fine; anything else is the
+        // operator's and stays as it is.
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return if fs::read(ctx.path(abs)).is_ok_and(|old| old == csr.as_bytes()) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "That file already exists: {abs}. Choose another name."
+                ))
+            };
+        }
         Err(error) => return Err(fail(error)),
     };
     file.write_all(csr.as_bytes())

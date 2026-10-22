@@ -97,8 +97,9 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   only when the process is root and the name is well formed (`shell::valid_user`,
   shared with Setup's operator), else the real uid's passwd name; the helper does nothing else, so sudo's password check and
   the journal line are what it is for), `ca-request [--copy PATH]` and
-  `ca-accept --cert PEM --root-cert PEM` (journalled as `ca-request` and
-  `ca-accept`, without the path or PEM).
+  `ca-accept --cert PEM --root-cert PEM` (journalled and audit-noted
+  as `ca-request /etc/openvibes/pki/request` and `ca-accept
+  /etc/openvibes/pki/request`, without the copy path or PEM).
   `Host::privileged` runs `sudo -S -k -p '' /usr/bin/openvibes-admin helper
   VERB…` with the password on stdin only (never in argv or the journal),
   journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns
