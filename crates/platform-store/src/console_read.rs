@@ -56,9 +56,8 @@ pub async fn agent_ids_in_scope(
 pub(crate) fn agent_visibility(agent_id: &str, global: &str, groups: &str) -> String {
     format!(
         "({global}::boolean OR EXISTS (
-            SELECT 1 FROM console_asset_groups vg
-            WHERE vg.asset_group_id::text = ANY({groups}::text[])
-              AND console_host_in_group({agent_id}, vg.asset_group_id)
+            SELECT 1 FROM console_host_group_membership vm
+            WHERE vm.agent_id = {agent_id} AND vm.asset_group_id::text = ANY({groups}::text[])
         )) AND ({global}::boolean OR a.status <> 'imported')"
     )
 }

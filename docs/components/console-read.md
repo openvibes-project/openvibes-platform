@@ -16,8 +16,9 @@ agent visibility in SQL for the supplied global or host-group scope.
   agent ID ascending. The state filter is allow-listed and stale state is
   computed against the supplied time.
 - `AgentScope::AssetGroups` matches an agent that is a member of any
-  authorized host group, decided by the SQL function `console_host_in_group`
-  (schema 53; see platform-store.md "Host groups"). Revoked and imported
+  authorized host group, read from the stored membership table
+  `console_host_group_membership` (schema 61, kept by triggers to the rule
+  of schema 53; see platform-store.md "Host groups"). Revoked and imported
   hosts are in no group. Empty group sets match no agents.
   `agent_summary_in_scope`, `agents_in_scope`, and `agent_in_scope` apply that
   predicate before aggregation, status filtering, cursor traversal, ordering,
@@ -111,7 +112,8 @@ it fails above 1 s. Through `console_host_in_group` per host and group the
 same query took 9.0 s; group membership is therefore evaluated in one pass
 with the inlinable `console_condition_holds_prepared`, and the version
 functions are single expressions so they inline (a call per host cost
-750 ms). Past this size, membership should be materialised in a table.
+750 ms). Since schema 61 membership is stored (`console_host_group_membership`,
+kept by triggers), so the list joins it instead of evaluating conditions.
 
 Alarms list (2026-10-20, same cluster, run under `nice -n 19`): the same
 20,000 agents and 20 groups with 200,000 agent alarms (ten per host over

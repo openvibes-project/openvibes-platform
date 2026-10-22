@@ -616,9 +616,8 @@ checks are each counted only where `alarms`, `vulnerabilities` or
 in that problem value); "none open" needs at least one kind in reach. Group
 values are groups with a host in scope (plus the chosen one, if it has
 one); label values are the 50 most used on hosts in scope (plus the chosen
-one, if present there). Group membership is evaluated in one pass
-(`host_list_sql::members`), the same rule as `console_host_in_group`,
-pinned by the tests.
+one, if present there). Group membership is read from the stored table
+(`host_list_sql::members` joins `console_host_group_membership`, schema 61).
 
 Migration 57 adds `console_version_parts(v) -> int[]` and
 `console_version_older(v, latest) -> boolean` (NULL when either is
@@ -661,9 +660,7 @@ host's `health -> 'alarms'` with its counters zeroed, grouped, and
 shows the last part only with `hosts.read`.
 
 Scope (spec §6): the hosts are `agent_visibility`'s rule read from the
-one-pass group membership (`host_list_sql::members`, over every agent;
-calling `console_host_in_group` per agent and scope group cost 0.9 s at
-20,000 agents). Group values are groups holding a host with an alarm in
+stored group membership (`host_list_sql::members`, schema 61). Group values are groups holding a host with an alarm in
 reach (plus the chosen one when the scope reaches it); technique and
 person values come from alarms in reach, so no value is named from a host
 out of reach. The host filter has no value list. The counts come from a
@@ -1174,17 +1171,16 @@ value, `ip` values must parse as `inet`),
 `console_host_group_members` (manual groups), `console_host_group_dismissed`
 (deleted automatic keys) and `console_host_labels` (1–64 characters).
 
-**Membership is one SQL function**, `console_host_in_group(agent, group)`,
-evaluated when queried: only active hosts; a manual group holds its
+**Membership is one rule** (stored since schema 61, below): only active hosts; a manual group holds its
 members; a rule or automatic group holds hosts satisfying every condition,
 a condition holding when any value matches (or none does, when negated). A
 fact the host has not reported never satisfies a condition, negated or not;
 a group without conditions holds no one; a condition that evaluates to
 unknown counts as not holding (fail closed). Hostname patterns are
 case-insensitive with `*` the only wildcard (`console_glob_like`); `ip`
-values are CIDRs or single addresses, v4 or v6. `agent_visibility`,
-`revoke_agent_in_scope` and rule-set assignment (`FLEET`, `HOST_STATE`) all
-call it. `console_os_family_name` and `console_distribution_name` give the
+values are CIDRs or single addresses, v4 or v6. `console_host_in_group(agent,
+group)` answers it; `agent_visibility`, `revoke_agent_in_scope` and rule-set
+assignment (`FLEET`, `HOST_STATE`) all use it. `console_os_family_name` and `console_distribution_name` give the
 display names of automatic groups (Debian, Ubuntu, Fedora, Rocky Linux,
 AlmaLinux, other ids capitalised, plus the release).
 `console_free_group_name(display, suffix, keep)` returns a free name of at
@@ -1210,9 +1206,35 @@ change. Grants: the console role reads and writes the new tables and may
 delete groups; distribution reads conditions, members, `kind` and the agent
 facts; ingest may create groups and conditions and read dismissals.
 
-Tests: `tests/host_groups_membership.rs` (the function),
-`tests/host_groups_upgrade.rs` (every role reaches the same hosts after the
-upgrade). Fixtures make groups with `common::manual_group` and
+**Stored membership (schema 61).** `console_host_group_membership
+(asset_group_id, agent_id)` holds every pair of every kind, indexed by
+`agent_id`. Triggers keep it in the changing transaction, never a job:
+on `agents` an active insert (enrolment; imports are never active), a
+delete, and an update of `status`, `os_id`, `os_version`, `hostname` or
+`last_address` only when the host was or becomes active and `status`,
+`os_family`, `distribution`, `hostname` or `last_address` really changed (a
+heartbeat repeating its facts does nothing); on conditions and picked hosts
+(statement-level, each touched group recomputed once); on groups a delete
+and a `kind` change (a new group has nothing to hold until its conditions
+or picks are inserted). The functions are `SECURITY DEFINER`, so writers
+need no grant on the table. Every refresh takes advisory lock 1870032226
+until commit and then reads committed state, so a host change and a rule
+change racing in two transactions cannot leave a stale or too wide pair.
+`console_host_in_group`, `agent_visibility` and `host_list_sql::members`
+read the table; console, distribution and ingest may SELECT it. Measured
+(release build, 20,000 hosts, 20 groups): 10,000 imports one statement
+each 72.1 s before and 70.9 s after (no trigger fires; the time is the
+per-statement commit); 10,000 active hosts in one INSERT 0.21 s → 1.35 s;
+1,000 hostname changes in one UPDATE 39 ms → 152 ms; one condition edit
+6 ms → 85 ms; an UPDATE of 30,000 hosts repeating their facts 1.07 s →
+1.16 s.
+
+Tests: `tests/host_groups_membership.rs` (the rule),
+`tests/host_group_membership.rs` (the table equals the rule, kept as the
+oracle, after every change path; a heartbeat repeating its facts does not
+refresh; scoped Hosts, Alarms and Vulnerabilities lists reach the hosts the
+rule puts in scope), `tests/host_groups_upgrade.rs` (every role reaches the
+same hosts after the upgrade). Fixtures make groups with `common::manual_group` and
 `common::rule_group`.
 
 Agent facts: `ingest::heartbeat` takes the peer `address` and stores it as

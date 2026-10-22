@@ -68,10 +68,8 @@ fn except(skip: &[Facet]) -> String {
 /// technique ids come from the rule-metadata index; `in_case`: an open case
 /// holds the alarm (at most one does).
 ///
-/// The scope is `agent_visibility`'s rule read from `members` (one pass over
-/// every agent, pinned to `console_host_in_group` by the Hosts list tests):
-/// calling `console_host_in_group` per agent and scope group cost 0.9 s at
-/// 20,000 agents and two groups.
+/// The scope is `agent_visibility`'s rule read from `members` (the stored
+/// membership, schema 61).
 fn base() -> &'static str {
     "hosts AS MATERIALIZED (
   SELECT a.agent_id, a.hostname,
