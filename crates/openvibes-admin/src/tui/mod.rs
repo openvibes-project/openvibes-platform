@@ -26,15 +26,6 @@ mod service;
 #[cfg(test)]
 mod service_tests;
 mod services_text;
-mod setup;
-#[cfg(test)]
-mod setup_done_tests;
-mod setup_form;
-#[cfg(test)]
-mod setup_form_tests;
-#[cfg(test)]
-mod setup_tests;
-mod setup_view;
 mod status;
 #[cfg(test)]
 mod status_tests;
@@ -68,10 +59,9 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
     nav::render(frame, app);
 }
 
-/// Today's Setup and Configuration screens, under the location line.
+/// The Settings files screen (legacy), under the location line.
 pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     match app.tab {
-        Tab::Setup => setup_view::draw(frame, area, app),
         Tab::Configuration => config_view::draw(frame, area, app),
     }
 }
@@ -220,10 +210,9 @@ pub fn run() -> ExitCode {
             Ok(false) => {}
             Err(_) => app.quit = true,
         }
-        // The key, then one Setup step per turn: the screen is redrawn
-        // between steps (a step blocks while it runs, e.g. dnf), and before
-        // the first step of a run the key just started.
-        app.key_then_tick(pressed);
+        if let Some(key) = pressed {
+            app.key(key);
+        }
         app.tick(Instant::now());
         if matches!(
             app.nav.screen,

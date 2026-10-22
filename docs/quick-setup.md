@@ -22,16 +22,17 @@ Prefer to read it first: `curl -fsSLO https://openvibes-project.github.io/instal
 read it, then `sudo sh install.sh`.
 
 The script adds the signed OpenVIBES package repository (it checks the key's
-fingerprint), installs `openvibes-admin` and opens its **Setup** screen.
+fingerprint), installs `openvibes-admin` and opens its **Install** screens.
 
-## 2. Run Setup
+## 2. Install
 
-The Setup form has the components ticked (ingest, console, distribution,
-vulnerabilities, rules and an agent on this host), a hostname and a CA
-mode, and the ports. The defaults are right for a first install:
-enter the hostname the other hosts will use to reach this one and press
-`Start`. The console port is 443 unless another web server already holds
-it; then the form proposes the first free port from 8443 and says so, and
+The Welcome screen offers **Quick install** (ingest, console,
+distribution, vulnerabilities, rules and an agent on this host, with
+OpenVIBES's own CA and the default ports) and **Choose what to install**
+(five steps: optional parts, names, certificates, ports, review; use it
+for your own CA). The defaults are right for a first install: enter the
+hostname the other hosts will use to reach this one and choose `Install`. The console port is 443 unless another web server already holds
+it; then the install proposes the first free port from 8443 and says so, and
 the console is at `https://HOST:PORT`. The agent ports (18423, 18424) move
 the same way, and the install command and package the console hands out
 (step 3) carry them. To move a
@@ -43,21 +44,20 @@ your password once and then shows each step as it runs: packages,
 PostgreSQL, database, CA, certificates, console, services, firewall
 (the console and agent ports), agent, readiness and the assistant model. A port another
 process holds stops Setup before any service starts, naming the process. If a step fails, fix the cause
-and press `r` to continue from it.
+and press `Enter` (Try again) to continue from it.
 
 **The CA's root key.** In the default (quick) CA mode, Setup writes the
-root key once to the form's *Root key file*, by default
+root key once to the *Root key file*, by default
 `~/openvibes-root-ca.key`, and keeps no other copy. It is the only way to
 issue a new intermediate certificate later, so copy it to offline
 storage and then delete it from the host. Without it, a new CA means
 re-enrolling every agent.
 
-**The assistant (optional).** Tick `assistant` in the form to have the
-console's chat assistant. Setup then asks "Download the assistant's model
-(2.7 GB from Hugging Face)?" and shows the model's licence: answer **Y**
-and Setup downloads it, checks it against its pinned checksum and turns the
-assistant on. Answer **N** and the assistant stays off; the last screen
-says so. No internet on the platform host: see the [offline install guide](components/offline-kit.md).
+**The assistant (optional).** Tick the assistant under *Optional* in Choose what to install to have the
+console's chat assistant (a 2.7 GB download from Hugging Face). The
+last step downloads the model, checks it against its pinned checksum and
+turns the assistant on; if that fails the assistant stays off and the
+install still finishes. No internet on the platform host: see the [offline install guide](components/offline-kit.md).
 
 **Internet lookups (optional, off).** The assistant can look up public
 security references (level 1) and search the web through your own SearXNG

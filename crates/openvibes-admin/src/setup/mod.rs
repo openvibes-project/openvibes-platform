@@ -19,7 +19,6 @@ mod fetch_domain;
 mod fleet;
 mod pg_health;
 pub use fleet::AGENT_AUDIT_RULE;
-pub(crate) use fleet::agent_by_default;
 pub(crate) mod pki;
 #[cfg(test)]
 mod pki_tests;

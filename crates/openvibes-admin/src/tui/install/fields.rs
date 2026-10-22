@@ -1,5 +1,5 @@
 //! The checks on the typed fields and the port proposal, shared by Quick
-//! install and the five steps (and, for the ports, the old Setup form).
+//! install and the five steps.
 
 use std::path::Path;
 
@@ -90,16 +90,7 @@ pub(in crate::tui) struct Moved {
 /// gets the first free port (from 8443 for the console, 18425 for ingest
 /// and distribution). Unprivileged, so the holder is rarely known here;
 /// Setup's own check (as root) names it if it is still there.
-pub(in crate::tui) fn propose<H: Host>(host: &H) -> ([u16; 3], Vec<Moved>) {
-    let defaults = [
-        ports::CONSOLE_DEFAULT,
-        ports::INGEST_DEFAULT,
-        ports::DISTRIBUTION_DEFAULT,
-    ];
-    propose_from(host, defaults, |_| false)
-}
-
-/// As `propose`, from the ports in `start`; a port the platform's own
+/// The proposal starts from the ports in `start`; a port the platform's own
 /// service holds (`ours`) stays.
 fn propose_from<H: Host>(
     host: &H,
@@ -169,4 +160,33 @@ pub fn propose_ports<H: Host>(
         })
         .collect();
     (!notes.is_empty()).then(|| notes.join("; "))
+}
+
+/// The free default root key file in `home`, or empty without a home.
+pub(super) fn default_root_key(home: Option<&str>) -> String {
+    home.map(|home| free_root_key(home, |path| Path::new(path).exists()))
+        .unwrap_or_default()
+}
+
+/// `HOME/openvibes-root-ca.key`, or `-2`, `-3`… when taken: Remove
+/// everything keeps the old root key (it is the user's), so a new install
+/// must not stop on it (#87).
+fn free_root_key(home: &str, exists: impl Fn(&str) -> bool) -> String {
+    crate::tui::maint::backup::free_path(&format!("{home}/openvibes-root-ca"), "key", exists)
+}
+
+#[cfg(test)]
+mod root_key_tests {
+    #[test]
+    fn the_default_root_key_name_skips_taken_files() {
+        let taken = ["/h/openvibes-root-ca.key", "/h/openvibes-root-ca-2.key"];
+        assert_eq!(
+            super::free_root_key("/h", |p| taken.contains(&p)),
+            "/h/openvibes-root-ca-3.key"
+        );
+        assert_eq!(
+            super::free_root_key("/h", |_| false),
+            "/h/openvibes-root-ca.key"
+        );
+    }
 }

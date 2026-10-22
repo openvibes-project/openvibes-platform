@@ -206,6 +206,25 @@ fn text(rows: Vec<crate::tui::ui::list::Row>) -> String {
 const CONSOLE: &str = "https://limebox.lan · console admin: admin, password Kq7-vR2p-Xw9m (shown only now; change it after logging in)";
 
 #[test]
+fn installing_hides_the_generated_password_until_the_end() {
+    use crate::tui::run::Call;
+    let mut app = fresh(vec![]);
+    app.install.agent = false;
+    let mut run = crate::tui::run::Run::new(app.install.work(), std::time::Instant::now());
+    let console = run
+        .work
+        .calls
+        .iter()
+        .position(|c| *c == Call::Setup(Step::Console))
+        .unwrap();
+    run.states[console] = Some(StepState::Done(CONSOLE.into()));
+    app.nav.screen = Screen::Install(Stage::Running);
+    app.run = Some(run);
+    let text = screen(&app);
+    assert!(!text.contains("Kq7-vR2p-Xw9m"), "{text}");
+}
+
+#[test]
 fn finished_own_root_shows_root_key_row() {
     let s = states(
         "root key saved to /home/a/root.key: keep it offline; root certificate x",

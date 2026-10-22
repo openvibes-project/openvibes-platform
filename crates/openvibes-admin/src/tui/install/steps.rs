@@ -147,7 +147,7 @@ impl Install {
             CaMode::Careful => Ca::Own,
             CaMode::Quick => Ca::OpenVibes,
         };
-        self.root_key_out = super::super::setup_form::default_root_key(self.home.as_deref());
+        self.root_key_out = super::fields::default_root_key(self.home.as_deref());
         self.console_port = plan.console_port.to_string();
         self.ingest_port = plan.ingest_port.to_string();
         self.distribution_port = plan.distribution_port.to_string();

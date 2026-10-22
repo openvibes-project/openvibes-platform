@@ -114,7 +114,7 @@ impl Install {
             hostname,
             sans: String::new(),
             ca: Ca::Own,
-            root_key_out: super::setup_form::default_root_key(home.as_deref()),
+            root_key_out: fields::default_root_key(home.as_deref()),
             home,
             origin: Stage::Step(4),
             proposed: [None, None, None],

@@ -322,7 +322,7 @@ fn issue_87_opens_step_one_filled_from_plan() {
     assert_eq!(install.console_port, "8443");
     assert_eq!(
         install.root_key_out,
-        crate::tui::setup_form::default_root_key(install.home.as_deref())
+        super::fields::default_root_key(install.home.as_deref())
     );
     let text = screen(&app);
     assert!(text.contains("[x] Assistant"), "{text}");

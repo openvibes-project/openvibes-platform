@@ -13,7 +13,6 @@ use super::{
     database::{Check, DatabaseScreen},
     nav::{Nav, Screen},
     password::PasswordPrompt,
-    setup::Setup,
     ui::theme::Theme,
 };
 
@@ -41,21 +40,19 @@ pub enum Key {
     Paste(String),
 }
 
-/// Which of today's screens `Screen::Legacy` shows.
+/// Which screen `Screen::Legacy` shows (Settings files only).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tab {
-    Setup,
     Configuration,
 }
 
 /// The TUI's state: where the operator is (`nav`), what the host reports
 /// (`services`, the health checks in `database`), the bar's question, prompt
-/// and running work, and today's screens' own state (`setup`, `config`,
+/// and running work, and the screens' own state (`install`, `config`,
 /// `database`).
 pub struct App<H: Host> {
     pub host: H,
     pub tab: Tab,
-    pub setup: Setup,
     pub install: super::install::Install,
     pub config: Configuration,
     pub database: DatabaseScreen,
@@ -144,17 +141,14 @@ impl<H: Host> App<H> {
         let home = crate::setup::plan::operator_from_env()
             .and_then(|user| host.user_home(&user))
             .or_else(|| std::env::var("HOME").ok());
-        let mut install = super::install::Install::new(hostname.clone(), home.clone());
-        let mut setup = Setup::new(hostname.clone(), home);
+        let mut install = super::install::Install::new(hostname.clone(), home);
         if !set_up {
-            setup.propose_ports(&host);
             install.port_note =
                 super::install::fields::propose_ports(&host, &mut install, |_| false);
         }
         let mut app = App {
             host,
-            tab: Tab::Setup,
-            setup,
+            tab: Tab::Configuration,
             install,
             config: Configuration::default(),
             database: DatabaseScreen::default(),
@@ -259,16 +253,12 @@ impl<H: Host> App<H> {
         };
     }
 
-    /// Set up, CA included: a host whose first install stopped before its
-    /// CA is still installing (#87), so its form quits with q as on a
-    /// fresh host.
-    pub fn setup_done(&self) -> bool {
-        self.host.is_set_up() && self.ca_exists()
-    }
-
-    /// `setup_done` for drawing: the CA as last read (`ca`), no file reads.
-    pub fn setup_done_seen(&self) -> bool {
-        self.host.is_set_up() && self.ca
+    /// The CA exists: the host's first install got past its CA step.
+    pub(super) fn ca_exists(&self) -> bool {
+        self.host
+            .certificates()
+            .iter()
+            .any(|(path, _)| *path == "/etc/openvibes/pki/intermediate.crt")
     }
 
     /// Opens Status, with fresh health checks.
@@ -287,7 +277,6 @@ impl<H: Host> App<H> {
             self.nav.go(Screen::Legacy);
         }
         match tab {
-            Tab::Setup => self.tab = Tab::Setup,
             Tab::Configuration => {
                 self.tab = Tab::Configuration;
                 self.load_config();
@@ -425,7 +414,6 @@ impl<H: Host> App<H> {
     /// Today's screens' own keys.
     pub(super) fn legacy_dispatch(&mut self, key: Key) {
         match self.tab {
-            Tab::Setup => self.setup_key(key),
             Tab::Configuration => self.config_key(key),
         }
     }

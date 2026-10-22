@@ -31,6 +31,7 @@ pub enum Component {
 }
 
 impl Component {
+    #[cfg(test)]
     pub const ALL: [Component; 8] = [
         Component::Ingest,
         Component::Console,
@@ -53,25 +54,6 @@ impl Component {
             Component::Rules => "rules",
             Component::Agent => "agent",
             Component::Signer => "signer",
-        }
-    }
-
-    /// Installed on every platform host: Setup's form cannot untick it.
-    pub fn always(self) -> bool {
-        matches!(self, Component::Ingest | Component::Console)
-    }
-
-    /// What it is, for the Setup screen.
-    pub fn about(self) -> &'static str {
-        match self {
-            Component::Ingest => "agent enrollment and findings",
-            Component::Console => "web console",
-            Component::Distribution => "rules delivered to agents",
-            Component::Vulns => "vulnerability feeds and matching",
-            Component::Assistant => "local LLM for the console (heavy; needs a model)",
-            Component::Rules => "OpenVIBES baseline rules (needs distribution)",
-            Component::Agent => "the agent on this host",
-            Component::Signer => "signer for your own rules (preview: no console screen yet)",
         }
     }
 
