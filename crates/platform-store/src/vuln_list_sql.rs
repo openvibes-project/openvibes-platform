@@ -13,7 +13,7 @@
 //! group, `$9` host, `$10` advisory, `$11` assignee user id (text), `$12`
 //! unassigned, `$13` today, `$14` limit, `$15` offset.
 
-use crate::{host_list_sql::members, vuln_list::VulnSort};
+use crate::vuln_list::VulnSort;
 
 /// One filter whose own condition the counts of its values leave out. The
 /// host filter narrows the pairs themselves; the group filter picks the
@@ -97,65 +97,67 @@ const PAIR_STATE: &str = "CASE WHEN v.fixed_at IS NOT NULL THEN 'resolved'
               ELSE t.state END";
 
 /// A fixable pair mapped below confidence 80 (`vulns/confidence.rs`): an
-/// unknown feed with a fix, over advisory `a` and packages `pk`.
-const LOW_CONFIDENCE: &str = "NOT (split_part(a.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
-              OR (jsonb_typeof(pk) = 'array' AND jsonb_array_length(pk) > 0
-                  AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(pk) e
-                                  WHERE e ? 'fixed' AND jsonb_typeof(e->'fixed') IS DISTINCT FROM 'null')))";
+/// advisory `a` from an unknown feed (every fixable pair has a fix).
+const LOW_CONFIDENCE: &str =
+    "split_part(a.source, '-', 1) NOT IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')";
 
-/// `glist`: groups holding a host, numbered for the host masks; `hosts`:
-/// agents in the scope (`$1`, `$2`, as the Alarms list) and the host filter,
-/// with `in_group` (the group filter holds) and `mask` (a bit per group).
-fn hosts() -> &'static str {
-    "glist AS MATERIALIZED (
-  SELECT d.gid, row_number() OVER (ORDER BY d.gid)::int AS ord, count(*) OVER () AS g
-  FROM (SELECT DISTINCT gid FROM members) d),
-hmask AS MATERIALIZED (
-  SELECT m.agent_id, bit_or(rpad(lpad('1', gl.ord, '0'), gl.g::int, '0')::varbit) AS mask
-  FROM members m JOIN glist gl ON gl.gid = m.gid GROUP BY m.agent_id),
-hosts AS MATERIALIZED (
-  SELECT a.agent_id, a.os_id, a.os_release,
-         $8::text IS NULL OR a.agent_id IN (SELECT m.agent_id FROM members m WHERE m.gid = lower($8)) AS in_group,
-         COALESCE(hm.mask, repeat('0', (SELECT count(*) FROM glist)::int)::varbit) AS mask
-  FROM agents a LEFT JOIN hmask hm ON hm.agent_id = a.agent_id
+/// The agents in the scope (`$1`, `$2`, as the Alarms list) and the host
+/// filter (`$9`), from the stored membership: `in_group` (the group filter
+/// `$8` holds) and `mask` (a bit per `glist` group). A grouped subquery,
+/// written in place rather than read from a CTE, so the pair scans that
+/// join it can run in parallel workers, and never pulled up, so its
+/// columns are worked out once per agent. The group ids are read from the
+/// table each time (not from `glist`): a CTE would keep the scans serial.
+const HOSTS: &str = "(SELECT a.agent_id, a.os_id, a.os_release,
+         $8::text IS NULL OR COALESCE(bool_or(g.asset_group_id::text = lower($8)), false) AS in_group,
+         COALESCE(bit_or(rpad(lpad('1', array_position((SELECT COALESCE(array_agg(DISTINCT asset_group_id::text), '{}') FROM console_host_group_membership), g.asset_group_id::text), '0'),
+                              cardinality((SELECT COALESCE(array_agg(DISTINCT asset_group_id::text), '{}') FROM console_host_group_membership)), '0')::varbit),
+                  repeat('0', cardinality((SELECT COALESCE(array_agg(DISTINCT asset_group_id::text), '{}') FROM console_host_group_membership)))::varbit) AS mask
+  FROM agents a LEFT JOIN console_host_group_membership g ON g.agent_id = a.agent_id
   WHERE ($1::boolean OR (a.status <> 'imported' AND EXISTS (
-          SELECT 1 FROM members m WHERE m.agent_id = a.agent_id AND m.gid = ANY($2::text[]))))
-    AND ($9::text IS NULL OR a.agent_id = $9))"
+          SELECT 1 FROM console_host_group_membership m
+          WHERE m.agent_id = a.agent_id AND m.asset_group_id::text = ANY($2::text[]))))
+    AND ($9::text IS NULL OR a.agent_id = $9)
+  GROUP BY a.agent_id)";
+
+/// `glist`: the ids of groups holding a host, in mask bit order; `hosts`:
+/// [`HOSTS`] materialised for the small joins.
+fn hosts() -> String {
+    format!(
+        "glist AS MATERIALIZED (
+  SELECT COALESCE(array_agg(DISTINCT asset_group_id::text), '{{}}') AS ids FROM console_host_group_membership),
+hosts AS MATERIALIZED (SELECT * FROM {HOSTS} h)"
+    )
 }
 
-/// `fix_u`: fixable pairs without a triage row (open or resolved,
-/// unassigned) per advisory and package list, counted, masked and
-/// reboot-flagged per group side and state; `fix_t`: the few triaged ones
-/// per state and assignee too. Grouping all pairs by state, assignee and
-/// the package list at once sorted 3.2 M rows on disk (4.5 s).
+/// `fix`: the fixable pairs in reach per advisory, state and assignee
+/// (triage is joined, most pairs have none), counted, masked and
+/// reboot-flagged per group side, in parallel workers; `apnames`: the
+/// package names (and fixed versions) of those advisories installed on a
+/// host in reach. Grouping the pairs by their package list instead cost
+/// 2.3–6 s (a jsonb key that spills or runs in one process).
 fn fixable() -> String {
     let side = |(cond, name): (&str, &str)| {
         format!(
-            "count(*) FILTER (WHERE {cond}) AS n{name}, bit_or(h.mask) FILTER (WHERE {cond}) AS m{name},
-         COALESCE(bool_or(v.reboot_needed) FILTER (WHERE {cond}), false) AS r{name}"
+            "count(*) FILTER (WHERE {cond}) AS n_{name}, bit_or(h.mask) FILTER (WHERE {cond}) AS m_{name},
+         COALESCE(bool_or(v.fixed_at IS NULL AND v.reboot_needed) FILTER (WHERE {cond}), false) AS r_{name}"
         )
     };
-    let [io, ir, oo, or] = [
-        ("h.in_group AND v.fixed_at IS NULL", "io"),
-        ("h.in_group AND v.fixed_at IS NOT NULL", "ir"),
-        ("NOT h.in_group AND v.fixed_at IS NULL", "oo"),
-        ("NOT h.in_group AND v.fixed_at IS NOT NULL", "or"),
-    ]
-    .map(side);
+    let [inside, outside] = [("h.in_group", "in"), ("NOT h.in_group", "out")].map(side);
     format!(
-        "fix_u AS MATERIALIZED (
-  SELECT v.advisory_id, v.packages, {io}, {ir}, {oo}, {or}
-  FROM vulnerabilities v JOIN hosts h ON h.agent_id = v.agent_id
-  WHERE NOT EXISTS (SELECT 1 FROM vulnerability_triage t
-                    WHERE t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id)
-  GROUP BY v.advisory_id, v.packages),
-fix_t AS MATERIALIZED (
-  SELECT v.advisory_id, v.packages, {PAIR_STATE} AS state, t.assigned_to AS assignee, h.in_group,
-         count(*) AS n, bit_or(h.mask) AS mask, bool_or(v.fixed_at IS NULL AND v.reboot_needed) AS reboot
-  FROM vulnerability_triage t
-  JOIN vulnerabilities v ON v.agent_id = t.agent_id AND v.advisory_id = t.advisory_id
-  JOIN hosts h ON h.agent_id = t.agent_id
-  GROUP BY 1, 2, 3, 4, 5)"
+        "fix AS MATERIALIZED (
+  SELECT v.advisory_id, COALESCE({PAIR_STATE}, 'open') AS state, t.assigned_to AS assignee, {inside}, {outside}
+  FROM vulnerabilities v JOIN {HOSTS} h ON h.agent_id = v.agent_id
+  LEFT JOIN vulnerability_triage t ON t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
+  GROUP BY 1, 2, 3),
+apnames AS MATERIALIZED (
+  SELECT DISTINCT ap.advisory_id, ap.name, ap.fixed
+  FROM (SELECT DISTINCT advisory_id FROM fix) f
+  JOIN advisory_packages ap ON ap.advisory_id = f.advisory_id
+  WHERE EXISTS (SELECT 1 FROM package_versions pv JOIN host_packages hp ON hp.package_version_id = pv.id
+                WHERE pv.name = ap.name AND hp.agent_id IN (SELECT agent_id FROM hosts))
+     OR EXISTS (SELECT 1 FROM package_versions pv JOIN host_packages hp ON hp.package_version_id = pv.id
+                WHERE pv.source = ap.name AND hp.agent_id IN (SELECT agent_id FROM hosts)))"
     )
 }
 
@@ -165,19 +167,34 @@ fix_t AS MATERIALIZED (
 /// the group filter, with one sample host; `pv_adv`: each profile's version
 /// pairs (no-fix advisories of the host's release, and CPE matches as
 /// `CPE:<cve>:<product>`, never triaged, so open and unassigned) with
-/// their package names as `[{name}]`.
+/// their package names as `[{name}]`. A host with a fixable row for an
+/// advisory also without a fix (`overlap`) holds one pair: the fixable one;
+/// those advisories' no-fix pairs are listed per host (`vx`) without it.
 // ponytail: a fingerprint collision (two package-version sets with equal
 // count, sum and 64-bit xor-hash) would merge two profiles; vanishingly
 // unlikely. Profiles scale with distinct affected-package sets: 3 on the
 // sizing fleet, up to one per host on a fleet where every host differs.
-fn profiles() -> &'static str {
-    "vpv AS MATERIALIZED (
-  SELECT package_version_id AS id FROM version_vulnerabilities UNION SELECT package_version_id FROM cpe_findings),
+fn profiles() -> String {
+    format!(
+        "overlap AS MATERIALIZED (
+  SELECT advisory_id FROM fix
+  INTERSECT SELECT advisory_id FROM version_vulnerabilities),
+vx AS MATERIALIZED (
+  SELECT h.agent_id, vv.advisory_id, h.in_group, h.mask,
+         jsonb_agg(DISTINCT jsonb_build_object('name', vv.package)) AS packages
+  FROM overlap b JOIN version_vulnerabilities vv ON vv.advisory_id = b.advisory_id
+  JOIN advisories a ON a.advisory_id = vv.advisory_id
+  JOIN host_packages hp ON hp.package_version_id = vv.package_version_id
+  JOIN hosts h ON h.agent_id = hp.agent_id AND h.os_id = a.os_id AND h.os_release = a.os_version
+  WHERE NOT EXISTS (SELECT 1 FROM vulnerabilities v WHERE v.agent_id = h.agent_id AND v.advisory_id = vv.advisory_id)
+  GROUP BY h.agent_id, vv.advisory_id, h.in_group, h.mask),
 hostfp AS (
   SELECT hp.agent_id, count(*) AS c, sum(hp.package_version_id) AS s,
          bit_xor(hashint8extended(hp.package_version_id, 0)) AS x
   FROM host_packages hp
-  WHERE hp.agent_id IN (SELECT agent_id FROM hosts) AND hp.package_version_id IN (SELECT id FROM vpv)
+  WHERE (($1::boolean AND $9::text IS NULL) OR hp.agent_id IN (SELECT h.agent_id FROM {HOSTS} h))
+    AND hp.package_version_id IN (SELECT package_version_id FROM version_vulnerabilities
+                                  UNION SELECT package_version_id FROM cpe_findings)
   GROUP BY hp.agent_id),
 prof AS MATERIALIZED (
   SELECT row_number() OVER () AS id, h.os_id, h.os_release, min(f.agent_id) AS sample,
@@ -192,6 +209,7 @@ pv_adv AS MATERIALIZED (
   FROM prof p JOIN host_packages hp ON hp.agent_id = p.sample
   JOIN version_vulnerabilities vv ON vv.package_version_id = hp.package_version_id
   JOIN advisories a ON a.advisory_id = vv.advisory_id AND a.os_id = p.os_id AND a.os_version = p.os_release
+  WHERE vv.advisory_id NOT IN (SELECT advisory_id FROM overlap)
   GROUP BY p.id, vv.advisory_id
   UNION ALL
   SELECT p.id, 'CPE:' || f.cve_id || ':' || f.product, f.cve_id, max(f.confidence) < 80, max(f.cvss),
@@ -199,6 +217,7 @@ pv_adv AS MATERIALIZED (
   FROM prof p JOIN host_packages hp ON hp.agent_id = p.sample
   JOIN cpe_findings f ON f.package_version_id = hp.package_version_id AND f.os_version = p.os_release
   GROUP BY p.id, f.cve_id, f.product)"
+    )
 }
 
 /// `cube`: pairs counted per advisory, state, assignee, group side,
@@ -207,27 +226,24 @@ pv_adv AS MATERIALIZED (
 /// all-groups side (`grp` false) and, with a group filter, once more on the
 /// group's side.
 fn cube() -> String {
-    let lc = LOW_CONFIDENCE.replace("pk", "u.packages");
-    let lc_t = LOW_CONFIDENCE.replace("pk", "t.packages");
     format!(
         "cube AS MATERIALIZED (
-  SELECT u.advisory_id, NULL::text AS cve, NULL::real AS cvss, s.state, NULL::uuid AS assignee, s.in_group,
-         {lc} AS lc, u.packages, s.n, s.mask, s.reboot, true AS fix
-  FROM fix_u u JOIN advisories a ON a.advisory_id = u.advisory_id
-  CROSS JOIN LATERAL (VALUES ('open', true, u.nio, u.mio, u.rio), ('resolved', true, u.nir, u.mir, false),
-                             ('open', false, u.noo, u.moo, u.roo), ('resolved', false, u.nor, u.mor, false))
-             s(state, in_group, n, mask, reboot)
+  SELECT f.advisory_id, NULL::text AS cve, NULL::real AS cvss, f.state, f.assignee, s.in_group,
+         {LOW_CONFIDENCE} AS lc, NULL::jsonb AS packages, s.n, s.mask, s.reboot, true AS fix
+  FROM fix f JOIN advisories a ON a.advisory_id = f.advisory_id
+  CROSS JOIN LATERAL (VALUES (true, f.n_in, f.m_in, f.r_in), (false, f.n_out, f.m_out, f.r_out))
+             s(in_group, n, mask, reboot)
   WHERE s.n > 0
-  UNION ALL
-  SELECT t.advisory_id, NULL, NULL, t.state, t.assignee, t.in_group, {lc_t}, t.packages, t.n, t.mask, t.reboot, true
-  FROM fix_t t JOIN advisories a ON a.advisory_id = t.advisory_id
   UNION ALL
   SELECT pa.advisory_id, pa.cve, max(pa.cvss), 'open', NULL::uuid, s.in_group, pa.lc, pa.packages,
          sum(s.n), bit_or(s.mask), false, false
   FROM pv_adv pa JOIN prof p ON p.id = pa.prof
   CROSS JOIN LATERAL (VALUES (true, p.n_in, p.mask_in), (false, p.n_out, p.mask_out)) s(in_group, n, mask)
   WHERE s.n > 0
-  GROUP BY pa.advisory_id, pa.cve, s.in_group, pa.lc, pa.packages),
+  GROUP BY pa.advisory_id, pa.cve, s.in_group, pa.lc, pa.packages
+  UNION ALL
+  SELECT x.advisory_id, NULL, NULL, 'open', NULL, x.in_group, false, x.packages, count(*), bit_or(x.mask), false, false
+  FROM vx x GROUP BY x.advisory_id, x.in_group, x.packages),
 keyed AS MATERIALIZED (
   SELECT COALESCE(c.cve, ac.cve_id, c.advisory_id) AS key, gs.grp, c.*
   FROM cube c LEFT JOIN advisory_cves ac ON c.cve IS NULL AND ac.advisory_id = c.advisory_id
@@ -260,12 +276,16 @@ kpers AS MATERIALIZED (
   SELECT c.key, c.lc, c.grp, c.assignee, bool_or({STATE_OK}) AS s_ok, bool_or(c.state = 'open') AS open
   FROM keyed c WHERE c.assignee IS NOT NULL GROUP BY c.key, c.lc, c.grp, c.assignee),
 knames AS MATERIALIZED (
-  SELECT c.key, c.lc, c.grp, array_agg(DISTINCT p ->> 'name' ORDER BY p ->> 'name') AS names,
-         array_agg(DISTINCT p ->> 'fixed') FILTER (WHERE p ->> 'fixed' IS NOT NULL) AS fixed
-  FROM keyed c CROSS JOIN jsonb_array_elements(c.packages) p
-  WHERE p ->> 'name' IS NOT NULL GROUP BY c.key, c.lc, c.grp),
+  SELECT x.key, x.lc, x.grp, array_agg(DISTINCT x.name ORDER BY x.name) AS names,
+         array_agg(DISTINCT x.fixed) FILTER (WHERE x.fixed IS NOT NULL) AS fixed
+  FROM (SELECT c.key, c.lc, c.grp, p ->> 'name' AS name, NULL::text AS fixed
+        FROM keyed c CROSS JOIN jsonb_array_elements(c.packages) p WHERE c.packages IS NOT NULL
+        UNION ALL
+        SELECT ka.key, ka.lc, ka.grp, n.name, n.fixed FROM kadv ka JOIN apnames n ON n.advisory_id = ka.advisory_id
+        WHERE ka.fix) x
+  WHERE x.name IS NOT NULL GROUP BY x.key, x.lc, x.grp),
 r AS MATERIALIZED (
-  SELECT k.*, COALESCE(n.names, '{{}}') AS names, COALESCE(n.fixed, '{{}}') AS fixed,
+  SELECT k.*, COALESCE(o.people, 0) AS people, o.person, COALESCE(n.names, '{{}}') AS names, COALESCE(n.fixed, '{{}}') AS fixed,
          COALESCE(k.title0, x.description, k.key) AS title,
          COALESCE(x.kev_added IS NOT NULL OR x.euvd_exploited, false) AS exploited, x.kev_due,
          COALESCE(x.cvss_score, k.cvss0) AS cvss, x.epss, x.epss_percentile AS pct
@@ -286,6 +306,9 @@ r AS MATERIALIZED (
         LEFT JOIN cve_enrichment x ON x.cve_id = ka.key
         GROUP BY ka.key, ka.lc, ka.grp) k
   LEFT JOIN knames n ON n.key = k.key AND n.lc = k.lc AND n.grp = k.grp
+  LEFT JOIN (SELECT kp.key, kp.lc, kp.grp, count(*) AS people, min(kp.assignee::text) AS person
+             FROM kpers kp WHERE kp.open GROUP BY kp.key, kp.lc, kp.grp) o
+    ON o.key = k.key AND o.lc = k.lc AND o.grp = k.grp
   LEFT JOIN cve_enrichment x ON x.cve_id = k.key)"
     )
 }
@@ -328,7 +351,8 @@ fn counts() -> String {
                        WHERE EXISTS (SELECT 1 FROM r WHERE {MAIN} AND $7 = ANY(r.names))) p),
     'groups', (SELECT COALESCE(jsonb_agg(jsonb_build_array(g.asset_group_id::text, g.name, g.kind, COALESCE(c.n, 0))), '[]')
                FROM console_asset_groups g LEFT JOIN (
-                 SELECT gl.gid, count(*) AS n FROM glist gl JOIN r ON get_bit(r.mask, gl.ord - 1) = 1
+                 SELECT gl.gid, count(*) AS n
+                 FROM glist, unnest(glist.ids) WITH ORDINALITY gl(gid, ord) JOIN r ON get_bit(r.mask, gl.ord::int - 1) = 1
                  WHERE r.lc = ($6::text IS NOT DISTINCT FROM 'lowconf') AND NOT r.grp AND {group}
                  GROUP BY gl.gid) c ON c.gid = g.asset_group_id::text
                WHERE c.n > 0
@@ -352,22 +376,23 @@ fn summary() -> String {
     let rows = format!("{MAIN} AND {} AND r.st_open", except(&[Facet::State]));
     let lc = "($6::text IS NOT DISTINCT FROM 'lowconf')";
     let assignee = ASSIGNEE_OK.replace("c.assignee", "t.assigned_to");
-    let low = LOW_CONFIDENCE.replace("pk", "v.packages");
     format!(
         "sum_adv AS MATERIALIZED (SELECT DISTINCT unnest(r.advisories) AS advisory_id FROM r WHERE {rows}),
 counted AS MATERIALIZED (
   SELECT unnest(p.agents) AS agent_id FROM prof p
   WHERE p.n_in > 0 AND $11::text IS NULL
     AND EXISTS (SELECT 1 FROM pv_adv pa WHERE pa.prof = p.id AND pa.lc = {lc}
-                  AND pa.advisory_id IN (SELECT advisory_id FROM sum_adv))),
+                  AND pa.advisory_id IN (SELECT advisory_id FROM sum_adv))
+  UNION
+  SELECT x.agent_id FROM vx x
+  WHERE x.in_group AND $11::text IS NULL AND NOT {lc} AND x.advisory_id IN (SELECT advisory_id FROM sum_adv)),
 summary AS (
   SELECT jsonb_build_object(
     'open_rows', count(*),
     'exploited', count(*) FILTER (WHERE r.exploited),
     'with_due', count(*) FILTER (WHERE r.kev_due IS NOT NULL),
     'no_fix', count(*) FILTER (WHERE NOT r.fix),
-    'unassigned', count(*) FILTER (WHERE NOT EXISTS (
-        SELECT 1 FROM kpers kp WHERE kp.key = r.key AND kp.lc = r.lc AND kp.grp = r.grp AND kp.open)),
+    'unassigned', count(*) FILTER (WHERE r.people = 0),
     'hosts', (SELECT count(*) FROM counted) + (
         SELECT count(*) FROM hosts h
         WHERE h.in_group AND h.agent_id NOT IN (SELECT agent_id FROM counted)
@@ -376,7 +401,7 @@ summary AS (
                       WHERE v.agent_id = h.agent_id
                         AND v.advisory_id = ANY((SELECT array_agg(advisory_id) FROM sum_adv)::text[])
                         AND COALESCE({PAIR_STATE}, 'open') = 'open'
-                        AND {assignee} AND ({low}) = {lc}))) AS summary
+                        AND {assignee} AND ({LOW_CONFIDENCE}) = {lc}))) AS summary
   FROM r WHERE {rows})"
     )
 }
@@ -407,7 +432,7 @@ pub(crate) fn statement(sort: VulnSort, descending: bool) -> String {
     let all = except(&[]);
     let order = order(sort, descending);
     format!(
-        "WITH {members}, {hosts}, {fixable}, {profiles}, {cube}, {rows}, {counts}, {summary},
+        "WITH {hosts}, {fixable}, {profiles}, {cube}, {rows}, {counts}, {summary},
 meta AS (
   SELECT jsonb_build_object('total', (SELECT count(*) FROM r WHERE {MAIN} AND {all}),
                             'counts', (SELECT counts FROM counts),
@@ -420,14 +445,10 @@ SELECT CASE WHEN p.ord IS NOT DISTINCT FROM (SELECT min(ord) FROM page) THEN m.m
        p.names, p.fixed, p.open, p.total, p.reboot, p.lc, p.advisories,
        ARRAY(SELECT DISTINCT ac.cve_id FROM advisory_cves ac
              WHERE ac.advisory_id = ANY(p.advisories) AND ac.cve_id <> p.key ORDER BY 1 LIMIT 10),
-       (SELECT count(*) FROM kpers kp WHERE kp.key = p.key AND kp.lc = p.lc AND kp.grp = p.grp AND kp.open),
-       (SELECT kp.assignee::text FROM kpers kp WHERE kp.key = p.key AND kp.lc = p.lc AND kp.grp = p.grp AND kp.open
-        ORDER BY kp.assignee LIMIT 1),
-       (SELECT u.display_name FROM kpers kp JOIN console_users u ON u.user_id = kp.assignee
-        WHERE kp.key = p.key AND kp.lc = p.lc AND kp.grp = p.grp AND kp.open ORDER BY kp.assignee LIMIT 1)
+       p.people, p.person, u.display_name
 FROM meta m LEFT JOIN page p ON true
+LEFT JOIN console_users u ON u.user_id::text = p.person
 ORDER BY p.ord",
-        members = members("agents"),
         hosts = hosts(),
         fixable = fixable(),
         profiles = profiles(),

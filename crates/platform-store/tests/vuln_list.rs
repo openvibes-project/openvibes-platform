@@ -39,7 +39,7 @@ async fn rows_are_cves_with_their_covering_advisories() {
     assert_eq!(a.title, "curl: flaw A", "the advisory with the most pairs");
     assert_eq!((a.open, a.total), (1, 3));
     assert_eq!(a.packages, ["curl"]);
-    assert_eq!(a.fixed, Fixed::Several(3));
+    assert_eq!(a.fixed, Fixed::Several(2));
     assert!(a.exploited);
     assert_eq!(a.cvss, Some(9.8));
     let b = row(&page, "CVE-B");
@@ -416,5 +416,39 @@ async fn assignee_summary_and_summary_line() {
     );
     // The summary counts open rows whatever the state filter.
     assert_eq!(run(&c, &every(), &scope).await.summary, s);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_host_with_fixable_and_no_fix_rows_counts_once() {
+    let (db, c) = common::migrated().await;
+    let (web, _) = fixture(&c).await;
+    // Host 1 also has a fixable row for DEBIAN-NF (zlib without a fix on
+    // the other package), mitigated: one pair, the fixable one.
+    c.batch_execute(&format!(
+        "INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, fixed_at, last_evaluated_at)
+         VALUES ('{h1}', 'DEBIAN-NF', '[{{\"name\":\"zlib\",\"installed\":\"1.2\",\"fixed\":\"1.3\"}}]', now(), NULL, now());
+         INSERT INTO vulnerability_triage (agent_id, advisory_id, state, note, version, updated_at, updated_by)
+         VALUES ('{h1}', 'DEBIAN-NF', 'mitigated', 'n', 1, now(), 't');",
+        h1 = id(1)
+    ))
+    .await
+    .unwrap();
+    let scope = AgentScope::AssetGroups(vec![web]);
+    let page = run(&c, &every(), &scope).await;
+    let nf = row(&page, "CVE-NF");
+    assert_eq!((nf.open, nf.total), (1, 2));
+    let mitigated = run(
+        &c,
+        &VulnQuery {
+            state: VulnState::Mitigated,
+            ..query()
+        },
+        &scope,
+    )
+    .await;
+    assert_eq!(keys(&mitigated), ["CVE-A", "CVE-NF"]);
+    // Host 1 keeps open pairs elsewhere; host 2 its no-fix one.
+    assert_eq!(run(&c, &query(), &scope).await.summary.hosts, 2);
     db.drop().await;
 }

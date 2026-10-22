@@ -50,6 +50,10 @@ async fn sizing_fleet(c: &Client) {
          SELECT 'CVE-2026-' || lpad(i::text, 5, '0'), CASE WHEN i % 97 = 0 THEN current_date - 30 END,
                 CASE WHEN i % 97 = 0 THEN current_date + (i % 60 - 20) END, (i % 1000) / 1000.0, (i % 997) / 997.0, (i % 100) / 10.0
          FROM generate_series(1, 4750) i;
+         INSERT INTO advisory_packages (advisory_id, name, arch, scheme, match_on, fixed)
+         SELECT 'DEBIAN-CVE-2026-' || lpad(i::text, 5, '0'), 'pkg-' || (i % 389), '', 'dpkg', 'source',
+                CASE WHEN i <= 1600 THEN '1.1' END
+         FROM generate_series(1, 4750) i;
          INSERT INTO version_vulnerabilities (package_version_id, advisory_id, package, first_seen_at)
          SELECT pv.id, 'DEBIAN-CVE-2026-' || lpad(i::text, 5, '0'), pv.source, now()
          FROM generate_series(2001, 4750) i JOIN package_versions pv ON pv.name = 'pkg-' || (i % 389);

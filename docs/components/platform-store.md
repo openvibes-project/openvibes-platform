@@ -707,13 +707,18 @@ me, unassigned and people. The summary counts rows with an open pair over
 every filter but the state's: open rows, hosts, exploited, with a due date,
 without a fix, with no open pair assigned.
 
-How: fixable pairs without triage are grouped per advisory and package
-list, the few triaged ones per state and assignee too; pairs without a fix
-are counted through host profiles (hosts with the same affected package
-versions, by fingerprint), so the 27 M no-fix pairs of the sizing fleet are
-never expanded. Everything else reads that small cube. **Known limit:** it
-misses ruling 13's 2 s budget on the sizing fleet (12.7 s full reach,
-2.9 s scoped; console-read.md). Tests: `tests/vuln_list.rs`; the timing in
+How: the fixable pairs in reach are counted per advisory, state and
+assignee in one parallel pass (hosts, group side and group mask come from
+the stored membership, `console_host_group_membership`, in a subquery
+written in place: a CTE would keep the scan serial); package names and
+fixed versions come from the covering advisories' `advisory_packages`
+entries installed on a host in reach. Pairs without a fix are counted
+through host profiles (hosts with the same affected package versions, by
+fingerprint), so the 27 M no-fix pairs of the sizing fleet are never
+expanded; a host that also has a fixable row for that advisory holds one
+pair, the fixable one. Everything else reads that small cube. Timing
+(console-read.md): 1.44 s at full reach, 1.36 s scoped, within ruling
+13's 2 s. Tests: `tests/vuln_list.rs`; the timing in
 `tests/vuln_list_timing.rs`.
 
 ## The host page summary (`host_summary::summary`)
@@ -1220,6 +1225,11 @@ or picks are inserted). The functions are `SECURITY DEFINER`, so writers
 need no grant on the table. Every refresh takes advisory lock 1870032226
 until commit and then reads committed state, so a host change and a rule
 change racing in two transactions cannot leave a stale or too wide pair.
+Lock order (`host_group_facts::MEMBERSHIP_LOCK`): `ACCESS_BINDING_LOCK`
+(group writes) and the enrolment token lock come before it, and it comes
+before `AUTO_GROUP_LOCK`: `ensure_automatic_groups` takes it first, since an
+inventory whose OS changed already holds it from its agents UPDATE. Most
+likely first contention: heartbeat `last_address` churn (roaming or NAT).
 `console_host_in_group`, `agent_visibility` and `host_list_sql::members`
 read the table; console, distribution and ingest may SELECT it. Measured
 (release build, 20,000 hosts, 20 groups): 10,000 imports one statement

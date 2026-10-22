@@ -20,7 +20,7 @@ pub const BOB: &str = "00000000-0000-4000-8000-0000000000b2";
 /// - FEDORA-1 (critical, CVE-A and CVE-B, curl fixed in 2): host 3,
 ///   accepted risk (Ann).
 /// - DEBIAN-A (important, CVE-A, curl): host 1 open (Ann, fixed in
-///   7.88-2), host 2 mitigated (Bob, fixed in 7.88-3).
+///   7.88-2), host 2 mitigated (Bob).
 /// - DSA-NOCVE (low, no CVE, openssl): host 1, reboot pending.
 /// - DEBIAN-NF (moderate, CVE-NF): no fix, zlib on hosts 1, 2 and 4.
 /// - DEBIAN-EXP (moderate, CVE-EXP): host 1 open (Bob), host 2 accepted
@@ -64,7 +64,7 @@ pub async fn fixture(c: &Client) -> (String, String) {
          INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, fixed_at, last_evaluated_at, reboot_needed) VALUES
            ('{h3}', 'FEDORA-1', '[{{\"name\":\"curl\",\"installed\":\"1\",\"fixed\":\"2\"}}]', now(), NULL, now(), false),
            ('{h1}', 'DEBIAN-A', '[{{\"name\":\"curl\",\"installed\":\"7.88-1\",\"fixed\":\"7.88-2\"}}]', now(), NULL, now(), false),
-           ('{h2}', 'DEBIAN-A', '[{{\"name\":\"curl\",\"installed\":\"7.88-1\",\"fixed\":\"7.88-3\"}}]', now(), NULL, now(), false),
+           ('{h2}', 'DEBIAN-A', '[{{\"name\":\"curl\",\"installed\":\"7.88-1\",\"fixed\":\"7.88-2\"}}]', now(), NULL, now(), false),
            ('{h1}', 'DSA-NOCVE', '[{{\"name\":\"openssl\",\"installed\":\"3\",\"fixed\":\"3.1\"}}]', now(), NULL, now(), true),
            ('{h1}', 'DEBIAN-EXP', '[{{\"name\":\"bash\",\"installed\":\"5\",\"fixed\":\"5.1\"}}]', now(), NULL, now(), false),
            ('{h2}', 'DEBIAN-EXP', '[{{\"name\":\"bash\",\"installed\":\"5\",\"fixed\":\"5.1\"}}]', now(), NULL, now(), false),
@@ -84,6 +84,17 @@ pub async fn fixture(c: &Client) -> (String, String) {
          INSERT INTO host_packages SELECT h, (SELECT id FROM package_versions WHERE name = 'zlib1g')
            FROM unnest(ARRAY['{h1}', '{h2}', '{h4}']) h;
          INSERT INTO host_packages SELECT '{h2}', id FROM package_versions WHERE name = 'nginx';
+         INSERT INTO package_versions (manager, name, version, arch, source)
+         SELECT 'dpkg', n, '1', 'amd64', n FROM unnest(ARRAY['curl', 'openssl', 'bash', 'tar', 'vim', 'odd', 'secretpkg']) n;
+         INSERT INTO host_packages SELECT h, (SELECT id FROM package_versions WHERE name = n)
+         FROM (VALUES ('{h1}', 'curl'), ('{h2}', 'curl'), ('{h3}', 'curl'), ('{h1}', 'openssl'), ('{h1}', 'bash'),
+                      ('{h2}', 'bash'), ('{h1}', 'tar'), ('{h2}', 'vim'), ('{h2}', 'odd'), ('{h4}', 'secretpkg')) x(h, n);
+         INSERT INTO advisory_packages (advisory_id, name, arch, scheme, match_on, fixed) VALUES
+           ('FEDORA-1', 'curl', 'x86_64', 'rpm', 'binary', '2'), ('DEBIAN-A', 'curl', '', 'dpkg', 'source', '7.88-2'),
+           ('DSA-NOCVE', 'openssl', '', 'dpkg', 'source', '3.1'), ('DEBIAN-EXP', 'bash', '', 'dpkg', 'source', '5.1'),
+           ('DEBIAN-R', 'tar', '', 'dpkg', 'source', '2'), ('DEBIAN-FP', 'vim', '', 'dpkg', 'source', '9.1'),
+           ('MYS-1', 'odd', '', 'dpkg', 'source', '2'), ('DEBIAN-OUT', 'secretpkg', '', 'dpkg', 'source', '2'),
+           ('DEBIAN-NF', 'zlib', '', 'dpkg', 'source', NULL);
          INSERT INTO version_vulnerabilities SELECT id, 'DEBIAN-NF', 'zlib', now() FROM package_versions WHERE name = 'zlib1g';
          INSERT INTO cpe_findings (package_version_id, os_version, cve_id, product, package, installed, range_text,
                                    confidence, basis, cvss, first_seen_at)
