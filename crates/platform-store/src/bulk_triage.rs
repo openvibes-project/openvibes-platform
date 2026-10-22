@@ -294,7 +294,26 @@ pub async fn vulnerabilities(
         let named = items
             .iter()
             .any(|(adv, a)| adv == advisory && a.as_deref() == Some(agent.as_str()));
-        if let Some(why) = spared(change, named, &now_state.state) {
+        // A CVE row acts on its open pairs only (an expired accepted risk is
+        // open); a reopen keeps its own rule below.
+        let reopen = matches!(change, BulkChange::State { state: "open", .. });
+        let open = now_state.state == "open"
+            || (now_state.state == "accepted_risk"
+                && now_state.accepted_until.is_some_and(|u| u <= now));
+        if !named && !reopen && !open {
+            result
+                .skipped
+                .push((format!("{agent}/{advisory}"), "not open"));
+            continue;
+        }
+        // An expired accepted risk is open when closing or assigning; a reopen
+        // still sees its stored state and clears it, as before.
+        let effective = if open && !reopen {
+            "open"
+        } else {
+            &now_state.state
+        };
+        if let Some(why) = spared(change, named, effective) {
             result.skipped.push((format!("{agent}/{advisory}"), why));
             continue;
         }

@@ -537,5 +537,26 @@ async fn items_go_into_one_open_case_and_vulnerabilities_triage_per_host() {
         states.contains(&"open") && states.contains(&"false_positive"),
         "{states:?}"
     );
+    // A CVE row's bulk close changes the open host only; the false positive
+    // is skipped as not open.
+    let close = json!({"action": "state", "state": "mitigated", "note": "patched", "items": [{"advisory_id": "FEDORA-1"}]});
+    let (status, body, _) = call(
+        &router,
+        "POST",
+        "/api/v1/vulnerabilities/bulk",
+        &cookie,
+        &csrf,
+        Some(close),
+        None,
+    )
+    .await;
+    assert_eq!(
+        (status, body["changed"].as_u64()),
+        (StatusCode::OK, Some(1)),
+        "{body}"
+    );
+    let skipped = body["skipped"].as_array().unwrap();
+    assert_eq!(skipped.len(), 1, "{body}");
+    assert_eq!(skipped[0]["reason"], "not open", "{body}");
     db.drop().await;
 }

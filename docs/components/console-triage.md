@@ -31,6 +31,20 @@ both described in [openvibes-console.md](openvibes-console.md). The web
 side is the Alarms list's bulk bar and the alarm page's header; see
 [console-alarms.md](console-alarms.md). The alarm panel's triage is gone.
 
+## Vulnerabilities in bulk
+
+`POST /api/v1/vulnerabilities/bulk` takes items `{advisory_id}` (a CVE row
+acts through its covering advisories; the advisory expands to its hosts in
+reach) or `{agent_id, advisory_id}` (that pair, as asked). An advisory-wide
+`state` close or `assign` changes only open pairs: no triage row, or an
+accepted risk whose expiry has passed, counts as open, and fixed pairs are
+never expanded. Mitigated, accepted and false-positive pairs come back in
+`skipped` with reason `not open` and keep their note and assignee. Hosts out
+of the actor's reach are never touched. A reopen (`state: open`) is the
+exception: it reopens the closed pairs and skips the open ones ("already
+open"). Triage on one CVE row shows on its sibling rows, which share the
+advisory's pairs.
+
 ## Configuration and failures
 
 The module uses the existing PostgreSQL pool and schema migration. Missing
