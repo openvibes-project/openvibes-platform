@@ -74,7 +74,9 @@ themselves and other deployments (pods, Kubernetes) can plug in later
 - `Secret`: the user's password for one Setup run, zeroed on drop
   (`zeroize`), `Debug` prints `Secret(..)`.
 - `Privileged`: the password-gated helper verbs `setup-plan ARGS…`,
-  `setup-status`, `setup-step STEP`, `unit-enable UNIT`, `unit-disable UNIT`.
+  `setup-status`, `setup-step STEP`, `unit-enable UNIT`, `unit-disable UNIT`,
+  `admin-reset` (journalled as `admin-reset admin`, with no detail: its
+  stdout holds the new console password).
   `Host::privileged` runs `sudo -S -k -p '' /usr/bin/openvibes-admin helper
   VERB…` with the password on stdin only (never in argv or the journal),
   journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns

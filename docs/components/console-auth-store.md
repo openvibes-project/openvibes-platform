@@ -16,7 +16,9 @@ tokens, and CSRF values stay in the console process.
   and last session activity for the audited local administration CLI.
 - `unlock_local_user` clears only a currently locked account throttle bucket
   and writes the unlock event atomically. Source-address throttles remain in
-  effect.
+  effect. `enable_local_user` enables a disabled account by username and
+  writes `user.enabled` with the caller's actor kind atomically (the CLI's
+  break-glass `user reset-password`).
 - `user_role_bindings` returns active bindings (role ids; since schema 52 a
   binding has no group scope, the role carries its reach) for per-request
   capability resolution. It does not cache effective permission state.
@@ -74,8 +76,10 @@ tokens, and CSRF values stay in the console process.
   advances the account generation, revokes its sessions, and writes one audit
   event atomically. `revoke_session` revokes only one session and writes the
   logout event in the same transaction.
-- `replace_password` replaces the PHC credential, advances auth generation,
-  revokes all sessions, and appends its audit event in one transaction.
+- `replace_password` replaces the PHC credential, sets the credential's and
+  the user's must-change flags to its `must_change` argument, advances auth
+  generation, revokes all sessions, and appends its audit event in one
+  transaction.
   `rehash_password` upgrades an existing hash only at the generation just
   verified and records the upgrade without invalidating the new login.
   `disable_local_user` disables an account and revokes its sessions with the

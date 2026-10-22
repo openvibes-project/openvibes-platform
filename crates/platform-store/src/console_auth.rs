@@ -1029,10 +1029,13 @@ pub async fn revoke_user_sessions(
 }
 
 /// Replaces an Argon2id credential and invalidates every session atomically.
+/// `must_change` makes the user set their own password at the next sign-in.
+#[allow(clippy::too_many_arguments)] // one audited write; a struct would only rename the arguments
 pub async fn replace_password(
     client: &mut Client,
     user_id: &str,
     password_phc: &str,
+    must_change: bool,
     now: DateTime<Utc>,
     audit: &AuditContext<'_>,
     actor_id: &str,
@@ -1041,9 +1044,9 @@ pub async fn replace_password(
     let tx = client.transaction().await?;
     let updated = tx
         .execute(
-            "UPDATE console_credentials SET password_phc = $2, changed_at = $3, must_change = false
+            "UPDATE console_credentials SET password_phc = $2, changed_at = $3, must_change = $4
              WHERE user_id = $1::text::uuid",
-            &[&user_id, &password_phc, &now],
+            &[&user_id, &password_phc, &now, &must_change],
         )
         .await?;
     if updated == 0 {
@@ -1051,9 +1054,10 @@ pub async fn replace_password(
         return Ok(false);
     }
     tx.execute(
-        "UPDATE console_users SET auth_generation = auth_generation + 1
+        "UPDATE console_users SET auth_generation = auth_generation + 1,
+                password_must_change = $2
          WHERE user_id = $1::text::uuid",
-        &[&user_id],
+        &[&user_id, &must_change],
     )
     .await?;
     tx.execute(
@@ -1248,6 +1252,51 @@ pub enum DisableOutcome {
     NotFound,
     /// The user is the last enabled Administrator.
     LastAdministrator,
+}
+
+/// Enables a disabled user and records it atomically. `false` when there
+/// is no such user or it is already enabled. `_now` keeps the signature of
+/// `unlock_local_user`; the audit row takes the database's time.
+pub async fn enable_local_user(
+    client: &mut Client,
+    username: &str,
+    _now: DateTime<Utc>,
+    actor_id: &str,
+    actor_kind: &str,
+) -> Result<bool, StoreError> {
+    let tx = client.transaction().await?;
+    let user_id: Option<String> = tx
+        .query_opt(
+            "UPDATE console_users SET enabled = true, disabled_at = NULL
+             WHERE username = $1 AND NOT enabled RETURNING user_id::text",
+            &[&username],
+        )
+        .await?
+        .map(|row| row.get(0));
+    let Some(user_id) = user_id else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    append_auth_event(
+        &tx,
+        &AuditContext::default(),
+        AuthAuditEvent {
+            actor: actor_id,
+            action: "user.enabled",
+            target: Some(&user_id),
+            result: "success",
+            actor_kind: Some(actor_kind),
+            actor_id: Some(actor_id),
+            actor_display: None,
+            authentication_method: None,
+            target_kind: Some("user"),
+            target_id: Some(&user_id),
+            reason_code: Some("administrator_enable"),
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
 }
 
 /// Disables an enabled user and revokes all sessions in one audited

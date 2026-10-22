@@ -341,3 +341,74 @@ async fn user_create_reads_one_password_line_from_stdin() {
     assert_eq!(fixture.count(&must_change("admin")).await, 0);
     fixture.drop().await;
 }
+
+#[tokio::test]
+async fn reset_password_reads_stdin_and_sets_must_change() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let create = [
+        "user",
+        "create",
+        "--username",
+        "admin",
+        "--display-name",
+        "Administrator",
+        "--password-stdin",
+    ];
+    assert!(
+        fixture
+            .run_input(&create, "violet quartz lantern 2026\n")
+            .status
+            .success()
+    );
+    // Break-glass (ruling 2): a locked, disabled admin comes back too.
+    let client = platform_store::connect(&fixture.url)
+        .await
+        .unwrap()
+        .get()
+        .await
+        .unwrap();
+    client
+        .batch_execute(
+            "UPDATE console_users SET enabled = false, disabled_at = now() WHERE username = 'admin';
+             INSERT INTO console_auth_throttle
+                 (bucket_sha256, window_started_at, failures, locked_until, updated_at)
+             VALUES (sha256(convert_to('openvibes-console-login-throttle-v1', 'UTF8')
+                     || '\\x00'::bytea || convert_to('account', 'UTF8')
+                     || '\\x00'::bytea || convert_to('admin', 'UTF8')),
+                     now(), 10, now() + interval '1 hour', now())",
+        )
+        .await
+        .unwrap();
+    drop(client);
+    let out = fixture.run_input(
+        &[
+            "user",
+            "reset-password",
+            "admin",
+            "--password-stdin",
+            "--must-change",
+        ],
+        "Tz4m-W8qH-n2cR-7kLp\n",
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM console_users WHERE username = 'admin' AND enabled AND password_must_change").await,
+        1
+    );
+    assert_eq!(
+        fixture
+            .count("SELECT count(*) FROM console_auth_throttle WHERE locked_until > now()")
+            .await,
+        0
+    );
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM audit_log WHERE action IN ('user.enabled', 'user.unlocked', 'auth.password.changed')").await,
+        3
+    );
+    fixture.drop().await;
+}

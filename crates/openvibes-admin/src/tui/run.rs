@@ -29,6 +29,10 @@ pub enum Call {
     Disk,
     /// The unit's last journal lines, joined (no password).
     Logs(Unit, u16),
+    /// `admin-reset`: a new one-time password for the console's `admin`.
+    // ponytail: the Console sign-in page (2b-2 Task 2) constructs it; drop the allow then.
+    #[allow(dead_code)]
+    AdminReset,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -207,6 +211,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
                 })
         }),
         Call::Logs(unit, lines) => host.logs(*unit, *lines).map(|l| l.join("\n")),
+        Call::AdminReset => host.privileged(Privileged::AdminReset, secret),
     }
 }
 
@@ -214,7 +219,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
 pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
     match (call, result) {
         (_, Err(error)) => StepState::Failed(error.to_string()),
-        (Call::Repair(_) | Call::Update(..) | Call::Remove(..), Ok(out)) => {
+        (Call::Repair(_) | Call::Update(..) | Call::Remove(..) | Call::AdminReset, Ok(out)) => {
             StepState::parse(out.trim_end()).unwrap_or_else(|| {
                 StepState::Failed(format!("unexpected helper output: {}", out.trim()))
             })

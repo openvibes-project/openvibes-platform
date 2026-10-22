@@ -944,3 +944,44 @@ fn the_console_detail_is_withheld_without_a_keyword() {
         assert!(line.ends_with("ok: (detail withheld)"), "{repair}: {line}");
     }
 }
+
+#[test]
+fn the_reset_password_is_not_journalled() {
+    let host = fake(vec![
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "admin-reset",
+            ],
+            out(0, "done\tTz4m-W8qH-n2cR-7kLp\n", ""),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    assert_eq!(Privileged::AdminReset.args(), ["admin-reset"]);
+    assert_eq!(Privileged::AdminReset.journal(), "admin-reset admin");
+    let stdout = host
+        .privileged(Privileged::AdminReset, &Secret::new("pw".into()))
+        .unwrap();
+    assert_eq!(
+        StepState::parse(stdout.trim_end()),
+        Some(StepState::Done("Tz4m-W8qH-n2cR-7kLp".into()))
+    );
+    let calls = host.runner.calls.borrow();
+    let journal = calls
+        .iter()
+        .find(|call| call[0] == "/usr/bin/logger")
+        .unwrap();
+    assert!(journal[3].ends_with(" admin-reset admin ok"), "{journal:?}");
+    assert!(
+        calls
+            .iter()
+            .all(|call| !call.iter().any(|arg| arg.contains("Tz4m"))),
+        "{calls:?}"
+    );
+}

@@ -271,7 +271,7 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 | `user list` | lists usernames, status, active role names, display names, and last activity; never reads or prints password hashes | tab-separated rows |
 | `user disable USERNAME` | disables the account and revokes its sessions atomically | `disabled local user NAME` |
 | `user unlock USERNAME` | clears an active per-account login lock and audits the recovery; source-address throttles remain active | `unlocked local user NAME` |
-| `user reset-password USERNAME` | replaces the password and revokes all sessions atomically; does not enable a disabled account | prompts twice without terminal echo |
+| `user reset-password USERNAME [--password-stdin] [--must-change]` | replaces the password and revokes all sessions atomically; break-glass: a disabled account is enabled (`user.enabled`) and an account lock cleared (`user.unlocked`) first; `--must-change` makes the password one-time (the user sets their own at the next console sign-in), without it the user is not asked to change it | prompts twice without terminal echo; with `--password-stdin`, reads one line from standard input instead, same password rules |
 
 Usernames are normalized to lowercase ASCII and limited to 64 characters.
 Passwords use the same console NFC normalization, 15–128 Unicode-character
@@ -728,7 +728,12 @@ password (no sudoers entry): `helper setup-plan PLANARGS` (writes
 (`STATE<TAB>DETAIL`, exit 0 whatever the state), `helper update-step STEP
 [--backup PATH] [--repo-dir DIR] [--remember-choice]`, `helper remove-step STEP (backup, stop, firewall, packages, purge, admin) --components
 LIST [--backup PATH] [--confirm HOSTNAME] [--remember-choice]`, `helper unit-enable UNIT`,
-`helper unit-disable UNIT`. Arguments are checked before the root check.
+`helper unit-disable UNIT`, `helper admin-reset` (the console's `admin`
+gets a new one-time password, 4 groups of 4 characters without 0/O/1/l/I,
+through `user reset-password admin --password-stdin --must-change` as
+`openvibes-admin`; prints `done<TAB>PASSWORD` or `failed<TAB>WHY`; the
+journal line is only `admin-reset admin ok`, never the password;
+`src/setup/admin_reset.rs`). Arguments are checked before the root check.
 
 ## CA commands
 

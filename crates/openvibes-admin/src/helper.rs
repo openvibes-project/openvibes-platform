@@ -1,7 +1,7 @@
 //! `openvibes-admin helper VERB …`: the root helper of the administration
 //! TUI (admin TUI spec §3): `logs`, `config-read`, `config-write` (through
 //! the RPM's sudoers drop-in), and Setup's `setup-plan`, `setup-status`,
-//! `setup-step`, `update-step`, `remove-step`, `unit-enable`,
+//! `setup-step`, `update-step`, `remove-step`, `admin-reset`, `unit-enable`,
 //! `unit-disable` (only with the user's own
 //! sudo rights and password). A closed set of verbs, each its own function;
 //! arguments are checked against the allow-lists before anything else, and
@@ -105,6 +105,9 @@ pub enum HelperCommand {
     /// Adds the services collector to the list an older Setup wrote for the
     /// local agent (run by the package after an upgrade); exit 0.
     AgentConfigUpgrade,
+    /// Gives the console's `admin` a new one-time password, unlocked and
+    /// enabled; prints `done<TAB>PASSWORD` (Console sign-in, break-glass).
+    AdminReset,
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
     /// Stops starting an OpenVIBES unit at boot.
@@ -131,6 +134,7 @@ enum Verb {
     RulesApply,
     UpgradeMigrate,
     AgentConfigUpgrade,
+    AdminReset,
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, String> {
@@ -209,6 +213,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::RulesApply => Verb::RulesApply,
         HelperCommand::UpgradeMigrate => Verb::UpgradeMigrate,
         HelperCommand::AgentConfigUpgrade => Verb::AgentConfigUpgrade,
+        HelperCommand::AdminReset => Verb::AdminReset,
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
             true,
@@ -310,6 +315,7 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::RulesApply => crate::setup::rules_apply(),
         Verb::UpgradeMigrate => crate::setup::upgrade_migrate(),
         Verb::AgentConfigUpgrade => crate::setup::agent_config_upgrade(),
+        Verb::AdminReset => crate::setup::admin_reset::run(),
         Verb::AssistantTune(opts, _, true) => {
             let root = test_root.unwrap_or_else(|| "/".into());
             println!(
