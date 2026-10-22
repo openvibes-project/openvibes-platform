@@ -31,13 +31,14 @@ fn admin_reset_passes_the_password_on_stdin_only() {
     };
     let call = fake.call(&["/usr/sbin/runuser"]);
     assert_eq!(
-        call[call.len() - 5..],
+        call[call.len() - 6..],
         [
             "user",
             "reset-password",
             "admin",
             "--password-stdin",
-            "--must-change"
+            "--must-change",
+            "--recover"
         ]
     );
     assert!(!call.iter().any(|arg| arg.contains(&password)), "{call:?}");
@@ -47,10 +48,33 @@ fn admin_reset_passes_the_password_on_stdin_only() {
 #[test]
 fn a_failed_reset_is_an_error_without_the_password() {
     let fake = Fake::new("admin-reset-fail");
-    fake.fail(&["/usr/sbin/runuser"], "no local user named admin");
+    fake.fail(
+        &["/usr/sbin/runuser"],
+        "openvibes-admin: no local user named admin\n",
+    );
     let plan = plan(&[]);
     let error = admin_reset(&fake.ctx(&plan)).unwrap_err();
-    assert!(error.contains("no local user named admin"), "{error}");
+    // Short enough for the page's two wrapped lines: no command, no prefix.
+    assert_eq!(error, "There is no local account named admin.");
     let input = fake.inputs.borrow()[0].clone();
     assert!(!error.contains(input.trim_end()), "{error}");
+}
+
+#[test]
+fn a_database_error_says_repair_first() {
+    for (stderr, want) in [
+        (
+            "openvibes-admin: database unavailable",
+            "Database unavailable. Repair first.",
+        ),
+        (
+            "openvibes-admin: schema is not current; run openvibes-admin migrate",
+            "Schema is not current; run openvibes-admin migrate. Repair first.",
+        ),
+    ] {
+        let fake = Fake::new("admin-reset-db");
+        fake.fail(&["/usr/sbin/runuser"], stderr);
+        let plan = plan(&[]);
+        assert_eq!(admin_reset(&fake.ctx(&plan)).unwrap_err(), want);
+    }
 }

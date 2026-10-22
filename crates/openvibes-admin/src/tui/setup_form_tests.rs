@@ -42,6 +42,33 @@ fn a_plan_without_a_ca_opens_the_install_form_filled() {
     assert_eq!(calls[1].0, format!("setup-step {}", Step::ALL[0].name()));
 }
 
+/// A Remove everything that stopped after the CA went (purge) but before
+/// `setup.toml` did: Home, whose Status shows the half-done uninstall,
+/// not the install form.
+#[test]
+fn a_half_done_remove_everything_starts_on_home() {
+    let mut app = app_with_plan(&format!("{PLAN}{NO_CA}"), vec![]);
+    let run = app.root.join("run/openvibes-admin");
+    std::fs::create_dir_all(&run).unwrap();
+    std::fs::write(run.join("job"), "uninstall\neverything").unwrap();
+    app.files_changed();
+    app.start_screen();
+    assert_eq!(app.nav.screen, Screen::Home);
+    let _ = std::fs::remove_dir_all(&app.root);
+}
+
+/// The CA's presence is read at start, on refresh and as a run ends, not
+/// on every draw.
+#[test]
+fn drawing_reads_no_certificates() {
+    let app = app_with_plan(&format!("{PLAN}{NO_CA}"), vec![]);
+    let before = app.host.cert_reads.get();
+    for _ in 0..3 {
+        screen(&app);
+    }
+    assert_eq!(app.host.cert_reads.get(), before);
+}
+
 /// Ruling (fix 1): the #87 form is not a trap; Home's Maintenance ›
 /// Uninstall still works from there. A fresh host's form has no Home.
 #[test]

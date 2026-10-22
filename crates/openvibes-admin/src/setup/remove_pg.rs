@@ -11,12 +11,19 @@ use super::{
     Ctx, installed, remove_file_or_dir,
 };
 
-const TABLES: &str = "SELECT count(*) FROM pg_catalog.pg_tables \
-                      WHERE schemaname NOT IN ('pg_catalog','information_schema')";
+/// Data in the `postgres` database itself: tables, partitioned tables,
+/// materialized views, foreign tables (outside the system schemas) and
+/// large objects.
+pub(super) const OBJECTS: &str = "SELECT (SELECT count(*) FROM pg_class c \
+     JOIN pg_namespace n ON n.oid = c.relnamespace \
+     WHERE c.relkind IN ('r','p','m','f') \
+     AND n.nspname NOT IN ('pg_catalog','information_schema') \
+     AND n.nspname NOT LIKE 'pg_toast%') \
+     + (SELECT count(*) FROM pg_largeobject_metadata)";
 
 /// PostgreSQL goes only when Setup installed it (the record), the package
 /// is still installed and the cluster holds nothing but the system
-/// databases and `openvibes`, and no user table in `postgres`. Everything
+/// databases and `openvibes`, and no data in `postgres` (`OBJECTS`). Everything
 /// that can refuse runs before the mark and before anything stops; after the
 /// mark, each part checks whether it is still to do, so a retry finishes. `/var/lib/pgsql` goes only under
 /// the mark, never on a record alone. The record goes last.
@@ -40,15 +47,15 @@ pub(super) fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
             );
         }
         let count = others?.lines().filter(|l| !l.trim().is_empty()).count();
-        // User tables in the `postgres` database itself are data too.
-        let tables = ctx.as_postgres(&["/usr/bin/psql", "-d", "postgres", "-Atqc", TABLES])?;
-        let tables: usize = (tables.trim().parse())
-            .map_err(|_| format!("the postgres database's tables were not counted: {tables:?}"))?;
+        // Data in the `postgres` database itself is data too.
+        let objects = ctx.as_postgres(&["/usr/bin/psql", "-d", "postgres", "-Atqc", OBJECTS])?;
+        let objects: usize = (objects.trim().parse())
+            .map_err(|_| format!("the postgres database's data was not counted: {objects:?}"))?;
         let held: Vec<String> = [
             (count, format!("it holds {count} other database")),
             (
-                tables,
-                format!("the postgres database holds {tables} table"),
+                objects,
+                format!("the postgres database holds {objects} object"),
             ),
         ]
         .into_iter()

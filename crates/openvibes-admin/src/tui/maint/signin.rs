@@ -156,6 +156,10 @@ impl<H: Host> App<H> {
         else {
             return;
         };
+        // An empty Done shows nothing to sign in with: it is a failure.
+        if matches!(&run.states[0], Some(StepState::Done(text)) if text.is_empty()) {
+            run.states[0] = Some(StepState::Failed("the reset gave no password".into()));
+        }
         if let Some(StepState::Done(text)) = run.states[0].as_mut() {
             self.maint.signin = Some(Shown(Zeroizing::new(std::mem::take(text))));
         }

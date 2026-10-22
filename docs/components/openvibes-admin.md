@@ -140,7 +140,10 @@ the old key. A host with `setup.toml` but no
 `/etc/openvibes/pki/intermediate.crt` (a first install that stopped before
 its CA step) starts on the install form, filled from the plan with a free
 root key name, and installs again, not a Repair, which refuses to make a CA
-(#87). A plan that does not parse shows its error on an unfilled form. Esc
+(#87). Not while a job is half done (`/run/openvibes-admin/job`): a Remove
+everything that stopped after deleting the CA but before `setup.toml`
+starts on Home, whose Status offers to finish it. The CA's presence is read
+at start, on each refresh and after each Setup step, not on every draw. A plan that does not parse shows its error on an unfilled form. Esc
 on that form goes Home (whose Maintenance › Uninstall still works; Repair
 refuses to make the CA), and the next start opens the form again; a fresh
 host's form has no Home to go to. After
@@ -201,7 +204,7 @@ to the journal (`config-write SERVICE ok|failed`, never the content).
 
 A repaired step reads "repaired: ..." in the list, and the journal line of each setup, update and remove step carries its detail (first 300 characters), e.g. `setup-step firewall --repair ok: repaired: open: 18423/tcp` (#292).
 
-**Console sign-in** (Maintenance › Console sign-in): for when nobody can sign in to the console any more. Enter asks "Reset the admin password?" ("old one stops", Yes first), then the sudo password, and runs the helper's `admin-reset` on the worker: a new one-time password for `admin` (4 groups of 4 characters, no look-alikes), which also clears the account's lock and re-enables it. The page then shows `Sign in as admin` and the password with "shown only now"; the bar is Enter Done. The password is moved out of the run's result into a `Zeroizing<String>` the moment the run ends and dropped when the page is left (Enter or Esc); it is never journalled, and opening the page again shows the entry, not the password. When the helper fails (no `admin` user, the database down, `setup.toml` unreadable) its words show in red as `✗ <text>`, no password shows, and Enter is Try again. Tests: `src/tui/maint/signin_tests.rs`.
+**Console sign-in** (Maintenance › Console sign-in): for when nobody can sign in to the console any more. Enter asks "Reset the admin password?" ("old one stops", Yes first), then the sudo password, and runs the helper's `admin-reset` on the worker: a new one-time password for `admin` (4 groups of 4 characters, no look-alikes), which also clears the account's lock and re-enables it (`--recover`). The page then shows `Sign in as admin` and the password with "shown only now"; the bar is Enter Done. The password is moved out of the run's result into a `Zeroizing<String>` the moment the run ends and dropped when the page is left (Enter or Esc); it is never journalled, and opening the page again shows the entry, not the password. When the helper fails (no `admin` user, the database down, `setup.toml` unreadable) its words show in red as `✗ <text>` (e.g. "There is no local account named admin.", or the database error with "Repair first."), no password shows, and Enter is Try again; a `done` with no password counts as failed. Tests: `src/tui/maint/signin_tests.rs`.
 
 **Shell** (Maintenance › Shell, second to last): the operating system's command line, for experts. It has no page: Enter on the menu row (bar `Enter Open the shell`) asks "Open a shell?" ("for experts; logged", Yes first), then "Your login password:" in the bar (Enter Open, Esc Cancel; the same sudo password, said as the operator knows it). The password runs the helper's `shell-open` on the worker, which does nothing but is checked by sudo and journalled and audit-noted as `shell-open OPERATOR`; while it runs the bar spins over Maintenance. Under `sudo openvibes-admin` no password is asked. When the run is done, the main loop restores the terminal, prints `OpenVIBES shell · type exit to go back to the menu. Logged as USER, HH:MM.` (USER is the name the journal records) (teal) and `Changes here are yours: Repair can put OpenVIBES' own files right again.` (dim; both plain under `NO_COLOR`), runs `Host::shell` (the `SUDO_USER`'s login shell through `runuser -l` under sudo, otherwise the user's own), then takes the terminal back and redraws Maintenance with Shell highlighted. A shell that cannot start shows `✗ The shell could not start: <error>`; three wrong passwords show `✗ The shell did not open: three wrong passwords: nothing more was run` and open nothing; while other work runs the Yes is refused with "Wait: other work is still running". The finished run is dropped, so Home shows no result for it. Tests: `src/tui/maint/shell_tests.rs`.
 
@@ -273,7 +276,7 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 | `user list` | lists usernames, status, active role names, display names, and last activity; never reads or prints password hashes | tab-separated rows |
 | `user disable USERNAME` | disables the account and revokes its sessions atomically | `disabled local user NAME` |
 | `user unlock USERNAME` | clears an active per-account login lock and audits the recovery; source-address throttles remain active | `unlocked local user NAME` |
-| `user reset-password USERNAME [--password-stdin] [--must-change]` | replaces the password and revokes all sessions atomically; break-glass: a disabled account is enabled (`user.enabled`) and an account lock cleared (`user.unlocked`) first; `--must-change` makes the password one-time (the user sets their own at the next console sign-in), without it the user is not asked to change it | prompts twice without terminal echo; with `--password-stdin`, reads one line from standard input instead, same password rules |
+| `user reset-password USERNAME [--password-stdin] [--must-change] [--recover]` | replaces the password and revokes all sessions atomically; it does not enable a disabled account; `--recover` (break-glass, passed only by `helper admin-reset`) then also enables a disabled account (`user.enabled`) and clears an account lock (`user.unlocked`), after the password is replaced, so a failed replace leaves a disabled account disabled; `--must-change` makes the password one-time (the user sets their own at the next console sign-in), without it the user is not asked to change it | prompts twice without terminal echo; with `--password-stdin`, reads one line from standard input instead, same password rules |
 
 Usernames are normalized to lowercase ASCII and limited to 64 characters.
 Passwords use the same console NFC normalization, 15–128 Unicode-character
@@ -667,12 +670,13 @@ refused while one works):
   step records that in `/etc/openvibes/setup-installed-postgresql`, as
   `setup-opened-ports` does for ports) and the cluster holds no database
   besides `postgres`, `template0`, `template1` and `openvibes`, and no
-  user table in the `postgres` database itself (counted in `pg_tables`
-  outside `pg_catalog` and `information_schema`): then the
+  data in the `postgres` database itself (tables, partitioned tables,
+  materialized views and foreign tables outside `pg_catalog`,
+  `information_schema` and `pg_toast*`, plus large objects): then the
   service is disabled, `postgresql-server` (and `postgresql` and
   `postgresql-private-libs`, whichever Setup installed too: the record lists each
   one that was absent before) removed with `rpm -e`, and `/var/lib/pgsql` deleted. With
-  other databases or such tables ("the postgres database holds 3 tables"), when another package needs it (`rpm -e --test` refuses,
+  other databases or such data ("the postgres database holds 3 objects"), when another package needs it (`rpm -e --test` refuses,
   e.g. `postgresql-upgrade`), or without the record, it stays, the step says
   why and Purge finishes; `--keep-data` never removes it. Once the checks pass
   a mark (`/etc/openvibes/postgresql-removing`) is written; a retry with the
@@ -734,8 +738,11 @@ password (no sudoers entry): `helper setup-plan PLANARGS` (writes
 LIST [--backup PATH] [--confirm HOSTNAME] [--remember-choice]`, `helper unit-enable UNIT`,
 `helper unit-disable UNIT`, `helper admin-reset` (the console's `admin`
 gets a new one-time password, 4 groups of 4 characters without 0/O/1/l/I,
-through `user reset-password admin --password-stdin --must-change` as
-`openvibes-admin`; prints `done<TAB>PASSWORD` or `failed<TAB>WHY`; the
+through `user reset-password admin --password-stdin --must-change --recover` as
+`openvibes-admin`; prints `done<TAB>PASSWORD` or `failed<TAB>WHY`, the
+CLI's own words without the command line, "There is no local account
+named admin." for a missing admin, and "Repair first." after a database
+error; the
 journal line is only `admin-reset admin ok`, never the password;
 `src/setup/admin_reset.rs`), `helper shell-open` (does nothing and
 prints `done<TAB>opened`: sudo's password check and the journal line are

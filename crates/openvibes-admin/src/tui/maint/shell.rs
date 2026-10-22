@@ -87,7 +87,10 @@ impl<H: Host> App<H> {
     /// exits; a shell that cannot start says so on Maintenance.
     pub fn run_shell(&mut self) {
         if let Err(error) = self.host.shell() {
-            self.outcome = Some((false, format!("The shell could not start: {error}")));
+            let error = error.to_string();
+            // Without HostError's "failed: ", like the other pages.
+            let why = error.strip_prefix("failed: ").unwrap_or(&error);
+            self.outcome = Some((false, format!("The shell could not start: {why}")));
         }
     }
 }

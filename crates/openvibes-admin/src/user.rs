@@ -64,6 +64,10 @@ pub enum UserCommand {
         /// sign-in (treat the given password as one-time).
         #[arg(long)]
         must_change: bool,
+        /// Break-glass (`helper admin-reset`): also enable the account and
+        /// clear its sign-in lock.
+        #[arg(long)]
+        recover: bool,
     },
 }
 
@@ -253,6 +257,7 @@ pub async fn run(
             username,
             password_stdin,
             must_change,
+            recover,
         } => {
             let username = match canonical_username(username) {
                 Ok(username) => username,
@@ -286,17 +291,10 @@ pub async fn run(
                     );
                 }
             };
-            // Break-glass: a reset that left the account disabled or locked
-            // would fail exactly when nobody can sign in (ruling 2).
             let now = Utc::now();
-            let recovered = async {
-                enable_local_user(client, &username, now, actor, "local_admin").await?;
-                unlock_local_user(client, &username, now, actor, "local_admin").await
-            };
-            if let Err(error) = recovered.await {
-                return (Err(error.to_string()), Some(username));
-            }
-            let changed = replace_password(
+            // The password first: a failed replace leaves a disabled
+            // account disabled.
+            match replace_password(
                 client,
                 &credential.user_id,
                 password_hash.as_str(),
@@ -307,17 +305,33 @@ pub async fn run(
                 "local_admin",
             )
             .await
-            .map_err(|error| error.to_string());
-            let result = changed.and_then(|changed| {
-                changed
-                    .then(|| {
-                        format!(
-                            "reset password for local user {username}; all sessions were revoked\n"
-                        )
-                    })
-                    .ok_or_else(|| format!("local user {username} no longer exists"))
-            });
-            (result, Some(username))
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    return (
+                        Err(format!("local user {username} no longer exists")),
+                        Some(username),
+                    );
+                }
+                Err(error) => return (Err(error.to_string()), Some(username)),
+            }
+            // Break-glass: a reset that left the account disabled or locked
+            // would fail exactly when nobody can sign in (ruling 2).
+            if *recover {
+                let recovered = async {
+                    enable_local_user(client, &username, now, actor, "local_admin").await?;
+                    unlock_local_user(client, &username, now, actor, "local_admin").await
+                };
+                if let Err(error) = recovered.await {
+                    return (Err(error.to_string()), Some(username));
+                }
+            }
+            (
+                Ok(format!(
+                    "reset password for local user {username}; all sessions were revoked\n"
+                )),
+                Some(username),
+            )
         }
     }
 }

@@ -115,7 +115,7 @@ fn a_shell_that_cannot_start_says_so() {
     app.run_shell();
     let text = screen(&app);
     assert!(
-        text.contains("✗ The shell could not start: failed: no shell here"),
+        text.contains("✗ The shell could not start: no shell here"),
         "{text}"
     );
 }

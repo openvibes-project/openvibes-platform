@@ -39,6 +39,8 @@ pub(super) struct SetupHost {
     pub(super) shells: Cell<usize>,
     /// `shell()` fails, as when the login shell cannot start.
     pub(super) no_shell: bool,
+    /// `certificates()` calls made.
+    pub(super) cert_reads: Cell<usize>,
 }
 
 impl Host for SetupHost {
@@ -64,6 +66,7 @@ impl Host for SetupHost {
         !self.root
     }
     fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
+        self.cert_reads.set(self.cert_reads.get() + 1);
         if !self.pems.is_empty() {
             return self.pems.iter().map(|(p, t)| (*p, Ok(t.clone()))).collect();
         }
@@ -161,6 +164,7 @@ fn built(
         pems: Vec::new(),
         shells: Cell::new(0),
         no_shell: false,
+        cert_reads: Cell::new(0),
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

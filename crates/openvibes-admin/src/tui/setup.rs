@@ -259,6 +259,7 @@ impl<H: Host> App<H> {
         self.setup.prompt.failures = 0;
         let finished = state.finished();
         self.setup.states[next] = Some(state);
+        self.ca = self.ca_exists();
         // The model step is last and optional: its failure still ends on
         // the Finished screen, which shows the URL and password.
         let optional_last = Step::ALL.get(next) == Some(&Step::AssistantModel);

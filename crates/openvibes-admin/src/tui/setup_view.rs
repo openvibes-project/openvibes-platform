@@ -21,7 +21,7 @@ const FORM_KEYS: &str = "j/k move  space toggle  Enter edit/start";
 const RUNNING_KEYS: &str = "Working: keys wait until this step ends";
 /// How to leave: `Esc` goes back on a set-up host; `q` quits the install form.
 fn leave<H: Host>(app: &App<H>) -> &'static str {
-    if app.setup_done() {
+    if app.setup_done_seen() {
         "Esc back"
     } else {
         "q quit"
@@ -40,7 +40,7 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
         Phase::Form => (
             form(app),
             // #87's form (set up, no CA) goes Home on Esc and still quits.
-            if app.host.is_set_up() && !app.setup_done() {
+            if app.host.is_set_up() && !app.setup_done_seen() {
                 format!("{FORM_KEYS}  Esc back  q quit")
             } else {
                 format!("{FORM_KEYS}  {}", leave(app))
@@ -69,7 +69,7 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
         // Esc: Home after the CA, the filled form before it (#87).
         Phase::Stopped(_) => (
             checklist(app, usize::from(body.width.saturating_sub(2))),
-            if app.setup_done() {
+            if app.setup_done_seen() {
                 "r retry  Esc back".into()
             } else {
                 "r retry  Esc form  q quit".into()

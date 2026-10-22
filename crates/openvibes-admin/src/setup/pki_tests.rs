@@ -146,6 +146,13 @@ fn an_existing_root_key_file_is_not_overwritten() {
     plan.root_key_out = Some("/media/usb/openvibes-root.key".into());
     let state = run_step(&fake.ctx(&plan), Step::Ca);
     assert!(state.detail().contains("already exists"), "{state:?}");
+    // The form's own key (no m any more).
+    assert!(
+        state
+            .detail()
+            .contains("(Esc opens the form, or --root-key-out)"),
+        "{state:?}"
+    );
     assert_eq!(
         fake.text("/media/usb/openvibes-root.key"),
         "an older root key"

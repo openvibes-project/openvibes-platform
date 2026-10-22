@@ -15,7 +15,17 @@ fn others_query() -> Vec<&'static str> {
 }
 
 fn tables_query() -> Vec<&'static str> {
-    [&OTHERS[..], &["/usr/bin/psql", "-d", "postgres", "-Atqc", "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema')"]].concat()
+    [
+        &OTHERS[..],
+        &[
+            "/usr/bin/psql",
+            "-d",
+            "postgres",
+            "-Atqc",
+            super::super::pg::OBJECTS,
+        ],
+    ]
+    .concat()
 }
 
 /// A host where Remove everything's Purge runs; `others` is what the
@@ -97,6 +107,16 @@ fn postgresql_stays_when_another_database_exists() {
     assert!(state.detail().contains("2 other databases"), "{state:?}");
 }
 
+/// The count takes materialized views, foreign tables and large objects
+/// too, not only `pg_tables`.
+#[test]
+fn the_postgres_data_count_takes_every_kind_of_object() {
+    let query = super::super::pg::OBJECTS;
+    for want in ["'r','p','m','f'", "pg_largeobject_metadata", "pg_toast%"] {
+        assert!(query.contains(want), "{query}");
+    }
+}
+
 /// User tables in the `postgres` database itself are data too.
 #[test]
 fn tables_in_the_postgres_database_keep_postgresql() {
@@ -109,7 +129,7 @@ fn tables_in_the_postgres_database_keep_postgresql() {
     assert!(
         state
             .detail()
-            .contains("the postgres database holds 3 tables"),
+            .contains("the postgres database holds 3 objects"),
         "{state:?}"
     );
 }

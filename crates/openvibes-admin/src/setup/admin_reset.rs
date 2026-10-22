@@ -51,10 +51,36 @@ pub fn admin_reset<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             "admin",
             "--password-stdin",
             "--must-change",
+            "--recover",
         ],
         input.as_bytes(),
-    )?;
+    )
+    .map_err(|error| reason(&error))?;
     Ok(StepState::Done(password.to_string()))
+}
+
+/// The CLI's own words, short enough for the page: without the command line
+/// (`/usr/sbin/runuser … --must-change: `) and the `openvibes-admin: `
+/// prefix; a database problem says what to do.
+fn reason(error: &str) -> String {
+    let why = match error.rsplit_once("openvibes-admin: ") {
+        Some((_, why)) => why,
+        None => error.split_once(": ").map_or(error, |(_, why)| why),
+    }
+    .trim();
+    if why == "no local user named admin" {
+        return "There is no local account named admin.".into();
+    }
+    let mut chars = why.chars();
+    let why: String = chars
+        .next()
+        .map(|c| c.to_uppercase().chain(chars).collect())
+        .unwrap_or_default();
+    if why.starts_with("Database") || why.starts_with("Schema") || why.contains("database_url") {
+        format!("{}. Repair first.", why.trim_end_matches('.'))
+    } else {
+        why
+    }
 }
 
 /// `helper admin-reset`: prints `done<TAB>PASSWORD` or `failed<TAB>WHY`.

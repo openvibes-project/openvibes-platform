@@ -361,7 +361,7 @@ async fn reset_password_reads_stdin_and_sets_must_change() {
             .status
             .success()
     );
-    // Break-glass (ruling 2): a locked, disabled admin comes back too.
+    // A locked, disabled admin.
     let client = platform_store::connect(&fixture.url)
         .await
         .unwrap()
@@ -381,34 +381,52 @@ async fn reset_password_reads_stdin_and_sets_must_change() {
         .await
         .unwrap();
     drop(client);
-    let out = fixture.run_input(
-        &[
+    let reset = |extra: &'static [&'static str]| {
+        let mut args = vec![
             "user",
             "reset-password",
             "admin",
             "--password-stdin",
             "--must-change",
-        ],
-        "Tz4m-W8qH-n2cR-7kLp\n",
-    );
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+        ];
+        args.extend_from_slice(extra);
+        let out = fixture.run_input(&args, "Tz4m-W8qH-n2cR-7kLp\n");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    let disabled = "SELECT count(*) FROM console_users WHERE username = 'admin' AND NOT enabled";
+    let locked = "SELECT count(*) FROM console_auth_throttle WHERE locked_until > now()";
+    // A plain reset changes the password only.
+    reset(&[]);
+    assert_eq!(fixture.count(disabled).await, 1);
+    assert_eq!(fixture.count(locked).await, 1);
+    // Break-glass (ruling 2, `helper admin-reset`): --recover brings a
+    // locked, disabled admin back too.
+    reset(&["--recover"]);
     assert_eq!(
         fixture.count("SELECT count(*) FROM console_users WHERE username = 'admin' AND enabled AND password_must_change").await,
         1
     );
+    assert_eq!(fixture.count(locked).await, 0);
+    // The password is replaced first: a failed replace leaves a disabled
+    // account disabled.
     assert_eq!(
         fixture
-            .count("SELECT count(*) FROM console_auth_throttle WHERE locked_until > now()")
+            .count(
+                "SELECT count(*) FROM audit_log a JOIN audit_log b
+                   ON a.action = 'auth.password.changed' AND b.action = 'user.enabled'
+                  AND a.id < b.id
+                  AND a.id = (SELECT max(id) FROM audit_log WHERE action = 'auth.password.changed')"
+            )
             .await,
-        0
+        1
     );
     assert_eq!(
         fixture.count("SELECT count(*) FROM audit_log WHERE action IN ('user.enabled', 'user.unlocked', 'auth.password.changed')").await,
-        3
+        4
     );
     fixture.drop().await;
 }

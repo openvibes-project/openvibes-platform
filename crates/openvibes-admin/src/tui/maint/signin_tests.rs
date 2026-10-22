@@ -126,6 +126,32 @@ fn a_failed_reset_shows_no_password() {
 }
 
 #[test]
+fn the_helpers_failed_line_shows_its_reason_whole() {
+    let mut app = page(vec![Ok(
+        "failed\tDatabase schema 12 is newer than this platform. Repair first.\n".into(),
+    )]);
+    reset(&mut app);
+    let text = screen(&app);
+    assert!(
+        text.contains("✗ Database schema 12 is newer than this platform. Repair first."),
+        "{text}"
+    );
+    assert!(text.contains("Try again"), "{text}");
+}
+
+#[test]
+fn an_empty_done_is_a_failure() {
+    let mut app = page(vec![Ok("done\t\n".into())]);
+    reset(&mut app);
+    let text = screen(&app);
+    assert!(!text.contains("Sign in as"), "{text}");
+    assert!(text.contains("Try again"), "{text}");
+    // Enter tries again rather than going back.
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::SignIn));
+}
+
+#[test]
 fn the_menu_lists_console_sign_in_after_database() {
     let names = crate::tui::maint::names();
     let at = names.iter().position(|n| *n == "Database").unwrap();
