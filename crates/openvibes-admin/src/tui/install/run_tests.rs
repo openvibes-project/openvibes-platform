@@ -41,6 +41,43 @@ fn titles(install: &Install) -> Vec<String> {
 }
 
 #[test]
+fn installing_keeps_the_empty_line_under_the_heading() {
+    let mut app = fresh(vec![]);
+    app.install.agent = false;
+    app.nav.screen = Screen::Install(Stage::Running);
+    app.run = Some(crate::tui::run::Run::new(
+        app.install.work(),
+        std::time::Instant::now(),
+    ));
+    let text = screen(&app);
+    let lines: Vec<&str> = text.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.contains("━━ Installing"))
+        .unwrap();
+    assert!(lines[at + 1].trim().is_empty(), "{text}");
+    assert!(lines[at + 2].contains("Packages"), "{text}");
+    assert!(text.contains("Ready"), "{text}");
+}
+
+#[test]
+fn a_failure_with_twelve_rows_keeps_its_whole_reason_at_80x24() {
+    let mut app = fresh(vec![
+        ok(),
+        ok(),
+        Ok("failed\tport 443 is in use by nginx".into()),
+    ]);
+    app.install.assistant = true;
+    go(&mut app);
+    let text = screen(&app);
+    assert_eq!(app.install.work().labels.len(), 12);
+    assert!(text.contains("✗ PostgreSQL"), "{text}");
+    assert!(text.contains("port 443 is in use by nginx"), "{text}");
+    assert!(text.contains("Try again goes on from this step."), "{text}");
+    assert!(text.contains("Enter  Try again"), "{text}");
+}
+
+#[test]
 fn install_rows_group_the_steps() {
     let mut install = Install::new("limebox.lan".into(), None);
     install.agent = false;

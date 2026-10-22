@@ -105,19 +105,31 @@ fn draw_running<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: Op
         None => Bar::act(&[("Enter", "Try again")]),
     };
     let area = frame::draw(frame, t, head, Some("Installing"), &app.bar(bar));
+    let room = usize::from(area.height);
+    // A stop keeps its whole reason: the rows fold to make room for it.
+    let stop = run.stopped_at().map(|at| {
+        let why = run.states[at].as_ref().map_or("", StepState::detail);
+        failure(t, why, "Try again goes on from this step.")
+    });
     let mut lines = Vec::new();
+    let room = match &stop {
+        Some(block) => room.saturating_sub(block.len() + 1),
+        None => {
+            lines.push(Line::raw(""));
+            room.saturating_sub(1)
+        }
+    };
     lines.extend(steps::lines(
         t,
         &titles,
         &states,
         running,
         app.tick_count,
-        12,
+        room,
     ));
-    if let Some(at) = run.stopped_at() {
-        let why = run.states[at].as_ref().map_or("", StepState::detail);
+    if let Some(block) = stop {
         lines.push(Line::raw(""));
-        lines.extend(failure(t, why, "Try again goes on from this step."));
+        lines.extend(block);
     }
     frame.render_widget(Paragraph::new(lines), area);
 }
