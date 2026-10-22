@@ -11,6 +11,7 @@ use common::hosts::id;
 use platform_store::{
     Client,
     console_read::AgentScope,
+    host_group_facts::{MEMBERSHIP_LOCK, ensure_automatic_groups},
     host_list::{HostScopes, hosts},
     vuln_list::VulnQuery,
 };
@@ -230,8 +231,8 @@ async fn membership_matches_the_rule_after_every_change() {
 async fn refreshed(c: &impl deadpool_postgres::GenericClient) -> bool {
     c.query_one(
         "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()
-                          AND classid = 0 AND objid = 1870032226)",
-        &[],
+                          AND classid = 0 AND objid = $1::bigint::oid)",
+        &[&MEMBERSHIP_LOCK],
     )
     .await
     .unwrap()
@@ -360,5 +361,70 @@ async fn scoped_lists_reach_the_hosts_the_rule_puts_in_scope() {
     )
     .await;
     lists_match(&c, &groups, "a host is revoked").await;
+    db.drop().await;
+}
+
+/// Advisory locks on `key` held (`true`) or awaited (`false`) by other
+/// backends in this test's database (tests run in parallel).
+async fn others_on(c: &Client, key: i64) -> Vec<bool> {
+    c.query(
+        "SELECT granted FROM pg_locks WHERE locktype = 'advisory' AND pid <> pg_backend_pid()
+           AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+           AND classid = ($1::bigint >> 32)::oid AND objid = ($1::bigint & 4294967295)::oid",
+        &[&key],
+    )
+    .await
+    .unwrap()
+    .iter()
+    .map(|r| r.get(0))
+    .collect()
+}
+
+/// An inventory whose OS changed holds the membership lock from its agents
+/// UPDATE and then takes AUTO_GROUP_LOCK; one that only makes an automatic
+/// group must take them in the same order, or the two deadlock.
+#[tokio::test]
+async fn making_an_automatic_group_takes_the_membership_lock_first() {
+    const AUTO_GROUP_LOCK: i64 = 0x4F56_4847;
+    let (db, c) = common::migrated().await;
+    c.batch_execute(&format!(
+        "BEGIN; SELECT pg_advisory_xact_lock({MEMBERSHIP_LOCK})"
+    ))
+    .await
+    .unwrap();
+    let pool = db.pool.clone();
+    let maker = tokio::spawn(async move {
+        let mut a = pool.get().await.unwrap();
+        let tx = a.transaction().await.unwrap();
+        ensure_automatic_groups(&tx, "linux", "debian 12", Utc::now())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    });
+    let mut waiting = Vec::new();
+    for _ in 0..100 {
+        waiting = others_on(&c, MEMBERSHIP_LOCK).await;
+        if waiting == [false] {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(waiting, [false], "the maker waits for the membership lock");
+    assert!(
+        others_on(&c, AUTO_GROUP_LOCK).await.is_empty(),
+        "without holding AUTO_GROUP_LOCK"
+    );
+    c.batch_execute("COMMIT").await.unwrap();
+    maker.await.unwrap();
+    assert_eq!(same(&c, "automatic groups made").await, 0);
+    let made: i64 = c
+        .query_one(
+            "SELECT count(*) FROM console_asset_groups WHERE kind = 'automatic'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(made, 2);
     db.drop().await;
 }

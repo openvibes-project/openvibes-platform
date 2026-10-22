@@ -10,6 +10,13 @@ use crate::StoreError;
 /// race on the unique name index). Constant is "OVHG" in ASCII.
 const AUTO_GROUP_LOCK: i64 = 0x4F56_4847;
 
+/// The stored-membership lock (migration 61, "ovmb"): every membership
+/// refresh takes it until commit. Always taken before [`AUTO_GROUP_LOCK`]:
+/// an inventory whose OS changed holds it from its agents UPDATE, and one
+/// that only makes a group would otherwise take it after, at the conditions
+/// INSERT, and the two deadlock.
+pub const MEMBERSHIP_LOCK: i64 = 0x6F76_6D62;
+
 /// Most automatic groups there can be; an agent reports its own os-release,
 /// so without a cap a hostile one could make groups without end.
 const MAX_AUTOMATIC_GROUPS: i64 = 200;
@@ -105,9 +112,11 @@ pub async fn ensure_automatic_groups(
             continue;
         }
         if !locked {
-            client
-                .execute("SELECT pg_advisory_xact_lock($1)", &[&AUTO_GROUP_LOCK])
-                .await?;
+            for lock in [MEMBERSHIP_LOCK, AUTO_GROUP_LOCK] {
+                client
+                    .execute("SELECT pg_advisory_xact_lock($1)", &[&lock])
+                    .await?;
+            }
             locked = true;
             // another ingest may have made it while we waited
             if !client.query_one(missing, &[&key]).await?.get::<_, bool>(0) {

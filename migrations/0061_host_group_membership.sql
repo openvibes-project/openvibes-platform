@@ -14,7 +14,10 @@
 -- later change refreshes again. No foreign keys: their cascades would write
 -- rows outside the lock; deletes are triggers too.
 -- ponytail: one lock for all membership writes; relevant changes are rare
--- (facts, rules, revokes), per-group locks if they ever contend.
+-- (facts, rules, revokes). Heartbeat `last_address` churn (roaming or NAT
+-- hosts) is the likely first contention; per-group locks if it shows.
+-- Lock order: ACCESS_BINDING_LOCK and the enrolment token lock before this
+-- one, this one before AUTO_GROUP_LOCK (host_group_facts.rs MEMBERSHIP_LOCK).
 -- Additive: the deletes below are inside trigger functions and the backfill
 -- only fills the new table, so no stored data changes (no needs-backup).
 CREATE TABLE console_host_group_membership (
