@@ -330,6 +330,12 @@ pub enum Privileged<'a> {
     /// `shell-open`: does nothing itself; sudo checks the password and the
     /// call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
+    /// `ca-request [--copy PATH]`: makes or reuses the CA request before
+    /// install; prints `request` or `signed<TAB>ISSUER`, then the request.
+    CaRequest(Option<&'a str>),
+    /// `ca-accept --cert PEM --root-cert PEM`: checks and keeps the CA's
+    /// answer; journalled as `ca-accept` (no PEM).
+    CaAccept(&'a str, &'a str),
 }
 
 impl Privileged<'_> {
@@ -361,10 +367,25 @@ impl Privileged<'_> {
             Privileged::UnitDisable(unit) => vec!["unit-disable".into(), unit.name().into()],
             Privileged::AdminReset => vec!["admin-reset".into()],
             Privileged::ShellOpen => vec!["shell-open".into()],
+            Privileged::CaRequest(copy) => {
+                let mut all = vec!["ca-request".to_owned()];
+                if let Some(path) = copy {
+                    all.extend(["--copy".to_owned(), (*path).to_owned()]);
+                }
+                all
+            }
+            Privileged::CaAccept(cert, root) => vec![
+                "ca-accept".into(),
+                "--cert".into(),
+                (*cert).into(),
+                "--root-cert".into(),
+                (*root).into(),
+            ],
         }
     }
 
-    /// What the journal records (no arguments of `setup-plan`, `update-step`, `remove-step`).
+    /// What the journal records (no arguments of `setup-plan`, `update-step`,
+    /// `remove-step`, `ca-request`, `ca-accept`).
     #[must_use]
     pub fn journal(&self) -> String {
         match self {
@@ -374,7 +395,30 @@ impl Privileged<'_> {
             // Two words: no step detail, so the password stays out (journal.rs).
             Privileged::AdminReset => "admin-reset admin".into(),
             Privileged::ShellOpen => format!("shell-open {}", crate::shell::operator()),
+            Privileged::CaRequest(_) => "ca-request".into(),
+            Privileged::CaAccept(..) => "ca-accept".into(),
             other => other.args().join(" "),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Privileged;
+
+    #[test]
+    fn ca_verbs_keep_the_pem_out_of_the_journal() {
+        assert_eq!(Privileged::CaRequest(None).args(), ["ca-request"]);
+        assert_eq!(
+            Privileged::CaRequest(Some("/home/alice/openvibes-request.csr")).args(),
+            ["ca-request", "--copy", "/home/alice/openvibes-request.csr"]
+        );
+        assert_eq!(Privileged::CaRequest(Some("/x")).journal(), "ca-request");
+        let accept = Privileged::CaAccept("CERT PEM", "ROOT PEM");
+        assert_eq!(
+            accept.args(),
+            ["ca-accept", "--cert", "CERT PEM", "--root-cert", "ROOT PEM"]
+        );
+        assert_eq!(accept.journal(), "ca-accept");
     }
 }

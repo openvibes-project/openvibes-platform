@@ -6,7 +6,11 @@ use rcgen::{
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use time::OffsetDateTime;
-use x509_parser::{certificate::X509Certificate, pem::parse_x509_pem};
+use x509_parser::{
+    certificate::X509Certificate,
+    pem::{Pem, parse_x509_pem},
+    x509::X509Name,
+};
 
 use crate::PkiError;
 
@@ -234,12 +238,99 @@ pub fn check_intermediate(
         return Err(PkiError::NotIntermediate);
     }
     verify_signed_by(cert_pem, root_cert_pem)?;
+    valid_at(&cert, now)
+}
+
+fn valid_at(cert: &X509Certificate<'_>, now: DateTime<Utc>) -> Result<(), PkiError> {
     let validity = cert.validity();
     let now = now.timestamp();
     if now < validity.not_before.timestamp() || now > validity.not_after.timestamp() {
         return Err(PkiError::IssuerExpired);
     }
     Ok(())
+}
+
+/// Exactly one PEM block (a pasted chain is refused, not half read).
+fn single(pem: &str) -> Result<(), PkiError> {
+    match Pem::iter_from_buffer(pem.as_bytes()).count() {
+        0 => Err(PkiError::InvalidPem),
+        1 => Ok(()),
+        n => Err(PkiError::Several(n)),
+    }
+}
+
+/// The common name, else the whole distinguished name.
+fn name_of(name: &X509Name<'_>) -> String {
+    name.iter_common_name()
+        .next()
+        .and_then(|cn| cn.as_str().ok())
+        .map_or_else(|| name.to_string(), str::to_owned)
+}
+
+/// A signed intermediate request, as [`check_signed_request`] read it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Signed {
+    /// The certificate's subject (common name, else the whole name).
+    pub subject: String,
+    /// Its issuer, the same way.
+    pub issuer: String,
+    /// End of validity, `YYYY-MM-DD`.
+    pub not_after: String,
+}
+
+/// Whether `cert_pem` is the CA's answer to `csr_pem`: one certificate, a CA
+/// with path length 0, for the request's own key, and valid at `now`.
+pub fn check_signed_request(
+    csr_pem: &str,
+    cert_pem: &str,
+    now: DateTime<Utc>,
+) -> Result<Signed, PkiError> {
+    single(cert_pem)?;
+    let der = der_of(cert_pem)?;
+    let cert = parse(&der)?;
+    let constraints = cert
+        .basic_constraints()
+        .map_err(|_| PkiError::InvalidPem)?
+        .map(|extension| (extension.value.ca, extension.value.path_len_constraint));
+    if constraints != Some((true, Some(0))) {
+        return Err(PkiError::NotCa);
+    }
+    let csr =
+        CertificateSigningRequestParams::from_pem(csr_pem).map_err(|_| PkiError::InvalidCsr)?;
+    if csr.public_key.subject_public_key_info() != cert.tbs_certificate.subject_pki.raw {
+        return Err(PkiError::NotForRequest);
+    }
+    valid_at(&cert, now)?;
+    let not_after = DateTime::from_timestamp(cert.validity().not_after.timestamp(), 0)
+        .ok_or(PkiError::InvalidPem)?;
+    Ok(Signed {
+        subject: name_of(cert.subject()),
+        issuer: name_of(cert.issuer()),
+        not_after: not_after.format("%Y-%m-%d").to_string(),
+    })
+}
+
+/// Whether `root_pem` is one self-signed CA certificate, valid at `now`,
+/// that signed `cert_pem`; the root's common name.
+pub fn check_root_signed(
+    root_pem: &str,
+    cert_pem: &str,
+    now: DateTime<Utc>,
+) -> Result<String, PkiError> {
+    single(root_pem)?;
+    let der = der_of(root_pem)?;
+    let root = parse(&der)?;
+    let is_ca = root
+        .basic_constraints()
+        .ok()
+        .flatten()
+        .is_some_and(|constraints| constraints.value.ca);
+    if !is_ca || root.subject() != root.issuer() || root.verify_signature(None).is_err() {
+        return Err(PkiError::NotRoot);
+    }
+    valid_at(&root, now)?;
+    verify_signed_by(cert_pem, root_pem)?;
+    Ok(name_of(root.subject()))
 }
 
 /// SHA-256 of the first certificate's DER encoding.

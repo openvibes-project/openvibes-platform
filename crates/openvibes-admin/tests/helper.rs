@@ -220,3 +220,12 @@ fn setup_actions_need_root_and_exactly_one_action() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("--confirm"));
 }
+
+#[test]
+fn ca_accept_takes_pem_arguments_that_start_with_dashes() {
+    let pem = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n";
+    let out = helper(&["ca-accept", "--cert", pem, "--root-cert", pem]);
+    // Parsed: it reaches the root check (clap would exit 2).
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("helper must run as root"));
+}

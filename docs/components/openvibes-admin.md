@@ -583,7 +583,10 @@ an installed package whose packaged configuration file is missing, per
 `postgres`, `operators` (the sudo user joins `openvibes-operators`),
 `database`, `schema`, `ca` (quick: root in `/run/openvibes-ca`, its key
 written once to `--root-key-out`, never over an existing file, otherwise
-deleted; careful: waits for the signed intermediate), `certificates`
+deleted; careful: installs from the request folder below when it holds
+the key, request, certificate and root, then removes the folder, otherwise
+waits for the signed intermediate in `/run/openvibes-ca/int`; quick also
+removes a leftover request folder), `certificates`
 (hostname, `--san`, `localhost`, `127.0.0.1`, then the host's global IPv4
 and IPv6 addresses from `ip -o addr show scope global` (not rotating IPv6
 privacy or deprecated ones), container and VM bridges
@@ -746,8 +749,24 @@ error; the
 journal line is only `admin-reset admin ok`, never the password;
 `src/setup/admin_reset.rs`), `helper shell-open` (does nothing and
 prints `done<TAB>opened`: sudo's password check and the journal line are
-the point, before Maintenance › Shell opens the operator's shell).
-Arguments are checked before the root check.
+the point, before Maintenance › Shell opens the operator's shell),
+`helper ca-request [--copy PATH]` and `helper ca-accept --cert PEM
+--root-cert PEM` ("Your own CA" before install, `src/setup/request.rs`).
+`ca-request` makes the intermediate's key and request in
+`/etc/openvibes/pki/request/` (root, 0700; `intermediate.key` 0600,
+`intermediate.csr`), or reuses them so a request already sent stays valid,
+and writes the request to `--copy` (absolute, 0644, the operator's) only if
+nothing is there. `ca-accept` checks the certificate against the stored
+request and the root against the certificate (platform-pki
+`check_signed_request`, `check_root_signed`) and only then writes
+`intermediate.crt` and `root.crt` there. Both print line 1 `request` or
+`signed<TAB>ISSUER`, then the request; a refused certificate exits 1 with
+one plain sentence (e.g. "This certificate was signed for a different
+request: sign the request shown here.", "That is 2 certificates: paste only
+the one signed for OpenVIBES."). The journal line is only `ca-request` or
+`ca-accept`, never the PEM. The folder survives reboots; the CA step removes
+it after installing from it, Remove everything deletes it with
+`/etc/openvibes`. Arguments are checked before the root check.
 
 ## CA commands
 

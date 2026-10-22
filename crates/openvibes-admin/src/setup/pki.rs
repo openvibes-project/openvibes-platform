@@ -15,6 +15,7 @@ use platform_host::{
 use super::{
     Ctx,
     plan::{CaMode, Component},
+    request::REQUEST_DIR,
 };
 
 const STAGE: &str = "/run/openvibes-ca";
@@ -168,10 +169,41 @@ fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     import_and_install(ctx)?;
     let kept = keep_root_key(ctx)?;
     remove_stage(ctx)?;
+    remove_request(ctx)?;
     Ok(StepState::Done(format!("{kept}; {}", root_summary(ctx)?)))
 }
 
+/// Removes the request made before install, if any (R2).
+fn remove_request<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+    match fs::remove_dir_all(ctx.path(REQUEST_DIR)) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(format!("{REQUEST_DIR}: {error}"))
+        }
+        _ => Ok(()),
+    }
+}
+
 fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    let request = |name: &str| format!("{REQUEST_DIR}/{name}");
+    let names = [
+        "intermediate.key",
+        "intermediate.csr",
+        "intermediate.crt",
+        "root.crt",
+    ];
+    if names.iter().all(|name| ctx.exists(&request(name))) {
+        // Staged for openvibes-admin, which cannot read the root-only folder.
+        fresh_stage(ctx)?;
+        stage_dir(ctx, INT)?;
+        for name in names {
+            let mode = if name.ends_with(".key") { 0o600 } else { 0o644 };
+            ctx.copy(&request(name), &format!("{INT}/{name}"), ADMIN_OWNER, mode)?;
+        }
+        import_and_install(ctx)?;
+        remove_stage(ctx)?;
+        remove_request(ctx)?;
+        return Ok(StepState::Done(root_summary(ctx)?));
+    }
     if ctx.exists(&format!("{INT}/intermediate.crt")) && ctx.exists(&format!("{INT}/root.crt")) {
         import_and_install(ctx)?;
         remove_stage(ctx)?;

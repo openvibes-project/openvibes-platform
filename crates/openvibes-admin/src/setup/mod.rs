@@ -31,6 +31,7 @@ pub(crate) mod ports;
 #[cfg(test)]
 mod ports_tests;
 pub mod remove;
+pub(crate) mod request;
 mod run;
 #[cfg(test)]
 mod run_tests;
