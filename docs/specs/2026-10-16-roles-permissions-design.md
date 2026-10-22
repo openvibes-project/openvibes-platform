@@ -788,9 +788,9 @@ These fill gaps in the Vulnerabilities list and a vulnerability's page.
    - "In reach" means hosts where the viewer holds `vulnerabilities.triage`.
    - A confirmation says how many hosts will change.
    - Mitigated, accepted, false-positive and fixed pairs are left as they are.
+   - To change only some hosts, tick them in the page's Hosts table.
 
 **Rulings:**
-
 
 1. **A new list route, `GET /v1/vulnerability-list`.** `GET /v1/vulnerabilities` stays as it is.
 2. **What a row is.**
