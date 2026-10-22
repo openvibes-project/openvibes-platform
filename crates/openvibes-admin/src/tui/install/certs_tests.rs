@@ -18,13 +18,13 @@ use crate::{
 };
 
 /// A request, the root that signs it, and its answer.
-struct Pki {
-    csr: String,
-    root: String,
-    cert: String,
+pub(super) struct Pki {
+    pub(super) csr: String,
+    pub(super) root: String,
+    pub(super) cert: String,
 }
 
-fn pki() -> Pki {
+pub(super) fn pki() -> Pki {
     let now = chrono::Utc::now();
     let (csr, _key) = platform_pki::intermediate_request().unwrap();
     let root = platform_pki::generate_root(now).unwrap();
@@ -36,10 +36,12 @@ fn pki() -> Pki {
     }
 }
 
-/// Step 3 with your own CA: Next, the password, and the request made.
-fn requested(pki: &Pki) -> App<SetupHost> {
+/// Step 3 with your own CA: Next, the password, and the request made
+/// (its copy beside another file the helper found).
+pub(super) fn requested(pki: &Pki) -> App<SetupHost> {
     let mut app = steps(2);
-    answer(&app, Ok(format!("request\n{}", pki.csr)));
+    let copy = "copy\t/home/u/openvibes-intermediate-2.csr";
+    answer(&app, Ok(format!("request\n{copy}\n{}", pki.csr)));
     down(&mut app, 2);
     app.key(Key::Enter);
     type_text(&mut app, "pw");
@@ -48,7 +50,7 @@ fn requested(pki: &Pki) -> App<SetupHost> {
 }
 
 /// From the request rows: open `which`, Paste it, and paste `text`.
-fn paste(app: &mut App<SetupHost>, which: Which, text: &str) {
+pub(super) fn paste(app: &mut App<SetupHost>, which: Which, text: &str) {
     app.nav.row = if which == Which::Signed { 1 } else { 2 };
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Install(Stage::Add(which)));
@@ -104,7 +106,8 @@ fn certs_openvibes_shows_root_key_file_row() {
     app.key(Key::Up);
     app.key(Key::Enter);
     app.key(Key::ClearLine);
-    let key = format!("{}/root.key", folder("certs"));
+    let dir = folder("certs");
+    let key = format!("{dir}/root.key");
     type_text(&mut app, &key);
     assert!(screen(&app).contains("root.key█"));
     app.key(Key::Enter);
@@ -175,7 +178,7 @@ fn request_screen_shows_pem_and_saved_path() {
     for row in [
         "· Install › Certificates › Request",
         "The signing request",
-        "Also saved as ~/openvibes-intermediate.csr",
+        "Also saved as ~/openvibes-intermediate-2.csr",
         "-----BEGIN CERTIFICATE REQUEST-----",
         "-----END CERTIFICATE REQUEST-----",
         "Scroll",
@@ -315,7 +318,7 @@ fn file_pick_lists_files_and_reads_one() {
     std::fs::write(format!("{dir}/big.crt"), "x".repeat(100 * 1024)).unwrap();
     let mut app = at(super::super::script_host::fresh_app(), 2);
     answer(&app, Ok(format!("request\n{}", pki.csr)));
-    app.install.home = Some(dir.clone());
+    app.install.home = Some(dir.to_string());
     down(&mut app, 2);
     app.key(Key::Enter);
     type_text(&mut app, "pw");
@@ -404,30 +407,6 @@ fn both_added_calls_ca_accept_and_review_says_signed_by() {
 }
 
 #[test]
-fn a_refused_accept_says_why_and_next_stays_disabled() {
-    let pki = pki();
-    let mut app = requested(&pki);
-    paste(&mut app, Which::Signed, &pki.cert);
-    app.key(Key::Enter);
-    answer(
-        &app,
-        Err(HostError::Failed(
-            "openvibes-admin helper: There is no request here: make one first.".into(),
-        )),
-    );
-    paste(&mut app, Which::Root, &pki.root);
-    app.key(Key::Enter);
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    let text = screen(&app);
-    assert!(text.contains("There is no request here"), "{text}");
-    assert!(app.install.signed.is_none());
-    app.nav.row = 3;
-    app.key(Key::Enter);
-    assert_eq!(app.nav.screen, Screen::Install(Stage::Step(2)));
-}
-
-#[test]
 fn restart_with_signed_request_shows_added() {
     let pki = pki();
     let plan = format!("{PLAN}# no ca\n").replace("ca = \"quick\"", "ca = \"careful\"");
@@ -476,7 +455,8 @@ fn switching_to_openvibes_ca_forgets_the_signed_certificates() {
     assert_eq!(app.install.ca, Ca::OpenVibes);
     assert!(app.install.signed.is_none() && app.install.cert.is_none());
     assert!(app.install.root_pem.is_none() && app.install.root_added.is_none());
-    let key = format!("{}/root.key", folder("switch"));
+    let dir = folder("switch");
+    let key = format!("{dir}/root.key");
     app.install.root_key_out = key.clone();
     // The plan, then Packages to Schema, then the CA step's own detail.
     answer(&app, Ok("written\n".into()));

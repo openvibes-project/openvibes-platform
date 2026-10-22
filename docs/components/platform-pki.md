@@ -57,13 +57,14 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
   valid at `now` (`IssuerExpired`); returns `Signed` (subject and issuer
   common names, `not_after` as `YYYY-MM-DD`).
 - `check_root_signed(root_cert, cert, now)`: one PEM block, a self-signed CA
-  (`NotRoot`), valid at `now`, that signed `cert` (`NotSignedBy`); returns
-  the root's common name.
+  (`NotRoot`), valid at `now`, that signed `cert` (`NotSignedBy`) and may
+  sign a CA: path length 0 is refused (`RootPathLen0`); returns the root's
+  common name.
 - `sha256_fingerprint(cert)`: SHA-256 of the DER encoding.
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,
   `InvalidValidity`, `IssuerExpired`, `InvalidAgentId`, `NotIntermediate`,
-  `NotForRequest`, `Several(n)`, `NotRoot`.
+  `NotForRequest`, `Several(n)`, `NotRoot`, `RootPathLen0`.
   Messages never contain key or certificate material.
 
 ## Test

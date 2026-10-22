@@ -4,7 +4,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use platform_host::{Step, StepState};
 
-use super::{REQUEST_DIR, RequestState, accept, output, request};
+use super::{REQUEST_DIR, RequestState, accept, output, request, save_copy};
 use crate::setup::{
     fake::{Fake, plan},
     pki_tests::{ADMIN, ca_commands, with},
@@ -38,12 +38,12 @@ fn signed(fake: &Fake) -> (String, String) {
 fn request_is_reused() {
     let fake = Fake::new("request-reused");
     let plan = plan(&[Ingest]);
-    let first = request(&fake.ctx(&plan), None).unwrap();
+    let first = request(&fake.ctx(&plan)).unwrap();
     assert!(matches!(first, RequestState::Request { .. }), "{first:?}");
     let key = fake.text(&format!("{REQUEST_DIR}/intermediate.key"));
     let csr = csr_of(first);
     assert!(csr.contains("BEGIN CERTIFICATE REQUEST"), "{csr}");
-    assert_eq!(csr_of(request(&fake.ctx(&plan), None).unwrap()), csr);
+    assert_eq!(csr_of(request(&fake.ctx(&plan)).unwrap()), csr);
     assert_eq!(fake.text(&format!("{REQUEST_DIR}/intermediate.key")), key);
     assert_eq!(fake.text(&format!("{REQUEST_DIR}/intermediate.csr")), csr);
     assert_eq!(mode(&fake, REQUEST_DIR), 0o700);
@@ -54,32 +54,60 @@ fn request_is_reused() {
 }
 
 #[test]
-fn request_copy_is_written_once() {
+fn a_reused_request_dir_is_tightened_again() {
+    let fake = Fake::new("request-tighten");
+    let plan = plan(&[Ingest]);
+    request(&fake.ctx(&plan)).unwrap();
+    let dir = fake.root.join(&REQUEST_DIR[1..]);
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    request(&fake.ctx(&plan)).unwrap();
+    assert_eq!(mode(&fake, REQUEST_DIR), 0o700);
+}
+
+#[test]
+fn the_copy_is_reused_or_written_beside_another_file() {
     let fake = Fake::new("request-copy");
     std::fs::create_dir_all(fake.root.join("home/alice")).unwrap();
     let plan = plan(&[Ingest]);
-    let copy = std::path::Path::new("/home/alice/openvibes-request.csr");
-    let csr = csr_of(request(&fake.ctx(&plan), Some(copy)).unwrap());
-    assert_eq!(fake.text("/home/alice/openvibes-request.csr"), csr);
-    assert_eq!(mode(&fake, "/home/alice/openvibes-request.csr"), 0o644);
-    // The same request again (reused): fine, nothing rewritten.
-    request(&fake.ctx(&plan), Some(copy)).unwrap();
-    assert_eq!(fake.text("/home/alice/openvibes-request.csr"), csr);
-    fake.file(
-        "/home/alice/openvibes-request.csr",
-        "the operator's own file",
-    );
-    assert_eq!(
-        request(&fake.ctx(&plan), Some(copy)).unwrap_err(),
-        "That file already exists: /home/alice/openvibes-request.csr. Choose another name."
-    );
-    assert_eq!(
-        fake.text("/home/alice/openvibes-request.csr"),
-        "the operator's own file"
-    );
+    let ctx = fake.ctx(&plan);
+    let csr = csr_of(request(&ctx).unwrap());
+    let base = std::path::Path::new("/home/alice/openvibes-request.csr");
+    let copy = save_copy(&ctx, base, &csr).unwrap();
+    assert_eq!(copy, "/home/alice/openvibes-request.csr");
+    assert_eq!(fake.text(&copy), csr);
+    assert_eq!(mode(&fake, &copy), 0o644);
+    // The same request again (a new session): the same file, nothing new.
+    assert_eq!(save_copy(&ctx, base, &csr).unwrap(), copy);
     assert!(
-        request(&fake.ctx(&plan), Some(std::path::Path::new("relative.csr"))).is_err(),
+        !fake
+            .root
+            .join("home/alice/openvibes-request-2.csr")
+            .exists()
+    );
+    // The operator's own file there: kept, the copy goes beside it.
+    fake.file(&copy, "the operator's own file");
+    let beside = save_copy(&ctx, base, &csr).unwrap();
+    assert_eq!(beside, "/home/alice/openvibes-request-2.csr");
+    assert_eq!(fake.text(&beside), csr);
+    assert_eq!(fake.text(&copy), "the operator's own file");
+    assert_eq!(save_copy(&ctx, base, &csr).unwrap(), beside);
+    assert!(
+        save_copy(&ctx, std::path::Path::new("relative.csr"), &csr).is_err(),
         "only an absolute path"
+    );
+}
+
+#[test]
+fn every_copy_name_taken_is_refused() {
+    let fake = Fake::new("request-copy-full");
+    let plan = plan(&[Ingest]);
+    fake.file("/h/r.csr", "taken");
+    for n in 2..=100 {
+        fake.file(&format!("/h/r-{n}.csr"), "taken");
+    }
+    assert_eq!(
+        save_copy(&fake.ctx(&plan), std::path::Path::new("/h/r.csr"), "CSR").unwrap_err(),
+        "That file already exists: /h/r.csr. Choose another name."
     );
 }
 
@@ -87,13 +115,13 @@ fn request_copy_is_written_once() {
 fn accept_writes_both_and_state_is_signed() {
     let fake = Fake::new("request-accept");
     let plan = plan(&[Ingest]);
-    let csr = csr_of(request(&fake.ctx(&plan), None).unwrap());
+    let csr = csr_of(request(&fake.ctx(&plan)).unwrap());
     let (cert, root) = signed(&fake);
     let accepted = accept(&fake.ctx(&plan), &cert, &root).unwrap();
     assert_eq!(accepted.issuer, "OpenVIBES Root CA");
     assert_eq!(fake.text(&format!("{REQUEST_DIR}/intermediate.crt")), cert);
     assert_eq!(fake.text(&format!("{REQUEST_DIR}/root.crt")), root);
-    let state = request(&fake.ctx(&plan), None).unwrap();
+    let state = request(&fake.ctx(&plan)).unwrap();
     assert_eq!(
         state,
         RequestState::Signed {
@@ -107,7 +135,7 @@ fn accept_writes_both_and_state_is_signed() {
 fn accept_refuses_other_request_and_writes_nothing() {
     let fake = Fake::new("request-other");
     let plan = plan(&[Ingest]);
-    request(&fake.ctx(&plan), None).unwrap();
+    request(&fake.ctx(&plan)).unwrap();
     let root = platform_pki::generate_root(chrono::Utc::now()).unwrap();
     let (other, _) = platform_pki::intermediate_request().unwrap();
     let cert = platform_pki::sign_intermediate(&root, &other, chrono::Utc::now()).unwrap();
@@ -146,7 +174,7 @@ fn careful_installs_from_request_dir_and_removes_it() {
     ca_commands(&fake);
     let mut plan = plan(&[Ingest]);
     plan.ca = CaMode::Careful;
-    request(&fake.ctx(&plan), None).unwrap();
+    request(&fake.ctx(&plan)).unwrap();
     let key = fake.text(&format!("{REQUEST_DIR}/intermediate.key"));
     let (cert, root) = signed(&fake);
     accept(&fake.ctx(&plan), &cert, &root).unwrap();
@@ -176,22 +204,34 @@ fn quick_removes_a_leftover_request_dir() {
     let fake = Fake::new("request-quick");
     ca_commands(&fake);
     let plan = plan(&[Ingest]);
-    request(&fake.ctx(&plan), None).unwrap();
+    request(&fake.ctx(&plan)).unwrap();
     let state = run_step(&fake.ctx(&plan), Step::Ca);
     assert!(matches!(state, StepState::Done(_)), "{state:?}");
     assert!(!fake.root.join(&REQUEST_DIR[1..]).exists());
 }
 
 #[test]
-fn output_names_the_state_then_the_request() {
+fn output_names_the_state_the_copy_then_the_request() {
     let csr = "-----BEGIN CERTIFICATE REQUEST-----\n…\n".to_owned();
     assert_eq!(
-        output(&RequestState::Request { csr: csr.clone() }),
+        output(&RequestState::Request { csr: csr.clone() }, None),
         format!("request\n{csr}")
     );
     let signed = RequestState::Signed {
         csr: csr.clone(),
         issuer: "Example Root".into(),
     };
-    assert_eq!(output(&signed), format!("signed\tExample Root\n{csr}"));
+    assert_eq!(
+        output(&signed, Some("/home/a/r-2.csr")),
+        format!("signed\tExample Root\ncopy\t/home/a/r-2.csr\n{csr}")
+    );
+}
+
+#[test]
+fn a_root_with_path_length_0_has_its_own_sentence() {
+    assert_eq!(
+        super::message(&platform_pki::PkiError::RootPathLen0),
+        "Your CA's certificate does not allow it to sign another CA (path length 0): it \
+         cannot sign the intermediate."
+    );
 }

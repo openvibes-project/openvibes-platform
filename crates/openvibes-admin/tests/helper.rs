@@ -149,6 +149,7 @@ fn maintenance_verbs_check_their_arguments_before_the_root_check() {
             vec!["update-step", "backup", "--backup", "relative.dump"],
             "absolute",
         ),
+        (vec!["ca-request", "--copy", "relative.csr"], "absolute"),
         (vec!["remove-step", "purge"], "--components is required"),
         (
             vec![

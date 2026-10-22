@@ -113,9 +113,10 @@ pub enum HelperCommand {
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
     /// Makes the CA request before install, or reuses it; prints `request`
-    /// or `signed<TAB>ISSUER`, then the request.
+    /// or `signed<TAB>ISSUER`, the copy's line, then the request.
     CaRequest {
-        /// Also write the request here (absolute) unless a file is there.
+        /// Also write the request here (absolute), or beside it as `-2`,
+        /// `-3`… when another file is there; prints `copy<TAB>PATH`.
         #[arg(long)]
         copy: Option<std::path::PathBuf>,
     },
@@ -240,7 +241,12 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::AgentConfigUpgrade => Verb::AgentConfigUpgrade,
         HelperCommand::AdminReset => Verb::AdminReset,
         HelperCommand::ShellOpen => Verb::ShellOpen,
-        HelperCommand::CaRequest { copy } => Verb::CaRequest(copy.clone()),
+        HelperCommand::CaRequest { copy } => {
+            if let Some(copy) = copy.as_ref().filter(|copy| !copy.is_absolute()) {
+                return Err(format!("{}: not an absolute path", copy.display()));
+            }
+            Verb::CaRequest(copy.clone())
+        }
         HelperCommand::CaAccept { cert, root_cert } => {
             Verb::CaAccept(cert.clone(), root_cert.clone())
         }

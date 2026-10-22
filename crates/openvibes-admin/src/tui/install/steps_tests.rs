@@ -47,11 +47,26 @@ pub(super) fn answer(app: &App<SetupHost>, answer: Result<String, HostError>) {
     app.host.answers.borrow_mut().push_back(answer);
 }
 
-/// A folder that exists, for the root key.
-pub(super) fn folder(name: &str) -> String {
+/// A folder that exists, for the root key; removed when dropped, so keep
+/// it bound while the test uses it.
+pub(super) struct Folder(String);
+
+impl std::fmt::Display for Folder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl Drop for Folder {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+pub(super) fn folder(name: &str) -> Folder {
     let dir = std::env::temp_dir().join(format!("ov-steps-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    dir.display().to_string()
+    Folder(dir.display().to_string())
 }
 
 #[test]
@@ -255,7 +270,8 @@ fn review_install_asks_password_in_bar_once() {
     assert!(calls(&app).is_empty());
     let mut app = steps(4);
     app.install.ca = Ca::OpenVibes;
-    app.install.root_key_out = format!("{}/openvibes-root-ca.key", folder("review"));
+    let dir = folder("review");
+    app.install.root_key_out = format!("{dir}/openvibes-root-ca.key");
     down(&mut app, 4);
     let text = screen(&app);
     assert!(
@@ -363,7 +379,8 @@ fn esc_after_a_failed_install_goes_back_where_it_began() {
     // From Quick install: back to Quick install.
     let mut app = fresh_app();
     app.install.hostname = "limebox.lan".into();
-    app.install.root_key_out = format!("{}/openvibes-root-ca.key", folder("quick"));
+    let dir = folder("quick");
+    app.install.root_key_out = format!("{dir}/openvibes-root-ca.key");
     for a in stop() {
         answer(&app, a);
     }
@@ -382,7 +399,8 @@ fn esc_after_a_failed_install_goes_back_where_it_began() {
     // From the steps: back to Review.
     let mut app = steps(4);
     app.install.ca = Ca::OpenVibes;
-    app.install.root_key_out = format!("{}/openvibes-root-ca.key", folder("steps"));
+    let dir = folder("steps");
+    app.install.root_key_out = format!("{dir}/openvibes-root-ca.key");
     for a in stop() {
         answer(&app, a);
     }

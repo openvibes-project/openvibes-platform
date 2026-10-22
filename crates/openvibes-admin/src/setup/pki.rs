@@ -53,8 +53,19 @@ fn careful_help() -> String {
     )
 }
 
+/// The CA files are where the services read them.
+fn installed<R: Runner>(ctx: &Ctx<R>) -> bool {
+    ctx.exists(INTERMEDIATE) && ctx.exists(ROOT_CERT) && ctx.exists(INTERMEDIATE_KEY)
+}
+
+/// A quick CA installed whose root key is still staged: writing it to
+/// `root_key_out` failed, so the step is not done until it is kept.
+fn key_staged<R: Runner>(ctx: &Ctx<R>) -> bool {
+    ctx.plan.root_key_out.is_some() && ctx.exists(&format!("{ROOT_DIR}/root.key"))
+}
+
 pub fn ca_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    if ctx.exists(INTERMEDIATE) && ctx.exists(ROOT_CERT) && ctx.exists(INTERMEDIATE_KEY) {
+    if installed(ctx) && !key_staged(ctx) {
         return Ok(StepState::Done(root_summary(ctx)?));
     }
     let signed =
@@ -133,14 +144,38 @@ fn keep_root_key<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
     Ok(format!("root key saved to {shown}: keep it offline{note}"))
 }
 
-fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    if let Some(out) = &ctx.plan.root_key_out
-        && ctx.path(&out.display().to_string()).exists()
-    {
+/// `root_key_out` is new (a dangling link counts as there) in an existing
+/// folder, so the key can be written once the CA is installed.
+fn check_root_key_out<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+    let Some(out) = &ctx.plan.root_key_out else {
+        return Ok(());
+    };
+    let again = "set another Root key file (Esc opens the form, or --root-key-out)";
+    if fs::symlink_metadata(ctx.path(&out.display().to_string())).is_ok() {
         return Err(format!(
-            "{} already exists (a root key kept from an earlier install?); set another Root key file (Esc opens the form, or --root-key-out)",
+            "{} already exists (a root key kept from an earlier install?); {again}",
             out.display()
         ));
+    }
+    let folder = out.parent().map_or("/".into(), |p| p.display().to_string());
+    let path = ctx.path(&folder);
+    if !path.exists() {
+        return Err(format!("the folder {folder} does not exist; {again}"));
+    }
+    if !path.is_dir() {
+        return Err(format!("{folder} is not a folder; {again}"));
+    }
+    Ok(())
+}
+
+fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    check_root_key_out(ctx)?;
+    if installed(ctx) && key_staged(ctx) {
+        // A retry after the key could not be written: keep it now.
+        let kept = keep_root_key(ctx)?;
+        remove_stage(ctx)?;
+        remove_request(ctx)?;
+        return Ok(StepState::Done(format!("{kept}; {}", root_summary(ctx)?)));
     }
     fresh_stage(ctx)?;
     ctx.ok(Admin, &["ca", "init-root", "--out", ROOT_DIR])?;
@@ -217,7 +252,8 @@ fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 }
 
 pub fn ca_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    if ctx.repair {
+    // Keeping a staged root key (installed CA) is no new CA.
+    if ctx.repair && !installed(ctx) {
         return Err("the CA files are missing; Repair never makes a new CA (enrolled agents trust \
                     the old one): restore /etc/openvibes/pki and /var/lib/openvibes-ingest/\
                     intermediate.key from a backup, or uninstall with Remove everything and set up again"
@@ -383,3 +419,7 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         names.join(", ")
     )))
 }
+
+#[cfg(test)]
+#[path = "pki_root_key_tests.rs"]
+mod root_key_tests;

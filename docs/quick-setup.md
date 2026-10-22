@@ -54,6 +54,10 @@ issue a new intermediate certificate later, so copy it to offline
 storage and then delete it from the host. Without it, a new CA means
 re-enrolling every agent.
 
+**Your own CA.** Choose what to install, step 3, makes a request for your
+CA to sign and also saves it as `~/openvibes-intermediate.csr` (or `-2`,
+`-3`… beside another file): it is public; delete it when done.
+
 **The assistant (optional).** Tick the assistant under *Optional* in Choose what to install to have the
 console's chat assistant (a 2.7 GB download from Hugging Face). The
 last step downloads the model, checks it against its pinned checksum and
@@ -84,8 +88,8 @@ sudo openvibes-admin setup --quick --components ingest,console,distribution,vuln
   --hostname NAME --root-key-out /root/openvibes-root-ca.key
 ```
 
-Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Setup and
-the setup command).
+Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Install
+and the `setup` command).
 
 ## Step 1 (offline): install from the kit
 
@@ -135,18 +139,18 @@ from `/etc/openvibes/pki/` into the browser to stop the warning).
   advisories. The vulnerability service checks a feed at startup if a host
   already reports that release, or when the first inventory for a new
   release arrives. Results appear after that check completes.
-- **Compliance:** findings from the baseline rules, which Setup publishes.
+- **Compliance:** findings from the baseline rules, which Install publishes.
 - **Alarms:** threat alarms (for example a web server starting a shell)
   appear within seconds of the program start.
 
 ## Ports
 
-| Port | Service | Opened by Setup's Firewall step |
+| Port | Service | Opened by Install's Firewall step |
 |---|---|---|
 | 443 (or the first free from 8443) / tcp | console | yes |
 | 18423 / tcp | ingest (agents) | yes |
 | 18424 / tcp | distribution (agent rules) | yes |
-| 514 / udp | netlog (network device events) | **no**: open it yourself if you add a router; Setup warns when firewalld has it closed |
+| 514 / udp | netlog (network device events) | **no**: open it yourself if you add a router; Install warns when firewalld has it closed |
 
 ## Optional: alarms from a UniFi gateway
 
@@ -165,7 +169,7 @@ from `/etc/openvibes/pki/` into the browser to stop the warning).
 - Other hosts: repeat step 3; `openvibes-admin agent list` shows them all.
 - Check, repair, update, change components or uninstall: Maintenance
   (Update, Repair, Optional parts, Uninstall).
-- Services and configuration: the Services and Configuration tabs. Setup
+- Services and configuration: the Services and Configuration tabs. Install
   added you to `openvibes-operators`; log in again before using them.
 - Hosts without network access: the agent's `export`, then
   `openvibes-admin import` on the platform.

@@ -3,8 +3,6 @@
 //! `certs.rs`. Enter on Next moves on, Esc goes back a step; fields are
 //! edited in place.
 
-use std::path::Path;
-
 use platform_host::Host;
 use ratatui::{
     Frame,
@@ -30,10 +28,6 @@ use crate::{
 };
 
 pub(super) const STEPS: [&str; 5] = ["Optional", "Names", "Certificates", "Ports", "Review"];
-
-pub(super) fn exists(path: &str) -> bool {
-    Path::new(path).exists()
-}
 
 /// `✓ done · ● current · ○ to come`.
 fn steps_line(t: &Theme, at: u8) -> Line<'static> {
@@ -261,7 +255,7 @@ impl<H: Host> App<H> {
         }
         let count = if at < 3 { 3 } else { 5 };
         let row = self.nav.row;
-        // Ports: a digit on a moved port types another one.
+        // Ports: a digit on any port row starts typing that port afresh.
         if let (3, Key::Char(c)) = (at, &key)
             && c.is_ascii_digit()
             && row < 3

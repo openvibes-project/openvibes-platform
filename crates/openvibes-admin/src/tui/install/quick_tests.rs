@@ -9,16 +9,12 @@ use crate::tui::{
     script_host::{SetupHost, app_taken, fresh_app, screen, type_text},
 };
 
-/// A folder that exists, for the root key.
-fn folder() -> String {
-    let dir = std::env::temp_dir().join(format!("ov-quick-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir.display().to_string()
-}
-
 fn quick_from(mut app: App<SetupHost>) -> App<SetupHost> {
     app.install.hostname = "limebox.lan".into();
-    app.install.root_key_out = format!("{}/openvibes-root-ca.key", folder());
+    // A new file in a folder that exists; nothing writes it.
+    let tmp = std::env::temp_dir();
+    let pid = std::process::id();
+    app.install.root_key_out = format!("{}/ov-quick-{pid}-root-ca.key", tmp.display());
     app.nav.screen = Screen::Install(Stage::Quick);
     app
 }
@@ -168,14 +164,24 @@ fn quick_edits_in_place() {
 
 #[test]
 fn quick_root_key_existing_relative_missing_folder_flagged() {
-    let dir = folder();
+    let dir = super::steps_tests::folder("qf");
     let existing = format!("{dir}/exists.key");
     std::fs::write(&existing, "").unwrap();
+    let dangling = format!("{dir}/dangling.key");
+    let _ = std::fs::remove_file(&dangling);
+    std::os::unix::fs::symlink("/no/such/target", &dangling).unwrap();
+    let in_a_file = format!("{existing}/ca.key");
+    let not_a_folder = format!("{existing} is not a folder.");
     for (path, said) in [
         (
             existing.as_str(),
             "That file already exists: choose another name.",
         ),
+        (
+            dangling.as_str(),
+            "That file already exists: choose another name.",
+        ),
+        (in_a_file.as_str(), not_a_folder.as_str()),
         ("openvibes.key", "The path must start with /."),
         (
             "/no/such/folder/ca.key",
@@ -253,4 +259,34 @@ fn esc_on_quick_goes_to_welcome() {
 #[test]
 fn install_defaults_keep_the_agent_on() {
     assert!(Install::new("h".into(), None).agent);
+}
+
+/// A paste outside the paste box presses no keys: q on Welcome does not
+/// quit, its line end on Review's Install row starts nothing (as root, no
+/// password asked first).
+#[test]
+fn a_stray_paste_presses_no_keys() {
+    let mut app = fresh_app();
+    app.key(Key::Paste("q\n".into()));
+    assert!(!app.quit);
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Welcome));
+    let mut app = super::steps_tests::steps(4);
+    app.host.root = true;
+    app.nav.row = 4;
+    app.key(Key::Paste("some text\n".into()));
+    assert!(calls(&app).is_empty(), "{:?}", calls(&app));
+    assert!(app.run.is_none() && app.asking.is_none());
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Step(4)));
+}
+
+/// A field being typed takes a paste's characters, never its line end.
+#[test]
+fn a_paste_into_a_field_types_it_without_the_line_end() {
+    let mut app = quick();
+    app.key(Key::Enter);
+    app.key(Key::ClearLine);
+    app.key(Key::Paste("lime.lan\r\n".into()));
+    assert!(app.install.editing.is_some(), "still typing");
+    app.key(Key::Enter);
+    assert_eq!(app.install.hostname, "lime.lan");
 }

@@ -15,6 +15,8 @@ mod steps;
 mod welcome;
 pub(super) use run::draw;
 #[cfg(test)]
+mod certs_accept_tests;
+#[cfg(test)]
 mod certs_tests;
 #[cfg(test)]
 mod quick_tests;
@@ -89,7 +91,7 @@ pub struct Install {
     /// Each port moved off its default (console, ingest, distribution),
     /// and why: "443 is in use by nginx", until Enter keeps the proposal.
     pub proposed: [Option<String>; 3],
-    /// Where the helper copies the request, chosen once.
+    /// Where the helper saved the request's copy, as it said.
     pub copy: Option<String>,
     /// The signed certificate added and its issuer, until the helper keeps it.
     pub cert: Option<(String, String)>,

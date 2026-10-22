@@ -8,7 +8,7 @@ use ratatui::{Frame, text::Span};
 
 use super::{
     Ca, Install, fields,
-    steps::{Step, draw_step, exists, tilde, typed},
+    steps::{Step, draw_step, tilde, typed},
 };
 use crate::{
     setup::plan::plan_of,
@@ -62,7 +62,7 @@ impl Install {
                 Some("✗ Certificates: add both certificates first.".into())
             }
             Ca::Own => None,
-            Ca::OpenVibes => fields::check_root_key(self.root_key_out.trim(), exists)
+            Ca::OpenVibes => fields::check_root_key(self.root_key_out.trim())
                 .err()
                 .map(|why| format!("✗ Root key file: {why}")),
         }

@@ -14,13 +14,12 @@ use ratatui::{
 
 use super::{
     Ca, Install, Stage, Which, fields,
-    steps::{Step, draw_step, exists, name_bar, tilde, typed},
+    steps::{Step, draw_step, name_bar, tilde, typed},
 };
 use crate::{
     setup::request::RequestState,
     tui::{
         app::{App, Key},
-        maint::backup::free_path,
         nav::Screen,
         run::{Call, Kind, Work},
         ui::{
@@ -52,6 +51,13 @@ impl Install {
         self.ca == Ca::Own && self.request.is_some()
     }
 
+    /// The certificates added and not (yet) kept by the helper.
+    fn forget_added(&mut self) {
+        self.cert = None;
+        self.root_pem = None;
+        self.root_added = None;
+    }
+
     /// The choice rows: the root key file only for OpenVIBES makes one.
     fn choice_rows(&self) -> usize {
         if self.ca == Ca::OpenVibes { 4 } else { 3 }
@@ -70,18 +76,23 @@ fn sentence(why: &str) -> String {
     }
 }
 
-/// The helper's answer: `request` or `signed<TAB>ISSUER`, then the request.
-fn read_state(out: &str) -> Option<RequestState> {
-    let (first, csr) = out.split_once('\n')?;
-    let csr = csr.to_owned();
-    match first.trim_end().split_once('\t') {
-        None if first.trim_end() == "request" => Some(RequestState::Request { csr }),
-        Some(("signed", issuer)) => Some(RequestState::Signed {
+/// The helper's answer: `request` or `signed<TAB>ISSUER`, then
+/// `copy<TAB>PATH` when it saved a copy, then the request.
+fn read_state(out: &str) -> Option<(RequestState, Option<String>)> {
+    let (first, rest) = out.split_once('\n')?;
+    let (copy, csr) = match rest.strip_prefix("copy\t").and_then(|r| r.split_once('\n')) {
+        Some((path, csr)) => (Some(path.to_owned()), csr.to_owned()),
+        None => (None, rest.to_owned()),
+    };
+    let state = match first.trim_end().split_once('\t') {
+        None if first.trim_end() == "request" => RequestState::Request { csr },
+        Some(("signed", issuer)) => RequestState::Signed {
             csr,
             issuer: issuer.to_owned(),
-        }),
-        _ => None,
-    }
+        },
+        _ => return None,
+    };
+    Some((state, copy))
 }
 
 pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
@@ -170,7 +181,7 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     rows.push(Row::entry("Next", "ports"));
     let next = install.choice_rows() - 1;
     let flagged = (install.ca == Ca::OpenVibes)
-        .then(|| fields::check_root_key(install.root_key_out.trim(), exists).err())
+        .then(|| fields::check_root_key(install.root_key_out.trim()).err())
         .flatten()
         .map(|why| format!("✗ Root key file: {why}"));
     let help = match row {
@@ -289,6 +300,7 @@ impl<H: Host> App<H> {
                 (Key::Esc, _) => {
                     self.install.request = None;
                     self.install.error = None;
+                    self.install.forget_added();
                     self.nav.row = 0;
                 }
                 (Key::Enter, 0) => self.nav.go(Screen::Install(Stage::Request)),
@@ -310,12 +322,9 @@ impl<H: Host> App<H> {
                 self.install.error = None;
                 // Your own CA's certificates never go with OpenVIBES's own CA.
                 if self.install.ca == Ca::OpenVibes {
-                    let install = &mut self.install;
-                    install.request = None;
-                    install.signed = None;
-                    install.cert = None;
-                    install.root_pem = None;
-                    install.root_added = None;
+                    self.install.request = None;
+                    self.install.signed = None;
+                    self.install.forget_added();
                 }
                 if let Key::Enter = key {
                     self.nav.row = self.install.choice_rows() - 1;
@@ -324,7 +333,7 @@ impl<H: Host> App<H> {
             (Key::Enter, 2) if count == 4 => self.edit(2),
             (Key::Enter, r) if r == count - 1 => match self.install.ca {
                 Ca::OpenVibes
-                    if fields::check_root_key(self.install.root_key_out.trim(), exists).is_ok() =>
+                    if fields::check_root_key(self.install.root_key_out.trim()).is_ok() =>
                 {
                     self.next_step(2)
                 }
@@ -335,17 +344,13 @@ impl<H: Host> App<H> {
         }
     }
 
-    /// `ca-request`, with a copy in the operator's home: a free name the
-    /// first time, the same one after (the helper takes its own request
-    /// again there).
+    /// `ca-request`, with a copy in the operator's home: the helper takes
+    /// its own copy again, or writes one beside another file, and says
+    /// where.
     fn make_request(&mut self) {
-        if self.install.copy.is_none() {
-            self.install.copy =
-                self.install.home.as_ref().map(|home| {
-                    free_path(&format!("{home}/openvibes-intermediate"), "csr", exists)
-                });
-        }
-        let call = Call::CaRequest(self.install.copy.clone());
+        let base =
+            (self.install.home.as_ref()).map(|home| format!("{home}/openvibes-intermediate.csr"));
+        let call = Call::CaRequest(base);
         self.begin(Work::new(Kind::Ca { accept: false }, vec![call]), 0);
     }
 
@@ -405,7 +410,10 @@ impl<H: Host> App<H> {
         let install = &mut self.install;
         match &run.states[0] {
             Some(StepState::Done(out)) => match read_state(out) {
-                Some(state) => {
+                Some((state, copy)) => {
+                    if copy.is_some() {
+                        install.copy = copy;
+                    }
                     if let RequestState::Signed { issuer, .. } = &state {
                         install.signed = Some(issuer.clone());
                         // Your CA's certificate signed it directly: its name.
@@ -414,6 +422,7 @@ impl<H: Host> App<H> {
                         install.root_pem = None;
                     } else if accept {
                         install.error = Some("The helper did not keep the certificates.".into());
+                        install.forget_added();
                         return;
                     }
                     install.request = Some(state);
@@ -426,7 +435,13 @@ impl<H: Host> App<H> {
                 }
                 None => install.error = Some(format!("Unexpected helper output: {}", out.trim())),
             },
-            Some(state) if !state.finished() => install.error = Some(sentence(state.detail())),
+            Some(state) if !state.finished() => {
+                install.error = Some(sentence(state.detail()));
+                // Refused: neither row claims "✓ added", both can be added again.
+                if accept {
+                    install.forget_added();
+                }
+            }
             _ => {}
         }
     }

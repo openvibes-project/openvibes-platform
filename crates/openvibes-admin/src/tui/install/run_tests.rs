@@ -300,3 +300,25 @@ fn quick_plan_carries_the_root_key_and_careful_does_not() {
     );
     assert!(args.ends_with("--console-port 443 --ingest-port 18423 --distribution-port 18424"));
 }
+
+/// The one-time secret on the real 80×24 Finished screen (spec §11): the
+/// Password row and the Next line that says to change it.
+#[test]
+fn finished_screen_shows_the_password_once_and_next() {
+    let mut answers = vec![ok()];
+    answers.extend(Step::ALL.iter().map(|step| match step {
+        Step::Console => Ok(format!("done\t{CONSOLE}")),
+        _ => ok(),
+    }));
+    let mut app = fresh(answers);
+    go(&mut app);
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Finished));
+    let text = screen(&app);
+    assert!(text.contains("Password"), "{text}");
+    assert!(text.contains("Kq7-vR2p-Xw9m"), "{text}");
+    assert!(text.contains("shown only now: write it down"), "{text}");
+    assert!(
+        text.contains("Next: sign in, change the password, then add hosts under Enrollment."),
+        "{text}"
+    );
+}

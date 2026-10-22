@@ -3,8 +3,6 @@
 //! else is the defaults (OpenVIBES's own CA, the default ports, no
 //! assistant).
 
-use std::path::Path;
-
 use platform_host::Host;
 use ratatui::{
     Frame,
@@ -35,10 +33,6 @@ const HELP: [&str; 5] = [
     "Untick only if this server must not run an agent.",
     "Starts the install; it asks for your password once.",
 ];
-
-fn exists(path: &str) -> bool {
-    Path::new(path).exists()
-}
 
 impl Install {
     fn field(&mut self, row: usize) -> &mut String {
@@ -105,7 +99,7 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     );
     let rows: Vec<Row> = (0..=INSTALL).map(|i| row(app, i)).collect();
     // A flagged field is said under the list, before any help.
-    let (text, red) = match install.problem(exists) {
+    let (text, red) = match install.problem() {
         Some((at, why)) => (format!("✗ {}: {why}", NAMES[at]), true),
         None => match (&install.port_note, app.nav.row) {
             (Some(note), INSTALL) => (note.clone(), false),
@@ -161,7 +155,7 @@ impl<H: Host> App<H> {
             (Key::Char(' '), AGENT) => self.install.agent = !self.install.agent,
             (Key::Enter, AGENT) => self.nav.row = INSTALL,
             // A flagged field is said under the list: nothing starts.
-            (Key::Enter, INSTALL) if self.install.problem(exists).is_none() => {
+            (Key::Enter, INSTALL) if self.install.problem().is_none() => {
                 self.install.ca = Ca::OpenVibes;
                 self.install.assistant = false;
                 self.start_install();

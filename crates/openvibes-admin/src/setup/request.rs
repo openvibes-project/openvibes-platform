@@ -53,6 +53,9 @@ pub fn message(e: &PkiError) -> String {
         PkiError::NotRoot => "This is not a root CA (self-signed): OpenVIBES needs the root that \
                               signed the request directly, with no CA in between."
             .into(),
+        PkiError::RootPathLen0 => "Your CA's certificate does not allow it to sign another CA \
+                                   (path length 0): it cannot sign the intermediate."
+            .into(),
         PkiError::Several(n) => {
             format!("That is {n} certificates: paste only the one signed for OpenVIBES.")
         }
@@ -64,22 +67,15 @@ pub fn message(e: &PkiError) -> String {
     }
 }
 
-/// Makes the key and request, or reuses them, and writes `copy` (absolute,
-/// 0644, the operator's); another file already at `copy` is refused.
-pub fn request<R: Runner>(ctx: &Ctx<R>, copy: Option<&Path>) -> Result<RequestState, String> {
-    let copy = copy
-        .map(|path| {
-            path.to_str()
-                .filter(|path| path.starts_with('/'))
-                .ok_or_else(|| format!("{}: not an absolute path", path.display()))
-        })
-        .transpose()?;
+/// Makes the key and request, or reuses them.
+pub fn request<R: Runner>(ctx: &Ctx<R>) -> Result<RequestState, String> {
     let (key, csr) = (file("intermediate.key"), file("intermediate.csr"));
+    let dir = ctx.path(REQUEST_DIR);
+    let fail = |error: std::io::Error| format!("{REQUEST_DIR}: {error}");
+    fs::create_dir_all(&dir).map_err(fail)?;
+    // Also a folder left from before: only root ever reads the key.
+    fs::set_permissions(&dir, Permissions::from_mode(0o700)).map_err(fail)?;
     if !(ctx.exists(&key) && ctx.exists(&csr)) {
-        let dir = ctx.path(REQUEST_DIR);
-        let fail = |error: std::io::Error| format!("{REQUEST_DIR}: {error}");
-        fs::create_dir_all(&dir).map_err(fail)?;
-        fs::set_permissions(&dir, Permissions::from_mode(0o700)).map_err(fail)?;
         let (csr_pem, key_pem) = platform_pki::intermediate_request()
             .map_err(|error| format!("intermediate request: {error}"))?;
         // The key first: a CSR on disk always has its key.
@@ -87,9 +83,6 @@ pub fn request<R: Runner>(ctx: &Ctx<R>, copy: Option<&Path>) -> Result<RequestSt
         ctx.put(&csr, csr_pem.as_bytes(), None, 0o644)?;
     }
     let csr = ctx.read(&csr)?;
-    if let Some(copy) = copy {
-        write_copy(ctx, copy, &csr)?;
-    }
     let (crt, root) = (file("intermediate.crt"), file("root.crt"));
     if !(ctx.exists(&crt) && ctx.exists(&root)) {
         return Ok(RequestState::Request { csr });
@@ -102,9 +95,38 @@ pub fn request<R: Runner>(ctx: &Ctx<R>, copy: Option<&Path>) -> Result<RequestSt
     })
 }
 
-/// Creates `abs` with the request, 0644, owned by the operator; a file
-/// already there is never overwritten (refused unless it holds this request).
-fn write_copy<R: Runner>(ctx: &Ctx<R>, abs: &str, csr: &str) -> Result<(), String> {
+/// The names a copy may take: `base`, then `-2`, `-3`… before the extension
+/// (as `maint::backup::free_path`).
+const COPY_NAMES: usize = 100;
+
+/// Writes `csr` (0644, the operator's) to `base` (absolute), or beside it
+/// as `-2`, `-3`… when another file is there; the same request already at
+/// one of those names is taken as it is. The path used.
+pub fn save_copy<R: Runner>(ctx: &Ctx<R>, base: &Path, csr: &str) -> Result<String, String> {
+    let abs = base
+        .to_str()
+        .filter(|path| path.starts_with('/'))
+        .ok_or_else(|| format!("{}: not an absolute path", base.display()))?;
+    let (stem, ext) = match base.extension().and_then(|ext| ext.to_str()) {
+        Some(ext) => (&abs[..abs.len() - ext.len() - 1], format!(".{ext}")),
+        None => (abs, String::new()),
+    };
+    let names =
+        std::iter::once(abs.to_owned()).chain((2..=COPY_NAMES).map(|n| format!("{stem}-{n}{ext}")));
+    for path in names {
+        if write_copy(ctx, &path, csr)? {
+            return Ok(path);
+        }
+    }
+    Err(format!(
+        "That file already exists: {abs}. Choose another name."
+    ))
+}
+
+/// Creates `abs` with the request, 0644, owned by the operator; false when
+/// another file is there (never overwritten), true when it holds this
+/// request already.
+fn write_copy<R: Runner>(ctx: &Ctx<R>, abs: &str, csr: &str) -> Result<bool, String> {
     let fail = |error: std::io::Error| format!("{abs}: {error}");
     let mut file = match OpenOptions::new()
         .write(true)
@@ -116,13 +138,7 @@ fn write_copy<R: Runner>(ctx: &Ctx<R>, abs: &str, csr: &str) -> Result<(), Strin
         // The same request written earlier is fine; anything else is the
         // operator's and stays as it is.
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            return if fs::read(ctx.path(abs)).is_ok_and(|old| old == csr.as_bytes()) {
-                Ok(())
-            } else {
-                Err(format!(
-                    "That file already exists: {abs}. Choose another name."
-                ))
-            };
+            return Ok(fs::read(ctx.path(abs)).is_ok_and(|old| old == csr.as_bytes()));
         }
         Err(error) => return Err(fail(error)),
     };
@@ -135,7 +151,7 @@ fn write_copy<R: Runner>(ctx: &Ctx<R>, abs: &str, csr: &str) -> Result<(), Strin
     if let Some(Ok((uid, gid))) = ctx.plan.operator.as_deref().map(|u| ctx.ids(Some((u, u)))) {
         let _ = std::os::unix::fs::fchown(&file, Some(uid), Some(gid));
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Checks the CA's certificate and root against the stored request, then
@@ -164,18 +180,22 @@ pub fn accept<R: Runner>(ctx: &Ctx<R>, cert_pem: &str, root_pem: &str) -> Result
     Ok(signed)
 }
 
-/// Line 1 `request` or `signed<TAB>ISSUER`, then the request.
-fn output(state: &RequestState) -> String {
+/// Line 1 `request` or `signed<TAB>ISSUER`, then `copy<TAB>PATH` when a
+/// copy was written, then the request.
+fn output(state: &RequestState, copy: Option<&str>) -> String {
+    let copy = copy.map_or(String::new(), |path| format!("copy\t{path}\n"));
     match state {
-        RequestState::Request { csr } => format!("request\n{csr}"),
-        RequestState::Signed { csr, issuer } => format!("signed\t{issuer}\n{csr}"),
+        RequestState::Request { csr } => format!("request\n{copy}{csr}"),
+        RequestState::Signed { csr, issuer } => format!("signed\t{issuer}\n{copy}{csr}"),
     }
 }
 
 /// Runs `work` under the Setup lock on the host, with a plan holding only
 /// the operator (the request comes before `setup-plan`).
 fn on_host(
-    work: impl FnOnce(&Ctx<platform_host::runner::SystemRunner>) -> Result<RequestState, String>,
+    work: impl FnOnce(
+        &Ctx<platform_host::runner::SystemRunner>,
+    ) -> Result<(RequestState, Option<String>), String>,
 ) -> ExitCode {
     let done = super::lock(Path::new("/")).and_then(|_lock| {
         let mut plan = super::plan::plan_of("components = []\nhostname = \"\"\nca = \"careful\"")?;
@@ -183,8 +203,8 @@ fn on_host(
         work(&super::host_ctx(&plan, false))
     });
     match done {
-        Ok(state) => {
-            print!("{}", output(&state));
+        Ok((state, copy)) => {
+            print!("{}", output(&state, copy.as_deref()));
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -196,7 +216,16 @@ fn on_host(
 
 /// `helper ca-request [--copy PATH]`.
 pub fn run_request(copy: Option<&Path>) -> ExitCode {
-    on_host(|ctx| request(ctx, copy))
+    on_host(|ctx| {
+        let state = request(ctx)?;
+        let copy = match (copy, &state) {
+            (Some(base), RequestState::Request { csr } | RequestState::Signed { csr, .. }) => {
+                Some(save_copy(ctx, base, csr)?)
+            }
+            (None, _) => None,
+        };
+        Ok((state, copy))
+    })
 }
 
 /// `helper ca-accept --cert PEM --root-cert PEM`.
@@ -204,10 +233,11 @@ pub fn run_accept(cert_pem: &str, root_pem: &str) -> ExitCode {
     on_host(|ctx| {
         let signed = accept(ctx, cert_pem, root_pem)?;
         let csr = ctx.read(&file("intermediate.csr"))?;
-        Ok(RequestState::Signed {
+        let state = RequestState::Signed {
             csr,
             issuer: signed.issuer,
-        })
+        };
+        Ok((state, None))
     })
 }
 

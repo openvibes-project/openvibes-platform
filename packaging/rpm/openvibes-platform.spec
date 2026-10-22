@@ -324,6 +324,13 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %systemd_preun openvibes-maintenance.timer
 %postun -n openvibes-admin
 %systemd_postun openvibes-maintenance.timer
+# Removed from a host never installed (no setup.toml): an abandoned "Your
+# own CA" request goes too, its key included, and the folders it made when
+# left empty (never fails).
+if [ $1 -eq 0 ] && [ ! -e %{_sysconfdir}/openvibes/setup.toml ]; then
+    rm -rf %{_sysconfdir}/openvibes/pki/request
+    rmdir %{_sysconfdir}/openvibes/pki %{_sysconfdir}/openvibes 2>/dev/null || :
+fi
 # A new or upgraded rules package is published after the whole transaction,
 # by the new admin binary (the unit skips unless Setup ran and is idle).
 # Priority below systemd's restart trigger; the unit also waits for migrate.

@@ -11,20 +11,21 @@ use crate::setup::{
     ports,
 };
 
-/// The root key file: absolute, new, in a folder that exists. `exists`
-/// answers for files and folders alike (tests pass a list).
-pub fn check_root_key(path: &str, exists: impl Fn(&str) -> bool) -> Result<(), String> {
+/// The root key file: absolute, new (a dangling link counts as there), in
+/// a folder that exists.
+pub fn check_root_key(path: &str) -> Result<(), String> {
     if !path.starts_with('/') {
         return Err("The path must start with /.".into());
     }
-    if exists(path) {
+    if std::fs::symlink_metadata(path).is_ok() {
         return Err("That file already exists: choose another name.".into());
     }
-    let folder = Path::new(path)
-        .parent()
-        .map_or("/".into(), |p| p.display().to_string());
-    if !exists(&folder) {
-        return Err(format!("The folder {folder} does not exist."));
+    let folder = Path::new(path).parent().unwrap_or(Path::new("/"));
+    if !folder.exists() {
+        return Err(format!("The folder {} does not exist.", folder.display()));
+    }
+    if !folder.is_dir() {
+        return Err(format!("{} is not a folder.", folder.display()));
     }
     Ok(())
 }
@@ -63,14 +64,14 @@ pub fn check_names(hostname: &str, sans: &str) -> Result<(), String> {
 impl Install {
     /// The first typed field the plan would refuse: its row on Quick
     /// install (0 host name, 1 other names, 2 root key) and why.
-    pub fn problem(&self, exists: impl Fn(&str) -> bool) -> Option<(usize, String)> {
+    pub fn problem(&self) -> Option<(usize, String)> {
         if let Err(why) = check_names(&self.hostname, "") {
             return Some((0, why));
         }
         if let Err(why) = check_names(&self.hostname, &self.sans) {
             return Some((1, why));
         }
-        check_root_key(self.root_key_out.trim(), exists)
+        check_root_key(self.root_key_out.trim())
             .err()
             .map(|why| (2, why))
     }
@@ -89,7 +90,7 @@ pub(in crate::tui) struct Moved {
 /// The three ports and the ones moved: each default another process holds
 /// gets the first free port (from 8443 for the console, 18425 for ingest
 /// and distribution). Unprivileged, so the holder is rarely known here;
-/// Setup's own check (as root) names it if it is still there.
+/// the install's own port check (as root) names it if it is still there.
 /// The proposal starts from the ports in `start`; a port the platform's own
 /// service holds (`ours`) stays.
 fn propose_from<H: Host>(
@@ -164,7 +165,7 @@ pub fn propose_ports<H: Host>(
 
 /// The free default root key file in `home`, or empty without a home.
 pub(super) fn default_root_key(home: Option<&str>) -> String {
-    home.map(|home| free_root_key(home, |path| Path::new(path).exists()))
+    home.map(|home| free_root_key(home, |path| std::fs::symlink_metadata(path).is_ok()))
         .unwrap_or_default()
 }
 

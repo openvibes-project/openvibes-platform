@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Setup's whole life cycle under systemd (admin TUI spec §12), in podman
 # fedora:44 with systemd as PID 1, from built RPMs:
-# install (with the agent on the host) → repair after breaking things →
-# uninstall keeping data → install again (same CA, same agent) → update to
-# newer packages → remove everything (nothing left).
+# an abandoned CA request removed with the admin tool → install (with the
+# agent on the host) → repair after breaking things → uninstall keeping
+# data → install again (same CA, same agent) → update to newer packages →
+# remove everything (nothing left).
 # Usage: scripts/setup-lifecycle-e2e.sh OLD_DIR NEW_DIR
 #   OLD_DIR  lower-version openvibes-{ingest,distribution,vulns,admin}-*.rpm
 #            and one openvibes-agent RPM
-#   NEW_DIR  the same packages at the current version
+#   NEW_DIR  the same packages at the current version (its admin package
+#            also runs step 0)
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PODMAN=${PODMAN:-podman}
@@ -55,6 +57,15 @@ QUICK='openvibes-admin setup --quick --components ingest,distribution,vulns,agen
        --san 127.0.0.1 --repo-dir /test/old --allow-unsigned-local'
 agent_id() { in_c 'runuser -u openvibes-admin -- openvibes-admin agent list' | awk '$2 == "active" {print $1; exit}'; }
 fingerprint() { in_c 'sha256sum /etc/openvibes/pki/root.crt' | cut -d' ' -f1; }
+
+# 0. A "Your own CA" request abandoned before install: removing the admin
+#    package leaves no key behind (no setup.toml yet).
+in_c 'dnf -q -y install /test/new/openvibes-admin-*.rpm' >/dev/null 2>&1 || fail "install the new openvibes-admin"
+in_c 'openvibes-admin helper ca-request >/dev/null && test -s /etc/openvibes/pki/request/intermediate.key' ||
+    fail "ca-request made no key"
+in_c 'dnf -q -y remove openvibes-admin' >/dev/null 2>&1 || fail "remove openvibes-admin"
+in_c '! test -e /etc/openvibes/pki/request && ! test -e /etc/openvibes/pki' || fail "the abandoned request was left"
+ok "removing the admin tool before install removes an abandoned request"
 
 # 1. Install from the lower version, with the agent on this host.
 in_c 'dnf -q -y install /test/old/openvibes-admin-*.rpm' >/dev/null 2>&1 || fail "install openvibes-admin"

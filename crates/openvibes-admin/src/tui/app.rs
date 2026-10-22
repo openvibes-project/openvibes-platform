@@ -295,16 +295,16 @@ impl<H: Host> App<H> {
             }
             return;
         }
-        // Only the paste box takes a paste whole; elsewhere it is typed,
-        // as without bracketed paste.
+        // Only the paste box takes a paste whole; a field being typed or
+        // a password takes its characters without line ends; anywhere else
+        // it is dropped, so a stray paste never presses keys (Enter, q).
         if let Key::Paste(text) = &key
             && !self.takes_paste()
         {
-            for c in text.replace("\r\n", "\n").chars() {
-                self.key(match c {
-                    '\n' | '\r' => Key::Enter,
-                    c => Key::Char(c),
-                });
+            if self.typing_text() {
+                for c in text.chars().filter(|c| !matches!(c, '\n' | '\r')) {
+                    self.key(Key::Char(c));
+                }
             }
             return;
         }
@@ -361,6 +361,15 @@ impl<H: Host> App<H> {
                 Screen::Help(_) | Screen::Legacy | Screen::Install(_) => {}
             },
         }
+    }
+
+    /// A text field is being edited or the bar asks for a password.
+    fn typing_text(&self) -> bool {
+        self.asking.is_some()
+            || self.prompt.is_some()
+            || self.install.editing.is_some()
+            || self.maint.editing()
+            || (self.nav.screen == Screen::Legacy && self.config.editing.is_some())
     }
 
     /// The paste box is open and nothing is asked in the bar.
