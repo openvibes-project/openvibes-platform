@@ -9,6 +9,7 @@ import type { Vulnerability, VulnList, VulnListRow } from "../../api/types";
 import type { DemoContext } from "../context";
 import { hasControl, inGroup, isActive } from "../hostGroups";
 import { json, problem, severityRank } from "../http";
+import { cveFacts } from "./cveFacts";
 
 type Pair = Vulnerability & { state: string; groups: string[] };
 type Row = { row: VulnListRow; pairs: Pair[] };
@@ -78,11 +79,13 @@ export function registerVulnListRoute(ctx: DemoContext) {
       const people = unique(open.flatMap((p) => (p.assigned_to ? [p.assigned_to] : [])));
       const one = nameOf(people[0]);
       const dues = ps.flatMap((p) => (p.kev_due ? [p.kev_due.slice(0, 10)] : [])).sort(byteOrder);
+      // Per CVE from its enrichment; an advisory without CVEs keeps its own.
+      const facts = cveFacts(data.advisories, key, ps) ?? { exploited: ps.some((p) => p.exploited), due: dues[0] ?? null,
+        cvss: lead.cvss ?? null, epss: lead.epss ?? null, epss_percentile: lead.epss_percentile ?? null };
       return {
         key, title: lead.title,
         severity: ps.map((p) => p.severity).sort((a, b) => (severityRank[a] ?? 9) - (severityRank[b] ?? 9))[0] ?? "unrated",
-        exploited: ps.some((p) => p.exploited), due: dues[0] ?? null,
-        cvss: lead.cvss ?? null, epss: lead.epss ?? null, epss_percentile: lead.epss_percentile ?? null,
+        ...facts,
         packages: unique(ps.flatMap((p) => (Array.isArray(p.packages) ? (p.packages as { name: string }[]).map((k) => k.name) : []))),
         fixed: fixed.length === 0 ? { kind: "none" } : fixed.length === 1 ? { kind: "one", version: fixed[0] ?? "" } : { kind: "several", count: fixed.length },
         open: open.length, total: ps.length, reboot: ps.some((p) => p.reboot_needed), low_confidence: lc,

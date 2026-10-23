@@ -45,6 +45,15 @@ exception: it reopens the closed pairs and skips the open ones ("already
 open"). Triage on one CVE row shows on its sibling rows, which share the
 advisory's pairs.
 
+An item may add `open_only: true` (default false; only on vulnerability
+items, refused elsewhere as `invalid_items`). The Vulnerabilities list sends
+it on every row, so with the Host chip set (`{agent_id, advisory_id,
+open_only}`) a close or assign still changes only that host's open pair and
+skips the others as `not open`; a named pair without it changes as asked
+(the page's Hosts table). A reopen ignores it. Store:
+`bulk_triage::vulnerabilities_open_only` (`vulnerabilities` is the same
+with no flags).
+
 ## Configuration and failures
 
 The module uses the existing PostgreSQL pool and schema migration. Missing

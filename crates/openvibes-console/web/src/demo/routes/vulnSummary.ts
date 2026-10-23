@@ -10,6 +10,7 @@ import type { createCaseStore } from "../cases";
 import type { DemoContext } from "../context";
 import { hasControl } from "../hostGroups";
 import { json, problem, severityRank } from "../http";
+import { cveFacts } from "./cveFacts";
 
 const SEGMENTS = ["all", "open", "mitigated", "resolved"];
 const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -49,6 +50,7 @@ export function registerVulnSummaryRoutes(ctx: DemoContext & { cases: ReturnType
     const lead = [...advisories].sort((a, b) => count(b) - count(a) || byteOrder(a, b))[0] ?? "";
     const leadPair = pairs.find((p) => p.advisory_id === lead) ?? pairs[0];
     const cve = data.advisories.flatMap((a) => a.cves).find((c) => c.cve_id === key);
+    const facts = cveFacts(data.advisories, key, pairs);
     const open = pairs.filter((p) => p.state === "open");
     const fixed = unique(pairs.flatMap((p) => pkgs(p).flatMap((k) => (k.fixed ? [k.fixed] : []))));
     const people = unique(open.flatMap((p) => (p.assigned_to ? [p.assigned_to] : [])));
@@ -96,13 +98,13 @@ export function registerVulnSummaryRoutes(ctx: DemoContext & { cases: ReturnType
         fixed: fixed.length === 0 ? { kind: "none" } : fixed.length === 1 ? { kind: "one", version: fixed[0] ?? "" } : { kind: "several", count: fixed.length },
         open: open.length, total: pairs.length,
         assignee: people.length === 0 ? { kind: "none" } : people.length === 1 && one ? { kind: "one", id: one.user_id, name: one.display_name } : { kind: "several", count: people.length },
-        kev_due: pairs.flatMap((p) => (p.kev_due ? [p.kev_due.slice(0, 10)] : [])).sort(byteOrder)[0] ?? null,
+        kev_due: (facts ? facts.due : pairs.flatMap((p) => (p.kev_due ? [p.kev_due.slice(0, 10)] : [])).sort(byteOrder)[0]) ?? null,
         ransomware: pairs.some((p) => p.ransomware),
       },
       tiles: {
         open: open.length, total: pairs.length,
         fix: withFix === 0 ? { kind: "none" } : withFix === dists.length ? { kind: "all" } : { kind: "some", n: withFix, of: dists.length },
-        epss: cve?.epss ?? null, epss_percentile: leadPair?.epss_percentile ?? null, cvss: cve?.cvss_score ?? null, cvss_version: cve?.cvss_version ?? null,
+        epss: cve?.epss ?? null, epss_percentile: (facts ? facts.epss_percentile : leadPair?.epss_percentile) ?? null, cvss: cve?.cvss_score ?? null, cvss_version: cve?.cvss_version ?? null,
       },
       what_to_do: dists.sort((a, b) => byteOrder(a.os_id, b.os_id) || byteOrder(a.os_version, b.os_version)),
       details: {

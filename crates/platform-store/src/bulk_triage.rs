@@ -266,6 +266,21 @@ pub async fn vulnerabilities(
     actor: &str,
     now: DateTime<Utc>,
 ) -> Result<Result<BulkResult, BulkRefusal>, StoreError> {
+    vulnerabilities_open_only(client, scope, items, &[], change, actor, now).await
+}
+
+/// [`vulnerabilities`], where `open_only[i]` (missing: false) marks item `i`
+/// as a list row's: a close or assign then changes its pairs only while
+/// open ("not open" otherwise), even on one named host. A reopen ignores it.
+pub async fn vulnerabilities_open_only(
+    client: &mut Client,
+    scope: &AgentScope,
+    items: &[(String, Option<String>)],
+    open_only: &[bool],
+    change: BulkChange<'_>,
+    actor: &str,
+    now: DateTime<Utc>,
+) -> Result<Result<BulkResult, BulkRefusal>, StoreError> {
     if let Err(refusal) = check(change, items.len(), now) {
         return Ok(Err(refusal));
     }
@@ -291,12 +306,15 @@ pub async fn vulnerabilities(
             .get(&(agent.clone(), advisory.clone()))
             .cloned()
             .unwrap_or_default();
-        let named = items
-            .iter()
-            .any(|(adv, a)| adv == advisory && a.as_deref() == Some(agent.as_str()));
         // A CVE row acts on its open pairs only (an expired accepted risk is
-        // open); a reopen keeps its own rule below.
+        // open); a reopen keeps its own rule below. A list row's item names
+        // its host without lifting that (`open_only`), except for a reopen.
         let reopen = matches!(change, BulkChange::State { state: "open", .. });
+        let named = items.iter().enumerate().any(|(i, (adv, a))| {
+            adv == advisory
+                && a.as_deref() == Some(agent.as_str())
+                && (reopen || !open_only.get(i).copied().unwrap_or(false))
+        });
         let open = now_state.state == "open"
             || (now_state.state == "accepted_risk"
                 && now_state.accepted_until.is_some_and(|u| u <= now));

@@ -74,10 +74,11 @@ export function vulnFilters(list: VulnList | undefined, set: { host: string | nu
   ];
 }
 
-/** What a bulk action sends for these rows (ruling 8): each covering advisory, on the Host chip's host when set. */
+/** What a bulk action sends for these rows (ruling 8): each covering advisory, on the Host chip's host when set,
+ * open pairs only (`open_only`, so naming the host does not reach its closed pairs). */
 export function bulkItems(rows: readonly VulnListRow[], host: string | null) {
   const on = host ? { agent_id: host } : {};
-  return [...new Set(rows.flatMap((r) => r.advisories))].map((advisory_id) => ({ advisory_id, ...on }));
+  return [...new Set(rows.flatMap((r) => r.advisories))].map((advisory_id) => ({ advisory_id, ...on, open_only: true }));
 }
 
 /** What a state change or an assignment on these rows reaches: their open
@@ -111,7 +112,7 @@ function dueTone(due: string, now = Date.now()): "late" | "soon" | null {
 function Due({ due }: { due: string | null | undefined }) {
   if (!due) return none("No due date");
   const tone = dueTone(due);
-  return <span className={tone ? `due due--${tone}` : "due"} title="CISA's due date">{date(`${due}T00:00:00Z`)}{tone === "late" && <span className="sr-only"> (overdue)</span>}</span>;
+  return <span className={tone ? `due due--${tone}` : "due"} title="CISA's due date">{date(`${due}T00:00:00Z`)}{tone && <span className="sr-only">{tone === "late" ? " (overdue)" : " (due within 30 days)"}</span>}</span>;
 }
 
 function Fixed({ fixed }: { fixed: VulnListRow["fixed"] }) {
@@ -124,7 +125,7 @@ const columns: Column<VulnListRow>[] = [
   { key: "severity", header: header("severity"), width: "110px", sort: (r) => r.severity, render: (r) => <SeverityBadge severity={r.severity} /> },
   { key: "advisory", header: header("advisory"), render: (r) => (
     <div className="cell-two">
-      <span className="row"><a className="truncate" {...viewLink(vulnPath(r.key))}>{r.title}</a>
+      <span className="row"><a className="truncate" {...viewLink(vulnPath(r.key))}>{r.title}<span className="sr-only"> ({r.key})</span></a>
         {r.exploited && <span className="badge badge--critical badge--plain" title="Known to be exploited"><Icon name="flame" size={12} /> Exploited</span>}
         {r.low_confidence && <span className="badge badge--plain" title="Matched from upstream version ranges, not a distribution advisory">Lower confidence</span>}
       </span>
@@ -139,7 +140,7 @@ const columns: Column<VulnListRow>[] = [
   { key: "hosts", header: header("hosts"), width: "140px", sort: (r) => r.open, render: (r) => (
     <div className="stack hosts-cell">
       <span className="num"><b>{r.open.toLocaleString()}</b> <span className="subtle">open of {r.total.toLocaleString()}</span></span>
-      <span className="meter meter--ok" role="progressbar" aria-label={`${r.open} open of ${r.total} hosts`}
+      <span className="meter meter--ok" role="progressbar" aria-label={`${r.open} open of ${r.total} hosts`} aria-valuetext={`${r.open} open of ${r.total} hosts`}
         aria-valuemin={0} aria-valuemax={r.total} aria-valuenow={r.total - r.open}>
         <span style={{ width: `${r.total ? Math.round((100 * (r.total - r.open)) / r.total) : 0}%` }} />
       </span>

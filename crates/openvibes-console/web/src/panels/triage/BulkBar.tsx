@@ -84,7 +84,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
     ...(others.length > 0 ? [{ group: "People", options: others.map((p) => ({ value: p.username, label: p.display_name || p.username, hint: p.username, icon: avatar(p.display_name || p.username) })) }] : []),
   ];
 
-  // Reopen and assign apply at once: no note is needed.
+  // Reopen applies at once, and so does assign unless `confirm` asks first: no note is needed.
   const apply = async (body: Record<string, unknown>, rows: BulkItem[]) => {
     setBusy(true);
     try {

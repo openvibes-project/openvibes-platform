@@ -29,7 +29,9 @@ use crate::{
 
 /// One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`
 /// (every host in scope), with `agent_id` for one host. Vulnerabilities:
-/// `advisory_id` (every host where it is open), with `agent_id` for one.
+/// `advisory_id` (every host where it is open), with `agent_id` for one;
+/// `open_only` (a Vulnerabilities list row) keeps a close or assign to open
+/// pairs even with `agent_id`.
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BulkItem {
@@ -43,6 +45,10 @@ pub struct BulkItem {
     pub advisory_id: Option<String>,
     /// One host only.
     pub agent_id: Option<String>,
+    /// Vulnerabilities: change only open pairs on a close or assign, even
+    /// on the named host (a list row); a reopen ignores it. Default false.
+    #[serde(default)]
+    pub open_only: bool,
 }
 
 /// One action on many items.
@@ -157,7 +163,8 @@ pub(crate) async fn bulk_vulnerabilities(
 enum Items {
     Alarms(Vec<i64>),
     Compliance(Vec<(String, String, Option<String>)>),
-    Vulnerabilities(Vec<(String, Option<String>)>),
+    /// (advisory, host?) and each item's `open_only`.
+    Vulnerabilities(Vec<(String, Option<String>)>, Vec<bool>),
 }
 
 fn parse_items(kind: Kind, items: &[BulkItem]) -> Option<Items> {
@@ -167,6 +174,7 @@ fn parse_items(kind: Kind, items: &[BulkItem]) -> Option<Items> {
             && item.rule_id.is_some() == b
             && item.advisory_id.is_some() == c
             && (d || item.agent_id.is_none())
+            && (c || !item.open_only)
     };
     match kind {
         Kind::Alarms => items
@@ -202,7 +210,9 @@ fn parse_items(kind: Kind, items: &[BulkItem]) -> Option<Items> {
                 })
             })
             .collect::<Option<Vec<_>>>()
-            .map(Items::Vulnerabilities),
+            .map(|pairs| {
+                Items::Vulnerabilities(pairs, items.iter().map(|i| i.open_only).collect())
+            }),
     }
 }
 
@@ -303,8 +313,9 @@ async fn apply(
         Items::Compliance(items) => {
             store::compliance(client, scope, items, change, actor, now).await
         }
-        Items::Vulnerabilities(items) => {
-            store::vulnerabilities(client, scope, items, change, actor, now).await
+        Items::Vulnerabilities(items, open_only) => {
+            store::vulnerabilities_open_only(client, scope, items, open_only, change, actor, now)
+                .await
         }
     }
 }
@@ -347,7 +358,7 @@ async fn add_to_case(
             Ok(None) => return bad("invalid_items", "Select 1 to 10,000 items"),
             Err(_) => return unavailable_auth(),
         },
-        Items::Vulnerabilities(items) => {
+        Items::Vulnerabilities(items, _) => {
             match store::expand_vulnerabilities(client, scope, items).await {
                 Ok(Some(found)) => found
                     .into_iter()

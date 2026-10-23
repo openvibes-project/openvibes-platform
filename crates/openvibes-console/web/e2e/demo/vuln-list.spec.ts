@@ -87,7 +87,7 @@ test("the CVE is a real link to its page, and the row shows screen 25's cells", 
   await expect(row).toContainText("2 people");
   await expect(row.getByRole("progressbar", { name: "4 open of 6 hosts" })).toBeVisible();
   await expect(row.locator(".due--late")).toBeVisible();
-  await expect(row.getByRole("link", { name: "openssl security update" })).toHaveAttribute("href", "/vulnerabilities/CVE-2026-20037");
+  await expect(row.getByRole("link", { name: "openssl security update (CVE-2026-20037)", exact: true })).toHaveAttribute("href", "/vulnerabilities/CVE-2026-20037");
 });
 
 test("bulk Set state names the open hosts and the other CVEs, and changes only open ones; there is no Reopen", async ({ page }) => {

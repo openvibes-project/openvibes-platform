@@ -63,7 +63,7 @@ export function seedVulnerabilities(now: number, hostname: (agent: string) => st
       vulnerabilities.push({
         advisory_id: s.id, agent_id: h.agent, hostname: name, title: s.title, severity: s.severity, url: s.url,
         cves: s.cves.map((c) => c.cve_id), cvss: first?.cvss_score ?? null, epss: first?.epss ?? null,
-        epss_percentile: first?.epss == null ? null : Math.min(0.999, first.epss * 1.1),
+        epss_percentile: first?.epss == null ? null : Math.min(0.999, first.epss * 1.6),
         kev, kev_due: kev && s.due != null ? iso(s.due) : null, euvd: kev, exploited: kev, ransomware: false, reboot_needed: false,
         packages: [s.pkg], first_seen_at: iso(now - 9 * DAY), fixed_at: h.fixedDaysAgo == null ? null : iso(now - h.fixedDaysAgo * DAY),
         source: s.source, match_method: s.method, confidence: s.confidence, match_basis: s.basis,

@@ -84,8 +84,8 @@ Show everything, without page changes for details:
   hosts in scope; a close leaves the hosts already closed alone, a reopen
   the ones already open. Rows in an open case show
   its badge (`panels/cases/CaseBadge.tsx`). On the Vulnerabilities list a
-  ticked CVE row sends each of its covering advisories (`{advisory_id}`, plus
-  `agent_id` with the Host chip); the server changes only their open pairs
+  ticked CVE row sends each of its covering advisories (`{advisory_id,
+  open_only: true}`, plus `agent_id` with the Host chip); the server changes only their open pairs
   ("not open" for the rest) and skips pairs with no fix. There is no Reopen
   there. `BulkBar`'s `confirm` puts what a change reaches in the Set state
   dialog and makes Assign ask first too: "Changes up to N open hosts. Hosts
@@ -248,8 +248,8 @@ used.
 ### Filter catalogue
 
 `views/lists/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
-Hosts, Audit log; Vulnerabilities keeps only Severity, for the List tile, since
-the view has its own FilterBar): each filter is a flag (one fixed value) or a choice (a
+Hosts, Audit log; the Vulnerabilities entry serves the List tile, which reads
+`GET /v1/vulnerabilities`, while the view has its own FilterBar): each filter is a flag (one fixed value) or a choice (a
 list of values), and each parameter holds one value. The list views build
 their chip bars from it and the List widget editor offers the same filters,
 so the two cannot drift. Runtime extras (compliance rule sets, counts) stay

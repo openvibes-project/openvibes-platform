@@ -10,7 +10,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
   // Bulk triage (triage v2): the same rules as one item, applied to each;
   // what cannot change is skipped with the reason.
   type Triage = { state: string; assigned_to: string | null; note: string | null; accepted_until: string | null };
-  /** `openOnly`: a CVE row's advisory-wide pair, which a close or assign changes only while open (bulk_triage.rs). */
+  /** `openOnly`: an advisory-wide pair or a list row's (`open_only`), which a close or assign changes only while open (bulk_triage.rs). */
   type Target = { id: string; named: boolean; caseKind: "alarm" | "compliance_finding" | "vulnerability"; caseRef: string;
     current: () => Triage; write: (next: Triage) => void; openOnly?: boolean };
   type Picked = { found: Target[]; missing: string[] };
@@ -19,7 +19,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
   const auditNames = { alarms: "alarm", compliance: "finding", vulnerabilities: "vulnerability" } as const;
 
   const alarmTargets = (item: Record<string, unknown>, into: Picked): boolean => {
-    if (typeof item.id !== "string") return false;
+    if (typeof item.id !== "string" || item.open_only === true) return false;
     const alarm = alarmList().find((a) => a.id === item.id);
     if (!alarm) { into.missing.push(item.id); return true; }
     into.found.push({ id: alarm.id, named: true, caseKind: "alarm", caseRef: alarm.id, current: () => alarm.triage,
@@ -27,7 +27,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     return true;
   };
   const findingTargets = (item: Record<string, unknown>, into: Picked): boolean => {
-    if (typeof item.rule_set_id !== "string" || typeof item.rule_id !== "string") return false;
+    if (typeof item.rule_set_id !== "string" || typeof item.rule_id !== "string" || item.open_only === true) return false;
     const agent = typeof item.agent_id === "string" ? item.agent_id : null;
     const set = item.rule_set_id === "~unknown" ? "" : item.rule_set_id;
     const rule = item.rule_id;
@@ -44,7 +44,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     return true;
   };
   const vulnerabilityTargets = (item: Record<string, unknown>, into: Picked): boolean => {
-    if (typeof item.advisory_id !== "string") return false;
+    if (typeof item.advisory_id !== "string" || (item.open_only !== undefined && typeof item.open_only !== "boolean")) return false;
     const agent = typeof item.agent_id === "string" ? item.agent_id : null;
     const advisory = item.advisory_id;
     // Only pairs with a fix are triaged (the store's `vulnerabilities` table); no-fix pairs and CPE matches are not.
@@ -52,7 +52,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     const hits = vulnerabilities().filter((v) => v.advisory_id === advisory && (agent === null || v.agent_id === agent) && fixable(v));
     if (hits.length === 0) into.missing.push(agent ? `${agent}/${advisory}` : advisory);
     for (const v of hits) {
-      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, openOnly: agent === null, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
+      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, openOnly: agent === null || item.open_only === true, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
         current: () => ({ state: v.triage_state, assigned_to: v.assigned_to ?? null, note: null, accepted_until: null }),
         write: (next) => { v.triage_state = next.state; v.assigned_to = next.assigned_to; v.triage_version += 1; } });
     }

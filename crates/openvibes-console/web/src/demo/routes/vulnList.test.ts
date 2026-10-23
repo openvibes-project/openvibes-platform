@@ -102,9 +102,33 @@ describe("demo Vulnerabilities list", () => {
     for (const kind of ["none", "one", "several"]) expect(rows.some((r) => r.assignee.kind === kind)).toBe(true);
   });
 
+  it("takes exploited, due, CVSS and EPSS per CVE, not from the covering advisory", async () => {
+    const row = (await get("state=all&q=CVE-2026-20051")).body.items[0];
+    expect(row).toMatchObject({ key: "CVE-2026-20051", exploited: false, due: null, cvss: 5.3, epss: 0.008 });
+    // Its advisory also names the exploited CVE-2026-20037, which keeps its own facts.
+    expect((await get("state=all&q=CVE-2026-20037")).body.items[0]).toMatchObject({ exploited: true, cvss: 9.8 });
+    for (const signal of ["exploited", "due30"]) {
+      const listed = (await get(`state=all&signal=${signal}&limit=100`)).body;
+      expect(listed.items.map((r) => r.key)).not.toContain("CVE-2026-20051");
+      expect(listed.items.map((r) => r.key)).toContain("CVE-2026-20037");
+    }
+    const page = await createDemoServer({ persona: "admin" }).handle("GET", "/api/v1/vulnerabilities/CVE-2026-20051/summary", undefined);
+    const summary = (await page.json()) as { header: { kev_due: string | null }; tiles: { cvss: number | null; epss_percentile: number | null } };
+    expect(summary.header.kev_due).toBeNull();
+    expect(summary.tiles).toMatchObject({ cvss: 5.3, epss_percentile: 0.008 * 1.6 });
+  });
+
   it("bulk on a CVE row's advisories changes only open pairs; no-fix pairs can't be triaged", async () => {
     const server = createDemoServer({ persona: "admin" });
     const call = async (method: string, path: string, body?: unknown) => (await server.handle(method, path, body)).json();
+    // A list row on the Host chip names the host but says open_only: agent-00012's mitigated pair stays.
+    const hostRow = (await call("POST", "/api/v1/vulnerabilities/bulk", { action: "assign", assignee: "sam",
+      items: [{ advisory_id: "FEDORA-2026-5b1e0c11", agent_id: "agent-00012", open_only: true }] })) as { changed: number; skipped: { id: string; reason: string }[] };
+    expect(hostRow).toMatchObject({ changed: 0, skipped: [{ id: "agent-00012/FEDORA-2026-5b1e0c11", reason: "not open" }] });
+    const named = (await call("POST", "/api/v1/vulnerabilities/bulk", { action: "assign", assignee: "sam",
+      items: [{ advisory_id: "FEDORA-2026-5b1e0c11", agent_id: "agent-00012" }] })) as { changed: number };
+    expect(named.changed).toBe(1);
+    expect((await server.handle("POST", "/api/v1/alarms/bulk", { action: "assign", assignee: null, items: [{ id: "1", open_only: true }] })).status).toBe(400);
     const list = (await call("GET", `${URL}?state=all&limit=100`)) as VulnList;
     const shared = list.items.find((r) => r.advisories.some((a) => a.startsWith("DSA-")) && r.advisories.some((a) => a.startsWith("FEDORA-")));
     expect(shared).toBeDefined();

@@ -56,6 +56,8 @@ describe("Vulnerabilities list", () => {
     const html = render(list());
     for (const header of ["Severity", "Advisory", "Package", "CVSS", "EPSS", "Hosts", "Due", "Assignee"]) expect(html).toContain(`>${header}<`);
     expect(html).toContain('href="/vulnerabilities/CVE-2026-10037"');
+    // The link's name carries the key for screen readers.
+    expect(html).toContain('<span class="sr-only"> (CVE-2026-10037)</span></a>');
     expect(html).toContain("Exploited");
     expect(html).toContain("fixed in 3.0.15");
     expect(html).toContain("no fix yet");
@@ -71,6 +73,7 @@ describe("Vulnerabilities list", () => {
   it("names the hosts bar for screen readers", () => {
     const html = render(list());
     expect(html).toMatch(/role="progressbar"[^>]*aria-label="3 open of 5 hosts"|aria-label="3 open of 5 hosts"[^>]*role="progressbar"/);
+    expect(html).toContain('aria-valuetext="3 open of 5 hosts"');
   });
 
   it("shows the due date amber within 30 days and red when overdue", () => {
@@ -78,6 +81,7 @@ describe("Vulnerabilities list", () => {
     expect(html).toMatch(/class="due due--soon"/);
     expect(html).toMatch(/class="due due--late"/);
     expect(html).toContain("overdue");
+    expect(html).toContain("(due within 30 days)");
     // 60 days out: neither.
     expect(html.match(/class="due"/g)?.length).toBe(1);
   });
@@ -110,9 +114,11 @@ describe("Vulnerabilities list", () => {
 
   it("sends each ticked row's covering advisories, on the Host chip's host when set (ruling 8)", () => {
     const rows = list().items.slice(0, 2);
-    expect(bulkItems(rows, null)).toEqual([{ advisory_id: "DSA-5891-1" }, { advisory_id: "FEDORA-2026-1" }, { advisory_id: "FEDORA-2026-2" }]);
+    expect(bulkItems(rows, null)).toEqual([{ advisory_id: "DSA-5891-1", open_only: true }, { advisory_id: "FEDORA-2026-1", open_only: true },
+      { advisory_id: "FEDORA-2026-2", open_only: true }]);
+    // The Host chip names the host; open_only keeps its closed pairs out of reach.
     expect(bulkItems([row(), row({ key: "CVE-2026-10051" })], "agent-1"))
-      .toEqual([{ advisory_id: "DSA-5891-1", agent_id: "agent-1" }, { advisory_id: "FEDORA-2026-1", agent_id: "agent-1" }]);
+      .toEqual([{ advisory_id: "DSA-5891-1", agent_id: "agent-1", open_only: true }, { advisory_id: "FEDORA-2026-1", agent_id: "agent-1", open_only: true }]);
   });
 
   it("counts the open hosts a change reaches and names the other CVEs those advisories cover", () => {
