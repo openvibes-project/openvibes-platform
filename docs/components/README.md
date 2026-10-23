@@ -35,6 +35,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-web` | web application | the embedded console interface: sign-in, inspector panel stack, floating windows, assistant dock, command palette, saved views, dashboards (Number, Graph and more widgets); demo build for the GitHub Pages preview | [console-web.md](console-web.md) |
 | `console-hosts` | web pages and console API | the Hosts list (filters with counts, saved views, columns, server paging) and the host page | [console-hosts.md](console-hosts.md) |
 | `console-alarms` | web pages | the Alarms list (filters with counts, saved views, columns, server paging, the bulk bar) and an alarm's page | [console-alarms.md](console-alarms.md) |
+| `console-vulnerabilities` | web pages, console API and store queries | the Vulnerabilities list, one row per CVE (filters with counts, saved views, columns, server paging, open-only bulk), and a vulnerability's page | [console-vulnerabilities.md](console-vulnerabilities.md) |
 | `console-dashboards` | console module | user dashboards: layouts, sharing by role, home (schema 26) | [console-dashboards.md](console-dashboards.md) |
 | `console-cases` | console module | investigations: items, notes, assignment, closing with evidence; scope-aware visibility (schema 35) | [console-cases.md](console-cases.md) |
 | `count-history` | store module and console endpoint | daily per-host problem counts (schema 44) written by maintenance, served as count history graphs by `/api/v1/metrics/history` | [count-history.md](count-history.md) |

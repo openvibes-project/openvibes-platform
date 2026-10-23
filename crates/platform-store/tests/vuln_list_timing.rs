@@ -1,7 +1,8 @@
 //! The Vulnerabilities list on the `docs/sizing.md` fleet (step 5b ruling
 //! 13, Review Focus 5): 10,000 Debian 12 hosts with 389 packages each,
 //! 3.2 M fixable pairs and 27.5 M pairs without a fix. Ignored by default;
-//! run it explicitly. Timings are recorded in console-read.md.
+//! run it explicitly. Timings are recorded in console-read.md. The CVE
+//! page's summary for a kernel-sized CVE is timed on the same fleet.
 
 mod common;
 
@@ -12,6 +13,7 @@ use platform_store::{
     Client,
     console_read::AgentScope,
     vuln_list::{VulnQuery, VulnSort, VulnState, vuln_list},
+    vuln_summary::{Lookup, PageScopes, vuln_summary},
 };
 
 const ANN: &str = "00000000-0000-4000-8000-0000000000a1";
@@ -164,6 +166,89 @@ async fn records_vuln_list_latency_on_the_sizing_fleet() {
     );
     assert_eq!(hosts, 10_000);
     assert!(scoped_hosts < hosts);
+    assert!(full < Duration::from_secs(2), "full reach {full:?}");
+    assert!(scoped < Duration::from_secs(2), "scoped {scoped:?}");
+    db.drop().await;
+}
+
+/// A kernel on top of the fleet: package `linux` on every host, with
+/// CVE-2026-90000 fixable on every host (DEBIAN-LINUX-0) and 1,999 more
+/// advisories without a fix on it (Debian's kernel carries thousands), so
+/// the page's same-package count walks a large candidate set.
+async fn kernel(c: &Client) {
+    c.batch_execute(
+        "INSERT INTO package_versions (manager, name, version, arch, source)
+           VALUES ('dpkg', 'linux-image-amd64', '6.1-1', 'amd64', 'linux');
+         INSERT INTO host_packages (agent_id, package_version_id)
+         SELECT agent_id, (SELECT id FROM package_versions WHERE name = 'linux-image-amd64') FROM agents;
+         INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
+         SELECT 'DEBIAN-LINUX-' || i, 'debian-12', 'debian', '12', 'important', 'linux: flaw ' || i, 'u'
+         FROM generate_series(0, 1999) i;
+         INSERT INTO advisory_cves SELECT 'DEBIAN-LINUX-' || i, 'CVE-2026-' || (90000 + i) FROM generate_series(0, 1999) i;
+         INSERT INTO advisory_packages (advisory_id, name, arch, scheme, match_on, fixed)
+         SELECT 'DEBIAN-LINUX-' || i, 'linux', '', 'dpkg', 'source', CASE WHEN i = 0 THEN '6.1-2' END
+         FROM generate_series(0, 1999) i;
+         INSERT INTO version_vulnerabilities (package_version_id, advisory_id, package, first_seen_at)
+         SELECT (SELECT id FROM package_versions WHERE name = 'linux-image-amd64'), 'DEBIAN-LINUX-' || i, 'linux', now()
+         FROM generate_series(1, 1999) i;
+         INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, fixed_at, last_evaluated_at, reboot_needed)
+         SELECT agent_id, 'DEBIAN-LINUX-0',
+                '[{\"name\":\"linux-image-amd64\",\"installed\":\"6.1-1\",\"fixed\":\"6.1-2\"}]', now(), NULL, now(), true
+         FROM agents;",
+    )
+    .await
+    .unwrap();
+    c.batch_execute("VACUUM ANALYZE").await.unwrap();
+}
+
+async fn summary_median(c: &Client, scope: &AgentScope) -> Duration {
+    const RUNS: usize = 5;
+    let scopes = PageScopes {
+        read: scope,
+        alarms: Some(scope),
+        cases: Some(scope),
+    };
+    let mut samples = Vec::with_capacity(RUNS);
+    for _ in 0..RUNS {
+        let started = Instant::now();
+        let page = vuln_summary(c, "CVE-2026-90000", &scopes, Utc::now().date_naive())
+            .await
+            .unwrap();
+        samples.push(started.elapsed());
+        let Lookup::Found(page) = page else {
+            panic!("CVE-2026-90000 missing")
+        };
+        assert!(page.header.total > 0);
+    }
+    samples.sort();
+    eprintln!("  all {samples:?}");
+    samples[RUNS / 2]
+}
+
+/// Records the CVE page's summary (header, tiles, what to do, details,
+/// history, related) of a kernel CVE on every host, at full reach and for
+/// a viewer scoped to two manual groups.
+#[tokio::test]
+#[ignore = "large-fleet timing; run explicitly"]
+async fn records_cve_page_summary_latency_for_a_kernel_cve() {
+    let (db, c) = common::migrated().await;
+    c.batch_execute("SET statement_timeout = 0").await.unwrap();
+    sizing_fleet(&c).await;
+    kernel(&c).await;
+    let full = summary_median(&c, &AgentScope::Global).await;
+    eprintln!("cve page summary, full reach: median {full:?}");
+    let groups: Vec<String> = c
+        .query(
+            "SELECT asset_group_id::text FROM console_asset_groups WHERE name IN ('manual 0', 'manual 1')",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.get(0))
+        .collect();
+    let scoped = summary_median(&c, &AgentScope::AssetGroups(groups)).await;
+    eprintln!("cve page summary, two manual groups: median {scoped:?}");
     assert!(full < Duration::from_secs(2), "full reach {full:?}");
     assert!(scoped < Duration::from_secs(2), "scoped {scoped:?}");
     db.drop().await;

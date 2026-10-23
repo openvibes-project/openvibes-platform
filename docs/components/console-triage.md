@@ -33,26 +33,9 @@ side is the Alarms list's bulk bar and the alarm page's header; see
 
 ## Vulnerabilities in bulk
 
-`POST /api/v1/vulnerabilities/bulk` takes items `{advisory_id}` (a CVE row
-acts through its covering advisories; the advisory expands to its hosts in
-reach) or `{agent_id, advisory_id}` (that pair, as asked). An advisory-wide
-`state` close or `assign` changes only open pairs: no triage row, or an
-accepted risk whose expiry has passed, counts as open, and fixed pairs are
-never expanded. Mitigated, accepted and false-positive pairs come back in
-`skipped` with reason `not open` and keep their note and assignee. Hosts out
-of the actor's reach are never touched. A reopen (`state: open`) is the
-exception: it reopens the closed pairs and skips the open ones ("already
-open"). Triage on one CVE row shows on its sibling rows, which share the
-advisory's pairs.
-
-An item may add `open_only: true` (default false; only on vulnerability
-items, refused elsewhere as `invalid_items`). The Vulnerabilities list sends
-it on every row, so with the Host chip set (`{agent_id, advisory_id,
-open_only}`) a close or assign still changes only that host's open pair and
-skips the others as `not open`; a named pair without it changes as asked
-(the page's Hosts table). A reopen ignores it. Store:
-`bulk_triage::vulnerabilities_open_only` (`vulnerabilities` is the same
-with no flags).
+`POST /api/v1/vulnerabilities/bulk` (CVE rows acting through their covering
+advisories, open-only closes and assigns, `open_only` items) is in
+[console-vulnerabilities.md](console-vulnerabilities.md#bulk).
 
 ## Configuration and failures
 

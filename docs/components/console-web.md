@@ -31,57 +31,8 @@ Show everything, without page changes for details:
   POSTs `/auth/v1/logout` with the session CSRF token.
 - **Views** (the same set v1 had):
   - findings with bulk triage and a 14-day trend of reporting hosts;
-  - vulnerabilities, one row per CVE (screen 25, roles 5b): `views/investigate/Vulnerabilities.tsx`
-    over `GET /api/v1/vulnerability-list`, with the shared FilterBar (Severity,
-    State, Signals, Package, Group, Assignee, and Host and Advisory as chips
-    only while set), SummaryLine ("N open on N hosts · N known exploited · N
-    with a due date · N without a fix · N unassigned"), Columns (page
-    `vulnerabilities`; Severity and Advisory never hidden), saved views and
-    paging by offset. Columns: Severity; Advisory (the title a real link to
-    `/vulnerabilities/{key}`, Exploited, Lower confidence, the CVE id);
-    Package ("fixed in V", "fixed in n versions" or "no fix yet"); CVSS; EPSS;
-    Hosts ("n open of m" and a bar named "n open of m hosts"); Due (CISA's
-    date, amber within 30 days, red when overdue); Assignee. URL sorts
-    `severity`, `cvss`, `epss`, `hosts` (the API's `open`) and `due`; none is
-    the API's priority order. Old addresses keep their meaning in place
-    (`vulnerabilitiesQuery` in `app/location.ts`, applied by `redirect`):
-    `exploited`, `reboot`, `nofix` and `lowconf=true` become one `signal`
-    (the first in that order wins), and old sorts no column has go. Views
-    the old list kept in this browser (`openvibes.v2.views./vulnerabilities`)
-    are imported once with the same mapping. `/vulnerabilities/{key}` is the CVE's page (below);
-  - a vulnerability's page (screen 26, roles 5b rulings 7-12):
-    `views/investigate/vulnerability/` at `/vulnerabilities/{key}`, one per
-    CVE (or per advisory without a CVE), over
-    `GET /api/v1/vulnerabilities/{key}/summary` and its paged `/hosts`. The
-    header has Set state ▾, Assign ▾ and Add to case (each covering
-    advisory's open hosts in reach, `{advisory_id, open_only: true}`; the
-    confirmation says how many open hosts change, that hosts without a fix
-    are left as they are, and names the other CVEs the advisories cover),
-    Ask about this (`header.advisory_id`, the covering advisory with the
-    most hosts) and ⋯ (Export, a CSV of its hosts; Copy link), each only
-    with its `can` flag; Set state and Assign go when nothing is open. The
-    status shows Known exploited from `header.exploited` (KEV or EUVD); the
-    CVE id links to NVD; CISA's due date is a banner below the header
-    (`DetailPage`'s `banner`). Tiles: open on
-    (to the Hosts card), fix available, EPSS, CVSS. Left: What to do (the
-    fixed build per distribution, reboot), Details (advisories, published,
-    confidence, vector, CWE, description), History. Right: Hosts
-    (`?segment=` All, Open, Mitigated, Resolved, an unknown value read as
-    All; `?offset=` paging by 50; ticks send `{agent_id, advisory_id}`
-    pairs, Reopen included; a pair with no triage, no fix or a version-range
-    match, has no tick and says why; without `vulnerabilities.triage` but
-    with `can.add_to_case`, each such pair has its own Add to case, since the
-    bulk route needs triage even to add to a case) and Related (open alarms
-    on its hosts, cases, the same packages' other CVEs, each package linking
-    to `/vulnerabilities?package=NAME&state=all`). `Reach.tsx` holds the
-    confirmation text the list and the header share. The summary resolves the
-    key: an advisory naming one CVE is replaced by that CVE's address, one
-    naming several by `/vulnerabilities?advisory=ID&state=all`
-    (`nav.replace`), so history keeps no dead entry. The advisory panel is
-    gone: `nav.open({kind: "advisory"})`, `ObjectLink` and
-    `?open=advisory:ID` go to the page (`pagePath` and `redirect` in
-    `app/location.ts`). Tests: `vulnerability/VulnPage.test.tsx`,
-    `e2e/demo/vuln-page.spec.ts`;
+  - vulnerabilities, one row per CVE, and a vulnerability's page
+    (`/vulnerabilities/{key}`, roles 5b): [console-vulnerabilities.md](console-vulnerabilities.md);
   - agents, with labels, host groups and revocation;
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
@@ -116,15 +67,8 @@ Show everything, without page changes for details:
   why the rest was skipped. A selected finding or advisory row acts on its
   hosts in scope; a close leaves the hosts already closed alone, a reopen
   the ones already open. Rows in an open case show
-  its badge (`panels/cases/CaseBadge.tsx`). On the Vulnerabilities list a
-  ticked CVE row sends each of its covering advisories (`{advisory_id,
-  open_only: true}`, plus `agent_id` with the Host chip); the server changes only their open pairs
-  ("not open" for the rest) and skips pairs with no fix. There is no Reopen
-  there. `BulkBar`'s `confirm` puts what a change reaches in the Set state
-  dialog and makes Assign ask first too: "Changes up to N open hosts. Hosts
-  without a fix yet are left as they are…" and the other CVEs those
-  advisories also cover. A vulnerability change refreshes every
-  `/api/v1/vulnerabilit…` read, the list included.
+  its badge (`panels/cases/CaseBadge.tsx`). The Vulnerabilities list's bulk bar is in
+  [console-vulnerabilities.md](console-vulnerabilities.md#bulk).
 - **Detail template** (`panels/triage/TriageDetail.tsx`): a finding's
   layout (an alarm and a vulnerability are pages, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
   actions line (a finding: "Set state: N open", acting on its
@@ -789,7 +733,10 @@ for the pages not yet moved; its saved views stay in the browser.
   The advisory panel became the vulnerability's page
   `/vulnerabilities/{key}`; old links (`?open=advisory:ID`) redirect to it,
   or to the list filtered by the advisory when it names several CVEs.
-  Popped-out advisory windows are dropped.
+  Popped-out advisory windows are dropped. Old list URLs and saved views
+  keep their filters (`exploited`, `reboot`, `nofix`, `lowconf` become
+  `signal`), and views saved in the browser move to the person's account;
+  see [console-vulnerabilities.md](console-vulnerabilities.md#upgrading).
 
 ## Configuration
 

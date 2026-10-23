@@ -804,7 +804,7 @@ These fill gaps in the Vulnerabilities list and a vulnerability's page.
      - "fixed in n versions" when the fixed versions differ;
      - "no fix yet" when no pair has a fix.
    - **Hosts** shows "n open of m". n is the open pairs (triage state open, and not fixed); m is every pair, whatever its state.
-   - **Assignee** shows the one name when every open pair has the same assignee, "n people" when they differ, and "—" when none is assigned.
+   - **Assignee** shows One when exactly one person is assigned among the open pairs (others may be unassigned); Several(n) for n people; None ("—") when no open pair is assigned. (Amended 2026-10-23; it first said "when every open pair has the same assignee".)
 3. **Filter values** (one value per filter; all filters combine):
    - **State:**
      - `open` (the default), `mitigated`, `accepted_risk`, `false_positive`, `resolved` (fixed by an update) and `all`;
@@ -853,8 +853,15 @@ These fill gaps in the Vulnerabilities list and a vulnerability's page.
     - **Same package:** other CVEs in reach on the same package names, as a count with their severities, linking to `/vulnerabilities?package=NAME`.
 13. **Performance:**
     - The list must answer within 2 s at full reach on the `docs/sizing.md` fleet: 10,000 Debian hosts, 3.2 M fixable pairs, plus the pairs with no fix. Record the scoped time as well.
-    - An index may be added in migration 0061 if the timing test needs one. No other schema change is planned.
+    - Met: 1.90 s at full reach and 1.53 s scoped (`console-read.md`). Migration 0061 holds the stored group membership (ruling 15), and the index the timing test needed, `vulnerabilities (advisory_id)`, is migration 0062 (this ruling first said 0061).
 14. **List rows name the other CVEs.** Each list row also carries `also_covers`: the other CVEs named by its covering advisories in reach, at most 10, so the bulk confirmation can name them.
+15. **Stored group membership** (user decision, 2026-10-22). Computing membership per request kept the list at 12.7 s, so migration 0061 stores it in `console_host_group_membership`, kept by triggers on hosts, groups, their members and conditions. Its lock is taken before the auto-group lock, so the two never deadlock.
+16. **`open_only` bulk items.** A vulnerability bulk item may carry `open_only: true`. List rows always send it, so a close or assign stays open-only even with the Host chip set (`{agent_id, advisory_id}`). A reopen ignores it, and the page's Hosts table sends pairs without it. Without this flag, ruling 8 would break user decision 2 whenever the Host chip is set.
+17. **Pairs with no fix stay untriageable,** as before: triage needs a `vulnerabilities` row. Their rows and hosts say they can't be triaged until a fix is known. Hosts-table rows for them have no checkbox, and the bulk confirmation counts only triageable open hosts. Making them triageable is a separate redesign.
+18. **Add to case without triage.** The bulk route needs `vulnerabilities.triage` for every action, Add to case included. A person with `cases.write` but no triage gets an Add to case button on each triageable Hosts row of the page, as the old panel had, and no header or bulk case action.
+19. **Lower-confidence pairs on the page** count only when the CVE has no other pairs, to match the list, which shows them only under their signal.
+20. **History** shows state changes and notes only. `vulnerability_triage_history` does not store assignee changes, and adding them is a schema change outside this step.
+21. **What to do counts every pair that is not fixed** per distribution, mitigated, accepted and false-positive ones included: they still need the fixed build.
 
 ## 11. Dashboards
 

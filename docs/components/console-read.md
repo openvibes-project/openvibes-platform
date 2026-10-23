@@ -145,3 +145,14 @@ fixable pairs of the 100 mixed advisories out of the no-fix counts (0.45 s
 before their advisory ids were sorted bytewise). The margin is small: a
 fleet with more mixed advisories, or a busier host, can pass 2 s. Before
 the stored group membership the same list took 12.7 s.
+
+A vulnerability's page (2026-10-23, same fleet and settings, plus a
+kernel: `linux` on every host, CVE-2026-90000 fixable on all 10,000 and
+1,999 more `linux` advisories without a fix, so Related's same-package
+count walks 2,000 candidates): the summary (header, tiles, what to do,
+details, history, related with alarms and cases) measured a median of
+175 ms over 5 runs (173–199 ms) at full reach and 40 ms (40–42 ms) scoped
+to two manual groups. Run it with
+`cargo test -p platform-store --test vuln_list_timing records_cve_page_summary_latency_for_a_kernel_cve -- --ignored --nocapture`;
+it fails above 2 s. The same-package candidates need no narrowing to the
+releases in reach at this size.
