@@ -315,7 +315,8 @@ fn file_pick_lists_files_and_reads_one() {
     let dir = folder("pick");
     std::fs::create_dir_all(format!("{dir}/sub")).unwrap();
     std::fs::write(format!("{dir}/signed.crt"), &pki.cert).unwrap();
-    std::fs::write(format!("{dir}/big.crt"), "x".repeat(100 * 1024)).unwrap();
+    let big = format!("{}{}", pki.cert, "x".repeat(100 * 1024));
+    std::fs::write(format!("{dir}/big.crt"), big).unwrap();
     let mut app = at(super::super::script_host::fresh_app(), 2);
     answer(&app, Ok(format!("request\n{}", pki.csr)));
     app.install.home = Some(dir.to_string());

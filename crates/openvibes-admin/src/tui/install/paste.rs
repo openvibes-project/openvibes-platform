@@ -256,30 +256,41 @@ impl<H: Host> App<H> {
                     self.nav.scroll.set(Scroll::default());
                 }
                 Some((path, false)) => {
-                    let mut text = Vec::new();
+                    // What the last pick said is for that file only.
+                    if let Some(browse) = &mut self.install.pick {
+                        browse.refused = None;
+                        browse.error = None;
+                    }
+                    let mut bytes = Vec::new();
                     let read = std::fs::File::open(&path)
-                        .and_then(|file| file.take(MAX as u64).read_to_end(&mut text));
-                    match read {
-                        // A key never reaches the box, nor stays here.
-                        Ok(_) if holds_private_key(&String::from_utf8_lossy(&text)) => {
-                            drop(text);
+                        .and_then(|file| file.take(MAX as u64).read_to_end(&mut bytes));
+                    let text = String::from_utf8_lossy(&bytes);
+                    let refused = if holds_private_key(&text) {
+                        Some("That file holds a private key: pick the certificate.")
+                    } else if !text.contains("-----BEGIN CERTIFICATE-----") {
+                        Some("That file holds no certificate: pick the certificate.")
+                    } else {
+                        None
+                    };
+                    match (read, refused) {
+                        (Err(error), _) => {
                             if let Some(browse) = &mut self.install.pick {
-                                browse.refused = Some(
-                                    "That file holds a private key: pick the certificate.".into(),
-                                );
+                                browse.error = Some(format!("{}: {error}", path.display()));
                             }
                         }
-                        Ok(_) => {
-                            self.install.paste = Some(String::from_utf8_lossy(&text).into_owned());
+                        // A key, or anything but a certificate, never
+                        // reaches the box, nor stays here.
+                        (Ok(_), Some(why)) => {
+                            if let Some(browse) = &mut self.install.pick {
+                                browse.refused = Some(why.into());
+                            }
+                        }
+                        (Ok(_), None) => {
+                            self.install.paste = Some(text.into_owned());
                             self.install.paste_file = path
                                 .file_name()
                                 .map(|name| name.to_string_lossy().into_owned());
                             self.install.pick = None;
-                        }
-                        Err(error) => {
-                            if let Some(browse) = &mut self.install.pick {
-                                browse.error = Some(format!("{}: {error}", path.display()));
-                            }
                         }
                     }
                 }

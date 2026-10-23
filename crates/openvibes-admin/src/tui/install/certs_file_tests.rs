@@ -69,3 +69,54 @@ fn a_file_holding_a_private_key_is_refused_and_never_read_in() {
     let body = key.lines().nth(1).unwrap();
     assert!(!text.contains(&body[..20]), "{text}");
 }
+
+/// A refusal is for the file picked: the next pick, or another folder,
+/// says its own.
+#[test]
+fn a_refusal_is_cleared_by_the_next_pick_or_folder() {
+    use std::os::unix::fs::PermissionsExt;
+    let pki = pki();
+    let dir = folder("file-next");
+    let (_, key) = platform_pki::intermediate_request().unwrap();
+    std::fs::write(format!("{dir}/root.key"), &key).unwrap();
+    let locked = format!("{dir}/locked.crt");
+    std::fs::write(&locked, &pki.root).unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    std::fs::create_dir_all(format!("{dir}/sub")).unwrap();
+    let mut app = requested(&pki);
+    pick(&mut app, Which::Root, &dir.to_string(), "root.key");
+    let row = |app: &crate::tui::app::App<SetupHost>, name: &str| {
+        let rows = app.install.pick.as_ref().unwrap().rows();
+        rows.iter().position(|(n, _)| n == name).unwrap()
+    };
+    // Root reads any file: only a user is refused the locked one.
+    if std::fs::read(&locked).is_err() {
+        app.nav.row = row(&app, "locked.crt");
+        app.key(Key::Enter);
+        let text = screen(&app);
+        assert!(!text.contains("private key"), "{text}");
+        assert!(text.contains("cannot be read"), "{text}");
+    }
+    app.nav.row = row(&app, "root.key");
+    app.key(Key::Enter);
+    assert!(screen(&app).contains("private key"));
+    app.nav.row = row(&app, "sub/");
+    app.key(Key::Enter);
+    assert!(!screen(&app).contains("private key"), "{}", screen(&app));
+}
+
+/// Only a file holding a certificate reaches the box.
+#[test]
+fn a_file_holding_no_certificate_is_refused() {
+    let pki = pki();
+    let dir = folder("file-none");
+    std::fs::write(format!("{dir}/notes.txt"), "my CA notes").unwrap();
+    let mut app = requested(&pki);
+    pick(&mut app, Which::Root, &dir.to_string(), "notes.txt");
+    assert!(app.install.paste.is_none());
+    let text = screen(&app);
+    assert!(
+        text.contains("That file holds no certificate: pick the certificate."),
+        "{text}"
+    );
+}
