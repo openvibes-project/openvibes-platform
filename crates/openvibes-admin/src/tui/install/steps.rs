@@ -62,7 +62,8 @@ pub(super) struct Step<'a> {
 pub(super) fn draw_step<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, step: Step) {
     let t = &app.theme;
     let area = frame::draw(frame, t, head, None, &app.bar(step.bar));
-    let help = wrap(step.help, 76, 2);
+    // Four lines: the Assistant's licence link is longer than one.
+    let help = wrap(step.help, 76, 4);
     // The help line follows the list (advanced.py `step`), which takes no
     // more than its rows and the two hint lines.
     let room = area
@@ -166,9 +167,24 @@ fn draw_optional<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let t = &app.theme;
     let install = &app.install;
     let row = app.nav.row;
+    // The model's licence shows with the Assistant, as the old model
+    // question showed it. The link is longer than a line, so it breaks
+    // after the last `/` that fits rather than mid-name.
+    let licence = crate::model_fetch::pin_or_embedded().map_or_else(
+        |_| String::new(),
+        |pin| {
+            let url = pin.license_url;
+            let fits = url.get(..76 - "Licence: ".len()).unwrap_or(&url);
+            let cut = fits.rfind('/').map_or(url.len(), |i| i + 1);
+            format!(" Licence: {} {}", &url[..cut], &url[cut..])
+        },
+    );
+    let assistant = format!(
+        "Answers questions about your findings, on this host, no cloud. Needs 4 GB.{licence}"
+    );
     let help = [
         "Untick only if this server must not run an agent.",
-        "Answers questions about your findings, on this host, no cloud. Needs 4 GB.",
+        &assistant,
         "Go on to the names this host is reached by.",
     ][row.min(2)];
     let step = Step {

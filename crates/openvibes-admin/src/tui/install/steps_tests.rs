@@ -107,6 +107,11 @@ fn optional_has_agent_on_and_assistant_off_and_next() {
         text.contains("Answers questions about your findings, on this host, no cloud. Needs 4 GB."),
         "{text}"
     );
+    // The model's licence, from the pin (the old model question showed it).
+    let url = crate::model_fetch::pin_or_embedded().unwrap().license_url;
+    let (head, tail) = url.split_at(url.rfind("/resolve/").unwrap() + "/resolve/".len());
+    assert!(text.contains(&format!("    Licence: {head}  ")), "{text}");
+    assert!(text.contains(&format!("    {tail}  ")), "{text}");
     app.key(Key::Char(' '));
     assert!(app.install.assistant);
     assert!(screen(&app).contains("[x] Assistant"));

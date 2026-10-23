@@ -59,7 +59,8 @@ CA to sign and also saves it as `~/openvibes-intermediate.csr` (or `-2`,
 `-3`… beside another file): it is public; delete it when done.
 
 **The assistant (optional).** Tick the assistant under *Optional* in Choose what to install to have the
-console's chat assistant (a 2.7 GB download from Hugging Face). The
+console's chat assistant (a 2.7 GB download from Hugging Face; the
+Assistant line's help gives the model's licence). The
 last step downloads the model, checks it against its pinned checksum and
 turns the assistant on; if that fails the assistant stays off and the
 install still finishes. No internet on the platform host: see the [offline install guide](components/offline-kit.md).

@@ -93,9 +93,7 @@ pub struct Pin {
     pub url: String,
     pub sha256: String,
     pub alias: String,
-    /// Was shown by the old Setup form's consent step; the Install screens
-    /// do not show it yet.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Shown with the Assistant on Install's Optional step.
     pub license_url: String,
 }
 
