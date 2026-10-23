@@ -47,7 +47,12 @@ pub fn uncovered(
     certificates
         .iter()
         .filter_map(|(path, pem)| {
-            let names = platform_pki::subject_alt_names(pem.as_ref().ok()?).ok()?;
+            let pem = pem.as_ref().ok()?;
+            // A CA (the intermediate) names no host.
+            if platform_pki::is_ca(pem).ok()? {
+                return None;
+            }
+            let names = platform_pki::subject_alt_names(pem).ok()?;
             let missing: Vec<&str> = addresses
                 .iter()
                 .map(String::as_str)
@@ -57,7 +62,7 @@ pub fn uncovered(
                 check(
                     true,
                     format!(
-                        "{path}: does not cover {} (this host): press r on Setup to repair",
+                        "{path}: does not cover {} (this host): run Repair in Maintenance",
                         missing.join(", ")
                     ),
                 )
@@ -147,7 +152,7 @@ pub fn checks(
             if distribution && sets.is_empty() {
                 checks.push(check(
                     true,
-                    "no rule set published: agents get no rules; press r on Setup to repair, \
+                    "no rule set published: agents get no rules; run Repair in Maintenance, \
                      or publish one (rules publish)"
                         .into(),
                 ));

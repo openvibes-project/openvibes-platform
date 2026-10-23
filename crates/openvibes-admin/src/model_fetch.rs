@@ -93,7 +93,7 @@ pub struct Pin {
     pub url: String,
     pub sha256: String,
     pub alias: String,
-    /// Shown by Setup's consent step.
+    /// Shown with the Assistant on Install's Optional step.
     pub license_url: String,
 }
 

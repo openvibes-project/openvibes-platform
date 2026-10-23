@@ -430,7 +430,7 @@ impl<H: Host> App<H> {
             return;
         }
         let choices = choices(self);
-        if self.move_row(key, choices.len()) {
+        if self.move_row(&key, choices.len()) {
             return;
         }
         match (choices.get(self.nav.row), key) {

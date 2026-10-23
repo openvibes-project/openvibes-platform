@@ -209,7 +209,12 @@ pub fn bar() -> Bar {
 pub struct Browse {
     pub dir: PathBuf,
     pub folders: Vec<String>,
+    /// The files too, to pick one ("From a file on this host").
+    pub show_files: bool,
+    pub files: Vec<String>,
     pub error: Option<String>,
+    /// Why the file picked was refused, a sentence of its own.
+    pub refused: Option<String>,
 }
 
 impl Browse {
@@ -226,35 +231,58 @@ impl Browse {
         Browse::open(dir)
     }
     pub fn open(dir: PathBuf) -> Browse {
-        match std::fs::read_dir(&dir) {
+        Browse::list(dir, false)
+    }
+    /// As `open`, with the files: Enter on one picks it.
+    pub fn open_files(dir: PathBuf) -> Browse {
+        Browse::list(dir, true)
+    }
+    /// `open_files` at `path`, else its nearest parent that exists, else /.
+    pub fn files_at(path: &str) -> Browse {
+        let at = Browse::at(path);
+        Browse::open_files(at.dir)
+    }
+    fn list(dir: PathBuf, show_files: bool) -> Browse {
+        let (mut folders, mut files) = (Vec::new(), Vec::new());
+        let error = match std::fs::read_dir(&dir) {
             Ok(entries) => {
-                let mut folders: Vec<String> = entries
-                    .filter_map(Result::ok)
+                for entry in entries.filter_map(Result::ok) {
+                    let Ok(name) = entry.file_name().into_string() else {
+                        continue;
+                    };
                     // A symbolic link is not offered: the helper refuses them.
-                    .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-                    .filter_map(|e| e.file_name().into_string().ok())
-                    .filter(|name| !name.starts_with('.'))
-                    .collect();
-                folders.sort();
-                Browse {
-                    dir,
-                    folders,
-                    error: None,
+                    match entry.file_type() {
+                        _ if name.starts_with('.') => {}
+                        Ok(t) if t.is_dir() => folders.push(name),
+                        Ok(t) if t.is_file() && show_files => files.push(name),
+                        _ => {}
+                    }
                 }
+                None
             }
-            Err(error) => Browse {
-                dir,
-                folders: Vec::new(),
-                error: Some(error.to_string()),
-            },
+            Err(error) => Some(error.to_string()),
+        };
+        folders.sort();
+        files.sort();
+        Browse {
+            dir,
+            folders,
+            show_files,
+            files,
+            error,
+            refused: None,
         }
     }
     fn up(&self) -> Option<&Path> {
         self.dir.parent()
     }
-    /// Use this folder, `..` (unless at /), then the folders.
+    /// Use this folder (not when picking a file), `..` (unless at /), the
+    /// folders, then the files.
     pub fn rows(&self) -> Vec<(String, String)> {
-        let mut rows = vec![("Use this folder".to_owned(), self.dir.display().to_string())];
+        let mut rows = Vec::new();
+        if !self.show_files {
+            rows.push(("Use this folder".to_owned(), self.dir.display().to_string()));
+        }
         if self.up().is_some() {
             rows.push(("..".to_owned(), "up one folder".to_owned()));
         }
@@ -263,26 +291,56 @@ impl Browse {
                 .iter()
                 .map(|f| (format!("{f}/"), String::new())),
         );
+        rows.extend(self.files.iter().map(|f| (f.clone(), String::new())));
         rows
+    }
+
+    /// What Enter on a row of a file browser opens: a folder (true) or a
+    /// file (false).
+    pub fn target(&self, row: usize) -> Option<(PathBuf, bool)> {
+        let up = self.up().map(Path::to_path_buf);
+        let row = row.checked_sub(usize::from(!self.show_files))?;
+        match (row, up) {
+            (0, Some(parent)) => Some((parent, true)),
+            (row, up) => {
+                let i = row - usize::from(up.is_some());
+                match self.folders.get(i) {
+                    Some(f) => Some((self.dir.join(f), true)),
+                    None => self
+                        .files
+                        .get(i - self.folders.len())
+                        .map(|f| (self.dir.join(f), false)),
+                }
+            }
+        }
     }
 }
 
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
+    if let Some(browse) = &app.maint.browse {
+        draw_browse(frame, head, app, browse);
+    }
+}
+
+/// The browser of folders, or of files to pick one.
+pub fn draw_browse<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, browse: &Browse) {
     let t = &app.theme;
-    let Some(browse) = &app.maint.browse else {
-        return;
-    };
-    let up = usize::from(browse.up().is_some());
-    let enter = match app.nav.row {
-        0 => "Use this folder",
-        1 if up == 1 => "Up one folder",
+    let enter = match (browse.show_files, browse.target(app.nav.row)) {
+        (false, None) => "Use this folder",
+        (_, Some((_, false))) => "Use this file",
+        (_, Some((dir, true))) if browse.up() == Some(dir.as_path()) => "Up one folder",
         _ => "Open",
+    };
+    let title = if browse.show_files {
+        "Choose a file"
+    } else {
+        "Choose a folder"
     };
     let area = frame::draw(
         frame,
         t,
         head,
-        Some("Choose a folder"),
+        Some(title),
         &app.bar(Bar::keys(&[("Enter", enter)])),
     );
     let rows: Vec<Row> = browse
@@ -300,12 +358,16 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         22,
     );
     app.nav.scroll.set(scroll);
-    lines.push(match &browse.error {
-        Some(error) => Line::styled(
+    lines.push(match (&browse.refused, &browse.error) {
+        (Some(why), _) => Line::styled(format!("    {why}"), t.red()),
+        (None, Some(error)) => Line::styled(
             format!("    {} cannot be read: {error}", browse.dir.display()),
             t.yellow(),
         ),
-        None => Line::styled(
+        _ if browse.show_files => {
+            Line::styled("    Enter opens a folder or picks a file.", t.dim())
+        }
+        _ => Line::styled(
             "    Enter opens a folder; Use this folder picks the one shown.",
             t.dim(),
         ),
@@ -345,7 +407,7 @@ impl<H: Host> App<H> {
                 .get(row - 1 - usize::from(up.is_some()))
                 .map(|f| dir.join(f)),
         };
-        if self.move_row(key, count) {
+        if self.move_row(&key, count) {
             return;
         }
         match key {

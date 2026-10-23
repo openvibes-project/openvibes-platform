@@ -1,8 +1,9 @@
 //! Where the operator is (spec §3): a stack of screens. Enter opens, Esc
 //! pops (back to the row and window it left), ? opens Help, q quits from
-//! Home. Today's Setup and Configuration screens ("legacy") are
-//! reached from Maintenance and keep their own keys; q is no longer theirs, and Esc leaves them only when
-//! nothing is being typed or asked (sub-projects 2 and 3 replace them).
+//! Home. The Settings files screen ("legacy") is reached from
+//! Maintenance and keeps its own keys; q is no longer its, and Esc leaves
+//! it only when nothing is being typed or asked (sub-project 2 replaces
+//! it). The install has its own screens (`install`).
 
 use std::cell::Cell;
 
@@ -12,9 +13,7 @@ use ratatui::Frame;
 use super::{
     app::{App, Key, Tab},
     configuration::{Prompt, Then},
-    home, service,
-    setup::Phase,
-    status,
+    home, service, status,
     ui::{frame, list::Scroll, logo::Header},
 };
 
@@ -28,6 +27,8 @@ pub enum Screen {
     Maint(super::maint::Page),
     Help(Box<Screen>),
     Legacy,
+    /// The first install (sub-project 3).
+    Install(super::install::Stage),
 }
 
 #[derive(Clone, Debug)]
@@ -77,9 +78,8 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Maintenance => " · Maintenance".into(),
         Screen::Maint(page) => format!(" · Maintenance › {}", page.title()),
         Screen::Help(_) => " · Help".into(),
+        Screen::Install(stage) => super::install::location(*stage),
         Screen::Legacy => match app.tab {
-            // Only a first install reaches Setup now (Maintenance has the rest).
-            Tab::Setup => " · Install".into(),
             Tab::Configuration => " · Maintenance › Settings files".into(),
         },
     };
@@ -102,6 +102,7 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
             let body = frame::legacy(frame, &app.theme, &head);
             super::legacy_view(frame, body, app);
         }
+        Screen::Install(stage) => super::install::draw(frame, &head, app, *stage),
         Screen::Home => home::draw(frame, &head, app),
         Screen::Maintenance => super::maint::draw_menu(frame, &head, app),
         Screen::Maint(page) => super::maint::draw(frame, &head, app, *page),
@@ -116,8 +117,6 @@ impl<H: Host> App<H> {
     /// The legacy screen has nothing typed, asked or running.
     pub fn legacy_at_rest(&self) -> bool {
         match self.tab {
-            // A stopped run's Esc is its own (#87).
-            Tab::Setup => self.setup.phase == Phase::Finished,
             Tab::Configuration => self.config.editing.is_none() && self.config.prompt.is_none(),
         }
     }
@@ -125,8 +124,8 @@ impl<H: Host> App<H> {
     pub(super) fn legacy_key(&mut self, key: Key) {
         match key {
             // q quits from Home only, but is typed into a value.
-            Key::Char('q') if (self.setup_done() || self.tab != Tab::Setup) && !self.typing() => {}
-            Key::Esc if self.legacy_at_rest() && self.setup_done() => {
+            Key::Char('q') if !self.typing() => {}
+            Key::Esc if self.legacy_at_rest() => {
                 if self.tab == Tab::Configuration && self.config_dirty() {
                     self.config.prompt = Some(Prompt::Discard(Then::Back));
                 } else {
@@ -140,7 +139,6 @@ impl<H: Host> App<H> {
     /// A value or password is being typed on the legacy screen.
     fn typing(&self) -> bool {
         match self.tab {
-            Tab::Setup => self.setup.editing || matches!(self.setup.phase, Phase::Password(_)),
             Tab::Configuration => self.config.editing.is_some(),
         }
     }

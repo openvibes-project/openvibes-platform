@@ -124,7 +124,7 @@ pub(super) fn app(set_up: bool, answers: Vec<Result<String, HostError>>) -> App<
 
 /// A host not set up yet, as the other fresh-host tests build it.
 pub(super) fn fresh_app() -> App<SetupHost> {
-    app(false, vec![])
+    built(false, vec![], vec![], String::new())
 }
 
 pub(super) fn app_taken(
@@ -134,10 +134,7 @@ pub(super) fn app_taken(
 ) -> App<SetupHost> {
     // A set-up host has its plan (and so its CA) from the start.
     let plan = if set_up { PLAN.into() } else { String::new() };
-    let mut app = built(set_up, answers, taken, plan);
-    app.setup.hostname = "platform.example.com".into();
-    app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
-    app
+    built(set_up, answers, taken, plan)
 }
 
 /// A set-up host whose `setup.toml` is `plan` from the start, so the start
@@ -169,7 +166,6 @@ fn built(
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     app.root = std::env::temp_dir().join(format!("ov-tui-script-{}-{n}", std::process::id()));
-    app.setup.model_present = false;
     app
 }
 
@@ -185,16 +181,6 @@ pub(super) fn screen(app: &App<SetupHost>) -> String {
                 + "\n"
         })
         .collect()
-}
-
-/// From the form: Start, then the password.
-pub(super) fn start(app: &mut App<SetupHost>, password: &str) {
-    while app.setup.row != super::setup::START_ROW {
-        app.key(Key::Down);
-    }
-    app.key(Key::Enter);
-    type_text(app, password);
-    app.key(Key::Enter);
 }
 
 pub(super) fn type_text(app: &mut App<SetupHost>, text: &str) {

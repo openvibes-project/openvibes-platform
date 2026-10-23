@@ -297,10 +297,10 @@ impl<H: Host> App<H> {
             return;
         }
         let shown = choices(self);
-        if self.move_row(key, shown.len()) {
+        if self.move_row(&key, shown.len()) {
             return;
         }
-        match (shown.get(self.nav.row), key) {
+        match (shown.get(self.nav.row), &key) {
             // Enter selects and moves on; only Uninstall asks (no stray Enters).
             (Some(Choice::Keep), Key::Char(' ') | Key::Enter) => {
                 self.maint.everything = false;

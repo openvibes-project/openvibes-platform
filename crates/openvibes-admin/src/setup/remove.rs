@@ -254,6 +254,9 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     kept.push(PG_RECORD);
     kept.push(PG_MARK);
     let site_key = ctx.exists("/var/lib/openvibes-signer/site.key");
+    // An install stopped before the CA step: the request's copy in the
+    // operator's home goes too, before its record under /etc/openvibes.
+    super::request::remove_copy(ctx);
     for dir in DATA {
         let path = ctx.path(dir);
         if !path.exists() {

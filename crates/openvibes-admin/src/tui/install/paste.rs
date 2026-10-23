@@ -1,0 +1,302 @@
+//! The paste box (ca2.py `paste`) and "From a file on this host": a
+//! certificate pasted, typed line by line or read from a file, checked
+//! at once in-process (the same checks the helper runs again).
+//!
+//! A bracketed paste arrives whole (`Key::Paste`). A terminal without it
+//! sends the lines as keys: Enter adds a new line until an `-----END`
+//! line is there; after that Enter is "Use it", once the check passed.
+
+use std::io::Read;
+
+use platform_host::Host;
+use platform_pki::PkiError;
+use ratatui::{Frame, text::Line, widgets::Paragraph};
+
+use super::{Install, Which};
+use crate::{
+    setup::request::message,
+    tui::{
+        app::{App, Key},
+        maint::folder::Browse,
+        ui::{bar::Bar, frame, list::Scroll, logo::Header},
+    },
+};
+
+/// The most a paste or a file gives the box: a certificate is ~1 KiB.
+pub(super) const MAX: usize = 64 * 1024;
+/// The box's inside: 68 columns, 4 lines.
+const WIDE: usize = 68;
+const TALL: usize = 4;
+
+impl Install {
+    /// The check of `text` as `which`: the lines that say it is right, or
+    /// why it is not; `None` while the box is empty.
+    pub(super) fn check(&self, which: Which, text: &str) -> Option<Result<Vec<String>, String>> {
+        if text.trim().is_empty() {
+            return None;
+        }
+        let now = chrono::Utc::now();
+        Some(match which {
+            Which::Signed => match self.csr() {
+                None => Err("There is no request here: make one first.".into()),
+                Some(csr) => platform_pki::check_signed_request(csr, text, now)
+                    .map(|s| {
+                        vec![
+                            format!(
+                                "Intermediate for {} · signed by {}",
+                                self.hostname.trim(),
+                                s.issuer
+                            ),
+                            format!("Matches the request · valid until {}", s.not_after),
+                        ]
+                    })
+                    .map_err(|e| message(&e)),
+            },
+            // Before the signed certificate is added, the root is checked
+            // against itself (a self-signed CA signs itself); the helper
+            // checks it against the certificate once both are added.
+            Which::Root => {
+                let cert = self.cert.as_ref().map_or(text, |c| c.0.as_str());
+                platform_pki::check_root_signed(text, cert, now)
+                    .map(|name| {
+                        let mut said = vec![format!("{name} · a root CA (self-signed)")];
+                        if self.cert.is_some() {
+                            said.push("Signed the intermediate directly".into());
+                        }
+                        said
+                    })
+                    .map_err(|e| match e {
+                        PkiError::Several(n) => format!(
+                            "That is {n} certificates: paste only your root CA's certificate."
+                        ),
+                        e => message(&e),
+                    })
+            }
+        })
+    }
+}
+
+const PASTE_HELP: &str = "Paste the whole block, BEGIN to END lines included.";
+const FILE_HELP: &str = "The file's text, checked below.";
+
+/// A PEM private key block is in `text` (`BEGIN PRIVATE KEY`, `BEGIN EC
+/// PRIVATE KEY`…).
+fn holds_private_key(text: &str) -> bool {
+    text.lines().any(|l| {
+        let l = l.trim();
+        l.starts_with("-----BEGIN ") && l.ends_with("PRIVATE KEY-----")
+    })
+}
+
+/// An `-----END` line is there: Enter is "Use it" from now on.
+fn ended(text: &str) -> bool {
+    text.lines().any(|l| l.trim_start().starts_with("-----END"))
+}
+
+pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, which: Which) {
+    let t = &app.theme;
+    let install = &app.install;
+    let text = install.paste.as_deref().unwrap_or_default();
+    let check = install.check(which, text);
+    let bar = if matches!(check, Some(Ok(_))) && ended(text) {
+        Bar::edit("", "", &[("Enter", "Use it")])
+    } else {
+        Bar::edit("", "", &[])
+    };
+    let (title, help) = match (which, &install.paste_file) {
+        (Which::Signed, None) => ("Paste the signed certificate".to_owned(), PASTE_HELP),
+        (Which::Root, None) => ("Paste your CA's certificate".to_owned(), PASTE_HELP),
+        (Which::Signed, Some(file)) => (format!("The signed certificate, from {file}"), FILE_HELP),
+        (Which::Root, Some(file)) => (format!("Your CA's certificate, from {file}"), FILE_HELP),
+    };
+    let area = frame::draw(frame, t, head, Some(&title), &app.bar(bar));
+    let mut lines = vec![
+        Line::raw(""),
+        Line::styled(format!("    {help}"), t.dim()),
+        Line::raw(""),
+        Line::styled(format!("  ┌{}┐", "─".repeat(WIDE + 2)), t.dim()),
+    ];
+    // The cursor sits after the last character, on a line of its own
+    // after a new line.
+    let mut typed: Vec<String> = text.split('\n').map(str::to_owned).collect();
+    // Folded, a pasted block's last new line is not shown: the cursor
+    // stays on its END line (ca2.py).
+    if typed.len() > TALL && typed.last().is_some_and(String::is_empty) {
+        typed.pop();
+    }
+    let mut shown: Vec<String> = if typed.len() > TALL {
+        vec![
+            typed[0].clone(),
+            typed[1].clone(),
+            "…".into(),
+            typed[typed.len() - 1].clone(),
+        ]
+    } else {
+        typed
+    };
+    if let Some(last) = shown.last_mut() {
+        last.push('█');
+    }
+    for line in shown {
+        let cut: String = line.chars().take(WIDE).collect();
+        let pad = WIDE - cut.chars().count();
+        lines.push(Line::from(vec![
+            ratatui::text::Span::styled("  │", t.dim()),
+            ratatui::text::Span::raw(format!(" {cut}{} ", " ".repeat(pad))),
+            ratatui::text::Span::styled("│", t.dim()),
+        ]));
+    }
+    lines.push(Line::styled(
+        format!("  └{}┘", "─".repeat(WIDE + 2)),
+        t.dim(),
+    ));
+    lines.push(Line::raw(""));
+    match check {
+        Some(Ok(said)) => lines.extend(said.into_iter().map(|s| {
+            Line::from(vec![
+                ratatui::text::Span::styled("    ✓", t.green()),
+                ratatui::text::Span::raw(format!(" {s}")),
+            ])
+        })),
+        Some(Err(why)) => lines.extend(
+            crate::tui::status::wrap(&format!("✗ {why}"), 72, 2)
+                .into_iter()
+                .map(|l| Line::styled(format!("    {l}"), t.red())),
+        ),
+        None => {}
+    }
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
+impl<H: Host> App<H> {
+    /// The paste box's keys.
+    pub(super) fn paste_key(&mut self, which: Which, key: Key) {
+        let Some(text) = self.install.paste.as_mut() else {
+            return;
+        };
+        match key {
+            Key::Paste(pasted) => {
+                let pasted = pasted.replace("\r\n", "\n").replace('\r', "\n");
+                let room = MAX.saturating_sub(text.len());
+                text.extend(pasted.chars().scan(0, |n, c| {
+                    *n += c.len_utf8();
+                    (*n <= room).then_some(c)
+                }));
+            }
+            Key::Char(c) if !c.is_control() && text.len() < MAX => text.push(c),
+            Key::Backspace => {
+                text.pop();
+            }
+            Key::ClearLine => text.clear(),
+            Key::Enter if !ended(text) => text.push('\n'),
+            Key::Enter => {
+                let text = text.clone();
+                if let Some(Ok(_)) = self.install.check(which, &text) {
+                    self.use_it(which, text);
+                }
+            }
+            Key::Esc => {
+                self.install.paste = None;
+                self.install.paste_file = None;
+                self.nav.row = 0;
+            }
+            _ => {}
+        }
+    }
+
+    /// The certificate is added; with both, the helper keeps them.
+    fn use_it(&mut self, which: Which, text: String) {
+        let pem = text.trim().to_owned();
+        let now = chrono::Utc::now();
+        match which {
+            Which::Signed => {
+                let Some(csr) = self.install.csr() else {
+                    return;
+                };
+                let Ok(signed) = platform_pki::check_signed_request(csr, &pem, now) else {
+                    return;
+                };
+                self.install.cert = Some((pem, signed.issuer));
+            }
+            Which::Root => {
+                let Ok(name) = platform_pki::check_root_signed(&pem, &pem, now) else {
+                    return;
+                };
+                self.install.root_pem = Some(pem);
+                self.install.root_added = Some(name);
+            }
+        }
+        self.install.paste = None;
+        self.install.paste_file = None;
+        self.install.error = None;
+        self.nav.pop();
+        self.accept_both();
+    }
+
+    /// The file browser's keys: Enter opens a folder or reads a file into
+    /// the box (at most `MAX`); Esc goes back to the two ways.
+    pub(super) fn pick_key(&mut self, key: Key) {
+        let Some(count) = self.install.pick.as_ref().map(|b| b.rows().len()) else {
+            return;
+        };
+        if self.move_row(&key, count) {
+            return;
+        }
+        let row = self.nav.row;
+        let target = self.install.pick.as_ref().and_then(|b| b.target(row));
+        match key {
+            Key::Esc => {
+                self.install.pick = None;
+                self.nav.row = 1;
+            }
+            Key::Enter => match target {
+                Some((path, true)) => {
+                    self.install.pick = Some(Browse::open_files(path));
+                    self.nav.row = 0;
+                    self.nav.scroll.set(Scroll::default());
+                }
+                Some((path, false)) => {
+                    // What the last pick said is for that file only.
+                    if let Some(browse) = &mut self.install.pick {
+                        browse.refused = None;
+                        browse.error = None;
+                    }
+                    let mut bytes = Vec::new();
+                    let read = std::fs::File::open(&path)
+                        .and_then(|file| file.take(MAX as u64).read_to_end(&mut bytes));
+                    let text = String::from_utf8_lossy(&bytes);
+                    let refused = if holds_private_key(&text) {
+                        Some("That file holds a private key: pick the certificate.")
+                    } else if !text.contains("-----BEGIN CERTIFICATE-----") {
+                        Some("That file holds no certificate: pick the certificate.")
+                    } else {
+                        None
+                    };
+                    match (read, refused) {
+                        (Err(error), _) => {
+                            if let Some(browse) = &mut self.install.pick {
+                                browse.error = Some(format!("{}: {error}", path.display()));
+                            }
+                        }
+                        // A key, or anything but a certificate, never
+                        // reaches the box, nor stays here.
+                        (Ok(_), Some(why)) => {
+                            if let Some(browse) = &mut self.install.pick {
+                                browse.refused = Some(why.into());
+                            }
+                        }
+                        (Ok(_), None) => {
+                            self.install.paste = Some(text.into_owned());
+                            self.install.paste_file = path
+                                .file_name()
+                                .map(|name| name.to_string_lossy().into_owned());
+                            self.install.pick = None;
+                        }
+                    }
+                }
+                None => {}
+            },
+            _ => {}
+        }
+    }
+}

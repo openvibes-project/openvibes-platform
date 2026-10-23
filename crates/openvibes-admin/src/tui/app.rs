@@ -13,7 +13,6 @@ use super::{
     database::{Check, DatabaseScreen},
     nav::{Nav, Screen},
     password::PasswordPrompt,
-    setup::Setup,
     ui::theme::Theme,
 };
 
@@ -23,7 +22,7 @@ pub const LOG_LINES: u16 = 50;
 pub use super::work::{Pending, Question};
 
 /// A key press, as the event loop maps it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Key {
     Char(char),
     Up,
@@ -37,23 +36,24 @@ pub enum Key {
     Tab,
     /// Ctrl+U: empty the field being edited.
     ClearLine,
+    /// A whole bracketed paste (ruling 9): only the paste box takes it.
+    Paste(String),
 }
 
-/// Which of today's screens `Screen::Legacy` shows.
+/// Which screen `Screen::Legacy` shows (Settings files only).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tab {
-    Setup,
     Configuration,
 }
 
 /// The TUI's state: where the operator is (`nav`), what the host reports
 /// (`services`, the health checks in `database`), the bar's question, prompt
-/// and running work, and today's screens' own state (`setup`, `config`,
+/// and running work, and the screens' own state (`install`, `config`,
 /// `database`).
 pub struct App<H: Host> {
     pub host: H,
     pub tab: Tab,
-    pub setup: Setup,
+    pub install: super::install::Install,
     pub config: Configuration,
     pub database: DatabaseScreen,
     pub services: Vec<ServiceStatus>,
@@ -141,14 +141,15 @@ impl<H: Host> App<H> {
         let home = crate::setup::plan::operator_from_env()
             .and_then(|user| host.user_home(&user))
             .or_else(|| std::env::var("HOME").ok());
-        let mut setup = Setup::new(hostname.clone(), home);
+        let mut install = super::install::Install::new(hostname.clone(), home);
         if !set_up {
-            setup.propose_ports(&host);
+            install.port_note =
+                super::install::fields::propose_ports(&host, &mut install, |_| false);
         }
         let mut app = App {
             host,
-            tab: Tab::Setup,
-            setup,
+            tab: Tab::Configuration,
+            install,
             config: Configuration::default(),
             database: DatabaseScreen::default(),
             services: Vec::new(),
@@ -157,7 +158,11 @@ impl<H: Host> App<H> {
             logs: Vec::new(),
             quit: false,
             theme: Theme::from_env(),
-            nav: Nav::new(if set_up { Screen::Home } else { Screen::Legacy }),
+            nav: Nav::new(if set_up {
+                Screen::Home
+            } else {
+                Screen::Install(super::install::Stage::Welcome)
+            }),
             hostname,
             update: None,
             versions_loaded: false,
@@ -190,17 +195,16 @@ impl<H: Host> App<H> {
         app
     }
 
-    /// #87 (ruling 6): set up but stopped before its CA, the host opens
-    /// the install form, filled from its plan; unless a job is half done
-    /// (Remove everything deletes the CA before `setup.toml`): Home, whose
-    /// Status offers to finish it.
+    /// #87 (ruling 8): set up but stopped before its CA, the host opens
+    /// Choose what to install at step 1, filled from its plan; unless a
+    /// job is half done (Remove everything deletes the CA before
+    /// `setup.toml`): Home, whose Status offers to finish it.
     pub(super) fn start_screen(&mut self) {
         if !self.host.is_set_up() {
             return;
         }
         if !self.ca && self.half_done.is_none() {
-            self.nav = Nav::new(Screen::Legacy);
-            self.fill_from_plan();
+            self.open_steps_from_plan();
         } else {
             self.nav = Nav::new(Screen::Home);
         }
@@ -249,16 +253,12 @@ impl<H: Host> App<H> {
         };
     }
 
-    /// Set up, CA included: a host whose first install stopped before its
-    /// CA is still installing (#87), so its form quits with q as on a
-    /// fresh host.
-    pub fn setup_done(&self) -> bool {
-        self.host.is_set_up() && self.ca_exists()
-    }
-
-    /// `setup_done` for drawing: the CA as last read (`ca`), no file reads.
-    pub fn setup_done_seen(&self) -> bool {
-        self.host.is_set_up() && self.ca
+    /// The CA exists: the host's first install got past its CA step.
+    pub(super) fn ca_exists(&self) -> bool {
+        self.host
+            .certificates()
+            .iter()
+            .any(|(path, _)| *path == "/etc/openvibes/pki/intermediate.crt")
     }
 
     /// Opens Status, with fresh health checks.
@@ -277,7 +277,6 @@ impl<H: Host> App<H> {
             self.nav.go(Screen::Legacy);
         }
         match tab {
-            Tab::Setup => self.tab = Tab::Setup,
             Tab::Configuration => {
                 self.tab = Tab::Configuration;
                 self.load_config();
@@ -293,6 +292,19 @@ impl<H: Host> App<H> {
         if self.gone() {
             if matches!(key, Key::Enter | Key::Char('q')) {
                 self.quit = true;
+            }
+            return;
+        }
+        // Only the paste box takes a paste whole; a field being typed or
+        // a password takes its characters without line ends; anywhere else
+        // it is dropped, so a stray paste never presses keys (Enter, q).
+        if let Key::Paste(text) = &key
+            && !self.takes_paste()
+        {
+            if self.typing_text() {
+                for c in text.chars().filter(|c| !matches!(c, '\n' | '\r')) {
+                    self.key(Key::Char(c));
+                }
             }
             return;
         }
@@ -312,6 +324,9 @@ impl<H: Host> App<H> {
         }
         if self.prompt.is_some() {
             return self.prompt_key(key);
+        }
+        if let Screen::Install(stage) = self.nav.screen {
+            return self.install_key(stage, key);
         }
         match key {
             Key::Char('?') if !matches!(self.nav.screen, Screen::Help(_)) => {
@@ -343,9 +358,27 @@ impl<H: Host> App<H> {
                 Screen::Status => self.status_key(key),
                 Screen::Service(unit) => self.service_key(unit, key),
                 Screen::Log(_) => self.log_key(key),
-                Screen::Help(_) | Screen::Legacy => {}
+                Screen::Help(_) | Screen::Legacy | Screen::Install(_) => {}
             },
         }
+    }
+
+    /// A text field is being edited or the bar asks for a password.
+    fn typing_text(&self) -> bool {
+        self.asking.is_some()
+            || self.prompt.is_some()
+            || self.install.editing.is_some()
+            || self.maint.editing()
+            || (self.nav.screen == Screen::Legacy && self.config.editing.is_some())
+    }
+
+    /// The paste box is open and nothing is asked in the bar.
+    fn takes_paste(&self) -> bool {
+        matches!(
+            self.nav.screen,
+            Screen::Install(super::install::Stage::Add(_))
+        ) && self.install.paste.is_some()
+            && self.asking.is_none()
     }
 
     /// Takes the health checks and the update notice once they have been
@@ -390,7 +423,6 @@ impl<H: Host> App<H> {
     /// Today's screens' own keys.
     pub(super) fn legacy_dispatch(&mut self, key: Key) {
         match self.tab {
-            Tab::Setup => self.setup_key(key),
             Tab::Configuration => self.config_key(key),
         }
     }

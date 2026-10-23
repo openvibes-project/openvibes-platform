@@ -105,7 +105,7 @@ fn name(screen: &Screen) -> String {
         Screen::Status => "Status".into(),
         Screen::Service(unit) => format!("Service: {}", unit.label()),
         Screen::Log(unit) => format!("Log: {}", unit.label()),
-        Screen::Help(_) | Screen::Legacy => String::new(),
+        Screen::Help(_) | Screen::Legacy | Screen::Install(_) => String::new(),
     }
 }
 
@@ -117,13 +117,13 @@ fn here(from: &Screen) -> &'static str {
         Screen::Status => "Enter opens a service, or does what a problem's line says.",
         Screen::Service(_) => "Enter does the highlighted action; Full log shows every line.",
         Screen::Log(_) => "⭡⭣ scroll the log.",
-        Screen::Help(_) | Screen::Legacy => "",
+        Screen::Help(_) | Screen::Legacy | Screen::Install(_) => "",
     }
 }
 
 impl<H: Host> App<H> {
     /// ⭡⭣ (j/k) move the highlight; true when `key` was one of them.
-    pub(super) fn move_row(&mut self, key: Key, count: usize) -> bool {
+    pub(super) fn move_row(&mut self, key: &Key, count: usize) -> bool {
         match key {
             Key::Down | Key::Char('j') if self.nav.row + 1 < count => self.nav.row += 1,
             Key::Up | Key::Char('k') if self.nav.row > 0 => self.nav.row -= 1,
@@ -134,7 +134,7 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn home_key(&mut self, key: Key) {
-        if self.move_row(key, HOME.len()) {
+        if self.move_row(&key, HOME.len()) {
             return;
         }
         if key == Key::Enter {

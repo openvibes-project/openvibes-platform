@@ -19,6 +19,8 @@ pub enum Call {
     /// `setup-status`: every step's state.
     Status,
     Repair(Step),
+    /// `setup-step STEP` (no `--repair`): the install's own step, which may make the CA.
+    Setup(Step),
     Update(UpdateStep, Vec<String>),
     Remove(RemoveStep, Vec<String>),
     /// `setup-plan` with these arguments (the whole plan: see `Plan::args`).
@@ -34,6 +36,10 @@ pub enum Call {
     /// `shell-open`: sudo checks the password and the call is journalled;
     /// the shell itself opens once the run is done.
     ShellOpen,
+    /// `ca-request [--copy PATH]`: the request for "Your own CA", made or reused.
+    CaRequest(Option<String>),
+    /// `ca-accept`: the signed certificate and your CA's, checked and kept.
+    CaAccept(String, String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -58,6 +64,12 @@ pub enum Kind {
     SignIn,
     /// Maintenance › Shell: the password, then the operator's shell.
     Shell,
+    /// The first install, run from the Install screens.
+    Install,
+    /// Your own CA's request (`accept`: its two certificates), before install.
+    Ca {
+        accept: bool,
+    },
     /// Optional parts added or removed; `what` is the title.
     Parts {
         what: String,
@@ -96,6 +108,9 @@ impl Kind {
             Kind::Report => "Reading the database".into(),
             Kind::SignIn => "Resetting the admin password".into(),
             Kind::Shell => "Opening the shell".into(),
+            Kind::Install => "Installing".into(),
+            Kind::Ca { accept: false } => "Making the request".into(),
+            Kind::Ca { accept: true } => "Adding the certificates".into(),
             Kind::Parts { what, .. } => what.clone(),
             Kind::Ports { what, .. } => what.clone(),
             Kind::Names { what, .. } => what.clone(),
@@ -114,6 +129,9 @@ impl Kind {
             Kind::Report => "Read".into(),
             Kind::SignIn => "Admin password reset".into(),
             Kind::Shell => "Shell opened".into(),
+            Kind::Install => "OpenVIBES is installed".into(),
+            Kind::Ca { accept: false } => "Request made".into(),
+            Kind::Ca { accept: true } => "Certificates added".into(),
             Kind::Parts { done, .. } => done.clone(),
             Kind::Ports { done, .. } => done.clone(),
             Kind::Names { done, .. } => done.clone(),
@@ -129,6 +147,9 @@ impl Kind {
             Kind::Report => "The database could not be read".into(),
             Kind::SignIn => "The reset failed".into(),
             Kind::Shell => "The shell did not open".into(),
+            Kind::Install => "The install stopped".into(),
+            Kind::Ca { accept: false } => "The request failed".into(),
+            Kind::Ca { accept: true } => "The certificates were refused".into(),
             Kind::Parts { .. } => "The change stopped".into(),
             Kind::Ports { .. } => "The move stopped".into(),
             Kind::Names { .. } => "The change stopped".into(),
@@ -153,6 +174,9 @@ impl Kind {
             Kind::Report => "Read",
             Kind::SignIn => "Reset",
             Kind::Shell => "Open",
+            Kind::Install => "Install",
+            Kind::Ca { accept: false } => "Continue",
+            Kind::Ca { accept: true } => "Add",
             Kind::Parts { .. } | Kind::Ports { .. } | Kind::Names { .. } => "Apply",
         }
     }
@@ -219,6 +243,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
     match call {
         Call::Status => host.privileged(Privileged::SetupStatus, secret),
         Call::Repair(step) => host.privileged(Privileged::Repair(*step), secret),
+        Call::Setup(step) => host.privileged(Privileged::SetupStep(*step), secret),
         Call::Update(step, args) => host.privileged(Privileged::Update(*step, args), secret),
         Call::Remove(step, args) => host.privileged(Privileged::Remove(*step, args), secret),
         Call::SetupPlan(args) => host.privileged(Privileged::SetupPlan(args), secret),
@@ -234,6 +259,8 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::Logs(unit, lines) => host.logs(*unit, *lines).map(|l| l.join("\n")),
         Call::AdminReset => host.privileged(Privileged::AdminReset, secret),
         Call::ShellOpen => host.privileged(Privileged::ShellOpen, secret),
+        Call::CaRequest(copy) => host.privileged(Privileged::CaRequest(copy.as_deref()), secret),
+        Call::CaAccept(cert, root) => host.privileged(Privileged::CaAccept(cert, root), secret),
     }
 }
 
@@ -243,6 +270,7 @@ pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
         (_, Err(error)) => StepState::Failed(error.to_string()),
         (
             Call::Repair(_)
+            | Call::Setup(_)
             | Call::Update(..)
             | Call::Remove(..)
             | Call::AdminReset
@@ -255,11 +283,18 @@ pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
     }
 }
 
+/// The optional assistant model's call: its download failing never stops a run.
+pub fn is_model(call: &Call) -> bool {
+    matches!(
+        call,
+        Call::Repair(Step::AssistantModel) | Call::Setup(Step::AssistantModel)
+    )
+}
+
 /// Whether the run goes on. The assistant's model is optional: its
-/// download failing does not stop a repair.
+/// download failing does not stop a repair or an install.
 pub fn goes_on(call: &Call, result: &Result<String, HostError>) -> bool {
-    state_of(call, result).finished()
-        || (*call == Call::Repair(Step::AssistantModel) && result.is_ok())
+    state_of(call, result).finished() || (is_model(call) && result.is_ok())
 }
 
 /// Runs the calls from `from` in order, reporting each; stops at the first
@@ -335,8 +370,7 @@ impl Run {
     /// The first main call that did not finish (the optional model aside).
     pub fn stopped_at(&self) -> Option<usize> {
         (0..self.work.calls.len()).find(|&i| {
-            self.states[i].as_ref().is_some_and(|s| !s.finished())
-                && self.work.calls[i] != Call::Repair(Step::AssistantModel)
+            self.states[i].as_ref().is_some_and(|s| !s.finished()) && !is_model(&self.work.calls[i])
         })
     }
 
@@ -352,8 +386,7 @@ impl Run {
         !self.running()
             && (0..self.work.calls.len()).all(|i| {
                 self.states[i].as_ref().is_some_and(|s| s.finished())
-                    || (self.states[i].is_some()
-                        && self.work.calls[i] == Call::Repair(Step::AssistantModel))
+                    || (self.states[i].is_some() && is_model(&self.work.calls[i]))
             })
     }
 
@@ -417,14 +450,13 @@ impl Run {
 /// model's call is left out of a label that holds other calls: it never
 /// stops a run, so it must not turn them red.
 pub fn label_states(run: &Run) -> Vec<Option<StepState>> {
-    let model = Call::Repair(Step::AssistantModel);
     run.work
         .labels
         .iter()
         .map(|(_, calls)| {
             let mut own: Vec<&Option<StepState>> = calls
                 .clone()
-                .filter(|i| run.work.calls[*i] != model)
+                .filter(|i| !is_model(&run.work.calls[*i]))
                 .map(|i| &run.states[i])
                 .collect();
             if own.is_empty() {

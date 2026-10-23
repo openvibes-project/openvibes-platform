@@ -15,49 +15,57 @@ On the platform host, as your own user (not root):
 sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"
 ```
 
-(Piped as `curl … | sudo sh`, it installs but cannot open Setup, because a
+(Piped as `curl … | sudo sh`, it installs but cannot open the Install screens, because a
 pipe is not a terminal; it then tells you to run `sudo openvibes-admin`.)
 
 Prefer to read it first: `curl -fsSLO https://openvibes-project.github.io/install.sh`,
 read it, then `sudo sh install.sh`.
 
 The script adds the signed OpenVIBES package repository (it checks the key's
-fingerprint), installs `openvibes-admin` and opens its **Setup** screen.
+fingerprint), installs `openvibes-admin` and opens its **Install** screens.
 
-## 2. Run Setup
+## 2. Install
 
-The Setup form has the components ticked (ingest, console, distribution,
-vulnerabilities, rules and an agent on this host), a hostname and a CA
-mode, and the ports. The defaults are right for a first install:
-enter the hostname the other hosts will use to reach this one and press
-`Start`. The console port is 443 unless another web server already holds
-it; then the form proposes the first free port from 8443 and says so, and
+The Welcome screen offers **Quick install** (ingest, console,
+distribution, vulnerabilities, rules and an agent on this host, with
+OpenVIBES's own CA and the default ports) and **Choose what to install**
+(five steps: optional parts, names, certificates, ports, review; use it
+for your own CA). The defaults are right for a first install: enter the
+hostname the other hosts will use to reach this one and choose `Install`.
+The console port is 443 unless another web server already holds
+it; then the install proposes the first free port from 8443 and says so, and
 the console is at `https://HOST:PORT`. The agent ports (18423, 18424) move
 the same way, and the install command and package the console hands out
 (step 3) carry them. To move a
 port later: `sudo openvibes-admin setup --repair --console-port N` (or
 `--ingest-port`, `--distribution-port`, which also need
 `--move-agent-ports`: agents on other hosts then need their install line
-run again). Setup asks for
-your password once and then shows each step as it runs: packages,
+run again). Install asks for
+your password once (not when sudo asks none, e.g. run as root) and then
+shows each step as it runs: packages,
 PostgreSQL, database, CA, certificates, console, services, firewall
 (the console and agent ports), agent, readiness and the assistant model. A port another
-process holds stops Setup before any service starts, naming the process. If a step fails, fix the cause
-and press `r` to continue from it.
+process holds stops the install before any service starts, naming the process. If a step fails, fix the cause
+and press `Enter` (Try again) to continue from it.
 
-**The CA's root key.** In the default (quick) CA mode, Setup writes the
-root key once to the form's *Root key file*, by default
+**The CA's root key.** In the default (quick) CA mode, Install writes the
+root key once to the *Root key file*, by default
 `~/openvibes-root-ca.key`, and keeps no other copy. It is the only way to
 issue a new intermediate certificate later, so copy it to offline
 storage and then delete it from the host. Without it, a new CA means
 re-enrolling every agent.
 
-**The assistant (optional).** Tick `assistant` in the form to have the
-console's chat assistant. Setup then asks "Download the assistant's model
-(2.7 GB from Hugging Face)?" and shows the model's licence: answer **Y**
-and Setup downloads it, checks it against its pinned checksum and turns the
-assistant on. Answer **N** and the assistant stays off; the last screen
-says so. No internet on the platform host: see the [offline install guide](components/offline-kit.md).
+**Your own CA.** Choose what to install, step 3, makes a request for your
+CA to sign and also saves it as `~/openvibes-intermediate.csr` (or `-2`,
+`-3`… beside another file): it is public, and OpenVIBES removes it once
+the CA is installed, or when the package is removed unused.
+
+**The assistant (optional).** Tick the assistant under *Optional* in Choose what to install to have the
+console's chat assistant (a 2.7 GB download from Hugging Face; the
+Assistant line's help gives the model's licence). The
+last step downloads the model, checks it against its pinned checksum and
+turns the assistant on; if that fails the assistant stays off and the
+install still finishes. No internet on the platform host: see the [offline install guide](components/offline-kit.md).
 
 **Internet lookups (optional, off).** The assistant can look up public
 security references (level 1) and search the web through your own SearXNG
@@ -65,8 +73,8 @@ security references (level 1) and search the web through your own SearXNG
 switch shows what leaves your network. See the
 [admin guide](components/openvibes-admin.md#assistant-internet-lookups-risk-levels).
 
-**Adding the assistant later:** open Setup (`sudo openvibes-admin`), turn the
-assistant on with `m` (change components) and answer **Y**.
+**Adding the assistant later:** open `sudo openvibes-admin`, then Maintenance › Optional parts:
+tick Assistant and choose Apply. It downloads the 2.7 GB model.
 
 The last screen shows, once:
 
@@ -83,8 +91,8 @@ sudo openvibes-admin setup --quick --components ingest,console,distribution,vuln
   --hostname NAME --root-key-out /root/openvibes-root-ca.key
 ```
 
-Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Setup and
-the setup command).
+Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Install
+and the `setup` command).
 
 ## Step 1 (offline): install from the kit
 
@@ -95,7 +103,7 @@ Instead of step 1, for a platform host with no internet. Details:
 2. Copy both to the server, into the same folder.
 3. Run `tar xf openvibes-platform-<v>-offline-fedora44.tar && sudo ./openvibes-offline/install`.
 
-Setup opens at the end; continue with step 2. If you copied the model, Setup installs it.
+The Install screens open at the end; continue with step 2. If you copied the model, Install installs it.
 
 ## 3. Add a second host
 
@@ -134,18 +142,18 @@ from `/etc/openvibes/pki/` into the browser to stop the warning).
   advisories. The vulnerability service checks a feed at startup if a host
   already reports that release, or when the first inventory for a new
   release arrives. Results appear after that check completes.
-- **Compliance:** findings from the baseline rules, which Setup publishes.
+- **Compliance:** findings from the baseline rules, which Install publishes.
 - **Alarms:** threat alarms (for example a web server starting a shell)
   appear within seconds of the program start.
 
 ## Ports
 
-| Port | Service | Opened by Setup's Firewall step |
+| Port | Service | Opened by Install's Firewall step |
 |---|---|---|
 | 443 (or the first free from 8443) / tcp | console | yes |
 | 18423 / tcp | ingest (agents) | yes |
 | 18424 / tcp | distribution (agent rules) | yes |
-| 514 / udp | netlog (network device events) | **no**: open it yourself if you add a router; Setup warns when firewalld has it closed |
+| 514 / udp | netlog (network device events) | **no**: open it yourself if you add a router; Install warns when firewalld has it closed |
 
 ## Optional: alarms from a UniFi gateway
 
@@ -162,9 +170,9 @@ from `/etc/openvibes/pki/` into the browser to stop the warning).
 ## Next
 
 - Other hosts: repeat step 3; `openvibes-admin agent list` shows them all.
-- Check, repair, update, change components or uninstall: the Setup tab
-  (`c`, `r`, `u`, `m`, `x`).
-- Services and configuration: the Services and Configuration tabs. Setup
+- Check, repair, update, change components or uninstall: Maintenance
+  (Update, Repair, Optional parts, Uninstall).
+- Services and configuration: the Services and Configuration tabs. Install
   added you to `openvibes-operators`; log in again before using them.
 - Hosts without network access: the agent's `export`, then
   `openvibes-admin import` on the platform.

@@ -10,6 +10,7 @@ mod database;
 mod database_tests;
 pub mod form;
 mod home;
+mod install;
 mod maint;
 mod nav;
 #[cfg(test)]
@@ -25,15 +26,6 @@ mod service;
 #[cfg(test)]
 mod service_tests;
 mod services_text;
-mod setup;
-#[cfg(test)]
-mod setup_done_tests;
-mod setup_form;
-#[cfg(test)]
-mod setup_form_tests;
-#[cfg(test)]
-mod setup_tests;
-mod setup_view;
 mod status;
 #[cfg(test)]
 mod status_tests;
@@ -52,8 +44,14 @@ use app::{App, Key, Tab};
 use nav::Screen;
 use platform_host::{Host, native::Native, runner::SystemRunner};
 use ratatui::{
-    Frame,
-    crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    DefaultTerminal, Frame,
+    crossterm::{
+        event::{
+            self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEventKind,
+            KeyModifiers,
+        },
+        execute,
+    },
     layout::Rect,
 };
 
@@ -61,10 +59,9 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
     nav::render(frame, app);
 }
 
-/// Today's Setup and Configuration screens, under the location line.
+/// The Settings files screen (legacy), under the location line.
 pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     match app.tab {
-        Tab::Setup => setup_view::draw(frame, area, app),
         Tab::Configuration => config_view::draw(frame, area, app),
     }
 }
@@ -73,13 +70,30 @@ pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) 
 const REFRESH: Duration = Duration::from_secs(5);
 
 /// Restores the terminal however the TUI ends (return, error, or panic:
-/// `ratatui::init` also installs a panic hook that restores it).
+/// `ratatui::init` also installs a panic hook that restores it, and `run`
+/// adds one that turns bracketed paste off).
 struct Restore;
 
 impl Drop for Restore {
     fn drop(&mut self) {
-        ratatui::restore();
+        restore();
     }
+}
+
+/// The terminal for the TUI, with bracketed paste on (ruling 9): a paste
+/// arrives whole, so the paste box can check it at once.
+fn init() -> DefaultTerminal {
+    let terminal = ratatui::init();
+    // A terminal without bracketed paste ignores it: lines arrive as keys.
+    let _ = execute!(std::io::stdout(), EnableBracketedPaste);
+    terminal
+}
+
+/// The terminal as it was, bracketed paste off: every path that gives
+/// the terminal back (quit, the shell, the new version) goes through here.
+fn restore() {
+    let _ = execute!(std::io::stdout(), DisableBracketedPaste);
+    ratatui::restore();
 }
 
 pub fn run() -> ExitCode {
@@ -138,8 +152,14 @@ pub fn run() -> ExitCode {
         });
         receive
     }));
-    let mut terminal = ratatui::init();
+    let mut terminal = init();
     let _restore = Restore;
+    // A panic gives the terminal back without bracketed paste too.
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = execute!(std::io::stdout(), DisableBracketedPaste);
+        hook(info);
+    }));
     let mut refreshed = Instant::now();
     while !app.quit {
         if let Err(error) = terminal.draw(|frame| render(frame, &app)) {
@@ -150,43 +170,49 @@ pub fn run() -> ExitCode {
         let mut pressed = None;
         match event::poll(Duration::from_millis(250)) {
             Ok(true) => {
-                let Ok(Event::Key(key)) = event::read() else {
-                    continue;
-                };
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
-                let key = match key.code {
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        app.interrupt();
-                        continue;
+                let key = match event::read() {
+                    // A whole paste (ruling 9).
+                    Ok(Event::Paste(text)) => {
+                        pressed = Some(Key::Paste(text));
+                        None
                     }
-                    // Ctrl+U empties a field; other control chords typed
-                    // their letter into it (#78).
-                    KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        Key::ClearLine
-                    }
-                    KeyCode::Char(_) if key.modifiers.contains(KeyModifiers::CONTROL) => continue,
-                    KeyCode::Char(c) => Key::Char(c),
-                    KeyCode::Up => Key::Up,
-                    KeyCode::Down => Key::Down,
-                    KeyCode::Left => Key::Left,
-                    KeyCode::Right => Key::Right,
-                    KeyCode::Enter => Key::Enter,
-                    KeyCode::Esc => Key::Esc,
-                    KeyCode::Backspace => Key::Backspace,
-                    KeyCode::Tab => Key::Tab,
+                    Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => Some(key),
                     _ => continue,
                 };
-                pressed = Some(key);
+                if let Some(key) = key {
+                    let key = match key.code {
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.interrupt();
+                            continue;
+                        }
+                        // Ctrl+U empties a field; other control chords typed
+                        // their letter into it (#78).
+                        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            Key::ClearLine
+                        }
+                        KeyCode::Char(_) if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            continue;
+                        }
+                        KeyCode::Char(c) => Key::Char(c),
+                        KeyCode::Up => Key::Up,
+                        KeyCode::Down => Key::Down,
+                        KeyCode::Left => Key::Left,
+                        KeyCode::Right => Key::Right,
+                        KeyCode::Enter => Key::Enter,
+                        KeyCode::Esc => Key::Esc,
+                        KeyCode::Backspace => Key::Backspace,
+                        KeyCode::Tab => Key::Tab,
+                        _ => continue,
+                    };
+                    pressed = Some(key);
+                }
             }
             Ok(false) => {}
             Err(_) => app.quit = true,
         }
-        // The key, then one Setup step per turn: the screen is redrawn
-        // between steps (a step blocks while it runs, e.g. dnf), and before
-        // the first step of a run the key just started.
-        app.key_then_tick(pressed);
+        if let Some(key) = pressed {
+            app.key(key);
+        }
         app.tick(Instant::now());
         if matches!(
             app.nav.screen,
@@ -200,7 +226,7 @@ pub fn run() -> ExitCode {
         }
         if app.take_shell() {
             // The operator's login shell gets the terminal until it exits.
-            ratatui::restore();
+            restore();
             let [first, second] = app.shell_header(chrono::Local::now());
             if app.theme.color {
                 println!("\x1b[1;38;2;54;185;224m{first}\x1b[0m\n\x1b[2m{second}\x1b[0m");
@@ -208,15 +234,15 @@ pub fn run() -> ExitCode {
                 println!("{first}\n{second}");
             }
             app.run_shell();
-            terminal = ratatui::init();
+            terminal = init();
             // Whatever the shell left on screen is drawn over in full.
             let _ = terminal.clear();
         }
         if app.reopen {
-            ratatui::restore();
+            restore();
             let error = reopen();
             // Only reached when exec failed.
-            terminal = ratatui::init();
+            terminal = init();
             app.reopen = false;
             app.outcome = Some((false, format!("could not start the new version: {error}")));
         }

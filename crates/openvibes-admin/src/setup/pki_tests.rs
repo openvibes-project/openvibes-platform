@@ -9,7 +9,7 @@ use crate::setup::{
     run_step,
 };
 
-const ADMIN: [&str; 5] = [
+pub(super) const ADMIN: [&str; 5] = [
     "/usr/sbin/runuser",
     "-u",
     "openvibes-admin",
@@ -17,7 +17,7 @@ const ADMIN: [&str; 5] = [
     "/usr/bin/openvibes-admin",
 ];
 
-fn with(prefix: &[&str], rest: &[&str]) -> Vec<&'static str> {
+pub(super) fn with(prefix: &[&str], rest: &[&str]) -> Vec<&'static str> {
     prefix
         .iter()
         .chain(rest)
@@ -26,7 +26,7 @@ fn with(prefix: &[&str], rest: &[&str]) -> Vec<&'static str> {
 }
 
 /// The CA commands as fakes that write what the real ones write.
-fn ca_commands(fake: &Fake) {
+pub(super) fn ca_commands(fake: &Fake) {
     fake.effect(&["/usr/bin/openvibes-admin", "ca", "init-root"], |root| {
         let dir = root.join("run/openvibes-ca/root");
         std::fs::create_dir_all(&dir).unwrap();

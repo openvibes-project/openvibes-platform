@@ -136,8 +136,18 @@ fn a_certificate_missing_one_of_the_hosts_addresses_is_a_problem() {
     assert!(moved[0].problem);
     assert_eq!(
         moved[0].text,
-        "/c.crt: does not cover 192.168.1.23 (this host): press r on Setup to repair"
+        "/c.crt: does not cover 192.168.1.23 (this host): run Repair in Maintenance"
     );
+}
+
+/// A CA certificate (the intermediate) names no host: it is never
+/// "does not cover", whatever its path.
+#[test]
+fn a_ca_certificate_is_not_checked_for_the_hosts_addresses() {
+    let now = Utc::now();
+    let root = platform_pki::generate_root(now).unwrap();
+    let certificate = [("/c.crt", Ok(root.cert_pem))];
+    assert!(crate::tui::database::uncovered(&certificate, &["192.168.1.10".into()]).is_empty());
 }
 
 /// Board #107: the site's own sets warn a month ahead and say to publish
@@ -260,9 +270,10 @@ fn distribution_with_no_rule_set_published_is_a_problem() {
     };
     let empty = health(true, "baseline none keys 1 expires -\n");
     assert!(
-        empty
-            .iter()
-            .any(|c| c.problem && c.text.starts_with("no rule set published")),
+        empty.iter().any(|c| c.problem
+            && c.text
+                == "no rule set published: agents get no rules; run Repair in Maintenance, \
+                        or publish one (rules publish)"),
         "{empty:?}"
     );
     let published = health(true, "baseline v2 keys 1 expires 2030-01-01T00:00:00Z\n");

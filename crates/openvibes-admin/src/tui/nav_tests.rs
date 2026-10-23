@@ -101,19 +101,6 @@ fn esc_while_typing_in_a_legacy_screen_cancels_the_field_not_the_screen() {
 }
 
 #[test]
-fn a_fresh_host_opens_the_setup_form_and_esc_does_not_leave_it() {
-    let mut app = super::script_host::fresh_app();
-    assert_eq!(
-        (app.nav.screen.clone(), app.tab),
-        (Screen::Legacy, Tab::Setup)
-    );
-    app.key(Key::Esc);
-    assert_eq!(app.nav.screen, Screen::Legacy);
-    app.key(Key::Char('q'));
-    assert!(app.quit, "q still quits the install form");
-}
-
-#[test]
 fn q_types_into_a_configuration_value() {
     let mut app = app(false);
     editable_field(&mut app);
@@ -410,20 +397,13 @@ fn no_components_and_ports_entry() {
 }
 
 #[test]
-fn no_legacy_screen_advertises_tab_and_q_only_on_the_fresh_install_form() {
-    for tab in [Tab::Setup, Tab::Configuration] {
-        let mut app = app(false);
-        app.open(tab);
-        let text = screen(&app, 80, 24);
-        let footer = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap();
-        assert!(!footer.contains("Tab"), "{tab:?}: {footer}");
-        assert!(
-            !footer.contains("q quit"),
-            "{tab:?} on a set-up host: {footer}"
-        );
-        assert!(footer.contains("Esc back"), "{tab:?}: {footer}");
-    }
-    let fresh = super::script_host::fresh_app();
-    let text = super::script_host::screen(&fresh);
-    assert!(text.contains("q quit") && !text.contains("Tab"), "{text}");
+fn the_legacy_screen_advertises_neither_tab_nor_q() {
+    let tab = Tab::Configuration;
+    let mut app = app(false);
+    app.open(tab);
+    let text = screen(&app, 80, 24);
+    let footer = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap();
+    assert!(!footer.contains("Tab"), "{tab:?}: {footer}");
+    assert!(!footer.contains("q quit"), "{tab:?}: {footer}");
+    assert!(footer.contains("Esc back"), "{tab:?}: {footer}");
 }

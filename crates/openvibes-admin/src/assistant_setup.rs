@@ -142,15 +142,6 @@ const SYSTEMCTL_STEPS: [&[&str]; 3] = [
     &["try-restart", "openvibes-console"],
 ];
 
-/// Whether `model.conf` selects a model file that exists (Setup asks
-/// before downloading only when this is false).
-pub(crate) fn model_installed() -> bool {
-    crate::model::read_config(Path::new(MODEL_CONF))
-        .ok()
-        .and_then(|text| parse_env(&text).remove("OPENVIBES_LLM_MODEL"))
-        .is_some_and(|file| Path::new(&file).is_file())
-}
-
 /// Makes sure the selected model file exists, fetching the pinned model
 /// (through `fetch`) when it is missing and the pinned one is the selection.
 fn ensure_model(

@@ -1,7 +1,8 @@
 //! `openvibes-admin helper VERB …`: the root helper of the administration
 //! TUI (admin TUI spec §3): `logs`, `config-read`, `config-write` (through
 //! the RPM's sudoers drop-in), and Setup's `setup-plan`, `setup-status`,
-//! `setup-step`, `update-step`, `remove-step`, `admin-reset`, `shell-open`, `unit-enable`,
+//! `setup-step`, `update-step`, `remove-step`, `admin-reset`, `shell-open`,
+//! `ca-request`, `ca-accept`, `unit-enable`,
 //! `unit-disable` (only with the user's own
 //! sudo rights and password). A closed set of verbs, each its own function;
 //! arguments are checked against the allow-lists before anything else, and
@@ -111,6 +112,25 @@ pub enum HelperCommand {
     /// Does nothing and prints `done<TAB>opened`: sudo checks the password
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
+    /// Makes the CA request before install, or reuses it; prints `request`
+    /// or `signed<TAB>ISSUER`, the copy's line, then the request.
+    CaRequest {
+        /// Also write the request here (absolute), or beside it as `-2`,
+        /// `-3`… when another file is there; prints `copy<TAB>PATH`.
+        #[arg(long)]
+        copy: Option<std::path::PathBuf>,
+    },
+    /// Checks the CA's certificate and root against the request and keeps
+    /// them; prints `signed<TAB>ISSUER`, then the request.
+    CaAccept {
+        /// The certificate the CA signed for the request (PEM, which starts
+        /// with dashes).
+        #[arg(long, allow_hyphen_values = true)]
+        cert: String,
+        /// The CA's own self-signed certificate (PEM).
+        #[arg(long, allow_hyphen_values = true)]
+        root_cert: String,
+    },
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
     /// Stops starting an OpenVIBES unit at boot.
@@ -139,6 +159,8 @@ enum Verb {
     AgentConfigUpgrade,
     AdminReset,
     ShellOpen,
+    CaRequest(Option<std::path::PathBuf>),
+    CaAccept(String, String),
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, String> {
@@ -219,6 +241,15 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::AgentConfigUpgrade => Verb::AgentConfigUpgrade,
         HelperCommand::AdminReset => Verb::AdminReset,
         HelperCommand::ShellOpen => Verb::ShellOpen,
+        HelperCommand::CaRequest { copy } => {
+            if let Some(copy) = copy.as_ref().filter(|copy| !copy.is_absolute()) {
+                return Err(format!("{}: not an absolute path", copy.display()));
+            }
+            Verb::CaRequest(copy.clone())
+        }
+        HelperCommand::CaAccept { cert, root_cert } => {
+            Verb::CaAccept(cert.clone(), root_cert.clone())
+        }
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
             true,
@@ -321,6 +352,8 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::UpgradeMigrate => crate::setup::upgrade_migrate(),
         Verb::AgentConfigUpgrade => crate::setup::agent_config_upgrade(),
         Verb::AdminReset => crate::setup::admin_reset::run(),
+        Verb::CaRequest(copy) => crate::setup::request::run_request(copy.as_deref()),
+        Verb::CaAccept(cert, root) => crate::setup::request::run_accept(&cert, &root),
         Verb::ShellOpen => {
             println!("done\topened");
             ExitCode::SUCCESS

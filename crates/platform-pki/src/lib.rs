@@ -12,9 +12,9 @@ mod token;
 use std::fmt;
 
 pub use ca::{
-    Issuer, KeyAndCert, check_intermediate, generate_root, intermediate_request,
-    issuer_common_name, not_after, sha256_fingerprint, sign_intermediate, subject_alt_names,
-    verify_signed_by,
+    Issuer, KeyAndCert, Signed, check_intermediate, check_root_signed, check_signed_request,
+    generate_root, intermediate_request, is_ca, issuer_common_name, not_after, sha256_fingerprint,
+    sign_intermediate, subject_alt_names, verify_signed_by,
 };
 pub use client::{
     CheckedCsr, IssuedClient, check_csr, leaf_identity, leaf_validity, spki_sha256_of_cert,
@@ -49,6 +49,14 @@ pub enum PkiError {
     /// Not an intermediate: a leaf, a self-signed root, or a CA without path
     /// length 0.
     NotIntermediate,
+    /// The certificate was signed for another request (another key).
+    NotForRequest,
+    /// Several PEM blocks where one certificate was expected.
+    Several(usize),
+    /// Not a self-signed CA certificate.
+    NotRoot,
+    /// A root with path length 0: it cannot validly sign an intermediate.
+    RootPathLen0,
 }
 
 impl fmt::Display for PkiError {
@@ -66,6 +74,12 @@ impl fmt::Display for PkiError {
             Self::IssuerExpired => "the issuing CA has expired",
             Self::NotIntermediate => "not an intermediate CA certificate (path length 0)",
             Self::InvalidAgentId => "invalid agent id",
+            Self::NotForRequest => "certificate was signed for another request",
+            Self::NotRoot => "not a self-signed CA certificate",
+            Self::RootPathLen0 => "the root CA has path length 0 and cannot sign an intermediate",
+            Self::Several(n) => {
+                return write!(f, "{n} PEM blocks where one certificate was expected");
+            }
         })
     }
 }

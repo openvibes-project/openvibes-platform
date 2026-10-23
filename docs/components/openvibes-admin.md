@@ -91,69 +91,102 @@ shows up to 500 lines, newest at the bottom; `↑`/`↓` scroll back, no further
 returns. Code: `service.rs` (screen), `work.rs` (questions, prompt, polling),
 tests `service_tests.rs`.
 
-**Setup**: opens first on a host without `/etc/openvibes/setup.toml`. A
-form: components (ingest and console always; distribution, vulns, rules,
-the agent on this host on by default; the assistant off), hostname, other
-names or addresses, CA mode (quick or careful) and the root key file.
-Ingest and console show `[•]` (always installed, not a box to untick). A dim
-line under the form says what the row under the cursor means (install
-walkthrough, 2026-10-08). The field rows are numbered after the last
-component, so each row is its own cursor position.
-`Start` asks for the user's password once (masked; the user needs sudo
-rights, not operator membership), writes the plan through `helper
-setup-plan`, then runs one step per screen refresh through `helper
-setup-step`, showing each step's state on one line (cut with "…" at the
-screen's width; the step a run stopped at has its whole detail under the
-list; the console step reads "admin account ready (password at the end)",
-never the password). Pressing Start draws this list before the first step
-runs (a step blocks the screen while it runs, e.g. dnf); while one runs, the
-footer says keys wait, and the package step says it can take a few minutes.
-The first step that fails or waits
-stops the run and drops the password; `r` asks for it again and continues
-from that step, and `Esc` leaves without retrying (#87, below). Three
-wrong passwords close the prompt. The finished screen
-of an install is a few labelled rows (install walkthrough, 2026-10-08):
-`Console` (the address), `Sign in` (admin and the generated password, shown
-only then), `Root key` (where the only copy was written, and to move it
-offline), then "Next: sign in, change the password, then add hosts under
-Enrollment" and, when it applies, that the operator can run openvibes-admin
-without sudo after logging in again. A detail in a wording the screen does
-not know is shown as it is. No agent install line: hosts are added from the
-console; `agent command` prints one for scripts. Today's Setup screen is
-reached only by a first install (location ` · Install`) and keeps only the
-install (2b-2): no `m`, `p`, repair or remove runs; Optional parts, Ports
-and addresses and Certificates are in Maintenance. Once the host is set up
-(it has `setup.toml` and its CA), Enter or Esc on the Finished screen goes
-Home. On the form, a default port another program holds is noted on its
-row ("443 is in use"; "443 is in use by another program" when the plan
-still has 443 and our unit is not running). The ports a plan moves away
-from (Maintenance › Ports and addresses) are recorded in
-`/etc/openvibes/setup-moved-from` by `helper setup-plan` and closed in
-firewalld once Readiness is done, as the CLI's Repair does; only ports the
-Firewall step itself opened are closed, as recorded in
+**Install**: opens first on a host without `/etc/openvibes/setup.toml`
+(code in `src/tui/install/`). Location line ` · Install`. There is no
+other install form: Maintenance has the optional parts, ports and
+addresses, and certificates once the host is set up.
+
+- *Welcome*: "This host does not run OpenVIBES yet." with Choose what to
+  install, Quick install and Quit.
+- *Quick install*: only what OpenVIBES cannot know, edited in place: the
+  host name, other names, the root key file and whether the agent runs on
+  this host (ticked; Space). Everything else is the defaults: OpenVIBES's
+  own CA, the default ports, no assistant. The root key file defaults to
+  the first free name in the home directory (`openvibes-root-ca.key`, then
+  `-2`, `-3`…), since Remove everything keeps the old key. Enter on
+  Install asks for the password.
+- *Choose what to install*, five steps on a steps line (Enter on Next goes
+  on, Esc goes back a step, fields are edited in place): 1 Optional (the
+  agent on this host, the assistant; ingest and console are always
+  installed), 2 Names (host name, other names), 3 Certificates, 4 Ports (each
+  checked as typed; a default another program holds is moved to a free
+  port with its reason in yellow, unless the platform's own service holds
+  it, #115), 5 Review (every choice on one screen; Enter on a line goes
+  back to its step; Install asks for the password once, and when sudo asks
+  none its row reads "install now" and its help leaves the password out).
+- *Certificates* (step 3): your own CA (the default) or OpenVIBES makes one
+  (then the root key file is asked). With your own CA, Next first makes the
+  request, before anything is installed: `helper ca-request` writes
+  `/etc/openvibes/pki/request/` (the request and what is needed to sign
+  it) and the screen shows the request to copy. The two certificates (the
+  signed one and your CA's) are then added by paste box (a bracketed paste
+  arrives whole; without it, lines are typed and Enter adds a line until an
+  `-----END` line) or "From a file on this host" (a file browser). Each is
+  checked at once in the TUI; once both are in, `helper ca-accept` checks
+  and keeps them under the request folder, and only then does Next go on:
+  the careful CA step installs from them. The request can be signed on
+  the host with `openvibes-admin ca sign-intermediate`. A copy of the
+  request is also saved in the home folder (`~/openvibes-intermediate.csr`,
+  or `-2`, `-3`… beside another file): it is public, and OpenVIBES
+  removes it once the CA is installed, or when the package is removed
+  unused.
+  An abandoned request leaves its key in `/etc/openvibes/pki/request/`
+  until a CA step or Remove everything; removing the `openvibes-admin`
+  package on a host never installed (no `setup.toml`) deletes it too.
+- *Installing*: one row per group of steps (Packages, PostgreSQL, Database,
+  Certificate authority, Certificates, Console, Services, Firewall,
+  Baseline rules, then Agent on this host and Assistant when chosen, Ready),
+  each with its state; the step a run stopped at has its whole reason
+  under the rows and the rows fold to make room. The password is asked once
+  (masked, over the screen the install started from; as root, #82, none is
+  asked), the plan is written by `helper setup-plan`, and the steps run by
+  `helper setup-step` on the worker like every other long job, so the screen
+  stays responsive while a step blocks (e.g. dnf). A stop keeps the
+  password for Enter, "Try again", which goes on from that step; the
+  assistant's failure never stops the run (its row shows a note). Esc after
+  a stop goes back to where the install began (Quick install or Review)
+  while there is no CA, and Home once there is. The console step's
+  generated admin password is not shown while the run goes: only on
+  Finished.
+- *Finished*: labelled rows: Open the console (the address), Sign in as
+  (admin), Password (generated, "shown only now: write it down"), Root key
+  (where the only copy was written, to move to a USB stick and keep
+  offline; only with OpenVIBES's CA) or Certificates ("signed by <your CA>";
+  browsers that trust your CA show no warning; only with your own CA), then
+  the next steps (sign in, change the password, add hosts under
+  Enrollment, and that the operator can run openvibes-admin without sudo
+  after logging in again). A detail in a wording the screen does not know
+  is shown as it is. No agent install line: hosts are added from the
+  console; `agent command` prints one for scripts. Enter goes Home.
+
+The ports a plan moves away from (Maintenance › Ports and addresses) are
+recorded in `/etc/openvibes/setup-moved-from` by `helper setup-plan` and
+closed in firewalld once Readiness is done, as the CLI's Repair does; only
+ports the Firewall step itself opened are closed, as recorded in
 `/etc/openvibes/setup-opened-ports` (one open before Setup ran is never
 Setup's; installs from before the record close nothing), and one another
 program listens on, per `ss`, stays open with who uses it.
-The root key file defaults to the first free name in the home directory
-(`openvibes-root-ca.key`, then `-2`, `-3`…), since Remove everything keeps
-the old key. A host with `setup.toml` but no
-`/etc/openvibes/pki/intermediate.crt` (a first install that stopped before
-its CA step) starts on the install form, filled from the plan with a free
-root key name, and installs again, not a Repair, which refuses to make a CA
-(#87). Not while a job is half done (`/run/openvibes-admin/job`): a Remove
-everything that stopped after deleting the CA but before `setup.toml`
-starts on Home, whose Status offers to finish it. The CA's presence is read
-at start, on each refresh and after each Setup step, not on every draw. A plan that does not parse shows its error on an unfilled form. Esc
-on that form goes Home (whose Maintenance › Uninstall still works; Repair
-refuses to make the CA), and the next start opens the form again; a fresh
-host's form has no Home to go to. After
-a stopped run, Esc goes to that filled form while there is no CA, and Home
-once there is (Maintenance › Repair finishes it).
-As root no password is asked (#82): the TUI started with `sudo openvibes-admin` runs
-its helper directly, keeping `SUDO_USER` so Setup still names the person who
-started it (operators group, root key owner); otherwise the password prompt
-suggests starting it that way (#92). The install's steps are those of
-`setup --quick` (below).
+
+*#87*: a host with `setup.toml` but no `/etc/openvibes/pki/intermediate.crt`
+(a first install that stopped before its CA step) starts on step 1 of
+Choose what to install, filled from the plan (agent and assistant from its
+components, names, CA mode, ports) with a free root key name, and installs
+again, not a Repair, which refuses to make a CA. A port the plan chose that
+another program holds now is moved to a free one and said on Ports. Not
+while a job is half done (`/run/openvibes-admin/job`): a Remove everything
+that stopped after deleting the CA but before `setup.toml` starts on Home,
+whose Status offers to finish it. The CA's presence is read at start and on
+each refresh. A plan that does not parse keeps the defaults and says its
+error in red on step 1. Esc on step 1 goes Home (whose Maintenance ›
+Uninstall still works; Repair refuses to make the CA), and the next start
+opens the steps again; on a fresh host it goes to Welcome.
+
+As root no password is asked (#82): the TUI started with `sudo
+openvibes-admin` runs its helper directly, keeping `SUDO_USER` so Setup
+still names the person who started it (operators group, root key owner);
+otherwise the password prompt suggests starting it that way (#92). The
+install's steps are those of `setup --quick` (below). Tests:
+`src/tui/install/*_tests.rs`.
 
 **Boot state**: `helper unit-enable` (through the user's own sudo; polkit cannot
 limit boot changes to OpenVIBES units) enables a unit at boot. Service
@@ -200,6 +233,8 @@ to the journal (`config-write SERVICE ok|failed`, never the content).
 
 **Certificates › Names**: Host name, one Other name row per SAN of the plan, Add a name (at most 16 other names, `plan::MAX_SANS`) and, once something changed, Apply. Enter types a value, checked at once by the plan's own rules (`plan::check_name` for the host name, `plan::check_san` for other names: a lowercase DNS name or an IP address; letters are lowercased as typed, and `PlanArgs::plan` lowercases the host name and every SAN, so Setup and the CLI store them lowercase too); a red note keeps Enter from doing anything, Esc cancels. Enter on an emptied Other name removes it; the Host name cannot be emptied. Apply asks "Issue new certificates?" ("for these names") and is refused up front as Optional parts' is (other work running, a half-done job, a changed or older plan). One run: Save the names (`setup-plan` with the whole edited plan), New certificates (Repair Packages to Certificates), Restart services (Console to Agent), Ready. The result line reads the new `ingest.crt` again for `valid until <date>`. The Certificates step itself runs `systemctl try-restart openvibes-ingest openvibes-distribution openvibes-console` after issuing (the services read their certificate at start; none reloads it, and a stopped service is left stopped). Tests: `src/tui/maint/certs_tests.rs`.
 
+**Install, in detail** (`src/tui/install/`): `Install` holds the choices (agent, assistant, names, `Ca::Own` or `Ca::OpenVibes`, root key file, three ports) and writes the `setup-plan` arguments (`--ca careful|quick`; `--root-key-out` only with OpenVIBES' own root; `--model fetch` with the assistant). The install runs on the worker (`Kind::Install`, the password asked once in the bar; root is not asked) as `setup-plan` then `setup-step STEP` (no `--repair`), in rows: Packages (holds the plan), PostgreSQL, Database, Certificate authority, Certificates, Console, Services, Firewall, Baseline rules, Agent on this host (only when ticked), Ready, Assistant (only when ticked, last; its failure never stops the run; while it runs its row reads `Assistant  1.2 of 2.7 GB`, from the progress file Optional parts reads, through the same `maint::with_progress`). Installing shows `Step N of M: TITLE`; a stop shows ✗ with the reason, Enter is Try again (resumes at that step) and Esc goes back where the install began (`Install.origin`: Quick install, or Review, `Stage::Step(4)`) while there is no CA, to Home once there is. Finished (`install/finished.rs`) shows the console address (with the port when not 443), `admin`, the generated password once, then the root key file or "signed by X", and Enter goes Home, reading the health checks again first so Home's count matches Status. A host without `setup.toml` opens on **Welcome** (`install/welcome.rs`: Choose what to install, Quick install, Quit; `q` quits). **Quick install** (`install/quick.rs`; location ` · Install › Quick install`) asks only Host name, Other names, Root key file (edited in place: Enter types, Enter keeps, Esc cancels), "Agent on this host" (ticked; Space) and Install; it installs the core components, OpenVIBES' own CA (`--ca quick --root-key-out`), the default ports and no assistant. A default port another program holds gets the free one `fields::propose_ports` finds, and the Install row's help line says so ("443 is in use by nginx: the console uses 8443"). `install/fields.rs` holds the shared checks: `check_names` (host name and other names, as the plan checks them), `check_root_key` (absolute, new: a dangling link counts as there; in an existing folder that is a folder; the CA step checks the same before `ca init-root`) and `Install::problem`, whose first flagged field is said in red under the list; Install does nothing while one is flagged. **Choose what to install** (`install/steps.rs`, `review.rs`, `certs.rs`, `paste.rs`; advanced.py, ca.py, ca2.py, full_advanced.py) is five steps under a steps line (`✓ done · ● current · ○ to come`; location ` · Install › Optional|Names|Certificates|Ports|Review`). Enter on Next moves on, Esc goes back a step. *Optional*: Agent on this host (ticked) and Assistant (2.7 GB download; its help line gives the model's licence link, broken after a `/`), Space ticks; the core is always installed. *Names*: host name and other names edited in place (empty Other names read `none`, as on Quick install, until typed); a bad one is said in red and Next refuses. *Certificates*: "(•) Your own CA" (default, `--ca careful`) or "( ) OpenVIBES makes one" (`--ca quick`, which adds a Root key file row checked by `fields::check_root_key`); Space chooses. With your own CA, Next runs `helper ca-request --copy ~/openvibes-intermediate.csr` (the helper takes its own copy there again, or writes `-2`, `-3`… beside another file, and says which in its `copy<TAB>PATH` line) through the worker (`Kind::Ca`, password in the bar), and the step shows Show the request, Signed certificate, Your CA's certificate and Next ("once both are added", disabled). Show the request (` › Certificates › Request`) shows the PEM to copy with the terminal and where the copy was saved (⭡⭣ scroll, the END line kept in view). Each certificate is added by "Paste it" or "From a file on this host" (the folder browser of `maint/folder.rs` in files mode, `Browse::open_files`; a file is read up to 64 KiB into the paste box, then titled for the file, e.g. "Your CA's certificate, from root.crt"; a file holding a `PRIVATE KEY` PEM block is refused in the browser, "That file holds a private key: pick the certificate.", as is one holding no `-----BEGIN CERTIFICATE-----` block, "That file holds no certificate: pick the certificate."; a refused file's text is never kept or shown, and each pick or folder clears the last refusal). The paste box checks in-process at once (`platform_pki::check_signed_request` against the request, `check_root_signed`; the sentences are `setup::request::message`'s, e.g. "That is 2 certificates: paste only the one signed for OpenVIBES."); Enter is "Use it" only once an `-----END` line is there and the check passed, and before that adds a new line (terminals without bracketed paste send the lines as keys). Both added, `helper ca-accept` checks and keeps them; on success `Install.signed` is the issuer (Finished then says "signed by X") and Next goes on. Install with your own CA is refused until then: the careful CA step would otherwise make a new request that does not match what the CA signed. With a request already signed (`signed<TAB>ISSUER` from `ca-request`, e.g. after a restart), both rows show "✓ added". A refused `ca-accept`, or Esc back to the choice, forgets both certificates added, so both rows can be added again. Helper failures show only their sentence (the `openvibes-admin helper: ` prefix is dropped). *Ports*: Console, Agent connections, Rule distribution (Enter types, checked as typed with `maint::ports::port_note`; Enter keeps only a usable port), Network devices (514/udp, said, not edited); a moved default reads "443 is in use by nginx · 8443 proposed" in yellow until Enter keeps it or a digit types another. *Review*: Optional, Names, Certificates ("your own CA · ✓ signed by X" or "OpenVIBES makes one · PATH"), Ports and Install; Enter on a line goes to its step, Enter on Install asks the password once in the bar and runs the install; what still blocks it is said in red. The TUI turns bracketed paste on at start and off on every path that gives the terminal back (quit, the shell, the new version, a panic); a paste arrives whole as `Key::Paste`, which only the paste box takes: a field being typed or a password in the bar takes its characters without line ends, and anywhere else it is dropped (a stray paste never presses Enter or `q`). Tests: `src/tui/install/run_tests.rs`, `quick_tests.rs`, `steps_tests.rs`, `certs_tests.rs`, `certs_accept_tests.rs`.
+
 **Repair** (Maintenance): it asks for the password and checks every step first (`helper setup-status`), then lists the steps that need attention with why. The ones that pass fold into one line ("✓ 11 other steps in order"), since 14 do not fit 80×24. Fix N problems runs every step with `--repair` (never a new CA) on the worker, then checks again; the bar says what is left. A step that stops is marked ✗ with its error, and Try again goes on from it. Check again re-reads. A half-done update blocks repair runs (`job_guard`), so Repair says so and offers no Fix until the update is finished in Update OpenVIBES, and a half-done uninstall the same way in Uninstall (each has its "Finish the …" entry there). Tests: `src/tui/maint/repair_tests.rs`.
 
 A repaired step reads "repaired: ..." in the list, and the journal line of each setup, update and remove step carries its detail (first 300 characters), e.g. `setup-step firewall --repair ok: repaired: open: 18423/tcp` (#292).
@@ -214,8 +249,10 @@ A repaired step reads "repaired: ..." in the list, and the journal line of each 
 `ok`, with the problem count in the title: each installed unit (a problem
 unless active and, where it has an endpoint, ready); the ingest and
 distribution server certificates and the intermediate (a problem under 14
-days to expiry, when Setup's repair renews them; also a problem when one
-misses an address this host now has, e.g. after DHCP, which Repair fixes);
+days to expiry, when Setup's repair renews them; also a problem when a
+server certificate misses an address this host now has, e.g. after DHCP:
+"run Repair in Maintenance"; a CA certificate, which names no host, is not
+checked for addresses);
 feed errors from `feeds
 status` (an unreachable database is a problem here); disk use of
 `/var/lib/pgsql` and each `/var/lib/openvibes-*` (a problem from 90 %);
@@ -520,9 +557,9 @@ failure, 2 on bad arguments (checked before the root check).
 `--model` (with the assistant; default `fetch`) decides whether the
 "Assistant model" step downloads the pinned model; `skip` leaves the
 assistant off ("assistant: off until its model is installed; turn the
-assistant on in Setup again to download it"). The Setup screen asks first
-("Download the assistant's model (2.7 GB from Hugging Face)? [Y/n]", with the
-model's licence URL from `model.pin`) unless the model is installed. The step
+assistant on in Setup again to download it"). Choose what to install names
+the download on the Assistant line ("local AI helper · 2.7 GB download"),
+and its help line gives the model's licence URL from `model.pin`. The step
 runs `helper assistant-setup` as root; the download itself always runs as
 `openvibes-admin` (`runuser`), never in the root process.
 `--components` must include `ingest`; `rules` needs `distribution`;
@@ -582,8 +619,14 @@ an installed package whose packaged configuration file is missing, per
 `rpm -V`, is reinstalled, which restores it and keeps edited ones, #82),
 `postgres`, `operators` (the sudo user joins `openvibes-operators`),
 `database`, `schema`, `ca` (quick: root in `/run/openvibes-ca`, its key
-written once to `--root-key-out`, never over an existing file, otherwise
-deleted; careful: waits for the signed intermediate), `certificates`
+written once to `--root-key-out`, never over an existing file (a dangling
+link counts) and only into an existing folder, both checked before
+`ca init-root`, otherwise deleted; a CA installed whose key could not be
+written stays to do while the key is staged, and the retry only writes
+it; careful: installs from the request folder below when it holds
+the key, request, certificate and root, then removes the folder, otherwise
+waits for the signed intermediate in `/run/openvibes-ca/int`; quick also
+removes a leftover request folder), `certificates`
 (hostname, `--san`, `localhost`, `127.0.0.1`, then the host's global IPv4
 and IPv6 addresses from `ip -o addr show scope global` (not rotating IPv6
 privacy or deprecated ones), container and VM bridges
@@ -746,8 +789,43 @@ error; the
 journal line is only `admin-reset admin ok`, never the password;
 `src/setup/admin_reset.rs`), `helper shell-open` (does nothing and
 prints `done<TAB>opened`: sudo's password check and the journal line are
-the point, before Maintenance › Shell opens the operator's shell).
-Arguments are checked before the root check.
+the point, before Maintenance › Shell opens the operator's shell),
+`helper ca-request [--copy PATH]` and `helper ca-accept --cert PEM
+--root-cert PEM` ("Your own CA" before install, `src/setup/request.rs`).
+`ca-request` makes the intermediate's key and request in
+`/etc/openvibes/pki/request/` (root, 0700, set again on every call;
+`intermediate.key` 0600, `intermediate.csr`), or reuses them so a request
+already sent stays valid. With `--copy PATH` (absolute, checked before the
+root check) it also writes the request there (0644, the operator's): a
+file already holding this request is taken as it is, another file is left
+alone and the copy goes beside it as `-2`, `-3`… (before the extension, up
+to `-100`; past that "That file already exists: PATH. Choose another
+name.") and records the path used in `/etc/openvibes/pki/request/copy`
+(0600). The CA step (careful or quick), before removing the request
+folder, removes that copy, as does Remove everything before it deletes
+`/etc/openvibes` (an install stopped before the CA step); both open it
+once with `O_NOFOLLOW | O_NONBLOCK` and check and read that handle.
+`dnf remove openvibes-admin` on a host never installed does the same in
+`%postun`. All only while it is still the request: a regular file, never
+a link or a FIFO, with the same bytes (`cmp -s` under `timeout 5` in the
+scriptlet, hence `Requires(postun): diffutils`). `ca-accept` checks the certificate against the stored request and
+the root against the certificate (platform-pki `check_signed_request`,
+`check_root_signed`) and only then writes `intermediate.crt` and
+`root.crt` there. Both print line 1 `request` or `signed<TAB>ISSUER`,
+then, for `ca-request --copy`, `copy<TAB>PATH` (the file used), then the
+request. A refused certificate exits 1 with one plain sentence (e.g. "This
+certificate was signed for a different request: sign the request shown
+here.", "That is 2 certificates: paste only the one signed for
+OpenVIBES.", "Your CA's certificate must be the root that signed this
+certificate directly: paste that root, not another CA.", "Your CA's
+certificate does not allow it to sign another CA (path length 0): it
+cannot sign the intermediate."). The journal line is `ca-request` or
+`ca-accept` with the request folder as target, never the copy path or the
+PEM. The folder survives reboots; the CA step removes it after installing
+from it, Remove everything deletes it with `/etc/openvibes`, and removing
+the `openvibes-admin` package on a host without `setup.toml` deletes it
+(and `/etc/openvibes/pki`, `/etc/openvibes` when left empty). Arguments
+are checked before the root check.
 
 ## CA commands
 

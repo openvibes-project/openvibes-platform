@@ -219,7 +219,11 @@ impl Bar {
                 (left, right)
             }
             Bar::Edit { label, what, keys } => {
-                let mut left = vec![Span::styled(format!("{label}:"), theme.bold())];
+                // No label: the screen says what is typed (the paste box).
+                let mut left = Vec::new();
+                if !label.is_empty() {
+                    left.push(Span::styled(format!("{label}:"), theme.bold()));
+                }
                 if !what.is_empty() {
                     left.push(Span::raw(format!(" {what}")));
                 }

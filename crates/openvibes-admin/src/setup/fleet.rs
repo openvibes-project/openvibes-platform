@@ -257,14 +257,8 @@ fn audit_note<R: Runner>(ctx: &Ctx<R>) -> &'static str {
     }
 }
 
-/// Whether the form ticks "agent on this host": only when the agent package
-/// is installed or an OpenVIBES repository could supply it (an offline kit
-/// carries neither; agents are added from the console).
-pub(crate) fn agent_by_default(root: &std::path::Path) -> bool {
-    agent_available(root, None)
-}
-
-/// As above, and a plan's `--repo-dir` holding an agent package counts too.
+/// Whether an agent package can be had: installed, or a plan's `--repo-dir` holding
+/// one.
 fn agent_available(root: &std::path::Path, repo_dir: Option<&std::path::Path>) -> bool {
     root.join("usr/bin/openvibes-agent").exists()
         || repo_dir.is_some_and(|dir| {

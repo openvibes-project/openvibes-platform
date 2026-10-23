@@ -402,7 +402,7 @@ impl<H: Host> App<H> {
             return;
         }
         let count = self.maint.names.rows().len();
-        if self.maint.names.now.is_none() || self.move_row(key, count) || key != Key::Enter {
+        if self.maint.names.now.is_none() || self.move_row(&key, count) || key != Key::Enter {
             return;
         }
         let Some(at) = self.name_at() else { return };

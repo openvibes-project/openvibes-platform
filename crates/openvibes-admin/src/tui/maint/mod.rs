@@ -42,6 +42,7 @@ mod update;
 #[cfg(test)]
 mod update_tests;
 
+pub(in crate::tui) use parts_run::with_progress;
 pub use update::half_done as update_half_done;
 
 use platform_host::Host;
@@ -374,7 +375,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
 
 impl<H: Host> App<H> {
     pub(super) fn menu_key(&mut self, key: Key) {
-        if self.move_row(key, ENTRIES.len()) || key != Key::Enter {
+        if self.move_row(&key, ENTRIES.len()) || key != Key::Enter {
             return;
         }
         match ENTRIES[self.nav.row].0 {
@@ -468,6 +469,7 @@ impl<H: Host> App<H> {
             self.names_ended();
             self.parts_ended();
             self.repair_ended();
+            self.install_ended();
         }
     }
 }
