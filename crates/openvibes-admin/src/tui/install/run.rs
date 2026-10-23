@@ -55,6 +55,9 @@ impl<H: Host> App<H> {
             (Stage::Add(which), key) => self.add_key(which, key),
             (Stage::Finished, Key::Enter) => {
                 self.run = None;
+                // Read before or while installing: Home counts what Status
+                // shows.
+                self.load_health();
                 self.nav = Nav::new(Screen::Home);
             }
             (Stage::Running, Key::Enter) if stopped => {

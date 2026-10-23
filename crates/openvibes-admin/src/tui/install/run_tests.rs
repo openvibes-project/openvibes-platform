@@ -278,8 +278,18 @@ fn finished_enter_goes_home() {
         text.contains("limebox") || text.contains("Install"),
         "{text}"
     );
+    // Read before or while installing: Home's count must not show it.
+    app.database.health = vec![crate::tui::database::Check {
+        problem: true,
+        text: "stale".into(),
+    }];
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Home);
+    assert!(
+        app.database.health.iter().all(|c| c.text != "stale"),
+        "{:?}",
+        app.database.health
+    );
 }
 
 #[test]
