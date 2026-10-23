@@ -52,8 +52,9 @@ const avatar = (name: string | null) => <span className={name ? "initials" : "in
  * list holds only its first results; `inline` draws the actions for a
  * panel header (no count or Clear); `without` leaves out actions the panel
  * offers elsewhere (any of state, assign, case, suppress); `confirm` says what a state change or an assignment
- * will reach, and makes the assignment ask first too. */
-export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople, confirm }: Readonly<{
+ * will reach, and makes the assignment ask first too; `changes` is how many of the `count` selected an action
+ * can change (the dialog's count; default all). */
+export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople, confirm, changes }: Readonly<{
   kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
   newCase: () => { title: string; severity?: string | undefined };
   closed?: number; reopenItems?: () => BulkItem[]; assignee?: string | null; stateLabel?: string;
@@ -61,6 +62,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
   /** Whether other people may be offered (an alarm page's per-host `can.assign`); else the session's `cases.assign`. */
   assignPeople?: boolean;
   confirm?: ReactNode;
+  changes?: number;
 }>) {
   const { can, canEverywhere, session } = useSession();
   const [choice, setChoice] = useState<Choice | null>(null);
@@ -119,7 +121,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
           <Icon name="cases" size={15} />Add to case
         </button>
       )}
-      {choice && <BulkDialog kind={kind} noun={noun} choice={choice} items={items} count={count} newCase={newCase} confirm={confirm}
+      {choice && <BulkDialog kind={kind} noun={noun} choice={choice} items={items} count={changes ?? count} newCase={newCase} confirm={confirm}
         onClose={() => setChoice(null)} onDone={inline ? () => undefined : onClear} />}
     </>
   );

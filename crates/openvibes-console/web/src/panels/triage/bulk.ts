@@ -7,8 +7,8 @@ import { noteRequired, triageBody } from "./triage";
 export type BulkKind = "alarms" | "compliance" | "vulnerabilities";
 export type BulkAction = "state" | "assign" | "case" | "suppress";
 
-/** One selected row, as the server wants it for its list. */
-/** `open_only` (vulnerabilities): a close or assign leaves the pair alone unless open, even on a named host. */
+/** One selected row, as the server wants it for its list; `open_only` (vulnerabilities): a close or assign
+ * leaves the pair alone unless open, even on a named host. */
 export type BulkItem = { id?: string; rule_set_id?: string; rule_id?: string; advisory_id?: string; agent_id?: string; open_only?: boolean };
 
 export type BulkForm = {

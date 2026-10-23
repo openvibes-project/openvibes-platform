@@ -141,8 +141,11 @@ row): their Hosts rows have no tick, and the confirmation counts only
 triageable open hosts.
 
 In the web, a ticked list row sends each of its covering advisories (`{advisory_id,
-open_only: true}`, plus `agent_id` with the Host chip); the server changes only their open pairs
-(the closed ones are not reached) and skips pairs with no fix. There is no Reopen
+open_only: true}`, plus `agent_id` with the Host chip) but `CPE:` matches; the server changes only their open pairs
+(the closed ones are not reached) and skips pairs with no fix. A row with no fix
+(`fixed.kind` none) or only `CPE:` advisories sends nothing and is left out of the
+confirmation's counts; a selection of only such rows offers no Set state, Assign
+or Add to case. There is no Reopen
 there. `BulkBar`'s `confirm` puts what a change reaches in the Set state
 dialog and makes Assign ask first too: "Changes up to N open hosts. Hosts
 without a fix yet are left as they are…" and the other CVEs those

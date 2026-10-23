@@ -10,7 +10,7 @@ vi.hoisted(() => {
 });
 
 import type { VulnList, VulnListRow } from "../../api/types";
-import { VulnListBody, apiQuery, bulkItems, vulnFilters, vulnKeyOf } from "./Vulnerabilities";
+import { VulnListBody, apiQuery, bulkItems, listBulk, vulnFilters, vulnKeyOf } from "./Vulnerabilities";
 import { bulkReach } from "./vulnerability/Reach";
 
 const DAY = 86_400_000;
@@ -115,11 +115,22 @@ describe("Vulnerabilities list", () => {
 
   it("sends each ticked row's covering advisories, on the Host chip's host when set (ruling 8)", () => {
     const rows = list().items.slice(0, 2);
-    expect(bulkItems(rows, null)).toEqual([{ advisory_id: "DSA-5891-1", open_only: true }, { advisory_id: "FEDORA-2026-1", open_only: true },
-      { advisory_id: "FEDORA-2026-2", open_only: true }]);
+    // The second row has no fix: nothing of it can be triaged, so it sends nothing.
+    expect(bulkItems(rows, null)).toEqual([{ advisory_id: "DSA-5891-1", open_only: true }, { advisory_id: "FEDORA-2026-1", open_only: true }]);
     // The Host chip names the host; open_only keeps its closed pairs out of reach.
     expect(bulkItems([row(), row({ key: "CVE-2026-10051" })], "agent-1"))
       .toEqual([{ advisory_id: "DSA-5891-1", agent_id: "agent-1", open_only: true }, { advisory_id: "FEDORA-2026-1", agent_id: "agent-1", open_only: true }]);
+  });
+
+  it("sends no version-range (CPE:) advisory, and offers nothing for rows that cannot change", () => {
+    expect(bulkItems([row({ advisories: ["CPE:CVE-2026-10037:openssl", "DSA-5891-1"] })], null)).toEqual([{ advisory_id: "DSA-5891-1", open_only: true }]);
+    const [fixable, nofix] = list().items;
+    if (!fixable || !nofix) throw new Error("fixture");
+    const cpe = row({ advisories: ["CPE:CVE-2026-10037:openssl"] });
+    // A mixed selection: only the fixable row is counted and confirmed.
+    expect(listBulk([fixable, nofix, cpe])).toMatchObject({ changes: 1, rows: [fixable], without: [] });
+    // Nothing that can change: no Set state, Assign or Add to case (they would send nothing).
+    expect(listBulk([nofix, cpe])).toMatchObject({ changes: 0, rows: [], without: ["state", "assign", "case"] });
   });
 
   it("counts the open hosts a change reaches and names the other CVEs those advisories cover", () => {

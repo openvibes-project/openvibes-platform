@@ -11,6 +11,7 @@ import type { VulnList, VulnListRow } from "../../api/types";
 import { vulnPath, vulnerabilitiesQuery } from "../../app/location";
 import { nav, useLocation, viewLink } from "../../app/nav";
 import { highest } from "../../panels/triage/bulk";
+import type { BulkAction } from "../../panels/triage/bulk";
 import { BulkBar } from "../../panels/triage/BulkBar";
 import { Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
 import { type Column, DataTable } from "../../ui/DataTable";
@@ -76,11 +77,22 @@ export function vulnFilters(list: VulnList | undefined, set: { host: string | nu
   ];
 }
 
-/** What a bulk action sends for these rows (ruling 8): each covering advisory, on the Host chip's host when set,
- * open pairs only (`open_only`, so naming the host does not reach its closed pairs). */
+const triaged = (advisory: string) => !advisory.startsWith("CPE:");
+/** Whether a bulk action can change a row: it has a fix and an advisory that is not a version-range match (ruling 17). */
+const canChange = (r: VulnListRow) => r.fixed.kind !== "none" && r.advisories.some(triaged);
+
+/** What a bulk action sends for these rows (ruling 8): each covering advisory with triage, on the Host chip's host
+ * when set, open pairs only (`open_only`, so naming the host does not reach its closed pairs). */
 export function bulkItems(rows: readonly VulnListRow[], host: string | null) {
   const on = host ? { agent_id: host } : {};
-  return [...new Set(rows.flatMap((r) => r.advisories))].map((advisory_id) => ({ advisory_id, ...on, open_only: true }));
+  return [...new Set(rows.filter(canChange).flatMap((r) => r.advisories.filter(triaged)))].map((advisory_id) => ({ advisory_id, ...on, open_only: true }));
+}
+
+/** The ticked rows a bulk action can change, how many, and the actions to leave out when none can. */
+export function listBulk(chosen: readonly VulnListRow[]) {
+  const rows = chosen.filter(canChange);
+  const without: BulkAction[] = rows.length === 0 ? ["state", "assign", "case"] : [];
+  return { rows, changes: rows.length, without };
 }
 
 const none = (text: string) => <span className="subtle" title={text}><span aria-hidden="true">—</span><span className="sr-only">{text}</span></span>;
@@ -168,6 +180,7 @@ function VulnListView() {
   const [picked, setSelected] = useSelection(apiQuery(params));
   const chosen = (data?.items ?? []).filter((r) => picked.has(r.key));
   const selected = new Set(chosen.map((r) => r.key));
+  const bulk = listBulk(chosen);
   // Views saved in this browser before saved views lived on the console.
   useEffect(() => { void importBrowserViews("vulnerabilities", "openvibes.v2.views./vulnerabilities", vulnerabilitiesQuery); }, []);
 
@@ -194,7 +207,7 @@ function VulnListView() {
         <VulnListBody list={data} hidden={hidden ?? []} offset={Math.max(0, Number(params.get(PAGE)) || 0)} selected={selected} onSelect={setSelected} />
       )}
       <BulkBar kind="vulnerabilities" noun={selected.size === 1 ? "vulnerability" : "vulnerabilities"} count={selected.size} onClear={() => setSelected(new Set())}
-        items={() => bulkItems(chosen, host)} confirm={<Reach rows={chosen} />}
+        items={() => bulkItems(chosen, host)} confirm={<Reach rows={bulk.rows} />} changes={bulk.changes} without={bulk.without}
         newCase={() => ({ title: `${chosen.length} vulnerabilities: ${chosen[0]?.key ?? ""} ${chosen[0]?.title ?? ""}`.trim(), severity: highest(chosen.map((r) => r.severity)) })} />
     </div>
   );
