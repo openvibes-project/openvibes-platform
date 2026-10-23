@@ -77,4 +77,20 @@ describe("demo vulnerability page", () => {
       expect(body.header.total).toBe((await firstRow("scoped_operator")).find((r) => r.key === inside)?.total);
     }
   });
+
+  it("marks a CVE exploited from EUVD alone (no due date) and names the advisory its title is from", async () => {
+    const server = createDemoServer();
+    const cve = server.data.advisories.flatMap((a) => a.cves).find((c) => c.cve_id === "CVE-2026-10000");
+    if (!cve) throw new Error("fixture");
+    const read = async () => (await (await server.handle("GET", "/api/v1/vulnerabilities/CVE-2026-10000/summary", undefined)).json()) as VulnSummaryPage;
+    expect((await read()).header.exploited).toBe(cve.kev || cve.euvd_exploited != null);
+    Object.assign(cve, { kev: false, euvd_exploited: new Date().toISOString() });
+    const body = await read();
+    expect(body.header.exploited).toBe(true);
+    expect(body.header.kev_due).toBeNull();
+    expect(body.header.advisory_id).toBe("FEDORA-2026-3a1f9c0d");
+    // The list agrees.
+    const list = (await (await server.handle("GET", "/api/v1/vulnerability-list?state=all&q=CVE-2026-10000", undefined)).json()) as VulnList;
+    expect(list.items.find((r) => r.key === "CVE-2026-10000")?.exploited).toBe(true);
+  });
 });

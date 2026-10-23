@@ -92,7 +92,9 @@ export function registerVulnSummaryRoutes(ctx: DemoContext & { cases: ReturnType
     const body: VulnSummaryPage = {
       key,
       header: {
-        title: leadPair?.title ?? key,
+        title: leadPair?.title ?? key, advisory_id: lead,
+        // Per CVE (KEV or EUVD), as the list row; a CVE-less advisory from its pairs.
+        exploited: facts ? facts.exploited : pairs.some((p) => p.exploited),
         severity: pairs.map((p) => p.severity).sort((a, b) => (severityRank[a] ?? 9) - (severityRank[b] ?? 9))[0] ?? "unrated",
         packages: names,
         fixed: fixed.length === 0 ? { kind: "none" } : fixed.length === 1 ? { kind: "one", version: fixed[0] ?? "" } : { kind: "several", count: fixed.length },

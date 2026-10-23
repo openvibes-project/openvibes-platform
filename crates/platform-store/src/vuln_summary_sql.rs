@@ -102,6 +102,7 @@ SELECT jsonb_build_object(
                          WHERE ac.advisory_id IN (SELECT advisory_id FROM pairs)
                            AND ac.cve_id IS DISTINCT FROM $4::text ORDER BY 1 LIMIT 100)),
   'enrichment', (SELECT jsonb_build_object('kev_due', x.kev_due::text, 'ransomware', x.kev_ransomware,
+                          'exploited', COALESCE(x.kev_added IS NOT NULL OR x.euvd_exploited, false),
                           'epss', x.epss, 'epss_percentile', x.epss_percentile, 'cvss', x.cvss_score,
                           'cvss_version', x.cvss_version, 'cvss_vector', x.cvss_vector, 'cwe', x.cwe,
                           'description', x.description)

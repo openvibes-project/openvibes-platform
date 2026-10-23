@@ -10,7 +10,8 @@ vi.hoisted(() => {
 });
 
 import type { VulnList, VulnListRow } from "../../api/types";
-import { VulnListBody, apiQuery, bulkItems, bulkReach, vulnFilters, vulnKeyOf } from "./Vulnerabilities";
+import { VulnListBody, apiQuery, bulkItems, vulnFilters, vulnKeyOf } from "./Vulnerabilities";
+import { bulkReach } from "./vulnerability/Reach";
 
 const DAY = 86_400_000;
 const day = (offset: number) => new Date(Date.now() + offset * DAY).toISOString().slice(0, 10);

@@ -51,7 +51,7 @@ const avatar = (name: string | null) => <span className={name ? "initials" : "in
  * `stateLabel` renames Set state ("Set state: 12 open"); `partial` says the
  * list holds only its first results; `inline` draws the actions for a
  * panel header (no count or Clear); `without` leaves out actions the panel
- * offers elsewhere; `confirm` says what a state change or an assignment
+ * offers elsewhere (any of state, assign, case, suppress); `confirm` says what a state change or an assignment
  * will reach, and makes the assignment ask first too. */
 export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople, confirm }: Readonly<{
   kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
@@ -106,14 +106,14 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
 
   const actions = (
     <>
-      <MenuButton label={stateLabel ?? "Set state"} icon="check" items={menu} disabled={busy}
-        onPick={(value) => setChoice(menu.find((m) => m.value === value)?.choice ?? null)} />
+      {!without.includes("state") && <MenuButton label={stateLabel ?? "Set state"} icon="check" items={menu} disabled={busy}
+        onPick={(value) => setChoice(menu.find((m) => m.value === value)?.choice ?? null)} />}
       {closed > 0 && !inline && (
         <button type="button" className="button" disabled={busy} onClick={reopen}><Icon name="refresh" size={15} />Reopen {closed.toLocaleString()} closed</button>
       )}
-      <Select button search label={inline && assignee !== undefined ? "Assignee" : `Assign ${noun}`} placeholder="Assign"
+      {!without.includes("assign") && <Select button search label={inline && assignee !== undefined ? "Assignee" : `Assign ${noun}`} placeholder="Assign"
         value={assignee === undefined ? "" : assignee ?? NOBODY} onChange={assign} disabled={busy}
-        options={assignOptions} unknownLabel={(v) => v} />
+        options={assignOptions} unknownLabel={(v) => v} />}
       {can("cases.write") && !without.includes("case") && (
         <button type="button" className={inline ? "button push" : "button"} disabled={busy} onClick={() => setChoice({ action: "case", label: "Add to case" })}>
           <Icon name="cases" size={15} />Add to case

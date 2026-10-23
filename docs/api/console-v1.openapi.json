@@ -19934,6 +19934,8 @@
         "description": "The header.",
         "required": [
           "title",
+          "advisory_id",
+          "exploited",
           "severity",
           "packages",
           "fixed",
@@ -19943,9 +19945,17 @@
           "ransomware"
         ],
         "properties": {
+          "advisory_id": {
+            "type": "string",
+            "description": "That advisory (the one with the most hosts when none has a title)."
+          },
           "assignee": {
             "$ref": "#/components/schemas/VulnAssigneeView",
             "description": "Who the open pairs are assigned to."
+          },
+          "exploited": {
+            "type": "boolean",
+            "description": "On CISA KEV or EUVD's exploited list."
           },
           "fixed": {
             "$ref": "#/components/schemas/VulnFixedView",

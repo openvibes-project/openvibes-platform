@@ -54,6 +54,10 @@ pub struct PageScopes<'a> {
 pub struct Header {
     /// The title of the covering advisory with the most pairs in reach.
     pub title: String,
+    /// That advisory (the one with the most pairs when none has a title).
+    pub advisory_id: String,
+    /// On CISA KEV or EUVD's exploited list (as the list's `exploited`).
+    pub exploited: bool,
     /// The worst severity among the covering advisories in reach.
     pub severity: VulnSeverity,
     /// Affected package names, sorted.
@@ -235,6 +239,7 @@ struct RawDist {
 #[derive(Deserialize, Default)]
 struct RawEnrichment {
     kev_due: Option<String>,
+    exploited: Option<bool>,
     ransomware: Option<bool>,
     epss: Option<f32>,
     epss_percentile: Option<f32>,
@@ -320,10 +325,17 @@ pub async fn vuln_summary(
         }
     }
     by_id.sort_by(|a, b| a.0.cmp(&b.0));
-    let title = by_id
+    // The most pairs, then the smallest id (as the list's title).
+    let most = |a: &&(String, i64, &RawAdvisory), b: &&(String, i64, &RawAdvisory)| {
+        a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0))
+    };
+    let titled = by_id
         .iter()
         .filter(|(_, _, a)| a.title.is_some())
-        .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0)))
+        .max_by(most);
+    let lead = titled.or_else(|| by_id.iter().max_by(most));
+    let advisory_id = lead.map(|(id, _, _)| id.clone()).unwrap_or_default();
+    let title = titled
         .and_then(|(_, _, a)| a.title.clone())
         .or_else(|| x.description.clone())
         .unwrap_or_else(|| t.key.clone());
@@ -426,6 +438,8 @@ pub async fn vuln_summary(
     Ok(Lookup::Found(VulnPageSummary {
         header: Header {
             title,
+            advisory_id,
+            exploited: x.exploited.unwrap_or(false),
             severity: worst,
             packages: names,
             fixed,

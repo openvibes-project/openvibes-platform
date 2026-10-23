@@ -19,6 +19,10 @@ use crate::{
 pub(crate) struct VulnHeaderView {
     /// Title of the covering advisory with the most hosts in reach.
     pub title: String,
+    /// That advisory (the one with the most hosts when none has a title).
+    pub advisory_id: String,
+    /// On CISA KEV or EUVD's exploited list.
+    pub exploited: bool,
     /// Worst severity among the covering advisories in reach.
     pub severity: String,
     /// Affected package names, sorted.
@@ -319,6 +323,8 @@ impl VulnerabilitySummaryView {
             key: s.key,
             header: VulnHeaderView {
                 title: h.title,
+                advisory_id: h.advisory_id,
+                exploited: h.exploited,
                 severity: h.severity.as_str().into(),
                 packages: h.packages,
                 fixed: h.fixed.into(),

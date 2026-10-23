@@ -105,6 +105,8 @@ test("the header's Set state confirms the open host count and names the other CV
 test("the due banner says when CISA wants it fixed", async ({ page }) => {
   await page.goto("/vulnerabilities/CVE-2026-20037");
   await expect(page.locator(".detail-page__banner")).toContainText(/Known exploited: CISA asks for remediation by .+ \(3 days ago\)\./);
+  await expect(page.locator(".person-page__head").getByText("Known exploited")).toBeVisible();
+  await expect(page.locator(".person-page__head").getByRole("link", { name: "CVE-2026-20037" })).toHaveAttribute("href", "https://nvd.nist.gov/vuln/detail/CVE-2026-20037");
   await page.goto("/vulnerabilities/CVE-2026-20042");
   await expect(page.locator(".detail-page__banner")).toContainText(/\(in 60 days\)\./);
   await page.goto("/vulnerabilities/CVE-2026-10000");

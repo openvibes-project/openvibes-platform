@@ -743,9 +743,9 @@ fixable rows, no-fix packages of the host's release (one pair per host and
 advisory while a fixable row is unfixed), and the CVE's CPE matches.
 Lower-confidence pairs count only when the key has no other, as the list
 shows them only under their signal. The summary is one statement returning
-JSON: header (title of the advisory with most pairs, worst severity,
-names, fixed versions, open and total, assignee of open pairs, KEV due and
-ransomware), tiles (fix: `All`, `Some(n, m)` distributions or `None`; EPSS,
+JSON: header (title and id of the advisory with most pairs, worst severity,
+names, fixed versions, open and total, assignee of open pairs, exploited
+as the list's (KEV or EUVD), KEV due and ransomware), tiles (fix: `All`, `Some(n, m)` distributions or `None`; EPSS,
 CVSS), what to do per distribution (OS id and version: its advisory with
 most pairs, that advisory's names and fixed versions, hosts not fixed,
 reboot), details (advisories, earliest issue date, confidence min/max with

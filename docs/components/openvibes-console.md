@@ -976,7 +976,8 @@ one CVE answers as that CVE, with `key` set to it so the web replaces the
 URL; an advisory with several answers 409 `advisory_has_several_cves`, each
 CVE in `field_errors` (field `key`, the CVE as `message`); a key missing,
 out of reach or of a CPE match answers 404 `vulnerability_not_found`. The
-summary carries `header`, `tiles` (`fix`: `kind` `all`, `some` with `n`
+summary carries `header` (with `advisory_id`, the covering advisory its
+`title` comes from, and `exploited`, KEV or EUVD as the list's), `tiles` (`fix`: `kind` `all`, `some` with `n`
 and `of`, or `none`), `what_to_do` per distribution, `details`, `history`
 (50 newest changes on hosts in reach), `related` (`alarms` only with
 `alarms.read`, `cases` only with `cases.read`, `same_package` counts),

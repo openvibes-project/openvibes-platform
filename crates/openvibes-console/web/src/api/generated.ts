@@ -6032,8 +6032,12 @@ export interface components {
         };
         /** @description The header. */
         VulnHeaderView: {
+            /** @description That advisory (the one with the most hosts when none has a title). */
+            advisory_id: string;
             /** @description Who the open pairs are assigned to. */
             assignee: components["schemas"]["VulnAssigneeView"];
+            /** @description On CISA KEV or EUVD's exploited list. */
+            exploited: boolean;
             /** @description The fixed version. */
             fixed: components["schemas"]["VulnFixedView"];
             /** @description KEV due date, `YYYY-MM-DD`. */

@@ -57,18 +57,24 @@ Show everything, without page changes for details:
     advisory's open hosts in reach, `{advisory_id, open_only: true}`; the
     confirmation says how many open hosts change, that hosts without a fix
     are left as they are, and names the other CVEs the advisories cover),
-    Ask about this (the covering advisory with the most hosts) and ⋯ (Export,
-    a CSV of its hosts; Copy link), each only with its `can` flag; CISA's due
-    date is a banner below it (`DetailPage`'s `banner`). Tiles: open on
+    Ask about this (`header.advisory_id`, the covering advisory with the
+    most hosts) and ⋯ (Export, a CSV of its hosts; Copy link), each only
+    with its `can` flag; Set state and Assign go when nothing is open. The
+    status shows Known exploited from `header.exploited` (KEV or EUVD); the
+    CVE id links to NVD; CISA's due date is a banner below the header
+    (`DetailPage`'s `banner`). Tiles: open on
     (to the Hosts card), fix available, EPSS, CVSS. Left: What to do (the
     fixed build per distribution, reboot), Details (advisories, published,
     confidence, vector, CWE, description), History. Right: Hosts
     (`?segment=` All, Open, Mitigated, Resolved, an unknown value read as
     All; `?offset=` paging by 50; ticks send `{agent_id, advisory_id}`
     pairs, Reopen included; a pair with no triage, no fix or a version-range
-    match, has no tick and says why) and Related (open alarms on its hosts,
-    cases, the same package's other CVEs linking to
-    `/vulnerabilities?package=NAME&state=all`). The summary resolves the
+    match, has no tick and says why; without `vulnerabilities.triage` but
+    with `can.add_to_case`, each such pair has its own Add to case, since the
+    bulk route needs triage even to add to a case) and Related (open alarms
+    on its hosts, cases, the same packages' other CVEs, each package linking
+    to `/vulnerabilities?package=NAME&state=all`). `Reach.tsx` holds the
+    confirmation text the list and the header share. The summary resolves the
     key: an advisory naming one CVE is replaced by that CVE's address, one
     naming several by `/vulnerabilities?advisory=ID&state=all`
     (`nav.replace`), so history keeps no dead entry. The advisory panel is

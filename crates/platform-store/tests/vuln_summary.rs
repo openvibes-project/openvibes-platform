@@ -412,3 +412,36 @@ async fn reaches_any_checks_the_hosts_against_a_scope() {
     );
     db.drop().await;
 }
+
+/// The header says whether the CVE is exploited as the list does (KEV or
+/// EUVD; EUVD alone has no due date), and names the advisory its title is from.
+#[tokio::test]
+async fn header_marks_euvd_only_exploitation_and_names_the_lead_advisory() {
+    let (db, c) = common::migrated().await;
+    let (web, _) = fixture(&c).await;
+    let web = AgentScope::AssetGroups(vec![web]);
+    let s = scopes(&web);
+    let a = found(&c, "CVE-A", &s).await;
+    assert!(a.header.exploited, "on KEV");
+    assert_eq!(
+        (a.header.advisory_id.as_str(), a.header.title.as_str()),
+        ("DEBIAN-A", "curl: flaw A"),
+        "two pairs beat FEDORA-1's one"
+    );
+    assert!(!found(&c, "CVE-EXP", &s).await.header.exploited);
+    c.execute(
+        "UPDATE cve_enrichment SET euvd_exploited = true WHERE cve_id = 'CVE-EXP'",
+        &[],
+    )
+    .await
+    .unwrap();
+    let exp = found(&c, "CVE-EXP", &s).await;
+    assert!(exp.header.exploited, "EUVD only");
+    assert_eq!(exp.header.kev_due, None);
+    assert_eq!(exp.header.advisory_id, "DEBIAN-EXP");
+    assert_eq!(
+        found(&c, "DSA-NOCVE", &s).await.header.advisory_id,
+        "DSA-NOCVE"
+    );
+    db.drop().await;
+}

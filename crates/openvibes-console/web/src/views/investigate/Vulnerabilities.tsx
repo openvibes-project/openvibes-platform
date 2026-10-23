@@ -23,6 +23,7 @@ import { SummaryLine } from "../../ui/list/SummaryLine";
 import { useSelection } from "../../ui/selection";
 import { useHostName } from "../lists/HostChip";
 import { Pager } from "./Hosts";
+import { Reach } from "./vulnerability/Reach";
 import { NoSuchVuln, VulnPage } from "./vulnerability/VulnPage";
 
 const PAGE_SIZE = 50;
@@ -80,26 +81,6 @@ export function vulnFilters(list: VulnList | undefined, set: { host: string | nu
 export function bulkItems(rows: readonly VulnListRow[], host: string | null) {
   const on = host ? { agent_id: host } : {};
   return [...new Set(rows.flatMap((r) => r.advisories))].map((advisory_id) => ({ advisory_id, ...on, open_only: true }));
-}
-
-type Reached = Pick<VulnListRow, "key" | "open" | "also_covers">;
-
-/** What a state change or an assignment on these rows (or a CVE's page) reaches: their open
- * pairs, and the other CVEs those advisories also cover (not ticked here). */
-export function bulkReach(rows: readonly Reached[]): { open: number; others: string[] } {
-  const ticked = new Set(rows.map((r) => r.key));
-  const others = [...new Set(rows.flatMap((r) => r.also_covers))].filter((k) => !ticked.has(k)).sort();
-  return { open: rows.reduce((n, r) => n + r.open, 0), others };
-}
-
-export function Reach({ rows }: { rows: readonly Reached[] }) {
-  const { open, others } = bulkReach(rows);
-  return (
-    <>
-      <p>Changes up to {plural(open, "open host")}. Hosts without a fix yet are left as they are, and so are mitigated, accepted and false-positive ones.</p>
-      {others.length > 0 && <p>The same advisories also cover {others.join(", ")}: those change on these hosts too.</p>}
-    </>
-  );
 }
 
 const none = (text: string) => <span className="subtle" title={text}><span aria-hidden="true">—</span><span className="sr-only">{text}</span></span>;
