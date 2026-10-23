@@ -76,6 +76,18 @@ impl Install {
     }
 }
 
+const PASTE_HELP: &str = "Paste the whole block, BEGIN to END lines included.";
+const FILE_HELP: &str = "The file's text, checked below.";
+
+/// A PEM private key block is in `text` (`BEGIN PRIVATE KEY`, `BEGIN EC
+/// PRIVATE KEY`…).
+fn holds_private_key(text: &str) -> bool {
+    text.lines().any(|l| {
+        let l = l.trim();
+        l.starts_with("-----BEGIN ") && l.ends_with("PRIVATE KEY-----")
+    })
+}
+
 /// An `-----END` line is there: Enter is "Use it" from now on.
 fn ended(text: &str) -> bool {
     text.lines().any(|l| l.trim_start().starts_with("-----END"))
@@ -91,17 +103,16 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, whic
     } else {
         Bar::edit("", "", &[])
     };
-    let title = match which {
-        Which::Signed => "Paste the signed certificate",
-        Which::Root => "Paste your CA's certificate",
+    let (title, help) = match (which, &install.paste_file) {
+        (Which::Signed, None) => ("Paste the signed certificate".to_owned(), PASTE_HELP),
+        (Which::Root, None) => ("Paste your CA's certificate".to_owned(), PASTE_HELP),
+        (Which::Signed, Some(file)) => (format!("The signed certificate, from {file}"), FILE_HELP),
+        (Which::Root, Some(file)) => (format!("Your CA's certificate, from {file}"), FILE_HELP),
     };
-    let area = frame::draw(frame, t, head, Some(title), &app.bar(bar));
+    let area = frame::draw(frame, t, head, Some(&title), &app.bar(bar));
     let mut lines = vec![
         Line::raw(""),
-        Line::styled(
-            "    Paste the whole block, BEGIN to END lines included.",
-            t.dim(),
-        ),
+        Line::styled(format!("    {help}"), t.dim()),
         Line::raw(""),
         Line::styled(format!("  ┌{}┐", "─".repeat(WIDE + 2)), t.dim()),
     ];
@@ -186,6 +197,7 @@ impl<H: Host> App<H> {
             }
             Key::Esc => {
                 self.install.paste = None;
+                self.install.paste_file = None;
                 self.nav.row = 0;
             }
             _ => {}
@@ -215,6 +227,7 @@ impl<H: Host> App<H> {
             }
         }
         self.install.paste = None;
+        self.install.paste_file = None;
         self.install.error = None;
         self.nav.pop();
         self.accept_both();
@@ -247,8 +260,20 @@ impl<H: Host> App<H> {
                     let read = std::fs::File::open(&path)
                         .and_then(|file| file.take(MAX as u64).read_to_end(&mut text));
                     match read {
+                        // A key never reaches the box, nor stays here.
+                        Ok(_) if holds_private_key(&String::from_utf8_lossy(&text)) => {
+                            drop(text);
+                            if let Some(browse) = &mut self.install.pick {
+                                browse.refused = Some(
+                                    "That file holds a private key: pick the certificate.".into(),
+                                );
+                            }
+                        }
                         Ok(_) => {
                             self.install.paste = Some(String::from_utf8_lossy(&text).into_owned());
+                            self.install.paste_file = path
+                                .file_name()
+                                .map(|name| name.to_string_lossy().into_owned());
                             self.install.pick = None;
                         }
                         Err(error) => {

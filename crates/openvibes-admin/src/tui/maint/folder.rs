@@ -213,6 +213,8 @@ pub struct Browse {
     pub show_files: bool,
     pub files: Vec<String>,
     pub error: Option<String>,
+    /// Why the file picked was refused, a sentence of its own.
+    pub refused: Option<String>,
 }
 
 impl Browse {
@@ -268,6 +270,7 @@ impl Browse {
             show_files,
             files,
             error,
+            refused: None,
         }
     }
     fn up(&self) -> Option<&Path> {
@@ -355,15 +358,16 @@ pub fn draw_browse<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, brow
         22,
     );
     app.nav.scroll.set(scroll);
-    lines.push(match &browse.error {
-        Some(error) => Line::styled(
+    lines.push(match (&browse.refused, &browse.error) {
+        (Some(why), _) => Line::styled(format!("    {why}"), t.red()),
+        (None, Some(error)) => Line::styled(
             format!("    {} cannot be read: {error}", browse.dir.display()),
             t.yellow(),
         ),
-        None if browse.show_files => {
+        _ if browse.show_files => {
             Line::styled("    Enter opens a folder or picks a file.", t.dim())
         }
-        None => Line::styled(
+        _ => Line::styled(
             "    Enter opens a folder; Use this folder picks the one shown.",
             t.dim(),
         ),

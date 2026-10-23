@@ -391,7 +391,10 @@ impl<H: Host> App<H> {
             (Key::Esc, _) => {
                 self.nav.pop();
             }
-            (Key::Enter, 0) => self.install.paste = Some(String::new()),
+            (Key::Enter, 0) => {
+                self.install.paste = Some(String::new());
+                self.install.paste_file = None;
+            }
             (Key::Enter, _) => {
                 let home = self.install.home.clone().unwrap_or_else(|| "/".into());
                 self.install.pick = Some(crate::tui::maint::folder::Browse::files_at(&home));

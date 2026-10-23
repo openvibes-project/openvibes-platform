@@ -17,6 +17,8 @@ pub(super) use run::draw;
 #[cfg(test)]
 mod certs_accept_tests;
 #[cfg(test)]
+mod certs_file_tests;
+#[cfg(test)]
 mod certs_tests;
 #[cfg(test)]
 mod quick_tests;
@@ -99,6 +101,9 @@ pub struct Install {
     pub root_pem: Option<String>,
     /// The paste box's text, while it is open.
     pub paste: Option<String>,
+    /// The name of the file the box's text was read from; `None` when
+    /// pasted.
+    pub paste_file: Option<String>,
     /// The file browser of "From a file on this host", while it is open.
     pub pick: Option<Browse>,
     /// Why the helper refused the request or the certificates (or why a
@@ -124,6 +129,7 @@ impl Install {
             cert: None,
             root_pem: None,
             paste: None,
+            paste_file: None,
             pick: None,
             error: None,
             port_check: None,
