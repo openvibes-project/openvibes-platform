@@ -127,7 +127,9 @@ addresses, and certificates once the host is set up.
   the careful CA step installs from them. The request can be signed on
   the host with `openvibes-admin ca sign-intermediate`. A copy of the
   request is also saved in the home folder (`~/openvibes-intermediate.csr`,
-  or `-2`, `-3`… beside another file): it is public; delete it when done.
+  or `-2`, `-3`… beside another file): it is public, and OpenVIBES
+  removes it once the CA is installed, or when the package is removed
+  unused.
   An abandoned request leaves its key in `/etc/openvibes/pki/request/`
   until a CA step or Remove everything; removing the `openvibes-admin`
   package on a host never installed (no `setup.toml`) deletes it too.
@@ -798,7 +800,12 @@ root check) it also writes the request there (0644, the operator's): a
 file already holding this request is taken as it is, another file is left
 alone and the copy goes beside it as `-2`, `-3`… (before the extension, up
 to `-100`; past that "That file already exists: PATH. Choose another
-name."). `ca-accept` checks the certificate against the stored request and
+name.") and records the path used in `/etc/openvibes/pki/request/copy`
+(0600). The CA step (careful or quick), before removing the request
+folder, removes that copy, and `dnf remove openvibes-admin` on a host
+never installed does the same in `%postun`; both only while it is still
+the request: a regular file, never a link, with the same bytes
+(`cmp -s`, hence `Requires(postun): diffutils`). `ca-accept` checks the certificate against the stored request and
 the root against the certificate (platform-pki `check_signed_request`,
 `check_root_signed`) and only then writes `intermediate.crt` and
 `root.crt` there. Both print line 1 `request` or `signed<TAB>ISSUER`,

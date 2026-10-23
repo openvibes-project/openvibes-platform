@@ -115,12 +115,29 @@ pub fn save_copy<R: Runner>(ctx: &Ctx<R>, base: &Path, csr: &str) -> Result<Stri
         std::iter::once(abs.to_owned()).chain((2..=COPY_NAMES).map(|n| format!("{stem}-{n}{ext}")));
     for path in names {
         if write_copy(ctx, &path, csr)? {
+            // Root-only, for remove_copy and `dnf remove` (the spec's
+            // %postun) to find it.
+            ctx.put(&file("copy"), path.as_bytes(), None, 0o600)?;
             return Ok(path);
         }
     }
     Err(format!(
         "That file already exists: {abs}. Choose another name."
     ))
+}
+
+/// Removes the operator's copy recorded by `save_copy` when it is still the
+/// request: a regular file (a link is never followed) with the same bytes.
+/// Best effort: residue is not worth failing the CA step for.
+pub fn remove_copy<R: Runner>(ctx: &Ctx<R>) {
+    let (Ok(path), Ok(csr)) = (ctx.read(&file("copy")), ctx.read(&file("intermediate.csr"))) else {
+        return;
+    };
+    let at = ctx.path(path.trim());
+    let regular = fs::symlink_metadata(&at).is_ok_and(|meta| meta.file_type().is_file());
+    if regular && fs::read(&at).is_ok_and(|bytes| bytes == csr.as_bytes()) {
+        let _ = fs::remove_file(&at);
+    }
 }
 
 /// Creates `abs` with the request, 0644, owned by the operator; false when

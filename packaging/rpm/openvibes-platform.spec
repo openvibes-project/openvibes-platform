@@ -84,6 +84,8 @@ Requires(pre):  shadow-utils procps-ng systemd
 # The administration TUI: operators act through sudo, polkit and curl;
 # Setup checks ports with ss (iproute).
 Requires:       sudo polkit curl iproute
+# %%postun compares the request's copy with cmp before removing it.
+Requires(postun): diffutils
 # admin ships the migrations: an older console refuses the new schema and
 # stays down, so dnf must upgrade the console with it (a fresh install
 # without a console is unaffected).
@@ -326,9 +328,17 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %systemd_postun openvibes-maintenance.timer
 # Removed from a host never installed (no setup.toml): an abandoned "Your
 # own CA" request goes too, its key included, and the folders it made when
-# left empty (never fails).
+# left empty (never fails). So does the operator's copy of the request
+# that ca-request recorded, only while it is still that request: a regular
+# file (a link is never followed) with the same bytes.
 if [ $1 -eq 0 ] && [ ! -e %{_sysconfdir}/openvibes/setup.toml ]; then
-    rm -rf %{_sysconfdir}/openvibes/pki/request
+    request=%{_sysconfdir}/openvibes/pki/request
+    copy=$(cat "$request/copy" 2>/dev/null) || :
+    if [ -n "$copy" ] && [ -f "$copy" ] && [ ! -L "$copy" ] &&
+        cmp -s "$copy" "$request/intermediate.csr"; then
+        rm -f "$copy"
+    fi
+    rm -rf "$request"
     rmdir %{_sysconfdir}/openvibes/pki %{_sysconfdir}/openvibes 2>/dev/null || :
 fi
 # A new or upgraded rules package is published after the whole transaction,

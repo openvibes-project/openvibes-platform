@@ -57,7 +57,8 @@ re-enrolling every agent.
 
 **Your own CA.** Choose what to install, step 3, makes a request for your
 CA to sign and also saves it as `~/openvibes-intermediate.csr` (or `-2`,
-`-3`… beside another file): it is public; delete it when done.
+`-3`… beside another file): it is public, and OpenVIBES removes it once
+the CA is installed, or when the package is removed unused.
 
 **The assistant (optional).** Tick the assistant under *Optional* in Choose what to install to have the
 console's chat assistant (a 2.7 GB download from Hugging Face; the

@@ -206,6 +206,62 @@ fn careful_installs_from_request_dir_and_removes_it() {
     );
 }
 
+/// The copy's path is kept in the request folder, root-only, so the CA
+/// step (and `dnf remove` of a host never installed) can remove it.
+#[test]
+fn the_copy_is_recorded_and_removed_once_the_ca_is_installed() {
+    let fake = Fake::new("request-copy-gone");
+    ca_commands(&fake);
+    std::fs::create_dir_all(fake.root.join("home/alice")).unwrap();
+    let mut plan = plan(&[Ingest]);
+    plan.ca = CaMode::Careful;
+    let ctx = fake.ctx(&plan);
+    let csr = csr_of(request(&ctx).unwrap());
+    let copy = save_copy(&ctx, std::path::Path::new("/home/alice/r.csr"), &csr).unwrap();
+    let record = format!("{REQUEST_DIR}/copy");
+    assert_eq!(fake.text(&record), copy);
+    assert_eq!(mode(&fake, &record), 0o600);
+    let (cert, root) = signed(&fake);
+    accept(&ctx, &cert, &root).unwrap();
+    let state = run_step(&ctx, Step::Ca);
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(!fake.root.join("home/alice/r.csr").exists(), "copy removed");
+}
+
+/// Only the request itself goes: a copy the operator changed, or a link
+/// put at its path, is left as it is (and the link is never followed).
+#[test]
+fn a_changed_copy_or_a_link_is_kept() {
+    for link in [false, true] {
+        let fake = Fake::new(if link {
+            "request-copy-link"
+        } else {
+            "request-copy-mine"
+        });
+        ca_commands(&fake);
+        std::fs::create_dir_all(fake.root.join("home/alice")).unwrap();
+        let plan = plan(&[Ingest]);
+        let ctx = fake.ctx(&plan);
+        let csr = csr_of(request(&ctx).unwrap());
+        let copy = save_copy(&ctx, std::path::Path::new("/home/alice/r.csr"), &csr).unwrap();
+        let at = fake.root.join(&copy[1..]);
+        let target = fake.root.join("home/alice/target.csr");
+        if link {
+            std::fs::write(&target, &csr).unwrap();
+            std::fs::remove_file(&at).unwrap();
+            std::os::unix::fs::symlink(&target, &at).unwrap();
+        } else {
+            std::fs::write(&at, "the operator's own notes").unwrap();
+        }
+        let state = run_step(&ctx, Step::Ca);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(at.symlink_metadata().is_ok(), "kept (link {link})");
+        if link {
+            assert_eq!(std::fs::read_to_string(&target).unwrap(), csr);
+        }
+    }
+}
+
 #[test]
 fn quick_removes_a_leftover_request_dir() {
     let fake = Fake::new("request-quick");

@@ -208,8 +208,10 @@ fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     Ok(StepState::Done(format!("{kept}; {}", root_summary(ctx)?)))
 }
 
-/// Removes the request made before install, if any (R2).
+/// Removes the request made before install, if any (R2), and the
+/// operator's copy of it.
 fn remove_request<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+    super::request::remove_copy(ctx);
     match fs::remove_dir_all(ctx.path(REQUEST_DIR)) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
             Err(format!("{REQUEST_DIR}: {error}"))

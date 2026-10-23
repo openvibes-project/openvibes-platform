@@ -59,12 +59,14 @@ agent_id() { in_c 'runuser -u openvibes-admin -- openvibes-admin agent list' | a
 fingerprint() { in_c 'sha256sum /etc/openvibes/pki/root.crt' | cut -d' ' -f1; }
 
 # 0. A "Your own CA" request abandoned before install: removing the admin
-#    package leaves no key behind (no setup.toml yet).
+#    package leaves no key behind (no setup.toml yet), nor the request's copy.
 in_c 'dnf -q -y install /test/new/openvibes-admin-*.rpm' >/dev/null 2>&1 || fail "install the new openvibes-admin"
-in_c 'openvibes-admin helper ca-request >/dev/null && test -s /etc/openvibes/pki/request/intermediate.key' ||
-    fail "ca-request made no key"
+in_c 'openvibes-admin helper ca-request --copy /root/openvibes-intermediate.csr >/dev/null &&
+      test -s /etc/openvibes/pki/request/intermediate.key && test -s /root/openvibes-intermediate.csr' ||
+    fail "ca-request made no key or no copy"
 in_c 'dnf -q -y remove openvibes-admin' >/dev/null 2>&1 || fail "remove openvibes-admin"
 in_c '! test -e /etc/openvibes/pki/request && ! test -e /etc/openvibes/pki' || fail "the abandoned request was left"
+in_c '! test -e /root/openvibes-intermediate.csr' || fail "the request's copy was left"
 ok "removing the admin tool before install removes an abandoned request"
 
 # 1. Install from the lower version, with the agent on this host.
