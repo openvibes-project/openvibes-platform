@@ -7,7 +7,7 @@ use ratatui::{Frame, text::Line, widgets::Paragraph};
 use super::{Stage, finished};
 use crate::tui::{
     app::{App, Key},
-    maint::failure,
+    maint::{failure, with_progress},
     nav::{Nav, Screen},
     run::{Kind, Run, is_model, label_states},
     ui::{bar::Bar, frame, logo::Header, steps},
@@ -108,10 +108,19 @@ fn draw_running<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: Op
         frame::draw(frame, t, head, Some("Installing"), &app.bar(Bar::act(&[])));
         return;
     };
-    let titles: Vec<String> = run.work.labels.iter().map(|(t, _)| t.clone()).collect();
     let running = run
         .current()
         .and_then(|c| run.work.labels.iter().position(|(_, r)| r.contains(&c)));
+    // The model's row says how much is downloaded while it runs.
+    let titles: Vec<String> = (run.work.labels.iter().enumerate())
+        .map(|(i, (title, calls))| {
+            if running == Some(i) && calls.clone().all(|c| is_model(&run.work.calls[c])) {
+                with_progress(&app.root, title)
+            } else {
+                title.clone()
+            }
+        })
+        .collect();
     // The assistant never stops the run: its row shows a note, not a cross.
     let states: Vec<Option<StepState>> = label_states(run)
         .into_iter()

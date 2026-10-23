@@ -139,6 +139,27 @@ fn installing_shows_current_row_and_step_count() {
     assert!(text.contains("Step 2 of 10: PostgreSQL"), "{text}");
 }
 
+/// The Assistant row says the download's size as Optional parts' does.
+#[test]
+fn installing_shows_the_assistant_download_progress() {
+    let mut app = fresh(vec![]);
+    app.install.assistant = true;
+    let mut run = crate::tui::run::Run::new(app.install.work(), std::time::Instant::now());
+    let last = run.states.len() - 1;
+    for state in &mut run.states[..last] {
+        *state = Some(StepState::Done(String::new()));
+    }
+    app.nav.screen = Screen::Install(Stage::Running);
+    app.run = Some(run);
+    let text = screen(&app);
+    assert!(text.contains("Assistant  about 2.7 GB"), "{text}");
+    let file = app.root.join("run/openvibes-admin/model-progress");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, "1200000000 2700000000\n").unwrap();
+    let text = screen(&app);
+    assert!(text.contains("Assistant  1.2 of 2.7 GB"), "{text}");
+}
+
 fn fail_at_postgres() -> App<SetupHost> {
     let mut app = fresh(vec![ok(), ok(), Ok("failed\tport in use".into())]);
     app.install.agent = false;

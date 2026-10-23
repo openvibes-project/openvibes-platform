@@ -25,6 +25,12 @@ pub(super) fn model_progress(root: &Path) -> Option<(u64, u64)> {
     Some((numbers.next()??, numbers.next()??))
 }
 
+/// `title` and the model download's progress: "Assistant  1.2 of 2.7 GB"
+/// (Installing's Assistant row, Optional parts' Download the model).
+pub(in crate::tui) fn with_progress(root: &Path, title: &str) -> String {
+    format!("{title}  {}", progress_text(model_progress(root)))
+}
+
 fn progress_text(progress: Option<(u64, u64)>) -> String {
     let gb = |n: u64| format!("{:.1}", n as f64 / 1e9);
     match progress {
@@ -82,12 +88,11 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run:
             other => other,
         })
         .collect();
-    let progress = model_progress(&app.root);
     let titles: Vec<String> = titles
         .into_iter()
         .map(|t| {
             if t == MODEL && running.is_some_and(|i| run.work.labels[i].0 == MODEL) {
-                format!("{t}  {}", progress_text(progress))
+                with_progress(&app.root, &t)
             } else {
                 t
             }

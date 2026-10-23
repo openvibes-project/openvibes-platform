@@ -42,6 +42,7 @@ mod update;
 #[cfg(test)]
 mod update_tests;
 
+pub(in crate::tui) use parts_run::with_progress;
 pub use update::half_done as update_half_done;
 
 use platform_host::Host;
