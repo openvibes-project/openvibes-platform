@@ -16,8 +16,9 @@ agent visibility in SQL for the supplied global or host-group scope.
   agent ID ascending. The state filter is allow-listed and stale state is
   computed against the supplied time.
 - `AgentScope::AssetGroups` matches an agent that is a member of any
-  authorized host group, decided by the SQL function `console_host_in_group`
-  (schema 53; see platform-store.md "Host groups"). Revoked and imported
+  authorized host group, read from the stored membership table
+  `console_host_group_membership` (schema 61, kept by triggers to the rule
+  of schema 53; see platform-store.md "Host groups"). Revoked and imported
   hosts are in no group. Empty group sets match no agents.
   `agent_summary_in_scope`, `agents_in_scope`, and `agent_in_scope` apply that
   predicate before aggregation, status filtering, cursor traversal, ordering,
@@ -111,7 +112,8 @@ it fails above 1 s. Through `console_host_in_group` per host and group the
 same query took 9.0 s; group membership is therefore evaluated in one pass
 with the inlinable `console_condition_holds_prepared`, and the version
 functions are single expressions so they inline (a call per host cost
-750 ms). Past this size, membership should be materialised in a table.
+750 ms). Since schema 61 membership is stored (`console_host_group_membership`,
+kept by triggers), so the list joins it instead of evaluating conditions.
 
 Alarms list (2026-10-20, same cluster, run under `nice -n 19`): the same
 20,000 agents and 20 groups with 200,000 agent alarms (ten per host over
@@ -125,3 +127,32 @@ each (10,956 matching). Run it with
 it fails above 1 s at full reach. The cost is the one materialised pass
 over the alarms in reach (it spills past `work_mem` at this size) and the
 group membership pass; the counts read a small cube, not the alarms.
+
+Vulnerabilities list (2026-10-22, same cluster, `nice -n 19`, default
+PostgreSQL settings, 2 parallel workers): the `docs/sizing.md` fleet
+generated in SQL (10,000 Debian 12 hosts with 389 packages, 3.2 M fixable
+pairs, 27.5 M pairs without a fix, 100 advisories with both a fixed and an
+unfixed package, 1 % of open pairs triaged, ten manual and five rule
+groups). The default list (open, by priority, 50 rows, every count and
+the summary) measured a median of 1.90 s over 5 runs (1.86–1.95 s) at full
+reach (4,382 rows, 10,000 hosts) and 1.53 s (1.47–1.55 s) scoped to two
+manual groups. Run it with
+`cargo test -p platform-store --test vuln_list_timing -- --ignored --nocapture`;
+it fails above 2 s. The cost is two parallel passes, the fixable pairs
+joined to the hosts in reach (about 0.85 s) and the per-host package
+fingerprints (about 0.45 s), plus about 0.3 s taking the 180,000 unfixed
+fixable pairs of the 100 mixed advisories out of the no-fix counts (0.45 s
+before their advisory ids were sorted bytewise). The margin is small: a
+fleet with more mixed advisories, or a busier host, can pass 2 s. Before
+the stored group membership the same list took 12.7 s.
+
+A vulnerability's page (2026-10-23, same fleet and settings, plus a
+kernel: `linux` on every host, CVE-2026-90000 fixable on all 10,000 and
+1,999 more `linux` advisories without a fix, so Related's same-package
+count walks 2,000 candidates): the summary (header, tiles, what to do,
+details, history, related with alarms and cases) measured a median of
+175 ms over 5 runs (173–199 ms) at full reach and 40 ms (40–42 ms) scoped
+to two manual groups. Run it with
+`cargo test -p platform-store --test vuln_list_timing records_cve_page_summary_latency_for_a_kernel_cve -- --ignored --nocapture`;
+it fails above 2 s. The same-package candidates need no narrowing to the
+releases in reach at this size.

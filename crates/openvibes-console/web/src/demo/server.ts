@@ -26,6 +26,8 @@ import { registerSessionRoutes } from "./routes/session";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerTriageRoutes } from "./routes/triage";
 import { registerVulnerabilityRoutes } from "./routes/vulnerabilities";
+import { registerVulnListRoute } from "./routes/vulnList";
+import { registerVulnSummaryRoutes } from "./routes/vulnSummary";
 import { createSuppressions } from "./suppressions";
 
 // Each area registers its routes on the shared context. A request takes the
@@ -45,6 +47,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   registerAlarmRoutes({ ...ctx, suppressions });
   registerAssetRoutes(ctx);
   registerVulnerabilityRoutes(ctx);
+  registerVulnListRoute(ctx);
   registerMetricRoutes(ctx);
   const roles = registerRoleRoutes(ctx);
   registerAccessRoutes({ ...ctx, roles });
@@ -54,6 +57,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   const cases = registerCaseRoutes(ctx);
   registerAlarmListRoute({ ...ctx, cases });
   registerAlarmSummaryRoute({ ...ctx, cases });
+  registerVulnSummaryRoutes({ ...ctx, cases });
   registerTriageRoutes({ ...ctx, cases, suppressions });
 
   return {

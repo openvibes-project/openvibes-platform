@@ -10,8 +10,9 @@ Design: [2026-09-28-console-v2-design.md](../superpowers/specs/2026-09-28-consol
 
 Show everything, without page changes for details:
 
-- **Inspector:** any object (agent, finding, advisory, token, rule set,
-  service account, audit event, user) opens in a panel beside the list.
+- **Inspector:** any object (finding, package, port, token, rule set,
+  service account, audit event, user) opens in a panel beside the list. A
+  host, an alarm and a vulnerability are whole pages instead.
 - **Panel stack:** links inside a panel stack further panels, with a
   breadcrumb. The stack is in the URL (`?open=kind:id`, repeated), so
   Back, reload and shared links restore it.
@@ -30,7 +31,8 @@ Show everything, without page changes for details:
   POSTs `/auth/v1/logout` with the session CSRF token.
 - **Views** (the same set v1 had):
   - findings with bulk triage and a 14-day trend of reporting hosts;
-  - vulnerabilities by advisory, with CVEs, EPSS and KEV;
+  - vulnerabilities, one row per CVE, and a vulnerability's page
+    (`/vulnerabilities/{key}`, roles 5b): [console-vulnerabilities.md](console-vulnerabilities.md);
   - agents, with labels, host groups and revocation;
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
@@ -65,13 +67,13 @@ Show everything, without page changes for details:
   why the rest was skipped. A selected finding or advisory row acts on its
   hosts in scope; a close leaves the hosts already closed alone, a reopen
   the ones already open. Rows in an open case show
-  its badge (`panels/cases/CaseBadge.tsx`). Vulnerabilities count open hosts
-  and hide advisories triaged everywhere unless Include resolved is on.
-- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding and an advisory
-  share one layout (an alarm is a page, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
-  actions line (a finding or advisory: "Set state: N open", acting on its
+  its badge (`panels/cases/CaseBadge.tsx`). The Vulnerabilities list's bulk bar is in
+  [console-vulnerabilities.md](console-vulnerabilities.md#bulk).
+- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding's
+  layout (an alarm and a vulnerability are pages, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
+  actions line (a finding: "Set state: N open", acting on its
   open hosts), a short summary, then the console's underline tabs
-  (`Tabs`). Findings and advisories: Hosts (a `DataTable` with a state
+  (`Tabs`). Findings: Hosts (a `DataTable` with a state
   filter, selection and the bulk bar, never cut off), Evidence, History.
   The Hosts table shows each
   host's assignee and, for accepted risk, the date it is accepted until
@@ -223,7 +225,8 @@ used.
 ### Filter catalogue
 
 `views/lists/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
-Hosts, Audit log): each filter is a flag (one fixed value) or a choice (a
+Hosts, Audit log; the Vulnerabilities entry serves the List tile, which reads
+`GET /v1/vulnerabilities`, while the view has its own FilterBar): each filter is a flag (one fixed value) or a choice (a
 list of values), and each parameter holds one value. The list views build
 their chip bars from it and the List widget editor offers the same filters,
 so the two cannot drift. Runtime extras (compliance rule sets, counts) stay
@@ -434,7 +437,8 @@ for the pages not yet moved; its saved views stay in the browser.
   "Delete the view “…”?" before deleting (Escape cancels). After a save or
   delete, focus goes to the saved views, or to the search when none is left.
 - **Columns** (`ui/list/ColumnsMenu.tsx`): a disclosure button with a
-  checkbox per column; the first (Host) is checked and disabled, and all are
+  checkbox per column; the first (Host) and any marked `fixed` (the
+  Vulnerabilities Advisory) are checked and disabled, and all are
   disabled until the person's columns have loaded. Each change is a
   `PUT /api/v1/list-columns/{page}` carrying the full set after every
   toggle so far (`columnSaver` queues them, so quick toggles never undo
@@ -456,7 +460,7 @@ for the pages not yet moved; its saved views stay in the browser.
   that is always present, so a change is announced.
 - **DetailPage** (`ui/detail/DetailPage.tsx`): optional crumb; header with
   icon, title, status, a facts line (joined with " · ", empty facts left
-  out) and actions; an error callout (`role="alert"`); tiles; a narrow left
+  out) and actions; a banner (a vulnerability's due date); an error callout (`role="alert"`); tiles; a narrow left
   and a wide right column (one column fills the width). An empty slot draws
   nothing. `Card` (a card of either column) lives here too; the person,
   group and settings pages use it. **Tile**
@@ -725,6 +729,14 @@ for the pages not yet moved; its saved views stay in the browser.
   more" became paging (Previous and Next).
   Alarm views saved in the browser are moved to the person's account the
   first time they open Alarms; see [console-alarms.md](console-alarms.md).
+- **Roles step 5b (Vulnerabilities):** one list row and one page per CVE.
+  The advisory panel became the vulnerability's page
+  `/vulnerabilities/{key}`; old links (`?open=advisory:ID`) redirect to it,
+  or to the list filtered by the advisory when it names several CVEs.
+  Popped-out advisory windows are dropped. Old list URLs and saved views
+  keep their filters (`exploited`, `reboot`, `nofix`, `lowconf` become
+  `signal`), and views saved in the browser move to the person's account;
+  see [console-vulnerabilities.md](console-vulnerabilities.md#upgrading).
 
 ## Configuration
 

@@ -105,6 +105,21 @@ pub mod tokens;
 pub mod triage_history;
 /// Agent version order, the Rust twin of `console_version_older` (schema 57).
 pub mod version_order;
+/// Its Hosts table.
+mod vuln_hosts;
+/// The Vulnerabilities list: one row per CVE, filters, per-value counts,
+/// summary and paging in scope.
+pub mod vuln_list;
+/// Its no-fix pairs, through host profiles.
+mod vuln_list_profiles;
+/// The SQL of the Vulnerabilities list's one statement.
+mod vuln_list_sql;
+/// Its Related card.
+mod vuln_related;
+/// A vulnerability's page: its summary and Hosts table, in scope.
+pub mod vuln_summary;
+/// The SQL of a vulnerability's page.
+mod vuln_summary_sql;
 pub mod vulnerability_triage;
 /// Advisories, vulnerabilities, and feed state (vulnerability management).
 pub mod vulns;

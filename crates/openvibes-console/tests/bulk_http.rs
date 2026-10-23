@@ -537,5 +537,63 @@ async fn items_go_into_one_open_case_and_vulnerabilities_triage_per_host() {
         states.contains(&"open") && states.contains(&"false_positive"),
         "{states:?}"
     );
+    // A CVE row's bulk close changes the open host only; the false positive
+    // is not reached (closed pairs are not part of the action).
+    let close = json!({"action": "state", "state": "mitigated", "note": "patched", "items": [{"advisory_id": "FEDORA-1"}]});
+    let (status, body, _) = call(
+        &router,
+        "POST",
+        "/api/v1/vulnerabilities/bulk",
+        &cookie,
+        &csrf,
+        Some(close),
+        None,
+    )
+    .await;
+    assert_eq!(
+        (status, body["changed"].as_u64()),
+        (StatusCode::OK, Some(1)),
+        "{body}"
+    );
+    assert_eq!(body["skipped"].as_array().unwrap().len(), 0, "{body}");
+    // A list row on the Host chip names its host and says `open_only`: web's
+    // mitigated FEDORA-2 pair is left alone, as on every host.
+    let row = json!({"action": "state", "state": "false_positive", "note": "lab",
+        "items": [{"advisory_id": "FEDORA-2", "agent_id": WEB, "open_only": true}]});
+    let (status, body, _) = call(
+        &router,
+        "POST",
+        "/api/v1/vulnerabilities/bulk",
+        &cookie,
+        &csrf,
+        Some(row),
+        None,
+    )
+    .await;
+    assert_eq!(
+        (status, body["changed"].as_u64()),
+        (StatusCode::OK, Some(0)),
+        "{body}"
+    );
+    assert_eq!(
+        body["skipped"][0]["id"],
+        format!("{WEB}/FEDORA-2"),
+        "{body}"
+    );
+    assert_eq!(body["skipped"][0]["reason"], "not open", "{body}");
+    // `open_only` belongs to vulnerability items only.
+    let wrong =
+        json!({"action": "assign", "assignee": null, "items": [{"id": "1", "open_only": true}]});
+    let (status, _, _) = call(
+        &router,
+        "POST",
+        "/api/v1/alarms/bulk",
+        &cookie,
+        &csrf,
+        Some(wrong),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
     db.drop().await;
 }

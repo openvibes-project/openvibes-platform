@@ -14,6 +14,11 @@ describe("filters", () => {
     expect(q).toBe("exploited=true&severity=critical&bad=1");
     expect(queryOf(chipsOf("/vulnerabilities", q))).toBe(q);
   });
+  it("keeps the old Vulnerabilities flags for a List tile: a tile's exploited=true is a proper chip, and state=all stays", () => {
+    expect(chipsOf("/vulnerabilities", "exploited=true")[0]).toMatchObject({ known: true, label: "Known exploited" });
+    expect(LIST_FILTERS["/vulnerabilities"].map((f) => f.param)).toEqual(["state", "exploited", "reboot", "nofix", "lowconf", "severity"]);
+    expect(dropUnsupported("/vulnerabilities", "state=all&nofix=true")).toBe("state=all&nofix=true");
+  });
   it("treats a value outside the catalogue as unknown", () => {
     expect(chipsOf("/agents", "status=gone")[0]).toMatchObject({ known: false, label: "status=gone" });
   });
@@ -41,8 +46,9 @@ describe("filters", () => {
     expect(setFilter("/compliance", "severity=low&bad=1", "severity", "high")).toBe("severity=high&bad=1");
     expect(setFilter("/compliance", "", "state", "all")).toBe("state=all");
   });
+  // The Vulnerabilities list builds its chips from the server's counts (roles 5b); the catalogue serves its dashboard widget.
   it.each([
-    ["/compliance", "investigate/Findings"], ["/vulnerabilities", "investigate/Vulnerabilities"], ["/audit", "admin/Audit"],
+    ["/compliance", "investigate/Findings"], ["/audit", "admin/Audit"],
   ] as const)("%s view builds its chips from the catalogue", (view, file) => {
     expect(LIST_FILTERS[view].length).toBeGreaterThan(0);
     expect(readFileSync(new URL(`../${file}.tsx`, import.meta.url), "utf8")).toContain(`"${view}"`);

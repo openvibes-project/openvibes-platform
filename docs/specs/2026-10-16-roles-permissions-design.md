@@ -775,6 +775,97 @@ These fill gaps in the Alarms list and an alarm's page.
 
     The table is `alarm_hourly_starts (alarm_row_id bigint, hour timestamptz, starts int, PK (alarm_row_id, hour))`. It is not partitioned, and maintenance deletes hours older than 7 days.
 
+### Plan rulings, 2026-10-22 (step 5b)
+
+These fill gaps in the Vulnerabilities list and a vulnerability's page.
+
+**User decisions (2026-10-22):**
+
+1. **One row and one page per CVE,** as in the mockups.
+   - An advisory without a CVE appears under its own ID.
+   - Triage is still saved per host and advisory. Setting a CVE's state on a host changes that host's covering advisory. When that advisory also covers other CVEs, the page and the confirmation say which ones.
+2. **Set state and Assign on a list row, and the page header's Set state, change the open hosts in reach.**
+   - "In reach" means hosts where the viewer holds `vulnerabilities.triage`.
+   - A confirmation says how many hosts will change.
+   - Mitigated, accepted, false-positive and fixed pairs are left as they are.
+   - To change only some hosts, tick them in the page's Hosts table.
+
+**Rulings:**
+
+1. **A new list route, `GET /v1/vulnerability-list`.** `GET /v1/vulnerabilities` stays as it is.
+2. **What a row is.**
+   - **The key** is the CVE ID, or the advisory ID for an advisory without CVEs.
+   - **Pairs under a row:** every host and advisory pair in reach whose advisory names that CVE. This includes fixable pairs (`vulnerabilities`), pairs with no fix (`version_vulnerabilities` through `host_packages`), and, with the Lower confidence signal only, CPE matches (`cpe_findings`) for that CVE.
+   - **Severity** is the worst severity among the covering advisories in reach.
+   - **Title** is the title of the covering advisory with the most hosts in reach (ties by advisory ID).
+   - **Exploited** means KEV or EUVD. **Due** is the earliest `kev_due`. **CVSS** and **EPSS** come from `cve_enrichment` for that CVE.
+   - **Package** shows the first affected package name, plus "+n" for more. Under it:
+     - "fixed in V" when every pair with a fix names the same fixed version;
+     - "fixed in n versions" when the fixed versions differ;
+     - "no fix yet" when no pair has a fix.
+   - **Hosts** shows "n open of m". n is the open pairs (triage state open, and not fixed); m is every pair, whatever its state.
+   - **Assignee** shows One when exactly one person is assigned among the open pairs (others may be unassigned); Several(n) for n people; None ("—") when no open pair is assigned. (Amended 2026-10-23; it first said "when every open pair has the same assignee".)
+3. **Filter values** (one value per filter; all filters combine):
+   - **State:**
+     - `open` (the default), `mitigated`, `accepted_risk`, `false_positive`, `resolved` (fixed by an update) and `all`;
+     - a row matches when at least one of its pairs is in that state.
+   - **Severity:** critical, important, moderate, low and unrated, shown as today's labels.
+   - **Signals:**
+     - `exploited`;
+     - `due30`: `kev_due` within 30 days of today, overdue included;
+     - `nofix`;
+     - `reboot`;
+     - `lowconf`: only rows with a lower-confidence match (below today's `MIN_CONFIDENCE`), showing those matches. Without it, lower-confidence matches are left out, as today.
+   - **Package:** the 50 package names with the most rows in reach, plus the chosen one.
+   - **Group, Assignee and Host:** as on Alarms (5a rulings 2 and 3).
+   - **Advisory** (`advisory=ID`): a removable chip, used by redirects (ruling 7). It keeps the CVEs that advisory names.
+4. **Search** covers the CVE ID, advisory IDs, title and package names.
+5. **Paging is by offset:** `offset` 0..=100000, `limit` 1..=100, default 50.
+   - **Sorts:** priority (the default, today's rank: exploited, EPSS percentile, severity, CVSS), severity, CVSS, EPSS, hosts open and due.
+   - Ties are broken by key.
+6. **The summary line:** "N open on N hosts · N known exploited · N with a due date · N without a fix · N unassigned". The counts are rows, except hosts.
+7. **Old links.** The `advisory` panel kind and `AdvisoryPanel.tsx` are removed. `nav.open({kind:"advisory", id})` and `?open=advisory:ID` go to `/vulnerabilities/ID`, and the summary route resolves the key:
+   - **a CVE ID:** that page;
+   - **an advisory with one CVE:** that CVE's page, with `key` set to the CVE, and the web replaces the URL;
+   - **an advisory with no CVE:** its own page;
+   - **an advisory with several CVEs:** 409 `advisory_has_several_cves`, and the web replaces the URL with `/vulnerabilities?advisory=ID&state=all`.
+
+   Old list URLs map onto the new filters: `state=all`, `exploited=true` → `signal=exploited`, `reboot=true` → `signal=reboot`, `nofix=true` → `signal=nofix` and `lowconf=true` → `signal=lowconf`. When an old URL sets several flags, the first in that order wins.
+
+   Views saved in the browser under `openvibes.v2.views./vulnerabilities` are imported once, as on Alarms.
+8. **Bulk on rows** (user decision 2):
+   - Each ticked row sends `{advisory_id}` items, one per covering advisory in reach, plus `agent_id` when the Host chip is set.
+   - `set_state` and `assign` with advisory-wide items change only open pairs. Closed pairs are left alone and not reported one by one; an item with no open pair left is skipped with the reason "not open".
+   - Refined in the final review: closed pairs are left out before the 10,000-item cap (with an advisory-wide or `open_only` item, not a reopen), so they do not count toward it.
+   - Reopen is not offered on list rows. It stays on the page's Hosts table, which sends `{agent_id, advisory_id}` pairs.
+   - The confirmation shows the sum of the rows' open-in-reach counts, and names the other CVEs that the changed advisories also cover.
+9. **Hosts card segments:**
+   - **Open:** triage open and not fixed;
+   - **Mitigated:** triage mitigated;
+   - **Resolved:** fixed by an update, accepted risk or false positive;
+   - **All:** every pair.
+
+   The route is `GET /v1/vulnerabilities/{key}/hosts?segment=&offset=&limit=`. It returns rows (host, OS and address, installed version, state, assignee, covering advisory, triage version) and the four segment counts.
+
+   Refined in the final review: a pair fixed by an update has a null triage version (no tick; bulk never expands it), and each row also carries `reboot_needed` and `first_seen`, shown with the pair's open cases as the old panel did.
+10. **Ask about this** sends the assistant the covering advisory with the most hosts in reach (`{kind:"advisory"}` as today), so the assistant does not change. It is shown with `assistant.use`.
+11. **⋯** holds Export (a CSV of the CVE's hosts in reach, with `vulnerabilities.export`) and Copy link.
+12. **Related:**
+    - **Alarms:** open alarms on the affected hosts in reach, the top 3 and the total, shown only with `alarms.read`.
+    - **Cases:** cases holding any pair of this CVE, shown only with `cases.read`.
+    - **Same package:** other CVEs in reach on the same package names, as a count with their severities, linking to `/vulnerabilities?package=NAME`.
+13. **Performance:**
+    - The list must answer within 2 s at full reach on the `docs/sizing.md` fleet: 10,000 Debian hosts, 3.2 M fixable pairs, plus the pairs with no fix. Record the scoped time as well.
+    - Met: 1.90 s at full reach and 1.53 s scoped (`console-read.md`). Migration 0061 holds the stored group membership (ruling 15), and the index the timing test needed, `vulnerabilities (advisory_id)`, is migration 0062 (this ruling first said 0061).
+14. **List rows name the other CVEs.** Each list row also carries `also_covers`: the other CVEs named by its covering advisories in reach, at most 10, so the bulk confirmation can name them.
+15. **Stored group membership** (user decision, 2026-10-22). Computing membership per request kept the list at 12.7 s, so migration 0061 stores it in `console_host_group_membership`, kept by triggers on hosts, groups, their members and conditions. Its lock is taken before the auto-group lock, so the two never deadlock.
+16. **`open_only` bulk items.** A vulnerability bulk item may carry `open_only: true`. List rows always send it, so a close or assign stays open-only even with the Host chip set (`{agent_id, advisory_id}`). A reopen ignores it, and the page's Hosts table sends pairs without it. Without this flag, ruling 8 would break user decision 2 whenever the Host chip is set.
+17. **Pairs with no fix stay untriageable,** as before: triage needs a `vulnerabilities` row. Their rows and hosts say they can't be triaged until a fix is known. Hosts-table rows for them have no checkbox, and the bulk confirmation counts only triageable open hosts. Making them triageable is a separate redesign.
+18. **Add to case without triage.** The bulk route needs `vulnerabilities.triage` for every action, Add to case included. A person with `cases.write` but no triage gets an Add to case button on each triageable Hosts row of the page, as the old panel had, and no header or bulk case action.
+19. **Lower-confidence pairs on the page** count only when the CVE has no other pairs, to match the list, which shows them only under their signal.
+20. **History** shows state changes and notes only. `vulnerability_triage_history` does not store assignee changes, and adding them is a schema change outside this step.
+21. **What to do counts every pair that is not fixed** per distribution, mitigated, accepted and false-positive ones included: they still need the fixed build.
+
 ## 11. Dashboards
 
 - **Storage:** `console_dashboards.shared_role_id` becomes a visibility:

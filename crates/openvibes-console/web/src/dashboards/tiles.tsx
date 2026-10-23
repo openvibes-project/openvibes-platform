@@ -10,7 +10,7 @@ import { CountError, Unavailable } from "./CountError";
 import { LineChart } from "../ui/LineChart";
 import { useListRows } from "../views/lists/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
-import { int, list, parseListConfig, str } from "./config";
+import { int, list, listMoreLabel, parseListConfig, str } from "./config";
 import { useHistory } from "./history";
 import { METRICS, METRIC_KEYS, delta, deltaSince, partText, scanNotSetUp, permitted, trendDays, type Metric } from "./metrics";
 import type { WidgetProps } from "./widgets";
@@ -162,7 +162,7 @@ function ListTileBody({ view, params, limit }: NonNullable<ReturnType<typeof par
           ))}
         </ul>
       )}
-      <button type="button" className="link-button tile-more" onClick={() => nav.view(view, Object.fromEntries(params))}>Open list ({count(total)})</button>
+      <button type="button" className="link-button tile-more" onClick={() => nav.view(view, Object.fromEntries(params))}>{listMoreLabel(view, count(total))}</button>
     </div>
   );
 }

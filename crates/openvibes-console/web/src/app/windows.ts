@@ -1,8 +1,8 @@
 // Floating windows: panels popped out of the inspector, to compare two hosts
-// or keep an advisory open while browsing. Positions are kept per viewer.
+// or keep a finding open while browsing. Positions are kept per viewer.
 import { useSyncExternalStore } from "react";
 
-import { type PanelRef, samePanel } from "./location";
+import { type PanelRef, pagePath, samePanel } from "./location";
 import { nav } from "./nav";
 
 export type Win = PanelRef & { x: number; y: number; w: number; h: number; z: number; min: boolean };
@@ -15,8 +15,8 @@ let top = Math.max(10, ...windows.map((w) => w.z));
 function read(): Win[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
-    // A host or alarm window from before their pages (approved screens 17 and 30) is dropped: they are pages now.
-    return Array.isArray(parsed) ? parsed.filter((w): w is Win => typeof w?.kind === "string" && w.kind !== "agent" && w.kind !== "alarm" && typeof w?.id === "string" && typeof w?.x === "number").slice(0, 12) : [];
+    // A host, alarm or advisory window from before their pages (approved screens 17, 30 and 26) is dropped: they are pages now.
+    return Array.isArray(parsed) ? parsed.filter((w): w is Win => typeof w?.kind === "string" && typeof w?.id === "string" && pagePath(w as PanelRef) === null && typeof w?.x === "number").slice(0, 12) : [];
   } catch {
     return [];
   }

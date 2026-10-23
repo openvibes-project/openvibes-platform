@@ -939,6 +939,60 @@ columns accept the page `alarms` (hideable: `alarm`, `host`, `count`, `seen`,
 `state`, `assignee`, `case`; severity is the first column and never hidden).
 Tests: `tests/alarm_list_http.rs`; demo: `web/src/demo/routes/alarmList.ts`.
 
+## Vulnerabilities list
+
+`GET /api/v1/vulnerability-list` (needs `vulnerabilities.read`; session or
+bearer; roles 5b) pages the Vulnerabilities list, one row per CVE (an
+advisory without CVEs is its own row), over the store's `vuln_list`.
+`GET /api/v1/vulnerabilities` stays as it is. Filters (one value each,
+ANDed): `q` (CVE, advisory id, title or package), `state` (`open` by
+default, `mitigated`, `accepted_risk`, `false_positive`, `resolved` or
+`all`), `severity` (`critical`, `important`, `moderate`, `low`,
+`unrated`), `signal` (`exploited`, `due30`, `nofix`, `reboot`, `lowconf`),
+`package`, `group` (UUID), `host` (agent id), `advisory` and `assignee`
+(`me` is the session user's id, `unassigned` or a user UUID). `sort` is
+`priority` (default), `severity`, `cvss`, `epss`, `open` or `due`; `dir` is
+`desc` by default; `offset` 0..=100000 and `limit` 1..=100 (default 50).
+An invalid value or an unknown parameter (the old list's `exploited=true`
+and the like, which the web maps) is 400 `invalid_query` naming the
+parameter. Rows carry `fixed` (`kind` `one` with `version`, `several` with
+`count`, or `none`), `assignee` (`none`, `one` with `id` and `name`,
+`several` with `count`), `open` and `total` pairs, `also_covers` and
+`advisories`. `counts` hold every filter's values with the other filters
+applied; `summary` counts rows with an open pair under every filter but
+state (`hosts` counts hosts). Saved views and hidden columns accept the
+page `vulnerabilities` (hideable: `package`, `cvss`, `epss`, `hosts`, `due`,
+`assignee`; Severity and Advisory are never hidden).
+Tests: `tests/vuln_list_http.rs`; demo: `web/src/demo/routes/vulnList.ts`.
+
+## A vulnerability's page
+
+`GET /api/v1/vulnerabilities/{key}/summary` and
+`GET /api/v1/vulnerabilities/{key}/hosts` (need `vulnerabilities.read`;
+session or bearer; roles 5b) answer a vulnerability's page over the store's
+`vuln_summary` and `vuln_hosts`. The key is a CVE or an advisory id (at
+most 256 characters, no control character; otherwise 404). An advisory with
+one CVE answers as that CVE, with `key` set to it so the web replaces the
+URL; an advisory with several answers 409 `advisory_has_several_cves`, each
+CVE in `field_errors` (field `key`, the CVE as `message`); a key missing,
+out of reach or of a CPE match answers 404 `vulnerability_not_found`. The
+summary carries `header` (with `advisory_id`, the covering advisory its
+`title` comes from, and `exploited`, KEV or EUVD as the list's), `tiles` (`fix`: `kind` `all`, `some` with `n`
+and `of`, or `none`), `what_to_do` per distribution, `details`, `history`
+(50 newest changes on hosts in reach), `related` (`alarms` only with
+`alarms.read`, `cases` only with `cases.read`, `same_package` counts),
+`also_covers` and `can`: `triage` and `assign` (`vulnerabilities.triage`),
+`add_to_case` (`cases.write` and `cases.read`, as the bulk route), `ask`
+(`assistant.use`, with the assistant on) and `export`
+(`vulnerabilities.export`), each true when the permission reaches a host
+with a pair in reach. The Hosts route takes `segment` (`all` by default,
+`open`, `mitigated`, `resolved`), `offset` 0..=100000 and `limit` 1..=100
+(default 50); a bad or unknown parameter is 400 `invalid_query` naming it.
+Rows: `agent_id`, `hostname`, `os` (the Hosts list's distribution name),
+`address`, `installed`, `state`, `assignee`, `advisory_id`,
+`triage_version`; `segments` counts each. Tests: `tests/vuln_page_http.rs`;
+demo: `web/src/demo/routes/vulnSummary.ts`.
+
 ## Host page summary
 
 `GET /api/v1/hosts/{agent_id}/summary` (needs `hosts.read`; session or

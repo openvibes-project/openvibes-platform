@@ -4,6 +4,7 @@ import catalogue from "../api/permissions.json";
 import templates from "../api/templates.json";
 import type { StoredGroup } from "./hostGroups";
 import { ADMIN_ROLE, type StoredReach } from "./share";
+import { seedVulnerabilities } from "./vulnSeed";
 import type {
   Agent, AuditEvent, Certificate, Cve, EnrollmentToken, Finding as FindingView,
   RuleBundle, RuleSet, ServiceAccount, ServiceToken, Severity, Triage, Vulnerability,
@@ -245,6 +246,8 @@ export function buildDemoData(now = Date.now()) {
       });
     }
   }
+
+  seedVulnerabilities(now, (id) => { const a = reporting.find((x) => x.id === id); return a ? a.hostname ?? null : undefined; }, advisories, vulnerabilities);
 
   const groups = hostGroups(agents, now);
   // Each group's history (the audit rows the group page shows), newest first.

@@ -31,6 +31,12 @@ both described in [openvibes-console.md](openvibes-console.md). The web
 side is the Alarms list's bulk bar and the alarm page's header; see
 [console-alarms.md](console-alarms.md). The alarm panel's triage is gone.
 
+## Vulnerabilities in bulk
+
+`POST /api/v1/vulnerabilities/bulk` (CVE rows acting through their covering
+advisories, open-only closes and assigns, `open_only` items) is in
+[console-vulnerabilities.md](console-vulnerabilities.md#bulk).
+
 ## Configuration and failures
 
 The module uses the existing PostgreSQL pool and schema migration. Missing

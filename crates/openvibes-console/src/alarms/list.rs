@@ -70,7 +70,7 @@ fn invalid_query(field: &str) -> Response {
     problem_response(p)
 }
 
-fn is_uuid(s: &str) -> bool {
+pub(crate) fn is_uuid(s: &str) -> bool {
     s.len() == 36
         && s.char_indices().all(|(i, c)| match i {
             8 | 13 | 18 | 23 => c == '-',
@@ -78,7 +78,7 @@ fn is_uuid(s: &str) -> bool {
         })
 }
 
-fn number(
+pub(crate) fn number(
     value: Option<&str>,
     default: i64,
     max: i64,
@@ -94,7 +94,7 @@ fn number(
 }
 
 /// A pick from a closed list.
-fn pick<T>(
+pub(crate) fn pick<T>(
     value: Option<&str>,
     field: &'static str,
     parse: impl Fn(&str) -> Option<T>,

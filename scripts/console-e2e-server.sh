@@ -4,7 +4,8 @@
 # database for the browser tests: schema migrated, users
 # alex (admin) and sam (analyst), imported findings for six hosts, and
 # eight enrolled hosts with their facts (OS, version, hostname, address), one
-# finding and one alarm each (page-1's alarm with two siblings). Needs
+# finding and one alarm each (page-1's alarm with two siblings), and three
+# hosts per browser with vulnerabilities for vulnerabilities.spec.ts. Needs
 # OPENVIBES_TEST_DATABASE_URL (scripts/test-db.sh locally; the CI job sets it)
 # and the binaries built by scripts/test-console-e2e.sh.
 set -euo pipefail
@@ -118,6 +119,38 @@ WHERE hostname = 'page-1.example.test';
 INSERT INTO alarm_hourly_starts (alarm_row_id, hour, starts)
 SELECT id, date_trunc('hour', now()), count FROM alarms
 WHERE agent_id = (SELECT agent_id FROM agents WHERE hostname = 'page-1.example.test');
+SQL
+# The Vulnerabilities journey (vulnerabilities.spec.ts), one set per browser
+# P = n (1 chromium, 2 firefox, 3 webkit) so their triage never races, added
+# after the alarms and findings above so these hosts carry neither:
+# vuln-P-1 and vuln-P-2 (the lead's reach) and out-P-1 (outside it).
+# DSA-E2E-P-1 (openssl, CVE-2099-n001 and n002) is on all three hosts,
+# DSA-E2E-P-2 (CVE-2099-n003) only on out-P-1, DSA-E2E-P-3 (bash,
+# CVE-2099-n004) on vuln-P-1. No feed_sources row: the Overview still says
+# vulnerability scanning is not set up (console.spec.ts).
+psql -qX -v ON_ERROR_STOP=1 "${database_url}" >/dev/null <<'SQL'
+CREATE TEMP TABLE e2e_browsers AS
+SELECT * FROM (VALUES (1, 'chromium'), (2, 'firefox'), (3, 'webkit')) AS b (n, p);
+INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version, hostname, os_id, os_version, last_address)
+SELECT 'agent.00000000-0000-4000-8000-0000000001' || n || h, 'active', now() - interval '1 day', now(), '0.4.2',
+    name || '.example.test', 'debian', '12', ('198.51.100.' || (n * 10 + h))::inet
+FROM e2e_browsers, LATERAL (VALUES (1, 'vuln-' || p || '-1'), (2, 'vuln-' || p || '-2'), (3, 'out-' || p || '-1')) AS x (h, name);
+INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
+SELECT 'DSA-E2E-' || p || '-' || a, 'debian-12', 'debian', '12', severity, title || ' (' || p || ')', 'https://security-tracker.debian.org/'
+FROM e2e_browsers, (VALUES (1, 'important', 'openssl: two flaws'), (2, 'critical', 'secret: flaw'), (3, 'low', 'bash: flaw')) AS x (a, severity, title);
+INSERT INTO advisory_cves
+SELECT 'DSA-E2E-' || p || '-' || a, 'CVE-2099-' || n || '00' || c
+FROM e2e_browsers, (VALUES (1, 1), (1, 2), (2, 3), (3, 4)) AS x (a, c);
+INSERT INTO advisory_packages (advisory_id, name, arch, scheme, match_on, fixed)
+SELECT 'DSA-E2E-' || p || '-' || a, pkg, '', 'dpkg', 'source', fixed
+FROM e2e_browsers, (VALUES (1, 'openssl', '3.0.2'), (2, 'secretpkg', '2'), (3, 'bash', '5.1')) AS x (a, pkg, fixed);
+INSERT INTO cve_enrichment (cve_id, epss, epss_percentile, cvss_score)
+SELECT 'CVE-2099-' || n || '001', 0.2, 0.8, 7.5 FROM e2e_browsers;
+INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, fixed_at, last_evaluated_at, reboot_needed)
+SELECT 'agent.00000000-0000-4000-8000-0000000001' || n || h, 'DSA-E2E-' || p || '-' || a,
+    jsonb_build_array(jsonb_build_object('name', pkg, 'installed', installed, 'fixed', fixed)), now(), NULL, now(), false
+FROM e2e_browsers, (VALUES (1, 1, 'openssl', '3.0.1', '3.0.2'), (2, 1, 'openssl', '3.0.1', '3.0.2'), (3, 1, 'openssl', '3.0.1', '3.0.2'),
+                           (3, 2, 'secretpkg', '1', '2'), (1, 3, 'bash', '5.0', '5.1')) AS x (h, a, pkg, installed, fixed);
 SQL
 
 exec "${bin}/openvibes-console" --config "${work}/console.toml"

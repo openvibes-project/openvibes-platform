@@ -3,7 +3,11 @@
 mod common;
 
 use chrono::{Duration, Utc};
-use common::TestDb;
+use common::{
+    TestDb,
+    hosts::id,
+    vulns::{every, fixture, row, run},
+};
 use platform_store::{
     bulk_triage::{self as bulk, BulkChange, BulkRefusal},
     console_read::AgentScope,
@@ -212,7 +216,8 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
     .unwrap()
     .unwrap();
     assert_eq!((done.changed, done.skipped.len()), (2, 0));
-    // Assign keeps the state and note (no assignee user exists: skipped).
+    // Assign keeps the state and note; an advisory-wide one skips the closed
+    // pairs ("not open", whatever the assignee).
     let done = bulk::vulnerabilities(
         &mut client,
         &all,
@@ -225,11 +230,7 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
     .unwrap()
     .unwrap();
     assert_eq!(done.changed, 0);
-    assert!(
-        done.skipped
-            .iter()
-            .all(|(_, why)| *why == "assignee unavailable")
-    );
+    assert!(done.skipped.iter().all(|(_, why)| *why == "not open"));
     let unknown = [("FEDORA-9".to_owned(), None)];
     let done = bulk::vulnerabilities(
         &mut client,
@@ -268,5 +269,228 @@ async fn more_than_ten_thousand_items_are_refused() {
         Err(BulkRefusal::Count)
     );
     drop(client);
+    db.drop().await;
+}
+
+async fn triage_of(
+    c: &deadpool_postgres::Client,
+    agent: &str,
+    adv: &str,
+) -> (String, Option<String>) {
+    c.query_opt(
+        "SELECT state, note FROM vulnerability_triage WHERE agent_id = $1 AND advisory_id = $2",
+        &[&agent, &adv],
+    )
+    .await
+    .unwrap()
+    .map_or(("none".into(), None), |r| (r.get(0), r.get(1)))
+}
+
+/// The fixture's ann and bob can be assigned (admins).
+async fn make_admins(c: &deadpool_postgres::Client) {
+    c.batch_execute(
+        "INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+         SELECT gen_random_uuid(), user_id, 'admin', now(), 't' FROM console_users;",
+    )
+    .await
+    .unwrap();
+}
+
+fn why(done: &bulk::BulkResult, pair: &str) -> Option<&'static str> {
+    done.skipped
+        .iter()
+        .find(|(p, _)| p == pair)
+        .map(|(_, w)| *w)
+}
+
+/// An advisory-wide state change or assignment (a CVE row) touches only the
+/// open pairs in reach.
+#[tokio::test]
+async fn bulk_on_cve_rows_changes_only_open_pairs() {
+    let (db, mut c) = common::migrated().await;
+    let (web, _) = fixture(&c).await;
+    make_admins(&c).await;
+    let (h1, h2, h4) = (id(1), id(2), id(4));
+    // DEBIAN-A: h1 open, h2 mitigated; an open pair on h4, out of reach.
+    c.batch_execute(&format!(
+        "INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, fixed_at,
+            last_evaluated_at) VALUES ('{h4}', 'DEBIAN-A', '[]', now(), NULL, now());"
+    ))
+    .await
+    .unwrap();
+    let scope = AgentScope::AssetGroups(vec![web]);
+    let now = Utc::now();
+    let a = [("DEBIAN-A".to_owned(), None)];
+    let done = bulk::vulnerabilities(
+        &mut c,
+        &scope,
+        &a,
+        BulkChange::Assign(Some("bob")),
+        "ann",
+        now,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    // The mitigated h2 and the out-of-reach h4 are not reached at all.
+    assert_eq!((done.changed, done.skipped.len()), (1, 0), "{done:?}");
+    let assigned = |agent: &str| {
+        let agent = agent.to_owned();
+        let c = &c;
+        async move {
+            c.query_one(
+                "SELECT u.username FROM vulnerability_triage t JOIN console_users u ON u.user_id = t.assigned_to
+                 WHERE agent_id = $1 AND advisory_id = 'DEBIAN-A'",
+                &[&agent],
+            )
+            .await
+            .unwrap()
+            .get::<_, String>(0)
+        }
+    };
+    assert_eq!(assigned(h1).await, "bob");
+    assert_eq!(
+        assigned(h2).await,
+        "bob",
+        "the mitigated pair keeps its assignee"
+    );
+    assert_eq!(triage_of(&c, h4, "DEBIAN-A").await.0, "none");
+    // Accepted, false-positive and mitigated pairs are all left alone: an
+    // advisory with no open pair in reach says "not open".
+    for (adv, pair) in [("FEDORA-1", "FEDORA-1"), ("DEBIAN-FP", "DEBIAN-FP")] {
+        let one = [(adv.to_owned(), None)];
+        for change in [mitigate(Some("x")), BulkChange::Assign(Some("bob"))] {
+            let done = bulk::vulnerabilities(&mut c, &scope, &one, change, "ann", now)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(done.changed, 0, "{adv}");
+            assert_eq!(why(&done, pair), Some("not open"), "{adv}");
+        }
+    }
+    let before = triage_of(&c, id(3), "FEDORA-1").await;
+    assert_eq!(before, ("accepted_risk".into(), Some("n".into())));
+    // Close: only h1's open pair changes; the mitigated one keeps its note.
+    let done = bulk::vulnerabilities(&mut c, &scope, &a, mitigate(Some("patched")), "ann", now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!((done.changed, done.skipped.len()), (1, 0), "{done:?}");
+    assert_eq!(
+        triage_of(&c, h1, "DEBIAN-A").await,
+        ("mitigated".into(), Some("patched".into()))
+    );
+    assert_eq!(
+        triage_of(&c, h2, "DEBIAN-A").await,
+        ("mitigated".into(), Some("n".into()))
+    );
+    assert_eq!(triage_of(&c, h4, "DEBIAN-A").await.0, "none");
+    // A list row on one host (the Host chip) sends `open_only`: h2's mitigated
+    // pair is still left alone, for a close and an assignment alike.
+    let on_h2 = [("DEBIAN-A".to_owned(), Some(h2.to_owned()))];
+    for change in [mitigate(Some("again")), BulkChange::Assign(Some("ann"))] {
+        let done =
+            bulk::vulnerabilities_open_only(&mut c, &scope, &on_h2, &[true], change, "ann", now)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(done.changed, 0, "{done:?}");
+        assert_eq!(why(&done, &format!("{h2}/DEBIAN-A")), Some("not open"));
+    }
+    assert_eq!(
+        triage_of(&c, h2, "DEBIAN-A").await,
+        ("mitigated".into(), Some("n".into()))
+    );
+    // An expired accepted risk counts as open: DEBIAN-EXP (h1 open, h2 expired)
+    // takes an assignee on both, then closes on both.
+    let exp = [("DEBIAN-EXP".to_owned(), None)];
+    let done = bulk::vulnerabilities(
+        &mut c,
+        &scope,
+        &exp,
+        BulkChange::Assign(Some("ann")),
+        "ann",
+        now,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!((done.changed, done.skipped.len()), (2, 0), "{done:?}");
+    assert_eq!(triage_of(&c, h2, "DEBIAN-EXP").await.0, "open");
+    let done = bulk::vulnerabilities(&mut c, &scope, &exp, mitigate(Some("x")), "ann", now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!((done.changed, done.skipped.len()), (2, 0), "{done:?}");
+    // A reopen keeps its rule: it reopens the closed pairs (h1 closed above,
+    // h2 mitigated by the fixture; the test depends on the close above).
+    let reopen = BulkChange::State {
+        state: "open",
+        note: None,
+        accepted_until: None,
+    };
+    let done = bulk::vulnerabilities(&mut c, &scope, &a, reopen, "ann", now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(done.changed, 2);
+    drop(c);
+    db.drop().await;
+}
+
+/// The list shows a bulk change on every CVE row the advisory covers.
+#[tokio::test]
+async fn triage_on_one_cve_shows_on_its_siblings() {
+    let (db, mut c) = common::migrated().await;
+    let (web, _) = fixture(&c).await;
+    make_admins(&c).await;
+    let scope = AgentScope::AssetGroups(vec![web]);
+    let now = Utc::now();
+    let fed = [("FEDORA-1".to_owned(), None)];
+    let open =
+        |p: &platform_store::vuln_list::VulnListPage| (row(p, "CVE-A").open, row(p, "CVE-B").open);
+    assert_eq!(open(&run(&c, &every(), &scope).await), (1, 0));
+    let reopen = BulkChange::State {
+        state: "open",
+        note: None,
+        accepted_until: None,
+    };
+    let r = bulk::vulnerabilities(&mut c, &scope, &fed, reopen, "ann", now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(r.changed, 1, "{r:?}");
+    // Both CVEs of FEDORA-1 now show its host open (CVE-A also has DEBIAN-A's h1).
+    assert_eq!(open(&run(&c, &every(), &scope).await), (2, 1));
+    let done = bulk::vulnerabilities(&mut c, &scope, &fed, mitigate(Some("patched")), "ann", now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(done.changed, 1);
+    assert_eq!(open(&run(&c, &every(), &scope).await), (1, 0));
+    drop(c);
+    db.drop().await;
+}
+
+/// Pairs with no fix (`version_vulnerabilities`) have no triage: they are
+/// always open in the list and never expanded, so a bulk item for a no-fix
+/// advisory finds nothing and the list does not move.
+#[tokio::test]
+async fn no_fix_pairs_are_not_reached_by_bulk() {
+    let (db, mut c) = common::migrated().await;
+    let (web, _) = fixture(&c).await;
+    let scope = AgentScope::AssetGroups(vec![web]);
+    let nf = [("DEBIAN-NF".to_owned(), None)];
+    let done = bulk::vulnerabilities(&mut c, &scope, &nf, mitigate(Some("x")), "ann", Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(done.changed, 0);
+    assert_eq!(
+        done.skipped,
+        [("DEBIAN-NF".to_owned(), "not found or out of scope")]
+    );
+    assert_eq!(row(&run(&c, &every(), &scope).await, "CVE-NF").open, 2);
+    drop(c);
     db.drop().await;
 }

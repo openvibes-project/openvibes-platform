@@ -5,7 +5,7 @@
 // the count and Clear. Closing asks for a note in one small dialog whose
 // button names the count; the toast says what changed and why anything was
 // skipped (spec 2026-10-10-bulk-triage §3, §4).
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { apiMessage, invalidate, request, useAllPages, useResource } from "../../api/client";
 import type { CaseSummary, CaseUser } from "../../api/types";
@@ -21,10 +21,11 @@ import { caseNumber } from "../cases/cases";
 import { noteRequired } from "./triage";
 
 const triagePermission = { alarms: "alarms.triage", compliance: "compliance.triage", vulnerabilities: "vulnerabilities.triage" } as const;
-/** What a change refreshes: for alarms, every alarm read (the Alarms list is /alarm-list). */
-const readsOf = (kind: BulkKind) => (kind === "alarms" ? ALARMS_PREFIX : `/api/v1/${kind}`);
+/** What a change refreshes: for alarms, every alarm read (the Alarms list is /alarm-list);
+ * for vulnerabilities /vulnerabilities… and the list at /vulnerability-list. */
+const readsOf = (kind: BulkKind) => (kind === "alarms" ? ALARMS_PREFIX : kind === "vulnerabilities" ? "/api/v1/vulnerabilit" : `/api/v1/${kind}`);
 
-type Choice = { action: BulkAction; state?: string; label: string };
+type Choice = { action: BulkAction; state?: string; assignee?: string; label: string };
 const STATE_ITEMS: (MenuItem & { choice: Choice })[] = [
   { value: "mitigated", label: "Mitigate…", description: "Fixed or worked around; reopens if it comes back", dot: "var(--ok)",
     choice: { action: "state", state: "mitigated", label: "Mitigate" } },
@@ -50,14 +51,19 @@ const avatar = (name: string | null) => <span className={name ? "initials" : "in
  * `stateLabel` renames Set state ("Set state: 12 open"); `partial` says the
  * list holds only its first results; `inline` draws the actions for a
  * panel header (no count or Clear); `without` leaves out actions the panel
- * offers elsewhere. */
-export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople }: Readonly<{
+ * offers elsewhere (any of state, assign, case, suppress); `confirm` says what a state change or an assignment
+ * will reach, and makes the assignment ask first too; `changes` is how many of the `count` selected an action
+ * can change (the dialog's count; default all); `note` shows in the bar only when no action is left, to say why. */
+export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople, confirm, changes, note }: Readonly<{
   kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
   newCase: () => { title: string; severity?: string | undefined };
   closed?: number; reopenItems?: () => BulkItem[]; assignee?: string | null; stateLabel?: string;
   partial?: boolean; onClear: () => void; inline?: boolean; without?: BulkAction[];
   /** Whether other people may be offered (an alarm page's per-host `can.assign`); else the session's `cases.assign`. */
   assignPeople?: boolean;
+  confirm?: ReactNode;
+  changes?: number;
+  note?: string;
 }>) {
   const { can, canEverywhere, session } = useSession();
   const [choice, setChoice] = useState<Choice | null>(null);
@@ -81,7 +87,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
     ...(others.length > 0 ? [{ group: "People", options: others.map((p) => ({ value: p.username, label: p.display_name || p.username, hint: p.username, icon: avatar(p.display_name || p.username) })) }] : []),
   ];
 
-  // Reopen and assign apply at once: no note is needed.
+  // Reopen applies at once, and so does assign unless `confirm` asks first: no note is needed.
   const apply = async (body: Record<string, unknown>, rows: BulkItem[]) => {
     setBusy(true);
     try {
@@ -96,47 +102,51 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
       setBusy(false);
     }
   };
-  const assign = (value: string) => void apply({ action: "assign", assignee: value === NOBODY ? null : value }, items());
+  const assign = (value: string) => confirm
+    ? setChoice({ action: "assign", assignee: value === NOBODY ? "" : value, label: value === NOBODY ? "Unassign" : "Assign" })
+    : void apply({ action: "assign", assignee: value === NOBODY ? null : value }, items());
   const reopen = () => void apply({ action: "state", state: "open" }, (reopenItems ?? items)());
 
   const actions = (
     <>
-      <MenuButton label={stateLabel ?? "Set state"} icon="check" items={menu} disabled={busy}
-        onPick={(value) => setChoice(menu.find((m) => m.value === value)?.choice ?? null)} />
+      {!without.includes("state") && <MenuButton label={stateLabel ?? "Set state"} icon="check" items={menu} disabled={busy}
+        onPick={(value) => setChoice(menu.find((m) => m.value === value)?.choice ?? null)} />}
       {closed > 0 && !inline && (
         <button type="button" className="button" disabled={busy} onClick={reopen}><Icon name="refresh" size={15} />Reopen {closed.toLocaleString()} closed</button>
       )}
-      <Select button search label={inline && assignee !== undefined ? "Assignee" : `Assign ${noun}`} placeholder="Assign"
+      {!without.includes("assign") && <Select button search label={inline && assignee !== undefined ? "Assignee" : `Assign ${noun}`} placeholder="Assign"
         value={assignee === undefined ? "" : assignee ?? NOBODY} onChange={assign} disabled={busy}
-        options={assignOptions} unknownLabel={(v) => v} />
+        options={assignOptions} unknownLabel={(v) => v} />}
       {can("cases.write") && !without.includes("case") && (
         <button type="button" className={inline ? "button push" : "button"} disabled={busy} onClick={() => setChoice({ action: "case", label: "Add to case" })}>
           <Icon name="cases" size={15} />Add to case
         </button>
       )}
-      {choice && <BulkDialog kind={kind} noun={noun} choice={choice} items={items} count={count} newCase={newCase}
+      {choice && <BulkDialog kind={kind} noun={noun} choice={choice} items={items} count={changes ?? count} newCase={newCase} confirm={confirm}
         onClose={() => setChoice(null)} onDone={inline ? () => undefined : onClear} />}
     </>
   );
   if (inline) return actions;
+  const none = without.includes("state") && without.includes("assign") && (without.includes("case") || !can("cases.write")) && closed === 0;
   return (
     <section className="bulk-bar bulk-bar--bottom" aria-label="Bulk actions">
       <strong className="num">{count.toLocaleString()} selected</strong>
       {partial && <span className="subtle">(of the first results only)</span>}
       {actions}
+      {note && none && <span className="subtle">{note}</span>}
       <button type="button" className="button button--ghost push" onClick={onClear}>Clear</button>
     </section>
   );
 }
 
-function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone }: Readonly<{
-  kind: BulkKind; noun: string; choice: Choice; items: () => BulkItem[]; count: number;
+function BulkDialog({ kind, noun, choice, items, count, newCase, confirm, onClose, onDone }: Readonly<{
+  kind: BulkKind; noun: string; choice: Choice; items: () => BulkItem[]; count: number; confirm?: ReactNode;
   newCase: () => { title: string; severity?: string | undefined }; onClose: () => void; onDone: () => void;
 }>) {
   const { action } = choice;
   const [form, setForm] = useState<BulkForm>(() => {
     const suggested = newCase();
-    return { action, state: choice.state ?? "", note: "", acceptedUntil: day(90), assignee: "", caseId: "",
+    return { action, state: choice.state ?? "", note: "", acceptedUntil: day(90), assignee: choice.assignee ?? "", caseId: "",
       newCaseTitle: suggested.title.slice(0, 120), newCaseSeverity: suggested.severity };
   });
   const [busy, setBusy] = useState(false);
@@ -174,6 +184,7 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
       <form className="bulk-dialog stack" onSubmit={(event) => void submit(event)}>
         <div className="row row--between"><h2>{choice.label}: {count.toLocaleString()} {noun}</h2>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}><Icon name="close" size={16} /></button></div>
+        {confirm && (action === "state" || action === "assign") && <div className="stack">{confirm}</div>}
         {action === "state" && form.state === "accepted_risk" && (
           <label className="field"><span>Accepted until</span>
             <input className="input" type="date" required min={day(1)} max={day(365)} value={form.acceptedUntil} onChange={(event) => set({ acceptedUntil: event.target.value })} />

@@ -12,7 +12,7 @@ export const LIST_VIEWS = ["/compliance", "/vulnerabilities", "/agents", "/audit
 export type ListView = (typeof LIST_VIEWS)[number];
 type ListRow = { key: string; open: PanelRef; title: string; meta: string; badge: { label: string; tone: string } };
 
-export type AdvisoryRow = {
+type AdvisoryRow = {
   id: string; title: string; severity: string; cves: string[]; cvss: number | null; epss: number | null;
   exploited: boolean; kev: boolean; ransomware: boolean; hosts: number; reboot: number; noFix: boolean;
   /** Hosts whose triage is open (mitigated, accepted and false positive are not). */
@@ -24,7 +24,7 @@ export type AdvisoryRow = {
 /** Mappings below this (NVD CPE ranges, at most 75) are hidden unless "Lower confidence" is switched on. */
 const MIN_CONFIDENCE = 80;
 
-export function groupByAdvisory(items: readonly Vulnerability[]): AdvisoryRow[] {
+function groupByAdvisory(items: readonly Vulnerability[]): AdvisoryRow[] {
   const rows = new Map<string, AdvisoryRow>();
   for (const item of items) {
     const row = rows.get(item.advisory_id) ?? {
@@ -90,7 +90,7 @@ export function vulnerabilityQuery(params: URLSearchParams): string {
   return `/api/v1/vulnerabilities${query.size ? `?${query}` : ""}`;
 }
 
-export function selectAdvisories(all: readonly AdvisoryRow[], params: URLSearchParams): AdvisoryRow[] {
+function selectAdvisories(all: readonly AdvisoryRow[], params: URLSearchParams): AdvisoryRow[] {
   const q = params.get("q") ?? "";
   return all.filter((row) => (params.get("nofix") !== "true" || row.noFix) && (params.get("state") === "all" || row.open > 0) && matches([row.title, row.id, ...row.cves], q));
 }

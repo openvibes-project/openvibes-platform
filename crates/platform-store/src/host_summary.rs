@@ -119,7 +119,8 @@ impl HostSummary {
 }
 
 /// Severity order for alarms and findings, most severe first.
-const RANK: &str = "array_position(ARRAY['critical','high','medium','low','info'], severity)";
+pub(crate) const RANK: &str =
+    "array_position(ARRAY['critical','high','medium','low','info'], severity)";
 
 /// The summary of `agent_id`, or `None` when `scopes.hosts` does not reach it.
 pub async fn summary(
@@ -194,7 +195,10 @@ pub async fn summary(
 }
 
 /// Rows of a top-three query whose last column is `count(*) OVER ()`.
-fn top<T>(rows: &[tokio_postgres::Row], item: impl Fn(&tokio_postgres::Row) -> T) -> Top<T> {
+pub(crate) fn top<T>(
+    rows: &[tokio_postgres::Row],
+    item: impl Fn(&tokio_postgres::Row) -> T,
+) -> Top<T> {
     let total = rows.first().map_or(0, |r| r.get(r.len() - 1));
     Top {
         items: rows.iter().map(item).collect(),

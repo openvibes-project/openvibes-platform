@@ -1,4 +1,5 @@
-//! Vulnerabilities: the summary, the list and advisory detail.
+//! Vulnerabilities: the summary, the list, a vulnerability's page and
+//! advisory detail.
 
 use axum::{Router, routing::get};
 
@@ -7,6 +8,10 @@ use crate::http::AuthHttpState;
 pub(crate) mod advisory;
 mod cpe;
 pub(crate) mod list;
+pub(crate) mod list_page;
+pub(crate) mod list_page_types;
+pub(crate) mod page;
+pub(crate) mod page_types;
 pub(crate) mod summary;
 mod types;
 
@@ -25,6 +30,18 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
         .route(
             "/v1/vulnerabilities",
             get(list::authenticated_vulnerabilities),
+        )
+        .route(
+            "/v1/vulnerability-list",
+            get(list_page::list_vulnerability_page),
+        )
+        .route(
+            "/v1/vulnerabilities/{key}/summary",
+            get(page::vulnerability_summary_page),
+        )
+        .route(
+            "/v1/vulnerabilities/{key}/hosts",
+            get(page::vulnerability_hosts_page),
         )
         .route(
             "/v1/vulnerabilities/advisories/{advisory_id}",

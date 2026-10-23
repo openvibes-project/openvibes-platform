@@ -59,3 +59,9 @@ export function toInt(raw: string, min: number, max: number, fallback: number): 
 export function noteLines(text: string): string[] {
   return text.split("\n").slice(0, 16).map((line) => [...line].slice(0, 256).join(""));
 }
+
+/** A List tile's link with its total (`n`, formatted). The Vulnerabilities tile reads
+ * GET /v1/vulnerabilities, which counts advisories, while the list it opens counts CVEs. */
+export function listMoreLabel(view: string, n: string): string {
+  return view === "/vulnerabilities" ? `Open list (${n} ${n === "1" ? "advisory" : "advisories"})` : `Open list (${n})`;
+}

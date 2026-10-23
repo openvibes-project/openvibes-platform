@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { alarmPath, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel } from "./location";
+import { alarmPath, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
-    const loc = parseLocation("/console/compliance", "?open=finding%3Ab%2FR-1&open=advisory%3ARHSA-2026%3A1&q=web", "/console/");
+    const loc = parseLocation("/console/compliance", "?open=finding%3Ab%2FR-1&open=port%3Atcp%3A443&q=web", "/console/");
     expect(loc.view).toBe("/compliance");
-    expect(loc.panels).toEqual([{ kind: "finding", id: "b/R-1" }, { kind: "advisory", id: "RHSA-2026:1" }]);
+    expect(loc.panels).toEqual([{ kind: "finding", id: "b/R-1" }, { kind: "port", id: "tcp:443" }]);
     expect(loc.params.get("q")).toBe("web");
   });
 
@@ -47,11 +47,24 @@ describe("location", () => {
     expect(formatLocation(loc, "/")).toBe(want);
   });
 
+  it.each([
+    ["/vulnerabilities", "?open=advisory%3AFEDORA-2026-3a214d1f", "/vulnerabilities/FEDORA-2026-3a214d1f"],
+    ["/", "?open=advisory%3ACVE-2026-1", "/vulnerabilities/CVE-2026-1"],
+    ["/cases", "?status=open&open=case%3Ac-1&open=advisory%3ARHSA-2026%3A1", "/vulnerabilities/RHSA-2026%3A1"],
+    // A host or an alarm panel still wins.
+    ["/", "?open=advisory%3AX-1&open=alarm%3A7", "/alarms/7"],
+  ])("old_advisory_links_open_the_page: an old advisory panel on %s%s is the vulnerability's page, %s", (view, search, want) => {
+    const loc = parseLocation(view, search, "/");
+    expect(loc.panels).toEqual([]);
+    expect(formatLocation(loc, "/")).toBe(want);
+  });
+
   it("names the page an object opens instead of a panel", () => {
     expect(alarmPath("7 /x")).toBe("/alarms/7%20%2Fx");
     expect(pagePath({ kind: "alarm", id: "7" })).toBe("/alarms/7");
     expect(pagePath({ kind: "agent", id: "a b" })).toBe("/hosts/a%20b");
-    expect(pagePath({ kind: "advisory", id: "X-1" })).toBeNull();
+    expect(pagePath({ kind: "advisory", id: "X 1" })).toBe("/vulnerabilities/X%201");
+    expect(pagePath({ kind: "package", id: "x" })).toBeNull();
   });
 
   it("names a host's page", () => {
@@ -64,6 +77,27 @@ describe("location", () => {
     expect(hostsQuery("sort=seen&dir=desc")).toBe("sort=heartbeat&dir=desc");
     expect(hostsQuery("sort=version")).toBe("sort=agent");
     expect(hostsQuery("q=x&sort=enrolled&dir=desc")).toBe("q=x");
+  });
+
+  it.each([
+    ["?exploited=true", "/vulnerabilities?signal=exploited"],
+    ["?state=all&reboot=true&q=ssl", "/vulnerabilities?state=all&q=ssl&signal=reboot"],
+    ["?nofix=true", "/vulnerabilities?signal=nofix"],
+    ["?lowconf=true&severity=critical", "/vulnerabilities?severity=critical&signal=lowconf"],
+    // Several old flags: the first in ruling 7's order wins.
+    ["?lowconf=true&nofix=true&reboot=true&exploited=true", "/vulnerabilities?signal=exploited"],
+    ["?nofix=true&lowconf=true", "/vulnerabilities?signal=nofix"],
+    ["?severity=important&sort=cvss&dir=desc", "/vulnerabilities?severity=important&sort=cvss&dir=desc"],
+  ])("old_vulnerability_urls_keep_their_filters: /vulnerabilities%s reads as %s", (search, want) => {
+    expect(formatLocation(parseLocation("/vulnerabilities", search, "/"), "/")).toBe(want);
+  });
+
+  it("maps an old Vulnerabilities query's flags and sorts, and keeps today's", () => {
+    expect(vulnerabilitiesQuery("exploited=true&sort=priority&dir=asc")).toBe("signal=exploited");
+    expect(vulnerabilitiesQuery("q=x&sort=title&dir=desc")).toBe("q=x");
+    expect(vulnerabilitiesQuery("sort=confidence")).toBe("");
+    expect(vulnerabilitiesQuery("sort=hosts&dir=desc&exploited=false")).toBe("sort=hosts&dir=desc");
+    expect(vulnerabilitiesQuery("signal=due30&package=openssl")).toBe("signal=due30&package=openssl");
   });
 
   it("ignores malformed panel references", () => {

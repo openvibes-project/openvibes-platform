@@ -108,7 +108,10 @@ async fn upgrade_keeps_every_roles_hosts() {
     let mut before = reached_v52(&client).await;
     drop(client);
     let mut c = db.pool.get().await.unwrap();
-    assert_eq!(platform_store::migrate(&mut c).await.unwrap(), 60);
+    assert_eq!(
+        platform_store::migrate(&mut c).await.unwrap(),
+        platform_store::SCHEMA_VERSION
+    );
 
     // Revoked hosts are members of no group now (§5.1): the one change.
     assert!(before["r_prod"].contains(REVOKED));
@@ -242,7 +245,10 @@ async fn upgraded_from(sql: &str) -> (common::TestDb, Client) {
     client.batch_execute(sql).await.unwrap();
     drop(client);
     let mut c = db.pool.get().await.unwrap();
-    assert_eq!(platform_store::migrate(&mut c).await.unwrap(), 60);
+    assert_eq!(
+        platform_store::migrate(&mut c).await.unwrap(),
+        platform_store::SCHEMA_VERSION
+    );
     (db, c)
 }
 

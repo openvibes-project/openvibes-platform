@@ -17,6 +17,8 @@ export const LIST_FILTERS: Record<ListView, FilterDef[]> = {
     { param: "state", label: "Include resolved", kind: "flag", value: "all" },
     choice("severity", "Severity", severities("critical", "high", "medium", "low")),
   ],
+  // The dashboard List tile's filters over GET /v1/vulnerabilities; the
+  // Vulnerabilities view itself has its own FilterBar (step 5b).
   "/vulnerabilities": [
     { param: "state", label: "Include resolved", kind: "flag", value: "all" },
     { param: "exploited", label: "Known exploited", kind: "flag", value: "true" },

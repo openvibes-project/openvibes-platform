@@ -15,7 +15,6 @@ import { AuditEventPanel, RetentionPanel } from "../panels/admin/AuditPanels";
 import { EnrollmentTokenPanel } from "../panels/admin/EnrollmentTokenPanel";
 import { PublishBundle, RuleSetPanel } from "../panels/rules/RuleSetPanel";
 import { ServiceAccountPanel } from "../panels/admin/ServiceAccountPanel";
-import { AdvisoryPanel } from "../panels/findings/AdvisoryPanel";
 import { CasePanel, NewCasePanel } from "../panels/cases/CasePanel";
 import { SiteRulePanel } from "../panels/rules/SiteRulePanel";
 import { PackagePanel, splitPackageId } from "../panels/hosts/PackagePanel";
@@ -57,7 +56,7 @@ export const views: readonly ViewDef[] = [
   { path: "/", prefix: "/dashboards/", label: "Dashboards", short: "Home", icon: "overview", group: "Investigate", keys: "g d", access: [], render: () => <DashboardsView /> },
   { path: "/alarms", prefix: "/alarms/", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
   { path: "/compliance", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "compliance.read" }], render: () => <Findings /> },
-  { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
+  { path: "/vulnerabilities", prefix: "/vulnerabilities/", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/hosts", prefix: "/hosts/", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "hosts.read" }], render: () => <Hosts /> },
   { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "hosts.read" }], render: () => <Software /> },
   { path: "/ports", label: "Ports", icon: "activity", group: "Investigate", phoneMore: true, keys: "g o", access: [{ permission: "hosts.read" }], render: () => <Ports /> },
@@ -79,8 +78,8 @@ type PanelDef = {
   render: (id: string) => ReactNode;
 };
 
-/** An object's icon; a host and an alarm are pages, not panels (approved screens 17 and 30). */
-export const objectIcon = (kind: string): IconName => panels[kind]?.icon ?? (kind === "agent" ? "agents" : kind === "alarm" ? "alarm" : "layers");
+/** An object's icon; a host, an alarm and an advisory are pages, not panels (approved screens 17, 30 and 26). */
+export const objectIcon = (kind: string): IconName => panels[kind]?.icon ?? (kind === "agent" ? "agents" : kind === "alarm" ? "alarm" : kind === "advisory" ? "vulnerabilities" : "layers");
 
 /** The best known name of an object: learned from its panel, else from its id. */
 export function objectTitle(ref: { kind: string; id: string }): string {
@@ -94,7 +93,6 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   port: { label: "Port", icon: "activity", title: (id) => { const [protocol, port] = splitPortId(id); return `${port}/${protocol}`; }, render: (id) => <PortPanel id={id} /> },
   compare: { label: "Compare", icon: "agents", title: (id) => id.includes(" ") ? "Compare hosts" : "Compare with…", render: (id) => <ComparePanel id={id} /> },
   unit: { label: "Service", icon: "layers", title: (id) => id, render: (id) => <UnitPanel id={id} /> },
-  advisory: { label: "Advisory", icon: "vulnerabilities", title: (id) => id, render: (id) => <AdvisoryPanel id={id} /> },
   "rule-set": { label: "Rule set", icon: "rules", title: (id) => id, render: (id) => <RuleSetPanel id={id} /> },
   "enrollment-token": { label: "Enrollment token", icon: "enrollment", title: (id) => id === "new" ? "New token" : id, render: (id) => <EnrollmentTokenPanel id={id} /> },
   "service-account": { label: "Service account", icon: "service", title: (id) => id === "new" ? "New account" : id, render: (id) => <ServiceAccountPanel id={id} /> },

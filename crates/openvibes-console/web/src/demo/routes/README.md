@@ -23,7 +23,10 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 | `rules.ts` | Rule sets, bundles, site rule drafts, ATT&CK coverage and per-host rule sets. |
 | `session.ts` | The session, password changes and the About page. |
 | `settings.ts` | The general settings, the audit log, its retention and the assistant's internet access. |
-| `triage.ts` | Bulk triage of alarms, findings and vulnerabilities. |
+| `triage.ts` | Bulk triage of alarms, findings and vulnerabilities (an advisory-wide vulnerability item changes only open pairs with a fix, as bulk_triage.rs). |
+| `cveFacts.ts` | A CVE's own exploited flag, KEV due date, CVSS and EPSS (cve_enrichment), for the list rows and the page. |
+| `vulnList.ts` | The Vulnerabilities list (`GET /api/v1/vulnerability-list`): one row per CVE, filters, counts with the others applied, the summary, sort and paging inside the persona's reach; lower-confidence matches (below 80) only under the `lowconf` signal. |
+| `vulnSummary.ts` | A vulnerability's page (`GET /api/v1/vulnerabilities/{key}/summary` and `/{key}/hosts`): the key resolved (one CVE, a CVE-less advisory, 409 for an advisory with several CVEs), its pairs in reach, what to do per distribution, the Related card, the `can` flags and the Hosts table's segments and paging. No triage history in the demo. |
 | `vulnerabilities.ts` | The vulnerability list, summary and one advisory's hosts. |
 
 More: [docs/components/console-web.md](../../../../../../docs/components/console-web.md)

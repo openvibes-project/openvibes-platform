@@ -40,29 +40,54 @@ export function hostsQuery(query: string): string {
   return params.toString();
 }
 
+/** The old Vulnerabilities list's flags, in ruling 7's order: the first set wins as `signal`. */
+const OLD_SIGNALS = [["exploited", "exploited"], ["reboot", "reboot"], ["nofix", "nofix"], ["lowconf", "lowconf"]] as const;
+/** The old list's sorts that today's columns still have (it sorted in the browser). */
+const OLD_VULN_SORTS = new Set(["severity", "cvss", "epss", "hosts", "due"]);
+
+/** An old Vulnerabilities query as today's (roles 5b ruling 7): the flags
+ * become one `signal`, and sorts no column has any more go with their direction. */
+export function vulnerabilitiesQuery(query: string): string {
+  const params = new URLSearchParams(query);
+  const signal = OLD_SIGNALS.find(([flag]) => params.get(flag) === "true")?.[1];
+  for (const [flag] of OLD_SIGNALS) params.delete(flag);
+  if (signal) params.set("signal", signal);
+  const sort = params.get("sort");
+  if (sort !== null && !OLD_VULN_SORTS.has(sort)) { params.delete("sort"); params.delete("dir"); }
+  return params.toString();
+}
+
 /** A host's page (approved screen 17). */
 export const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
 
 /** An alarm's page (approved screen 30). */
 export const alarmPath = (id: string) => `/alarms/${encodeURIComponent(id)}`;
 
-/** The page an object opens instead of a panel: a host or an alarm; null for a panel. */
+/** A vulnerability's page (approved screen 26): a CVE, or an advisory id the page resolves (roles 5b ruling 7). */
+export const vulnPath = (key: string) => `/vulnerabilities/${encodeURIComponent(key)}`;
+
+const PAGES: Record<string, (id: string) => string> = { agent: hostPath, alarm: alarmPath, advisory: vulnPath };
+
+/** The page an object opens instead of a panel: a host, an alarm or an advisory; null for a panel. */
 export function pagePath(panel: PanelRef): string | null {
-  return panel.kind === "agent" ? hostPath(panel.id) : panel.kind === "alarm" ? alarmPath(panel.id) : null;
+  return PAGES[panel.kind]?.(panel.id) ?? null;
 }
 
 /**
  * Old addresses as today's (plan ruling 1; roles 5a): `/agents?…` is the
- * Hosts list, and a host or alarm panel opened on any view
- * (`?open=agent:ID`, `?open=alarm:ID`, the assistant's `/agents?agent=ID`)
- * is that object's page, a whole page with no panels (as `nav.open` opens it).
- * A host panel wins over an alarm panel.
+ * Hosts list, and a host, alarm or advisory panel opened on any view
+ * (`?open=agent:ID`, `?open=alarm:ID`, `?open=advisory:ID`, the assistant's
+ * `/agents?agent=ID`) is that object's page, a whole page with no panels (as
+ * `nav.open` opens it). A host panel wins over an alarm panel, an alarm over
+ * an advisory. The old Vulnerabilities flags are today's signals (roles 5b ruling 7).
  */
 export function redirect(location: AppLocation): AppLocation {
   const host = location.view === "/agents" ? location.params.get("agent") : null;
-  const panel = location.panels.find((p) => p.kind === "agent") ?? (host ? { kind: "agent", id: host } : location.panels.find((p) => p.kind === "alarm"));
+  const panel = location.panels.find((p) => p.kind === "agent") ?? (host ? { kind: "agent", id: host }
+    : location.panels.find((p) => p.kind === "alarm") ?? location.panels.find((p) => p.kind === "advisory"));
   const page = panel && pagePath(panel);
   if (page) return { view: page, panels: [], params: new URLSearchParams() };
+  if (location.view === "/vulnerabilities") return { ...location, params: new URLSearchParams(vulnerabilitiesQuery(location.params.toString())) };
   if (location.view !== "/agents") return location;
   return { ...location, view: "/hosts", params: new URLSearchParams(hostsQuery(location.params.toString())) };
 }

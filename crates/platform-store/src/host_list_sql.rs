@@ -59,35 +59,15 @@ fn except(skip: Option<Facet>) -> String {
         .join(" AND ")
 }
 
-/// CTEs `conds` and `members` (agent_id, gid): which hosts of the CTE
-/// `hosts` (any CTE with an `agent_id` column) are in which group, in one pass. The same rule as `console_host_in_group`
-/// (migration 53): active hosts only; a manual group holds its picked
-/// hosts; a rule or automatic group holds a host when it has conditions and
-/// every one holds. `host_list` tests pin the two to the same answers.
-// ponytail: evaluated per (host, rule condition) on every list request;
-// 20,000 hosts and 20 groups measured in console-read.md. Past that,
-// materialise membership in a table refreshed on fact and rule changes.
+/// CTE `members` (agent_id, gid): which hosts of the CTE `hosts` (any CTE
+/// with an `agent_id` column) are in which group, read from the stored
+/// membership (migration 61), which triggers keep equal to the rule of
+/// `console_host_in_group` (migration 53).
 pub(crate) fn members(hosts: &str) -> String {
     format!(
-        "conds AS MATERIALIZED (
-  SELECT c.asset_group_id, c.field, c.negate, c.vals, console_condition_likes(c.vals) AS likes,
-         CASE WHEN c.field = 'ip' THEN c.vals::inet[] END AS nets
-  FROM console_host_group_conditions c),
-members AS MATERIALIZED (
+        "members AS MATERIALIZED (
   SELECT m.agent_id, m.asset_group_id::text AS gid
-  FROM {hosts} b JOIN agents a ON a.agent_id = b.agent_id
-  JOIN console_host_group_members m ON m.agent_id = b.agent_id
-  JOIN console_asset_groups g ON g.asset_group_id = m.asset_group_id AND g.kind = 'manual'
-  WHERE a.status = 'active'
-  UNION ALL
-  SELECT a.agent_id, g.asset_group_id::text
-  FROM {hosts} b JOIN agents a ON a.agent_id = b.agent_id
-  CROSS JOIN console_asset_groups g
-  WHERE a.status = 'active' AND g.kind <> 'manual'
-    AND EXISTS (SELECT 1 FROM conds c WHERE c.asset_group_id = g.asset_group_id)
-    AND NOT EXISTS (SELECT 1 FROM conds c WHERE c.asset_group_id = g.asset_group_id
-                      AND NOT COALESCE(console_condition_holds_prepared(a, c.field, c.negate, c.vals,
-                                                                        c.likes, c.nets), false)))"
+  FROM {hosts} b JOIN console_host_group_membership m ON m.agent_id = b.agent_id)"
     )
 }
 

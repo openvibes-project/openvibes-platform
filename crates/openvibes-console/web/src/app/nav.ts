@@ -10,10 +10,11 @@ let snapshot: AppLocation = read();
 let snapshotKey = window.location.pathname + window.location.search;
 settle();
 
-/** An old /findings or /agents address, or an old host or alarm panel: show the URL
+/** An old /findings, /agents or Vulnerabilities address, or an old host, alarm or advisory panel: show the URL
  * of the page it now opens, in place, so history keeps no dead entry (plan ruling 1). */
 function settle() {
-  if (!/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=(agent|alarm)(%3A|:)/i.test(window.location.search)) return;
+  const oldVulns = /\/vulnerabilities$/.test(window.location.pathname) && /[?&](exploited|reboot|nofix|lowconf|sort)=/.test(window.location.search);
+  if (!oldVulns && !/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=(agent|alarm|advisory)(%3A|:)/i.test(window.location.search)) return;
   snapshotKey = formatLocation(snapshot, base);
   window.history.replaceState(null, "", snapshotKey);
 }
@@ -65,12 +66,16 @@ export const nav = {
     if (guard && !guard()) return;
     go({ view, panels: snapshot.panels, params: new URLSearchParams(params) });
   },
-  /** A host or an alarm is a whole page (approved screens 17 and 30): opening one goes there and closes the panels. */
+  /** A host, an alarm or an advisory is a whole page (approved screens 17, 30 and 26): opening one goes there and closes the panels. */
   open(panel: PanelRef, fromList = false) {
     const page = pagePath(panel);
     if (page === null) { go(pushPanel(snapshot, panel, fromList)); return; }
     if (guard && !guard()) return;
     go({ view: page, panels: [], params: new URLSearchParams() });
+  },
+  /** Goes to `view` in place of the current entry (a page whose address resolves to another). */
+  replace(view: string, params?: Record<string, string>) {
+    go({ view, panels: [], params: new URLSearchParams(params) }, true);
   },
   back() { go(popPanel(snapshot)); },
   closeAll() { go({ ...snapshot, panels: [] }); },
