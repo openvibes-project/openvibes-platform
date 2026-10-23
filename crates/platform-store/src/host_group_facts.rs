@@ -11,7 +11,7 @@ use crate::StoreError;
 const AUTO_GROUP_LOCK: i64 = 0x4F56_4847;
 
 /// The stored-membership lock (migration 61, "ovmb"): every membership
-/// refresh takes it until commit. Always taken before [`AUTO_GROUP_LOCK`]:
+/// refresh takes it until commit. Always taken before `AUTO_GROUP_LOCK`:
 /// an inventory whose OS changed holds it from its agents UPDATE, and one
 /// that only makes a group would otherwise take it after, at the conditions
 /// INSERT, and the two deadlock.

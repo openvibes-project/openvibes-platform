@@ -18,7 +18,7 @@ const CASES: i64 = 20;
 pub struct CaseRef {
     /// Case id.
     pub id: String,
-    /// Shown as C-<number>.
+    /// Shown as `C-<number>`.
     pub number: i64,
     /// Title.
     pub title: String,
