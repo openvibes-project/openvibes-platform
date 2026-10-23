@@ -166,6 +166,11 @@ fn purge_drops_the_database_roles_files_and_accounts() {
     fake.file("/etc/openvibes/setup.toml", "x");
     fake.file("/var/lib/openvibes-ingest/intermediate.key", "x");
     fake.file("/etc/openvibes-agent/agent.toml", "x");
+    // An install that stopped before the CA step: the request and the
+    // operator's copy of it, recorded in the request folder.
+    fake.file("/etc/openvibes/pki/request/intermediate.csr", "CSR");
+    fake.file("/etc/openvibes/pki/request/copy", "/home/alice/r.csr");
+    fake.file("/home/alice/r.csr", "CSR");
     fake.answer(
         &[&PG[..], &["/usr/bin/psql"]].concat(),
         0,
@@ -199,7 +204,11 @@ fn purge_drops_the_database_roles_files_and_accounts() {
         dropped,
         ["openvibes-admin", "openvibes-ingest", "openvibes-console"]
     );
-    for gone in ["var/lib/openvibes-ingest", "etc/openvibes-agent"] {
+    for gone in [
+        "var/lib/openvibes-ingest",
+        "etc/openvibes-agent",
+        "home/alice/r.csr",
+    ] {
         assert!(!fake.root.join(gone).exists(), "{gone}");
     }
     // The plan stays until the last step, so a retry can still load it.
