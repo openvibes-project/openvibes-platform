@@ -265,6 +265,8 @@ fn a_changed_copy_or_a_link_is_kept() {
 /// A FIFO or a file of the request's size with other bytes at the copy's
 /// path is left alone, and a FIFO never blocks the CA step.
 #[test]
+// The test makes its FIFO with mkfifo(1), as tests/*.rs run programs.
+#[allow(clippy::disallowed_types)]
 fn a_fifo_or_a_same_size_file_at_the_copy_is_kept() {
     use super::remove_copy;
     let fake = Fake::new("request-copy-fifo");
