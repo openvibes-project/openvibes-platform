@@ -246,8 +246,10 @@ A repaired step reads "repaired: ..." in the list, and the journal line of each 
 `ok`, with the problem count in the title: each installed unit (a problem
 unless active and, where it has an endpoint, ready); the ingest and
 distribution server certificates and the intermediate (a problem under 14
-days to expiry, when Setup's repair renews them; also a problem when one
-misses an address this host now has, e.g. after DHCP, which Repair fixes);
+days to expiry, when Setup's repair renews them; also a problem when a
+server certificate misses an address this host now has, e.g. after DHCP:
+"run Repair in Maintenance"; a CA certificate, which names no host, is not
+checked for addresses);
 feed errors from `feeds
 status` (an unreachable database is a problem here); disk use of
 `/var/lib/pgsql` and each `/var/lib/openvibes-*` (a problem from 90 %);

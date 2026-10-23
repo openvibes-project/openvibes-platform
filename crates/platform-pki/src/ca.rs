@@ -278,8 +278,8 @@ pub struct Signed {
     pub not_after: String,
 }
 
-/// Whether `cert_pem` is the CA's answer to `csr_pem`: one certificate, a CA
-/// with path length 0, for the request's own key, and valid at `now`.
+/// Whether `cert_pem` is the CA's answer to `csr_pem`: one certificate, for
+/// the request's own key, a CA with path length 0, and valid at `now`.
 pub fn check_signed_request(
     csr_pem: &str,
     cert_pem: &str,
@@ -288,17 +288,19 @@ pub fn check_signed_request(
     single(cert_pem)?;
     let der = der_of(cert_pem)?;
     let cert = parse(&der)?;
+    // The request first: another CA pasted by mistake (the root, say) is
+    // for a different request, not "not a CA".
+    let csr =
+        CertificateSigningRequestParams::from_pem(csr_pem).map_err(|_| PkiError::InvalidCsr)?;
+    if csr.public_key.subject_public_key_info() != cert.tbs_certificate.subject_pki.raw {
+        return Err(PkiError::NotForRequest);
+    }
     let constraints = cert
         .basic_constraints()
         .map_err(|_| PkiError::InvalidPem)?
         .map(|extension| (extension.value.ca, extension.value.path_len_constraint));
     if constraints != Some((true, Some(0))) {
         return Err(PkiError::NotCa);
-    }
-    let csr =
-        CertificateSigningRequestParams::from_pem(csr_pem).map_err(|_| PkiError::InvalidCsr)?;
-    if csr.public_key.subject_public_key_info() != cert.tbs_certificate.subject_pki.raw {
-        return Err(PkiError::NotForRequest);
     }
     valid_at(&cert, now)?;
     let not_after = DateTime::from_timestamp(cert.validity().not_after.timestamp(), 0)
@@ -367,6 +369,14 @@ pub fn subject_alt_names(cert_pem: &str) -> Result<Vec<String>, PkiError> {
             _ => None,
         })
         .collect())
+}
+
+/// Whether the first certificate is a CA (basicConstraints CA:TRUE).
+pub fn is_ca(cert_pem: &str) -> Result<bool, PkiError> {
+    let der = der_of(cert_pem)?;
+    let cert = parse(&der)?;
+    let constraints = cert.basic_constraints().map_err(|_| PkiError::InvalidPem)?;
+    Ok(constraints.is_some_and(|extension| extension.value.ca))
 }
 
 /// End of validity of the first certificate.

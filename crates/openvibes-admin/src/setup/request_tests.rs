@@ -144,6 +144,13 @@ fn accept_refuses_other_request_and_writes_nothing() {
         error,
         "This certificate was signed for a different request: sign the request shown here."
     );
+    // The root pasted as the signed certificate is a CA too, but not the
+    // answer to this request.
+    let error = accept(&fake.ctx(&plan), &root.cert_pem, &root.cert_pem).unwrap_err();
+    assert_eq!(
+        error,
+        "This certificate was signed for a different request: sign the request shown here."
+    );
     let (cert, _) = signed(&fake);
     let wrong = platform_pki::generate_root(chrono::Utc::now()).unwrap();
     let error = accept(&fake.ctx(&plan), &cert, &wrong.cert_pem).unwrap_err();

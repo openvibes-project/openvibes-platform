@@ -52,15 +52,18 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
   is not self-signed (`NotIntermediate`), signed by the root (`NotSignedBy`),
   and valid at `now` (`IssuerExpired`).
 - `check_signed_request(csr, cert, now)`: the answer to an intermediate
-  request made before install: exactly one PEM block (`Several(n)`), a CA
-  with path length 0 (`NotCa`), the request's own key (`NotForRequest`),
-  valid at `now` (`IssuerExpired`); returns `Signed` (subject and issuer
-  common names, `not_after` as `YYYY-MM-DD`).
+  request made before install: exactly one PEM block (`Several(n)`), the
+  request's own key (`NotForRequest`; checked first, so another CA pasted
+  by mistake, such as the root, reads as for a different request), a CA
+  with path length 0 (`NotCa`), valid at `now` (`IssuerExpired`); returns
+  `Signed` (subject and issuer common names, `not_after` as `YYYY-MM-DD`).
 - `check_root_signed(root_cert, cert, now)`: one PEM block, a self-signed CA
   (`NotRoot`), valid at `now`, that signed `cert` (`NotSignedBy`) and may
   sign a CA: path length 0 is refused (`RootPathLen0`); returns the root's
   common name.
 - `sha256_fingerprint(cert)`: SHA-256 of the DER encoding.
+- `is_ca(cert)`: whether the first certificate is a CA (basicConstraints
+  CA:TRUE).
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,
   `InvalidValidity`, `IssuerExpired`, `InvalidAgentId`, `NotIntermediate`,

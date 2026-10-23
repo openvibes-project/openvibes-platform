@@ -194,21 +194,42 @@ fn certificate_for_another_request_is_refused() {
 
 #[test]
 fn end_entity_certificate_is_refused() {
-    let (_, csr, _) = signed_request();
-    let (_, intermediate) = hierarchy();
+    let (root, csr, _) = signed_request();
+    // The request signed by the right CA, but as a leaf (CA:FALSE).
+    let request = rcgen::CertificateSigningRequestParams::from_pem(&csr).unwrap();
+    let key = rcgen::KeyPair::from_pem(&root.key_pem).unwrap();
+    let issuer = rcgen::Issuer::from_ca_cert_pem(&root.cert_pem, key).unwrap();
+    let leaf = request
+        .params
+        .signed_by(&request.public_key, &issuer)
+        .unwrap()
+        .pem();
+    assert_eq!(
+        platform_pki::check_signed_request(&csr, &leaf, Utc::now()).err(),
+        Some(PkiError::NotCa)
+    );
+}
+
+/// A CA of another shape for another key (the root itself pasted by
+/// mistake) is a certificate for a different request, not "not a CA".
+#[test]
+fn the_root_pasted_as_the_signed_certificate_is_for_another_request() {
+    let (root, csr, _) = signed_request();
+    assert_eq!(
+        platform_pki::check_signed_request(&csr, &root.cert_pem, Utc::now()).err(),
+        Some(PkiError::NotForRequest)
+    );
+}
+
+#[test]
+fn is_ca_reads_basic_constraints() {
+    let (root, intermediate) = hierarchy();
     let server = intermediate
         .issue_server(&["x.example".into()], Utc::now())
         .unwrap();
-    // The leaf alone, without the intermediate after it.
-    let leaf = server
-        .cert_pem
-        .split_inclusive("-----END CERTIFICATE-----\n")
-        .next()
-        .unwrap();
-    assert_eq!(
-        platform_pki::check_signed_request(&csr, leaf, Utc::now()).err(),
-        Some(PkiError::NotCa)
-    );
+    assert_eq!(platform_pki::is_ca(&root.cert_pem), Ok(true));
+    assert_eq!(platform_pki::is_ca(intermediate.cert_pem()), Ok(true));
+    assert_eq!(platform_pki::is_ca(&server.cert_pem), Ok(false));
 }
 
 #[test]
