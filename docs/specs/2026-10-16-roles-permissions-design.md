@@ -866,6 +866,99 @@ These fill gaps in the Vulnerabilities list and a vulnerability's page.
 20. **History** shows state changes and notes only. `vulnerability_triage_history` does not store assignee changes, and adding them is a schema change outside this step.
 21. **What to do counts every pair that is not fixed** per distribution, mitigated, accepted and false-positive ones included: they still need the fixed build.
 
+### Plan rulings, 2026-10-24 (step 5c)
+
+These fill gaps in the Compliance list and a check's page. Rule titles are already required by the protocol (`rule-set.schema.json` `required`), so the optional `title` change planned in "Short names for compliance checks" is already done.
+
+**User decisions (2026-10-24):**
+
+1. **Passing is inferred from rule-set health.** A host passes a check when all of these hold:
+   - it is active and in reach;
+   - its last heartbeat (`agents.health`, within 24 hours) lists the check's rule set as assigned (`state` not `not_assigned`) and not refused;
+   - the collector the check needs ran ok in its last scan;
+   - it has no failing finding for the check.
+
+   The agent reports only a count of rules it could not evaluate, so a host whose facts for this one rule were missing can be counted as passing.
+2. **The last 14 days come from current findings.** For each day, the count is the hosts whose current finding was open that day, from first seen to fixed. An earlier episode (a check that failed, was fixed, then failed again) is not counted.
+3. **Evidence is the fact and its value, plus the file.**
+   - The fact and value come from the finding's detection inputs, for example `sshd.permitrootlogin = yes`.
+   - The file comes from a small fact-to-file map, for example `sshd.*` → `/etc/ssh/sshd_config`.
+   - There is no line number. Passing hosts have no evidence to show.
+4. **The rule text comes from the existing optional fields.** `explain` is shown as "Why it matters", and `check` as "How to fix" (the exact setting and command). The rules repository adds both to the 85 baseline and hardening rules; the user reviews the wording and re-signs the sets. Until then the page shows the rule's message.
+
+**Rulings:**
+
+1. **A new list route, `GET /v1/compliance-list`.** The existing `/v1/compliance/*` routes stay for their current users: dashboards, the host page, the assistant and cases.
+2. **What a row is.**
+   - **The key** is (`rule_set_id`, `rule_id`).
+   - **Pairs under a row:** every host in reach with a current finding for the check (`current_findings`), plus the hosts that pass it (user decision 1).
+   - **Failing** means a current finding with `ended_at IS NULL`, seen within the window the current Compliance list uses by default. Ended findings are no longer failing.
+   - **Title, message, explain and check** come from `console_rule_meta`, using the newest indexed version of the rule. A check without metadata shows its rule ID.
+   - **Severity** is the severity of the newest finding.
+   - **Since** is the earliest first-seen time among the failing pairs.
+   - **"n of m":** n is failing hosts; m is failing plus passing hosts.
+   - **The hosts bar** shows open, mitigated, accepted and false-positive counts among the failing pairs (by triage state, with an expired acceptance counting as open), then pass.
+   - **Assignee** follows the 5b rule: One when exactly one person is assigned among the open failing pairs; Several(n) for n people; None when no open failing pair is assigned.
+3. **Area** is derived from the rule ID, using a fixed map in code (`check_area(rule_id) -> &'static str`):
+   - `port.*` → Network exposure;
+   - `package.*` → Packages;
+   - `harden.ssh.*` → SSH;
+   - `harden.net.*` → Network;
+   - `harden.kernel.*` and `harden.modules.*` → Kernel;
+   - `harden.files.*` and `harden.fs.*` → Files;
+   - `harden.accounts.*` and `harden.login.*` → Accounts;
+   - `harden.lsm.*` → Security modules;
+   - `harden.services.*` → Services;
+   - `test.*` → Tests;
+   - anything else → Other.
+4. **Filter values** (one value per filter; all filters combine):
+   - **State:**
+     - `open` (the default), `mitigated`, `accepted_risk`, `false_positive`, `passing` and `all`;
+     - a row matches when at least one of its pairs is in that state. A failing pair's state is its triage state, with no triage row counting as open.
+   - **Severity:** the five levels.
+   - **Rule set:** the sets of rows in reach, plus the chosen one.
+   - **Area:** the areas of rows in reach.
+   - **Group, Assignee and Host:** as on Alarms and Vulnerabilities.
+5. **Search** covers the title, rule ID and rule set.
+6. **Paging is by offset:** `offset` 0..=100000, `limit` 1..=100, default 50.
+   - **Sorts:** severity (the default, worst first, then most failing), failing, since and title.
+   - Ties are broken by key.
+7. **The summary line:** "N checks failing on N hosts · N critical · N unassigned", followed by a count per rule set ("baseline N, hardening-linux-l1 N").
+8. **Routes for the page:** `/compliance/{rule_set_id}/{rule_id}`, with `GET /v1/compliance/checks/{rule_set_id}/{rule_id}/summary` and `/hosts`. The spec's `/compliance/{rule_id}` is extended with the set, because rule IDs can repeat across sets.
+9. **Old links.**
+   - The `finding` panel kind and `FindingPanel.tsx` are removed.
+   - `nav.open({kind:"finding", id:"set/rule"})` and `?open=finding:set/rule` go to the page, through `settle()` with replace.
+   - Case items and the audit panel keep their refs and link through `nav`.
+   - Old list URLs map: `state=all` stays; `severity` stays; the old `window`/`since` parameter is dropped.
+   - Views saved in the browser under `openvibes.v2.views./compliance` are imported once.
+10. **Bulk on rows** follows step 5b (user decision 2 of 5b, ruling 8 and the `open_only` refinement):
+    - rows send compliance items `{rule_set_id, rule_id, open_only: true}`, plus `agent_id` when the Host chip is set;
+    - Set state and Assign change only open, failing pairs in reach;
+    - Reopen is offered only on the page's Hosts table;
+    - passing hosts are never touched.
+
+    `open_only` is extended to compliance items.
+11. **Hosts card segments:**
+    - **All:** failing and passing;
+    - **Failing:** a failing pair in any triage state;
+    - **Passing:** inferred passing hosts.
+
+    Rows show the host, OS and address, state, evidence, assignee and checked (the last observation for failing hosts; `health_at` for passing hosts). Failing rows have checkboxes. Passing rows have none, because there is nothing to triage.
+12. **The 14 days** are 14 numbers, oldest first. Each is the failing hosts in reach on that UTC day: `first_observed_at` ≤ end of day, and `ended_at` null or after the start of day. They are shown with the existing `HourlyBars` pattern (generalised to N bars) or a new `DayBars`.
+13. **Details:**
+    - **Rule:** the rule ID and version.
+    - **Rule set:** a link to it, with the version.
+    - **Applies to:** from the rule set (`hardening-linux-*` → "Linux hosts"; baseline → "All hosts"; site sets → "Hosts with this rule set").
+    - **Reference:** the rule's ATT&CK techniques from `attack` (there is no other reference field).
+14. **History:** the triage history of pairs in reach, the episode starts and ends (first seen and `ended_at`, labelled "passes again"), and rule-set version publishes. Newest first, at most 50.
+15. **Related:**
+    - **Port:** for `port.*` checks, the port parsed from the rule expression (`'N' in facts['port.tcp.exposed']`) joined to `host_listeners` in reach (exposed on n hosts), linking to `/ports/{port}`.
+    - **Service:** for `harden.services.*`, the unit parsed from the expression, joined to `host_services`, linking to `/services/{unit}`.
+    - **Same area:** other failing checks in reach with the same area, as a count with their worst severity.
+16. **Ask about this** sends `{kind:"finding", id:"set/rule"}`, as the panel does today. It is shown with `assistant.use`.
+17. **⋯** holds Export (a CSV of the check's hosts in reach, with `compliance.export` or the existing findings export permission) and Copy link.
+18. **Performance:** the list must answer within 2 s at full reach on a fleet of 10,000 hosts with 500,000 current findings (50 per host, `docs/sizing.md` "Finding changes"), with heartbeat health for every host. Record the scoped time too. Migration 0063 adds an index on `current_findings (rule_set_id, rule_id) WHERE ended_at IS NULL`, plus any other index the timing test needs.
+
 ## 11. Dashboards
 
 - **Storage:** `console_dashboards.shared_role_id` becomes a visibility:
