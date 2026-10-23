@@ -253,6 +253,10 @@ and `first_seen` (the earliest sighting of the pair) come with each row. Tests: 
 Timing of the page's summary for a kernel-sized CVE seen by a scoped viewer:
 [console-read.md](console-read.md#acceptance-measurement).
 
+A dashboard List tile on Vulnerabilities still reads `GET /api/v1/vulnerabilities`
+(advisory rows), so its link says "Open list (N advisories)": the list it
+opens counts CVEs, and the two numbers differ.
+
 ## Upgrading
 
 The advisory panel became the vulnerability's page, and list rows are now

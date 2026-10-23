@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { int, list, noteLines, noteParts, parseListConfig, str, toInt } from "./config";
+import { int, list, listMoreLabel, noteLines, noteParts, parseListConfig, str, toInt } from "./config";
 
 describe("widget configs", () => {
+  it("names what a List tile's total counts: advisories for Vulnerabilities, whose list counts CVEs", () => {
+    expect(listMoreLabel("/vulnerabilities", "12")).toBe("Open list (12 advisories)");
+    expect(listMoreLabel("/agents", "12")).toBe("Open list (12)");
+  });
+
   it("reads configs defensively", () => {
     expect(str({ metric: 5 }, "metric", "agents.active", ["agents.active"])).toBe("agents.active");
     expect(str({ metric: "nope" }, "metric", "agents.active", ["agents.active", "agents.stale"])).toBe("agents.active");
