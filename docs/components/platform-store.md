@@ -1007,8 +1007,10 @@ risk, when the vulnerability is fixed.
   findings or vulnerabilities (`expand_compliance` and
   `expand_vulnerabilities` turn a rule or advisory into its hosts in
   scope; a close skips expanded hosts already closed, a reopen the ones
-  already open; an advisory-wide vulnerability close or assign touches
-  open pairs only and skips the rest as "not open"); each item goes
+  already open; an advisory-wide or `open_only` vulnerability close or
+  assign expands open pairs only, so closed ones neither count toward the
+  cap nor come back, and an item with none open is skipped as "not open";
+  the vulnerability half is `bulk_triage/vulns.rs`); each item goes
   through its single-item update, skipped items come back with a reason,
   one audit row per action.
 - `triage_history::events`: the newest 200 changes of an alarm, or of a
@@ -1016,7 +1018,7 @@ risk, when the vulnerability is fixed.
 - `console_cases::active_items`: refs of one kind in open cases the
   caller can see, with the case number.
 - Tests: `tests/migrate.rs` (`triage_v2_retires_investigating`),
-  `tests/vulnerability_triage.rs`, `tests/bulk_triage.rs`.
+  `tests/vulnerability_triage.rs`, `tests/bulk_triage.rs`, `tests/bulk_triage_cap.rs`.
 
 ## Network devices (schema 46)
 

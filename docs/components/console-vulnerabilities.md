@@ -287,8 +287,11 @@ assign on a CVE row no longer lists each closed pair as `not open` in
 ## How to test
 
 - Store: `tests/vuln_list.rs`, `tests/vuln_list_pairs.rs`,
-  `tests/vuln_summary.rs`, `tests/bulk_triage.rs`; timing (ignored, run
+  `tests/vuln_summary.rs`, `tests/bulk_triage.rs`, `tests/bulk_triage_cap.rs`; timing (ignored, run
   explicitly): `cargo test -p platform-store --test vuln_list_timing -- --ignored --nocapture`.
+  Any change to `src/vuln_list*.rs` or `src/vuln_summary_sql.rs` runs it
+  before its PR and it must pass (the workspace `testing.md` gate): CI
+  skips it, and the plans it guards are planner-sensitive.
 - Console HTTP: `crates/openvibes-console/tests/vuln_list_http.rs`,
   `vuln_page_http.rs`.
 - Unit: `views/investigate/Vulnerabilities.test.tsx`,
