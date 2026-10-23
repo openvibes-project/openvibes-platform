@@ -7,7 +7,7 @@ chose ourselves; the indirect ones they pull in are counted, not listed.
 `Cargo.lock` and `crates/openvibes-console/web/package-lock.json` hold the
 full, exact sets.
 
-Checked against `main` on 2026-10-22. Update this page in the same change
+Checked against `main` on 2026-10-23. Update this page in the same change
 that adds, removes or bumps a dependency, and update everything before
 each release ([Before each release](#before-each-release)); the commands under
 [Refreshing this page](#refreshing-this-page) print the current state.
@@ -73,7 +73,7 @@ in the programs).
 | sha2 | 0.11.0 | MIT OR Apache-2.0 | Checksums and fingerprints |
 | subtle | 2.6.1 | BSD-3-Clause | Constant-time comparison of secrets |
 | time | 0.3.55 | MIT OR Apache-2.0 | Certificate validity dates (rcgen's type) |
-| tokio | 1.53.1 | MIT | Async runtime of every service |
+| tokio | 1.54.1 | MIT | Async runtime of every service |
 | tokio-postgres | 0.7.18 | MIT OR Apache-2.0 | PostgreSQL client |
 | tokio-rustls | 0.26.5 | MIT OR Apache-2.0 | TLS on tokio sockets |
 | toml | 1.1.6 | MIT OR Apache-2.0 | Reading config files |
