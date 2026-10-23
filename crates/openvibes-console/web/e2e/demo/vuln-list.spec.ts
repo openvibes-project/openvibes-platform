@@ -103,7 +103,9 @@ test("bulk Set state names the open hosts and the other CVEs, and changes only o
   await expect(dialog).toContainText("also cover CVE-2026-20051");
   await dialog.getByRole("textbox", { name: "Why (required)" }).fill("patched by hand");
   await dialog.getByRole("button", { name: "Mitigate 1 vulnerability" }).click();
-  await expect(page.locator(".toast").last()).toContainText("4 changed; 1 skipped (1 not open)");
+  // The closed pair is not part of the change, so nothing is listed as skipped.
+  await expect(page.locator(".toast").last()).toContainText("4 changed");
+  await expect(page.locator(".toast").last()).not.toContainText("skipped");
   // No open pair left: it leaves the default (open) list without a reload.
   await expect(page.getByText("No advisory matches these filters")).toBeVisible();
 });
