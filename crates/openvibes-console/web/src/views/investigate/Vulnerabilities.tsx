@@ -3,12 +3,12 @@
 // search and filter chips whose values and counts come from the server,
 // saved views, the person's columns, a summary line, paging by offset (all
 // in the URL) and the bulk bar (Set state, Assign, Add to case; no Reopen).
-// A row opens the CVE's page at /vulnerabilities/{key}.
+// A row opens the CVE's page at /vulnerabilities/{key} (vulnerability/VulnPage.tsx).
 import { useEffect, useState } from "react";
 
 import { invalidate, useResource } from "../../api/client";
 import type { VulnList, VulnListRow } from "../../api/types";
-import { vulnerabilitiesQuery } from "../../app/location";
+import { vulnPath, vulnerabilitiesQuery } from "../../app/location";
 import { nav, useLocation, viewLink } from "../../app/nav";
 import { highest } from "../../panels/triage/bulk";
 import { BulkBar } from "../../panels/triage/BulkBar";
@@ -23,6 +23,7 @@ import { SummaryLine } from "../../ui/list/SummaryLine";
 import { useSelection } from "../../ui/selection";
 import { useHostName } from "../lists/HostChip";
 import { Pager } from "./Hosts";
+import { NoSuchVuln, VulnPage } from "./vulnerability/VulnPage";
 
 const PAGE_SIZE = 50;
 /** The list's columns (keys as the console keeps hidden ones); Severity and Advisory are never hidden. */
@@ -81,15 +82,17 @@ export function bulkItems(rows: readonly VulnListRow[], host: string | null) {
   return [...new Set(rows.flatMap((r) => r.advisories))].map((advisory_id) => ({ advisory_id, ...on, open_only: true }));
 }
 
-/** What a state change or an assignment on these rows reaches: their open
+type Reached = Pick<VulnListRow, "key" | "open" | "also_covers">;
+
+/** What a state change or an assignment on these rows (or a CVE's page) reaches: their open
  * pairs, and the other CVEs those advisories also cover (not ticked here). */
-export function bulkReach(rows: readonly VulnListRow[]): { open: number; others: string[] } {
+export function bulkReach(rows: readonly Reached[]): { open: number; others: string[] } {
   const ticked = new Set(rows.map((r) => r.key));
   const others = [...new Set(rows.flatMap((r) => r.also_covers))].filter((k) => !ticked.has(k)).sort();
   return { open: rows.reduce((n, r) => n + r.open, 0), others };
 }
 
-function Reach({ rows }: { rows: readonly VulnListRow[] }) {
+export function Reach({ rows }: { rows: readonly Reached[] }) {
   const { open, others } = bulkReach(rows);
   return (
     <>
@@ -99,7 +102,6 @@ function Reach({ rows }: { rows: readonly VulnListRow[] }) {
   );
 }
 
-export const vulnPath = (key: string) => `/vulnerabilities/${encodeURIComponent(key)}`;
 const none = (text: string) => <span className="subtle" title={text}><span aria-hidden="true">—</span><span className="sr-only">{text}</span></span>;
 
 /** "late" when the KEV due date has passed, "soon" within 30 days. */
@@ -232,11 +234,5 @@ export function Vulnerabilities() {
   const { view } = useLocation();
   if (!view.startsWith("/vulnerabilities/")) return <VulnListView />;
   const key = vulnKeyOf(view);
-  // ponytail: a stand-in until the CVE's page (screen 26, step 5b task 8) replaces it.
-  return (
-    <Empty icon="vulnerabilities" title={key ?? "No such vulnerability"}>
-      {key ? "This vulnerability's page is on its way. " : "Check the link. "}
-      <a {...viewLink("/vulnerabilities", key ? { q: key, state: "all" } : undefined)}>{key ? "Show it in the list" : "Back to the list"}</a>
-    </Empty>
-  );
+  return key ? <VulnPage key={key} id={key} /> : <NoSuchVuln />;
 }

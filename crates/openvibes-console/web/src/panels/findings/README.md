@@ -1,10 +1,9 @@
 # panels/findings
 
-Panels for compliance findings and vulnerability advisories. Both use the triage detail template in `panels/triage/`.
+The compliance finding panel, on the triage detail template in `panels/triage/`. A vulnerability is a page (`views/investigate/vulnerability/`).
 
 | File | What it does |
 |---|---|
 | `FindingPanel.tsx` | A compliance rule and every host that matches it. |
-| `AdvisoryPanel.tsx` | A vulnerability advisory: its fix, hosts, evidence and history. |
 
 More: [docs/components/console-triage.md](../../../../../../docs/components/console-triage.md)

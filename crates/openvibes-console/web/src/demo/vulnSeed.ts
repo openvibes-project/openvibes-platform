@@ -3,8 +3,8 @@
 // Vulnerabilities list and page must show (roles 5b): a CVE covered by a
 // Fedora and a Debian advisory, a Fedora advisory naming two CVEs, a fixed
 // (resolved) pair and a mitigated one, KEV due dates overdue, within 30 days
-// and later, assignees (one person, two, none) and a lower-confidence CPE
-// match. Hosts: n % 4 is 0 for Fedora, 1 for Debian, 2 for Ubuntu.
+// and later, assignees (one person, two, none), a lower-confidence CPE
+// match and a Debian advisory naming no CVE. Hosts: n % 4 is 0 for Fedora, 1 for Debian, 2 for Ubuntu.
 import type { Cve, Vulnerability } from "../api/types";
 
 type Pkg = { name: string; installed: string; fixed: string | null };
@@ -45,6 +45,10 @@ function seeds(now: number): Seed[] {
       source: "nvd-cpe", cves: [smuggling], pkg: { name: "nginx", installed: "1.24.0-2ubuntu7", fixed: null },
       due: null, confidence: 60, method: "cpe-range", basis: "Matched from NVD's upstream version ranges, not a distribution advisory.",
       hosts: [{ agent: "agent-00002" }, { agent: "agent-00006" }] },
+    { id: "DSA-5912-1", title: "less security update", severity: "moderate", url: "https://www.debian.org/security/2026/dsa-5912",
+      source: "debian-12-amd64", cves: [], pkg: { name: "less", installed: "590-2", fixed: "590-2.1~deb12u1" },
+      due: null, confidence: 98, method: "distribution-advisory", basis: debian,
+      hosts: [{ agent: "agent-00001" }, { agent: "agent-00005" }] },
   ];
 }
 

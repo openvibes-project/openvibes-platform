@@ -10,8 +10,9 @@ Design: [2026-09-28-console-v2-design.md](../superpowers/specs/2026-09-28-consol
 
 Show everything, without page changes for details:
 
-- **Inspector:** any object (agent, finding, advisory, token, rule set,
-  service account, audit event, user) opens in a panel beside the list.
+- **Inspector:** any object (finding, package, port, token, rule set,
+  service account, audit event, user) opens in a panel beside the list. A
+  host, an alarm and a vulnerability are whole pages instead.
 - **Panel stack:** links inside a panel stack further panels, with a
   breadcrumb. The stack is in the URL (`?open=kind:id`, repeated), so
   Back, reload and shared links restore it.
@@ -47,8 +48,34 @@ Show everything, without page changes for details:
     `exploited`, `reboot`, `nofix` and `lowconf=true` become one `signal`
     (the first in that order wins), and old sorts no column has go. Views
     the old list kept in this browser (`openvibes.v2.views./vulnerabilities`)
-    are imported once with the same mapping. `/vulnerabilities/{key}` shows a
-    stand-in until the CVE's page arrives (step 5b task 8);
+    are imported once with the same mapping. `/vulnerabilities/{key}` is the CVE's page (below);
+  - a vulnerability's page (screen 26, roles 5b rulings 7-12):
+    `views/investigate/vulnerability/` at `/vulnerabilities/{key}`, one per
+    CVE (or per advisory without a CVE), over
+    `GET /api/v1/vulnerabilities/{key}/summary` and its paged `/hosts`. The
+    header has Set state ▾, Assign ▾ and Add to case (each covering
+    advisory's open hosts in reach, `{advisory_id, open_only: true}`; the
+    confirmation says how many open hosts change, that hosts without a fix
+    are left as they are, and names the other CVEs the advisories cover),
+    Ask about this (the covering advisory with the most hosts) and ⋯ (Export,
+    a CSV of its hosts; Copy link), each only with its `can` flag; CISA's due
+    date is a banner below it (`DetailPage`'s `banner`). Tiles: open on
+    (to the Hosts card), fix available, EPSS, CVSS. Left: What to do (the
+    fixed build per distribution, reboot), Details (advisories, published,
+    confidence, vector, CWE, description), History. Right: Hosts
+    (`?segment=` All, Open, Mitigated, Resolved, an unknown value read as
+    All; `?offset=` paging by 50; ticks send `{agent_id, advisory_id}`
+    pairs, Reopen included; a pair with no triage, no fix or a version-range
+    match, has no tick and says why) and Related (open alarms on its hosts,
+    cases, the same package's other CVEs linking to
+    `/vulnerabilities?package=NAME&state=all`). The summary resolves the
+    key: an advisory naming one CVE is replaced by that CVE's address, one
+    naming several by `/vulnerabilities?advisory=ID&state=all`
+    (`nav.replace`), so history keeps no dead entry. The advisory panel is
+    gone: `nav.open({kind: "advisory"})`, `ObjectLink` and
+    `?open=advisory:ID` go to the page (`pagePath` and `redirect` in
+    `app/location.ts`). Tests: `vulnerability/VulnPage.test.tsx`,
+    `e2e/demo/vuln-page.spec.ts`;
   - agents, with labels, host groups and revocation;
   - enrollment tokens;
   - rule sets, with signed-bundle preview and publish, and where each assignable set runs ([rule-set assignment](rule-set-assignment.md#console-screens));
@@ -92,11 +119,11 @@ Show everything, without page changes for details:
   without a fix yet are left as they are…" and the other CVEs those
   advisories also cover. A vulnerability change refreshes every
   `/api/v1/vulnerabilit…` read, the list included.
-- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding and an advisory
-  share one layout (an alarm is a page, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
-  actions line (a finding or advisory: "Set state: N open", acting on its
+- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding's
+  layout (an alarm and a vulnerability are pages, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
+  actions line (a finding: "Set state: N open", acting on its
   open hosts), a short summary, then the console's underline tabs
-  (`Tabs`). Findings and advisories: Hosts (a `DataTable` with a state
+  (`Tabs`). Findings: Hosts (a `DataTable` with a state
   filter, selection and the bulk bar, never cut off), Evidence, History.
   The Hosts table shows each
   host's assignee and, for accepted risk, the date it is accepted until
@@ -483,7 +510,7 @@ for the pages not yet moved; its saved views stay in the browser.
   that is always present, so a change is announced.
 - **DetailPage** (`ui/detail/DetailPage.tsx`): optional crumb; header with
   icon, title, status, a facts line (joined with " · ", empty facts left
-  out) and actions; an error callout (`role="alert"`); tiles; a narrow left
+  out) and actions; a banner (a vulnerability's due date); an error callout (`role="alert"`); tiles; a narrow left
   and a wide right column (one column fills the width). An empty slot draws
   nothing. `Card` (a card of either column) lives here too; the person,
   group and settings pages use it. **Tile**
@@ -752,6 +779,11 @@ for the pages not yet moved; its saved views stay in the browser.
   more" became paging (Previous and Next).
   Alarm views saved in the browser are moved to the person's account the
   first time they open Alarms; see [console-alarms.md](console-alarms.md).
+- **Roles step 5b (Vulnerabilities):** one list row and one page per CVE.
+  The advisory panel became the vulnerability's page
+  `/vulnerabilities/{key}`; old links (`?open=advisory:ID`) redirect to it,
+  or to the list filtered by the advisory when it names several CVEs.
+  Popped-out advisory windows are dropped.
 
 ## Configuration
 

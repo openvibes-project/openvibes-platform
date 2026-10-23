@@ -4,9 +4,9 @@ import { alarmPath, formatLocation, hostPath, hostsQuery, pagePath, parseLocatio
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
-    const loc = parseLocation("/console/compliance", "?open=finding%3Ab%2FR-1&open=advisory%3ARHSA-2026%3A1&q=web", "/console/");
+    const loc = parseLocation("/console/compliance", "?open=finding%3Ab%2FR-1&open=port%3Atcp%3A443&q=web", "/console/");
     expect(loc.view).toBe("/compliance");
-    expect(loc.panels).toEqual([{ kind: "finding", id: "b/R-1" }, { kind: "advisory", id: "RHSA-2026:1" }]);
+    expect(loc.panels).toEqual([{ kind: "finding", id: "b/R-1" }, { kind: "port", id: "tcp:443" }]);
     expect(loc.params.get("q")).toBe("web");
   });
 
@@ -47,11 +47,24 @@ describe("location", () => {
     expect(formatLocation(loc, "/")).toBe(want);
   });
 
+  it.each([
+    ["/vulnerabilities", "?open=advisory%3AFEDORA-2026-3a214d1f", "/vulnerabilities/FEDORA-2026-3a214d1f"],
+    ["/", "?open=advisory%3ACVE-2026-1", "/vulnerabilities/CVE-2026-1"],
+    ["/cases", "?status=open&open=case%3Ac-1&open=advisory%3ARHSA-2026%3A1", "/vulnerabilities/RHSA-2026%3A1"],
+    // A host or an alarm panel still wins.
+    ["/", "?open=advisory%3AX-1&open=alarm%3A7", "/alarms/7"],
+  ])("old_advisory_links_open_the_page: an old advisory panel on %s%s is the vulnerability's page, %s", (view, search, want) => {
+    const loc = parseLocation(view, search, "/");
+    expect(loc.panels).toEqual([]);
+    expect(formatLocation(loc, "/")).toBe(want);
+  });
+
   it("names the page an object opens instead of a panel", () => {
     expect(alarmPath("7 /x")).toBe("/alarms/7%20%2Fx");
     expect(pagePath({ kind: "alarm", id: "7" })).toBe("/alarms/7");
     expect(pagePath({ kind: "agent", id: "a b" })).toBe("/hosts/a%20b");
-    expect(pagePath({ kind: "advisory", id: "X-1" })).toBeNull();
+    expect(pagePath({ kind: "advisory", id: "X 1" })).toBe("/vulnerabilities/X%201");
+    expect(pagePath({ kind: "package", id: "x" })).toBeNull();
   });
 
   it("names a host's page", () => {

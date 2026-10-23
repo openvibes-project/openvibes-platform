@@ -1,6 +1,6 @@
 # views/investigate
 
-The lists you investigate from. A row opens its panel from `panels/` in the inspector; a host and an alarm open their pages.
+The lists you investigate from. A row opens its panel from `panels/` in the inspector; a host, an alarm and a vulnerability open their pages.
 
 | File | What it does |
 |---|---|
@@ -9,7 +9,8 @@ The lists you investigate from. A row opens its panel from `panels/` in the insp
 | `Alarms.tsx` | The Alarms list (screen 29): server filters with counts (Host as a chip), saved views, columns, summary line, paging and the bulk bar; routes `/alarms/{id}` to `alarm/`. |
 | `alarm/` | An alarm's page (screen 30); see its README. |
 | `Findings.tsx` | Compliance findings by rule; `host=` lists one host's current findings. |
-| `Vulnerabilities.tsx` | The Vulnerabilities list (screen 25): one row per CVE, server filters with counts (Host and Advisory as chips), saved views, columns, summary line, paging and the bulk bar; `/vulnerabilities/{key}` is a stand-in until the CVE's page. |
+| `Vulnerabilities.tsx` | The Vulnerabilities list (screen 25): one row per CVE, server filters with counts (Host and Advisory as chips), saved views, columns, summary line, paging and the bulk bar; routes `/vulnerabilities/{key}` to `vulnerability/`. |
+| `vulnerability/` | A vulnerability's page (screen 26); see its README. |
 | `Software.tsx` | Packages across the fleet. |
 | `Ports.tsx` | Open ports and running services across the fleet. |
 | `Cases.tsx` | Cases: the list of investigations. |

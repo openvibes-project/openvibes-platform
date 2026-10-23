@@ -269,7 +269,7 @@
 .person-page__title { gap: 4px; min-width: 0; flex: 1 1 0; }
 .person-page__title h1, .person-page__title h2 { margin: 0; }
 .person-page__title h2 { font-size: 22px; }
-.person-page__error { margin: 0 24px 16px; }
+.person-page__error, .detail-page__banner { margin: 0 24px 16px; }
 .person-page__cols { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 24px; align-items: start; padding: 0 24px 40px; }
 .person-page__col { gap: 16px; min-width: 0; }
 .person-card { overflow: hidden; }
@@ -338,7 +338,7 @@
   .person-page__title h1 { font-size: 22px; }
   .person-page__actions { flex-basis: 100%; }
   .person-page__cols { padding: 0 16px 32px; }
-  .person-page__error { margin: 0 16px 16px; }
+  .person-page__error, .detail-page__banner { margin: 0 16px 16px; }
   .detail-tiles { padding: 0 16px 24px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .person-access__area { grid-template-columns: 1fr; gap: 4px; }
 }

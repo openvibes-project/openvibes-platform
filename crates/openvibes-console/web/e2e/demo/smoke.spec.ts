@@ -87,7 +87,7 @@ test("a viewer does not see administration", async ({ page }) => {
   await page.getByRole("menuitemradio", { name: "admin" }).click();
 });
 
-for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/compliance?open=finding%3Abaseline%2Fport.ssh.exposed", "/vulnerabilities?open=advisory%3AFEDORA-2026-3a214d1f", "/hosts", "/hosts/agent-00005", "/audit"]) {
+for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/compliance?open=finding%3Abaseline%2Fport.ssh.exposed", "/vulnerabilities/CVE-2026-10523", "/hosts", "/hosts/agent-00005", "/audit"]) {
   test(`no accessibility violations on ${path} (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(path);

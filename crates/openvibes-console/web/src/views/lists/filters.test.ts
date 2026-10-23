@@ -46,8 +46,9 @@ describe("filters", () => {
     expect(setFilter("/compliance", "severity=low&bad=1", "severity", "high")).toBe("severity=high&bad=1");
     expect(setFilter("/compliance", "", "state", "all")).toBe("state=all");
   });
+  // The Vulnerabilities list builds its chips from the server's counts (roles 5b); the catalogue serves its dashboard widget.
   it.each([
-    ["/compliance", "investigate/Findings"], ["/vulnerabilities", "investigate/Vulnerabilities"], ["/audit", "admin/Audit"],
+    ["/compliance", "investigate/Findings"], ["/audit", "admin/Audit"],
   ] as const)("%s view builds its chips from the catalogue", (view, file) => {
     expect(LIST_FILTERS[view].length).toBeGreaterThan(0);
     expect(readFileSync(new URL(`../${file}.tsx`, import.meta.url), "utf8")).toContain(`"${view}"`);

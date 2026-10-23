@@ -63,22 +63,28 @@ export const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
 /** An alarm's page (approved screen 30). */
 export const alarmPath = (id: string) => `/alarms/${encodeURIComponent(id)}`;
 
-/** The page an object opens instead of a panel: a host or an alarm; null for a panel. */
+/** A vulnerability's page (approved screen 26): a CVE, or an advisory id the page resolves (roles 5b ruling 7). */
+export const vulnPath = (key: string) => `/vulnerabilities/${encodeURIComponent(key)}`;
+
+const PAGES: Record<string, (id: string) => string> = { agent: hostPath, alarm: alarmPath, advisory: vulnPath };
+
+/** The page an object opens instead of a panel: a host, an alarm or an advisory; null for a panel. */
 export function pagePath(panel: PanelRef): string | null {
-  return panel.kind === "agent" ? hostPath(panel.id) : panel.kind === "alarm" ? alarmPath(panel.id) : null;
+  return PAGES[panel.kind]?.(panel.id) ?? null;
 }
 
 /**
  * Old addresses as today's (plan ruling 1; roles 5a): `/agents?…` is the
- * Hosts list, and a host or alarm panel opened on any view
- * (`?open=agent:ID`, `?open=alarm:ID`, the assistant's `/agents?agent=ID`)
- * is that object's page, a whole page with no panels (as `nav.open` opens it).
- * A host panel wins over an alarm panel. The old Vulnerabilities flags are
- * today's signals (roles 5b ruling 7).
+ * Hosts list, and a host, alarm or advisory panel opened on any view
+ * (`?open=agent:ID`, `?open=alarm:ID`, `?open=advisory:ID`, the assistant's
+ * `/agents?agent=ID`) is that object's page, a whole page with no panels (as
+ * `nav.open` opens it). A host panel wins over an alarm panel, an alarm over
+ * an advisory. The old Vulnerabilities flags are today's signals (roles 5b ruling 7).
  */
 export function redirect(location: AppLocation): AppLocation {
   const host = location.view === "/agents" ? location.params.get("agent") : null;
-  const panel = location.panels.find((p) => p.kind === "agent") ?? (host ? { kind: "agent", id: host } : location.panels.find((p) => p.kind === "alarm"));
+  const panel = location.panels.find((p) => p.kind === "agent") ?? (host ? { kind: "agent", id: host }
+    : location.panels.find((p) => p.kind === "alarm") ?? location.panels.find((p) => p.kind === "advisory"));
   const page = panel && pagePath(panel);
   if (page) return { view: page, panels: [], params: new URLSearchParams() };
   if (location.view === "/vulnerabilities") return { ...location, params: new URLSearchParams(vulnerabilitiesQuery(location.params.toString())) };

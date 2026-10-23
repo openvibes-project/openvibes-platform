@@ -1,5 +1,6 @@
 // The shared layout of a detail page (approved screens 11 and 17): a
-// header (icon, title, status, a facts line, actions), up to four tiles,
+// header (icon, title, status, a facts line, actions), a banner (a due date,
+// screen 26), up to four tiles,
 // then a narrow left and a wide right column of cards. A slot left empty
 // draws nothing. `Card` is one card of either column.
 import { Fragment, type ReactNode } from "react";
@@ -16,7 +17,7 @@ export const Card = ({ title, aside, flush, id, children }: { title: ReactNode; 
 
 const present = (node: ReactNode) => node !== null && node !== undefined && node !== false && node !== "";
 
-export function DetailPage({ crumb, icon, title, status, facts = [], actions, error, tiles = [], left, right }: {
+export function DetailPage({ crumb, icon, title, status, facts = [], actions, banner, error, tiles = [], left, right }: {
   crumb?: ReactNode;
   icon?: ReactNode;
   title: ReactNode;
@@ -24,6 +25,8 @@ export function DetailPage({ crumb, icon, title, status, facts = [], actions, er
   /** Joined with " · "; empty ones are left out. */
   facts?: readonly ReactNode[];
   actions?: ReactNode;
+  /** A notice below the header (a CISA due date). */
+  banner?: ReactNode;
   /** A refusal or failure of an action on the page. */
   error?: string | undefined;
   tiles?: readonly ReactNode[];
@@ -48,6 +51,7 @@ export function DetailPage({ crumb, icon, title, status, facts = [], actions, er
         </div>
         {present(actions) && <div className="row person-page__actions">{actions}</div>}
       </header>
+      {present(banner) && <div className="callout callout--bad detail-page__banner">{banner}</div>}
       {error && <div className="callout callout--bad person-page__error" role="alert"><Icon name="alert" size={16} /><span>{error}</span></div>}
       {shownTiles.length > 0 && <div className="detail-tiles">{shownTiles.map((t, i) => <Fragment key={i}>{t}</Fragment>)}</div>}
       {cols.length > 0 && (

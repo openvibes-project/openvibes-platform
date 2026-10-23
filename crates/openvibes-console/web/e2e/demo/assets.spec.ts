@@ -39,13 +39,16 @@ test("software shows advisories per package and filters to packages in several v
   await expect(page).toHaveURL(/multiple_versions=true/);
   const rows = page.locator(".view tbody tr");
   await expect(rows.first()).toBeVisible();
-  // A package with an advisory lists it, linking to the advisory.
+  // A package with an advisory lists it, linking to the vulnerability's page (screen 26),
+  // or to the list filtered by it when the advisory names several CVEs.
   await page.goto("/software");
   const withAdvisory = page.locator(".view tbody tr").filter({ has: page.locator(".badge--critical, .badge--important, .badge--moderate, .badge--low") }).first();
   await withAdvisory.locator("td").first().click();
   const inspector = page.locator(".inspector");
   await inspector.getByRole("list", { name: "Open advisories" }).locator("a").first().click();
-  await expect(inspector.locator(".panel-header__kind")).toContainText("Advisory");
+  await expect(page).toHaveURL(/\/vulnerabilities(\/[^?]+|\?advisory=[^&]+&state=all)$/);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(inspector).toHaveCount(0);
 });
 
 /** The first host of the Hosts list, opened: its page. */
