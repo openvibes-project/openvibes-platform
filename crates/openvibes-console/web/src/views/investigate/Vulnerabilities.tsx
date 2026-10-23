@@ -92,7 +92,7 @@ export function bulkItems(rows: readonly VulnListRow[], host: string | null) {
 export function listBulk(chosen: readonly VulnListRow[]) {
   const rows = chosen.filter(canChange);
   const without: BulkAction[] = rows.length === 0 ? ["state", "assign", "case"] : [];
-  return { rows, changes: rows.length, without };
+  return { rows, changes: rows.length, without, note: "Nothing selected can be triaged: no fix is known yet, or it is a lower-confidence match." };
 }
 
 const none = (text: string) => <span className="subtle" title={text}><span aria-hidden="true">—</span><span className="sr-only">{text}</span></span>;
@@ -207,7 +207,7 @@ function VulnListView() {
         <VulnListBody list={data} hidden={hidden ?? []} offset={Math.max(0, Number(params.get(PAGE)) || 0)} selected={selected} onSelect={setSelected} />
       )}
       <BulkBar kind="vulnerabilities" noun={selected.size === 1 ? "vulnerability" : "vulnerabilities"} count={selected.size} onClear={() => setSelected(new Set())}
-        items={() => bulkItems(chosen, host)} confirm={<Reach rows={bulk.rows} />} changes={bulk.changes} without={bulk.without}
+        items={() => bulkItems(chosen, host)} confirm={<Reach rows={bulk.rows} />} changes={bulk.changes} without={bulk.without} note={bulk.note}
         newCase={() => ({ title: `${chosen.length} vulnerabilities: ${chosen[0]?.key ?? ""} ${chosen[0]?.title ?? ""}`.trim(), severity: highest(chosen.map((r) => r.severity)) })} />
     </div>
   );

@@ -835,8 +835,8 @@ These fill gaps in the Vulnerabilities list and a vulnerability's page.
    Views saved in the browser under `openvibes.v2.views./vulnerabilities` are imported once, as on Alarms.
 8. **Bulk on rows** (user decision 2):
    - Each ticked row sends `{advisory_id}` items, one per covering advisory in reach, plus `agent_id` when the Host chip is set.
-   - `set_state` and `assign` with advisory-wide items change only open pairs. The other states are skipped, with the reason "not open".
-   - Refined in the final review: closed pairs are left out before the 10,000-item cap (with an advisory-wide or `open_only` item, not a reopen), so they neither count toward it nor are listed one by one; an item with no open pair left is skipped as "not open".
+   - `set_state` and `assign` with advisory-wide items change only open pairs. Closed pairs are left alone and not reported one by one; an item with no open pair left is skipped with the reason "not open".
+   - Refined in the final review: closed pairs are left out before the 10,000-item cap (with an advisory-wide or `open_only` item, not a reopen), so they do not count toward it.
    - Reopen is not offered on list rows. It stays on the page's Hosts table, which sends `{agent_id, advisory_id}` pairs.
    - The confirmation shows the sum of the rows' open-in-reach counts, and names the other CVEs that the changed advisories also cover.
 9. **Hosts card segments:**

@@ -145,7 +145,7 @@ open_only: true}`, plus `agent_id` with the Host chip) but `CPE:` matches; the s
 (the closed ones are not reached) and skips pairs with no fix. A row with no fix
 (`fixed.kind` none) or only `CPE:` advisories sends nothing and is left out of the
 confirmation's counts; a selection of only such rows offers no Set state, Assign
-or Add to case. There is no Reopen
+or Add to case, and the bar says why (BulkBar's `note`). There is no Reopen
 there. `BulkBar`'s `confirm` puts what a change reaches in the Set state
 dialog and makes Assign ask first too: "Changes up to N open hosts. Hosts
 without a fix yet are left as they are…" and the other CVEs those

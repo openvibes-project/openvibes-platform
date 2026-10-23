@@ -9,7 +9,9 @@ vi.hoisted(() => {
   Object.assign(globalThis, { window: { location: { pathname: "/vulnerabilities", search: "" }, history: { replaceState() {} }, addEventListener() {}, removeEventListener() {} } });
 });
 
-import type { VulnList, VulnListRow } from "../../api/types";
+import type { Session, VulnList, VulnListRow } from "../../api/types";
+import { SessionContext } from "../../app/session";
+import { BulkBar } from "../../panels/triage/BulkBar";
 import { VulnListBody, apiQuery, bulkItems, listBulk, vulnFilters, vulnKeyOf } from "./Vulnerabilities";
 import { bulkReach } from "./vulnerability/Reach";
 
@@ -131,6 +133,21 @@ describe("Vulnerabilities list", () => {
     expect(listBulk([fixable, nofix, cpe])).toMatchObject({ changes: 1, rows: [fixable], without: [] });
     // Nothing that can change: no Set state, Assign or Add to case (they would send nothing).
     expect(listBulk([nofix, cpe])).toMatchObject({ changes: 0, rows: [], without: ["state", "assign", "case"] });
+  });
+
+  it("says why when nothing selected can be triaged, and only then", () => {
+    const session = { principal: { id: "u-me", username: "me", display_name: "Me" }, capabilities: [] } as unknown as Session;
+    const bar = (rows: VulnListRow[]) => {
+      const bulk = listBulk(rows);
+      return renderToStaticMarkup(<SessionContext.Provider value={{ session, demo: false, can: () => true, canEverywhere: () => true }}>
+        <BulkBar kind="vulnerabilities" noun="vulnerabilities" count={rows.length} items={() => []} onClear={() => undefined} newCase={() => ({ title: "x" })}
+          without={bulk.without} changes={bulk.changes} note={bulk.note} />
+      </SessionContext.Provider>);
+    };
+    const [fixable, nofix] = list().items;
+    if (!fixable || !nofix) throw new Error("fixture");
+    expect(bar([nofix])).toContain("Nothing selected can be triaged");
+    expect(bar([fixable, nofix])).not.toContain("Nothing selected can be triaged");
   });
 
   it("counts the open hosts a change reaches and names the other CVEs those advisories cover", () => {

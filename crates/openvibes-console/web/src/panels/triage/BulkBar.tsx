@@ -53,8 +53,8 @@ const avatar = (name: string | null) => <span className={name ? "initials" : "in
  * panel header (no count or Clear); `without` leaves out actions the panel
  * offers elsewhere (any of state, assign, case, suppress); `confirm` says what a state change or an assignment
  * will reach, and makes the assignment ask first too; `changes` is how many of the `count` selected an action
- * can change (the dialog's count; default all). */
-export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople, confirm, changes }: Readonly<{
+ * can change (the dialog's count; default all); `note` shows in the bar only when no action is left, to say why. */
+export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenItems, assignee, stateLabel, partial, onClear, inline, without = [], assignPeople, confirm, changes, note }: Readonly<{
   kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
   newCase: () => { title: string; severity?: string | undefined };
   closed?: number; reopenItems?: () => BulkItem[]; assignee?: string | null; stateLabel?: string;
@@ -63,6 +63,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
   assignPeople?: boolean;
   confirm?: ReactNode;
   changes?: number;
+  note?: string;
 }>) {
   const { can, canEverywhere, session } = useSession();
   const [choice, setChoice] = useState<Choice | null>(null);
@@ -126,11 +127,13 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
     </>
   );
   if (inline) return actions;
+  const none = without.includes("state") && without.includes("assign") && (without.includes("case") || !can("cases.write")) && closed === 0;
   return (
     <section className="bulk-bar bulk-bar--bottom" aria-label="Bulk actions">
       <strong className="num">{count.toLocaleString()} selected</strong>
       {partial && <span className="subtle">(of the first results only)</span>}
       {actions}
+      {note && none && <span className="subtle">{note}</span>}
       <button type="button" className="button button--ghost push" onClick={onClear}>Clear</button>
     </section>
   );
