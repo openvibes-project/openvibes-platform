@@ -8,7 +8,7 @@ export function cveFacts(advisories: readonly { cves: readonly Cve[] }[], key: s
   const cve = advisories.flatMap((a) => a.cves).find((c) => c.cve_id === key);
   if (!cve) return null;
   // The demo keeps the KEV date per pair; it is this CVE's only when the CVE is on KEV.
-  const due = cve.kev ? pairs.flatMap((p) => (p.kev_due ? [p.kev_due.slice(0, 10)] : [])).sort()[0] ?? null : null;
+  const due = cve.kev ? pairs.flatMap((p) => (p.kev_due ? [p.kev_due.slice(0, 10)] : [])).sort((a, b) => a.localeCompare(b))[0] ?? null : null;
   return {
     exploited: cve.kev || cve.euvd_exploited != null, due, cvss: cve.cvss_score ?? null, epss: cve.epss ?? null,
     epss_percentile: cve.epss == null ? null : Math.min(0.999, cve.epss * 1.6),
