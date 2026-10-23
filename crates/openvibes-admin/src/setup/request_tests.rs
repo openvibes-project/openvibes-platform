@@ -1,6 +1,6 @@
 //! The CA request before install (sub-project 3) on a temp root.
 
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 
 use platform_host::{Step, StepState};
 
@@ -260,6 +260,31 @@ fn a_changed_copy_or_a_link_is_kept() {
             assert_eq!(std::fs::read_to_string(&target).unwrap(), csr);
         }
     }
+}
+
+/// A FIFO or a file of the request's size with other bytes at the copy's
+/// path is left alone, and a FIFO never blocks the CA step.
+#[test]
+fn a_fifo_or_a_same_size_file_at_the_copy_is_kept() {
+    use super::remove_copy;
+    let fake = Fake::new("request-copy-fifo");
+    std::fs::create_dir_all(fake.root.join("home/alice")).unwrap();
+    let plan = plan(&[Ingest]);
+    let ctx = fake.ctx(&plan);
+    let csr = csr_of(request(&ctx).unwrap());
+    let copy = save_copy(&ctx, std::path::Path::new("/home/alice/r.csr"), &csr).unwrap();
+    let at = fake.root.join(&copy[1..]);
+    std::fs::write(&at, "x".repeat(csr.len())).unwrap();
+    remove_copy(&ctx);
+    assert_eq!(std::fs::read_to_string(&at).unwrap().len(), csr.len());
+    std::fs::remove_file(&at).unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg(&at)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    remove_copy(&ctx);
+    assert!(at.symlink_metadata().unwrap().file_type().is_fifo(), "kept");
 }
 
 #[test]

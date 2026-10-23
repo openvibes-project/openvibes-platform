@@ -802,10 +802,13 @@ alone and the copy goes beside it as `-2`, `-3`… (before the extension, up
 to `-100`; past that "That file already exists: PATH. Choose another
 name.") and records the path used in `/etc/openvibes/pki/request/copy`
 (0600). The CA step (careful or quick), before removing the request
-folder, removes that copy, and `dnf remove openvibes-admin` on a host
-never installed does the same in `%postun`; both only while it is still
-the request: a regular file, never a link, with the same bytes
-(`cmp -s`, hence `Requires(postun): diffutils`). `ca-accept` checks the certificate against the stored request and
+folder, removes that copy, as does Remove everything before it deletes
+`/etc/openvibes` (an install stopped before the CA step); both open it
+once with `O_NOFOLLOW | O_NONBLOCK` and check and read that handle.
+`dnf remove openvibes-admin` on a host never installed does the same in
+`%postun`. All only while it is still the request: a regular file, never
+a link or a FIFO, with the same bytes (`cmp -s` under `timeout 5` in the
+scriptlet, hence `Requires(postun): diffutils`). `ca-accept` checks the certificate against the stored request and
 the root against the certificate (platform-pki `check_signed_request`,
 `check_root_signed`) and only then writes `intermediate.crt` and
 `root.crt` there. Both print line 1 `request` or `signed<TAB>ISSUER`,

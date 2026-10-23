@@ -5,7 +5,7 @@
 
 use std::{
     fs::{self, OpenOptions, Permissions},
-    io::Write,
+    io::{Read, Write},
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::Path,
     process::ExitCode,
@@ -127,15 +127,32 @@ pub fn save_copy<R: Runner>(ctx: &Ctx<R>, base: &Path, csr: &str) -> Result<Stri
 }
 
 /// Removes the operator's copy recorded by `save_copy` when it is still the
-/// request: a regular file (a link is never followed) with the same bytes.
-/// Best effort: residue is not worth failing the CA step for.
+/// request: a regular file with the same bytes. Opened once, never through
+/// a link and never blocking on a FIFO; the checks and the read use that
+/// handle, so a file swapped in meanwhile is never read. Best effort:
+/// residue is not worth failing the CA step or Uninstall for.
 pub fn remove_copy<R: Runner>(ctx: &Ctx<R>) {
     let (Ok(path), Ok(csr)) = (ctx.read(&file("copy")), ctx.read(&file("intermediate.csr"))) else {
         return;
     };
     let at = ctx.path(path.trim());
-    let regular = fs::symlink_metadata(&at).is_ok_and(|meta| meta.file_type().is_file());
-    if regular && fs::read(&at).is_ok_and(|bytes| bytes == csr.as_bytes()) {
+    let Ok(mut copy) = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(&at)
+    else {
+        return;
+    };
+    let size = csr.len() as u64;
+    if !copy
+        .metadata()
+        .is_ok_and(|meta| meta.file_type().is_file() && meta.len() == size)
+    {
+        return;
+    }
+    let mut bytes = Vec::new();
+    // One byte more than the request: a file grown meanwhile differs.
+    if (&mut copy).take(size + 1).read_to_end(&mut bytes).is_ok() && bytes == csr.as_bytes() {
         let _ = fs::remove_file(&at);
     }
 }
