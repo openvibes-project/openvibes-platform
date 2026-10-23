@@ -10,7 +10,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use super::{Ca, Install, Stage, install_help};
+use super::{Ca, Install, Stage, install_help, steps::typed_or};
 use crate::tui::{
     app::{App, Key},
     nav::Screen,
@@ -47,14 +47,7 @@ fn row<H: Host>(app: &App<H>, i: usize) -> Row {
     let t = &app.theme;
     let install = &app.install;
     let typing = install.editing.is_some() && app.nav.row == i;
-    let value = |text: &str, empty: &str| {
-        let shown = if text.is_empty() && !typing {
-            empty
-        } else {
-            text
-        };
-        format!("{shown}{}", if typing { "█" } else { "" })
-    };
+    let value = |text: &str, empty: &str| typed_or(text, typing, empty);
     let (name, shown) = match i {
         0 => (NAMES[0], value(&install.hostname, "")),
         1 => (NAMES[1], value(&install.sans, "none")),

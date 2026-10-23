@@ -107,6 +107,15 @@ pub(super) fn typed(text: &str, typing: bool) -> String {
     format!("{text}{}", if typing { "█" } else { "" })
 }
 
+/// As `typed`, with `empty` for an empty value not being typed.
+pub(super) fn typed_or(text: &str, typing: bool, empty: &str) -> String {
+    if text.is_empty() && !typing {
+        empty.to_owned()
+    } else {
+        typed(text, typing)
+    }
+}
+
 /// `path` with the home folder as `~`.
 pub(super) fn tilde(path: &str, home: Option<&str>) -> String {
     match home.and_then(|h| path.strip_prefix(&format!("{h}/"))) {
@@ -238,7 +247,7 @@ fn draw_names<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         at: 1,
         rows: vec![
             Row::entry("Host name", &typed(&install.hostname, typing(0))),
-            Row::entry("Other names", &typed(&install.sans, typing(1))),
+            Row::entry("Other names", &typed_or(&install.sans, typing(1), "none")),
             Row::entry("Next", "certificates"),
         ],
         help: flagged.as_deref().unwrap_or(help),

@@ -138,8 +138,15 @@ fn names_edits_in_place_and_flags_a_bad_name() {
         "{text}"
     );
     assert!(text.contains("Enter  Change"), "{text}");
+    // Empty Other names read "none", as on Quick install, until typed.
+    let none = |text: &str| {
+        text.lines()
+            .any(|l| l.contains("Other names") && l.contains("none"))
+    };
+    assert!(none(&text), "{text}");
     app.key(Key::Down);
     app.key(Key::Enter);
+    assert!(!none(&screen(&app)), "{}", screen(&app));
     type_text(&mut app, "192.168.1.10");
     let text = screen(&app);
     assert!(text.contains("192.168.1.10█"), "{text}");
