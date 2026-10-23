@@ -84,8 +84,9 @@ Requires(pre):  shadow-utils procps-ng systemd
 # The administration TUI: operators act through sudo, polkit and curl;
 # Setup checks ports with ss (iproute).
 Requires:       sudo polkit curl iproute
-# %%postun compares the request's copy with cmp before removing it.
-Requires(postun): diffutils
+# %%postun compares the request's copy with cmp, under timeout, before
+# removing it.
+Requires(postun): diffutils coreutils
 # admin ships the migrations: an older console refuses the new schema and
 # stays down, so dnf must upgrade the console with it (a fresh install
 # without a console is unaffected).
@@ -330,12 +331,14 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 # own CA" request goes too, its key included, and the folders it made when
 # left empty (never fails). So does the operator's copy of the request
 # that ca-request recorded, only while it is still that request: a regular
-# file (a link is never followed) with the same bytes.
+# file (a link is never followed, a FIFO never read) with the same bytes.
+# cmp runs under a timeout, so a FIFO swapped in after the checks can never
+# hang dnf remove.
 if [ $1 -eq 0 ] && [ ! -e %{_sysconfdir}/openvibes/setup.toml ]; then
     request=%{_sysconfdir}/openvibes/pki/request
     copy=$(cat "$request/copy" 2>/dev/null) || :
-    if [ -n "$copy" ] && [ -f "$copy" ] && [ ! -L "$copy" ] &&
-        cmp -s "$copy" "$request/intermediate.csr"; then
+    if [ -n "$copy" ] && [ -f "$copy" ] && [ ! -L "$copy" ] && [ ! -p "$copy" ] &&
+        timeout 5 cmp -s "$copy" "$request/intermediate.csr"; then
         rm -f "$copy"
     fi
     rm -rf "$request"
