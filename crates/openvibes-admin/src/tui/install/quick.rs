@@ -10,7 +10,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use super::{Ca, Install, Stage};
+use super::{Ca, Install, Stage, install_help};
 use crate::tui::{
     app::{App, Key},
     nav::Screen,
@@ -26,12 +26,11 @@ use crate::tui::{
 const NAMES: [&str; 3] = ["Host name", "Other names", "Root key file"];
 const AGENT: usize = 3;
 const INSTALL: usize = 4;
-const HELP: [&str; 5] = [
+const HELP: [&str; 4] = [
     "The name agents and your browser use to reach this host.",
     "Other names or addresses agents may use, comma-separated.",
     "The CA's root key: written once here, move it offline.",
     "Untick only if this server must not run an agent.",
-    "Starts the install; it asks for your password once.",
 ];
 
 impl Install {
@@ -103,7 +102,8 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         Some((at, why)) => (format!("✗ {}: {why}", NAMES[at]), true),
         None => match (&install.port_note, app.nav.row) {
             (Some(note), INSTALL) => (note.clone(), false),
-            _ => (HELP[app.nav.row.min(INSTALL)].to_owned(), false),
+            (_, INSTALL..) => (install_help(app.host.needs_password()).to_owned(), false),
+            (_, row) => (HELP[row].to_owned(), false),
         },
     };
     let help = wrap(&text, 72, 2);

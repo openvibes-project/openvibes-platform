@@ -112,7 +112,8 @@ addresses, and certificates once the host is set up.
   checked as typed; a default another program holds is moved to a free
   port with its reason in yellow, unless the platform's own service holds
   it, #115), 5 Review (every choice on one screen; Enter on a line goes
-  back to its step; Install asks for the password once).
+  back to its step; Install asks for the password once, and when sudo asks
+  none its row reads "install now" and its help leaves the password out).
 - *Certificates* (step 3): your own CA (the default) or OpenVIBES makes one
   (then the root key file is asked). With your own CA, Next first makes the
   request, before anything is installed: `helper ca-request` writes

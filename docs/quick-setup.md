@@ -41,7 +41,8 @@ port later: `sudo openvibes-admin setup --repair --console-port N` (or
 `--ingest-port`, `--distribution-port`, which also need
 `--move-agent-ports`: agents on other hosts then need their install line
 run again). Install asks for
-your password once and then shows each step as it runs: packages,
+your password once (not when sudo asks none, e.g. run as root) and then
+shows each step as it runs: packages,
 PostgreSQL, database, CA, certificates, console, services, firewall
 (the console and agent ports), agent, readiness and the assistant model. A port another
 process holds stops the install before any service starts, naming the process. If a step fails, fix the cause

@@ -290,3 +290,27 @@ fn a_paste_into_a_field_types_it_without_the_line_end() {
     app.key(Key::Enter);
     assert_eq!(app.install.hostname, "lime.lan");
 }
+
+/// As root (sudo asks nothing) Install's help says no password; Review's
+/// Install row reads "install now".
+#[test]
+fn install_says_no_password_when_none_is_asked() {
+    let mut app = quick();
+    app.host.root = true;
+    app.nav.row = 4;
+    let text = screen(&app);
+    assert!(text.contains("Starts the install."), "{text}");
+    assert!(!text.contains("password"), "{text}");
+    let mut app = super::steps_tests::steps(4);
+    app.host.root = true;
+    app.install.ca = super::Ca::OpenVibes;
+    app.install.root_key_out = std::env::temp_dir()
+        .join(format!("ov-review-as-root-{}.key", std::process::id()))
+        .display()
+        .to_string();
+    app.nav.row = 4;
+    let text = screen(&app);
+    assert!(text.contains("install now"), "{text}");
+    assert!(text.contains("Starts the install."), "{text}");
+    assert!(!text.contains("password"), "{text}");
+}

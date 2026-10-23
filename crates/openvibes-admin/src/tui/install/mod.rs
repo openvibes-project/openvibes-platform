@@ -237,3 +237,12 @@ pub(super) fn location(stage: Stage) -> String {
         Stage::Welcome | Stage::Running | Stage::Finished => " · Install".into(),
     }
 }
+
+/// Install's help line: the password clause only when sudo asks one.
+pub(super) fn install_help(needs_password: bool) -> &'static str {
+    if needs_password {
+        "Starts the install; it asks for your password once."
+    } else {
+        "Starts the install."
+    }
+}

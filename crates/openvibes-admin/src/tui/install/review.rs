@@ -1,13 +1,13 @@
 //! Steps 4 and 5 of Choose what to install (advanced.py, full_advanced.py):
 //! Ports, each checked as typed and a taken default moved with its reason
 //! in yellow, and Review, every choice on one screen; Enter on a line goes
-//! back to its step, Install asks for the password once.
+//! back to its step, Install asks for the password once (when sudo asks one).
 
 use platform_host::Host;
 use ratatui::{Frame, text::Span};
 
 use super::{
-    Ca, Install, fields,
+    Ca, Install, fields, install_help,
     steps::{Step, draw_step, tilde, typed},
 };
 use crate::{
@@ -180,12 +180,19 @@ pub(super) fn draw_review<H: Host>(frame: &mut Frame, head: &Header, app: &App<H
             value: certs,
         },
         Row::entry("Ports", &ports),
-        Row::entry("Install", "asks for your password once"),
+        Row::entry(
+            "Install",
+            if app.host.needs_password() {
+                "asks for your password once"
+            } else {
+                "install now"
+            },
+        ),
     ];
     let refused = (row == 4).then(|| install.not_ready()).flatten();
     let help = match &refused {
         Some(why) => why.as_str(),
-        None if row == 4 => "Starts the install; it asks for your password once.",
+        None if row == 4 => install_help(app.host.needs_password()),
         None => "Enter goes back to this step to change it.",
     };
     let bar = if row == 4 {
