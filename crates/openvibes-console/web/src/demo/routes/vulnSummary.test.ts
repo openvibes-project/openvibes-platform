@@ -58,12 +58,29 @@ describe("demo vulnerability page", () => {
     expect(s.open + s.mitigated + s.resolved).toBe(s.all);
     expect(body.total).toBe(s.all);
     expect((await hosts(row.key, "segment=open")).body.total).toBe(s.open);
-    expect((await hosts(row.key, "offset=1&limit=1")).body.rows[0]).toEqual(body.rows[1]);
+    // Each call is a new demo server, whose dates move with the clock: compare the pair.
+    const pair = (r?: { agent_id: string; advisory_id: string }) => [r?.agent_id, r?.advisory_id];
+    expect(pair((await hosts(row.key, "offset=1&limit=1")).body.rows[0])).toEqual(pair(body.rows[1]));
     for (const [query, field] of [["segment=fixed", "segment"], ["offset=-1", "offset"], ["sort=x", "query"]]) {
       const r = await hosts(row.key, query);
       expect(r.status).toBe(400);
       expect(r.body.field_errors?.[0]?.field).toBe(field);
     }
+  });
+
+  it("marks fixed pairs untriageable and every row's reboot and first seen", async () => {
+    const server = createDemoServer();
+    const fixed = server.data.vulnerabilities.find((v) => v.fixed_at != null);
+    const reboot = server.data.vulnerabilities.find((v) => v.reboot_needed && v.fixed_at == null);
+    if (!fixed || !reboot) throw new Error("fixture");
+    const rowsOf = async (advisory: string) => {
+      const cve = server.data.advisories.find((a) => a.id === advisory)?.cves[0]?.cve_id ?? advisory;
+      return (await (await server.handle("GET", `/api/v1/vulnerabilities/${encodeURIComponent(cve)}/hosts?limit=100`, undefined)).json() as VulnHostsPage).rows;
+    };
+    const f = (await rowsOf(fixed.advisory_id)).find((r) => r.agent_id === fixed.agent_id && r.advisory_id === fixed.advisory_id);
+    expect(f).toMatchObject({ state: "resolved", triage_version: null, reboot_needed: false, first_seen: fixed.first_seen_at });
+    const r = (await rowsOf(reboot.advisory_id)).find((x) => x.agent_id === reboot.agent_id && x.advisory_id === reboot.advisory_id);
+    expect(r).toMatchObject({ reboot_needed: true, first_seen: reboot.first_seen_at });
   });
 
   it("keeps a scoped persona inside its reach", async () => {

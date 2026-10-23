@@ -154,8 +154,9 @@ export function registerVulnSummaryRoutes(ctx: DemoContext & { cases: ReturnType
         agent_id: p.agent_id, hostname: p.hostname ?? null, os: agent?.os_id ? `${agent.os_id} ${agent.os_version ?? ""}`.trim() : null,
         address: data.addresses.get(p.agent_id) ?? null, installed: unique(pkgs(p).flatMap((k) => (k.installed ? [k.installed] : []))).join(", "),
         state: p.state, assignee: who ? { id: who.user_id, name: who.display_name } : null, advisory_id: p.advisory_id,
-        // No triage without a fixable package, or on a version-range (CPE) match, as vuln_hosts.rs.
-        triage_version: p.advisory_id.startsWith("CPE:") || !pkgs(p).some((k) => k.fixed) ? null : p.triage_version,
+        // No triage without a fixable package, on a version-range (CPE) match, or once fixed by an update, as vuln_hosts.rs.
+        triage_version: p.advisory_id.startsWith("CPE:") || !pkgs(p).some((k) => k.fixed) || p.fixed_at != null ? null : p.triage_version,
+        reboot_needed: p.fixed_at == null && p.reboot_needed, first_seen: p.first_seen_at,
       };
     }).sort((a, b) => byteOrder(a.hostname ?? "￿", b.hostname ?? "￿") || byteOrder(a.agent_id, b.agent_id) || byteOrder(a.advisory_id, b.advisory_id));
     const n = (s: string) => rows.filter((r) => segmentOf(r.state) === s).length;

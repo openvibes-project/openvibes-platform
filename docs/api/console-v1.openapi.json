@@ -20060,7 +20060,9 @@
           "agent_id",
           "installed",
           "state",
-          "advisory_id"
+          "advisory_id",
+          "reboot_needed",
+          "first_seen"
         ],
         "properties": {
           "address": {
@@ -20089,6 +20091,10 @@
               }
             ]
           },
+          "first_seen": {
+            "type": "string",
+            "description": "When the pair was first seen (RFC 3339)."
+          },
           "hostname": {
             "type": [
               "string",
@@ -20107,6 +20113,10 @@
             ],
             "description": "Distribution, as the Hosts list names it."
           },
+          "reboot_needed": {
+            "type": "boolean",
+            "description": "The fix is installed and waits for a reboot."
+          },
           "state": {
             "type": "string",
             "description": "open, mitigated, accepted_risk, false_positive or resolved."
@@ -20117,7 +20127,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "The triage version for If-Match; null where triage does not apply."
+            "description": "The triage version for If-Match; null where triage does not apply\n(no fix yet, a CPE match, or fixed by an update)."
           }
         }
       },

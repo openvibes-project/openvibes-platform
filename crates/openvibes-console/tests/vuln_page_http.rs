@@ -209,6 +209,12 @@ async fn the_hosts_table_has_segments_and_pages() {
     assert_eq!(first["state"], "mitigated");
     assert_eq!(first["advisory_id"], "ADV-1");
     assert_eq!(first["triage_version"], 1);
+    assert_eq!(first["reboot_needed"], false);
+    assert!(
+        first["first_seen"]
+            .as_str()
+            .is_some_and(|s| s.ends_with('Z'))
+    );
     assert!(first["assignee"].is_null());
     assert_eq!(body["rows"][1]["assignee"]["id"], uid(1));
     let (_, body) = fx

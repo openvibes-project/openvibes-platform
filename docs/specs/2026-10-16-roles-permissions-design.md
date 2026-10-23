@@ -846,6 +846,8 @@ These fill gaps in the Vulnerabilities list and a vulnerability's page.
    - **All:** every pair.
 
    The route is `GET /v1/vulnerabilities/{key}/hosts?segment=&offset=&limit=`. It returns rows (host, OS and address, installed version, state, assignee, covering advisory, triage version) and the four segment counts.
+
+   Refined in the final review: a pair fixed by an update has a null triage version (no tick; bulk never expands it), and each row also carries `reboot_needed` and `first_seen`, shown with the pair's open cases as the old panel did.
 10. **Ask about this** sends the assistant the covering advisory with the most hosts in reach (`{kind:"advisory"}` as today), so the assistant does not change. It is shown with `assistant.use`.
 11. **⋯** holds Export (a CSV of the CVE's hosts in reach, with `vulnerabilities.export`) and Copy link.
 12. **Related:**

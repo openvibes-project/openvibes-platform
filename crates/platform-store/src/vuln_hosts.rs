@@ -1,7 +1,7 @@
 //! The Hosts table of a vulnerability's page (step 5b ruling 9): its pairs
 //! in reach, one row per host and covering advisory, by segment and page.
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Deserialize;
 
 use crate::{
@@ -43,8 +43,12 @@ pub struct VulnHostRow {
     /// The covering advisory.
     pub advisory_id: String,
     /// The triage version for If-Match; none where triage does not apply
-    /// (no fixable row, or a CPE match).
+    /// (no fixable row, a CPE match, or fixed by an update).
     pub triage_version: Option<i64>,
+    /// The fix is installed and waits for a reboot.
+    pub reboot_needed: bool,
+    /// When the pair was first seen.
+    pub first_seen: DateTime<Utc>,
 }
 
 /// Pairs per segment.
@@ -130,6 +134,8 @@ pub async fn vuln_hosts(
                     assignee: assignee.map(|id| (id, r.get(8))),
                     advisory_id: r.get(9),
                     triage_version: r.get(10),
+                    reboot_needed: r.get(11),
+                    first_seen: r.get(12),
                 })
             })
             .collect(),

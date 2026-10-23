@@ -76,7 +76,7 @@ advisory's open hosts in reach, `{advisory_id, open_only: true}`; the
 confirmation says how many open hosts change, that hosts without a fix
 are left as they are, and names the other CVEs the advisories cover),
 Ask about this (`header.advisory_id`, the covering advisory with the
-most hosts) and ⋯ (Export, a CSV of its hosts; Copy link), each only
+most hosts; not offered when that is a `CPE:` version-range match) and ⋯ (Export, a CSV of its hosts; Copy link), each only
 with its `can` flag; Set state and Assign go when nothing is open. The
 status shows Known exploited from `header.exploited` (KEV or EUVD); the
 CVE id links to NVD; CISA's due date is a banner below the header
@@ -86,8 +86,11 @@ fixed build per distribution, reboot), Details (advisories, published,
 confidence, vector, CWE, description), History. Right: Hosts
 (`?segment=` All, Open, Mitigated, Resolved, an unknown value read as
 All; `?offset=` paging by 50; ticks send `{agent_id, advisory_id}`
-pairs, Reopen included; a pair with no triage, no fix or a version-range
-match, has no tick and says why; without `vulnerabilities.triage` but
+pairs, Reopen included; a pair with no triage (no fix or a version-range
+match, which say why, or fixed by an update) has no tick; each row shows
+the open cases holding the pair, "Reboot needed" next to its state when
+the fix waits for one, and when it was first seen (hidden on narrow
+screens), as the old panel did; without `vulnerabilities.triage` but
 with `can.add_to_case`, each such pair has its own Add to case, since the
 bulk route needs triage even to add to a case) and Related (open alarms
 on its hosts, cases, the same packages' other CVEs, each package linking
@@ -240,7 +243,9 @@ same package names (via `advisory_packages`) per worst severity;
 Hosts table sorts by host name, agent id and advisory; segments are
 `open`, `mitigated` and `resolved` (fixed, accepted risk, false positive),
 each pair in one, `all` their sum; `triage_version` is null where triage
-does not apply (a no-fix or CPE pair). Tests: `tests/vuln_summary.rs`.
+does not apply (a no-fix or CPE pair, or one fixed by an update, which bulk
+never expands); `reboot_needed` (unfixed, fix installed, reboot pending)
+and `first_seen` (the earliest sighting of the pair) come with each row. Tests: `tests/vuln_summary.rs`.
 
 Timing of the page's summary for a kernel-sized CVE seen by a scoped viewer:
 [console-read.md](console-read.md#acceptance-measurement).

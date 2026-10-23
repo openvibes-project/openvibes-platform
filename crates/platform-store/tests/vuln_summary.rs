@@ -318,6 +318,33 @@ async fn the_four_segments_add_up_and_page() {
     db.drop().await;
 }
 
+/// A pair fixed by an update has no triage (no tick, as bulk never expands
+/// it); every row says when it was first seen and whether a reboot is due.
+#[tokio::test]
+async fn host_rows_mark_fixed_reboot_and_first_seen() {
+    let (db, c) = common::migrated().await;
+    let (web, _) = fixture(&c).await;
+    let web = AgentScope::AssetGroups(vec![web]);
+    let fixed = hosts(&c, "CVE-R", &web, HostSegment::All, 0, 50).await;
+    assert_eq!(fixed.rows[0].state, "resolved");
+    assert_eq!(fixed.rows[0].triage_version, None);
+    let reboot = hosts(&c, "DSA-NOCVE", &web, HostSegment::All, 0, 50).await;
+    assert!(reboot.rows[0].reboot_needed);
+    let a = hosts(&c, "CVE-A", &web, HostSegment::All, 0, 50).await;
+    assert!(a.rows.iter().all(|r| !r.reboot_needed));
+    let day = Utc::now() - chrono::Duration::days(1);
+    for page in [&fixed, &reboot, &a] {
+        assert!(page.rows.iter().all(|r| r.first_seen > day), "{page:?}");
+    }
+    let nf = hosts(&c, "CVE-NF", &web, HostSegment::All, 0, 50).await;
+    assert!(
+        nf.rows
+            .iter()
+            .all(|r| r.first_seen > day && !r.reboot_needed)
+    );
+    db.drop().await;
+}
+
 #[tokio::test]
 async fn history_is_scoped_and_capped() {
     let (db, c) = common::migrated().await;

@@ -32,9 +32,11 @@ pub(crate) fn pairs() -> String {
   FROM agents a WHERE {visible}),
 pairs0 AS MATERIALIZED (
   SELECT v.agent_id, v.advisory_id, a.os_id, a.os_version, COALESCE({state}, 'open') AS state,
-         t.assigned_to AS assignee, COALESCE(t.version, 0)::bigint AS version, v.packages,
+         t.assigned_to AS assignee,
+         CASE WHEN v.fixed_at IS NULL THEN COALESCE(t.version, 0) END::bigint AS version, v.packages,
          v.fixed_at IS NULL AND v.reboot_needed AS reboot, {LOW_CONFIDENCE} AS lc,
-         NULL::real AS cvss, NULL::int AS confidence, NULL::text AS basis, a.source, true AS fixable
+         NULL::real AS cvss, NULL::int AS confidence, NULL::text AS basis, a.source, true AS fixable,
+         v.first_seen_at AS first_seen
   FROM vulnerabilities v JOIN hosts h ON h.agent_id = v.agent_id
   JOIN advisories a ON a.advisory_id = v.advisory_id
   LEFT JOIN vulnerability_triage t ON t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
@@ -42,7 +44,7 @@ pairs0 AS MATERIALIZED (
   UNION ALL
   SELECT hp.agent_id, vv.advisory_id, a.os_id, a.os_version, 'open', NULL, NULL,
          jsonb_agg(DISTINCT jsonb_build_object('name', vv.package, 'installed', {INSTALLED}, 'fixed', NULL)),
-         false, false, NULL, NULL, NULL, a.source, false
+         false, false, NULL, NULL, NULL, a.source, false, min(vv.first_seen_at)
   FROM version_vulnerabilities vv JOIN advisories a ON a.advisory_id = vv.advisory_id
   JOIN host_packages hp ON hp.package_version_id = vv.package_version_id
   JOIN hosts h ON h.agent_id = hp.agent_id AND h.os_id = a.os_id AND h.os_release = a.os_version
@@ -54,7 +56,8 @@ pairs0 AS MATERIALIZED (
   UNION ALL
   SELECT hp.agent_id, 'CPE:' || f.cve_id || ':' || f.product, h.os_id, h.os_release, 'open', NULL, NULL,
          jsonb_agg(DISTINCT jsonb_build_object('name', f.package, 'installed', f.installed, 'fixed', NULL)),
-         false, max(f.confidence) < 80, max(f.cvss), max(f.confidence)::int, min(f.basis), 'cpe', false
+         false, max(f.confidence) < 80, max(f.cvss), max(f.confidence)::int, min(f.basis), 'cpe', false,
+         min(f.first_seen_at)
   FROM cpe_findings f JOIN host_packages hp ON hp.package_version_id = f.package_version_id
   JOIN hosts h ON h.agent_id = hp.agent_id AND h.os_release = f.os_version
   WHERE f.cve_id = $4::text
@@ -138,7 +141,7 @@ page AS (
   ORDER BY ord LIMIT $7 OFFSET $8)
 SELECT c.c, p.agent_id, p.hostname, p.os, p.address,
        (SELECT string_agg(DISTINCT e ->> 'installed', ', ') FROM jsonb_array_elements(p.packages) e),
-       p.state, p.assignee::text, u.display_name, p.advisory_id, p.version
+       p.state, p.assignee::text, u.display_name, p.advisory_id, p.version, p.reboot, p.first_seen
 FROM counts c LEFT JOIN page p ON true
 LEFT JOIN console_users u ON u.user_id = p.assignee
 ORDER BY p.ord",

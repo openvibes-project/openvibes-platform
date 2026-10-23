@@ -6089,17 +6089,22 @@ export interface components {
             /** @description Agent id. */
             agent_id: string;
             assignee?: null | components["schemas"]["AlarmListPersonView"];
+            /** @description When the pair was first seen (RFC 3339). */
+            first_seen: string;
             /** @description Host name. */
             hostname?: string | null;
             /** @description Installed versions, comma-separated. */
             installed: string;
             /** @description Distribution, as the Hosts list names it. */
             os?: string | null;
+            /** @description The fix is installed and waits for a reboot. */
+            reboot_needed: boolean;
             /** @description open, mitigated, accepted_risk, false_positive or resolved. */
             state: string;
             /**
              * Format: int64
-             * @description The triage version for If-Match; null where triage does not apply.
+             * @description The triage version for If-Match; null where triage does not apply
+             *     (no fix yet, a CPE match, or fixed by an update).
              */
             triage_version?: number | null;
         };

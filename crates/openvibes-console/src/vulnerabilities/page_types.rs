@@ -252,8 +252,13 @@ pub(crate) struct VulnHostRowView {
     pub assignee: Option<AlarmListPersonView>,
     /// The covering advisory.
     pub advisory_id: String,
-    /// The triage version for If-Match; null where triage does not apply.
+    /// The triage version for If-Match; null where triage does not apply
+    /// (no fix yet, a CPE match, or fixed by an update).
     pub triage_version: Option<i64>,
+    /// The fix is installed and waits for a reboot.
+    pub reboot_needed: bool,
+    /// When the pair was first seen (RFC 3339).
+    pub first_seen: String,
 }
 
 /// Pairs per segment.
@@ -448,6 +453,10 @@ impl From<VulnHostsPage> for VulnerabilityHostsPage {
                         .map(|(id, name)| AlarmListPersonView { id, name }),
                     advisory_id: r.advisory_id,
                     triage_version: r.triage_version,
+                    reboot_needed: r.reboot_needed,
+                    first_seen: r
+                        .first_seen
+                        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
                 })
                 .collect(),
             total: p.total,
