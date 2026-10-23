@@ -12,7 +12,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
   type Triage = { state: string; assigned_to: string | null; note: string | null; accepted_until: string | null };
   /** `openOnly`: an advisory-wide pair or a list row's (`open_only`), which a close or assign changes only while open (bulk_triage.rs). */
   type Target = { id: string; named: boolean; caseKind: "alarm" | "compliance_finding" | "vulnerability"; caseRef: string;
-    current: () => Triage; write: (next: Triage) => void; openOnly?: boolean };
+    current: () => Triage; write: (next: Triage) => void; openOnly?: boolean; advisory?: string };
   type Picked = { found: Target[]; missing: string[] };
   type Skip = { id: string; reason: string };
   const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -52,13 +52,24 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     const hits = vulnerabilities().filter((v) => v.advisory_id === advisory && (agent === null || v.agent_id === agent) && fixable(v));
     if (hits.length === 0) into.missing.push(agent ? `${agent}/${advisory}` : advisory);
     for (const v of hits) {
-      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, openOnly: agent === null || item.open_only === true, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
+      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, openOnly: agent === null || item.open_only === true, advisory, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
         current: () => ({ state: v.triage_state, assigned_to: v.assigned_to ?? null, note: null, accepted_until: null }),
         write: (next) => { v.triage_state = next.state; v.assigned_to = next.assigned_to; v.triage_version += 1; } });
     }
     return true;
   };
   const targetsOf = { alarms: alarmTargets, compliance: findingTargets, vulnerabilities: vulnerabilityTargets };
+  /** A close or assign: closed `openOnly` pairs are not part of it (bulk_triage/vulns.rs). A named one says "not open"; so does an advisory with no open pair left. */
+  const openTargets = (picked: Picked, skipped: Skip[]): Target[] => {
+    const kept = picked.found.filter((t) => !t.openOnly || t.current().state === "open");
+    for (const t of picked.found) {
+      if (kept.includes(t)) continue;
+      const id = t.named ? t.id : (t.advisory ?? t.id);
+      if (!t.named && kept.some((k) => k.advisory === t.advisory)) continue;
+      if (!skipped.some((s) => s.id === id)) skipped.push({ id, reason: "not open" });
+    }
+    return kept;
+  };
 
   const bulkState = (picked: Picked, body: Record<string, unknown>, note: string | null, skipped: Skip[], triage: Permission): number | Response => {
     const state = text(body.state);
@@ -67,8 +78,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
       return problem(400, "invalid_triage", "Triage state, note, or expiry is invalid (closing needs a note)");
     }
     let changed = 0;
-    for (const t of picked.found) {
-      if (t.openOnly && state !== "open" && t.current().state !== "open") { skipped.push({ id: t.id, reason: "not open" }); continue; }
+    for (const t of state === "open" ? picked.found : openTargets(picked, skipped)) {
       // A rule or advisory's closed hosts keep their decision (as the server).
       if (state !== "open" && !t.named && t.current().state !== "open") { skipped.push({ id: t.id, reason: "already closed" }); continue; }
       if (state === "open" && !t.named && t.current().state === "open") { skipped.push({ id: t.id, reason: "already open" }); continue; }
@@ -80,9 +90,8 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
   const bulkAssign = (picked: Picked, body: Record<string, unknown>, skipped: Skip[], triage: Permission): number => {
     const assignee = typeof body.assignee === "string" ? body.assignee : null;
     let changed = 0;
-    for (const t of picked.found) {
+    for (const t of openTargets(picked, skipped)) {
       const current = t.current();
-      if (t.openOnly && current.state !== "open") { skipped.push({ id: t.id, reason: "not open" }); continue; }
       if (assignee !== null && triageProblem({ state: current.state, accepted_until: current.accepted_until, assigned_to: assignee }, triage)) {
         skipped.push({ id: t.id, reason: "assignee unavailable" });
         continue;

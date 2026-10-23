@@ -538,7 +538,7 @@ async fn items_go_into_one_open_case_and_vulnerabilities_triage_per_host() {
         "{states:?}"
     );
     // A CVE row's bulk close changes the open host only; the false positive
-    // is skipped as not open.
+    // is not reached (closed pairs are not part of the action).
     let close = json!({"action": "state", "state": "mitigated", "note": "patched", "items": [{"advisory_id": "FEDORA-1"}]});
     let (status, body, _) = call(
         &router,
@@ -555,9 +555,7 @@ async fn items_go_into_one_open_case_and_vulnerabilities_triage_per_host() {
         (StatusCode::OK, Some(1)),
         "{body}"
     );
-    let skipped = body["skipped"].as_array().unwrap();
-    assert_eq!(skipped.len(), 1, "{body}");
-    assert_eq!(skipped[0]["reason"], "not open", "{body}");
+    assert_eq!(body["skipped"].as_array().unwrap().len(), 0, "{body}");
     // A list row on the Host chip names its host and says `open_only`: web's
     // mitigated FEDORA-2 pair is left alone, as on every host.
     let row = json!({"action": "state", "state": "false_positive", "note": "lab",

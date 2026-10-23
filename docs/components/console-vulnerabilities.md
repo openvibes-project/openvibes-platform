@@ -114,8 +114,11 @@ acts through its covering advisories; the advisory expands to its hosts in
 reach) or `{agent_id, advisory_id}` (that pair, as asked). An advisory-wide
 `state` close or `assign` changes only open pairs: no triage row, or an
 accepted risk whose expiry has passed, counts as open, and fixed pairs are
-never expanded. Mitigated, accepted and false-positive pairs come back in
-`skipped` with reason `not open` and keep their note and assignee. Hosts out
+never expanded. Mitigated, accepted and false-positive pairs are not
+expanded either, so they keep their note and assignee and do not count
+toward the 10,000-item cap (a widespread CVE with few open hosts still
+changes); an advisory with no open pair left comes back in `skipped` with
+reason `not open`. Hosts out
 of the actor's reach are never touched. A reopen (`state: open`) is the
 exception: it reopens the closed pairs and skips the open ones ("already
 open"). Triage on one CVE row shows on its sibling rows, which share the
@@ -125,7 +128,7 @@ An item may add `open_only: true` (default false; only on vulnerability
 items, refused elsewhere as `invalid_items`). The Vulnerabilities list sends
 it on every row, so with the Host chip set (`{agent_id, advisory_id,
 open_only}`) a close or assign still changes only that host's open pair and
-skips the others as `not open`; a named pair without it changes as asked
+answers `not open` when it is closed; a named pair without it changes as asked
 (the page's Hosts table). A reopen ignores it. Store:
 `bulk_triage::vulnerabilities_open_only` (`vulnerabilities` is the same
 with no flags).
@@ -136,7 +139,7 @@ triageable open hosts.
 
 In the web, a ticked list row sends each of its covering advisories (`{advisory_id,
 open_only: true}`, plus `agent_id` with the Host chip); the server changes only their open pairs
-("not open" for the rest) and skips pairs with no fix. There is no Reopen
+(the closed ones are not reached) and skips pairs with no fix. There is no Reopen
 there. `BulkBar`'s `confirm` puts what a change reaches in the Set state
 dialog and makes Assign ask first too: "Changes up to N open hosts. Hosts
 without a fix yet are left as they are…" and the other CVEs those
@@ -251,7 +254,9 @@ it names no CVE, or the list filtered by the advisory when it names
 several), and old list URLs keep their filters (`exploited`, `reboot`,
 `nofix` and `lowconf=true` become `signal`; the first wins). Views saved in
 the browser move to the person's account the first time they open
-Vulnerabilities. Popped-out advisory windows are dropped. See
+Vulnerabilities. Popped-out advisory windows are dropped. A bulk close or
+assign on a CVE row no longer lists each closed pair as `not open` in
+`skipped`: closed pairs are left out of the action (and of the cap). See
 [console-web.md](console-web.md#upgrading).
 
 ## Failure behaviour

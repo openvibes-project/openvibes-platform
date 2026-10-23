@@ -332,9 +332,8 @@ async fn bulk_on_cve_rows_changes_only_open_pairs() {
     .await
     .unwrap()
     .unwrap();
-    assert_eq!(done.changed, 1);
-    assert_eq!(why(&done, &format!("{h2}/DEBIAN-A")), Some("not open"));
-    assert!(why(&done, &format!("{h4}/DEBIAN-A")).is_none(), "{done:?}");
+    // The mitigated h2 and the out-of-reach h4 are not reached at all.
+    assert_eq!((done.changed, done.skipped.len()), (1, 0), "{done:?}");
     let assigned = |agent: &str| {
         let agent = agent.to_owned();
         let c = &c;
@@ -356,11 +355,9 @@ async fn bulk_on_cve_rows_changes_only_open_pairs() {
         "the mitigated pair keeps its assignee"
     );
     assert_eq!(triage_of(&c, h4, "DEBIAN-A").await.0, "none");
-    // Accepted, false-positive and mitigated pairs are all skipped.
-    for (adv, pair) in [
-        ("FEDORA-1", format!("{}/FEDORA-1", id(3))),
-        ("DEBIAN-FP", format!("{h2}/DEBIAN-FP")),
-    ] {
+    // Accepted, false-positive and mitigated pairs are all left alone: an
+    // advisory with no open pair in reach says "not open".
+    for (adv, pair) in [("FEDORA-1", "FEDORA-1"), ("DEBIAN-FP", "DEBIAN-FP")] {
         let one = [(adv.to_owned(), None)];
         for change in [mitigate(Some("x")), BulkChange::Assign(Some("bob"))] {
             let done = bulk::vulnerabilities(&mut c, &scope, &one, change, "ann", now)
@@ -368,7 +365,7 @@ async fn bulk_on_cve_rows_changes_only_open_pairs() {
                 .unwrap()
                 .unwrap();
             assert_eq!(done.changed, 0, "{adv}");
-            assert_eq!(why(&done, &pair), Some("not open"), "{adv}");
+            assert_eq!(why(&done, pair), Some("not open"), "{adv}");
         }
     }
     let before = triage_of(&c, id(3), "FEDORA-1").await;
@@ -378,8 +375,7 @@ async fn bulk_on_cve_rows_changes_only_open_pairs() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(done.changed, 1);
-    assert_eq!(why(&done, &format!("{h2}/DEBIAN-A")), Some("not open"));
+    assert_eq!((done.changed, done.skipped.len()), (1, 0), "{done:?}");
     assert_eq!(
         triage_of(&c, h1, "DEBIAN-A").await,
         ("mitigated".into(), Some("patched".into()))

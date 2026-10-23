@@ -136,13 +136,14 @@ describe("demo Vulnerabilities list", () => {
     const result = (await call("POST", "/api/v1/vulnerabilities/bulk", { action: "state", state: "false_positive", note: "lab", items })) as
       { changed: number; skipped: { id: string; reason: string }[] };
     expect(result.changed).toBe(shared?.open);
-    expect(result.skipped.some((s) => s.reason === "not open")).toBe(true);
+    // Closed pairs reached through an advisory are not part of the action, so none is listed.
+    expect(result.skipped.filter((s) => s.id.includes("/"))).toEqual([]);
     const after = (await call("GET", `${URL}?state=all&q=${shared?.key ?? ""}`)) as VulnList;
     expect(after.items[0]?.open).toBe(0);
     // Assign skips the closed ones too.
     const assign = (await call("POST", "/api/v1/vulnerabilities/bulk", { action: "assign", assignee: "sam", items })) as { changed: number; skipped: { reason: string }[] };
     expect(assign.changed).toBe(0);
-    expect(assign.skipped.every((s) => s.reason === "not open")).toBe(true);
+    expect(assign.skipped).toEqual(items.map((i) => ({ id: i.advisory_id, reason: "not open" })));
     const nofix = list.items.find((r) => r.fixed.kind === "none" && r.open > 0);
     const skipped = (await call("POST", "/api/v1/vulnerabilities/bulk", { action: "assign", assignee: "sam",
       items: (nofix?.advisories ?? []).map((advisory_id) => ({ advisory_id })) })) as { changed: number; skipped: { reason: string }[] };
