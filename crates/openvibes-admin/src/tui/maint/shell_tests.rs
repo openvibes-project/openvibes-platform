@@ -51,7 +51,7 @@ fn enter_asks_open_a_shell() {
     let text = screen(&app);
     assert!(text.contains("Open a shell?"), "{text}");
     assert!(text.contains("for experts; logged"), "{text}");
-    assert!(text.contains(" Yes  [ No ]"), "Yes is highlighted: {text}");
+    assert!(text.contains("[ Yes ]  No "), "Yes is chosen: {text}");
     assert_eq!(app.question.as_ref().map(|q| q.1), Some(true));
     assert_eq!(app.nav.screen, Screen::Maintenance, "no page of its own");
 }

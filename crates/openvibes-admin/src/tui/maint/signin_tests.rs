@@ -50,7 +50,7 @@ fn enter_asks_the_question() {
     let text = screen(&app);
     assert!(text.contains("Reset the admin password?"), "{text}");
     assert!(text.contains("old one stops"), "{text}");
-    assert!(text.contains(" Yes  [ No ]"), "Yes is highlighted: {text}");
+    assert!(text.contains("[ Yes ]  No "), "Yes is chosen: {text}");
     assert_eq!(app.question.as_ref().map(|q| q.1), Some(true));
 }
 

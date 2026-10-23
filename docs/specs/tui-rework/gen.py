@@ -171,7 +171,8 @@ def ask(question, detail="", yes=True):
     """Every question in the bar (rule 30): the question, Yes / No buttons,
     ←→ to choose and Enter to confirm."""
     left = "{b}" + question + "{/}" + (f" {{d}}{detail}{{/}}" if detail else "")
-    buttons = "{s} Yes {/} {d}[ No ]{/}" if yes else "{d}[ Yes ]{/} {s} No {/}"
+    # The brackets mark the chosen button (approved.md 54).
+    buttons = "{s}[ Yes ]{/} {d} No {/}" if yes else "{d} Yes {/} {s}[ No ]{/}"
     return bar(left, buttons + "  {k} ⭠⭢ {/} {k} Enter {/} Confirm", nav=False)
 
 
