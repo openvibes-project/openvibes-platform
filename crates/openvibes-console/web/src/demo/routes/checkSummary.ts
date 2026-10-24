@@ -65,7 +65,8 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
     const { now, shipped, extra, found, failing, passing } = p;
     const newest = [...found].sort((a, b) => Number(p.failingOf(b)) - Number(p.failingOf(a))
       || Date.parse(b.last_observed_at) - Date.parse(a.last_observed_at) || (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9))[0];
-    const severity = newest?.severity ?? shipped?.severity ?? extra?.severity ?? null;
+    // The list's rule (check_list_sql sev0): the newest finding's severity, an unknown one gives way to the rule's.
+    const severity = (newest && SEVERITIES.includes(newest.severity) ? newest.severity : null) ?? shipped?.severity ?? extra?.severity ?? null;
     const people = [...new Set(failing.filter((x) => x.state === "open" && x.assignee).map((x) => x.assignee as string))];
     const one = data.access.users.find((u) => u.username === people[0]);
     const first = [...failing].sort((a, b) => a.f.first_observed_at.localeCompare(b.f.first_observed_at) || byteOrder(a.f.agent_id, b.f.agent_id))[0];
@@ -99,6 +100,8 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
     const anyHost = (permission: Parameters<typeof reaches>[0]) => agents.some((a) => reaches(permission, a));
     // Triage acts on failing hosts only (page.rs): a passing host has nothing to triage.
     const triage = failing.some((x) => reaches("compliance.triage", x.f.agent_id));
+    // Add to case takes failing pairs only (page.rs).
+    const onFailing = (permission: Parameters<typeof reaches>[0]) => failing.some((x) => reaches(permission, x.f.agent_id));
     const body: CheckSummaryPage = {
       header: {
         title: extra?.title ?? (shipped ? title(shipped.message) : rule), severity, rule_set_id: asked,
@@ -120,7 +123,7 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
         same_area: { checks: others.size, worst },
       },
       can: {
-        triage, assign: triage, add_to_case: anyHost("cases.write") && anyHost("cases.read"),
+        triage, assign: triage, add_to_case: onFailing("cases.write") && onFailing("cases.read"),
         ask: ASSISTANT_AVAILABLE && anyHost("assistant.use"), export: anyHost("compliance.export"),
       },
     };

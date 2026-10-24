@@ -374,7 +374,13 @@ async fn triage_needs_a_failing_host_in_reach() {
     let win = fx
         .role(
             "Win triage",
-            &["compliance.read", "compliance.triage", "compliance.export"],
+            &[
+                "compliance.read",
+                "compliance.triage",
+                "compliance.export",
+                "cases.read",
+                "cases.write",
+            ],
             Reach::Groups(vec![WIN.into()]),
         )
         .await;
@@ -390,19 +396,24 @@ async fn triage_needs_a_failing_host_in_reach() {
         )
         .await
         .unwrap();
-    // ASLR fails only on L1; W1 and W2, in reach of the triage role, pass it.
+    // ASLR fails only on L1; W1 and W2, in reach of the triage role, pass it:
+    // nothing to triage or add to a case (only failing pairs go to one).
     let (_, body) = fx.call(&viewer, "GET", &summary(ASLR), None).await;
     assert_eq!(
         (
             &body["can"]["triage"],
             &body["can"]["assign"],
+            &body["can"]["add_to_case"],
             &body["can"]["export"]
         ),
-        (&json!(false), &json!(false), &json!(true))
+        (&json!(false), &json!(false), &json!(false), &json!(true))
     );
     // Root login fails on W1.
     let (_, body) = fx.call(&viewer, "GET", &summary(ROOT), None).await;
-    assert_eq!(body["can"]["triage"], true);
+    assert_eq!(
+        (&body["can"]["triage"], &body["can"]["add_to_case"]),
+        (&json!(true), &json!(true))
+    );
     fx.db.drop().await;
 }
 

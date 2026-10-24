@@ -106,11 +106,13 @@ pub(crate) async fn check_summary_page(
         scope(Permission::ComplianceTriage),
     )
     .await;
+    // Add to case takes failing pairs only, as the bulk route's check row does.
+    let on_failing = |p| holds(&client, &s.failing_agents, scope(p));
     let holds = |p| holds(&client, &s.agents, scope(p));
     let (Ok(triage), Ok(case_write), Ok(case_read), Ok(assistant), Ok(export)) = (
         triage,
-        holds(Permission::CasesWrite).await,
-        holds(Permission::CasesRead).await,
+        on_failing(Permission::CasesWrite).await,
+        on_failing(Permission::CasesRead).await,
         holds(Permission::AssistantUse).await,
         holds(Permission::ComplianceExport).await,
     ) else {

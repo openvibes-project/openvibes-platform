@@ -93,7 +93,7 @@ SELECT jsonb_build_object(
                                            'hostname', h.hostname)
                  FROM f JOIN hosts h ON h.agent_id = f.agent_id WHERE f.failing
                  ORDER BY f.first_observed_at, f.agent_id LIMIT 1),
-  'severity', COALESCE((SELECT f.severity FROM f WHERE f.severity = ANY({SEVERITIES})
+  'severity', COALESCE((SELECT CASE WHEN f.severity = ANY({SEVERITIES}) THEN f.severity END FROM f
                         ORDER BY f.failing DESC, f.last_observed_at DESC, array_position({SEVERITIES}, f.severity)
                         LIMIT 1), (SELECT severity FROM meta)),
   'finding', (SELECT jsonb_build_object('message', f.message, 'rule_version', f.rule_version) FROM f
