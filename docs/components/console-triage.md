@@ -49,8 +49,10 @@ the 10,000 cap nor appear in `skipped`; when none is left the row is skipped
 as "not open" (a named pair too). An assign on an expired acceptance writes it
 back open with no expiry, as in vulnerabilities. Ended findings and hosts out
 of reach are never touched; passing hosts have no finding. A reopen and a
-named host without `open_only` behave as before, and Add to case still takes
-every finding the row names. Code: `platform-store`
+named host without `open_only` behave as before. Add to case from a row (rule-wide or `open_only`) takes
+every failing finding, closed ones included, never an ended one; a named host
+without `open_only` is added as before. A named host with `open_only` whose
+finding has ended is "not found or out of scope". Code: `platform-store`
 `bulk_triage/compliance.rs`; demo `web/src/demo/routes/triage.ts`.
 
 ## Configuration and failures

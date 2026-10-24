@@ -53,7 +53,7 @@ pub async fn compliance_open_only(
             !reopen && (agent.is_none() || open_only.get(i).copied().unwrap_or(false))
         })
         .collect();
-    let Some(matched) = rows(client, scope, items, &filtered, now, false)
+    let Some(matched) = rows(client, scope, items, &filtered, now, Mode::Open)
         .await?
         .map(|rows| {
             rows.iter()
@@ -180,21 +180,41 @@ pub async fn compliance_open_only(
 }
 
 /// The (agent, rule set, rule) findings these items name in scope: a rule
-/// without a host is every host with a current finding of it. `None` when
-/// they are more than [`MAX_ITEMS`].
+/// without a host is every host with a current finding of it. A rule-wide
+/// item, or one with `open_only[i]` (missing: false), reaches failing (not
+/// ended) findings only, closed ones included. `None` when they are more
+/// than [`MAX_ITEMS`].
 pub async fn expand_compliance(
     client: &Client,
     scope: &AgentScope,
     items: &[Item],
+    open_only: &[bool],
 ) -> Result<Option<Vec<(String, String, String)>>, StoreError> {
-    let none = vec![false; items.len()];
-    Ok(rows(client, scope, items, &none, Utc::now(), false)
-        .await?
-        .map(|rows| {
-            rows.iter()
-                .map(|r| (r.get(0), r.get(1), r.get(2)))
-                .collect()
-        }))
+    let failing: Vec<bool> = items
+        .iter()
+        .enumerate()
+        .map(|(i, (_, _, agent))| agent.is_none() || open_only.get(i).copied().unwrap_or(false))
+        .collect();
+    Ok(
+        rows(client, scope, items, &failing, Utc::now(), Mode::Failing)
+            .await?
+            .map(|rows| {
+                rows.iter()
+                    .map(|r| (r.get(0), r.get(1), r.get(2)))
+                    .collect()
+            }),
+    )
+}
+
+/// What [`rows`] asks for.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Mode {
+    /// Pairs; a filtered item keeps its failing, open ones.
+    Open,
+    /// Pairs; a filtered item keeps its failing ones, open or not.
+    Failing,
+    /// The 1-based indexes of the filtered items that reach any failing pair.
+    Which,
 }
 
 /// The indexes of the items with any failing pair in scope, open or not.
@@ -205,7 +225,7 @@ async fn reaching(
     now: DateTime<Utc>,
 ) -> Result<std::collections::HashSet<usize>, StoreError> {
     let all = vec![true; items.len()];
-    let found = rows(client, scope, items, &all, now, true).await?;
+    let found = rows(client, scope, items, &all, now, Mode::Which).await?;
     Ok(found
         .unwrap_or_default()
         .iter()
@@ -213,17 +233,17 @@ async fn reaching(
         .collect())
 }
 
-/// The expansion query: pairs, or (`which`) the 1-based indexes of the items
+/// The expansion query: pairs, or (`Mode::Which`) the 1-based indexes of the items
 /// that reach any failing pair. `open[i]` keeps item `i` to its failing
 /// pairs still open at `now` (no triage, open, or an expired accepted risk);
-/// with `which`, only the failing test applies.
+/// with `Mode::Which`, only the failing test applies.
 async fn rows(
     client: &Client,
     scope: &AgentScope,
     items: &[Item],
     open: &[bool],
     now: DateTime<Utc>,
-    which: bool,
+    mode: Mode,
 ) -> Result<Option<Vec<tokio_postgres::Row>>, StoreError> {
     let (sets, rules, agents): (Vec<&str>, Vec<&str>, Vec<Option<&str>>) = items.iter().fold(
         (Vec::new(), Vec::new(), Vec::new()),
@@ -235,7 +255,7 @@ async fn rows(
         },
     );
     let visible = agent_visibility("a.agent_id", "$4", "$5");
-    let (select, order) = if which {
+    let (select, order) = if mode == Mode::Which {
         ("k.i", String::new())
     } else {
         (
@@ -243,7 +263,7 @@ async fn rows(
             format!("ORDER BY 2, 3, 1 LIMIT {}", MAX_ITEMS + 1),
         )
     };
-    let still_open = if which {
+    let still_open = if mode != Mode::Open {
         "$7::timestamptz IS NOT NULL"
     } else {
         "(t.state IS NULL OR t.state = 'open'

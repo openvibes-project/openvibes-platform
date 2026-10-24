@@ -1111,8 +1111,7 @@ risk, when the vulnerability is fixed.
 - `bulk_triage`: one state or assignee change on up to 10,000 alarms,
   findings or vulnerabilities (`expand_compliance` and
   `expand_vulnerabilities` turn a rule or advisory into its hosts in
-  scope; a close skips expanded hosts already closed, a reopen the ones
-  already open; an advisory-wide or `open_only` vulnerability close or
+  scope; a reopen skips the hosts already open; an advisory-wide or `open_only` vulnerability close or
   assign expands open pairs only, so closed ones neither count toward the
   cap nor come back, and an item with none open is skipped as "not open";
   the vulnerability half is `bulk_triage/vulns.rs`; a rule-wide or

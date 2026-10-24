@@ -353,14 +353,16 @@ async fn add_to_case(
 ) -> Response {
     let refs: Vec<(&'static str, String)> = match items {
         Items::Alarms(ids) => ids.iter().map(|id| ("alarm", id.to_string())).collect(),
-        Items::Compliance(items, _) => match store::expand_compliance(client, scope, items).await {
-            Ok(Some(found)) => found
-                .into_iter()
-                .map(|(a, s, r)| ("compliance_finding", format!("{a}/{s}/{r}")))
-                .collect(),
-            Ok(None) => return bad("invalid_items", "Select 1 to 10,000 items"),
-            Err(_) => return unavailable_auth(),
-        },
+        Items::Compliance(items, open_only) => {
+            match store::expand_compliance(client, scope, items, open_only).await {
+                Ok(Some(found)) => found
+                    .into_iter()
+                    .map(|(a, s, r)| ("compliance_finding", format!("{a}/{s}/{r}")))
+                    .collect(),
+                Ok(None) => return bad("invalid_items", "Select 1 to 10,000 items"),
+                Err(_) => return unavailable_auth(),
+            }
+        }
         Items::Vulnerabilities(items, _) => {
             match store::expand_vulnerabilities(client, scope, items).await {
                 Ok(Some(found)) => found

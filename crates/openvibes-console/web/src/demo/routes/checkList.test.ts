@@ -167,6 +167,8 @@ describe("demo Compliance list", () => {
     expect((await bulk({ action: "state", state: "open", items: [row("harden.ssh.permit_root_login", { agent_id: "agent-00004", open_only: true })] })).changed).toBe(1);
     // Nothing open is left on the closed-out row.
     expect(await bulk({ action: "assign", assignee: "sam", items: [row("harden.ssh.permit_empty_passwords")] })).toMatchObject({ changed: 0, skipped: [{ id: `${set}/harden.ssh.permit_empty_passwords`, reason: "not open" }] });
+    // Add to case from a row takes failing pairs only: aslr's ended agent-00001 stays out, agent-00002 goes in.
+    expect(await bulk({ action: "case", new_case_title: "aslr", items: [row("harden.kernel.aslr")] })).toMatchObject({ changed: 1, skipped: [] });
     expect((await server.handle("POST", "/api/v1/alarms/bulk", { action: "assign", assignee: null, items: [{ id: "1", open_only: true }] })).status).toBe(400);
   });
 });

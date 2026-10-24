@@ -65,8 +65,8 @@ Show everything, without page changes for details:
   case**. A state or a case opens one dialog whose confirm button names the
   count; the toast says what changed, what was already so ("unchanged") and
   why the rest was skipped. A selected finding or advisory row acts on its
-  hosts in scope; a close leaves the hosts already closed alone, a reopen
-  the ones already open. Rows in an open case show
+  hosts in scope; a rule-wide close or assign leaves the hosts not open
+  alone ("not open"), a reopen the ones already open. Rows in an open case show
   its badge (`panels/cases/CaseBadge.tsx`). The Vulnerabilities list's bulk bar is in
   [console-vulnerabilities.md](console-vulnerabilities.md#bulk).
 - **Detail template** (`panels/triage/TriageDetail.tsx`): a finding's

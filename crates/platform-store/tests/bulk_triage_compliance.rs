@@ -140,15 +140,41 @@ async fn compliance_rows_change_only_open_failing_pairs() {
         .unwrap()
         .unwrap();
     assert_eq!(done.skipped, [(format!("{}/{}", R.0, R.1), "not open")]);
-    // The ended host named with the chip is "not open" too; unnamed, a
-    // reopen still reopens the closed pairs (h1, h2, h5).
+    // The ended host named with the chip is not a failing finding at all, so
+    // it is "not found or out of scope"; a reopen still reopens the closed
+    // pairs (h1, h2, h5) and finds h3 already open.
     let on_h3 = row(Some(id(3)));
     let done = bulk::compliance_open_only(&mut c, &scope, &on_h3, &[true], close("x"), "ann", now)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!((done.changed, done.skipped.len()), (0, 1), "{done:?}");
+    assert_eq!(done.changed, 0, "{done:?}");
+    assert_eq!(
+        done.skipped,
+        [(
+            format!("{}/{}/{}", id(3), R.0, R.1),
+            "not found or out of scope"
+        )]
+    );
     assert_eq!(state_of(&c, id(3)).await.0, "none");
+    // Add to case from the row takes every failing pair (closed ones too),
+    // never the ended one; a named host without the chip keeps its pair.
+    let rule_wide = bulk::expand_compliance(&c, &scope, &row(None), &[])
+        .await
+        .unwrap()
+        .unwrap();
+    let hosts: Vec<&str> = rule_wide.iter().map(|(a, _, _)| a.as_str()).collect();
+    assert_eq!(hosts, [id(1), id(2), id(5)]);
+    let named = bulk::expand_compliance(&c, &scope, &row(Some(id(3))), &[false])
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(named.len(), 1);
+    let chip = bulk::expand_compliance(&c, &scope, &row(Some(id(3))), &[true])
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(chip.is_empty());
     let reopen = BulkChange::State {
         state: "open",
         note: None,
