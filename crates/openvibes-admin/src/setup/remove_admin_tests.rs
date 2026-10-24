@@ -264,6 +264,9 @@ fn finish_removes_a_failed_replace_progress_file() {
         &format!("/{PROGRESS}"),
         "Trusting the old and the new one\n",
     );
+    // A download's progress the TUI was showing, and its temp file.
+    fake.file(&format!("/{}", crate::model_progress::FILE), "1\t2\n");
+    fake.file("/run/openvibes-admin/model-progress.tmp", "1");
     let plan = plan(&[Ingest]);
     finish(&fake.ctx(&plan), &StepState::Done(String::new()));
     assert!(!fake.root.join("run/openvibes-admin").exists());

@@ -59,7 +59,7 @@ impl Page {
                 "Enter on a port types a new one; Apply moves it and opens the new port."
             }
             Page::Certificates => {
-                "A report: renewal is automatic. Names changes the names agents may use."
+                "Renewal is automatic. Names sets their names; Replace the intermediate makes a new one."
             }
             Page::Replace => {
                 "A new intermediate, trusted beside the old one until agents move over."
