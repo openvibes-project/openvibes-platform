@@ -15,6 +15,7 @@ The HTTP plumbing every area shares: how the routers are put together, the route
 | `problem.rs` | Problem-details error answers and request IDs. |
 | `error.rs` | `ConsoleError`, the server's startup and run errors. |
 | `openapi.rs` | The OpenAPI document generated from the handlers and types. |
+| `openapi_schemas.rs` | The document's schemas that no path names, merged into it by `openapi.rs`. |
 | `headers.rs` | The no-store cache header and `If-Match` version parsing, for several areas. |
 | `validate.rs` | UUID and agent-id checks on path segments, and the answer to a bad finding or vulnerability query, for several areas. |
 | `pagination.rs` | Cursor pagination: the validated cursor and limit, the page type, the bounds. |

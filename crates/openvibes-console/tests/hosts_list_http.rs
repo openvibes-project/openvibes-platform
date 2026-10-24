@@ -172,7 +172,11 @@ async fn an_administrator_sees_rows_counts_and_a_summary() {
         .iter()
         .map(|c| (c["value"].as_str().unwrap(), c["count"].as_i64().unwrap()))
         .collect();
-    assert_eq!(problems, [("critical", 1), ("alarms", 1), ("none", 2)]);
+    // win-02 has sent nothing for three days: its compliance is unknown.
+    assert_eq!(problems, [("critical", 1), ("alarms", 1), ("none", 1)]);
+    assert_eq!(body["items"][2]["problems"]["compliance_stale"], true);
+    assert!(body["items"][2]["problems"]["failing"].is_null());
+    assert_eq!(w1["problems"]["compliance_stale"], false);
     let groups = body["counts"]["group"].as_array().unwrap();
     assert!(
         groups

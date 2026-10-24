@@ -31,6 +31,21 @@ pub mod audit;
 pub mod bulk_triage;
 /// CA certificates the platform issues under.
 pub mod ca;
+/// A compliance check's area and collector, from its rule ID.
+pub mod check_area;
+/// The Compliance list: one row per check, filters, per-value counts,
+/// summary and paging in scope.
+pub mod check_list;
+/// The SQL of the Compliance list's one statement.
+mod check_list_sql;
+/// A check's Related card: its port, unit and same-area checks.
+pub mod check_related;
+/// A check's Hosts table by triage state.
+mod check_states;
+/// A check's page: header, tiles, text, history and the Hosts table in scope.
+pub mod check_summary;
+/// The SQL of a check's page.
+mod check_summary_sql;
 /// Console reads and triage of threat alarms (P14).
 pub mod console_alarms;
 /// Local console credentials, throttles, pre-authentication, and sessions.

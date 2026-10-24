@@ -101,14 +101,10 @@ pub(crate) const PAIR_STATE: &str = "CASE WHEN v.fixed_at IS NOT NULL THEN 'reso
 pub(crate) const LOW_CONFIDENCE: &str =
     "split_part(a.source, '-', 1) NOT IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')";
 
-/// The agents in the scope (`$1`, `$2`, as the Alarms list) and the host
-/// filter (`$9`), from the stored membership: `in_group` (the group filter
-/// `$8` holds) and `mask` (a bit per `glist` group). A grouped subquery,
-/// written in place rather than read from a CTE, so the pair scans that
-/// join it can run in parallel workers, and never pulled up, so its
-/// columns are worked out once per agent. The group ids are read from the
-/// table each time (not from `glist`): a CTE would keep the scans serial.
-pub(crate) const HOSTS: &str = "(SELECT a.agent_id, a.os_id, a.os_release,
+// The text of [`HOSTS`] after its first columns.
+macro_rules! hosts_body {
+    () => {
+        "
          $8::text IS NULL OR COALESCE(bool_or(g.asset_group_id::text = lower($8)), false) AS in_group,
          COALESCE(bit_or(rpad(lpad('1', array_position((SELECT COALESCE(array_agg(DISTINCT asset_group_id::text), '{}') FROM console_host_group_membership), g.asset_group_id::text), '0'),
                               cardinality((SELECT COALESCE(array_agg(DISTINCT asset_group_id::text), '{}') FROM console_host_group_membership)), '0')::varbit),
@@ -118,7 +114,21 @@ pub(crate) const HOSTS: &str = "(SELECT a.agent_id, a.os_id, a.os_release,
           SELECT 1 FROM console_host_group_membership m
           WHERE m.agent_id = a.agent_id AND m.asset_group_id::text = ANY($2::text[]))))
     AND ($9::text IS NULL OR a.agent_id = $9)
-  GROUP BY a.agent_id)";
+  GROUP BY a.agent_id)"
+    };
+}
+/// The agents in the scope (`$1`, `$2`, as the Alarms list) and the host
+/// filter (`$9`), from the stored membership: `in_group` (the group filter
+/// `$8` holds) and `mask` (a bit per `glist` group). A grouped subquery,
+/// written in place rather than read from a CTE, so the pair scans that
+/// join it can run in parallel workers, and never pulled up, so its
+/// columns are worked out once per agent. The group ids are read from the
+/// table each time (not from `glist`): a CTE would keep the scans serial.
+pub(crate) const HOSTS: &str = concat!("(SELECT a.agent_id, a.os_id, a.os_release,", hosts_body!());
+
+/// [`HOSTS`] after its first columns, for a list that selects others
+/// (`check_list_sql`): `(SELECT a.agent_id, <columns of a>,` then this.
+pub(crate) const HOSTS_BODY: &str = hosts_body!();
 
 /// `glist`: the ids of groups holding a host, in mask bit order; `hosts`:
 /// [`HOSTS`] materialised for the small joins.

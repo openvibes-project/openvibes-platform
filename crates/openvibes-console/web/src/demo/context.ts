@@ -4,6 +4,7 @@ import type { Agent, AuditEvent, FindingGroup, Permission, TriageCounts } from "
 import { buildDemoData } from "./data";
 import { type HostFacts, inGroup } from "./hostGroups";
 import { problem, severityRank } from "./http";
+import { pairState } from "./routes/checkList";
 import type { Persona } from "./personas";
 import { ADMIN_ROLE, resolveCapabilities } from "./share";
 
@@ -56,7 +57,7 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
     data.audit.unshift(event);
   };
   const triageKey = (agentId: string, ruleSetId: string, ruleId: string) => `${agentId}|${ruleSetId}|${ruleId}`;
-  const findings = () => data.findings.filter((finding) => visible(finding.agent_id));
+  const findings = () => data.findings.filter((finding) => finding.ended_at == null && visible(finding.agent_id));
   const vulnerabilities = () => data.vulnerabilities.filter((item) => visible(item.agent_id) && item.fixed_at == null);
 
   /** Findings by rule, all visible hosts or one (`agent_id`, the host page's `/compliance?host=`). */
@@ -65,7 +66,8 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
     for (const finding of findings().filter((f) => agentId === undefined || f.agent_id === agentId)) {
       const key = `${finding.rule_set_id}/${finding.rule_id}`;
       const counts: TriageCounts = byRule.get(key)?.triage_counts ?? { open: 0, mitigated: 0, accepted_risk: 0, false_positive: 0 };
-      const state = data.triage.get(triageKey(finding.agent_id, finding.rule_set_id, finding.rule_id))?.state ?? "open";
+      // An expired acceptance is open (finding_groups_in_scope, check_list_sql::PAIR_STATE).
+      const state = pairState(data.triage.get(triageKey(finding.agent_id, finding.rule_set_id, finding.rule_id)), Date.now());
       counts[state as keyof TriageCounts] += 1;
       const existing = byRule.get(key);
       byRule.set(key, {

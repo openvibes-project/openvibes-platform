@@ -1852,6 +1852,7 @@ dependencies = [
  "axum",
  "chrono",
  "deadpool-postgres",
+ "openvibes-core",
  "platform-config",
  "platform-store",
  "serde",

@@ -67,7 +67,8 @@ values!(
         Critical = "critical",
         /// At least one open agent alarm.
         OpenAlarms = "open_alarms",
-        /// No open alarm, critical vulnerability or failing check visible.
+        /// No open alarm, critical vulnerability or failing check visible,
+        /// and compliance (when in reach) reported within the last day.
         NoneOpen = "none_open",
     }
 );
@@ -169,8 +170,12 @@ pub struct HostRow {
     pub open_alarms: Option<i64>,
     /// Critical vulnerabilities.
     pub critical: Option<i64>,
-    /// Failing compliance checks.
+    /// Failing compliance checks; `None` when compliance is out of reach
+    /// or stale.
     pub failing: Option<i64>,
+    /// Compliance is in reach but the host sent no report in the last day,
+    /// so its failing count is unknown.
+    pub compliance_stale: bool,
     /// Agent version.
     pub scanner_version: Option<String>,
     /// Older than the latest agent release.
@@ -324,6 +329,7 @@ fn host_row(row: &Row) -> Option<HostRow> {
         open_alarms: row.get(15),
         critical: row.get(16),
         failing: row.get(17),
+        compliance_stale: row.get::<_, Option<bool>>(22).unwrap_or(false),
         scanner_version: row.get(18),
         agent_older: row.get(19),
         alarms_off: status == HostStatus::Online

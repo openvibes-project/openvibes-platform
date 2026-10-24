@@ -2,16 +2,18 @@ import type { Agent, Permission } from "../../api/types";
 import type { DemoContext } from "../context";
 import { demoHistory } from "../history";
 import { json, problem } from "../http";
+import { openFailing } from "./checkList";
 
 export function registerMetricRoutes(ctx: DemoContext) {
-  const { data, now, capabilities, visible, alarmList, vulnerabilities, findings, triageKey, route } = ctx;
+  const { data, now, capabilities, visible, alarmList, vulnerabilities, findings, route } = ctx;
   // History of the real catalogue's metrics, ending on the demo's own live counts.
   const vulnSeverity = { critical: "critical", high: "important", medium: "moderate", low: "low" } as const;
   const liveValue = (metric: string): number | undefined => {
     const [kind = "", mid = "", level = ""] = metric.split(".");
     const alarmsOpen = alarmList().filter((a) => !a.suppressed_by && a.state === "open");
     const vulns = vulnerabilities();
-    const openFindings = findings().filter((f) => (data.triage.get(triageKey(f.agent_id, f.rule_set_id, f.rule_id))?.state ?? "open") === "open");
+    // Open failing pairs, as the Compliance list and its summary count them (history.rs host_counts_sql).
+    const openFindings = findings().filter((f) => openFailing(ctx, f, Date.now()));
     const alarmsAt = (v: string) => alarmsOpen.filter((a) => a.severity === v).length;
     const vulnsAt = (v: keyof typeof vulnSeverity) => vulns.filter((i) => i.severity === vulnSeverity[v]).length;
     const findingsAt = (v: string) => openFindings.filter((f) => f.severity === v).length;
@@ -57,7 +59,7 @@ export function registerMetricRoutes(ctx: DemoContext) {
     };
     for (const a of alarmList()) if (!a.suppressed_by && a.state === "open") add(a.agent_id, a.severity);
     for (const v of vulnerabilities()) add(v.agent_id, v.severity);
-    for (const f of findings()) if ((data.triage.get(triageKey(f.agent_id, f.rule_set_id, f.rule_id))?.state ?? "open") === "open") add(f.agent_id, f.severity);
+    for (const f of findings()) if (openFailing(ctx, f, Date.now())) add(f.agent_id, f.severity);
     const items = [...hosts.values()].filter((h) => visible(h.agent_id)).sort((a, b) => b.serious - a.serious || b.open - a.open || a.agent_id.localeCompare(b.agent_id));
     return json({ items: items.slice(0, limit) });
   });

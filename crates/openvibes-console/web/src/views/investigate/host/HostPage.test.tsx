@@ -22,7 +22,7 @@ const summary = (over: Partial<HostSummary> = {}): HostSummary => ({
     os: { id: "debian", version: "12", distribution: "Debian 12", family: "linux" }, running_kernel: "6.1.0", scanner_version: "0.4.2",
     agent_older: false, enrolled_at: "2026-10-03T09:00:00Z", revoked_at: null, last_seen_at: iso(now - 120_000), inventory_at: null, capabilities: ["findings"],
   },
-  tiles: { open_alarms: 3, compliance_failing: 7, vulnerabilities: 12, software: 412 },
+  tiles: { open_alarms: 3, compliance_failing: 7, compliance_stale: false, vulnerabilities: 12, software: 412 },
   protection: { threat_alarms: { state: "on", source: "ebpf", fault: false }, last_test: { alarm_at: null, finding_at: null } },
   groups: [{ id: "grp-prod", name: "Production", kind: "rule" }], labels: ["pci"],
   certificates: [{ serial: "01AB", issued_at: "2026-10-03T09:00:00Z", not_before: "2026-10-03T09:00:00Z", not_after: "2027-10-03T09:00:00Z" }], certificate_count: 1,
@@ -56,15 +56,24 @@ describe("host page", () => {
 
   it("links the four tiles to their full lists", () => {
     const html = render(summary());
-    for (const href of ["/alarms?host=agent-00005", "/compliance?host=agent-00005&amp;window=all", "/vulnerabilities?host=agent-00005", "/hosts/agent-00005/software"]) {
+    for (const href of ["/alarms?host=agent-00005", "/compliance?host=agent-00005", "/vulnerabilities?host=agent-00005", "/hosts/agent-00005/software"]) {
       expect(html).toMatch(new RegExp(`<a [^>]*detail-tile[^>]*href="${href.replace("?", "\\?")}"|<a [^>]*href="${href.replace("?", "\\?")}"[^>]*detail-tile`));
     }
     expect(html).toContain('aria-label="Software: 412"');
   });
 
+  it("says a host silent for a day has no failing count, with no link (roles 5c)", () => {
+    const html = render(summary({ tiles: { open_alarms: 3, compliance_failing: 0, compliance_stale: true, vulnerabilities: 12, software: 412 },
+      top_failing: { total: 0, items: [] } }));
+    expect(html).toContain('aria-label="Compliance failing: No report in the last day"');
+    expect(html).not.toMatch(/<a [^>]*href="\/compliance\?host=agent-00005"[^>]*detail-tile|<a [^>]*detail-tile[^>]*href="\/compliance\?host=/);
+    expect(text(html)).toContain("No report in the last day");
+    expect(text(html)).not.toContain("No failing checks");
+  });
+
   it("leaves out each card and tile whose section is null", () => {
     const html = render(summary({
-      tiles: { open_alarms: null, compliance_failing: null, vulnerabilities: null, software: 412 },
+      tiles: { open_alarms: null, compliance_failing: null, compliance_stale: false, vulnerabilities: null, software: 412 },
       top_alarms: null, top_vulnerabilities: null, top_failing: null,
     }));
     expect(html).not.toContain("Open alarms");
@@ -86,7 +95,7 @@ describe("host page", () => {
     const html = render(summary());
     expect(html).toMatch(/<a [^>]*href="\/vulnerabilities\?host=agent-00005"[^>]*>Show all 12 vulnerabilities<\/a>/);
     expect(html).toMatch(/<a [^>]*href="\/alarms\?host=agent-00005"[^>]*>Show all 3 alarms<\/a>/);
-    expect(html).toMatch(/<a [^>]*href="\/compliance\?host=agent-00005&amp;window=all"[^>]*>Show all 7 checks<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/compliance\?host=agent-00005"[^>]*>Show all 7 checks<\/a>/);
     expect(html).toMatch(/<a [^>]*href="\/hosts\/agent-00005\/ports"[^>]*>Show all 9 ports<\/a>/);
     expect(html).toMatch(/<a [^>]*href="\/hosts\/agent-00005\/services"[^>]*>Show all 23 services<\/a>/);
   });

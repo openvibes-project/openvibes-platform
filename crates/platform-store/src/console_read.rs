@@ -796,7 +796,11 @@ pub async fn finding_summary(client: &Client) -> Result<FindingSummary, StoreErr
     finding_summary_in_scope(client, &AgentScope::Global).await
 }
 
-/// Counts current observations and severities for agents visible in SQL.
+/// Counts open failing pairs and their severities for agents visible in
+/// SQL, by the Compliance list's one definition
+/// (`check_list_sql::open_failing`: not ended, seen within its
+/// window, and open, an expired acceptance included), so the menu count
+/// and the dashboard's Breakdown tile agree with the list they open.
 pub async fn finding_summary_in_scope(
     client: &Client,
     scope: &AgentScope,
@@ -804,18 +808,21 @@ pub async fn finding_summary_in_scope(
     let groups = scope.group_ids();
     let global = scope.is_global();
     let visible_agent = agent_visibility("a.agent_id", "$1", "$2");
+    let open_failing = crate::check_list_sql::open_failing("$3");
     let row = client
         .query_one(
             &format!(
-                "SELECT count(*), count(DISTINCT c.agent_id),
-                        count(*) FILTER (WHERE c.severity = 'critical'),
-                        count(*) FILTER (WHERE c.severity = 'high'),
-                        count(*) FILTER (WHERE c.severity = 'medium'),
-                        count(*) FILTER (WHERE c.severity = 'low')
-                 FROM current_findings c JOIN agents a USING (agent_id)
-                 WHERE {visible_agent}"
+                "SELECT count(*), count(DISTINCT f.agent_id),
+                        count(*) FILTER (WHERE f.severity = 'critical'),
+                        count(*) FILTER (WHERE f.severity = 'high'),
+                        count(*) FILTER (WHERE f.severity = 'medium'),
+                        count(*) FILTER (WHERE f.severity = 'low')
+                 FROM current_findings f JOIN agents a USING (agent_id)
+                 LEFT JOIN console_finding_triage t
+                   ON t.agent_id = f.agent_id AND t.rule_set_id = f.rule_set_id AND t.rule_id = f.rule_id
+                 WHERE {open_failing} AND {visible_agent}"
             ),
-            &[&global, &groups],
+            &[&global, &groups, &Utc::now()],
         )
         .await?;
     Ok(FindingSummary {
@@ -838,6 +845,7 @@ pub async fn latest_findings(
 
 /// Returns latest observations only for agents visible through the supplied
 /// SQL-enforced scope, before filters, ordering, or cursor pagination.
+/// Ended findings (fixed) are left out, as everywhere "failing" is meant.
 pub async fn latest_findings_in_scope(
     client: &Client,
     query: &LatestQuery,
@@ -856,7 +864,7 @@ pub async fn latest_findings_in_scope(
                     c.scan_id, c.authenticated, c.origin, c.first_observed_at,
                     c.last_observed_at, c.received_at, c.detection
              FROM current_findings c JOIN agents a USING (agent_id)
-             WHERE {visible_agent}
+             WHERE c.ended_at IS NULL AND {visible_agent}
                AND ($1::text IS NULL OR c.severity = $1)
                AND ($10::text IS NULL OR c.agent_id = $10)
                AND ($6::boolean = false OR
@@ -896,7 +904,8 @@ pub async fn latest_findings_in_scope(
     Ok(Page { items, next })
 }
 
-/// Groups current latest snapshots once per rule set and rule. The caller's
+/// Groups current latest snapshots once per rule set and rule, ended
+/// findings (fixed) left out of every count. The caller's
 /// asset scope is applied before aggregation; imported installations are
 /// visible only to a global reader until an association contract exists.
 pub async fn finding_groups_in_scope(
@@ -908,14 +917,16 @@ pub async fn finding_groups_in_scope(
     let groups = scope.group_ids();
     let global = scope.is_global();
     let visible_agent = agent_visibility("a.agent_id", "$7", "$8");
+    // An expired acceptance is open, as on the Compliance list.
+    let triage_state = crate::check_list_sql::PAIR_STATE.replace("$12", "$10");
     let rows = client
         .query(
             &format!(
                 "WITH visible AS (
-                    SELECT c.*, a.hostname, COALESCE(t.state, 'open') AS triage_state
+                    SELECT c.*, a.hostname, {triage_state} AS triage_state
                     FROM current_findings c JOIN agents a USING (agent_id)
                     LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
-                    WHERE {visible_agent} AND ($9::text IS NULL OR c.agent_id = $9)
+                    WHERE c.ended_at IS NULL AND {visible_agent} AND ($9::text IS NULL OR c.agent_id = $9)
                  ), grouped AS (
                     SELECT rule_set_id, rule_id,
                            count(*) FILTER (WHERE last_observed_at >= $1)::bigint AS endpoint_count,
@@ -960,6 +971,7 @@ pub async fn finding_groups_in_scope(
                 &global,
                 &groups,
                 &query.agent_id,
+                &Utc::now(),
             ],
         )
         .await?;

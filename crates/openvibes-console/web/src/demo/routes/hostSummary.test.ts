@@ -88,4 +88,27 @@ describe("demo host summary", () => {
     await call("POST", "/api/v1/vulnerabilities/bulk", { action: "state", state: "accepted_risk", note: "later", accepted_until: new Date(Date.now() + 86_400_000 * 30).toISOString(), items: [{ advisory_id: hit?.advisory_id, agent_id: id }] });
     expect(await critical(id)).toBe(before - 1);
   });
+  it("counts failing as the Compliance list does, and says when a host has not reported for a day (roles 5c)", async () => {
+    const server = createDemoServer();
+    const call = async (path: string) => (await server.handle("GET", path, undefined)).json() as Promise<Record<string, unknown>>;
+    const hosts = (await call("/api/v1/hosts?limit=100")).items as { id: string; last_seen_at: string | null; problems: { failing: number | null } }[];
+    for (const id of ["agent-00001", "agent-00002", "agent-00005"]) {
+      const summary = (await call(`/api/v1/hosts/${id}/summary`)) as unknown as HostSummary;
+      const list = (await call(`/api/v1/compliance-list?host=${id}&limit=100`)).items as { rule_id: string; open: number }[];
+      // The tile, the Hosts list and /compliance?host= count the same open failing checks.
+      expect(summary.tiles.compliance_failing).toBe(list.filter((r) => r.open > 0).length);
+      const row = ((await call(`/api/v1/hosts?q=${id}`)).items as { problems: { failing: number | null } }[])[0];
+      expect(row?.problems.failing).toBe(summary.tiles.compliance_failing);
+      expect(summary.tiles.compliance_stale).toBe(false);
+    }
+    // agent-00002's acceptance of empty SSH passwords expired: open again.
+    const two = (await call("/api/v1/hosts/agent-00002/summary")) as unknown as HostSummary;
+    expect((await call("/api/v1/compliance-list?host=agent-00002&q=permit_empty_passwords")).total).toBe(1);
+    expect(two.tiles.compliance_failing).toBeGreaterThan(0);
+    const silent = hosts.find((h) => h.last_seen_at !== null && Date.parse(h.last_seen_at) < Date.now() - 86_400_000);
+    expect(silent).toBeDefined();
+    const stale = (await call(`/api/v1/hosts/${silent?.id ?? ""}/summary`)) as unknown as HostSummary;
+    expect(stale.tiles.compliance_stale).toBe(true);
+    expect(stale.tiles.compliance_failing).toBe(0);
+  });
 });

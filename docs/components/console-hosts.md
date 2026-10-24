@@ -28,11 +28,19 @@ the old Agents view and host panel. The shared pieces they are built from
   page (a new tab works too); an empty cell shows "—" with its meaning for
   screen readers. The FilterBar's chips are Status (online, offline, revoked,
   imported), OS, Group, Label, Problems (has critical, has open alarms,
-  none open) and Agent (older than the latest, the latest), each value with
+  none open; a host with no report in the last day is never "none open"
+  while compliance is in reach, since its failing count is unknown. The
+  ceilings: staleness is the last contact, not the last scan, so a host
+  that still sends heartbeats but no longer scans shows its last findings
+  until they are a day old, then 0, and can be "none open"; an imported
+  host, which never reports, always shows "—") and Agent (older than the latest, the latest), each value with
   the server's count under the other filters; saved views and columns are
   the page `hosts`. Columns: Host and IP; OS (distribution, family); Groups
   (two, then "+n"); Labels; Open problems (alarms, critical, failing, "—"
-  where the viewer may not read that kind on the host); Last heartbeat with
+  where the viewer may not read that kind on the host; failing is also "—",
+  "No report in the last day", when the host's last contact is older than
+  the Compliance list's 24-hour window, `problems.compliance_stale`, as on
+  the host page); Last heartbeat with
   the status, and an "Alarms off" warning beside it when the host is online
   with threat alarms off by a fault (`alarms_off`; off by choice stays
   quiet); Agent version (amber, with a title, when older than the
@@ -80,7 +88,11 @@ the old Agents view and host panel. The shared pieces they are built from
   - **Tiles:** Open alarms, Compliance failing, Vulnerabilities (each only
     with its read permission on this host) and Software, linking to
     `/alarms?host=ID`, `/compliance?host=ID`, `/vulnerabilities?host=ID`
-    and `/hosts/ID/software`.
+    and `/hosts/ID/software`. A host with no report in the last day
+    (`tiles.compliance_stale`: its last contact is older than the
+    Compliance list's 24-hour window) shows "—" and "No report in the last
+    day" on the Compliance tile, with no link, and the same words in the
+    failing-checks card, instead of a count the list would not show.
   - **Left column:** Details (host name, agent ID, system, running kernel,
     IP, agent version, software as of, status, enrolled, revoked,
     capabilities); Protection (threat alarms, the hardening row, last
@@ -101,16 +113,15 @@ the old Agents view and host panel. The shared pieces they are built from
   - **The host filter:** Alarms, Compliance and Vulnerabilities take
     `host=ID` (`views/lists/HostChip.tsx`), shown as a removable chip
     "Host: web-01 ×" and sent as `agent_id` (alarms) or `host`
-    (vulnerabilities); Compliance reads `/compliance/groups?agent_id=`,
-    that host's findings by rule with its own triage (Include resolved,
-    Reopen and bulk close work as usual). Bulk actions then name the host
-    (`agent_id`), so they touch it alone. The Compliance tile and "Show all
-    n" add `window=all`, so the view asks for every current finding of the
-    host (`since` 1970, allowed with `agent_id` only) and a host silent for
-    days lists what the tile counts; removing the chip drops both. The page counts what these lists
-    show by default: open-triaged alarms, checks and advisories, and
-    vulnerabilities mapped at confidence 80 or more; the Hosts list's
-    failing count is open-triaged checks too, and its critical count the
+    (vulnerabilities); Compliance sends `host` to `/compliance-list`, the
+    host's checks with its own triage. Bulk actions then name the host
+    (`agent_id`), so they touch it alone; removing the chip drops it. The
+    page counts what these lists show by default: open-triaged alarms and
+    advisories, vulnerabilities mapped at confidence 80 or more, and the
+    Compliance list's open failing checks (`check_list_sql::open_failing`:
+    not ended, seen within the last day, triage open, with an expired
+    acceptance open again). The Hosts list's failing count is the same
+    definition, and its critical count the
     critical advisories as the page counts them.
   **Last test** shows when the host last raised the harmless test alarm
   and test finding (`openvibes-test alarm|finding`, from `last_test` in

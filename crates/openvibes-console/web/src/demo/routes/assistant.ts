@@ -2,6 +2,9 @@ import type { AssistantInternetSource, AssistantSegment } from "../../api/types"
 import type { DemoContext } from "../context";
 import { json, severityRank } from "../http";
 
+/** Whether the demo's assistant is on (the server's `state.assistant`); pages offer Ask only then. */
+export const ASSISTANT_AVAILABLE = true;
+
 export function registerAssistantRoutes(ctx: DemoContext) {
   const { data, visible, agentById, findings, vulnerabilities, groups, route } = ctx;
   const assistant = (question: string): AssistantSegment[] => {
@@ -55,7 +58,7 @@ export function registerAssistantRoutes(ctx: DemoContext) {
     ];
   };
 
-  route("GET", "/api/v1/assistant/status", "assistant.use", () => json({ available: true, model: "demo (synthetic answers)", location: "in your browser" }));
+  route("GET", "/api/v1/assistant/status", "assistant.use", () => json({ available: ASSISTANT_AVAILABLE, model: "demo (synthetic answers)", location: "in your browser" }));
   route("POST", "/api/v1/assistant/messages", "assistant.use", (_, __, body) =>
     json({ segments: assistant(String(body.question ?? "")), lookups: [{ name: "fleet", objects: data.agents.length, error: null }], internet: internetSources(String(body.question ?? "")) }));
 }

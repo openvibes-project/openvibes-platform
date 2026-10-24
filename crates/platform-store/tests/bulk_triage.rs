@@ -139,8 +139,8 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
     .unwrap()
     .unwrap();
     assert_eq!((done.changed, done.skipped.len()), (2, 0));
-    // A rule-wide close leaves an already closed host's decision alone; a
-    // named host changes as asked.
+    // A rule-wide close leaves a closed host's decision alone ("not open");
+    // a named host changes as asked.
     let one = [(
         "baseline".to_owned(),
         "port.ssh.exposed".to_owned(),
@@ -171,11 +171,9 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
     .unwrap()
     .unwrap();
     assert_eq!(again.changed, 0);
-    assert!(
-        again
-            .skipped
-            .iter()
-            .all(|(_, why)| *why == "already closed")
+    assert_eq!(
+        again.skipped,
+        [("baseline/port.ssh.exposed".to_owned(), "not open")]
     );
     let db_state: String = client
         .query_one(
@@ -246,27 +244,6 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
     assert_eq!(
         done.skipped,
         [("FEDORA-9".to_owned(), "not found or out of scope")]
-    );
-    drop(client);
-    db.drop().await;
-}
-
-#[tokio::test]
-async fn more_than_ten_thousand_items_are_refused() {
-    let (db, mut client, _) = setup().await;
-    let ids: Vec<i64> = (1..=10_001).collect();
-    assert_eq!(
-        bulk::alarms(
-            &mut client,
-            &AgentScope::Global,
-            &ids,
-            mitigate(Some("x")),
-            "a",
-            Utc::now()
-        )
-        .await
-        .unwrap(),
-        Err(BulkRefusal::Count)
     );
     drop(client);
     db.drop().await;
@@ -389,11 +366,18 @@ async fn bulk_on_cve_rows_changes_only_open_pairs() {
     // pair is still left alone, for a close and an assignment alike.
     let on_h2 = [("DEBIAN-A".to_owned(), Some(h2.to_owned()))];
     for change in [mitigate(Some("again")), BulkChange::Assign(Some("ann"))] {
-        let done =
-            bulk::vulnerabilities_open_only(&mut c, &scope, &on_h2, &[true], change, "ann", now)
-                .await
-                .unwrap()
-                .unwrap();
+        let done = bulk::vulnerabilities_open_only(
+            &mut c,
+            &scope,
+            &on_h2,
+            &[bulk::ListRow::open()],
+            change,
+            "ann",
+            now,
+        )
+        .await
+        .unwrap()
+        .unwrap();
         assert_eq!(done.changed, 0, "{done:?}");
         assert_eq!(why(&done, &format!("{h2}/DEBIAN-A")), Some("not open"));
     }

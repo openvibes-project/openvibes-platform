@@ -65,6 +65,7 @@ async fn an_administrator_sees_every_section() {
     assert_eq!(body["host"]["os"]["family"], "windows");
     assert_eq!(body["tiles"]["open_alarms"], 2);
     assert_eq!(body["tiles"]["compliance_failing"], 1);
+    assert_eq!(body["tiles"]["compliance_stale"], false);
     assert_eq!(body["tiles"]["vulnerabilities"], 0);
     assert_eq!(body["tiles"]["software"], 0);
     assert_eq!(body["top_alarms"]["total"], 2);
@@ -369,5 +370,33 @@ async fn compliance_groups_filter_by_host_inside_the_scope() {
     let (_, summary) = fx.call(&fx.admin, "GET", &url(W1), None).await;
     assert_eq!(summary["tiles"]["compliance_failing"], 0);
     assert_eq!(summary["top_failing"]["total"], 0);
+    fx.db.drop().await;
+}
+
+/// A host with no report in the last day (the Compliance list's window)
+/// says so instead of a failing count the list would not show.
+#[tokio::test]
+async fn a_host_silent_for_a_day_is_compliance_stale() {
+    let Some(fx) = Fx::new().await else { return };
+    seed(&fx).await;
+    let client = fx.db.pool.get().await.unwrap();
+    client
+        .execute(
+            "UPDATE agents SET last_seen_at = now() - interval '2 days' WHERE agent_id = $1",
+            &[&W1],
+        )
+        .await
+        .unwrap();
+    client
+        .execute(
+            "UPDATE current_findings SET last_observed_at = now() - interval '2 days' WHERE agent_id = $1",
+            &[&W1],
+        )
+        .await
+        .unwrap();
+    let (status, body) = fx.call(&fx.admin, "GET", &url(W1), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["tiles"]["compliance_stale"], true);
+    assert_eq!(body["tiles"]["compliance_failing"], 0);
     fx.db.drop().await;
 }

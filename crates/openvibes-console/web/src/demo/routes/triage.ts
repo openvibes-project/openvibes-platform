@@ -3,69 +3,85 @@ import { caseSeverityOf, type CaseStore } from "../cases";
 import type { Permission } from "../../api/types";
 import type { DemoContext } from "../context";
 import { json, problem } from "../http";
+import { inGroup } from "../hostGroups";
+import { isFailing } from "./checkList";
 import type { Suppressions } from "../suppressions";
 
 export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; suppressions: Suppressions }) {
-  const { data, iso, actor, capabilities, alarmList, findings, vulnerabilities, triageKey, setTriage, triageProblem, suppressions, audit, route, send, cases } = ctx;
+  const { data, facts, iso, actor, capabilities, alarmList, findings, vulnerabilities, triageKey, setTriage, triageProblem, suppressions, audit, route, send, cases } = ctx;
   // Bulk triage (triage v2): the same rules as one item, applied to each;
   // what cannot change is skipped with the reason.
   type Triage = { state: string; assigned_to: string | null; note: string | null; accepted_until: string | null };
-  /** `openOnly`: an advisory-wide pair or a list row's (`open_only`), which a close or assign changes only while open (bulk_triage.rs). */
+  /** `openOnly`: a rule- or advisory-wide pair or a list row's (`open_only`), which a close or assign changes only while open (bulk_triage.rs); `row` names its CVE or check. */
   type Target = { id: string; named: boolean; caseKind: "alarm" | "compliance_finding" | "vulnerability"; caseRef: string;
-    current: () => Triage; write: (next: Triage) => void; openOnly?: boolean; advisory?: string };
+    current: () => Triage; write: (next: Triage) => void; openOnly?: boolean; row?: string };
   type Picked = { found: Target[]; missing: string[] };
   type Skip = { id: string; reason: string };
   const text = (value: unknown) => (typeof value === "string" ? value : "");
   const auditNames = { alarms: "alarm", compliance: "finding", vulnerabilities: "vulnerability" } as const;
 
+  /** A list row's Group filter (`group`, bulk_triage::ListRow): absent keeps every host; otherwise only the group's members. */
+  const groupOk = (item: Record<string, unknown>) => item.group === undefined || typeof item.group === "string";
+  const inRowGroup = (item: Record<string, unknown>, agentId: string) => {
+    if (typeof item.group !== "string") return true;
+    const agent = data.agents.find((a) => a.id === agentId);
+    const group = data.access.host_groups.find((g) => g.asset_group_id === item.group);
+    return !!agent && !!group && inGroup(facts(agent), group);
+  };
   const alarmTargets = (item: Record<string, unknown>, into: Picked): boolean => {
-    if (typeof item.id !== "string" || item.open_only === true) return false;
+    if (typeof item.id !== "string" || item.open_only === true || item.group !== undefined) return false;
     const alarm = alarmList().find((a) => a.id === item.id);
     if (!alarm) { into.missing.push(item.id); return true; }
     into.found.push({ id: alarm.id, named: true, caseKind: "alarm", caseRef: alarm.id, current: () => alarm.triage,
       write: (next) => { alarm.state = next.state; alarm.triage = { ...next, version: alarm.triage.version + 1, updated_at: iso(), updated_by: actor }; } });
     return true;
   };
-  const findingTargets = (item: Record<string, unknown>, into: Picked): boolean => {
-    if (typeof item.rule_set_id !== "string" || typeof item.rule_id !== "string" || item.open_only === true) return false;
+  /** `reopen`: a reopen keeps every pair; otherwise a check row's (`openOnly`) pairs are only those the list counts failing (compliance.rs). */
+  const findingTargets = (item: Record<string, unknown>, into: Picked, reopen = false): boolean => {
+    if (typeof item.rule_set_id !== "string" || typeof item.rule_id !== "string" || (item.open_only !== undefined && typeof item.open_only !== "boolean") || !groupOk(item)) return false;
     const agent = typeof item.agent_id === "string" ? item.agent_id : null;
     const set = item.rule_set_id === "~unknown" ? "" : item.rule_set_id;
     const rule = item.rule_id;
-    const hits = findings().filter((f) => f.rule_set_id === set && f.rule_id === rule && (agent === null || f.agent_id === agent));
+    const openOnly = agent === null || item.open_only === true;
+    const now = Date.now();
+    const hits = findings().filter((f) => f.rule_set_id === set && f.rule_id === rule && (agent === null || f.agent_id === agent)
+      && (reopen || !openOnly || isFailing(f, now)) && inRowGroup(item, f.agent_id));
     if (hits.length === 0) into.missing.push(agent ? `${agent}/${set}/${rule}` : `${set}/${rule}`);
     for (const f of hits) {
       const current = (): Triage => {
         const t = data.triage.get(triageKey(f.agent_id, set, rule));
         return { state: t?.state ?? "open", assigned_to: t?.assigned_to ?? null, note: t?.note ?? null, accepted_until: t?.accepted_until ?? null };
       };
-      into.found.push({ id: `${f.agent_id}/${set}/${rule}`, named: agent !== null, caseKind: "compliance_finding", caseRef: `${f.agent_id}/${set}/${rule}`, current,
+      into.found.push({ id: `${f.agent_id}/${set}/${rule}`, named: agent !== null, openOnly, row: `${set}/${rule}`, caseKind: "compliance_finding", caseRef: `${f.agent_id}/${set}/${rule}`, current,
         write: (next) => { setTriage(f.agent_id, set, rule, next); } });
     }
     return true;
   };
   const vulnerabilityTargets = (item: Record<string, unknown>, into: Picked): boolean => {
-    if (typeof item.advisory_id !== "string" || (item.open_only !== undefined && typeof item.open_only !== "boolean")) return false;
+    if (typeof item.advisory_id !== "string" || (item.open_only !== undefined && typeof item.open_only !== "boolean") || !groupOk(item)) return false;
     const agent = typeof item.agent_id === "string" ? item.agent_id : null;
     const advisory = item.advisory_id;
     // Only pairs with a fix are triaged (the store's `vulnerabilities` table); no-fix pairs and CPE matches are not.
     const fixable = (v: { packages: unknown }) => Array.isArray(v.packages) && (v.packages as { fixed?: unknown }[]).some((p) => p?.fixed != null);
-    const hits = vulnerabilities().filter((v) => v.advisory_id === advisory && (agent === null || v.agent_id === agent) && fixable(v));
+    const hits = vulnerabilities().filter((v) => v.advisory_id === advisory && (agent === null || v.agent_id === agent) && fixable(v) && inRowGroup(item, v.agent_id));
     if (hits.length === 0) into.missing.push(agent ? `${agent}/${advisory}` : advisory);
     for (const v of hits) {
-      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, openOnly: agent === null || item.open_only === true, advisory, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
+      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, openOnly: agent === null || item.open_only === true, row: advisory, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
         current: () => ({ state: v.triage_state, assigned_to: v.assigned_to ?? null, note: null, accepted_until: null }),
         write: (next) => { v.triage_state = next.state; v.assigned_to = next.assigned_to; v.triage_version += 1; } });
     }
     return true;
   };
   const targetsOf = { alarms: alarmTargets, compliance: findingTargets, vulnerabilities: vulnerabilityTargets };
-  /** A close or assign: closed `openOnly` pairs are not part of it (bulk_triage/vulns.rs). A named one says "not open"; so does an advisory with no open pair left. */
+  /** Open as the store sees it: no triage, open, or an accepted risk whose expiry has passed. */
+  const isOpen = (t: Triage) => t.state === "open" || (t.state === "accepted_risk" && t.accepted_until !== null && Date.parse(t.accepted_until) <= Date.now());
+  /** A close or assign: closed `openOnly` pairs are not part of it (bulk_triage/vulns.rs, compliance.rs). A named one says "not open"; so does a row with no open pair left. */
   const openTargets = (picked: Picked, skipped: Skip[]): Target[] => {
-    const kept = picked.found.filter((t) => !t.openOnly || t.current().state === "open");
+    const kept = picked.found.filter((t) => !t.openOnly || isOpen(t.current()));
     for (const t of picked.found) {
       if (kept.includes(t)) continue;
-      const id = t.named ? t.id : (t.advisory ?? t.id);
-      if (!t.named && kept.some((k) => k.advisory === t.advisory)) continue;
+      const id = t.named ? t.id : (t.row ?? t.id);
+      if (!t.named && kept.some((k) => k.row === t.row)) continue;
       if (!skipped.some((s) => s.id === id)) skipped.push({ id, reason: "not open" });
     }
     return kept;
@@ -79,8 +95,6 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     }
     let changed = 0;
     for (const t of state === "open" ? picked.found : openTargets(picked, skipped)) {
-      // A rule or advisory's closed hosts keep their decision (as the server).
-      if (state !== "open" && !t.named && t.current().state !== "open") { skipped.push({ id: t.id, reason: "already closed" }); continue; }
       if (state === "open" && !t.named && t.current().state === "open") { skipped.push({ id: t.id, reason: "already open" }); continue; }
       t.write({ state, note, assigned_to: t.current().assigned_to, accepted_until: state === "accepted_risk" ? text(body.accepted_until) : null });
       changed += 1;
@@ -96,7 +110,9 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
         skipped.push({ id: t.id, reason: "assignee unavailable" });
         continue;
       }
-      t.write({ ...current, assigned_to: assignee });
+      // An expired accepted risk is open: written back open, with no expiry.
+      const expired = current.state === "accepted_risk" && isOpen(current);
+      t.write({ ...current, ...(expired ? { state: "open", accepted_until: null } : {}), assigned_to: assignee });
       changed += 1;
     }
     return changed;
@@ -168,7 +184,8 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
       if (!ACTIONS.includes(action)) return problem(400, "invalid_action", "Use state, assign, case or (alarms) suppress");
       if (!allowed(action)) return problem(403, "permission_denied", "Permission denied");
       const picked: Picked = { found: [], missing: [] };
-      if (!items.every((item) => targetsOf[kind](item, picked))) return problem(400, "invalid_items", "An item does not fit this list");
+      const reopen = action === "state" && body.state === "open";
+      if (!items.every((item) => targetsOf[kind](item, picked, reopen))) return problem(400, "invalid_items", "An item does not fit this list");
       const skipped: Skip[] = picked.missing.map((id) => ({ id, reason: "not found or out of scope" }));
       const note = text(body.note).trim() || null;
       let changed: number | Response;

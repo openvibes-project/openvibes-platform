@@ -121,6 +121,10 @@
 /* The Vulnerabilities list: hosts open of all with a bar of the fixed share, a KEV due date amber when close and red when past. */
 .hosts-cell { gap: 4px; }
 .hosts-cell .meter { width: 110px; }
+.triage-bar { display: flex; height: 8px; gap: 2px; border-radius: 999px; overflow: hidden; background: var(--surface-3); min-width: 80px; }
+.triage-bar span { display: block; height: 100%; }
+.hosts-cell .triage-bar { width: 130px; height: 6px; }
+.hosts-cell__words { font-size: 12px; }
 .due--soon, .text-warn { color: var(--warn); }
 .due--late { color: var(--bad); font-weight: 600; }
 /* On a selected row's tint the warn colour falls just under 4.5:1: a touch toward the text colour. */

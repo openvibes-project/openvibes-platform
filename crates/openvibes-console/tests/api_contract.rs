@@ -197,10 +197,10 @@ fn read_model_dtos_have_stable_wire_names() {
 /// schema name must belong to one type, and each appears once.
 #[test]
 fn registered_schema_names_are_unique() {
-    let source = include_str!("../src/http/openapi.rs");
+    let source = include_str!("../src/http/openapi_schemas.rs");
     let start = source.find("components(schemas(").unwrap();
     let block = &source[start..];
-    let block = &block[..block.find("\n    )),").unwrap()];
+    let block = &block[..block.find("\n)))]").unwrap()];
     let mut seen = std::collections::HashMap::new();
     for path in block
         .lines()

@@ -1,85 +1,9 @@
-// One detail template for an alarm, a compliance finding and a
-// vulnerability (triage v2, spec 2026-10-10-bulk-triage §5; #253): the
-// panel header carries the triage actions, then a short summary, then the
-// console's underline tabs. The Hosts tab is a real table with selection
-// and the bulk bar; History lists the triage changes.
-import { type ReactNode, useMemo, useState } from "react";
-
+// The triage history of one item (an alarm's page, approved screen 30):
+// who changed its state, when, from and to, and the note. The detail
+// template, its Hosts tab and the finding panel that used them are gone:
+// alarms, checks and vulnerabilities are pages now (screens 30, 28 and 26).
 import { useResource } from "../../api/client";
-import { Ago, Empty, ErrorBox, Loading, ObjectLink, TriageBadge } from "../../ui/bits";
-import { DataTable } from "../../ui/DataTable";
-import { triageLabel } from "../../ui/format";
-import { Tabs } from "../../ui/panel";
-import { useSelection } from "../../ui/selection";
-import type { BulkItem, BulkKind } from "./bulk";
-import { BulkBar } from "./BulkBar";
-import { CaseBadge } from "../cases/CaseBadge";
-import { triageStates } from "./triage";
-
-type Tab = { key: string; label: string; count?: number; body: ReactNode };
-
-/** The summary stays; one tab shows below it. `tab` and `onTab` let the
- * panel switch tabs itself (a host's "View evidence"). */
-export function TriageDetail({ summary, tabs, tab, onTab }: Readonly<{ summary?: ReactNode; tabs: Tab[]; tab?: string; onTab?: (tab: string) => void }>) {
-  return (
-    <>
-      {summary && <div className="panel-body stack">{summary}</div>}
-      <Tabs tabs={tabs.map((t) => ({ id: t.key, label: t.label, count: t.count }))}
-        {...(tab !== undefined ? { active: tab } : {})} {...(onTab ? { onActive: onTab } : {})}>
-        {(active) => <div className="detail-tab">{tabs.find((t) => t.key === active)?.body}</div>}
-      </Tabs>
-    </>
-  );
-}
-
-/** One host's row in a finding's or an advisory's Hosts tab. */
-export type HostRow = {
-  agent_id: string; hostname: string | null; triage_state: string; assigned_to: string | null;
-  seen: string; extra?: ReactNode;
-};
-
-/** The hosts, filterable by state, selectable, with the bulk bar for the
- * selected ones; it pages ("Show more") and is never cut off (#239). */
-export function HostsTab({ kind, hosts, item, cases, title, severity }: Readonly<{
-  kind: BulkKind; hosts: HostRow[]; item: (agentId: string) => BulkItem; cases: Map<string, number[]>;
-  title: string; severity: string;
-}>) {
-  const [filter, setFilter] = useState("all");
-  const rows = useMemo(() => hosts.filter((h) => filter === "all" || h.triage_state === filter), [hosts, filter]);
-  const [selected, setSelected] = useSelection(filter);
-  const counts = (state: string) => hosts.filter((h) => h.triage_state === state).length;
-  const closedSelected = hosts.filter((h) => selected.has(h.agent_id) && h.triage_state !== "open");
-  return (
-    <>
-      <fieldset className="row row--wrap detail-tab__filters" aria-label="Show hosts by triage state">
-        {(["all", ...triageStates] as const).map((value) => {
-          const n = value === "all" ? hosts.length : counts(value);
-          if (value !== "all" && n === 0) return null;
-          return (
-            <button key={value} type="button" className="chip" aria-pressed={filter === value} onClick={() => setFilter(value)}>
-              {value === "all" ? "All" : triageLabel[value]} <span className="chip__count">{n}</span>
-            </button>
-          );
-        })}
-      </fieldset>
-      {rows.length === 0 ? <Empty title="No hosts in this state" /> : (
-        <DataTable compact label="Hosts" rows={rows} rowKey={(h) => h.agent_id} selection={{ selected, onChange: setSelected }}
-          onOpen={() => undefined} defaultSort={{ key: "state", direction: "asc" }}
-          columns={[
-            { key: "host", header: "Host", sort: (h) => h.hostname ?? h.agent_id, render: (h) => (
-              <span className="row"><ObjectLink to={{ kind: "agent", id: h.agent_id }}>{h.hostname ?? h.agent_id}</ObjectLink>{h.extra}</span>) },
-            { key: "state", header: "State", width: "130px", sort: (h) => triageStates.indexOf(h.triage_state as never), render: (h) => <TriageBadge state={h.triage_state} /> },
-            { key: "assignee", header: "Assignee", width: "110px", hideBelow: 380, sort: (h) => h.assigned_to ?? "", render: (h) => <span className={h.assigned_to ? "truncate" : "subtle"}>{h.assigned_to ?? "—"}</span> },
-            { key: "case", header: "Case", width: "80px", hideBelow: 560, render: (h) => <CaseBadge numbers={cases.get(h.agent_id)} /> },
-            { key: "seen", header: "Last seen", width: "110px", hideBelow: 640, sort: (h) => h.seen, render: (h) => <span className="subtle"><Ago value={h.seen} /></span> },
-          ]} />
-      )}
-      <BulkBar kind={kind} noun={selected.size === 1 ? "host" : "hosts"} count={selected.size} onClear={() => setSelected(new Set())}
-        closed={closedSelected.length} reopenItems={() => closedSelected.map((h) => item(h.agent_id))}
-        items={() => [...selected].map(item)} newCase={() => ({ title: `${title} on ${selected.size} hosts`, severity })} />
-    </>
-  );
-}
+import { Ago, Empty, ErrorBox, Loading, TriageBadge } from "../../ui/bits";
 
 type Event = { agent_id: string; hostname?: string | null; from_state?: string | null; to_state: string; note?: string | null; changed_at: string; changed_by: string };
 

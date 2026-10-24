@@ -1,6 +1,6 @@
-// One filter catalogue per list: the views build their chip bars from it and
-// the List widget editor offers the same filters. Runtime extras (compliance
-// rule sets, counts) stay in the views and are not part of the catalogue.
+// One filter catalogue per list: the List widget editor offers these filters,
+// and the Audit log builds its chip bar from them. Compliance and
+// Vulnerabilities filter on the server with their own FilterBar.
 import type { ListView } from "./rows";
 
 type FilterDef =
@@ -13,6 +13,8 @@ const choice = (param: string, label: string, values: [string, string][]): Filte
 const severities = (...names: string[]) => names.map((n): [string, string] => [n, n[0]?.toUpperCase() + n.slice(1)]);
 
 export const LIST_FILTERS: Record<ListView, FilterDef[]> = {
+  // The dashboard List tile's filters over GET /v1/compliance/groups; the
+  // Compliance view itself has its own FilterBar (step 5c).
   "/compliance": [
     { param: "state", label: "Include resolved", kind: "flag", value: "all" },
     choice("severity", "Severity", severities("critical", "high", "medium", "low")),

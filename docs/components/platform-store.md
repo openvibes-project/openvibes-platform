@@ -613,7 +613,11 @@ Scope (spec §6): rows, total, counts and summary come only from hosts in
 `HostScopes.hosts`. Open alarms, critical vulnerabilities and failing
 checks are each counted only where `alarms`, `vulnerabilities` or
 `compliance` reaches the host (`None` on the row otherwise, and not counted
-in that problem value); "none open" needs at least one kind in reach. Group
+in that problem value); "none open" needs at least one kind in reach. A
+host in compliance reach whose last contact is older than the 24-hour
+window (`check_list_sql::WINDOW`, the base of `host_summary`'s
+`compliance_stale`) has `compliance_stale` and no failing count, and is
+never "none open". Group
 values are groups with a host in scope (plus the chosen one, if it has
 one); label values are the 50 most used on hosts in scope (plus the chosen
 one, if present there). Group membership is read from the stored table
@@ -674,6 +678,135 @@ alarms-off part. Tests: `tests/alarm_list.rs`; the 200,000-alarm timing
 One row and one page per CVE; the queries, their counts and timing are in
 [console-vulnerabilities.md](console-vulnerabilities.md#the-store).
 
+## The Compliance list (`check_list::check_list`, `check_area`, schema 63)
+
+`check_list(client, &CheckQuery, &AgentScope, actor_id, now) -> CheckListPage`:
+one statement returns one row per check (rule set and rule), the total,
+the count for every value of every filter with the other filters applied,
+and the summary line (roles spec §10.3; step 5c rulings 2–7, user
+decision 1). A row's pairs are the hosts in the `compliance.read` scope
+that fail it (a current finding with `ended_at IS NULL` seen within the
+last 24 hours, the Compliance groups' default window) or pass it.
+
+A host passes a check when:
+- it is active and its heartbeat health (`agents.health`) is at most 24
+  hours old;
+- the health lists the rule set with a version (the agent reports none
+  for a set it never accepted; a version that is not 1–18 digits is
+  ignored, so no reported value can fail the statement), neither
+  `not_assigned` nor refused;
+- the indexed bundle of that version has the rule (`console_rule_meta`;
+  a rule no indexed bundle of the set has passes at any version);
+- the rule's collectors (`check_area::check_collectors`: `port.*` ports,
+  `package.*` packages, `harden.*` hardening, `harden.net.ip_forward`
+  hardening and packages, `test.*` processes, from the agent's `scan.rs`)
+  ran `ok` in its last scan; a rule ID with no known prefix (a site rule)
+  needs at least one collector reported and every one `ok`;
+- no finding blocks it: a failing one, or an unended P13 match
+  (`source = 'changes'`) however old. A host stuck in a resync keeps fresh
+  health while its open matches age; such a pair is neither failing nor
+  passing. Legacy `scan` rows never end, so only their age counts.
+
+A failing pair's state is its triage state (no row is open, an accepted
+risk past `now` is open). Checks are the rules of each set's newest
+indexed version plus every check with a current finding on a host in
+reach (a site rule found only out of reach is never named); a row needs
+a failing or passing pair in reach. A check without metadata leaves the
+list once no host in reach has a finding for it, even when hosts in
+reach still pass it. Title: the rule's newest indexed title,
+else its ID. Severity: the newest failing finding's in reach, else the
+newest other finding's, else the rule's indexed severity
+(`console_rule_meta.severity`, schema 63), else `None`. Area: `check_area`
+(ruling 3), with the SQL twin `console_check_area(text)`. Since: the
+earliest first-seen of the failing pairs. Assignee: as the
+Vulnerabilities list (`AssigneeSummary`).
+
+Filters (one value each, all combining): state (`open`, `mitigated`,
+`accepted_risk`, `false_positive`, `passing`, `all`; a row matches when
+one of its pairs is in it), severity, rule set, area, group and host (they
+narrow the pairs) and assignee (state and assignee hold on the same pair;
+a passing pair has no assignee and matches only no filter). Search `q`
+matches the title, rule ID and rule set. Sorts: severity (then failing
+hosts), failing, since and title; nulls last, ties by key in the same
+direction. `offset` 0–100000, `limit` 1–100. Rule set and area values are
+those of rows in reach, each with its count under the other filters.
+Summary, over the rows matching every filter but the state's that have an
+open failing pair: how many, on how many hosts, how many critical, how
+many with no open pair assigned, and how many per rule set.
+
+`check_list::passing_hosts_sql(hosts, checks, now)` is the same passing
+rule as an SQL fragment listing (host, check) pairs, for a check's page;
+a test keeps it equal to the list's counts. The list counts passing hosts
+per host class instead (hosts alike in group side, mask, set versions and
+ok collectors), so the counts per group are exact without listing pairs.
+
+Schema 63 adds:
+- `current_findings (rule_set_id, rule_id) WHERE ended_at IS NULL`;
+- the extended statistics `current_findings_check` (ndistinct of rule
+  set, rule and severity), without which the planner sorted the findings
+  on disk;
+- `console_rule_meta.severity` and `expression`, written by `rule_meta::upsert_from_bundle`.
+  Rows indexed before it have none; `missing_bundles` lists their bundles,
+  so the console's start-up backfill re-indexes them;
+- `console_check_area`.
+
+Ended findings are not failing anywhere else either (step 5c ruling):
+the host page's failing checks (`host_summary`), `finding_summary_in_scope`,
+`latest_findings_in_scope` and `finding_groups_in_scope` leave rows with
+`ended_at` set out; only the per-rule endpoint list keeps them, for its
+"fixed" badge (`tests/ended_findings.rs`).
+
+One failing definition (step 5c ruling): `check_list_sql::failing(now)` (not
+ended, seen within `WINDOW`) and `open_failing(now)` (failing, and open by
+the pair state: no triage, open, or an expired acceptance) are the only
+SQL that says what fails. The list, a check's page, the host page's tile
+and top failing (`host_summary`), the Hosts list's failing count
+(`host_list_sql`), `finding_summary_in_scope` (the menu count and the
+Breakdown tile), the count history's compliance columns (`history.rs`
+`host_counts_sql`: metrics and top hosts) and bulk from a check row
+(`bulk_triage/compliance.rs`) all use them, so their numbers agree;
+`finding_groups_in_scope` takes its triage state from `PAIR_STATE` (an
+expired acceptance is open). Passing also needs the host's last scan to
+have finished within `WINDOW` (`scan_fresh`, read as 1–18 digits before
+the cast), shared by the list and `passing_hosts_sql`
+(`tests/check_scan_age.rs`, `tests/finding_summary_failing.rs`). A host whose last
+contact is older than `WINDOW` is compliance-stale on the host page and
+the Hosts list: no failing count rather than a misleading 0.
+
+Tests: `tests/check_list.rs`, `tests/check_list_filters.rs`,
+`tests/check_area.rs`, `tests/rule_meta.rs`; the 500,000-finding timing
+(`tests/check_list_timing.rs`) is in console-read.md.
+
+## A check's page (`check_summary`, `check_related`)
+
+`check_summary(client, rule_set_id, rule_id, &AgentScope, now) ->
+Lookup<CheckPageSummary>` and `check_hosts(client, rule_set_id, rule_id,
+&AgentScope, CheckHostSegment, offset, limit, now) -> Lookup<CheckHostsPage>`
+read one check under the list's definitions (`check_list_sql`'s
+`failing`, pair state and `passing_hosts_sql`), over the hosts in reach
+(`agent_visibility`). The check exists when its set's newest indexed
+version has it or a host in reach has a current finding for it, and it
+has a failing or passing host in reach; otherwise `Lookup::Missing`.
+`days` counts, per UTC day of the last 14, the findings in reach first
+seen by the day's end and ended (else, when not failing, last seen) at or
+after its start. History merges `console_finding_triage_history` of hosts
+in reach, episode starts and ends, and `rule_bundles` publishes, newest
+first, 50 at most. The header's `open` counts the failing pairs whose state is open (an
+expired acceptance counts); a Hosts row carries the pair's
+`accepted_until`, kept after it expires, and the finding's `origin`;
+`check_hosts` takes a `CheckHostState` that narrows the Failing segment
+and returns the failing pairs per state (`CheckStateCounts`; both in `check_states`, re-exported by `check_summary`). `check_summary::evidence` turns `detection -> 'inputs'`
+into evidence, a value only for a complete input. `check_related`
+parses the port or unit from the rule's indexed expression
+(`member_of`, `rule_port`, `rule_unit`; schema 63 adds
+`console_rule_meta.expression`, written with the severity) and counts the
+hosts in reach with it (`host_listeners` exposed, `host_services`).
+Same area counts the other failing checks in reach whose
+`console_check_area` matches, reading every failing finding in reach in
+that area; its timing on the ruling 18 fleet is in console-read.md.
+Tests: `tests/check_summary.rs`; the overview is
+[console-compliance.md](console-compliance.md).
+
 ## The host page summary (`host_summary::summary`)
 
 `summary(client, agent_id, &HostScopes, latest, now) -> Option<HostSummary>`:
@@ -684,7 +817,8 @@ package, listening and exposed port, service and certificate counts),
 `host_labels::of_host` (groups and labels; a revoked host keeps its labels and is in
 no group), the five newest certificates, `rules::last_tests`, and the top
 three of each problem kind with its total: open agent alarms and failing
-checks most severe then newest first, and open vulnerabilities through
+checks (triage open, not ended: an ended finding is fixed, as on the
+Compliance list) most severe then newest first, and open vulnerabilities through
 `vulns::list_in_scope` with the host as its filter, one item per advisory
 (first in priority order). Groups and labels come from
 `host_labels::of_host`, which skips the reach check `host_labels` makes. Each problem list is `None` unless its scope
@@ -1006,11 +1140,14 @@ risk, when the vulnerability is fixed.
 - `bulk_triage`: one state or assignee change on up to 10,000 alarms,
   findings or vulnerabilities (`expand_compliance` and
   `expand_vulnerabilities` turn a rule or advisory into its hosts in
-  scope; a close skips expanded hosts already closed, a reopen the ones
-  already open; an advisory-wide or `open_only` vulnerability close or
+  scope; a reopen skips the hosts already open; an advisory-wide or `open_only` vulnerability close or
   assign expands open pairs only, so closed ones neither count toward the
   cap nor come back, and an item with none open is skipped as "not open";
-  the vulnerability half is `bulk_triage/vulns.rs`); each item goes
+  the vulnerability half is `bulk_triage/vulns.rs`; a rule-wide or
+  `open_only` compliance item does the same over open findings failing as
+  the list counts them (`check_list_sql::failing`), `bulk_triage/compliance.rs`;
+  `ListRow { open_only, group }` per item, where `group` keeps the item to
+  that host group's members, still in scope); each item goes
   through its single-item update, skipped items come back with a reason,
   one audit row per action.
 - `triage_history::events`: the newest 200 changes of an alarm, or of a
@@ -1018,7 +1155,7 @@ risk, when the vulnerability is fixed.
 - `console_cases::active_items`: refs of one kind in open cases the
   caller can see, with the case number.
 - Tests: `tests/migrate.rs` (`triage_v2_retires_investigating`),
-  `tests/vulnerability_triage.rs`, `tests/bulk_triage.rs`, `tests/bulk_triage_cap.rs`.
+  `tests/vulnerability_triage.rs`, `tests/bulk_triage.rs`, `tests/bulk_triage_cap.rs`, `tests/bulk_triage_compliance.rs`, `tests/bulk_triage_group.rs`.
 
 ## Network devices (schema 46)
 

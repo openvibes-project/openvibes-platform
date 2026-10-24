@@ -32,15 +32,19 @@ agent visibility in SQL for the supplied global or host-group scope.
   `latest_finding_in_scope`, `finding_history_in_scope`, and
   `finding_event_in_scope` enforce the same membership predicate directly in
   SQL before aggregate, filter, cursor, and detail operations. Hidden detail
-  rows are returned as absent. The authenticated console does not expose
+  rows are returned as absent. `finding_summary_in_scope` and
+  `latest_findings_in_scope` leave ended findings (fixed) out, as the
+  Compliance list does; the single-finding reads keep them. The authenticated console does not expose
   production data routes until these store functions are wired to permission
   checks.
 - `finding_groups_in_scope` groups current snapshots by rule set and rule
-  only after applying asset scope, and returns in-window endpoint counts,
+  only after applying asset scope, leaves ended findings out of every
+  count, and returns in-window endpoint counts,
   severity, version and triage rollups plus older endpoint counts.
   `finding_group_endpoints_in_scope` pages the visible endpoints (with each
   one's triage state, version, assignee username and accepted-until, and
-  for a P13 agent `ended_at`/`end_approximate` once the match ended) and
+  for a P13 agent `ended_at`/`end_approximate` once the match ended, ended
+  rows included for the "fixed" badge) and
   hides a group with no recent in-scope endpoint. The authenticated console exposes
   opaque cursors bound to the time window and caller scope, and provides
   atomic endpoint triage through the companion `console_triage` store module.
@@ -156,3 +160,31 @@ to two manual groups. Run it with
 `cargo test -p platform-store --test vuln_list_timing records_cve_page_summary_latency_for_a_kernel_cve -- --ignored --nocapture`;
 it fails above 2 s. The same-package candidates need no narrowing to the
 releases in reach at this size.
+
+Compliance list (2026-10-24, same cluster and settings; see
+[console-compliance.md](console-compliance.md)): the step 5c
+ruling 18 fleet generated in SQL (10,000 hosts with heartbeat health
+running baseline and hardening-linux-l1, 85 indexed rules, 500,000 current
+findings, 50 per host, 1 % triaged, 1 % of hosts with stale health and 1 %
+with baseline not assigned, ten manual groups). The default list (open, by
+severity, 50 rows, every count and the summary) measured a median of
+753 ms over 5 runs (741–842 ms) at full reach (85 rows, 10,000 hosts) and
+266 ms (257–267 ms) scoped to two manual groups. Run it with
+`cargo test -p platform-store --test check_list_timing -- --ignored --nocapture --test-threads=1`
+(each test seeds its own fleet); it fails above 2 s. The cost is one serial pass over the findings joined
+to the hosts in reach and hashed per check, severity and host class
+(about 0.4 s), working out each host's rule sets, versions and collectors
+(about 0.1 s), and the summary's per-host probe for an open failing pair
+(about 0.15 s). Without the extended statistics on (rule set, rule,
+severity) the planner expected 170,000 groups, sorted the 500,000 rows on
+disk and took 1.5 s; grouping by the varbit mask did the same (0.9 s
+before the blocking rule), and listing passing hosts pair by pair
+instead of counting them per class took 4.7 s.
+
+A check's page (2026-10-24, same fleet): the summary of `baseline/port.r20`
+(failing on 5,870 hosts; its area, Network exposure, holds 41 other checks
+and about 250,000 failing findings, which Same area reads through
+`console_check_area`) measured a median of 1.08 s over 5 runs
+(1.08–1.11 s) at full reach and 453 ms scoped to two manual groups (578
+failing hosts); the same file's `records_check_page_latency_on_the_ruling_18_fleet`
+fails above 2 s.

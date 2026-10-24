@@ -12,7 +12,7 @@ import { api, firstSignIn, signIn } from "./helpers";
 type Count = { value: string; count: number };
 type List = { total: number; items: { id: string; hostname: string | null }[]; counts: { os: Count[]; group: Count[]; problems: Count[] } };
 
-const rows = (page: Page) => page.getByRole("table", { name: "Hosts" }).locator("tbody tr");
+const rows = (page: Page) => page.getByRole("table", { name: "Hosts", exact: true }).locator("tbody tr");
 const list = async (page: Page, query = "") => (await api(page, "GET", `/api/v1/hosts?limit=100${query}`)).json as List;
 const countOf = (counts: Count[], value: string) => counts.find((c) => c.value === value)?.count ?? 0;
 

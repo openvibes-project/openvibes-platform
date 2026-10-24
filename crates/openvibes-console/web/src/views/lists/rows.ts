@@ -47,21 +47,6 @@ export function activeCount(group: Pick<FindingGroup, "triage_counts">): number 
   return group.triage_counts.open;
 }
 
-/** The window of `window=all`: every current finding, however old. */
-export const ALL_TIME = "1970-01-01T00:00:00Z";
-
-/** The Compliance list's groups: every host in scope, or one with `host=`
- * (the host page's tile and "Show all n"), with that host's triage states;
- * `window=all` there lists every current finding of the host, as its page
- * counts them, not only the last day's. */
-export function complianceGroupsPath(params: URLSearchParams): string {
-  const host = params.get("host");
-  if (!host) return "/api/v1/compliance/groups";
-  const query = new URLSearchParams({ agent_id: host });
-  if (params.get("window") === "all") query.set("since", ALL_TIME);
-  return `/api/v1/compliance/groups?${query.toString()}`;
-}
-
 export function selectFindings(all: readonly FindingGroup[], params: URLSearchParams): FindingGroup[] {
   const severity = params.get("severity");
   const onlyOpen = params.get("state") !== "all";

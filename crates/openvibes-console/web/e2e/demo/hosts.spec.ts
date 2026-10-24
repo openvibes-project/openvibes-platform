@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
 
 // The Hosts list on the demo (approved screen 16): the demo answers
 // GET /api/v1/hosts like the real one (hosts/list.rs).
-const rows = (page: Page) => page.getByRole("table", { name: "Hosts" }).locator("tbody tr");
+const rows = (page: Page) => page.getByRole("table", { name: "Hosts", exact: true }).locator("tbody tr");
 const filters = (page: Page) => page.getByRole("group", { name: "Filters" });
 const summary = (page: Page) => page.locator(".summary-line");
 const optionText = async (page: Page, filter: string, option: RegExp) => {
@@ -54,7 +54,7 @@ test("a saved view comes back after Clear all", async ({ page }) => {
 
 test("a hidden column stays hidden after a reload", async ({ page }) => {
   await page.goto("/hosts");
-  const table = page.getByRole("table", { name: "Hosts" });
+  const table = page.getByRole("table", { name: "Hosts", exact: true });
   await expect(table.getByRole("columnheader", { name: "Labels" })).toBeVisible();
   await page.getByRole("button", { name: "Columns" }).click();
   await page.getByRole("checkbox", { name: "Labels" }).uncheck();

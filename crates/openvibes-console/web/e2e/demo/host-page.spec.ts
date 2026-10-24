@@ -43,9 +43,9 @@ test("the header reads the host's facts and the tiles lead to the filtered lists
   await expect(page.getByText(`Host: ${NAME}`)).toHaveCount(0);
   await page.goto("/hosts/agent-00005");
   await tiles(page).getByRole("link", { name: /^Compliance failing: \d+$/ }).click();
-  // Every current finding of the host, as the tile counts them.
-  await expect(page).toHaveURL(/\/compliance\?host=agent-00005&window=all$/);
-  await expect(page.locator(".view tbody tr")).toHaveCount(1);
+  // The host's failing checks (baseline ssh, plus the seeded hardening ones).
+  await expect(page).toHaveURL(/\/compliance\?host=agent-00005$/);
+  await expect(page.locator(".view tbody tr")).toHaveCount(3);
   await page.getByRole("button", { name: `Remove filter Host: ${NAME}` }).click();
   await expect(page).toHaveURL(/\/compliance$/);
 });
@@ -115,3 +115,11 @@ for (const scheme of ["light", "dark"] as const) {
     }
   });
 }
+
+test("a host silent for a day shows no failing count and no link to an empty list (roles 5c)", async ({ page }) => {
+  // db-13 last reported days ago in the demo: the Compliance list's window (a day) holds nothing of it.
+  await page.goto("/hosts/agent-00170");
+  const tile = tiles(page).getByRole("group", { name: "Compliance failing: No report in the last day" });
+  await expect(tile).toBeVisible();
+  await expect(tiles(page).getByRole("link", { name: /^Compliance failing/ })).toHaveCount(0);
+});

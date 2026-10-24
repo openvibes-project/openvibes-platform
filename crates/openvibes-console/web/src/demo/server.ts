@@ -26,6 +26,8 @@ import { registerSessionRoutes } from "./routes/session";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerTriageRoutes } from "./routes/triage";
 import { registerVulnerabilityRoutes } from "./routes/vulnerabilities";
+import { registerCheckListRoute } from "./routes/checkList";
+import { registerCheckSummaryRoutes } from "./routes/checkSummary";
 import { registerVulnListRoute } from "./routes/vulnList";
 import { registerVulnSummaryRoutes } from "./routes/vulnSummary";
 import { createSuppressions } from "./suppressions";
@@ -48,6 +50,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   registerAssetRoutes(ctx);
   registerVulnerabilityRoutes(ctx);
   registerVulnListRoute(ctx);
+  registerCheckListRoute(ctx);
+  registerCheckSummaryRoutes(ctx);
   registerMetricRoutes(ctx);
   const roles = registerRoleRoutes(ctx);
   registerAccessRoutes({ ...ctx, roles });

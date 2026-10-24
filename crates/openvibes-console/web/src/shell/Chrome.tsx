@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { isDemo } from "../api/client";
 import { assistant, useAssistant } from "../app/assistant";
 import { useActiveAlarms } from "../app/liveAlarms";
-import { menuCount, waitingToDecide } from "../app/menuCount";
+import { countTitle, menuCount, waitingToDecide } from "../app/menuCount";
 import { useResource } from "../api/client";
 import type { AlarmSuppression, FindingSummary, VulnerabilitySummary } from "../api/types";
 import { nav, useLocation } from "../app/nav";
@@ -72,7 +72,7 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
                 <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={item.label} aria-describedby={counts[item.path] ? `count-${item.icon}` : undefined} aria-current={here(item) ? "page" : undefined}
                   onClick={(event) => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
                   <Icon name={item.icon} size={19} />
-                  {counts[item.path] && <span className={item.path === "/alarms" ? "rail__count rail__count--bad" : "rail__count"} id={`count-${item.icon}`} title={`${counts[item.path]} ${item.label.toLowerCase()}`}>{counts[item.path]}</span>}
+                  {counts[item.path] && <span className={item.path === "/alarms" ? "rail__count rail__count--bad" : "rail__count"} id={`count-${item.icon}`} title={countTitle(item.path, counts[item.path] ?? "", item.label)} aria-label={countTitle(item.path, counts[item.path] ?? "", item.label)}>{counts[item.path]}</span>}
                   <span className="rail__label">{item.label}</span>
                   <span className="rail__short" aria-hidden="true">{item.short ?? item.label}</span>
                   <span className="rail__tip" aria-hidden="true">{item.label}</span>

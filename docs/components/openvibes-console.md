@@ -448,7 +448,7 @@ folder has a `README.md` listing its files, checked by
 
 To add an endpoint: write the handler in its area's file, add the route to
 that area's `routes()`, put its types in the area's `*_types.rs` or
-`types.rs`, add `#[utoipa::path]` and list it in `http/openapi.rs`, then
+`types.rs`, add `#[utoipa::path]` and list it in `http/openapi.rs` (a schema no path names goes in `http/openapi_schemas.rs`), then
 regenerate `docs/api/console-v1.openapi.json` (`export_openapi`) and the web
 client (`npm --prefix crates/openvibes-console/web run generate:api`).
 
@@ -551,8 +551,8 @@ Spec `docs/specs/2026-10-10-bulk-triage-design.md` (#237, #239, #240).
   (alarms `{id}`; compliance `{rule_set_id, rule_id, agent_id?}`;
   vulnerabilities `{advisory_id, agent_id?}`; without a host, every host in
   scope). Actions: `state` (a close needs a note, accepted risk its
-  expiry; a close reaching hosts through their rule or advisory skips
-  those already closed, so their decision stays), `assign`, `case` (an
+  expiry; a close reaching hosts through their rule or advisory leaves
+  out those not open ("not open"), so their decision stays), `assign`, `case` (an
   open case or a new one; an item in another open case is skipped, and no
   new case opens when nothing is left) and, for alarms, `suppress` (one `program`
   suppression on all hosts per distinct rule and program; activating it
@@ -906,7 +906,10 @@ parameter takes it (`problems` counts are `critical`, `alarms`, `none`), so
 a chosen value filters. Rows, per-filter `counts` and the `summary` line
 are inside the caller's `hosts.read` reach; open-alarm, critical and failing
 counts are null for hosts outside the caller's `alarms.read`,
-`vulnerabilities.read` or `compliance.read` reach. `alarms_off` is true for an online
+`vulnerabilities.read` or `compliance.read` reach. `problems.compliance_stale`
+is true for a host in `compliance.read` reach whose last contact is older
+than 24 hours (as the host page's `tiles.compliance_stale`): its failing
+count is null too, and `problems=none` leaves it out. `alarms_off` is true for an online
 host whose threat alarms are off by a fault (the rule of the host's
 `alarms` status; off by choice is false). `latest_agent_version` is
 the update checker's last-known agent release (null when the checker is off
@@ -965,6 +968,99 @@ page `vulnerabilities` (hideable: `package`, `cvss`, `epss`, `hosts`, `due`,
 `assignee`; Severity and Advisory are never hidden).
 Tests: `tests/vuln_list_http.rs`; demo: `web/src/demo/routes/vulnList.ts`.
 
+## Compliance list
+
+`GET /api/v1/compliance-list` (needs `compliance.read`; session or bearer;
+roles 5c) pages the Compliance list, one row per check (a rule of a rule
+set), over the store's `check_list`. `GET /api/v1/compliance/*` stays as it
+is. A row has the hosts that fail the check (a current finding, not ended,
+seen within 24 hours) and the hosts inferred to pass it (heartbeat health
+lists the rule set, not `not_assigned`, not refused; the collectors ran ok;
+no failing finding). Filters (one value each, ANDed): `q` (title, rule id or
+rule set), `state` (`open` by default, `mitigated`, `accepted_risk`,
+`false_positive`, `passing` or `all`; a row matches when one host is in
+that state, an expired acceptance is open), `severity` (`critical`, `high`,
+`medium`, `low`, `info`), `rule_set`, `area` (derived from the rule id),
+`group` (UUID), `host` (agent id) and `assignee` (`me` is the session
+user's id, `unassigned` or a user UUID; passing hosts have none). `sort` is
+`severity` (default), `failing`, `since` or `title`; `dir` is `desc` by
+default; `offset` 0..=100000 and `limit` 1..=100 (default 50). An invalid
+value or an unknown parameter is 400 `invalid_query` naming the parameter.
+Rows carry `severity` (the newest finding's, else the rule's indexed one;
+absent with neither), `area`, `failing`, `passing`, the failing hosts by
+triage state (`open`, `mitigated`, `accepted_risk`, `false_positive`),
+`since` and `assignee` (as on Vulnerabilities). `counts` hold every
+filter's values with the other filters applied; `summary` ("N checks
+failing on N hosts, N critical, N unassigned" and a count per rule set)
+counts rows with an open failing host under every filter but state. Saved
+views and hidden columns accept the page `compliance` (hideable: `area`,
+`failing`, `hosts`, `since`, `assignee`; Severity and Check are never
+hidden). Tests: `tests/check_list_http.rs`; demo:
+`web/src/demo/routes/checkList.ts` (data in `web/src/demo/checkSeed.ts`).
+
+## A check's page
+
+`GET /api/v1/compliance/checks/{rule_set_id}/{rule_id}/summary` and
+`GET /api/v1/compliance/checks/{rule_set_id}/{rule_id}/hosts` (need
+`compliance.read`; session or bearer; roles 5c rulings 8, 11-17) answer a
+check's page over the store's `check_summary` and `check_hosts`, under the
+Compliance list's rules, so the page agrees with its row. Ids are 1 to 256
+characters with no control character. A finding from before rule sets (stored with an
+empty set, as an agent export imports it) is reached as `~unknown`, which
+the header echoes. A check the list would not show in
+reach (no failing or passing host in reach, or a rule without metadata
+known only from hosts out of reach) answers 404 `check_not_found`.
+
+The summary carries `header` (`title`, `severity`, `rule_set_version` and
+`rule_version` of the newest indexed version, `area`, `failing`, `open`
+(of those, open: an expired acceptance counts; what the header's Set state
+and Assign change), `checked`
+= failing + passing, `assignee`), `tiles` (`failing`, `passing`,
+`first_seen` `{at, hostname}`, `days`: 14 failing-host counts per UTC day,
+oldest first, a finding counted from first seen to its end, or to its last
+sighting when it stopped being seen without ending), `text` (`explain`
+"Why it matters", `check` "How to fix", `message`), `details`
+(`applies_to`: "Linux hosts" for `hardening-linux-*`, "All hosts" for
+`baseline`, else "Hosts with this rule set"; `techniques`), `history` (at
+most 50, newest first: `triage` changes, `failing` episode starts,
+`passes_again` ends, `published` rule-set versions, all in reach),
+`related` (`port` `{protocol, port, hosts}` for a `port.*` rule, the first
+port its expression names with the hosts in reach exposing it; `service`
+`{unit, hosts}` for `harden.services.*`, hosts in reach running it;
+`same_area` `{checks, worst}`, other failing checks in reach in the area)
+and `can` (`triage` and `assign`: `compliance.triage`; `add_to_case`:
+`cases.write` and `cases.read`; `ask`: `assistant.use` with the assistant
+on; `export`: `compliance.export`; each held on a host with a pair, and
+triage and assign on a failing one: a passing host has nothing to triage). The
+port and unit come from the rule's expression, indexed in
+`console_rule_meta.expression` (schema 63).
+
+The Hosts table takes `segment` (`all` default, `failing`, `passing`),
+`state` (with `segment=failing` only: `open`, `mitigated`, `accepted_risk`
+or `false_positive`; 400 naming `state` otherwise),
+`offset` 0..=100000 and `limit` 1..=100 (default 50), 400 `invalid_query`
+naming the parameter otherwise. Rows (by host name, then agent id) carry
+the host, `os`, `address`, `state` (the triage state, or `passing`),
+`evidence` (`{fact, value?, status?, file?}` from the finding's P17
+`detection.inputs`: a value only for a complete input, else `masked`,
+`summarized` or `truncated`; `file` from `compliance/evidence.rs`
+`fact_file`, the file the agent's collectors read: one label where the
+collector reads several sources (`kernel.modules.disabled` names
+`/etc/modprobe.d/`, also `/run/modprobe.d/` and `/usr/lib/modprobe.d/`;
+`service.enabled` names `/etc/systemd/system/`, also
+`/usr/lib/systemd/system/`; `pam.pwquality.*` names
+`/etc/security/pwquality.conf`, also `pwquality.conf.d/`; `os.*` names
+`/etc/os-release`, else `/usr/lib/os-release`; `sshd.*` names
+`/etc/ssh/sshd_config` and the files it includes); empty for a passing host
+or a finding without detection), `assignee`, `checked_at` (last
+observation, or the passing host's heartbeat health) and `triage_version`
+(0 without triage; null when passing), `accepted_until` (an acceptance's
+end, kept after it expires; null when passing), `origin` (`online` or
+`import`; null when passing). `segments` count `all`, `failing` and
+`passing`; `states` count the failing hosts per triage state, whatever
+`state` is chosen (`total` is the chosen state's). Tests: `tests/check_page_http.rs`; demo:
+`web/src/demo/routes/checkSummary.ts`.
+
 ## A vulnerability's page
 
 `GET /api/v1/vulnerabilities/{key}/summary` and
@@ -998,7 +1094,10 @@ demo: `web/src/demo/routes/vulnSummary.ts`.
 `GET /api/v1/hosts/{agent_id}/summary` (needs `hosts.read`; session or
 bearer) answers everything above the fold on the host page (plan ruling
 10): `host` (header and Details facts), `tiles` (`open_alarms`,
-`compliance_failing`, `vulnerabilities`, `software`), `protection` (threat
+`compliance_failing`, `compliance_stale`, `vulnerabilities`, `software`;
+failing is the Compliance list's open failing pairs, and `compliance_stale`
+is true when the host's last contact is older than that list's 24-hour
+window), `protection` (threat
 alarms and the last test), `groups`, `labels`, the five newest
 `certificates` with `certificate_count`, the `top_alarms`,
 `top_vulnerabilities` and `top_failing` lists (three items and a `total`;

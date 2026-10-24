@@ -30,7 +30,26 @@ Show everything, without page changes for details:
   route asks `GET /api/v1/session` first and shows sign-in on 401. Sign out
   POSTs `/auth/v1/logout` with the session CSRF token.
 - **Views** (the same set v1 had):
-  - findings with bulk triage and a 14-day trend of reporting hosts;
+  - Compliance (`/compliance`, approved screen 27, roles 5c; overview in
+    [console-compliance.md](console-compliance.md)): one row per
+    check (a rule of a rule set) over `GET /api/v1/compliance-list`, with the
+    shared FilterBar (Severity, State, Rule set, Area, Group, Assignee; Host
+    as a chip), the summary line ("N checks failing on N hosts · N critical ·
+    N unassigned", then a count per rule set), Columns (Severity and Check
+    fixed; saved-views page `compliance`), saved views, offset paging and the
+    bulk bar. A row links to the check's page (below). The Hosts cell is a colour
+    bar (open, mitigated, accepted, false positive, pass) named for screen
+    readers, with the words under it. Bulk sends
+    `{rule_set_id, rule_id, open_only: true}` (plus the Host chip's
+    `agent_id`, and the Group filter's `group`, so a row under a group
+    changes only that group's hosts; the Vulnerabilities list sends it
+    too): Set state and Assign change only open, failing hosts and ask
+    first ("Changes up to N open hosts"); a check no host fails counts for
+    nothing, and a selection of only those offers no action and says why;
+    there is no Reopen. Old URLs keep their meaning (`state=all` and
+    `severity` stay, `set` is `rule_set`, `window`/`since` and sorts no
+    column has go, rewritten in place), and views saved in the browser under
+    `/compliance` or `/findings` move to the person's account once;
   - vulnerabilities, one row per CVE, and a vulnerability's page
     (`/vulnerabilities/{key}`, roles 5b): [console-vulnerabilities.md](console-vulnerabilities.md);
   - agents, with labels, host groups and revocation;
@@ -65,20 +84,48 @@ Show everything, without page changes for details:
   case**. A state or a case opens one dialog whose confirm button names the
   count; the toast says what changed, what was already so ("unchanged") and
   why the rest was skipped. A selected finding or advisory row acts on its
-  hosts in scope; a close leaves the hosts already closed alone, a reopen
-  the ones already open. Rows in an open case show
+  hosts in scope; a rule-wide close or assign leaves the hosts not open
+  alone ("not open"), a reopen the ones already open. Rows in an open case show
   its badge (`panels/cases/CaseBadge.tsx`). The Vulnerabilities list's bulk bar is in
   [console-vulnerabilities.md](console-vulnerabilities.md#bulk).
-- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding's
-  layout (an alarm and a vulnerability are pages, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
-  actions line (a finding: "Set state: N open", acting on its
-  open hosts), a short summary, then the console's underline tabs
-  (`Tabs`). Findings: Hosts (a `DataTable` with a state
-  filter, selection and the bulk bar, never cut off), Evidence, History.
-  The Hosts table shows each
-  host's assignee and, for accepted risk, the date it is accepted until
-  (marked expired once past), and a `fixed <date>` badge (`about` when
-  approximate) for a host whose agent reported the match ended (P13).
+- **A check's page** (`views/investigate/check/`, approved screen 28, roles
+  5c rulings 8-17) at `/compliance/{rule_set_id}/{rule_id}`, over
+  `GET /api/v1/compliance/checks/{set}/{rule}/summary` and `/hosts`. It
+  replaces the finding panel (removed with its `finding` panel kind, the
+  detail template and its Hosts tab; `panels/triage/TriageDetail.tsx` keeps
+  only `HistoryTab`, for the alarm's page). Header: severity, the rule ID,
+  rule set and version, area, "failing on N of M hosts checked" and the
+  assignee; Set state ▾ and Assign ▾ (with Add to case, `compliance.triage`)
+  send `{rule_set_id, rule_id, open_only: true}`, confirm "Changes up to N
+  open failing hosts" (`header.open`) and are hidden when none is open; Ask
+  about this sends `{kind: "finding", id: "set/rule"}`; ⋯ has Export (the
+  hosts as CSV) and Copy link. Tiles: Failing on (to `#hosts`), Passing,
+  First seen (on which host) and the last 14 days as bars
+  (`ui/charts/HourlyBars` with `unit="day"`, "3 → 2 hosts failing").
+  Left: Why it matters (`explain`, else the message), How to fix (`check`,
+  else "No fix text yet" and the rule set), Details (rule and version, rule
+  set and version, applies to, ATT&CK techniques), History (triage, started
+  failing, passes again, rule-set publishes). Right: Hosts (All, Failing,
+  Passing; unknown `?segment=` is All; paged by 50; inside Failing a second
+  row of chips, All failing, Open, Mitigated, Accepted risk, False positive
+  with counts, `?state=`, unknown is all failing, dropped with another
+  segment) with each failing row's
+  evidence as `fact = value` (a masked, summarized or truncated value only
+  by its status) and the file, the acceptance date (until, or expired once
+  past, as the panel showed), an `imported` badge for an agent-export
+  observation, its open cases, and **View evidence on <host>**, which
+  opens the latest observation (`GET /api/v1/compliance/latest/{agent}/{set}/{rule}`)
+  with `DetectionEvidence` ("Why it triggered", Show rule); ticks on failing
+  rows only and a bulk bar on `{agent_id, rule_set_id, rule_id}` pairs with
+  Reopen; per-row Add to case for case-only users. Related: the port (its
+  panel), the service (its panel) and the same area's other failing checks
+  (the list filtered by area). Old links land here with no dead history
+  entry: `nav.open({kind: "finding", id: "set/rule"})` (dashboards, the host
+  page, cases, the audit log, the palette, assistant citations) and
+  `?open=finding:set/rule` through `pagePath` and `settle()`'s replace; a
+  finding from before rule sets (`/rule`) is `~unknown/rule`; its Details
+  say "No rule set (from before rule sets)" and How to fix links nowhere. A host whose
+  match ended is no longer failing: History says when it passed again.
 
 ## Dashboards
 
@@ -225,12 +272,12 @@ used.
 ### Filter catalogue
 
 `views/lists/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
-Hosts, Audit log; the Vulnerabilities entry serves the List tile, which reads
-`GET /v1/vulnerabilities`, while the view has its own FilterBar): each filter is a flag (one fixed value) or a choice (a
-list of values), and each parameter holds one value. The list views build
-their chip bars from it and the List widget editor offers the same filters,
-so the two cannot drift. Runtime extras (compliance rule sets, counts) stay
-in the views.
+Hosts, Audit log; the Compliance and Vulnerabilities entries serve the List
+tile, which reads `GET /v1/compliance/groups` and `GET /v1/vulnerabilities`,
+while those views have their own FilterBar over their list routes): each filter is a flag (one fixed value) or a choice (a
+list of values), and each parameter holds one value. The Audit log builds
+its chip bar from it and the List widget editor offers the same filters,
+so the two cannot drift.
 
 ### Widget editors
 
@@ -362,7 +409,7 @@ triage on alarms and findings stays as it is.
     disabled until the rules are met (`panels/cases/cases.ts`, `closeProblems`).
     A closed case offers **Reopen**;
   - **Items**: each row shows its kind, title, severity and host and opens
-    that object's own panel or page (alarm: its page `/alarms/<id>`, finding `finding:<rule
+    that object's own panel or page (alarm: its page `/alarms/<id>`, finding: the check's page `/compliance/<rule
     set>/<rule>`, vulnerability `advisory:<advisory>`, host: its page,
     software `package:<manager>/<name>`). Alarms, findings and
     vulnerabilities take an outcome: resolved (offered only while the
@@ -737,6 +784,18 @@ for the pages not yet moved; its saved views stay in the browser.
   keep their filters (`exploited`, `reboot`, `nofix`, `lowconf` become
   `signal`), and views saved in the browser move to the person's account;
   see [console-vulnerabilities.md](console-vulnerabilities.md#upgrading).
+- **Roles step 5c (Compliance):** one list row and one page per check. The
+  finding panel became the check's page `/compliance/{rule_set_id}/{rule_id}`;
+  old links (`?open=finding:set/rule`, dashboards, cases, the audit log)
+  redirect to it. Passing is inferred from heartbeat health; rules without
+  `explain` and `check` text show their message. Fixed (ended) findings no
+  longer count as failing anywhere, so compliance counts may drop, and a
+  host with no report in the last day shows "—" for failing checks on the
+  host page and the Hosts list. The Compliance menu count and the
+  dashboard's Breakdown tile count failing findings (host and check pairs,
+  open, by the list's failing definition), while the list counts checks;
+  their title and label say "N failing findings". See
+  [console-compliance.md](console-compliance.md#upgrading).
 
 ## Configuration
 

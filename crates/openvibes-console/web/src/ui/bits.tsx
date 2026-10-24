@@ -56,7 +56,7 @@ export function ObjectLink({ to, children, fromList = false, className }: { to: 
   };
   const params = new URLSearchParams(nav.location.params);
   params.append("open", `${to.kind}:${to.id}`);
-  // A host, an alarm or an advisory is a page: a new tab opens it directly.
+  // A host, an alarm, an advisory or a finding is a page: a new tab opens it directly.
   const page = pagePath(to);
   const href = page ? nav.href(page) : `?${params.toString()}`;
   return <a className={className ?? "object-link"} href={href} onClick={onClick}>{children}</a>;

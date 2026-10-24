@@ -4,9 +4,10 @@ import catalogue from "../api/permissions.json";
 import templates from "../api/templates.json";
 import type { StoredGroup } from "./hostGroups";
 import { ADMIN_ROLE, type StoredReach } from "./share";
+import { type DemoFinding, seedChecks } from "./checkSeed";
 import { seedVulnerabilities } from "./vulnSeed";
 import type {
-  Agent, AuditEvent, Certificate, Cve, EnrollmentToken, Finding as FindingView,
+  Agent, AuditEvent, Certificate, Cve, EnrollmentToken,
   RuleBundle, RuleSet, ServiceAccount, ServiceToken, Severity, Triage, Vulnerability,
 } from "../api/types";
 
@@ -116,6 +117,8 @@ export function buildDemoData(now = Date.now()) {
       // Deterministic (no random() call, so the rest of the fleet is unchanged): every 7th host is a version behind.
       rule_sets: status === "imported" ? [] : [
         { id: "baseline", version: n % 7 === 0 ? 1 : 2, expires_at_ms: now + 700 * DAY },
+        // The site rule set: hosts 1-4 (where checkSeed.ts has site findings) and every fifth.
+        ...(n <= 4 || n % 5 === 0 ? [{ id: "site", version: 10, expires_at_ms: now + 50 * DAY }] : []),
         ...(n % 2 === 0 ? [{ id: "baseline-alarms", version: 1, expires_at_ms: now + 700 * DAY }] : []),
         // Hardening L1 (rule-set assignment): Production has it off, so its hosts report
         // not_assigned; agent-00040 has not caught up with the default yet ("pending").
@@ -138,7 +141,7 @@ export function buildDemoData(now = Date.now()) {
   }
   const reporting = agents.filter((agent) => agent.status !== "revoked");
 
-  const findings: FindingView[] = [];
+  const findings: DemoFinding[] = [];
   const triage = new Map<string, Triage>();
   for (const rule of RULES) {
     for (const agent of reporting) {
@@ -248,6 +251,8 @@ export function buildDemoData(now = Date.now()) {
   }
 
   seedVulnerabilities(now, (id) => { const a = reporting.find((x) => x.id === id); return a ? a.hostname ?? null : undefined; }, advisories, vulnerabilities);
+
+  seedChecks(now, (id) => { const a = reporting.find((x) => x.id === id); return a ? a.hostname ?? null : undefined; }, findings, triage);
 
   const groups = hostGroups(agents, now);
   // Each group's history (the audit rows the group page shows), newest first.

@@ -10,3 +10,15 @@ export function menuCount(n: number | undefined, more = false): string | undefin
 export function waitingToDecide(items: readonly { status: string; can_decide: boolean }[] | undefined): string | undefined {
   return menuCount(items?.filter((s) => s.status === "waiting" && s.can_decide).length);
 }
+
+/** What a source's count counts, when its view's name does not say: the
+ * Compliance count is failing findings (host and check pairs), while the
+ * Compliance list counts checks. */
+export function unitOf(source: string): string {
+  return source === "compliance" ? "failing findings" : "";
+}
+
+/** The menu count's title and label: "5 failing findings", "3 alarms". */
+export function countTitle(path: string, count: string, label: string): string {
+  return `${count} ${unitOf(path.slice(1)) || label.toLowerCase()}`;
+}

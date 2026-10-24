@@ -2,6 +2,7 @@
 //! only the Administrator, so each test creates the roles it binds.
 #![allow(dead_code, reason = "each test binary uses some of these")]
 
+pub mod bulk;
 pub mod http;
 pub mod people;
 pub mod suppressions;

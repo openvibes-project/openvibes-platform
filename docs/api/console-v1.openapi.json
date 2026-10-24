@@ -3448,6 +3448,177 @@
         }
       }
     },
+    "/api/v1/compliance-list": {
+      "get": {
+        "tags": [
+          "compliance"
+        ],
+        "summary": "The Compliance list.",
+        "operationId": "list_check_page",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Title, rule ID or rule set (contains).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "open (default), mitigated, accepted_risk, false_positive, passing or all.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "description": "critical, high, medium, low or info.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_set",
+            "in": "query",
+            "description": "A rule set id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "area",
+            "in": "query",
+            "description": "An area, for example SSH or Network exposure.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "description": "A host group id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "description": "An agent id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "query",
+            "description": "me, unassigned or a user id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "severity (default), failing, since or title.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc or desc (default).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of checks in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs compliance.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/compliance/bulk": {
       "post": {
         "tags": [
@@ -3477,6 +3648,214 @@
           },
           "400": {
             "description": "Invalid action, items, note or expiry",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/checks/{rule_set_id}/{rule_id}/hosts": {
+      "get": {
+        "tags": [
+          "compliance"
+        ],
+        "summary": "A check's Hosts table: its failing hosts in any triage state and its\npassing hosts.",
+        "operationId": "check_hosts_page",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "description": "Rule set id, or ~unknown for findings from before rule sets",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "description": "Rule id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "segment",
+            "in": "query",
+            "description": "all (default), failing or passing.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "With `segment=failing`: open, mitigated, accepted_risk or\nfalse_positive (absent: any). Refused with another segment.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the hosts in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckHostsPageView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs compliance.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "check_not_found: missing or outside reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/checks/{rule_set_id}/{rule_id}/summary": {
+      "get": {
+        "tags": [
+          "compliance"
+        ],
+        "summary": "A check's page above the Hosts table.",
+        "operationId": "check_summary_page",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "description": "Rule set id, or ~unknown for findings from before rule sets",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "description": "Rule id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckSummaryView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs compliance.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "check_not_found: missing or outside reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12750,7 +13129,7 @@
       },
       "BulkItem": {
         "type": "object",
-        "description": "One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`\n(every host in scope), with `agent_id` for one host. Vulnerabilities:\n`advisory_id` (every host where it is open), with `agent_id` for one;\n`open_only` (a Vulnerabilities list row) keeps a close or assign to open\npairs even with `agent_id`.",
+        "description": "One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`\n(every host in scope), with `agent_id` for one host. Vulnerabilities:\n`advisory_id` (every host where it is open), with `agent_id` for one;\n`open_only` (a Vulnerabilities list row) keeps a close or assign to open\npairs even with `agent_id`; so for a check row (compliance, which also\nleaves pairs alone that the list does not count failing). `group` (a\nlist row counted under a Group filter) keeps the item to that group's\nhosts, still inside the caller's reach.",
         "properties": {
           "advisory_id": {
             "type": [
@@ -12766,6 +13145,13 @@
             ],
             "description": "One host only."
           },
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vulnerabilities and compliance: a host group id (UUID); only that\ngroup's hosts are reached (the list's Group filter)."
+          },
           "id": {
             "type": [
               "string",
@@ -12775,7 +13161,7 @@
           },
           "open_only": {
             "type": "boolean",
-            "description": "Vulnerabilities: change only open pairs on a close or assign, even\non the named host (a list row); a reopen ignores it. Default false."
+            "description": "Vulnerabilities and compliance: change only open pairs on a close or\nassign, even on the named host (a list row); a reopen ignores it.\nDefault false."
           },
           "rule_id": {
             "type": [
@@ -13352,6 +13738,861 @@
           }
         },
         "additionalProperties": false
+      },
+      "CheckActionsView": {
+        "type": "object",
+        "description": "Actions allowed, each when the viewer holds its permission on a host in\nreach.",
+        "required": [
+          "triage",
+          "assign",
+          "add_to_case",
+          "ask",
+          "export"
+        ],
+        "properties": {
+          "add_to_case": {
+            "type": "boolean",
+            "description": "Add to case (`cases.write` and `cases.read`)."
+          },
+          "ask": {
+            "type": "boolean",
+            "description": "Ask about this (`assistant.use`, with the assistant on)."
+          },
+          "assign": {
+            "type": "boolean",
+            "description": "Assign (`compliance.triage`)."
+          },
+          "export": {
+            "type": "boolean",
+            "description": "Export (`compliance.export`)."
+          },
+          "triage": {
+            "type": "boolean",
+            "description": "Set state (`compliance.triage`)."
+          }
+        }
+      },
+      "CheckCountsView": {
+        "type": "object",
+        "description": "Rows per filter value, each with the other filters applied.",
+        "required": [
+          "state",
+          "severity",
+          "rule_set",
+          "area",
+          "group",
+          "assignee"
+        ],
+        "properties": {
+          "area": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By area (every area of rows in reach)."
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/VulnAssigneeCountsView",
+            "description": "By assignee."
+          },
+          "group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCountView"
+            },
+            "description": "By group."
+          },
+          "rule_set": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By rule set (every set of rows in reach)."
+          },
+          "severity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By severity."
+          },
+          "state": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By state."
+          }
+        }
+      },
+      "CheckDetailsView": {
+        "type": "object",
+        "description": "The details card.",
+        "required": [
+          "applies_to",
+          "techniques"
+        ],
+        "properties": {
+          "applies_to": {
+            "type": "string",
+            "description": "\"Linux hosts\", \"All hosts\" or \"Hosts with this rule set\"."
+          },
+          "techniques": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ATT&CK technique ids."
+          }
+        }
+      },
+      "CheckEventView": {
+        "type": "object",
+        "description": "One History event, newest first.",
+        "required": [
+          "at",
+          "kind"
+        ],
+        "properties": {
+          "actor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who changed triage, or published."
+          },
+          "agent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The host (absent for `published`)."
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "from_state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Triage state before."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its name."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`triage`, `failing` (started failing), `passes_again` or\n`published` (a rule-set version)."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Triage note."
+          },
+          "to_state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Triage state after."
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The published rule-set version."
+          }
+        }
+      },
+      "CheckEvidenceView": {
+        "type": "object",
+        "description": "One input the failing evaluation read.",
+        "required": [
+          "fact"
+        ],
+        "properties": {
+          "fact": {
+            "type": "string",
+            "description": "Fact key, for example `sshd.permitrootlogin`."
+          },
+          "file": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file the agent read it from."
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`masked`, `summarized` or `truncated`, instead of a value."
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its value, only when the agent sent it complete."
+          }
+        }
+      },
+      "CheckFirstSeenView": {
+        "type": "object",
+        "description": "The earliest first-seen failing host.",
+        "required": [
+          "at"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name."
+          }
+        }
+      },
+      "CheckHeaderView": {
+        "type": "object",
+        "description": "The header.",
+        "required": [
+          "title",
+          "rule_set_id",
+          "rule_id",
+          "area",
+          "failing",
+          "open",
+          "checked",
+          "assignee"
+        ],
+        "properties": {
+          "area": {
+            "type": "string",
+            "description": "What the check is about (derived from the rule id)."
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/VulnAssigneeView",
+            "description": "Who the open failing hosts are assigned to."
+          },
+          "checked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Failing and passing hosts in reach."
+          },
+          "failing": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Failing hosts in reach."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those, open (an expired acceptance counts): what the header's Set\nstate and Assign change."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule id."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set id."
+          },
+          "rule_set_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The newest indexed version of the set holding the rule."
+          },
+          "rule_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The rule's version (indexed, else the newest finding's)."
+          },
+          "severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`critical`, `high`, `medium`, `low` or `info`: the newest finding's\nin reach, else the rule's indexed severity."
+          },
+          "title": {
+            "type": "string",
+            "description": "The rule's title (its newest indexed version), else the rule id."
+          }
+        }
+      },
+      "CheckHostRowView": {
+        "type": "object",
+        "description": "One row of the Hosts table.",
+        "required": [
+          "agent_id",
+          "state",
+          "evidence"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339: until when the risk is accepted, kept after it expires\n(the state then reads open); null for a passing host."
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last address."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "assignee": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AlarmListPersonView",
+                "description": "Assignee."
+              }
+            ]
+          },
+          "checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339: the last observation (failing) or heartbeat (passing)."
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckEvidenceView"
+            },
+            "description": "What the failing evaluation read; empty for a passing host or a\nfinding recorded without detection."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name."
+          },
+          "origin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`online` or `import` (an agent export); null for a passing host."
+          },
+          "os": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Distribution, as the Hosts list names it."
+          },
+          "state": {
+            "type": "string",
+            "description": "open, mitigated, accepted_risk, false_positive or passing."
+          },
+          "triage_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The triage version for If-Match (0 without triage); null for a\npassing host."
+          }
+        }
+      },
+      "CheckHostsPageView": {
+        "type": "object",
+        "description": "One page of the Hosts table.",
+        "required": [
+          "rows",
+          "total",
+          "segments",
+          "states"
+        ],
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckHostRowView"
+            },
+            "description": "The page, by host name then agent id."
+          },
+          "segments": {
+            "$ref": "#/components/schemas/CheckSegmentsView",
+            "description": "Every segment's count."
+          },
+          "states": {
+            "$ref": "#/components/schemas/CheckStatesView",
+            "description": "The failing hosts per triage state, whatever `state` is chosen."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in the chosen segment."
+          }
+        }
+      },
+      "CheckListRowView": {
+        "type": "object",
+        "description": "One row: a check (a rule of a rule set).",
+        "required": [
+          "rule_set_id",
+          "rule_id",
+          "title",
+          "area",
+          "failing",
+          "passing",
+          "open",
+          "mitigated",
+          "accepted_risk",
+          "false_positive",
+          "assignee"
+        ],
+        "properties": {
+          "accepted_risk": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Accepted risk (not expired)."
+          },
+          "area": {
+            "type": "string",
+            "description": "What the check is about (derived from the rule id)."
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/VulnAssigneeView",
+            "description": "Who the open failing hosts are assigned to."
+          },
+          "failing": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts failing the check."
+          },
+          "false_positive": {
+            "type": "integer",
+            "format": "int64",
+            "description": "False positive."
+          },
+          "mitigated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Mitigated."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Failing hosts by triage state: open (an expired acceptance counts)."
+          },
+          "passing": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts inferred to pass it."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule id."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set id."
+          },
+          "severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`critical`, `high`, `medium`, `low` or `info`: the newest finding's,\nelse the rule's indexed severity; absent with neither."
+          },
+          "since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339: the earliest first-seen time of the failing hosts."
+          },
+          "title": {
+            "type": "string",
+            "description": "The rule's title (its newest indexed version), else the rule id."
+          }
+        }
+      },
+      "CheckListView": {
+        "type": "object",
+        "description": "One page of the Compliance list.",
+        "required": [
+          "items",
+          "total",
+          "counts",
+          "summary",
+          "generated_at"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/CheckCountsView",
+            "description": "Per-value counts."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckListRowView"
+            },
+            "description": "The page."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CheckSummaryLineView",
+            "description": "Summary line."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching every filter."
+          }
+        }
+      },
+      "CheckPortView": {
+        "type": "object",
+        "description": "The exposed port of a `port.*` check.",
+        "required": [
+          "protocol",
+          "port",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach where it is exposed."
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The port, linking to `/ports/{port}`.",
+            "minimum": 0
+          },
+          "protocol": {
+            "type": "string",
+            "description": "`tcp` or `udp`."
+          }
+        }
+      },
+      "CheckRelatedView": {
+        "type": "object",
+        "description": "The Related card.",
+        "required": [
+          "same_area"
+        ],
+        "properties": {
+          "port": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CheckPortView",
+                "description": "For `port.*` checks whose rule names a port."
+              }
+            ]
+          },
+          "same_area": {
+            "$ref": "#/components/schemas/CheckSameAreaView",
+            "description": "Same area."
+          },
+          "service": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CheckServiceView",
+                "description": "For `harden.services.*` checks whose rule names a unit."
+              }
+            ]
+          }
+        }
+      },
+      "CheckSameAreaView": {
+        "type": "object",
+        "description": "Other failing checks in reach in the same area.",
+        "required": [
+          "checks"
+        ],
+        "properties": {
+          "checks": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many."
+          },
+          "worst": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Their worst severity."
+          }
+        }
+      },
+      "CheckSegmentsView": {
+        "type": "object",
+        "description": "Hosts per segment.",
+        "required": [
+          "all",
+          "failing",
+          "passing"
+        ],
+        "properties": {
+          "all": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Failing and passing."
+          },
+          "failing": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Failing, in any triage state."
+          },
+          "passing": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Inferred passing."
+          }
+        }
+      },
+      "CheckServiceView": {
+        "type": "object",
+        "description": "The unit of a `harden.services.*` check.",
+        "required": [
+          "unit",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach running it."
+          },
+          "unit": {
+            "type": "string",
+            "description": "The systemd unit, linking to `/services/{unit}`."
+          }
+        }
+      },
+      "CheckStatesView": {
+        "type": "object",
+        "description": "Failing hosts per triage state.",
+        "required": [
+          "open",
+          "mitigated",
+          "accepted_risk",
+          "false_positive"
+        ],
+        "properties": {
+          "accepted_risk": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Accepted risk."
+          },
+          "false_positive": {
+            "type": "integer",
+            "format": "int64",
+            "description": "False positive."
+          },
+          "mitigated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Mitigated."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open (an expired acceptance counts)."
+          }
+        }
+      },
+      "CheckSummaryLineView": {
+        "type": "object",
+        "description": "\"N checks failing on N hosts · N critical · N unassigned\", then a count\nper rule set, over rows with an open failing host matching every filter\nbut state.",
+        "required": [
+          "failing_checks",
+          "hosts",
+          "critical",
+          "unassigned",
+          "rule_sets"
+        ],
+        "properties": {
+          "critical": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those rows, critical."
+          },
+          "failing_checks": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows with an open failing host."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts with an open failing pair in those rows."
+          },
+          "rule_sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "Those rows per rule set, by id."
+          },
+          "unassigned": {
+            "type": "integer",
+            "format": "int64",
+            "description": "With no open failing host assigned."
+          }
+        }
+      },
+      "CheckSummaryView": {
+        "type": "object",
+        "description": "A check's page above the Hosts table.",
+        "required": [
+          "header",
+          "tiles",
+          "text",
+          "details",
+          "history",
+          "related",
+          "can"
+        ],
+        "properties": {
+          "can": {
+            "$ref": "#/components/schemas/CheckActionsView",
+            "description": "Allowed actions."
+          },
+          "details": {
+            "$ref": "#/components/schemas/CheckDetailsView",
+            "description": "Details."
+          },
+          "header": {
+            "$ref": "#/components/schemas/CheckHeaderView",
+            "description": "Header."
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckEventView"
+            },
+            "description": "Up to 50 events in reach, newest first."
+          },
+          "related": {
+            "$ref": "#/components/schemas/CheckRelatedView",
+            "description": "Related."
+          },
+          "text": {
+            "$ref": "#/components/schemas/CheckTextView",
+            "description": "Text."
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/CheckTilesView",
+            "description": "Tiles."
+          }
+        }
+      },
+      "CheckTextView": {
+        "type": "object",
+        "description": "The rule's text.",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "check": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "\"How to fix\"."
+          },
+          "explain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "\"Why it matters\"."
+          },
+          "message": {
+            "type": "string",
+            "description": "The finding message, shown when the others are absent."
+          }
+        }
+      },
+      "CheckTilesView": {
+        "type": "object",
+        "description": "The tiles.",
+        "required": [
+          "failing",
+          "passing",
+          "days"
+        ],
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Failing hosts per UTC day, the last 14 days ending today, oldest first."
+          },
+          "failing": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Failing hosts."
+          },
+          "first_seen": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CheckFirstSeenView",
+                "description": "The earliest first-seen failing host; absent with none failing."
+              }
+            ]
+          },
+          "passing": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Inferred passing hosts."
+          }
+        }
       },
       "ClientTurn": {
         "type": "object",
@@ -15702,7 +16943,14 @@
       "HostProblemsView": {
         "type": "object",
         "description": "Problem counts; absent where the viewer may not read that kind for the host.",
+        "required": [
+          "compliance_stale"
+        ],
         "properties": {
+          "compliance_stale": {
+            "type": "boolean",
+            "description": "Compliance is in reach but the host sent no report in the last day\n(the host page's `tiles.compliance_stale`): the failing count is\nunknown, shown \"—\", and \"none open\" leaves the host out."
+          },
           "critical": {
             "type": [
               "integer",
@@ -15717,7 +16965,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Failing compliance checks."
+            "description": "Failing compliance checks; absent too when `compliance_stale`."
           },
           "open_alarms": {
             "type": [
@@ -16081,6 +17329,9 @@
       "HostTilesView": {
         "type": "object",
         "description": "The four tiles; each absent without its permission on this host.",
+        "required": [
+          "compliance_stale"
+        ],
         "properties": {
           "compliance_failing": {
             "type": [
@@ -16088,7 +17339,11 @@
               "null"
             ],
             "format": "int64",
-            "description": "Failing compliance checks (`compliance.read`)."
+            "description": "Failing compliance checks (`compliance.read`): the Compliance\nlist's open failing pairs, seen within the last day."
+          },
+          "compliance_stale": {
+            "type": "boolean",
+            "description": "The host has not reported in the last day (the Compliance list's\nwindow), so `compliance_failing` can't be trusted: the page shows\n\"No report in the last day\" instead."
           },
           "open_alarms": {
             "type": [

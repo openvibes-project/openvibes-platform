@@ -202,3 +202,46 @@ async fn inventory_and_certificates_are_counted() {
     assert!(s.certificates[0].issued_at > s.certificates[1].issued_at);
     db.drop().await;
 }
+
+/// Failing on the host page is the Compliance list's failing (roles 5c):
+/// open (an expired acceptance is open again), seen within the last day;
+/// the Hosts list counts the same. A host with no report in the last day
+/// says so instead of a misleading count.
+#[tokio::test]
+async fn failing_is_the_compliance_lists_failing() {
+    let (db, c) = common::migrated().await;
+    fleet(&c).await;
+    let host = id(6);
+    c.batch_execute(&format!(
+        "INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id, rule_version,
+             severity, first_observed_at, last_observed_at, last_observed_day, scan_id, confidence,
+             message, evidence, received_at, origin, authenticated)
+         SELECT '{host}', 'set', r, 'f-' || r, 1, 'high', now() - interval '3 days', now() - age, (now() AT TIME ZONE 'UTC')::date,
+                's', 50, 'm', '{{}}', now(), 'online', false
+         FROM (VALUES ('fresh', interval '1 hour'), ('old', interval '2 days'), ('expired', interval '1 hour'),
+                      ('accepted', interval '1 hour')) v(r, age);
+         INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state, rule_version, note, accepted_until,
+                                             version, updated_at, updated_by)
+         VALUES ('{host}', 'set', 'expired', 'accepted_risk', 1, 'n', now() - interval '1 day', 1, now(), 'test'),
+                ('{host}', 'set', 'accepted', 'accepted_risk', 1, 'n', now() + interval '1 day', 1, now(), 'test');"
+    ))
+    .await
+    .unwrap();
+    let s = get(&c, host, &everywhere()).await.unwrap();
+    let failing = s.top_failing.unwrap();
+    let mut rules: Vec<_> = failing.items.iter().map(|f| f.rule_id.as_str()).collect();
+    rules.sort_unstable();
+    assert_eq!((rules, failing.total), (vec!["expired", "fresh"], 2));
+    assert!(!s.compliance_stale);
+    let page = common::hosts::run(&c, &common::hosts::query(), &everywhere(), None).await;
+    let row = page.rows.iter().find(|r| r.agent_id == host).unwrap();
+    assert_eq!(row.failing, Some(2));
+    // mail-01 last reported two days ago.
+    assert!(
+        get(&c, id(5), &everywhere())
+            .await
+            .unwrap()
+            .compliance_stale
+    );
+    db.drop().await;
+}

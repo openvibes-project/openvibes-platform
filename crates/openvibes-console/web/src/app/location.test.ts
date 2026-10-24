@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { alarmPath, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
+import { alarmPath, checkPath, complianceQuery, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
+
+// An old panel link opens the object's page, with no panel left.
+const opensPage = (view: string, search: string, want: string) => {
+  const loc = parseLocation(view, search, "/");
+  expect(loc.panels).toEqual([]);
+  expect(formatLocation(loc, "/")).toBe(want);
+};
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
-    const loc = parseLocation("/console/compliance", "?open=finding%3Ab%2FR-1&open=port%3Atcp%3A443&q=web", "/console/");
+    const loc = parseLocation("/console/compliance", "?open=package%3Ab%2FR-1&open=port%3Atcp%3A443&q=web", "/console/");
     expect(loc.view).toBe("/compliance");
-    expect(loc.panels).toEqual([{ kind: "finding", id: "b/R-1" }, { kind: "port", id: "tcp:443" }]);
+    expect(loc.panels).toEqual([{ kind: "package", id: "b/R-1" }, { kind: "port", id: "tcp:443" }]);
     expect(loc.params.get("q")).toBe("web");
   });
 
@@ -16,8 +23,8 @@ describe("location", () => {
   });
 
   it("reads the old /findings page as /compliance, keeping its filters", () => {
-    const loc = parseLocation("/console/findings", "?severity=high&open=finding%3Ab%2FR-1", "/console/");
-    expect(formatLocation(loc, "/console/")).toBe("/console/compliance?severity=high&open=finding%3Ab%2FR-1");
+    const loc = parseLocation("/console/findings", "?severity=high&open=port%3Atcp%3A443", "/console/");
+    expect(formatLocation(loc, "/console/")).toBe("/console/compliance?severity=high&open=port%3Atcp%3A443");
   });
 
   it.each([
@@ -42,9 +49,7 @@ describe("location", () => {
     ["/", "?open=alarm%3A9000", "/alarms/9000"],
     ["/cases", "?status=open&open=case%3Ac-1&open=alarm%3A12", "/alarms/12"],
   ])("old_alarm_links_open_the_page: an old alarm panel on %s%s is the alarm's page, %s", (view, search, want) => {
-    const loc = parseLocation(view, search, "/");
-    expect(loc.panels).toEqual([]);
-    expect(formatLocation(loc, "/")).toBe(want);
+    opensPage(view, search, want);
   });
 
   it.each([
@@ -54,12 +59,24 @@ describe("location", () => {
     // A host or an alarm panel still wins.
     ["/", "?open=advisory%3AX-1&open=alarm%3A7", "/alarms/7"],
   ])("old_advisory_links_open_the_page: an old advisory panel on %s%s is the vulnerability's page, %s", (view, search, want) => {
-    const loc = parseLocation(view, search, "/");
-    expect(loc.panels).toEqual([]);
-    expect(formatLocation(loc, "/")).toBe(want);
+    opensPage(view, search, want);
+  });
+
+  it.each([
+    ["/compliance", "?open=finding%3Abaseline%2Fport.ssh.exposed", "/compliance/baseline/port.ssh.exposed"],
+    ["/findings", "?state=all&open=finding%3Ab%2FR-1", "/compliance/b/R-1"],
+    ["/", "?open=finding%3Aa%2Fb%2Fc", "/compliance/a/b%2Fc"],
+    ["/cases", "?status=open&open=case%3Ac-1&open=finding%3Ab%2FR-1", "/compliance/b/R-1"],
+    // A finding from before rule sets (`agent//rule` in a case).
+    ["/", "?open=finding%3A%2FLNX-1", "/compliance/~unknown/LNX-1"],
+    // A host, an alarm or an advisory panel still wins.
+    ["/", "?open=finding%3Ab%2FR-1&open=advisory%3AX-1", "/vulnerabilities/X-1"],
+  ])("old_finding_links_open_the_page: an old finding panel on %s%s is the check's page, %s", (view, search, want) => {
+    opensPage(view, search, want);
   });
 
   it("names the page an object opens instead of a panel", () => {
+    expect(pagePath({ kind: "finding", id: "hardening-linux-l1/harden.ssh.permit_root_login" })).toBe("/compliance/hardening-linux-l1/harden.ssh.permit_root_login");
     expect(alarmPath("7 /x")).toBe("/alarms/7%20%2Fx");
     expect(pagePath({ kind: "alarm", id: "7" })).toBe("/alarms/7");
     expect(pagePath({ kind: "agent", id: "a b" })).toBe("/hosts/a%20b");
@@ -98,6 +115,33 @@ describe("location", () => {
     expect(vulnerabilitiesQuery("sort=confidence")).toBe("");
     expect(vulnerabilitiesQuery("sort=hosts&dir=desc&exploited=false")).toBe("sort=hosts&dir=desc");
     expect(vulnerabilitiesQuery("signal=due30&package=openssl")).toBe("signal=due30&package=openssl");
+  });
+
+  it.each([
+    // Ruling 9: state=all and severity keep their meaning; the old window (and its since) goes.
+    ["?state=all&severity=high", "/compliance?state=all&severity=high"],
+    ["?host=agent-1&window=all", "/compliance?host=agent-1"],
+    ["?since=2026-01-01T00%3A00%3A00Z&q=ssh", "/compliance?q=ssh"],
+    // The old rule-set chip is today's Rule set filter.
+    ["?set=baseline", "/compliance?rule_set=baseline"],
+    // Sorts no column has any more go with their direction; today's stay.
+    ["?sort=active&dir=desc&severity=low", "/compliance?severity=low"],
+    ["?sort=failing&dir=asc", "/compliance?sort=failing&dir=asc"],
+  ])("old_compliance_urls_keep_their_meaning: /compliance%s reads as %s", (search, want) => {
+    expect(formatLocation(parseLocation("/compliance", search, "/"), "/")).toBe(want);
+  });
+
+  it("maps an old Compliance query and leaves today's alone", () => {
+    expect(complianceQuery("window=all&set=hardening-linux-l1&sort=last")).toBe("rule_set=hardening-linux-l1");
+    expect(complianceQuery("rule_set=site&area=SSH&sort=check&dir=desc")).toBe("rule_set=site&area=SSH&sort=check&dir=desc");
+    // The old /findings address reads as /compliance and maps too.
+    expect(formatLocation(parseLocation("/findings", "?set=baseline&window=all", "/"), "/")).toBe("/compliance?rule_set=baseline");
+  });
+
+  it("names a check's page by its rule set and rule", () => {
+    expect(checkPath("hardening-linux-l1", "harden.ssh.permit_root_login")).toBe("/compliance/hardening-linux-l1/harden.ssh.permit_root_login");
+    expect(checkPath("a/b", "c d")).toBe("/compliance/a%2Fb/c%20d");
+    expect(checkPath("", "ssh.root_login")).toBe("/compliance/~unknown/ssh.root_login");
   });
 
   it("ignores malformed panel references", () => {

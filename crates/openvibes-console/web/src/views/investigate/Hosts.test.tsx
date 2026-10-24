@@ -15,11 +15,11 @@ const row = (over: Partial<HostRow>): HostRow => ({
   id: "agent-1", hostname: "web-01", address: "10.0.1.3", status: "online", last_seen_at: "2026-10-20T10:00:00Z",
   os: { id: "debian", version: "12", distribution: "Debian 12", family: "linux" },
   groups: [{ id: "g1", name: "Linux", kind: "automatic" }, { id: "g2", name: "Production", kind: "rule" }], group_count: 3,
-  labels: ["pci"], problems: { open_alarms: 2, critical: 1, failing: 0 }, agent: { version: "0.4.1", older: true }, alarms_off: false, ...over,
+  labels: ["pci"], problems: { open_alarms: 2, critical: 1, failing: 0, compliance_stale: false }, agent: { version: "0.4.1", older: true }, alarms_off: false, ...over,
 });
 const list = (over: Partial<HostList> = {}): HostList => ({
   items: [row({}), row({ id: "agent-2", hostname: "win-01", address: null, os: { family: "windows", distribution: "Windows 11" }, groups: [], group_count: 0, labels: [],
-    problems: { open_alarms: null, critical: 0, failing: null }, agent: { version: "0.4.2", older: false } })],
+    problems: { open_alarms: null, critical: 0, failing: null, compliance_stale: false }, agent: { version: "0.4.2", older: false } })],
   total: 2, latest_agent_version: "0.4.2", generated_at: "2026-10-20T10:00:00Z",
   summary: { online: 9, older_agent: 4, critical: 4 },
   counts: { status: [{ value: "online", count: 9 }], os: [{ value: "linux", count: 8 }], group: [{ value: "g1", name: "Linux", kind: "automatic", count: 8 }],
@@ -52,9 +52,15 @@ describe("Hosts", () => {
   });
 
   it("shows — for a problem kind the viewer cannot read on that host", () => {
-    const html = render(list({ items: [row({ problems: { open_alarms: null, critical: 0, failing: null } })] }));
+    const html = render(list({ items: [row({ problems: { open_alarms: null, critical: 0, failing: null, compliance_stale: false } })] }));
     expect(html).toContain('title="You can’t see open alarms on this host"><span aria-hidden="true">—</span><span class="sr-only">You can’t see open alarms on this host</span>');
     expect(html).toContain('<span class="sr-only">You can’t see failing checks on this host</span>');
+  });
+
+  it("shows — for failing checks on a host with no report in the last day", () => {
+    const html = render(list({ items: [row({ problems: { open_alarms: 0, critical: 0, failing: null, compliance_stale: true } })] }));
+    expect(html).toContain('<span class="sr-only">No report in the last day</span>');
+    expect(html).not.toContain("You can’t see failing checks");
   });
 
   it("warns of threat alarms off by a fault beside the status", () => {

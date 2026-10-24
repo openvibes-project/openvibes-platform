@@ -83,9 +83,11 @@ const canChange = (r: VulnListRow) => r.fixed.kind !== "none" && r.advisories.so
 
 /** What a bulk action sends for these rows (ruling 8): each covering advisory with triage, on the Host chip's host
  * when set, open pairs only (`open_only`, so naming the host does not reach its closed pairs). */
-export function bulkItems(rows: readonly VulnListRow[], host: string | null) {
+export function bulkItems(rows: readonly VulnListRow[], host: string | null, group: string | null = null) {
   const on = host ? { agent_id: host } : {};
-  return [...new Set(rows.filter(canChange).flatMap((r) => r.advisories.filter(triaged)))].map((advisory_id) => ({ advisory_id, ...on, open_only: true }));
+  // The Group filter's rows count its hosts only; so does what they change (bulk_triage::ListRow).
+  const within = group ? { group } : {};
+  return [...new Set(rows.filter(canChange).flatMap((r) => r.advisories.filter(triaged)))].map((advisory_id) => ({ advisory_id, ...on, open_only: true, ...within }));
 }
 
 /** The ticked rows a bulk action can change, how many, and the actions to leave out when none can. */
@@ -207,7 +209,7 @@ function VulnListView() {
         <VulnListBody list={data} hidden={hidden ?? []} offset={Math.max(0, Number(params.get(PAGE)) || 0)} selected={selected} onSelect={setSelected} />
       )}
       <BulkBar kind="vulnerabilities" noun={selected.size === 1 ? "vulnerability" : "vulnerabilities"} count={selected.size} onClear={() => setSelected(new Set())}
-        items={() => bulkItems(chosen, host)} confirm={<Reach rows={bulk.rows} />} changes={bulk.changes} without={bulk.without} note={bulk.note}
+        items={() => bulkItems(chosen, host, params.get("group"))} confirm={<Reach rows={bulk.rows} />} changes={bulk.changes} without={bulk.without} note={bulk.note}
         newCase={() => ({ title: `${chosen.length} vulnerabilities: ${chosen[0]?.key ?? ""} ${chosen[0]?.title ?? ""}`.trim(), severity: highest(chosen.map((r) => r.severity)) })} />
     </div>
   );

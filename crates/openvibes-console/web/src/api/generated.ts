@@ -687,6 +687,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compliance-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Compliance list. */
+        get: operations["list_check_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/compliance/bulk": {
         parameters: {
             query?: never;
@@ -697,6 +714,43 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["bulk_compliance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/checks/{rule_set_id}/{rule_id}/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A check's Hosts table: its failing hosts in any triage state and its
+         *     passing hosts.
+         */
+        get: operations["check_hosts_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/checks/{rule_set_id}/{rule_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A check's page above the Hosts table. */
+        get: operations["check_summary_page"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3104,18 +3158,27 @@ export interface components {
          *     (every host in scope), with `agent_id` for one host. Vulnerabilities:
          *     `advisory_id` (every host where it is open), with `agent_id` for one;
          *     `open_only` (a Vulnerabilities list row) keeps a close or assign to open
-         *     pairs even with `agent_id`.
+         *     pairs even with `agent_id`; so for a check row (compliance, which also
+         *     leaves pairs alone that the list does not count failing). `group` (a
+         *     list row counted under a Group filter) keeps the item to that group's
+         *     hosts, still inside the caller's reach.
          */
         BulkItem: {
             /** @description Advisory of a vulnerability. */
             advisory_id?: string | null;
             /** @description One host only. */
             agent_id?: string | null;
+            /**
+             * @description Vulnerabilities and compliance: a host group id (UUID); only that
+             *     group's hosts are reached (the list's Group filter).
+             */
+            group?: string | null;
             /** @description The platform's alarm id. */
             id?: string | null;
             /**
-             * @description Vulnerabilities: change only open pairs on a close or assign, even
-             *     on the named host (a list row); a reopen ignores it. Default false.
+             * @description Vulnerabilities and compliance: change only open pairs on a close or
+             *     assign, even on the named host (a list row); a reopen ignores it.
+             *     Default false.
              */
             open_only?: boolean;
             /** @description Rule of a compliance finding. */
@@ -3354,6 +3417,401 @@ export interface components {
              * @description The new password, at least 15 characters and different from the current.
              */
             new_password: string;
+        };
+        /**
+         * @description Actions allowed, each when the viewer holds its permission on a host in
+         *     reach.
+         */
+        CheckActionsView: {
+            /** @description Add to case (`cases.write` and `cases.read`). */
+            add_to_case: boolean;
+            /** @description Ask about this (`assistant.use`, with the assistant on). */
+            ask: boolean;
+            /** @description Assign (`compliance.triage`). */
+            assign: boolean;
+            /** @description Export (`compliance.export`). */
+            export: boolean;
+            /** @description Set state (`compliance.triage`). */
+            triage: boolean;
+        };
+        /** @description Rows per filter value, each with the other filters applied. */
+        CheckCountsView: {
+            /** @description By area (every area of rows in reach). */
+            area: components["schemas"]["CountView"][];
+            /** @description By assignee. */
+            assignee: components["schemas"]["VulnAssigneeCountsView"];
+            /** @description By group. */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description By rule set (every set of rows in reach). */
+            rule_set: components["schemas"]["CountView"][];
+            /** @description By severity. */
+            severity: components["schemas"]["CountView"][];
+            /** @description By state. */
+            state: components["schemas"]["CountView"][];
+        };
+        /** @description The details card. */
+        CheckDetailsView: {
+            /** @description "Linux hosts", "All hosts" or "Hosts with this rule set". */
+            applies_to: string;
+            /** @description ATT&CK technique ids. */
+            techniques: string[];
+        };
+        /** @description One History event, newest first. */
+        CheckEventView: {
+            /** @description Who changed triage, or published. */
+            actor?: string | null;
+            /** @description The host (absent for `published`). */
+            agent_id?: string | null;
+            /** @description RFC 3339. */
+            at: string;
+            /** @description Triage state before. */
+            from_state?: string | null;
+            /** @description Its name. */
+            hostname?: string | null;
+            /**
+             * @description `triage`, `failing` (started failing), `passes_again` or
+             *     `published` (a rule-set version).
+             */
+            kind: string;
+            /** @description Triage note. */
+            note?: string | null;
+            /** @description Triage state after. */
+            to_state?: string | null;
+            /**
+             * Format: int64
+             * @description The published rule-set version.
+             */
+            version?: number | null;
+        };
+        /** @description One input the failing evaluation read. */
+        CheckEvidenceView: {
+            /** @description Fact key, for example `sshd.permitrootlogin`. */
+            fact: string;
+            /** @description The file the agent read it from. */
+            file?: string | null;
+            /** @description `masked`, `summarized` or `truncated`, instead of a value. */
+            status?: string | null;
+            /** @description Its value, only when the agent sent it complete. */
+            value?: string | null;
+        };
+        /** @description The earliest first-seen failing host. */
+        CheckFirstSeenView: {
+            /** @description RFC 3339. */
+            at: string;
+            /** @description Host name. */
+            hostname?: string | null;
+        };
+        /** @description The header. */
+        CheckHeaderView: {
+            /** @description What the check is about (derived from the rule id). */
+            area: string;
+            /** @description Who the open failing hosts are assigned to. */
+            assignee: components["schemas"]["VulnAssigneeView"];
+            /**
+             * Format: int64
+             * @description Failing and passing hosts in reach.
+             */
+            checked: number;
+            /**
+             * Format: int64
+             * @description Failing hosts in reach.
+             */
+            failing: number;
+            /**
+             * Format: int64
+             * @description Of those, open (an expired acceptance counts): what the header's Set
+             *     state and Assign change.
+             */
+            open: number;
+            /** @description Rule id. */
+            rule_id: string;
+            /** @description Rule set id. */
+            rule_set_id: string;
+            /**
+             * Format: int64
+             * @description The newest indexed version of the set holding the rule.
+             */
+            rule_set_version?: number | null;
+            /**
+             * Format: int64
+             * @description The rule's version (indexed, else the newest finding's).
+             */
+            rule_version?: number | null;
+            /**
+             * @description `critical`, `high`, `medium`, `low` or `info`: the newest finding's
+             *     in reach, else the rule's indexed severity.
+             */
+            severity?: string | null;
+            /** @description The rule's title (its newest indexed version), else the rule id. */
+            title: string;
+        };
+        /** @description One row of the Hosts table. */
+        CheckHostRowView: {
+            /**
+             * @description RFC 3339: until when the risk is accepted, kept after it expires
+             *     (the state then reads open); null for a passing host.
+             */
+            accepted_until?: string | null;
+            /** @description Last address. */
+            address?: string | null;
+            /** @description Agent id. */
+            agent_id: string;
+            assignee?: null | components["schemas"]["AlarmListPersonView"];
+            /** @description RFC 3339: the last observation (failing) or heartbeat (passing). */
+            checked_at?: string | null;
+            /**
+             * @description What the failing evaluation read; empty for a passing host or a
+             *     finding recorded without detection.
+             */
+            evidence: components["schemas"]["CheckEvidenceView"][];
+            /** @description Host name. */
+            hostname?: string | null;
+            /** @description `online` or `import` (an agent export); null for a passing host. */
+            origin?: string | null;
+            /** @description Distribution, as the Hosts list names it. */
+            os?: string | null;
+            /** @description open, mitigated, accepted_risk, false_positive or passing. */
+            state: string;
+            /**
+             * Format: int64
+             * @description The triage version for If-Match (0 without triage); null for a
+             *     passing host.
+             */
+            triage_version?: number | null;
+        };
+        /** @description One page of the Hosts table. */
+        CheckHostsPageView: {
+            /** @description The page, by host name then agent id. */
+            rows: components["schemas"]["CheckHostRowView"][];
+            /** @description Every segment's count. */
+            segments: components["schemas"]["CheckSegmentsView"];
+            /** @description The failing hosts per triage state, whatever `state` is chosen. */
+            states: components["schemas"]["CheckStatesView"];
+            /**
+             * Format: int64
+             * @description Hosts in the chosen segment.
+             */
+            total: number;
+        };
+        /** @description One row: a check (a rule of a rule set). */
+        CheckListRowView: {
+            /**
+             * Format: int64
+             * @description Accepted risk (not expired).
+             */
+            accepted_risk: number;
+            /** @description What the check is about (derived from the rule id). */
+            area: string;
+            /** @description Who the open failing hosts are assigned to. */
+            assignee: components["schemas"]["VulnAssigneeView"];
+            /**
+             * Format: int64
+             * @description Hosts failing the check.
+             */
+            failing: number;
+            /**
+             * Format: int64
+             * @description False positive.
+             */
+            false_positive: number;
+            /**
+             * Format: int64
+             * @description Mitigated.
+             */
+            mitigated: number;
+            /**
+             * Format: int64
+             * @description Failing hosts by triage state: open (an expired acceptance counts).
+             */
+            open: number;
+            /**
+             * Format: int64
+             * @description Hosts inferred to pass it.
+             */
+            passing: number;
+            /** @description Rule id. */
+            rule_id: string;
+            /** @description Rule set id. */
+            rule_set_id: string;
+            /**
+             * @description `critical`, `high`, `medium`, `low` or `info`: the newest finding's,
+             *     else the rule's indexed severity; absent with neither.
+             */
+            severity?: string | null;
+            /** @description RFC 3339: the earliest first-seen time of the failing hosts. */
+            since?: string | null;
+            /** @description The rule's title (its newest indexed version), else the rule id. */
+            title: string;
+        };
+        /** @description One page of the Compliance list. */
+        CheckListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["CheckCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["CheckListRowView"][];
+            /** @description Summary line. */
+            summary: components["schemas"]["CheckSummaryLineView"];
+            /**
+             * Format: int64
+             * @description Rows matching every filter.
+             */
+            total: number;
+        };
+        /** @description The exposed port of a `port.*` check. */
+        CheckPortView: {
+            /**
+             * Format: int64
+             * @description Hosts in reach where it is exposed.
+             */
+            hosts: number;
+            /**
+             * Format: int32
+             * @description The port, linking to `/ports/{port}`.
+             */
+            port: number;
+            /** @description `tcp` or `udp`. */
+            protocol: string;
+        };
+        /** @description The Related card. */
+        CheckRelatedView: {
+            port?: null | components["schemas"]["CheckPortView"];
+            /** @description Same area. */
+            same_area: components["schemas"]["CheckSameAreaView"];
+            service?: null | components["schemas"]["CheckServiceView"];
+        };
+        /** @description Other failing checks in reach in the same area. */
+        CheckSameAreaView: {
+            /**
+             * Format: int64
+             * @description How many.
+             */
+            checks: number;
+            /** @description Their worst severity. */
+            worst?: string | null;
+        };
+        /** @description Hosts per segment. */
+        CheckSegmentsView: {
+            /**
+             * Format: int64
+             * @description Failing and passing.
+             */
+            all: number;
+            /**
+             * Format: int64
+             * @description Failing, in any triage state.
+             */
+            failing: number;
+            /**
+             * Format: int64
+             * @description Inferred passing.
+             */
+            passing: number;
+        };
+        /** @description The unit of a `harden.services.*` check. */
+        CheckServiceView: {
+            /**
+             * Format: int64
+             * @description Hosts in reach running it.
+             */
+            hosts: number;
+            /** @description The systemd unit, linking to `/services/{unit}`. */
+            unit: string;
+        };
+        /** @description Failing hosts per triage state. */
+        CheckStatesView: {
+            /**
+             * Format: int64
+             * @description Accepted risk.
+             */
+            accepted_risk: number;
+            /**
+             * Format: int64
+             * @description False positive.
+             */
+            false_positive: number;
+            /**
+             * Format: int64
+             * @description Mitigated.
+             */
+            mitigated: number;
+            /**
+             * Format: int64
+             * @description Open (an expired acceptance counts).
+             */
+            open: number;
+        };
+        /**
+         * @description "N checks failing on N hosts · N critical · N unassigned", then a count
+         *     per rule set, over rows with an open failing host matching every filter
+         *     but state.
+         */
+        CheckSummaryLineView: {
+            /**
+             * Format: int64
+             * @description Of those rows, critical.
+             */
+            critical: number;
+            /**
+             * Format: int64
+             * @description Rows with an open failing host.
+             */
+            failing_checks: number;
+            /**
+             * Format: int64
+             * @description Hosts with an open failing pair in those rows.
+             */
+            hosts: number;
+            /** @description Those rows per rule set, by id. */
+            rule_sets: components["schemas"]["CountView"][];
+            /**
+             * Format: int64
+             * @description With no open failing host assigned.
+             */
+            unassigned: number;
+        };
+        /** @description A check's page above the Hosts table. */
+        CheckSummaryView: {
+            /** @description Allowed actions. */
+            can: components["schemas"]["CheckActionsView"];
+            /** @description Details. */
+            details: components["schemas"]["CheckDetailsView"];
+            /** @description Header. */
+            header: components["schemas"]["CheckHeaderView"];
+            /** @description Up to 50 events in reach, newest first. */
+            history: components["schemas"]["CheckEventView"][];
+            /** @description Related. */
+            related: components["schemas"]["CheckRelatedView"];
+            /** @description Text. */
+            text: components["schemas"]["CheckTextView"];
+            /** @description Tiles. */
+            tiles: components["schemas"]["CheckTilesView"];
+        };
+        /** @description The rule's text. */
+        CheckTextView: {
+            /** @description "How to fix". */
+            check?: string | null;
+            /** @description "Why it matters". */
+            explain?: string | null;
+            /** @description The finding message, shown when the others are absent. */
+            message: string;
+        };
+        /** @description The tiles. */
+        CheckTilesView: {
+            /** @description Failing hosts per UTC day, the last 14 days ending today, oldest first. */
+            days: number[];
+            /**
+             * Format: int64
+             * @description Failing hosts.
+             */
+            failing: number;
+            first_seen?: null | components["schemas"]["CheckFirstSeenView"];
+            /**
+             * Format: int64
+             * @description Inferred passing hosts.
+             */
+            passing: number;
         };
         ClientTurn: {
             answer: string;
@@ -4322,13 +4780,19 @@ export interface components {
         /** @description Problem counts; absent where the viewer may not read that kind for the host. */
         HostProblemsView: {
             /**
+             * @description Compliance is in reach but the host sent no report in the last day
+             *     (the host page's `tiles.compliance_stale`): the failing count is
+             *     unknown, shown "—", and "none open" leaves the host out.
+             */
+            compliance_stale: boolean;
+            /**
              * Format: int64
              * @description Critical vulnerabilities.
              */
             critical?: number | null;
             /**
              * Format: int64
-             * @description Failing compliance checks.
+             * @description Failing compliance checks; absent too when `compliance_stale`.
              */
             failing?: number | null;
             /**
@@ -4483,9 +4947,16 @@ export interface components {
         HostTilesView: {
             /**
              * Format: int64
-             * @description Failing compliance checks (`compliance.read`).
+             * @description Failing compliance checks (`compliance.read`): the Compliance
+             *     list's open failing pairs, seen within the last day.
              */
             compliance_failing?: number | null;
+            /**
+             * @description The host has not reported in the last day (the Compliance list's
+             *     window), so `compliance_failing` can't be trusted: the page shows
+             *     "No report in the last day" instead.
+             */
+            compliance_stale: boolean;
             /**
              * Format: int64
              * @description Open agent alarms (`alarms.read`).
@@ -9074,6 +9545,87 @@ export interface operations {
             };
         };
     };
+    list_check_page: {
+        parameters: {
+            query?: {
+                /** @description Title, rule ID or rule set (contains). */
+                q?: string;
+                /** @description open (default), mitigated, accepted_risk, false_positive, passing or all. */
+                state?: string;
+                /** @description critical, high, medium, low or info. */
+                severity?: string;
+                /** @description A rule set id. */
+                rule_set?: string;
+                /** @description An area, for example SSH or Network exposure. */
+                area?: string;
+                /** @description A host group id. */
+                group?: string;
+                /** @description An agent id. */
+                host?: string;
+                /** @description me, unassigned or a user id. */
+                assignee?: string;
+                /** @description severity (default), failing, since or title. */
+                sort?: string;
+                /** @description asc or desc (default). */
+                dir?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of checks in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs compliance.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     bulk_compliance: {
         parameters: {
             query?: never;
@@ -9098,6 +9650,149 @@ export interface operations {
             };
             /** @description Invalid action, items, note or expiry */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    check_hosts_page: {
+        parameters: {
+            query?: {
+                /** @description all (default), failing or passing. */
+                segment?: string;
+                /**
+                 * @description With `segment=failing`: open, mitigated, accepted_risk or
+                 *     false_positive (absent: any). Refused with another segment.
+                 */
+                state?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Rule set id, or ~unknown for findings from before rule sets */
+                rule_set_id: string;
+                /** @description Rule id */
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the hosts in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckHostsPageView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs compliance.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description check_not_found: missing or outside reach */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    check_summary_page: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Rule set id, or ~unknown for findings from before rule sets */
+                rule_set_id: string;
+                /** @description Rule id */
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckSummaryView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs compliance.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description check_not_found: missing or outside reach */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

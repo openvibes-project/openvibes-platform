@@ -4,6 +4,7 @@
 // assistant citations for free.
 import type { ReactNode } from "react";
 
+import { splitFindingId } from "./location";
 import type { Access } from "./session";
 import { panelTitle } from "./titles";
 import { DashboardsView } from "../dashboards/DashboardsView";
@@ -19,7 +20,6 @@ import { CasePanel, NewCasePanel } from "../panels/cases/CasePanel";
 import { SiteRulePanel } from "../panels/rules/SiteRulePanel";
 import { PackagePanel, splitPackageId } from "../panels/hosts/PackagePanel";
 import { PortPanel, UnitPanel, splitPortId } from "../panels/hosts/PortPanel";
-import { FindingPanel, splitFindingId } from "../panels/findings/FindingPanel";
 import type { IconName } from "../ui/Icon";
 import { Cases } from "../views/investigate/Cases";
 import { Settings, settingsAccess } from "../views/admin/settings/Settings";
@@ -55,7 +55,7 @@ type ViewDef = {
 export const views: readonly ViewDef[] = [
   { path: "/", prefix: "/dashboards/", label: "Dashboards", short: "Home", icon: "overview", group: "Investigate", keys: "g d", access: [], render: () => <DashboardsView /> },
   { path: "/alarms", prefix: "/alarms/", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
-  { path: "/compliance", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "compliance.read" }], render: () => <Findings /> },
+  { path: "/compliance", prefix: "/compliance/", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "compliance.read" }], render: () => <Findings /> },
   { path: "/vulnerabilities", prefix: "/vulnerabilities/", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/hosts", prefix: "/hosts/", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "hosts.read" }], render: () => <Hosts /> },
   { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "hosts.read" }], render: () => <Software /> },
@@ -78,17 +78,18 @@ type PanelDef = {
   render: (id: string) => ReactNode;
 };
 
-/** An object's icon; a host, an alarm and an advisory are pages, not panels (approved screens 17, 30 and 26). */
-export const objectIcon = (kind: string): IconName => panels[kind]?.icon ?? (kind === "agent" ? "agents" : kind === "alarm" ? "alarm" : kind === "advisory" ? "vulnerabilities" : "layers");
+/** Icons of objects that are pages, not panels (approved screens 17, 30, 26 and 28). */
+const PAGE_ICONS: Record<string, IconName> = { agent: "agents", alarm: "alarm", advisory: "vulnerabilities", finding: "findings" };
+/** An object's icon. */
+export const objectIcon = (kind: string): IconName => panels[kind]?.icon ?? PAGE_ICONS[kind] ?? "layers";
 
 /** The best known name of an object: learned from its panel, else from its id. */
 export function objectTitle(ref: { kind: string; id: string }): string {
-  return panelTitle(ref) ?? panels[ref.kind]?.title(ref.id) ?? ref.id;
+  return panelTitle(ref) ?? panels[ref.kind]?.title(ref.id) ?? (ref.kind === "finding" ? splitFindingId(ref.id)[1] : ref.id);
 }
 
 export const panels: Readonly<Record<string, PanelDef>> = {
   case: { label: "Case", icon: "cases", title: (id) => id === "new" ? "New case" : "Case", render: (id) => id === "new" ? <NewCasePanel /> : <CasePanel id={id} /> },
-  finding: { label: "Compliance finding", icon: "findings", title: (id) => splitFindingId(id)[1], render: (id) => <FindingPanel id={id} /> },
   package: { label: "Software", icon: "package", title: (id) => splitPackageId(id)[1], render: (id) => <PackagePanel id={id} /> },
   port: { label: "Port", icon: "activity", title: (id) => { const [protocol, port] = splitPortId(id); return `${port}/${protocol}`; }, render: (id) => <PortPanel id={id} /> },
   compare: { label: "Compare", icon: "agents", title: (id) => id.includes(" ") ? "Compare hosts" : "Compare with…", render: (id) => <ComparePanel id={id} /> },

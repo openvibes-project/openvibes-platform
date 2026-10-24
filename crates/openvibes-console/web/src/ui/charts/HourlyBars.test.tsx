@@ -22,4 +22,12 @@ describe("HourlyBars", () => {
     expect(html).toContain("sr-only");
     expect(html.match(/<tr/g)).toHaveLength(25);
   });
+
+  it("counts days too: today last, one bar each", () => {
+    const html = renderToStaticMarkup(<HourlyBars values={[1, 2, 3]} label="Failing hosts per day" unit="day" />);
+    expect(html.match(/<rect/g)).toHaveLength(3);
+    expect(html).toContain("<title>today: 3</title>");
+    expect(html).toContain("<title>2 days ago: 1</title>");
+    expect(html).toContain('<th scope="col">Day</th>');
+  });
 });

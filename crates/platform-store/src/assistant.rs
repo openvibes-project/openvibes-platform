@@ -94,7 +94,8 @@ pub struct Page<T> {
 }
 
 /// Findings in scope observed since `since`, one row per rule set and rule,
-/// most severe and widespread first.
+/// most severe and widespread first. Ended findings (fixed) are not failing
+/// and are left out, here and in every read below.
 pub async fn finding_groups(
     client: &Client,
     scope: &AgentScope,
@@ -118,7 +119,7 @@ pub async fn finding_groups(
                         (array_agg(c.last_finding_id ORDER BY c.last_observed_at DESC))[1] AS latest_id
                  FROM current_findings c
                  WHERE ($1::text[] IS NULL OR c.agent_id = ANY($1))
-                   AND c.last_observed_at >= $2
+                   AND c.ended_at IS NULL AND c.last_observed_at >= $2
                    AND ($3::text IS NULL OR c.rule_set_id = $3)
                  GROUP BY c.rule_set_id, c.rule_id),
              m AS (
@@ -209,7 +210,7 @@ pub async fn finding_endpoints(
                     count(*) FILTER (WHERE last_observed_at < $4)
              FROM current_findings
              WHERE ($1::text[] IS NULL OR agent_id = ANY($1))
-               AND rule_set_id = $2 AND rule_id = $3",
+               AND rule_set_id = $2 AND rule_id = $3 AND ended_at IS NULL",
             &[&scope.param(), &rule_set_id, &rule_id, &since],
         )
         .await?;
@@ -219,7 +220,8 @@ pub async fn finding_endpoints(
                     c.rule_version, c.severity
              FROM current_findings c JOIN agents a ON a.agent_id = c.agent_id
              WHERE ($1::text[] IS NULL OR c.agent_id = ANY($1))
-               AND c.rule_set_id = $2 AND c.rule_id = $3 AND c.last_observed_at >= $4
+               AND c.rule_set_id = $2 AND c.rule_id = $3 AND c.ended_at IS NULL
+               AND c.last_observed_at >= $4
              ORDER BY c.last_observed_at DESC, c.agent_id
              LIMIT $5",
             &[
@@ -289,7 +291,7 @@ pub async fn agent_summaries(
             "SELECT a.agent_id, a.hostname, a.status, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version,
                     a.os_id, a.os_version, a.running_kernel, a.capabilities,
                     (SELECT count(*) FROM current_findings c
-                     WHERE c.agent_id = a.agent_id AND c.last_observed_at >= $3),
+                     WHERE c.agent_id = a.agent_id AND c.ended_at IS NULL AND c.last_observed_at >= $3),
                     (SELECT count(*) FROM vulnerabilities v
                      WHERE v.agent_id = a.agent_id AND v.fixed_at IS NULL),
                     (SELECT count(DISTINCT v.advisory_id) FROM vulnerabilities v

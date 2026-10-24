@@ -7,7 +7,7 @@ vi.hoisted(() => {
 });
 
 import type { Permission, Session } from "../api/types";
-import { objectIcon, panels, views } from "./registry";
+import { objectIcon, objectTitle, panels, views } from "./registry";
 import { allows } from "./session";
 
 const held = (permissions: Permission[]) =>
@@ -35,5 +35,10 @@ describe("pages, not panels", () => {
     expect(panels.alarm).toBeUndefined();
     expect(objectIcon("alarm")).toBe("alarm");
     expect(objectIcon("agent")).toBe("agents");
+  });
+  it("a finding is a check's page (screen 28): no finding panel, its icon and rule as its name", () => {
+    expect(panels.finding).toBeUndefined();
+    expect(objectIcon("finding")).toBe("findings");
+    expect(objectTitle({ kind: "finding", id: "baseline/port.ssh.exposed" })).toBe("port.ssh.exposed");
   });
 });

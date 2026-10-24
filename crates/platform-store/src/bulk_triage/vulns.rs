@@ -3,7 +3,7 @@
 
 use chrono::{DateTime, Utc};
 
-use super::{BulkChange, BulkRefusal, BulkResult, MAX_ITEMS, audit, check, spared};
+use super::{BulkChange, BulkRefusal, BulkResult, ListRow, MAX_ITEMS, audit, check, spared};
 use crate::{
     Client, StoreError,
     console_read::{AgentScope, agent_visibility},
@@ -23,14 +23,15 @@ pub async fn vulnerabilities(
     vulnerabilities_open_only(client, scope, items, &[], change, actor, now).await
 }
 
-/// [`vulnerabilities`], where `open_only[i]` (missing: false) marks item `i`
-/// as a list row's: a close or assign then changes its pairs only while
-/// open ("not open" otherwise), even on one named host. A reopen ignores it.
+/// [`vulnerabilities`], where `rows[i]` (missing: the default) is item
+/// `i`'s list row: with `open_only` a close or assign changes its pairs
+/// only while open ("not open" otherwise), even on one named host (a
+/// reopen ignores it); with `group`, only that group's hosts.
 pub async fn vulnerabilities_open_only(
     client: &mut Client,
     scope: &AgentScope,
     items: &[(String, Option<String>)],
-    open_only: &[bool],
+    rows: &[ListRow],
     change: BulkChange<'_>,
     actor: &str,
     now: DateTime<Utc>,
@@ -45,11 +46,9 @@ pub async fn vulnerabilities_open_only(
     let filtered: Vec<bool> = items
         .iter()
         .enumerate()
-        .map(|(i, (_, agent))| {
-            !reopen && (agent.is_none() || open_only.get(i).copied().unwrap_or(false))
-        })
+        .map(|(i, (_, agent))| !reopen && (agent.is_none() || ListRow::of(rows, i).0))
         .collect();
-    let Some(pairs) = expand(client, scope, items, &filtered, now).await? else {
+    let Some(pairs) = expand(client, scope, items, &filtered, rows, now).await? else {
         return Ok(Err(BulkRefusal::Count));
     };
     let current = vulnerability_triage::states(client, &pairs).await?;
@@ -65,7 +64,7 @@ pub async fn vulnerabilities_open_only(
         })
         .collect();
     let closed = if missed.iter().any(|&i| filtered[i]) {
-        reaching(client, scope, items, now).await?
+        reaching(client, scope, items, rows, now).await?
     } else {
         std::collections::HashSet::new()
     };
@@ -93,7 +92,7 @@ pub async fn vulnerabilities_open_only(
         let named = items.iter().enumerate().any(|(i, (adv, a))| {
             adv == advisory
                 && a.as_deref() == Some(agent.as_str())
-                && (reopen || !open_only.get(i).copied().unwrap_or(false))
+                && (reopen || !ListRow::of(rows, i).0)
         });
         let open = now_state.state == "open"
             || (now_state.state == "accepted_risk"
@@ -177,14 +176,24 @@ pub async fn vulnerabilities_open_only(
 }
 
 /// The (agent, advisory) open vulnerabilities these items name in scope:
-/// an advisory without a host is every host where it is open. `None` when
-/// they are more than [`MAX_ITEMS`].
+/// an advisory without a host is every host where it is open; a row's
+/// `group` (`rows[i]`, missing: none) keeps to that group's hosts. `None`
+/// when they are more than [`MAX_ITEMS`].
 pub async fn expand_vulnerabilities(
     client: &Client,
     scope: &AgentScope,
     items: &[(String, Option<String>)],
+    rows: &[ListRow],
 ) -> Result<Option<Vec<(String, String)>>, StoreError> {
-    expand(client, scope, items, &vec![false; items.len()], Utc::now()).await
+    expand(
+        client,
+        scope,
+        items,
+        &vec![false; items.len()],
+        rows,
+        Utc::now(),
+    )
+    .await
 }
 
 /// [`expand_vulnerabilities`], where `open[i]` keeps item `i` to its pairs
@@ -194,10 +203,11 @@ async fn expand(
     scope: &AgentScope,
     items: &[(String, Option<String>)],
     open: &[bool],
+    rows: &[ListRow],
     now: DateTime<Utc>,
 ) -> Result<Option<Vec<(String, String)>>, StoreError> {
-    let rows = vuln_rows(client, scope, items, open, now, false).await?;
-    Ok((rows.len() <= MAX_ITEMS).then(|| rows.iter().map(|r| (r.get(0), r.get(1))).collect()))
+    let found = vuln_rows(client, scope, items, open, rows, now, false).await?;
+    Ok((found.len() <= MAX_ITEMS).then(|| found.iter().map(|r| (r.get(0), r.get(1))).collect()))
 }
 
 /// The indexes of the items with any unfixed pair in scope, open or not.
@@ -205,25 +215,38 @@ async fn reaching(
     client: &Client,
     scope: &AgentScope,
     items: &[(String, Option<String>)],
+    rows: &[ListRow],
     now: DateTime<Utc>,
 ) -> Result<std::collections::HashSet<usize>, StoreError> {
-    let rows = vuln_rows(client, scope, items, &vec![false; items.len()], now, true).await?;
-    Ok(rows
+    let found = vuln_rows(
+        client,
+        scope,
+        items,
+        &vec![false; items.len()],
+        rows,
+        now,
+        true,
+    )
+    .await?;
+    Ok(found
         .iter()
         .map(|r| usize::try_from(r.get::<_, i64>(0) - 1).unwrap_or(usize::MAX))
         .collect())
 }
 
 /// The expansion query: pairs, or (`which`) the 1-based indexes of the
-/// items that reach any.
+/// items that reach any. A row's `group` keeps its item to that group's
+/// members.
 async fn vuln_rows(
     client: &Client,
     scope: &AgentScope,
     items: &[(String, Option<String>)],
     open: &[bool],
+    rows: &[ListRow],
     now: DateTime<Utc>,
     which: bool,
 ) -> Result<Vec<tokio_postgres::Row>, StoreError> {
+    let groups: Vec<Option<&str>> = (0..items.len()).map(|i| ListRow::of(rows, i).1).collect();
     let (advisories, agents): (Vec<&str>, Vec<Option<&str>>) = items
         .iter()
         .map(|(adv, agent)| (adv.as_str(), agent.as_deref()))
@@ -241,8 +264,8 @@ async fn vuln_rows(
         .query(
             &format!(
                 "SELECT DISTINCT {select}
-                 FROM unnest($1::text[], $2::text[], $5::bool[])
-                     WITH ORDINALITY AS k(advisory_id, agent_id, open_only, i)
+                 FROM unnest($1::text[], $2::text[], $5::bool[], $7::text[])
+                     WITH ORDINALITY AS k(advisory_id, agent_id, open_only, grp, i)
                  JOIN vulnerabilities v ON v.advisory_id = k.advisory_id AND v.fixed_at IS NULL
                      AND (k.agent_id IS NULL OR v.agent_id = k.agent_id)
                  JOIN agents a ON a.agent_id = v.agent_id
@@ -250,6 +273,8 @@ async fn vuln_rows(
                      ON t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
                  WHERE {visible} AND (NOT k.open_only OR t.state IS NULL OR t.state = 'open'
                      OR (t.state = 'accepted_risk' AND t.accepted_until <= $6))
+                   AND (k.grp IS NULL OR EXISTS (SELECT 1 FROM console_host_group_membership m
+                        WHERE m.agent_id = v.agent_id AND m.asset_group_id::text = k.grp))
                  {order}"
             ),
             &[
@@ -259,6 +284,7 @@ async fn vuln_rows(
                 &scope.group_ids(),
                 &open,
                 &now,
+                &groups,
             ],
         )
         .await?)
