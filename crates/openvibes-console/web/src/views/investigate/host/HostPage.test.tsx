@@ -56,7 +56,7 @@ describe("host page", () => {
 
   it("links the four tiles to their full lists", () => {
     const html = render(summary());
-    for (const href of ["/alarms?host=agent-00005", "/compliance?host=agent-00005&amp;window=all", "/vulnerabilities?host=agent-00005", "/hosts/agent-00005/software"]) {
+    for (const href of ["/alarms?host=agent-00005", "/compliance?host=agent-00005", "/vulnerabilities?host=agent-00005", "/hosts/agent-00005/software"]) {
       expect(html).toMatch(new RegExp(`<a [^>]*detail-tile[^>]*href="${href.replace("?", "\\?")}"|<a [^>]*href="${href.replace("?", "\\?")}"[^>]*detail-tile`));
     }
     expect(html).toContain('aria-label="Software: 412"');
@@ -86,7 +86,7 @@ describe("host page", () => {
     const html = render(summary());
     expect(html).toMatch(/<a [^>]*href="\/vulnerabilities\?host=agent-00005"[^>]*>Show all 12 vulnerabilities<\/a>/);
     expect(html).toMatch(/<a [^>]*href="\/alarms\?host=agent-00005"[^>]*>Show all 3 alarms<\/a>/);
-    expect(html).toMatch(/<a [^>]*href="\/compliance\?host=agent-00005&amp;window=all"[^>]*>Show all 7 checks<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/compliance\?host=agent-00005"[^>]*>Show all 7 checks<\/a>/);
     expect(html).toMatch(/<a [^>]*href="\/hosts\/agent-00005\/ports"[^>]*>Show all 9 ports<\/a>/);
     expect(html).toMatch(/<a [^>]*href="\/hosts\/agent-00005\/services"[^>]*>Show all 23 services<\/a>/);
   });

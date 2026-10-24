@@ -30,7 +30,26 @@ Show everything, without page changes for details:
   route asks `GET /api/v1/session` first and shows sign-in on 401. Sign out
   POSTs `/auth/v1/logout` with the session CSRF token.
 - **Views** (the same set v1 had):
-  - findings with bulk triage and a 14-day trend of reporting hosts;
+  - Compliance (`/compliance`, approved screen 27, roles 5c): one row per
+    check (a rule of a rule set) over `GET /api/v1/compliance-list`, with the
+    shared FilterBar (Severity, State, Rule set, Area, Group, Assignee; Host
+    as a chip), the summary line ("N checks failing on N hosts · N critical ·
+    N unassigned", then a count per rule set), Columns (Severity and Check
+    fixed; saved-views page `compliance`), saved views, offset paging and the
+    bulk bar. A row links to `/compliance/{rule_set}/{rule}`; until the
+    check's page lands that path shows a stand-in with a link back to the
+    list, and the finding panel (14-day trend, hosts, evidence, history)
+    still opens from `?open=finding:{set}/{rule}`. The Hosts cell is a colour
+    bar (open, mitigated, accepted, false positive, pass) named for screen
+    readers, with the words under it. Bulk sends
+    `{rule_set_id, rule_id, open_only: true}` (plus the Host chip's
+    `agent_id`): Set state and Assign change only open, failing hosts and ask
+    first ("Changes up to N open hosts"); a check no host fails counts for
+    nothing, and a selection of only those offers no action and says why;
+    there is no Reopen. Old URLs keep their meaning (`state=all` and
+    `severity` stay, `set` is `rule_set`, `window`/`since` and sorts no
+    column has go, rewritten in place), and views saved in the browser under
+    `/compliance` or `/findings` move to the person's account once;
   - vulnerabilities, one row per CVE, and a vulnerability's page
     (`/vulnerabilities/{key}`, roles 5b): [console-vulnerabilities.md](console-vulnerabilities.md);
   - agents, with labels, host groups and revocation;
@@ -225,12 +244,12 @@ used.
 ### Filter catalogue
 
 `views/lists/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
-Hosts, Audit log; the Vulnerabilities entry serves the List tile, which reads
-`GET /v1/vulnerabilities`, while the view has its own FilterBar): each filter is a flag (one fixed value) or a choice (a
-list of values), and each parameter holds one value. The list views build
-their chip bars from it and the List widget editor offers the same filters,
-so the two cannot drift. Runtime extras (compliance rule sets, counts) stay
-in the views.
+Hosts, Audit log; the Compliance and Vulnerabilities entries serve the List
+tile, which reads `GET /v1/compliance/groups` and `GET /v1/vulnerabilities`,
+while those views have their own FilterBar over their list routes): each filter is a flag (one fixed value) or a choice (a
+list of values), and each parameter holds one value. The Audit log builds
+its chip bar from it and the List widget editor offers the same filters,
+so the two cannot drift.
 
 ### Widget editors
 

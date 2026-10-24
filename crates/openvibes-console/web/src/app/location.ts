@@ -57,6 +57,24 @@ export function vulnerabilitiesQuery(query: string): string {
   return params.toString();
 }
 
+/** The Compliance list's sortable columns (roles 5c): the old list's other sorts are gone. */
+const CHECK_SORTS = new Set(["severity", "check", "failing", "since"]);
+
+/** An old Compliance query as today's (roles 5c ruling 9): `state=all` and
+ * `severity` stay, the old window (`window`, `since`) goes, the rule-set chip
+ * (`set`) is the Rule set filter, and sorts no column has any more go with their direction. */
+export function complianceQuery(query: string): string {
+  const params = new URLSearchParams(query);
+  params.delete("window");
+  params.delete("since");
+  const set = params.get("set");
+  params.delete("set");
+  if (set && !params.has("rule_set")) params.set("rule_set", set);
+  const sort = params.get("sort");
+  if (sort !== null && !CHECK_SORTS.has(sort)) { params.delete("sort"); params.delete("dir"); }
+  return params.toString();
+}
+
 /** A host's page (approved screen 17). */
 export const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
 
@@ -65,6 +83,9 @@ export const alarmPath = (id: string) => `/alarms/${encodeURIComponent(id)}`;
 
 /** A vulnerability's page (approved screen 26): a CVE, or an advisory id the page resolves (roles 5b ruling 7). */
 export const vulnPath = (key: string) => `/vulnerabilities/${encodeURIComponent(key)}`;
+
+/** A check's page (approved screen 28): a rule of a rule set (roles 5c ruling 8). */
+export const checkPath = (ruleSet: string, rule: string) => `/compliance/${encodeURIComponent(ruleSet)}/${encodeURIComponent(rule)}`;
 
 const PAGES: Record<string, (id: string) => string> = { agent: hostPath, alarm: alarmPath, advisory: vulnPath };
 
@@ -79,7 +100,8 @@ export function pagePath(panel: PanelRef): string | null {
  * (`?open=agent:ID`, `?open=alarm:ID`, `?open=advisory:ID`, the assistant's
  * `/agents?agent=ID`) is that object's page, a whole page with no panels (as
  * `nav.open` opens it). A host panel wins over an alarm panel, an alarm over
- * an advisory. The old Vulnerabilities flags are today's signals (roles 5b ruling 7).
+ * an advisory. The old Vulnerabilities flags are today's signals (roles 5b ruling 7),
+ * and the old Compliance filters today's (roles 5c ruling 9).
  */
 export function redirect(location: AppLocation): AppLocation {
   const host = location.view === "/agents" ? location.params.get("agent") : null;
@@ -88,6 +110,7 @@ export function redirect(location: AppLocation): AppLocation {
   const page = panel && pagePath(panel);
   if (page) return { view: page, panels: [], params: new URLSearchParams() };
   if (location.view === "/vulnerabilities") return { ...location, params: new URLSearchParams(vulnerabilitiesQuery(location.params.toString())) };
+  if (location.view === "/compliance") return { ...location, params: new URLSearchParams(complianceQuery(location.params.toString())) };
   if (location.view !== "/agents") return location;
   return { ...location, view: "/hosts", params: new URLSearchParams(hostsQuery(location.params.toString())) };
 }

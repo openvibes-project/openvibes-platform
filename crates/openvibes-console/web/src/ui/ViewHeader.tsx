@@ -12,12 +12,7 @@ const storageKey = (view: string) => `openvibes.v2.views.${view}`;
 
 function readSaved(view: string): Saved[] {
   try {
-    let raw = localStorage.getItem(storageKey(view));
-    // Saved views from before the compliance rename (2026-10), copied once.
-    if (raw === null && view === "/compliance") {
-      raw = localStorage.getItem(storageKey("/findings"));
-      if (raw !== null) localStorage.setItem(storageKey(view), raw);
-    }
+    const raw = localStorage.getItem(storageKey(view));
     const parsed = JSON.parse(raw ?? "[]") as unknown;
     return Array.isArray(parsed) ? parsed.filter((item): item is Saved => typeof item?.name === "string" && typeof item?.query === "string") : [];
   } catch {

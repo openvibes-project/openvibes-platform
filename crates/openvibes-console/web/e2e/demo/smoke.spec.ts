@@ -24,8 +24,7 @@ test("overview lists what needs attention and opens it beside the page", async (
 });
 
 test("a finding opens in the inspector, links stack, and Esc goes back", async ({ page }) => {
-  await page.getByRole("link", { name: "Compliance", exact: true }).click();
-  await page.locator(".view tbody tr").first().locator("td").nth(2).click();
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
   await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
   // A host is a whole page (approved screen 17): its link opens it and closes the panels; Back returns.
   await page.locator(".inspector tbody a").first().click();
@@ -57,8 +56,7 @@ test("the palette finds a host and opens it", async ({ page }) => {
 });
 
 test("a panel pops out into a window and docks back", async ({ page }) => {
-  await page.goto("/compliance");
-  await page.locator(".view tbody tr").first().locator("td").nth(2).click();
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
   await page.getByRole("button", { name: "Open in a window" }).click();
   await expect(page.locator(".window")).toBeVisible();
   await expect(page.locator(".inspector")).toHaveCount(0);
@@ -168,7 +166,7 @@ test("a finding mitigated on every open host leaves the default Findings list (b
   // Not page.goto: the demo keeps its data in memory and a reload resets it.
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "Compliance", exact: true }).click();
-  await expect(page.locator(".view tbody tr").filter({ hasText: "The unencrypted Docker API" })).toHaveCount(0);
+  await expect(page.locator(".view tbody tr").filter({ hasText: "port.docker_api.exposed" })).toHaveCount(0);
 });
 
 test("an administrator creates a user and sees the one-time password once (board #85)", async ({ page }) => {

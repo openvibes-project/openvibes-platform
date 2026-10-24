@@ -43,8 +43,8 @@ test("the header reads the host's facts and the tiles lead to the filtered lists
   await expect(page.getByText(`Host: ${NAME}`)).toHaveCount(0);
   await page.goto("/hosts/agent-00005");
   await tiles(page).getByRole("link", { name: /^Compliance failing: \d+$/ }).click();
-  // Every current finding of the host, as the tile counts them (baseline ssh, plus the seeded hardening ones).
-  await expect(page).toHaveURL(/\/compliance\?host=agent-00005&window=all$/);
+  // The host's failing checks (baseline ssh, plus the seeded hardening ones).
+  await expect(page).toHaveURL(/\/compliance\?host=agent-00005$/);
   await expect(page.locator(".view tbody tr")).toHaveCount(3);
   await page.getByRole("button", { name: `Remove filter Host: ${NAME}` }).click();
   await expect(page).toHaveURL(/\/compliance$/);

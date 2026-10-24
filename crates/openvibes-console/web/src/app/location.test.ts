@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { alarmPath, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
+import { alarmPath, checkPath, complianceQuery, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
@@ -98,6 +98,32 @@ describe("location", () => {
     expect(vulnerabilitiesQuery("sort=confidence")).toBe("");
     expect(vulnerabilitiesQuery("sort=hosts&dir=desc&exploited=false")).toBe("sort=hosts&dir=desc");
     expect(vulnerabilitiesQuery("signal=due30&package=openssl")).toBe("signal=due30&package=openssl");
+  });
+
+  it.each([
+    // Ruling 9: state=all and severity keep their meaning; the old window (and its since) goes.
+    ["?state=all&severity=high", "/compliance?state=all&severity=high"],
+    ["?host=agent-1&window=all", "/compliance?host=agent-1"],
+    ["?since=2026-01-01T00%3A00%3A00Z&q=ssh", "/compliance?q=ssh"],
+    // The old rule-set chip is today's Rule set filter.
+    ["?set=baseline", "/compliance?rule_set=baseline"],
+    // Sorts no column has any more go with their direction; today's stay.
+    ["?sort=active&dir=desc&severity=low", "/compliance?severity=low"],
+    ["?sort=failing&dir=asc", "/compliance?sort=failing&dir=asc"],
+  ])("old_compliance_urls_keep_their_meaning: /compliance%s reads as %s", (search, want) => {
+    expect(formatLocation(parseLocation("/compliance", search, "/"), "/")).toBe(want);
+  });
+
+  it("maps an old Compliance query and leaves today's alone", () => {
+    expect(complianceQuery("window=all&set=hardening-linux-l1&sort=last")).toBe("rule_set=hardening-linux-l1");
+    expect(complianceQuery("rule_set=site&area=SSH&sort=check&dir=desc")).toBe("rule_set=site&area=SSH&sort=check&dir=desc");
+    // The old /findings address reads as /compliance and maps too.
+    expect(formatLocation(parseLocation("/findings", "?set=baseline&window=all", "/"), "/")).toBe("/compliance?rule_set=baseline");
+  });
+
+  it("names a check's page by its rule set and rule", () => {
+    expect(checkPath("hardening-linux-l1", "harden.ssh.permit_root_login")).toBe("/compliance/hardening-linux-l1/harden.ssh.permit_root_login");
+    expect(checkPath("a/b", "c d")).toBe("/compliance/a%2Fb/c%20d");
   });
 
   it("ignores malformed panel references", () => {

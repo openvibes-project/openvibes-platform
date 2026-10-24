@@ -6,7 +6,7 @@
 import { type Page, expect, test } from "@playwright/test";
 
 import templates from "../../src/api/templates.json" with { type: "json" };
-import { api, firstSignIn, signIn } from "./helpers";
+import { api, firstSignIn, openFirstFinding, signIn } from "./helpers";
 
 const ANALYST = templates.find((t) => t.name === "Analyst")?.permissions ?? [];
 const agentOf: Record<string, string> = {
@@ -72,8 +72,7 @@ test("two teams each see and change only their hosts, and a team lead gives only
       const hosts = member.getByRole("table", { name: "Hosts" }).locator("tbody tr");
       await expect(hosts).toHaveCount(2);
       for (const host of mine) await expect(hosts.filter({ hasText: host })).toHaveCount(1);
-      await member.goto("/compliance");
-      await member.locator(".view tbody tr").first().locator("td").nth(2).click();
+      await openFirstFinding(member);
       const inspector = member.locator(".inspector");
       for (const host of mine) await expect(inspector.getByText(host)).toHaveCount(1);
       for (const host of theirs) await expect(inspector.getByText(host)).toHaveCount(0);

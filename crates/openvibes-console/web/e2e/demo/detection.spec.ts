@@ -2,9 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 test("a finding explains one host and opens its original rule", async ({ page }) => {
-  await page.goto("/compliance");
-  const row = page.locator(".view tbody tr").filter({ hasText: "Redis (tcp 6379)" });
-  await row.locator("td").nth(2).click();
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.redis.exposed");
   const panel = page.locator(".inspector");
   await panel.getByRole("button", { name: "View evidence", exact: true }).first().click();
   await expect(panel.getByText("Complete list of 2 values", { exact: false })).toBeVisible();
@@ -31,8 +29,7 @@ test("an alarm opens the historical rule and evidence at a narrow width", async 
 });
 
 test("the host Select filters, picks a host and its evidence opens", async ({ page }) => {
-  await page.goto("/compliance");
-  await page.locator(".view tbody tr").filter({ hasText: "SSH (tcp 22)" }).locator("td").nth(2).click();
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
   const panel = page.locator(".inspector");
   await panel.getByRole("tab", { name: /^Evidence/ }).click();
   await panel.getByRole("combobox", { name: "Host", exact: true }).click();
@@ -46,8 +43,7 @@ test("the host Select filters, picks a host and its evidence opens", async ({ pa
 
 test("the host Select opens by keyboard, never clipped at 390 px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/compliance");
-  await page.locator(".view tbody tr").filter({ hasText: "SSH (tcp 22)" }).locator("td").nth(2).click();
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
   await page.locator(".inspector").getByRole("tab", { name: /^Evidence/ }).click();
   const host = page.locator(".inspector").getByRole("combobox", { name: "Host", exact: true });
   await host.focus();
@@ -67,8 +63,7 @@ test("the host Select opens by keyboard, never clipped at 390 px", async ({ page
 });
 
 test("a typed letter opens the Select with the search filled and a row active", async ({ page }) => {
-  await page.goto("/compliance");
-  await page.locator(".view tbody tr").filter({ hasText: "SSH (tcp 22)" }).locator("td").nth(2).click();
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
   const panel = page.locator(".inspector");
   await panel.getByRole("tab", { name: /^Evidence/ }).click();
   await panel.getByRole("combobox", { name: "Host", exact: true }).focus();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activeCount, complianceGroupsPath, selectAgents, selectAudit, selectFindings, severityBadge, vulnerabilityQuery } from "./rows";
+import { activeCount, selectAgents, selectAudit, selectFindings, severityBadge, vulnerabilityQuery } from "./rows";
 
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
@@ -43,13 +43,5 @@ describe("the host filter (plan ruling 9)", () => {
   it("a host filter asks the vulnerability list for that host only", () => {
     expect(vulnerabilityQuery(new URLSearchParams("host=agent%2F1&severity=high"))).toBe("/api/v1/vulnerabilities?severity=high&min_confidence=80&host=agent%2F1");
     expect(vulnerabilityQuery(new URLSearchParams("severity=high"))).not.toContain("host=");
-  });
-
-  it("a host filter asks the Compliance groups for that host, with its triage", () => {
-    expect(complianceGroupsPath(new URLSearchParams("host=agent%2F1&severity=high"))).toBe("/api/v1/compliance/groups?agent_id=agent%2F1");
-    // The host page's links ask for every current finding of the host.
-    expect(complianceGroupsPath(new URLSearchParams("host=agent-1&window=all"))).toBe("/api/v1/compliance/groups?agent_id=agent-1&since=1970-01-01T00%3A00%3A00Z");
-    expect(complianceGroupsPath(new URLSearchParams("window=all"))).toBe("/api/v1/compliance/groups");
-    expect(complianceGroupsPath(new URLSearchParams("severity=high"))).toBe("/api/v1/compliance/groups");
   });
 });

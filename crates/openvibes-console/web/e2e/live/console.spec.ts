@@ -4,7 +4,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { type Page, expect, test } from "@playwright/test";
 
-import { PASSWORD, signIn } from "./helpers";
+import { PASSWORD, openFirstFinding, signIn } from "./helpers";
 
 const origin = "https://127.0.0.1:18490";
 
@@ -164,9 +164,7 @@ test("an old /findings link lands on /compliance with its filters", async ({ pag
 
 test("open hosts of a finding are mitigated in bulk from the Hosts tab, with a note", async ({ page }, info) => {
   await signIn(page, "alex");
-  await page.goto("/compliance");
-  const row = page.locator(".view tbody tr").first();
-  await row.locator("td").nth(2).click();
+  await openFirstFinding(page);
   await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
   const inspector = page.locator(".inspector");
   await inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open \d/ }).click();
@@ -186,8 +184,7 @@ test("open hosts of a finding are mitigated in bulk from the Hosts tab, with a n
 
 test("one host's risk is accepted until a date, then assigned", async ({ page }) => {
   await signIn(page, "alex");
-  await page.goto("/compliance");
-  await page.locator(".view tbody tr").first().locator("td").nth(2).click();
+  await openFirstFinding(page);
   await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
   const inspector = page.locator(".inspector");
   const host = inspector.locator("tbody tr").first();
