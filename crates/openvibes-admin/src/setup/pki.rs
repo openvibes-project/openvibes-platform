@@ -18,14 +18,14 @@ use super::{
     request::REQUEST_DIR,
 };
 
-const STAGE: &str = "/run/openvibes-ca";
-const INT: &str = "/run/openvibes-ca/int";
-const ROOT_DIR: &str = "/run/openvibes-ca/root";
-const INTERMEDIATE: &str = "/etc/openvibes/pki/intermediate.crt";
+pub(super) const STAGE: &str = "/run/openvibes-ca";
+pub(super) const INT: &str = "/run/openvibes-ca/int";
+pub(super) const ROOT_DIR: &str = "/run/openvibes-ca/root";
+pub(crate) const INTERMEDIATE: &str = "/etc/openvibes/pki/intermediate.crt";
 /// The root certificate agents trust.
 pub const ROOT_CERT: &str = "/etc/openvibes/pki/root.crt";
-const INTERMEDIATE_KEY: &str = "/var/lib/openvibes-ingest/intermediate.key";
-const ADMIN_OWNER: Option<(&str, &str)> = Some(("openvibes-admin", "openvibes-admin"));
+pub(crate) const INTERMEDIATE_KEY: &str = "/var/lib/openvibes-ingest/intermediate.key";
+pub(super) const ADMIN_OWNER: Option<(&str, &str)> = Some(("openvibes-admin", "openvibes-admin"));
 
 /// `AB:CD:…`, the SHA-256 of a certificate.
 pub fn fingerprint(pem: &str) -> Result<String, String> {
@@ -78,7 +78,7 @@ pub fn ca_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 
 /// A fresh staging directory, 0700 openvibes-admin (a stale one from a
 /// failed run is removed: it is in tmpfs and only ever ours).
-fn fresh_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+pub(super) fn fresh_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     let path = ctx.path(STAGE);
     if path.exists() {
         fs::remove_dir_all(&path).map_err(|error| format!("{STAGE}: {error}"))?;
@@ -87,7 +87,7 @@ fn fresh_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
 }
 
 /// Creates `abs` (0700, openvibes-admin) for a command run as that user.
-fn stage_dir<R: Runner>(ctx: &Ctx<R>, abs: &str) -> Result<(), String> {
+pub(super) fn stage_dir<R: Runner>(ctx: &Ctx<R>, abs: &str) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     let path = ctx.path(abs);
     fs::create_dir_all(&path).map_err(|error| format!("{abs}: {error}"))?;
@@ -96,7 +96,7 @@ fn stage_dir<R: Runner>(ctx: &Ctx<R>, abs: &str) -> Result<(), String> {
     ctx.chown(abs, ADMIN_OWNER)
 }
 
-fn remove_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+pub(super) fn remove_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     fs::remove_dir_all(ctx.path(STAGE)).map_err(|error| format!("{STAGE}: {error}"))
 }
 
@@ -210,7 +210,7 @@ fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 
 /// Removes the request made before install, if any (R2), and the
 /// operator's copy of it.
-fn remove_request<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+pub(super) fn remove_request<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     super::request::remove_copy(ctx);
     match fs::remove_dir_all(ctx.path(REQUEST_DIR)) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
@@ -365,10 +365,42 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
     )))
 }
 
-/// Removes the previous intermediate once nothing it signed is left; the
-/// log line when it did (Task 4).
-pub(crate) fn drop_previous<R: Runner>(_ctx: &Ctx<R>) -> Result<Option<String>, String> {
-    Ok(None)
+/// Removes the previous intermediate once nothing it signed is left (see
+/// `replace`); the log line when it did.
+pub(crate) fn drop_previous<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {
+    use super::replace::{PREVIOUS, PREVIOUS_UNTIL};
+    let Ok(until) = ctx.read(PREVIOUS_UNTIL) else {
+        return Ok(None);
+    };
+    let until = chrono::DateTime::parse_from_rfc3339(until.trim())
+        .map_err(|error| format!("{PREVIOUS_UNTIL}: {error}"))?;
+    if chrono::Utc::now() < until {
+        return Ok(None);
+    }
+    let first = platform_pki::first_certificate(&ctx.read(INTERMEDIATE)?)
+        .map_err(|error| format!("{INTERMEDIATE}: {error:?}"))?;
+    ctx.put(INTERMEDIATE, first.as_bytes(), None, 0o644)?;
+    // The services read the bundle at start. The date goes last: a failed
+    // restart is tried again tomorrow.
+    let units = [Component::Ingest, Component::Distribution]
+        .into_iter()
+        .filter(|component| ctx.plan.has(*component))
+        .map(|component| format!("openvibes-{}", component.name()));
+    let mut args = vec!["try-restart".to_owned()];
+    args.extend(units);
+    ctx.ok(
+        Systemctl,
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+    )?;
+    for path in [PREVIOUS, PREVIOUS_UNTIL] {
+        match fs::remove_file(ctx.path(path)) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{path}: {error}"));
+            }
+            _ => {}
+        }
+    }
+    Ok(Some("previous intermediate no longer trusted".into()))
 }
 
 pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {

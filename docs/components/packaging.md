@@ -521,33 +521,41 @@ console's `console-chain.pem` is 0644 (the package's `%post` fixes an older
 ## Replacing the intermediate CA
 
 The intermediate lasts 2 years, and every agent certificate it issues expires
-no later than it does. Replace it **at least `client_certificate_days` (30
-by default) plus a margin before it expires**, with an overlap so agents
-never lose authentication:
+no later than it does. Status warns once it has under 60 days left. Replace
+it with **Replace the intermediate** in the TUI (`openvibes-admin helper
+ca-replace`, password-gated like the other Setup verbs):
 
-1. **New intermediate:** `ca intermediate-request` on this host, sign it
-   offline with the root, and `ca import-intermediate`, as in the first
-   install, staged in `/run`.
-2. **Accept both:** make `/etc/openvibes/pki/intermediate.crt`, which
-   `client_ca_file` names, a bundle of the **old and new** certificates
-   (`cat old.crt new.crt`). Ingest accepts client certificates from either.
-3. **Issue from the new one:** install the new key as
-   `/var/lib/openvibes-ingest/intermediate.key` and the new certificate as
-   the `issuing_certificate_file` (a separate file, for example
-   `/etc/openvibes/pki/issuing.crt`, while the bundle is in use). Issue a
-   new server certificate from it, then `systemctl restart
-   openvibes-ingest`.
+1. **New intermediate:** with your own CA, make the request and add the
+   signed certificate and your CA's certificate as at install (`ca-request`,
+   `ca-accept`); your CA's certificate must be this host's root, since
+   agents trust only that one. With OpenVIBES' own CA, pick the root key
+   kept at install (`--root-key PATH`): it must be the key of this host's
+   root, and its copy lives only in `/run/openvibes-ca` (tmpfs) while the
+   new intermediate is signed, removed whatever happens. A refusal changes
+   nothing.
+2. **Trust both:** the new intermediate is recorded (`ca
+   import-intermediate`), its key becomes
+   `/var/lib/openvibes-ingest/intermediate.key`, and
+   `/etc/openvibes/pki/intermediate.crt` (ingest's and distribution's
+   `client_ca_file` and ingest's `issuing_certificate_file`) holds the new
+   certificate first and the old one second. Ingest issues from the first
+   only; both accept client certificates from either. The old one is kept
+   in `/etc/openvibes/pki/previous.crt` and its end in
+   `/etc/openvibes/pki/previous-until` (now + `client_certificate_days` + 1
+   day; both 0644 root, read by the TUI).
+3. **Issue:** the ingest, distribution and console certificates are issued
+   again from the new intermediate and the services restart.
 4. **Agents move over by themselves:** each renews at two thirds of its
-   certificate's lifetime and gets a certificate from the new intermediate.
+   certificate's lifetime and gets a certificate from the new intermediate;
+   until then it keeps connecting with the old one's.
    `openvibes-admin agent list --offline` shows the ones that did not.
-5. **Drop the old one:** once every certificate the old intermediate issued
-   has expired (at most `client_certificate_days` after step 3), remove it
-   from the bundle and restart.
+5. **The old one is dropped by itself:** the daily certificate renewal,
+   once `previous-until` has passed, keeps only the first certificate in
+   `intermediate.crt`, removes both files and restarts ingest and
+   distribution ("previous intermediate no longer trusted" in its log).
+   An agent that was offline the whole time needs a new enrollment token.
 
-If the old intermediate is simply overwritten, every agent certificate it
-issued fails the TLS handshake at once. Agents treat that as a network
-error and retry forever, so each would need a new enrollment token. If
-nothing is done at all, every agent certificate expires on the
+If nothing is done at all, every agent certificate expires on the
 intermediate's last day.
 
 ## Releases

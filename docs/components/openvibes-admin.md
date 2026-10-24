@@ -693,7 +693,9 @@ refused while one works):
   recover. Certificates issued for other names, or expiring within 30 days,
   are issued again (the daily `openvibes-certificates.timer` runs that one
   step as `helper certificates-renew`; it skips while another Setup run holds
-  the lock, and exits non-zero only when the renewal failed).
+  the lock, and exits non-zero only when the renewal failed; it then drops
+  a replaced intermediate whose `previous-until` has passed, see
+  `helper ca-replace` under CA commands).
 - `setup --update [--backup PATH] [--update-repo-dir DIR]`: check
   PostgreSQL first (#292; the Backup and Update-the-database steps both do:
   a removed `postgresql-server` or a stopped service is installed and
@@ -799,7 +801,9 @@ journal line is only `admin-reset admin ok`, never the password;
 prints `done<TAB>opened`: sudo's password check and the journal line are
 the point, before Maintenance › Shell opens the operator's shell),
 `helper ca-request [--copy PATH]` and `helper ca-accept --cert PEM
---root-cert PEM` ("Your own CA" before install, `src/setup/request.rs`).
+--root-cert PEM` ("Your own CA" before install, `src/setup/request.rs`;
+also before `helper ca-replace [--root-key PATH]`, which replaces the
+intermediate: see CA commands).
 `ca-request` makes the intermediate's key and request in
 `/etc/openvibes/pki/request/` (root, 0700, set again on every call;
 `intermediate.key` 0600, `intermediate.csr`), or reuses them so a request
@@ -859,6 +863,31 @@ leaves the offline machine. `import-intermediate` refuses a key that does
 not match the certificate, a certificate the given root did not sign, one
 that is not an intermediate (the root itself, a leaf, or a CA without path
 length 0), or one outside its validity, and records nothing then. Offline commands work without any config file.
+
+**Replacing the intermediate** (`helper ca-replace [--root-key PATH]`,
+`src/setup/replace.rs`; the runbook is packaging.md "Replacing the
+intermediate CA"): under the Setup lock, like `setup-step`. The new
+intermediate comes from the request folder with your own CA (after
+`ca-request` and `ca-accept`; its `root.crt` must equal
+`/etc/openvibes/pki/root.crt`, else "Your CA's certificate is not this
+host's root: agents trust only that one.") or, with OpenVIBES' own CA,
+from the root key at `--root-key` (absolute; checked against the root
+first, else "Not the key of this host's root: pick the root key kept at
+install."), copied 0600 into `/run/openvibes-ca/root` for `ca
+intermediate-request` and `ca sign-intermediate`, and removed with the
+whole stage on every exit. Every check (the key, `check_intermediate`
+against the root, `ca import-intermediate`) passes before anything on disk
+changes. Then `previous.crt` (the old first certificate) and
+`previous-until` (RFC 3339, now + `client_certificate_days` from
+`ingest.toml`, default 30, + 1 day) are written 0644 root, the new key
+replaces `intermediate.key`, `intermediate.crt` becomes new + old, the
+request folder goes, and the certificates step reissues and restarts the
+services. Stdout has one line per finished stage (`Making the new
+intermediate`, `Trusting the old and the new one`, `Issuing the server
+certificates`, `Restarting the services`), then
+`done<TAB>EXPIRES<TAB>PREVIOUS_UNTIL` (both `YYYY-MM-DD`); a failure is one
+line on stderr prefixed `openvibes-admin helper: `, exit 1. The renewal
+timer's `pki::drop_previous` ends it. Tests: `src/setup/replace_tests.rs`.
 
 ## Test
 

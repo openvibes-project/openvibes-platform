@@ -31,6 +31,7 @@ pub(crate) mod ports;
 mod ports_tests;
 pub mod remove;
 mod renew;
+mod replace;
 pub(crate) mod request;
 mod run;
 #[cfg(test)]
@@ -47,6 +48,7 @@ use platform_host::{
 };
 
 pub use renew::renew;
+pub use replace::ca_replace;
 pub use system::{Ctx, lock};
 
 pub(crate) use pki::fingerprint;
