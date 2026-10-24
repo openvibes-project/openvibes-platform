@@ -10,7 +10,7 @@ use super::{
     is_uuid,
     list::assignee_available,
     note_ok, refuse, severity_ok, title_ok, unique_violation,
-    visibility::{case_visible, item_gone, item_visible, read_detail},
+    visibility::{blocking_item, case_visible, item_visible, read_detail},
 };
 use crate::{Client, StoreError, console_read::AgentScope};
 
@@ -77,15 +77,13 @@ pub(super) async fn blocking_items(
     viewer: &Viewer<'_>,
     case_id: &str,
 ) -> Result<(i64, i64), StoreError> {
-    let (gone, visible) = (item_gone(), item_visible("i"));
+    let (blocking, visible) = (blocking_item(), item_visible("i"));
     let rows = tx
         .query(
             &format!(
                 "SELECT s.seen, count(*) FROM (
                     SELECT {visible} AS seen FROM case_items i
-                    WHERE i.case_id = $4::text::uuid AND $3::text IS NOT NULL
-                      AND i.kind IN ('alarm', 'compliance_finding', 'vulnerability')
-                      AND (i.outcome IS NULL OR (i.outcome = 'resolved' AND NOT ({gone}))))
+                    WHERE i.case_id = $4::text::uuid AND $3::text IS NOT NULL AND {blocking})
                  s GROUP BY s.seen"
             ),
             viewer_params!(viewer, &case_id),

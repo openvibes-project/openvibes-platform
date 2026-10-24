@@ -63,8 +63,8 @@ values!(
 );
 
 values!(
-    /// The Updated filter. Today is since midnight UTC, the same for every
-    /// viewer.
+    /// The Updated filter. Today is since midnight UTC of `now`, the same
+    /// day for every viewer whatever their time zone.
     CaseUpdated {
         /// Since midnight UTC.
         Today = "today",
@@ -171,8 +171,11 @@ pub struct CaseListRow {
     pub assignee: Option<UserRef>,
     /// The newest note.
     pub latest_note: Option<CaseNote>,
-    /// Distinct hosts of visible items: (agent id, host name), by name.
+    /// The first five distinct hosts of visible items: (agent id, host
+    /// name), by name.
     pub hosts: Vec<(String, Option<String>)>,
+    /// Distinct hosts of visible items.
+    pub host_count: i64,
     /// Visible items per kind.
     pub kinds: CaseKinds,
     /// Visible items that take an outcome and have one.
@@ -207,8 +210,10 @@ pub struct CaseCounts {
 }
 
 /// "N open · N investigating · N unassigned · N ready to close" (ruling
-/// 10), over the cases matching every filter but the status's that are not
-/// closed. Ready: every visible item that takes an outcome has one.
+/// 10), over the cases matching every filter except status (the status
+/// filter never empties it) that are not closed. Ready uses close's own
+/// rule: no item, visible or hidden, lacks an outcome or is resolved with
+/// its evidence back.
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize)]
 pub struct CaseSummaryLine {
     /// Open.
@@ -348,6 +353,7 @@ fn case_row(row: &Row) -> Option<CaseListRow> {
         takes_outcome: row.get(20),
         with_outcome: row.get(21),
         updated_at: row.get(22),
+        host_count: row.get::<_, Option<i64>>(23).unwrap_or(0),
     })
 }
 

@@ -238,9 +238,9 @@ async fn case_list_counts_stay_inside_the_scope() {
             open: 2,
             investigating: 1,
             unassigned: 0,
-            ready_to_close: 2
+            ready_to_close: 0
         },
-        "1 (its hidden vulnerability aside) and 5 (no visible item) are ready"
+        "1 and 5 hold hidden items without an outcome, as close sees them"
     );
     let people: Vec<_> = page
         .counts

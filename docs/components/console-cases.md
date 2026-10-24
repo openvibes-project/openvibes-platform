@@ -18,10 +18,16 @@ a recorded decision to accept the risk or call it a false positive.
 A case stores links (kind and id), never copies. Each item's scope is that of
 its host, so a user with a limited scope never learns that an item outside it
 exists: it is left out of the case's items, counts and timeline, with no
-placeholder. A user sees a case if they can see at least one of its items, or
-opened it, or it is assigned to them; any other case answers 404, the same as
-one that does not exist. A case with no item is seen by who opened it, who
-it is assigned to, and anyone whose scope is every host (step 5d ruling 4).
+placeholder. Hosts decide (user decision 2026-10-25): a user sees a case if
+one of its host-bound items is on a host in their scope, or they opened it,
+or it is assigned to them; any other case answers 404, the same as one that
+does not exist. A software item has no host, so it never makes a case
+visible: a case with no item, or with only software items, is seen by who
+opened it, who it is assigned to, and anyone whose scope is every host (step
+5d ruling 4). Software items are still shown inside a case the user can
+already see. The rule is one SQL fragment (`visibility::case_visible`, with
+`item_in_scope` deciding and `item_visible` choosing the items shown), used by
+every read, change, lock and count.
 A change uses the scope that `cases.write` and `cases.read` share (by asset
 group), so it never reaches a case or item the caller cannot read.
 

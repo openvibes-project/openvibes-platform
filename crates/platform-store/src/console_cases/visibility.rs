@@ -6,39 +6,60 @@ use tokio_postgres::Row;
 use super::{CaseDetail, CaseEvent, CaseItem, CaseSummary, UserRef, Viewer, is_uuid};
 use crate::{StoreError, console_read::agent_visibility};
 
-/// Items an item row may be seen through: software always, the rest when
-/// their agent is in the caller's scope. Uses `$1` and `$2`.
+/// Items an item row may be seen through: software always (inside a case
+/// the caller sees), the rest when their agent is in the caller's scope.
+/// Uses `$1` and `$2`.
 pub(crate) fn item_visible(item: &str) -> String {
+    format!("({item}.agent_id IS NULL OR {})", item_in_scope(item))
+}
+
+/// A host-bound item whose agent is in the caller's scope: the only kind
+/// that makes a case visible (user decision 2026-10-25, "hosts decide").
+/// Uses `$1` and `$2`.
+pub(crate) fn item_in_scope(item: &str) -> String {
     format!(
-        "({item}.agent_id IS NULL OR EXISTS (SELECT 1 FROM agents a
+        "({item}.agent_id IS NOT NULL AND EXISTS (SELECT 1 FROM agents a
             WHERE a.agent_id = {item}.agent_id AND {}))",
         agent_visibility("a.agent_id", "$1", "$2")
     )
 }
 
 /// A case the caller can see: they opened it, it is assigned to them, or
-/// one of its items is visible to them; a case with no items also when
-/// their scope is every host (spec §6, step 5d ruling 4). Uses `$1`, `$2`
-/// and `$3`.
+/// one of its host-bound items is in their scope; a case with no
+/// host-bound item (none, or only software) also when their scope is
+/// every host (spec §6, step 5d ruling 4, user decision "hosts decide").
+/// Uses `$1`, `$2` and `$3`.
 pub(crate) fn case_visible(case: &str) -> String {
-    let has_visible_item = format!(
+    let in_scope = format!(
         "EXISTS (SELECT 1 FROM case_items vi WHERE vi.case_id = {case}.case_id AND {})",
-        item_visible("vi")
+        item_in_scope("vi")
     );
-    case_visible_with(case, &has_visible_item)
+    case_visible_with(case, &in_scope)
 }
 
-/// [`case_visible`] with `has_visible_item`, an SQL test that the case holds
-/// an item [`item_visible`] passes, worked out by the caller (the Cases
-/// list reads it from items it has already filtered, rather than one
+/// [`case_visible`] with `has_item_in_scope`, an SQL test that the case
+/// holds an item [`item_in_scope`] passes, worked out by the caller (the
+/// Cases list reads it from items it has already filtered, rather than one
 /// lookup per case).
-pub(crate) fn case_visible_with(case: &str, has_visible_item: &str) -> String {
+pub(crate) fn case_visible_with(case: &str, has_item_in_scope: &str) -> String {
     format!(
         "({case}.opened_by_user_id = $3::text::uuid
           OR {case}.assignee_user_id IS NOT DISTINCT FROM $3::text::uuid
-          OR {has_visible_item}
+          OR {has_item_in_scope}
           OR ($1::boolean
-              AND NOT EXISTS (SELECT 1 FROM case_items ei WHERE ei.case_id = {case}.case_id)))"
+              AND NOT EXISTS (SELECT 1 FROM case_items ei
+                              WHERE ei.case_id = {case}.case_id AND ei.agent_id IS NOT NULL)))"
+    )
+}
+
+/// An alarm, finding or vulnerability item (alias `i`) that stands in the
+/// way of closing: without an outcome, or resolved while its evidence is
+/// back. Shared by close and the Cases list's "ready to close".
+pub(crate) fn blocking_item() -> String {
+    format!(
+        "(i.kind IN ('alarm', 'compliance_finding', 'vulnerability')
+          AND (i.outcome IS NULL OR (i.outcome = 'resolved' AND NOT ({}))))",
+        item_gone()
     )
 }
 

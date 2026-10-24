@@ -21,8 +21,9 @@ const BOB: &str = "00000000-0000-4000-8000-0000000000b2";
 /// nobody, one in five closed, updated within the last 60 days. Its ten
 /// items sit on hosts `(n * 7 + k * 13) mod 10000`: 3 alarms, 3
 /// vulnerabilities, 2 findings, two host items (a host and a software item
-/// on every 10th case: software is seen by every reader), half of the
-/// outcome-taking ones with an outcome. Every case has a note, a status
+/// on every 10th case), half of the
+/// outcome-taking ones with an outcome (a quarter of those `resolved`, so
+/// ready to close checks their evidence). Every case has a note, a status
 /// change and a second note. Ten manual groups of about 500 hosts.
 async fn fleet(c: &Client) {
     c.batch_execute(&format!(
@@ -48,14 +49,15 @@ async fn fleet(c: &Client) {
          CROSS JOIN LATERAL (SELECT (ARRAY['open','investigating','open','investigating','closed'])[n % 5 + 1] AS status) s;
          INSERT INTO case_items (item_id, case_id, kind, ref, agent_id, active, outcome, outcome_note,
                                  added_by_user_id, added_at)
-         SELECT gen_random_uuid(), md5('case' || n)::uuid, kd.kind, n || '-' || k,
+         SELECT gen_random_uuid(), md5('case' || n)::uuid, kd.kind, (n * 10 + k)::text,
                 CASE WHEN kd.kind <> 'software' THEN 'agent.' || lpad(((n * 7 + k * 13) % 10000)::text, 36, '0') END,
-                n % 5 <> 4, o.outcome, CASE WHEN o.outcome IS NOT NULL THEN 'why' END, '{BOB}', now()
+                n % 5 <> 4, o.outcome, CASE WHEN o.outcome <> 'resolved' THEN 'why' END, '{BOB}', now()
          FROM generate_series(0, 19999) n CROSS JOIN generate_series(0, 9) k
          CROSS JOIN LATERAL (SELECT (ARRAY['alarm','alarm','alarm','vulnerability','vulnerability','vulnerability',
                                            'compliance_finding','compliance_finding','host',
                                            CASE WHEN n % 10 = 0 THEN 'software' ELSE 'host' END])[k + 1] AS kind) kd
-         CROSS JOIN LATERAL (SELECT CASE WHEN k < 8 AND (n + k) % 2 = 0 THEN 'expected' END AS outcome) o;
+         CROSS JOIN LATERAL (SELECT CASE WHEN k < 8 AND (n + k) % 2 = 0
+                                   THEN CASE WHEN k % 4 = 0 THEN 'resolved' ELSE 'expected' END END AS outcome) o;
          INSERT INTO case_events (case_id, at, actor_user_id, kind, body)
          SELECT md5('case' || n)::uuid, now() - make_interval(mins => n * 4 + e), '{BOB}',
                 CASE WHEN e = 1 THEN 'status' ELSE 'note' END,

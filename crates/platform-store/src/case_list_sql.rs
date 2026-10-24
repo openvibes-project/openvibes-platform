@@ -1,6 +1,6 @@
 //! The SQL of the Cases list's one statement (step 5d rulings 2, 4, 6–10).
 //! `vi` holds the items the viewer sees ([`item_visible`]), `ag` their
-//! counts per case, `cg` each case's groups through those items' hosts;
+//! counts per case (`hosted`: those in scope, which decide visibility), `cg` each case's groups through those items' hosts;
 //! `r` is one row per case the viewer sees (`case_visible`, its item test
 //! read from `ag`), and every
 //! filter, count, the summary and the page read `r`. Only fixed internal
@@ -14,9 +14,12 @@
 
 use crate::{
     case_list::CaseSort,
-    console_cases::{case_visible_with, item_visible},
+    console_cases::{blocking_item, case_visible_with, item_visible},
     console_read::agent_visibility,
 };
+
+/// Hosts a row names; `host_count` has them all.
+const MAX_HOSTS: i64 = 5;
 
 /// The item kinds that take an outcome (ruling 2).
 const TAKES: &str = "('alarm', 'compliance_finding', 'vulnerability')";
@@ -85,9 +88,10 @@ fn except(skip: &[Facet]) -> String {
 /// `vi`, `ag`, `cg` and `r`. A case without a visible item counts zero of
 /// everything and is on no host or group.
 fn base() -> String {
+    let blocking = blocking_item();
     let (item, case) = (
         item_visible("i"),
-        case_visible_with("c", "ag.case_id IS NOT NULL"),
+        case_visible_with("c", "COALESCE(ag.hosted, 0) > 0"),
     );
     let kind = |k: &str| format!("count(*) FILTER (WHERE kind = '{k}')");
     let (alarms, findings, vulns, hosts, software) = (
@@ -105,6 +109,7 @@ ag AS MATERIALIZED (
          {hosts} AS host_items, {software} AS software,
          count(*) FILTER (WHERE kind IN {TAKES}) AS takes,
          count(*) FILTER (WHERE kind IN {TAKES} AND outcome IS NOT NULL) AS done,
+         count(*) FILTER (WHERE agent_id IS NOT NULL) AS hosted,
          COALESCE(bool_or(agent_id = $11::text), false) AS on_host
   FROM vi GROUP BY 1),
 cg AS MATERIALIZED (
@@ -117,6 +122,8 @@ r AS MATERIALIZED (
          COALESCE(ag.vulnerabilities, 0) AS vulnerabilities, COALESCE(ag.host_items, 0) AS host_items,
          COALESCE(ag.software, 0) AS software, COALESCE(ag.takes, 0) AS takes, COALESCE(ag.done, 0) AS done,
          COALESCE(ag.on_host, false) AS on_host, gc.case_id IS NOT NULL AS in_group,
+         (c.status <> 'closed' AND NOT EXISTS (SELECT 1 FROM case_items i
+                                               WHERE i.case_id = c.case_id AND {blocking})) AS ready,
          ($4::text IS NULL OR c.number = $5::bigint OR strpos(lower(c.title), lower($4)) > 0
           OR strpos(lower(ou.display_name), lower($4)) > 0 OR strpos(lower(ou.username), lower($4)) > 0) AS m_q
   FROM cases c JOIN console_users ou ON ou.user_id = c.opened_by_user_id
@@ -167,8 +174,8 @@ fn counts() -> String {
 
 /// CTE `summary` (ruling 10): of the cases matching every filter but the
 /// status's, those not closed: open, investigating, unassigned, and ready
-/// to close (every visible item that takes an outcome has one; none is
-/// ready too).
+/// to close by close's own rule (`r.ready`: no item, visible or hidden,
+/// is a [`blocking_item`]; only that boolean per case is revealed).
 fn summary() -> String {
     let rows = except(&[Facet::Status]);
     format!(
@@ -176,7 +183,7 @@ fn summary() -> String {
   SELECT jsonb_build_object('open', count(*) FILTER (WHERE r.status = 'open'),
            'investigating', count(*) FILTER (WHERE r.status = 'investigating'),
            'unassigned', count(*) FILTER (WHERE r.assignee_user_id IS NULL),
-           'ready_to_close', count(*) FILTER (WHERE r.done = r.takes)) AS summary
+           'ready_to_close', count(*) FILTER (WHERE r.ready)) AS summary
   FROM r WHERE r.status <> 'closed' AND {rows})"
     )
 }
@@ -195,12 +202,12 @@ fn order(sort: CaseSort, descending: bool) -> String {
 
 /// The statement: the meta (total, counts, summary) as JSON on the first
 /// row only, then the page with its opener, assignee, latest note (ruling 9:
-/// the newest `note` event, its first 120 characters) and visible hosts by
-/// name. An empty page still returns one row, with the meta and no case.
+/// the newest `note` event, its first 120 characters) and the first
+/// [`MAX_HOSTS`] visible hosts by name, with their count. An empty page still returns one row, with the meta and no case.
 pub(crate) fn statement(sort: CaseSort, descending: bool) -> String {
     let all = except(&[]);
     let order = order(sort, descending);
-    let item = item_visible("i");
+    let item = crate::console_cases::item_in_scope("i");
     format!(
         "WITH {base}, {counts}, {summary},
 meta AS (
@@ -214,17 +221,20 @@ SELECT CASE WHEN p.ord IS NOT DISTINCT FROM (SELECT min(ord) FROM page) THEN m.m
        p.case_id::text, p.number, p.title, p.status, p.severity,
        p.opened_by_user_id::text, ou.username, ou.display_name,
        p.assignee_user_id::text, au.username, au.display_name, n.body, n.at, h.hosts,
-       p.alarms, p.findings, p.vulnerabilities, p.host_items, p.software, p.takes, p.done, p.updated_at
+       p.alarms, p.findings, p.vulnerabilities, p.host_items, p.software, p.takes, p.done, p.updated_at,
+       h.host_count
 FROM meta m LEFT JOIN page p ON true
 LEFT JOIN console_users ou ON ou.user_id = p.opened_by_user_id
 LEFT JOIN console_users au ON au.user_id = p.assignee_user_id
 LEFT JOIN LATERAL (SELECT left(e.body, 120) AS body, e.at FROM case_events e
                    WHERE e.case_id = p.case_id AND e.kind = 'note' ORDER BY e.event_id DESC LIMIT 1) n ON true
 LEFT JOIN LATERAL (
-  SELECT jsonb_agg(jsonb_build_array(x.agent_id, ha.hostname) ORDER BY ha.hostname, x.agent_id) AS hosts
-  FROM (SELECT DISTINCT i.agent_id FROM case_items i
-        WHERE i.case_id = p.case_id AND i.agent_id IS NOT NULL AND {item}) x
-  LEFT JOIN agents ha ON ha.agent_id = x.agent_id) h ON true
+  SELECT jsonb_agg(jsonb_build_array(y.agent_id, y.hostname) ORDER BY y.n) FILTER (WHERE y.n <= {MAX_HOSTS}) AS hosts,
+         count(*) AS host_count
+  FROM (SELECT x.agent_id, ha.hostname, row_number() OVER (ORDER BY ha.hostname, x.agent_id) AS n
+        FROM (SELECT DISTINCT i.agent_id FROM case_items i
+              WHERE i.case_id = p.case_id AND {item}) x
+        LEFT JOIN agents ha ON ha.agent_id = x.agent_id) y) h ON true
 ORDER BY p.ord",
         base = base(),
         counts = counts(),

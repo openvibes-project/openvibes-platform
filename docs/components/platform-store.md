@@ -1081,9 +1081,11 @@ permission-checked console API, so sharing never exposes data.
   INSERT, UPDATE, DELETE on `case_items`, and SELECT, INSERT on `case_events`.
 
 `console_cases` takes the caller's `AgentScope` and user id on every call and
-applies `agent_visibility` in SQL: a case is visible through a visible item,
-or to its opener or assignee, and a case with no items also to a global
-scope; items, counts and timeline entries about hidden
+applies `agent_visibility` in SQL: a case is visible through a host-bound
+item in scope (`item_in_scope`; a software item never makes a case
+visible, user decision 2026-10-25 "hosts decide"), or to its opener or
+assignee, and a case with no host-bound item (none, or only software) also
+to a global scope; items, counts and timeline entries about hidden
 items are left out. Changes return `Result<_, Refusal>` (`NotFound`, `Stale`,
 `ItemInCase`, `ItemsUnresolved` and so on) and write the audit row and
 timeline entry in the same transaction. `reopen_due` runs the lazy checks that
@@ -1103,10 +1105,10 @@ The module is the folder `src/console_cases/` (see its README). Tested by
 (step 5d rulings 2, 4, 6–10): one statement (`case_list_sql`) returns the
 page, the total, the count for every value of every filter with the
 other filters applied, and the summary line. It reuses the cases'
-visibility: `vi` holds the items `item_visible` passes (software is seen
-by every reader), `r` the cases `case_visible_with` passes, its item
-test read from `vi`'s per-case counts rather than one lookup per case
-(1.39 s of a 1.6 s scoped run before). Everything a row shows or counts
+visibility: `vi` holds the items `item_visible` passes (software shows
+inside a case already seen), `r` the cases `case_visible_with` passes, its
+host-bound-item test read from `vi`'s per-case counts rather than one
+lookup per case (1.39 s of a 1.6 s scoped run before). Everything a row shows or counts
 comes from visible items only.
 
 - Filters (one value each, ANDed): status (active = not closed, the
@@ -1114,26 +1116,31 @@ comes from visible items only.
   unassigned, a user id; a non-UUID matches nothing), contains (a
   visible alarm, vulnerability or finding), host and group (a visible item
   on that host, or on a host in the group), updated (today = since
-  midnight UTC of `now`, the same for every viewer; week = the last 7
+  midnight UTC of `now`, the same day for every viewer whatever their
+  time zone; week = the last 7
   days; quiet = not for 7 days or more). Search: the title, `C-104`,
   `104`, or the opener's display or user name.
 - Counts: every status, severity, contains and updated value; people
   assigned a visible case; groups holding a host the viewer sees, plus the
   chosen one when the scope reaches it. Host and search narrow every count.
-- Summary: of the cases matching every filter but the status's that are
-  not closed, open, investigating, unassigned and ready to close (every
-  visible item that takes an outcome has one; a case with none is ready).
+- Summary: applies every filter except status (so the status filter never
+  empties it), over the cases that are not closed: open, investigating,
+  unassigned and ready to close. Ready uses close's own rule
+  (`blocking_item`, shared with close): no item, visible or hidden, lacks an
+  outcome or is `resolved` with its evidence back; only that boolean per
+  case is revealed.
 - Rows: number, title, status, severity, opener, assignee, the newest
-  `note` event (first 120 characters and its time), distinct visible
-  hosts by name, visible items per kind, `with_outcome`/`takes_outcome`
+  `note` event (first 120 characters and its time), the first five
+  distinct visible hosts by name and `host_count` (all of them), visible items per kind, `with_outcome`/`takes_outcome`
   (alarms, findings and vulnerabilities only), `updated_at`.
 - Sorts: updated (default, newest first), severity, number, opened; ties
   by case id in the same direction. Offset 0–100000, limit 1–100.
 
-Tests: `tests/case_list.rs` (including `case_list_counts_stay_inside_the_scope`);
+Tests: `tests/case_list.rs` (including `case_list_counts_stay_inside_the_scope`),
+`tests/case_list_scope.rs` (hosts decide, ready to close, the host cap);
 `tests/case_list_timing.rs` (ignored; 10,000 hosts, 20,000 cases, 200,000
-items, 60,000 events): default list, 2026-10-25, median 382 ms at full
-reach and 206 ms scoped to two of ten groups, no index needed.
+items, 60,000 events): default list, 2026-10-25, median 458 ms at full
+reach and 272 ms scoped to two of ten groups, no index needed.
 
 ## The rule signer's access (`signer::…`, schema 32, board #107)
 
