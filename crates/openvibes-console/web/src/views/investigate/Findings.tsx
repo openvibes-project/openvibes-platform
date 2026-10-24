@@ -25,6 +25,7 @@ import { SummaryLine } from "../../ui/list/SummaryLine";
 import { useSelection } from "../../ui/selection";
 import { useHostName } from "../lists/HostChip";
 import { isTest } from "../lists/testRules";
+import { CheckPage, NoSuchCheck } from "./check/CheckPage";
 import { Pager } from "./Hosts";
 
 const PAGE_SIZE = 50;
@@ -226,11 +227,5 @@ export function Findings() {
   const { view } = useLocation();
   if (!view.startsWith("/compliance/")) return <CheckListView />;
   const key = checkKeyOf(view);
-  // ponytail: a stand-in until the check's page (screen 28, step 5c task 8) replaces it.
-  return (
-    <Empty icon="findings" title={key?.[1] ?? "No such check"}>
-      {key ? "This check's page is on its way. " : "Check the link. "}
-      <a {...viewLink("/compliance", key ? { q: key[1], rule_set: key[0], state: "all" } : undefined)}>{key ? "Show it in the list" : "Back to the list"}</a>
-    </Empty>
-  );
+  return key ? <CheckPage key={view} set={key[0]} rule={key[1]} /> : <NoSuchCheck />;
 }

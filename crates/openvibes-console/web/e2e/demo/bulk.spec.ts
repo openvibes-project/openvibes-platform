@@ -50,32 +50,31 @@ test("selected alarms go into a new case and the row shows it", async ({ page })
   await expect(page.locator(".view tbody tr").filter({ has: page.locator(`a[href="${href ?? ""}"]`) }).locator(".badge--info")).toContainText(/C-\d+/);
 });
 
-test("a finding's Hosts tab lists every host, never cut off, and selects them for the bulk bar", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
-  const inspector = page.locator(".inspector");
-  const hostsTab = inspector.getByRole("tab", { name: /^Hosts/ });
-  await expect(hostsTab).toHaveAttribute("aria-selected", "true");
-  const total = Number((await hostsTab.innerText()).replace(/\D/g, ""));
-  const hosts = inspector.locator("tbody tr");
-  await expect(hosts).toHaveCount(total);
+test("a check's Hosts table ticks every failing host on screen for the bulk bar", async ({ page }) => {
+  await page.goto("/compliance/baseline/port.ssh.exposed?segment=failing");
+  const card = page.locator(".person-card").filter({ has: page.getByRole("heading", { name: /^Hosts/ }) });
+  const hosts = card.getByRole("table", { name: "Hosts", exact: true }).locator("tbody tr");
+  await expect(hosts.first()).toBeVisible();
+  const shown = await hosts.count();
   const last = hosts.last();
   await last.scrollIntoViewIfNeeded();
   await expect(last).toBeInViewport();
-  await inspector.getByRole("checkbox", { name: "Select the rows on screen" }).check();
-  await expect(inspector.getByRole("region", { name: "Bulk actions" })).toContainText(`${total} selected`);
-  // The sticky bar's menu stays open on an overflowing list (it closed on the
+  await card.getByRole("checkbox", { name: "Select the failing hosts on screen" }).check();
+  const bar = page.getByRole("region", { name: "Bulk actions" });
+  await expect(bar).toContainText(`${shown} selected`);
+  // The sticky bar's menu stays open on an overflowing page (it closed on the
   // scroll its own opening caused).
-  await inspector.getByRole("region", { name: "Bulk actions" }).getByRole("button", { name: /^Set state/ }).click();
+  await bar.getByRole("button", { name: /^Set state/ }).click();
   await expect(page.getByRole("menuitem", { name: /^Mitigate/ })).toBeVisible();
 });
 
-test("on a phone the bulk bar and the detail tabs fit the width", async ({ page }) => {
+test("on a phone the bulk bar and a check's page fit the width", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/alarms");
   await page.locator(".view tbody tr").first().getByRole("checkbox", { name: "Select row" }).check();
   await expect(page.getByRole("region", { name: "Bulk actions" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
-  await expect(page.getByRole("tablist")).toBeVisible();
+  await page.goto("/compliance/baseline/port.ssh.exposed");
+  await expect(page.getByRole("table", { name: "Hosts", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });

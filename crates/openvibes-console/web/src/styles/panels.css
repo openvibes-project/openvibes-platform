@@ -373,12 +373,8 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .bulk-dialog h2 { font-size: 15px; margin: 0; }
 /* In a list view the bar sits at the bottom, over the rows (spec §3). */
 .bulk-bar--bottom { top: auto; bottom: 12px; margin: 8px 12px; box-shadow: var(--shadow-3); }
-/* The detail view's tabs (triage v2): a segmented control under the
-   summary; the tab's table scrolls with the panel, never cut off (#239). */
-.detail-tab__filters { padding: 8px 16px; }
+/* An item's triage history (an alarm's page). */
 .detail-history { padding: 0 8px 16px; }
-/* A fieldset of filter chips: no browser frame. */
-fieldset.detail-tab__filters { border: 0; margin: 0; min-width: 0; }
 fieldset.suppress-form { border: 0; margin: 0; padding: 0; min-width: 0; }
 /* The bulk dialog is a native <dialog> (focus trap, Escape); it keeps the
    palette's look and the same backdrop. */
@@ -402,5 +398,3 @@ dialog.bulk-modal::backdrop { background: var(--backdrop); backdrop-filter: blur
 /* A closed item's decision: the note, who and when, and Reopen. */
 .decision { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-2); background: var(--surface-2); border: 1px solid var(--line); font-size: 13px; }
 .decision__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-/* A tab's content starts clear of the tab strip. */
-.detail-tab > .panel-body:first-child { padding-top: 14px; }

@@ -7,14 +7,15 @@ test.beforeEach(async ({ page }) => {
   await page.mouse.move(900, 500);
 });
 
-test("overview lists what needs attention and opens it beside the page", async ({ page }) => {
-  const first = page.locator('.attention__row[href*="open="]').first();
-  await expect(first).toBeVisible();
-  await first.click();
-  await expect(page.locator(".inspector")).toBeVisible();
-  await expect(page).toHaveURL(/open=/);
+test("overview lists what needs attention and each row opens its page", async ({ page }) => {
+  // Every kind it lists is a page now (hosts, alarms, vulnerabilities, checks): no row opens a panel.
+  await expect(page.locator(".attention__row").first()).toBeVisible();
+  await expect(page.locator('.attention__row[href*="open="]')).toHaveCount(0);
+  // A check (approved screen 28): its row goes to its page; Back returns.
+  await page.locator('.attention__row[href^="/compliance/"]').first().click();
+  await expect(page).toHaveURL(/\/compliance\/[^/?]+\/[^/?]+$/);
+  await expect(page.locator(".detail-page h1")).toBeVisible();
   await page.goBack();
-  await expect(page.locator(".inspector")).toHaveCount(0);
   // An alarm is a whole page (approved screen 30): its row goes there; Back returns.
   await page.locator('.attention__row[href^="/alarms/"]').first().click();
   await expect(page).toHaveURL(/\/alarms\/\d+$/);
@@ -23,28 +24,27 @@ test("overview lists what needs attention and opens it beside the page", async (
   await expect(page.locator(".attention__row").first()).toBeVisible();
 });
 
-test("a finding opens in the inspector, links stack, and Esc goes back", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
-  await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
-  // A host is a whole page (approved screen 17): its link opens it and closes the panels; Back returns.
-  await page.locator(".inspector tbody a").first().click();
+test("a check's page links its hosts, and Back returns to it", async ({ page }) => {
+  await page.goto("/compliance/baseline/port.ssh.exposed");
+  // A host is a whole page (approved screen 17): its link opens it; Back returns.
+  await page.getByRole("table", { name: "Hosts", exact: true }).locator("tbody a").first().click();
   await expect(page).toHaveURL(/\/hosts\/agent-\d{5}$/);
   await expect(page.locator(".detail-page h1")).toBeVisible();
-  await expect(page.locator(".inspector")).toHaveCount(0);
   await page.goBack();
-  await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
+  await expect(page).toHaveURL(/\/compliance\/baseline\/port\.ssh\.exposed$/);
 });
 
-test("a finding's hosts show their assignee and accepted-risk expiry", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
-  const hosts = page.locator(".inspector tbody tr");
-  await expect(hosts.filter({ hasText: "cache-04.prod.example.test" })).toContainText("sam");
+test("a check's hosts show their assignee and accepted-risk expiry", async ({ page }) => {
+  await page.goto("/compliance/baseline/port.ssh.exposed?segment=failing");
+  const hosts = page.getByRole("table", { name: "Hosts", exact: true }).locator("tbody tr");
+  await expect(hosts.filter({ hasText: "cache-04.prod.example.test" })).toContainText("Sam Analyst");
   await expect(hosts.filter({ hasText: "backup-02.lab.example.test" })).toContainText(/until /);
 });
 
-test("a host whose match ended shows when it was fixed", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.smb.exposed");
-  await expect(page.locator(".inspector tbody tr").filter({ hasText: "files-03.office.example.test" })).toContainText(/fixed /);
+test("a host whose match ended passes again in the check's History", async ({ page }) => {
+  // demo/checkSeed.ts: host 1's harden.kernel.aslr finding ended two days ago.
+  await page.goto("/compliance/hardening-linux-l1/harden.kernel.aslr");
+  await expect(page.locator(".person-card").filter({ has: page.getByRole("heading", { name: "History" }) })).toContainText(/\S+ passes again/);
 });
 
 test("the palette finds a host and opens it", async ({ page }) => {
@@ -56,7 +56,7 @@ test("the palette finds a host and opens it", async ({ page }) => {
 });
 
 test("a panel pops out into a window and docks back", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
+  await page.goto("/ports?open=port%3Atcp%3A22");
   await page.getByRole("button", { name: "Open in a window" }).click();
   await expect(page.locator(".window")).toBeVisible();
   await expect(page.locator(".inspector")).toHaveCount(0);
@@ -85,7 +85,7 @@ test("a viewer does not see administration", async ({ page }) => {
   await page.getByRole("menuitemradio", { name: "admin" }).click();
 });
 
-for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/compliance?open=finding%3Abaseline%2Fport.ssh.exposed", "/vulnerabilities/CVE-2026-10523", "/hosts", "/hosts/agent-00005", "/audit"]) {
+for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/compliance/baseline/port.ssh.exposed", "/vulnerabilities/CVE-2026-10523", "/hosts", "/hosts/agent-00005", "/audit"]) {
   test(`no accessibility violations on ${path} (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(path);
@@ -152,20 +152,19 @@ test("a host group is created from the Host groups tab", async ({ page }) => {
   await expect(page.getByText("Hosts where hostname matches web-*")).toBeVisible();
 });
 
-test("a finding mitigated on every open host leaves the default Findings list (board #83)", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.docker_api.exposed");
-  const inspector = page.locator(".inspector");
-  // The summary acts on every open host in one step; a close needs a note.
-  await inspector.locator(".panel-header__actions").getByRole("button", { name: /^Set state/ }).click();
+test("a check mitigated on every open host leaves the default Compliance list (board #83)", async ({ page }) => {
+  await page.goto("/compliance/baseline/port.docker_api.exposed");
+  const actions = page.locator(".person-page__actions");
+  // The header acts on every open failing host in one step; a close needs a note.
+  await actions.getByRole("button", { name: /^Set state/ }).click();
   await page.getByRole("menuitem", { name: /^Mitigate/ }).click();
   const dialog = page.getByRole("dialog", { name: "Mitigate" });
   await dialog.getByRole("textbox", { name: "Why (required)" }).fill("firewalled at the edge");
-  await dialog.getByRole("button", { name: /^Mitigate \d+ open hosts?$/ }).click();
+  await dialog.getByRole("button", { name: /^Mitigate/ }).click();
   await expect(page.locator(".toast")).toContainText("changed");
-  await expect(inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ })).toHaveCount(0);
+  await expect(actions.getByRole("button", { name: /^Set state/ })).toHaveCount(0);
   // Not page.goto: the demo keeps its data in memory and a reload resets it.
-  await page.keyboard.press("Escape");
-  await page.getByRole("link", { name: "Compliance", exact: true }).click();
+  await page.locator(".person-page__crumb").getByRole("link", { name: "Compliance", exact: true }).click();
   await expect(page.locator(".view tbody tr").filter({ hasText: "port.docker_api.exposed" })).toHaveCount(0);
 });
 
@@ -249,7 +248,7 @@ test("Enrollment offers the install package and a CLI install command to copy (i
 // #257: a long context label is cut short; the send button stays in the dock.
 test("a long assistant context keeps the send button in view", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
+  await page.goto("/compliance/baseline/port.ssh.exposed");
   await page.getByRole("button", { name: "Ask about this" }).click();
   const dock = page.locator(".assistant");
   await expect(dock.locator(".context-chip")).toBeVisible();

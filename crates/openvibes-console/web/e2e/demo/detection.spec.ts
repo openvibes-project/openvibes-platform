@@ -1,9 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-test("a finding explains one host and opens its original rule", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.redis.exposed");
-  const panel = page.locator(".inspector");
+test("a check's failing host explains itself and opens its original rule", async ({ page }) => {
+  await page.goto("/compliance/baseline/port.redis.exposed?segment=failing");
+  const panel = page.locator(".person-card").filter({ has: page.getByRole("heading", { name: /^Hosts/ }) });
   await panel.getByRole("button", { name: "View evidence", exact: true }).first().click();
   await expect(panel.getByText("Complete list of 2 values", { exact: false })).toBeVisible();
   await expect(panel.locator(".detection-verdict")).toContainText("Matched 1 of 1 condition");
@@ -28,24 +28,14 @@ test("an alarm opens the historical rule and evidence at a narrow width", async 
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
-test("the host Select filters, picks a host and its evidence opens", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
-  const panel = page.locator(".inspector");
-  await panel.getByRole("tab", { name: /^Evidence/ }).click();
-  await panel.getByRole("combobox", { name: "Host", exact: true }).click();
-  await panel.getByRole("combobox", { name: "Filter Host" }).fill("db-01");
-  await expect(panel.getByRole("option")).toHaveCount(1);
-  expect((await new AxeBuilder({ page }).include(".inspector").analyze()).violations).toEqual([]);
-  await panel.getByRole("option").click();
-  await expect(panel.getByRole("combobox", { name: "Host", exact: true })).toContainText("db-01");
-  await expect(panel.getByText("Why it triggered")).toBeVisible();
-});
-
-test("the host Select opens by keyboard, never clipped at 390 px", async ({ page }) => {
+// The finding panel's host Select is gone with the panel (a check's page,
+// screen 28, opens each host's evidence from its row); the Select's filter,
+// typed-letter and pick behaviour is covered on the dashboard editor
+// (dashboards.spec.ts), its phone placement here on the Compliance list.
+test("a Select opens by keyboard, never clipped at 390 px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
-  await page.locator(".inspector").getByRole("tab", { name: /^Evidence/ }).click();
-  const host = page.locator(".inspector").getByRole("combobox", { name: "Host", exact: true });
+  await page.goto("/compliance");
+  const host = page.getByRole("group", { name: "Filters" }).getByRole("combobox", { name: "Rule set" });
   await host.focus();
   await page.keyboard.press("ArrowDown");
   const popup = page.locator(".sel__popup");
@@ -56,19 +46,4 @@ test("the host Select opens by keyboard, never clipped at 390 px", async ({ page
   await page.keyboard.press("Escape");
   await expect(popup).toHaveCount(0);
   await expect(host).toBeFocused();
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Enter");
-  await expect(popup).toHaveCount(0);
-  await expect(host).not.toContainText("Choose a host");
-});
-
-test("a typed letter opens the Select with the search filled and a row active", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
-  const panel = page.locator(".inspector");
-  await panel.getByRole("tab", { name: /^Evidence/ }).click();
-  await panel.getByRole("combobox", { name: "Host", exact: true }).focus();
-  await page.keyboard.press("d");
-  await expect(panel.getByRole("combobox", { name: "Filter Host" })).toHaveValue("d");
-  await expect(panel.locator(".sel__option--active")).toHaveCount(1);
-  await expect(panel.getByRole("combobox", { name: "Filter Host" })).toBeFocused();
 });

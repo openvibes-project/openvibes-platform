@@ -84,7 +84,8 @@ test("the check is a real link to its page, and the row shows screen 27's cells"
   await expect(link).toHaveAttribute("href", `/compliance/hardening-linux-l1/${ROOT}`);
   await link.click();
   await expect(page).toHaveURL(new RegExp(`/compliance/hardening-linux-l1/${ROOT.replace(/\./g, "\\.")}$`));
-  await page.getByRole("link", { name: "Show it in the list" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("SSH allows root to log in with a password");
+  await page.goBack();
   await expect(rows(page).filter({ hasText: ROOT })).toHaveCount(1);
 });
 

@@ -9,7 +9,7 @@ true, and the exact historical rule definition.
 ## Interfaces
 
 - Finding and alarm detail responses carry their optional stored `Detection`
-  explanation. The finding panel and the alarm's page ("Why it
+  explanation. A check's page (a failing host's View evidence) and the alarm's page ("Why it
   triggered") label incomplete, masked, summarized, and truncated values
   and show the recorded evaluation time.
 - `GET /api/v1/compliance/{id}/rule` and

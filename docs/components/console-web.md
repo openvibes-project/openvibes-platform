@@ -36,10 +36,7 @@ Show everything, without page changes for details:
     as a chip), the summary line ("N checks failing on N hosts · N critical ·
     N unassigned", then a count per rule set), Columns (Severity and Check
     fixed; saved-views page `compliance`), saved views, offset paging and the
-    bulk bar. A row links to `/compliance/{rule_set}/{rule}`; until the
-    check's page lands that path shows a stand-in with a link back to the
-    list, and the finding panel (14-day trend, hosts, evidence, history)
-    still opens from `?open=finding:{set}/{rule}`. The Hosts cell is a colour
+    bulk bar. A row links to the check's page (below). The Hosts cell is a colour
     bar (open, mitigated, accepted, false positive, pass) named for screen
     readers, with the words under it. Bulk sends
     `{rule_set_id, rule_id, open_only: true}` (plus the Host chip's
@@ -88,16 +85,39 @@ Show everything, without page changes for details:
   alone ("not open"), a reopen the ones already open. Rows in an open case show
   its badge (`panels/cases/CaseBadge.tsx`). The Vulnerabilities list's bulk bar is in
   [console-vulnerabilities.md](console-vulnerabilities.md#bulk).
-- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding's
-  layout (an alarm and a vulnerability are pages, [console-alarms.md](console-alarms.md)): the triage actions on the panel header's
-  actions line (a finding: "Set state: N open", acting on its
-  open hosts), a short summary, then the console's underline tabs
-  (`Tabs`). Findings: Hosts (a `DataTable` with a state
-  filter, selection and the bulk bar, never cut off), Evidence, History.
-  The Hosts table shows each
-  host's assignee and, for accepted risk, the date it is accepted until
-  (marked expired once past), and a `fixed <date>` badge (`about` when
-  approximate) for a host whose agent reported the match ended (P13).
+- **A check's page** (`views/investigate/check/`, approved screen 28, roles
+  5c rulings 8-17) at `/compliance/{rule_set_id}/{rule_id}`, over
+  `GET /api/v1/compliance/checks/{set}/{rule}/summary` and `/hosts`. It
+  replaces the finding panel (removed with its `finding` panel kind, the
+  detail template and its Hosts tab; `panels/triage/TriageDetail.tsx` keeps
+  only `HistoryTab`, for the alarm's page). Header: severity, the rule ID,
+  rule set and version, area, "failing on N of M hosts checked" and the
+  assignee; Set state ▾ and Assign ▾ (with Add to case, `compliance.triage`)
+  send `{rule_set_id, rule_id, open_only: true}`, confirm "Changes up to N
+  open failing hosts" (`header.open`) and are hidden when none is open; Ask
+  about this sends `{kind: "finding", id: "set/rule"}`; ⋯ has Export (the
+  hosts as CSV) and Copy link. Tiles: Failing on (to `#hosts`), Passing,
+  First seen (on which host) and the last 14 days as bars
+  (`ui/charts/HourlyBars` with `unit="day"`, "3 → 2 hosts failing").
+  Left: Why it matters (`explain`, else the message), How to fix (`check`,
+  else "No fix text yet" and the rule set), Details (rule and version, rule
+  set and version, applies to, ATT&CK techniques), History (triage, started
+  failing, passes again, rule-set publishes). Right: Hosts (All, Failing,
+  Passing; unknown `?segment=` is All; paged by 50) with each failing row's
+  evidence as `fact = value` (a masked, summarized or truncated value only
+  by its status) and the file, the acceptance date (until, or expired once
+  past, as the panel showed), its open cases, and **View evidence**, which
+  opens the latest observation (`GET /api/v1/compliance/latest/{agent}/{set}/{rule}`)
+  with `DetectionEvidence` ("Why it triggered", Show rule); ticks on failing
+  rows only and a bulk bar on `{agent_id, rule_set_id, rule_id}` pairs with
+  Reopen; per-row Add to case for case-only users. Related: the port (its
+  panel), the service (its panel) and the same area's other failing checks
+  (the list filtered by area). Old links land here with no dead history
+  entry: `nav.open({kind: "finding", id: "set/rule"})` (dashboards, the host
+  page, cases, the audit log, the palette, assistant citations) and
+  `?open=finding:set/rule` through `pagePath` and `settle()`'s replace; a
+  finding from before rule sets (`/rule`) is `~unknown/rule`. A host whose
+  match ended is no longer failing: History says when it passed again.
 
 ## Dashboards
 
@@ -381,7 +401,7 @@ triage on alarms and findings stays as it is.
     disabled until the rules are met (`panels/cases/cases.ts`, `closeProblems`).
     A closed case offers **Reopen**;
   - **Items**: each row shows its kind, title, severity and host and opens
-    that object's own panel or page (alarm: its page `/alarms/<id>`, finding `finding:<rule
+    that object's own panel or page (alarm: its page `/alarms/<id>`, finding: the check's page `/compliance/<rule
     set>/<rule>`, vulnerability `advisory:<advisory>`, host: its page,
     software `package:<manager>/<name>`). Alarms, findings and
     vulnerabilities take an outcome: resolved (offered only while the

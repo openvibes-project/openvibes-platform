@@ -43,10 +43,9 @@ export async function firstSignIn(browser: Browser, username: string, oneTime: s
   return page;
 }
 
-/** The Compliance list's first check in its finding panel: rows open the check's page (roles 5c), the panel opens from its address. */
-export async function openFirstFinding(page: Page) {
+/** The Compliance list's first check, on its page (approved screen 28, roles 5c). */
+export async function openFirstCheck(page: Page) {
   await page.goto("/compliance");
-  const href = await page.locator(".view tbody tr").first().locator('a[href^="/compliance/"]').first().getAttribute("href");
-  const [set = "", rule = ""] = (href ?? "").split("/").slice(2).map(decodeURIComponent);
-  await page.goto(`/compliance?open=${encodeURIComponent(`finding:${set}/${rule}`)}`);
+  await page.locator(".view tbody tr").first().locator('a[href^="/compliance/"]').first().click();
+  await page.getByRole("table", { name: "Hosts", exact: true }).waitFor();
 }

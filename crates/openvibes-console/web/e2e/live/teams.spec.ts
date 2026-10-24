@@ -6,7 +6,7 @@
 import { type Page, expect, test } from "@playwright/test";
 
 import templates from "../../src/api/templates.json" with { type: "json" };
-import { api, firstSignIn, openFirstFinding, signIn } from "./helpers";
+import { api, firstSignIn, openFirstCheck, signIn } from "./helpers";
 
 const ANALYST = templates.find((t) => t.name === "Analyst")?.permissions ?? [];
 const agentOf: Record<string, string> = {
@@ -69,13 +69,13 @@ test("two teams each see and change only their hosts, and a team lead gives only
       const member = await firstSignIn(browser, `${os}-${tag}`, people[os].one_time_password);
       pages.push(member);
       await member.goto("/hosts");
-      const hosts = member.getByRole("table", { name: "Hosts" }).locator("tbody tr");
+      const hosts = member.getByRole("table", { name: "Hosts", exact: true }).locator("tbody tr");
       await expect(hosts).toHaveCount(2);
       for (const host of mine) await expect(hosts.filter({ hasText: host })).toHaveCount(1);
-      await openFirstFinding(member);
-      const inspector = member.locator(".inspector");
-      for (const host of mine) await expect(inspector.getByText(host)).toHaveCount(1);
-      for (const host of theirs) await expect(inspector.getByText(host)).toHaveCount(0);
+      await openFirstCheck(member);
+      const checkHosts = member.getByRole("table", { name: "Hosts", exact: true });
+      for (const host of mine) await expect(checkHosts.getByText(host)).toHaveCount(1);
+      for (const host of theirs) await expect(checkHosts.getByText(host)).toHaveCount(0);
       await member.goto("/alarms");
       const alarms = member.getByRole("table", { name: "Alarms" }).locator("tbody tr");
       await expect(alarms).toHaveCount(2);
