@@ -12,7 +12,7 @@
 //! group, `$9` host, `$10` assignee user id (text), `$11` unassigned,
 //! `$12` now, `$13` limit, `$14` offset.
 
-use crate::{check_area::collector_sql, check_list::CheckSort, vuln_list_sql::HOSTS};
+use crate::{check_area::collectors_ok_sql, check_list::CheckSort, vuln_list_sql::HOSTS_BODY};
 
 /// How far back a finding still counts as failing: the window the
 /// Compliance groups use by default (`compliance/groups.rs`, 24 hours).
@@ -27,15 +27,32 @@ fn failing(now: &str) -> String {
     format!("(f.ended_at IS NULL AND f.last_observed_at >= ({now})::timestamptz - {WINDOW})")
 }
 
+/// A current finding `f` keeps its host from passing: failing, or an open
+/// P13 match (`source = 'changes'`) however old. Open changes rows are
+/// refreshed hourly while the agent's digest matches; a host stuck in a
+/// resync keeps fresh health while its open matches age, and is neither
+/// failing nor passing. Legacy `scan` rows never end, so only their age
+/// counts.
+fn blocks(now: &str) -> String {
+    format!(
+        "(f.ended_at IS NULL AND (f.source = 'changes' OR f.last_observed_at >= ({now})::timestamptz - {WINDOW}))"
+    )
+}
+
 /// User decision 1, per host `a` (an `agents` row) at `now` (an SQL
-/// timestamptz expression): the rule sets it runs, as a jsonb array of
-/// ids (NULL unless it is active with heartbeat health at most 24 hours
-/// old): those its health lists neither `not_assigned` nor refused.
+/// timestamptz expression): the rule sets it runs, as a jsonb object of
+/// set id → accepted version (NULL unless it is active with heartbeat
+/// health at most 24 hours old): those its health lists with a version
+/// (the agent reports none for a set it never accepted), not
+/// `not_assigned` and not refused.
 fn healthy_sets(now: &str) -> String {
     format!(
-        "CASE WHEN a.status = 'active' AND a.health_at >= ({now})::timestamptz - interval '24 hours'
-       THEN jsonb_path_query_array(a.health, '$.rule_sets[*] ? (!(@.state == \"not_assigned\")
-              && (!exists(@.refused) || @.refused == null || @.refused == false)).id', '{{}}', true) END"
+        "CASE WHEN a.status = 'active' AND a.health_at >= ({now})::timestamptz - interval '24 hours' THEN (
+         SELECT COALESCE(jsonb_object_agg(e ->> 'id', e -> 'version'), '{{}}')
+         FROM jsonb_array_elements(CASE WHEN jsonb_typeof(a.health -> 'rule_sets') = 'array'
+                                        THEN a.health -> 'rule_sets' ELSE '[]'::jsonb END) e
+         WHERE jsonb_typeof(e -> 'version') = 'number' AND (e ->> 'state') IS DISTINCT FROM 'not_assigned'
+           AND COALESCE(e ->> 'refused', 'false') = 'false') END"
     )
 }
 
@@ -43,13 +60,23 @@ fn healthy_sets(now: &str) -> String {
 const OK_COLLECTORS: &str = "jsonb_path_query_array(a.health,
        '$.last_scan.collectors.keyvalue() ? (@.value == \"ok\").key', '{}', true)";
 
-/// A host with `sets` and `colls` (from [`healthy_sets`] and
-/// [`OK_COLLECTORS`]) runs the check (`set`, `rule`): it runs the set and
-/// the collector of the rule's prefix (`check_area::check_collector`; not
-/// checked for an unknown prefix) was ok.
-fn runs(sets: &str, colls: &str, set: &str, rule: &str) -> String {
-    let collector = collector_sql(rule);
-    format!("(({sets}) ? {set} AND ({collector} IS NULL OR ({colls}) ? {collector}))")
+/// `a`'s last scan reported its collectors, every one `ok`.
+const ALL_OK: &str = "(jsonb_typeof(a.health -> 'last_scan' -> 'collectors') = 'object'
+       AND NOT jsonb_path_exists(a.health, '$.last_scan.collectors.* ? (@ != \"ok\")', '{}', true))";
+
+/// A host with `sets`, `colls` and `all_ok` (from [`healthy_sets`],
+/// [`OK_COLLECTORS`] and [`ALL_OK`]) runs the check (`set`, `rule`): it runs
+/// the set at a version whose indexed bundle has the rule (any version
+/// when no indexed bundle of the set has it), and the rule's collectors
+/// (`check_area::check_collectors`) ran ok.
+fn runs(sets: &str, colls: &str, all_ok: &str, set: &str, rule: &str) -> String {
+    let collectors = collectors_ok_sql(rule, colls, all_ok);
+    format!(
+        "(({sets}) ? {set} AND {collectors}
+   AND (EXISTS (SELECT 1 FROM console_rule_meta m WHERE m.rule_set_id = {set} AND m.rule_id = {rule}
+                  AND m.rule_set_version = (({sets}) ->> {set})::bigint)
+        OR NOT EXISTS (SELECT 1 FROM console_rule_meta m WHERE m.rule_set_id = {set} AND m.rule_id = {rule})))"
+    )
 }
 
 /// User decision 1, shared with a check's page: the hosts of `hosts` (a
@@ -57,18 +84,21 @@ fn runs(sets: &str, colls: &str, set: &str, rule: &str) -> String {
 /// checks of `checks` (a relation with `rule_set_id`, `rule_id`) at `now`
 /// (an SQL timestamptz expression), as `hosts`' columns plus
 /// `rule_set_id` and `rule_id`. A host passes when it is active, its
-/// heartbeat health is at most 24 hours old and lists the rule set neither
-/// `not_assigned` nor refused, the collector of the rule's prefix was `ok`
-/// in its last scan, and it has no failing finding for the check. The
-/// list counts the same rule per host class instead (`classes`, `pcube`).
+/// heartbeat health is at most 24 hours old and lists the rule set with a
+/// version, neither `not_assigned` nor refused, that version's indexed
+/// bundle has the rule (any version when none has it), the rule's
+/// collectors ran `ok` in its last scan (every reported collector for a
+/// rule ID with no known prefix), and no finding [`blocks`] it. The list
+/// counts the same rule per host class instead (`classes`, `pcube`).
 pub fn passing_hosts_sql(hosts: &str, checks: &str, now: &str) -> String {
     let runs = runs(
         &healthy_sets(now),
         OK_COLLECTORS,
+        ALL_OK,
         "k.rule_set_id",
         "k.rule_id",
     );
-    let failing = failing(now);
+    let blocks = blocks(now);
     // An EXCEPT, not NOT EXISTS: the planner merged that anti-join on the
     // check alone and filtered hosts per pair (minutes at 500,000 findings).
     format!(
@@ -78,23 +108,18 @@ pub fn passing_hosts_sql(hosts: &str, checks: &str, now: &str) -> String {
         WHERE {runs}
         EXCEPT
         SELECT f.agent_id, f.rule_set_id, f.rule_id FROM current_findings f
-        WHERE {failing} AND (f.rule_set_id, f.rule_id) IN (SELECT rule_set_id, rule_id FROM {checks})) x
+        WHERE {blocks} AND (f.rule_set_id, f.rule_id) IN (SELECT rule_set_id, rule_id FROM {checks})) x
   JOIN {hosts} hh ON hh.agent_id = x.agent_id"
     )
 }
 
-/// [`HOSTS`] with each host's [`healthy_sets`] and [`OK_COLLECTORS`] (`sets`,
-/// `colls`), worked out once per agent in its grouped subquery.
+/// The Vulnerabilities list's hosts in reach (`vuln_list_sql::HOSTS`) with
+/// each host's [`healthy_sets`], [`OK_COLLECTORS`] and [`ALL_OK`] (`sets`,
+/// `colls`, `all_ok`), worked out once per agent in its grouped subquery.
 fn hosts_in_reach() -> String {
-    let first = "SELECT a.agent_id, a.os_id, a.os_release,";
-    assert!(HOSTS.starts_with(&format!("({first}")), "HOSTS changed");
-    HOSTS.replacen(
-        first,
-        &format!(
-            "SELECT a.agent_id, {} AS sets, {OK_COLLECTORS} AS colls,",
-            healthy_sets("$12")
-        ),
-        1,
+    format!(
+        "(SELECT a.agent_id, {} AS sets, {OK_COLLECTORS} AS colls, {ALL_OK} AS all_ok,{HOSTS_BODY}",
+        healthy_sets("$12")
     )
 }
 
@@ -165,40 +190,49 @@ const PAIR_STATE: &str =
                 THEN 'open' ELSE t.state END, 'open')";
 
 /// `glist`; `hosts` ([`hosts_in_reach`], with `cls`: hosts alike for
-/// every count share it: group side, mask, sets and collectors);
+/// every count share it: group side, mask, set versions and collectors);
 /// `classes` (one row per `cls`, with its hosts); `titles` (each rule's
-/// newest indexed title); `fall` (current findings in reach per check,
-/// severity and class: failing ones, their first seen, and the last seen
-/// of failing and of all; no triage join, most findings have no triage
-/// row); `ftri` (triaged failing pairs per pair state, assignee and class);
+/// newest indexed title and severity); `fall` (current findings in reach per check,
+/// severity and class: failing ones, their first seen, the last seen of
+/// failing and of all, and those that [`blocks`] passing; no triage join,
+/// most findings have no triage row); `ftri` (triaged failing pairs per pair state, assignee and class);
 /// `fcube` (failing pairs per check, pair state, assignee and class:
 /// `fall` as open and unassigned, `ftri` moved to its state); `checks`
-/// (the rules of each set's newest indexed version and every failing
-/// check); `pcube` (passing hosts per check and class: the class's hosts
-/// when they run the check, less those failing it). Grouping by a class
+/// (the rules of each set's newest indexed version and every check with
+/// an open finding on any host, which names no host; a check without
+/// metadata leaves the list once no host anywhere has an open finding
+/// for it, even when hosts in reach still pass it); `pcube` (passing hosts per check and class: the class's hosts when
+/// they run the check, less those a finding [`blocks`]). Grouping by a class
 /// number, not the mask, lets the 500,000-finding aggregate hash (a
 /// varbit key sorted them on disk), and counts passing hosts exactly per
 /// group.
 fn cubes() -> String {
     let failing = failing("$12");
     let hosts = hosts_in_reach();
-    let runs_f = runs("c.sets", "c.colls", "x.rule_set_id", "x.rule_id");
-    let runs_k = runs("c.sets", "c.colls", "k.rule_set_id", "k.rule_id");
+    let blocks = blocks("$12");
+    let runs = runs(
+        "c.sets",
+        "c.colls",
+        "c.all_ok",
+        "k.rule_set_id",
+        "k.rule_id",
+    );
     format!(
         "glist AS MATERIALIZED (
   SELECT COALESCE(array_agg(DISTINCT asset_group_id::text), '{{}}') AS ids FROM console_host_group_membership),
 hosts AS MATERIALIZED (
-  SELECT h.*, dense_rank() OVER (ORDER BY h.in_group, h.mask::text, h.sets, h.colls) AS cls FROM {hosts} h),
+  SELECT h.*, dense_rank() OVER (ORDER BY h.in_group, h.mask::text, h.sets, h.colls, h.all_ok) AS cls FROM {hosts} h),
 classes AS MATERIALIZED (
-  SELECT DISTINCT ON (cls) cls, in_group, mask, sets, colls, count(*) OVER (PARTITION BY cls) AS n
+  SELECT DISTINCT ON (cls) cls, in_group, mask, sets, colls, all_ok, count(*) OVER (PARTITION BY cls) AS n
   FROM hosts ORDER BY cls),
 titles AS MATERIALIZED (
-  SELECT DISTINCT ON (rule_set_id, rule_id) rule_set_id, rule_id, title FROM console_rule_meta
+  SELECT DISTINCT ON (rule_set_id, rule_id) rule_set_id, rule_id, title, severity FROM console_rule_meta
   ORDER BY rule_set_id, rule_id, rule_set_version DESC),
 fall AS MATERIALIZED (
   SELECT f.rule_set_id, f.rule_id, f.severity, h.cls, count(*) FILTER (WHERE {failing}) AS n,
          min(f.first_observed_at) FILTER (WHERE {failing}) AS since,
-         max(f.last_observed_at) FILTER (WHERE {failing}) AS seen_failing, max(f.last_observed_at) AS seen
+         max(f.last_observed_at) FILTER (WHERE {failing}) AS seen_failing, max(f.last_observed_at) AS seen,
+         count(*) FILTER (WHERE {blocks}) AS blocked
   FROM current_findings f JOIN hosts h ON h.agent_id = f.agent_id
   GROUP BY 1, 2, 3, 4),
 ftri AS MATERIALIZED (
@@ -209,7 +243,7 @@ ftri AS MATERIALIZED (
   WHERE {failing}
   GROUP BY 1, 2, 3, 4, 5),
 fcube AS MATERIALIZED (
-  SELECT x.*, c.in_group, c.mask, COALESCE({runs_f}, false) AS runs
+  SELECT x.*, c.in_group, c.mask
   FROM (SELECT rule_set_id, rule_id, state, assignee, cls, sum(n)::bigint AS n
         FROM (SELECT rule_set_id, rule_id, 'open' AS state, NULL::uuid AS assignee, cls, n FROM fall WHERE n > 0
               UNION ALL
@@ -222,13 +256,13 @@ checks AS MATERIALIZED (
   SELECT m.rule_set_id, m.rule_id FROM console_rule_meta m
   WHERE m.rule_set_version = (SELECT max(x.rule_set_version) FROM console_rule_meta x WHERE x.rule_set_id = m.rule_set_id)
   UNION
-  SELECT rule_set_id, rule_id FROM fall WHERE n > 0),
+  SELECT DISTINCT rule_set_id, rule_id FROM current_findings WHERE ended_at IS NULL),
 pcube AS MATERIALIZED (
   SELECT k.rule_set_id, k.rule_id, c.in_group, c.mask, c.n - COALESCE(x.n, 0) AS n
   FROM checks k CROSS JOIN classes c
-  LEFT JOIN (SELECT rule_set_id, rule_id, cls, sum(n) AS n FROM fcube GROUP BY 1, 2, 3) x
+  LEFT JOIN (SELECT rule_set_id, rule_id, cls, sum(blocked) AS n FROM fall GROUP BY 1, 2, 3) x
     ON x.rule_set_id = k.rule_set_id AND x.rule_id = k.rule_id AND x.cls = c.cls
-  WHERE COALESCE({runs_k}, false) AND c.n > COALESCE(x.n, 0))"
+  WHERE COALESCE({runs}, false) AND c.n > COALESCE(x.n, 0))"
     )
 }
 
@@ -274,13 +308,13 @@ kpers AS MATERIALIZED (
   FROM keyed c WHERE c.assignee IS NOT NULL AND c.state IS NOT NULL GROUP BY 1, 2, 3, 4),
 r AS MATERIALIZED (
   SELECT k.*, COALESCE(o.people, 0) AS people, o.person, COALESCE(m.title, k.rule_id) AS title,
-         console_check_area(k.rule_id) AS area
+         COALESCE(k.sev0, array_position({SEVERITIES}, m.severity)) AS sev, console_check_area(k.rule_id) AS area
   FROM (SELECT c.rule_set_id, c.rule_id, c.grp, {failing} AS failing, {passing} AS passing,
                {open} AS open, {mitigated} AS mitigated, {accepted} AS accepted_risk, {fp} AS false_positive,
                min(c.since) AS since,
                array_position({SEVERITIES}, (array_agg(c.severity ORDER BY c.seen_failing IS NULL,
                    COALESCE(c.seen_failing, c.seen) DESC,
-                   array_position({SEVERITIES}, c.severity)) FILTER (WHERE c.severity IS NOT NULL))[1]) AS sev,
+                   array_position({SEVERITIES}, c.severity)) FILTER (WHERE c.severity IS NOT NULL))[1]) AS sev0,
                bool_or({STATE_OK} AND {ASSIGNEE_OK}) AS m_sa, bool_or({ASSIGNEE_OK}) AS m_a, bool_or({STATE_OK}) AS m_s,
                {flags},
                COALESCE(bool_or(c.assignee IS NULL AND c.state <> 'passing' AND {STATE_OK}), false) AS un,

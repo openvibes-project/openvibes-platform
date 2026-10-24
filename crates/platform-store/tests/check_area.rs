@@ -3,7 +3,7 @@
 
 mod common;
 
-use platform_store::check_area::{check_area, check_collector};
+use platform_store::check_area::{check_area, check_collectors};
 
 /// Every baseline and hardening-linux-l1 rule ID (openvibes-rules 65ff4c0,
 /// `baseline/rules.json` and `hardening/linux-l1/rules.json`) and a few
@@ -57,12 +57,22 @@ harden.ssh.x11_forwarding";
 
 #[test]
 fn collectors_by_prefix() {
-    assert_eq!(check_collector("port.ssh.exposed"), Some("ports"));
+    assert_eq!(check_collectors("port.ssh.exposed"), Some(&["ports"][..]));
     assert_eq!(
-        check_collector("package.xinetd.installed"),
-        Some("packages")
+        check_collectors("package.xinetd.installed"),
+        Some(&["packages"][..])
     );
-    assert_eq!(check_collector("harden.services.avahi"), Some("hardening"));
-    assert_eq!(check_collector("test.openvibes.running"), Some("processes"));
-    assert_eq!(check_collector("site.custom"), None);
+    assert_eq!(
+        check_collectors("harden.services.avahi"),
+        Some(&["hardening"][..])
+    );
+    assert_eq!(
+        check_collectors("harden.net.ip_forward"),
+        Some(&["hardening", "packages"][..])
+    );
+    assert_eq!(
+        check_collectors("test.openvibes.running"),
+        Some(&["processes"][..])
+    );
+    assert_eq!(check_collectors("site.custom"), None);
 }

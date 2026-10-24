@@ -682,21 +682,37 @@ the count for every value of every filter with the other filters applied,
 and the summary line (roles spec §10.3; step 5c rulings 2–7, user
 decision 1). A row's pairs are the hosts in the `compliance.read` scope
 that fail it (a current finding with `ended_at IS NULL` seen within the
-last 24 hours, the Compliance groups' default window) or pass it. A host
-passes a check when it is active, its heartbeat health (`agents.health`)
-is at most 24 hours old and lists the rule set neither `not_assigned` nor
-refused, the collector of the rule's prefix (`check_area::check_collector`:
-`port.*` ports, `package.*` packages, `harden.*` hardening, `test.*`
-processes, from the agent's `scan.rs`; unknown prefixes are not checked)
-reported `ok` in its last scan, and it does not fail the check. A failing
-pair's state is its triage state (no row is open, an accepted risk past
-`now` is open). Checks are the rules of each set's newest indexed version
-in `console_rule_meta` plus every failing check; a row needs a failing or
-passing pair. Title: the rule's newest indexed title, else its ID;
-severity: the newest failing finding's in reach, else the newest ended
-or stale one's, else `None`; area: `check_area` (ruling 3), with the SQL
-twin `console_check_area(text)`; since: the earliest first-seen of the
-failing pairs; assignee: as the Vulnerabilities list (`AssigneeSummary`).
+last 24 hours, the Compliance groups' default window) or pass it.
+
+A host passes a check when:
+- it is active and its heartbeat health (`agents.health`) is at most 24
+  hours old;
+- the health lists the rule set with a version (the agent reports none
+  for a set it never accepted), neither `not_assigned` nor refused;
+- the indexed bundle of that version has the rule (`console_rule_meta`;
+  a rule no indexed bundle of the set has passes at any version);
+- the rule's collectors (`check_area::check_collectors`: `port.*` ports,
+  `package.*` packages, `harden.*` hardening, `harden.net.ip_forward`
+  hardening and packages, `test.*` processes, from the agent's `scan.rs`)
+  ran `ok` in its last scan; a rule ID with no known prefix (a site rule)
+  needs every collector the host reported to be `ok`;
+- no finding blocks it: a failing one, or an unended P13 match
+  (`source = 'changes'`) however old. A host stuck in a resync keeps fresh
+  health while its open matches age; such a pair is neither failing nor
+  passing. Legacy `scan` rows never end, so only their age counts.
+
+A failing pair's state is its triage state (no row is open, an accepted
+risk past `now` is open). Checks are the rules of each set's newest
+indexed version plus every check with an open finding on any host; a row
+needs a failing or passing pair in reach. A check without metadata leaves
+the list once no host anywhere has an open finding for it, even when
+hosts in reach still pass it. Title: the rule's newest indexed title,
+else its ID. Severity: the newest failing finding's in reach, else the
+newest other finding's, else the rule's indexed severity
+(`console_rule_meta.severity`, schema 63), else `None`. Area: `check_area`
+(ruling 3), with the SQL twin `console_check_area(text)`. Since: the
+earliest first-seen of the failing pairs. Assignee: as the
+Vulnerabilities list (`AssigneeSummary`).
 
 Filters (one value each, all combining): state (`open`, `mitigated`,
 `accepted_risk`, `false_positive`, `passing`, `all`; a row matches when
@@ -714,12 +730,22 @@ many with no open pair assigned, and how many per rule set.
 `check_list::passing_hosts_sql(hosts, checks, now)` is the same passing
 rule as an SQL fragment listing (host, check) pairs, for a check's page;
 a test keeps it equal to the list's counts. The list counts passing hosts
-per host class instead (hosts alike in group side, mask, rule sets and ok
-collectors), so the counts per group are exact without listing pairs.
-Schema 63 adds `current_findings (rule_set_id, rule_id) WHERE ended_at IS
-NULL` and `console_check_area`. Tests: `tests/check_list.rs`,
-`tests/check_list_filters.rs`, `tests/check_area.rs`; the 500,000-finding
-timing (`tests/check_list_timing.rs`) is in console-read.md.
+per host class instead (hosts alike in group side, mask, set versions and
+ok collectors), so the counts per group are exact without listing pairs.
+
+Schema 63 adds:
+- `current_findings (rule_set_id, rule_id) WHERE ended_at IS NULL`;
+- the extended statistics `current_findings_check` (ndistinct of rule
+  set, rule and severity), without which the planner sorted the findings
+  on disk;
+- `console_rule_meta.severity`, written by `rule_meta::upsert_from_bundle`.
+  Rows indexed before it have none; `missing_bundles` lists their bundles,
+  so the console's start-up backfill re-indexes them;
+- `console_check_area`.
+
+Tests: `tests/check_list.rs`, `tests/check_list_filters.rs`,
+`tests/check_area.rs`, `tests/rule_meta.rs`; the 500,000-finding timing
+(`tests/check_list_timing.rs`) is in console-read.md.
 
 ## The host page summary (`host_summary::summary`)
 

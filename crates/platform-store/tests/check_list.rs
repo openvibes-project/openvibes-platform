@@ -28,14 +28,26 @@ async fn one_row_per_check() {
         "the newest finding"
     );
     assert_eq!(ssh.area, "Network exposure");
-    assert_eq!((ssh.failing, ssh.passing), (3, 1), "host 9 passes");
+    assert_eq!((ssh.failing, ssh.passing), (3, 2), "hosts 9 and 11 pass");
     let custom = row(&page, CUSTOM);
     assert_eq!(custom.title, "custom.check", "no metadata: the rule ID");
     assert_eq!(custom.area, "Other");
-    assert_eq!((custom.failing, custom.passing), (3, 0));
-    assert_eq!(row(&page, REDIS).severity, None, "no finding in reach");
-    assert_eq!(row(&page, REDIS).passing, 4);
-    assert_eq!(row(&page, ASLR).severity, None, "host 4 is out of reach");
+    assert_eq!(
+        (custom.failing, custom.passing),
+        (3, 1),
+        "host 9 runs site-x: no metadata, any version"
+    );
+    assert_eq!(
+        row(&page, REDIS).severity,
+        Some(CheckSeverity::High),
+        "no finding: the indexed severity"
+    );
+    assert_eq!(row(&page, REDIS).passing, 4, "not host 11, on baseline 1");
+    assert_eq!(
+        row(&page, ASLR).severity,
+        Some(CheckSeverity::Medium),
+        "host 9's legacy row"
+    );
     db.drop().await;
 }
 
@@ -55,7 +67,7 @@ async fn check_list_counts_stay_inside_the_scope() {
     assert_eq!(row(&scoped, ASLR).failing, 0);
     assert_eq!(
         (row(&scoped, ASLR).passing, row(&global, ASLR).passing),
-        (7, 7)
+        (9, 9)
     );
     let groups: Vec<&str> = scoped.counts.groups.iter().map(|g| g.1.as_str()).collect();
     assert_eq!(groups, ["Alpha", "Web"], "Other is never named");
@@ -78,13 +90,18 @@ async fn passing_needs_an_assigned_healthy_rule_set() {
         state: CheckState::Passing,
         ..query()
     };
-    // 5 stale, 6 baseline not assigned, 7 baseline refused, 8 ports failed.
+    // 5 stale, 6 baseline not assigned, 7 baseline refused, 8 ports failed
+    // (so neither its port rules nor site-x's, which need every collector),
+    // 10 baseline never accepted (no version), 11 on baseline 1 (no redis
+    // rule); 9 passes its legacy scan row three days old and site-x.
     for (n, want) in [
         (5, vec![]),
         (6, vec![ROOT, ASLR]),
         (7, vec![ROOT, ASLR]),
         (8, vec![TELNET, ROOT, ASLR]),
-        (9, vec![SSH, TELNET, REDIS, ROOT, ASLR]),
+        (9, vec![SSH, TELNET, REDIS, ROOT, ASLR, CUSTOM]),
+        (10, vec![ROOT, ASLR]),
+        (11, vec![SSH, TELNET, ROOT, ASLR]),
     ] {
         let id: &'static str = Box::leak(h(n).into_boxed_str());
         let page = run(&c, &host(id), &scope).await;
@@ -104,16 +121,24 @@ async fn ended_findings_are_not_failing() {
     let scope = AgentScope::AssetGroups(vec![web]);
     let page = run(&c, &every(), &scope).await;
     let telnet = row(&page, TELNET);
-    assert_eq!((telnet.failing, telnet.passing), (0, 5), "host 1 is fixed");
+    assert_eq!((telnet.failing, telnet.passing), (0, 6), "host 1 is fixed");
     assert_eq!(
         telnet.severity,
         Some(CheckSeverity::Medium),
         "from the ended finding"
     );
     assert_eq!(telnet.since, None);
-    // An open finding older than the window is not failing either.
+    // An open P13 match older than the window is neither failing nor
+    // passing (its host may be stuck in a resync).
     let root = row(&page, ROOT);
-    assert_eq!((root.failing, root.passing), (2, 5));
+    assert_eq!((root.failing, root.passing), (2, 6));
+    let h1 = h(1);
+    let one = CheckQuery {
+        host: Some(&h1),
+        ..every()
+    };
+    let one = run(&c, &one, &scope).await;
+    assert!(!keys(&one).contains(&ROOT.to_owned()), "{:?}", keys(&one));
     let open = run(&c, &query(), &scope).await;
     assert!(!keys(&open).contains(&TELNET.to_owned()));
     db.drop().await;
@@ -157,7 +182,7 @@ async fn passing_hosts_sql_agrees_with_the_list() {
     let (db, c) = common::migrated().await;
     let (web, _) = fixture(&c).await;
     let page = run(&c, &every(), &AgentScope::AssetGroups(vec![web])).await;
-    let reach: Vec<String> = [1, 2, 3, 5, 6, 7, 8, 9].map(h).to_vec();
+    let reach: Vec<String> = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11].map(h).to_vec();
     let sql = format!(
         "SELECT x.rule_set_id || '/' || x.rule_id, count(*) FROM ({}) x GROUP BY 1",
         passing_hosts_sql(
@@ -168,7 +193,7 @@ async fn passing_hosts_sql_agrees_with_the_list() {
         )
     );
     let rows = c.query(&sql, &[&reach, &keys(&page)]).await.unwrap();
-    assert_eq!(rows.len(), 5, "every check with passing hosts");
+    assert_eq!(rows.len(), 6, "every check has passing hosts");
     for r in &rows {
         let key: String = r.get(0);
         assert_eq!(row(&page, &key).passing, r.get::<_, i64>(1), "{key}");

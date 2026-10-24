@@ -163,12 +163,15 @@ running baseline and hardening-linux-l1, 85 indexed rules, 500,000 current
 findings, 50 per host, 1 % triaged, 1 % of hosts with stale health and 1 %
 with baseline not assigned, ten manual groups). The default list (open, by
 severity, 50 rows, every count and the summary) measured a median of
-689 ms over 5 runs (674–730 ms) at full reach (85 rows, 10,000 hosts) and
-347 ms (344–363 ms) scoped to two manual groups. Run it with
+768 ms over 5 runs (744–795 ms) at full reach (85 rows, 10,000 hosts) and
+281 ms (278–282 ms) scoped to two manual groups. Run it with
 `cargo test -p platform-store --test check_list_timing -- --ignored --nocapture`;
 it fails above 2 s. The cost is one serial pass over the findings joined
 to the hosts in reach and hashed per check, severity and host class
-(about 0.35 s), and the summary's per-host probe for an open failing pair
-(about 0.15 s). Grouping by the varbit group mask instead sorted the
-500,000 rows on disk (0.9 s), and listing passing hosts pair by pair
+(about 0.4 s), working out each host's rule sets, versions and collectors
+(about 0.1 s), and the summary's per-host probe for an open failing pair
+(about 0.15 s). Without the extended statistics on (rule set, rule,
+severity) the planner expected 170,000 groups, sorted the 500,000 rows on
+disk and took 1.5 s; grouping by the varbit mask did the same (0.9 s
+before the blocking rule), and listing passing hosts pair by pair
 instead of counting them per class took 4.7 s.

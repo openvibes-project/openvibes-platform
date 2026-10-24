@@ -5,6 +5,7 @@
 mod common;
 
 use common::TestDb;
+use openvibes_core::Severity;
 use platform_store::{
     Client,
     rule_meta::{self, RuleMeta, RuleMetaRow},
@@ -52,6 +53,7 @@ fn row(id: &str) -> RuleMetaRow {
             ("TA0003".into(), None),
             ("TA0004".into(), Some("T1059.004".into())),
         ],
+        severity: Some(Severity::High),
     }
 }
 
@@ -130,6 +132,50 @@ async fn missing_bundles_lists_only_unindexed_bundles() {
         rule_meta::missing_bundles(&client, 1).await.unwrap(),
         [("baseline".to_owned(), 1)]
     );
+    db.drop().await;
+}
+
+/// Schema 63: each rule's severity is indexed; a bundle indexed before it
+/// (a row without one) is listed again, so the start-up backfill re-indexes it.
+#[tokio::test]
+async fn severity_is_indexed_and_old_rows_are_re_indexed() {
+    let (db, client) = setup().await;
+    let old = RuleMetaRow {
+        severity: None,
+        ..row("shell")
+    };
+    for version in 1..=3 {
+        rule_meta::upsert_from_bundle(&client, "baseline", version, &[row("shell")])
+            .await
+            .unwrap();
+    }
+    rule_meta::upsert_from_bundle(
+        &client,
+        "baseline",
+        2,
+        &[
+            row("shell"),
+            RuleMetaRow {
+                rule_id: "old".into(),
+                ..old
+            },
+        ],
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        rule_meta::missing_bundles(&client, 10).await.unwrap(),
+        [("baseline".to_owned(), 2)]
+    );
+    let severity: Option<String> = client
+        .query_one(
+            "SELECT severity FROM console_rule_meta WHERE rule_set_version = 1",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(severity.as_deref(), Some("high"));
     db.drop().await;
 }
 

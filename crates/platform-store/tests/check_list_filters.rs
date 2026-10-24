@@ -22,7 +22,7 @@ async fn every_filter_with_its_counts() {
         (CheckState::Mitigated, 1),
         (CheckState::AcceptedRisk, 1),
         (CheckState::FalsePositive, 1),
-        (CheckState::Passing, 5),
+        (CheckState::Passing, 6),
         (CheckState::All, 6),
     ] {
         let page = run(&c, &CheckQuery { state, ..query() }, &scope).await;
@@ -31,8 +31,12 @@ async fn every_filter_with_its_counts() {
     }
     let all = run(&c, &every(), &scope).await;
     assert_eq!(n(&all.counts.severity, CheckSeverity::Critical), 1);
-    assert_eq!(n(&all.counts.severity, CheckSeverity::High), 1);
-    assert_eq!(n(&all.counts.severity, CheckSeverity::Medium), 1);
+    assert_eq!(
+        n(&all.counts.severity, CheckSeverity::High),
+        2,
+        "redis: indexed"
+    );
+    assert_eq!(n(&all.counts.severity, CheckSeverity::Medium), 2);
     assert_eq!(n(&all.counts.severity, CheckSeverity::Low), 1);
     assert_eq!(
         all.counts.rule_sets,
@@ -54,7 +58,7 @@ async fn every_filter_with_its_counts() {
     )
     .await;
     assert_eq!(keys(&crit), [ROOT]);
-    assert_eq!(n(&crit.counts.severity, CheckSeverity::High), 1);
+    assert_eq!(n(&crit.counts.severity, CheckSeverity::High), 2);
     assert_eq!(
         n(&crit.counts.rule_sets, "hardening-linux-l1".to_owned()),
         1
@@ -63,6 +67,16 @@ async fn every_filter_with_its_counts() {
         n(&crit.counts.rule_sets, "baseline".to_owned()),
         0,
         "listed with 0"
+    );
+    let high = CheckQuery {
+        severity: Some(CheckSeverity::High),
+        ..every()
+    };
+    let high = run(&c, &high, &scope).await;
+    assert_eq!(
+        keys(&high),
+        [SSH, REDIS],
+        "a passing-only check by its rule"
     );
     let set = run(
         &c,
@@ -117,7 +131,7 @@ async fn every_filter_with_its_counts() {
         &scope,
     )
     .await;
-    assert_eq!(alpha_all.total, 6, "host 1 fails or passes every check");
+    assert_eq!(alpha_all.total, 5, "host 1 fails or passes all but root");
     // Assignee: Me (Ann), Bob, unassigned; the state and assignee hold on one pair.
     let me = run(
         &c,
@@ -197,8 +211,8 @@ async fn every_sort_pages_stably() {
     let full = run(&c, &order(CheckSort::Severity, true), &scope).await;
     assert_eq!(
         keys(&full),
-        [ROOT, SSH, TELNET, CUSTOM, ASLR, REDIS],
-        "worst first, then nulls"
+        [ROOT, SSH, REDIS, ASLR, TELNET, CUSTOM],
+        "worst first, then most failing"
     );
     let title = run(&c, &order(CheckSort::Title, false), &scope).await;
     assert_eq!(keys(&title), [ASLR, CUSTOM, REDIS, ROOT, SSH, TELNET]);

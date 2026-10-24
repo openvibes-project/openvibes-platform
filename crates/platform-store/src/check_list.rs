@@ -95,8 +95,8 @@ pub struct CheckListRow {
     pub rule_id: String,
     /// From `console_rule_meta` (the newest indexed version), else the rule ID.
     pub title: String,
-    /// The newest finding's in reach (failing first, then ended); `None`
-    /// when no host in reach has a finding for it.
+    /// The newest finding's in reach (failing first, then the others),
+    /// else the rule's indexed severity; `None` without either.
     pub severity: Option<CheckSeverity>,
     /// The area.
     pub area: String,

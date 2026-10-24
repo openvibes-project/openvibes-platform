@@ -76,6 +76,7 @@ pub async fn index_bundle(client: &Client, set: &str, version: i64) -> Result<bo
                     .flatten()
                     .map(|pair| (pair.tactic.clone(), pair.technique.clone()))
                     .collect(),
+                severity: Some(rule.severity),
             })
         })
         .collect();
@@ -92,7 +93,8 @@ pub struct Backfill {
     pub skipped: usize,
 }
 
-/// Indexes stored bundles not yet indexed, at most `BACKFILL_LIMIT` (10,000).
+/// Indexes stored bundles not yet indexed (or indexed without severities,
+/// before schema 63), at most `BACKFILL_LIMIT` (10,000).
 pub async fn backfill(client: &Client) -> Result<Backfill, StoreError> {
     let mut done = Backfill::default();
     for (set, version) in rule_meta::missing_bundles(client, BACKFILL_LIMIT).await? {

@@ -5,7 +5,9 @@
 
 use serde_json::{Value, json};
 
-use crate::{Client, StoreError};
+use openvibes_core::Severity;
+
+use crate::{Client, StoreError, wire};
 
 /// One rule of a verified bundle, ready to index.
 #[derive(Clone, Debug, PartialEq)]
@@ -24,6 +26,9 @@ pub struct RuleMetaRow {
     pub check: Option<String>,
     /// ATT&CK `(tactic, technique)` pairs.
     pub attack: Vec<(String, Option<String>)>,
+    /// The rule's severity (schema 63; `None` is re-listed by
+    /// [`missing_bundles`]).
+    pub severity: Option<Severity>,
 }
 
 /// An indexed rule.
@@ -56,6 +61,10 @@ pub async fn upsert_from_bundle(
     let messages: Vec<&str> = rows.iter().map(|r| r.message.as_str()).collect();
     let explains: Vec<Option<&str>> = rows.iter().map(|r| r.explain.as_deref()).collect();
     let checks: Vec<Option<&str>> = rows.iter().map(|r| r.check.as_deref()).collect();
+    let severities: Vec<Option<&str>> = rows
+        .iter()
+        .map(|r| r.severity.map(wire::severity))
+        .collect();
     let attacks: Vec<Value> = rows
         .iter()
         .map(|r| {
@@ -68,20 +77,29 @@ pub async fn upsert_from_bundle(
     client
         .execute(
             "INSERT INTO console_rule_meta (rule_set_id, rule_set_version, rule_id, rule_version,
-                 title, message, explain, \"check\", attack, techniques)
+                 title, message, explain, \"check\", attack, techniques, severity)
              SELECT $1, $2, r.id, r.version, r.title, r.message, r.explain, r.chk, r.attack,
                  ARRAY(SELECT DISTINCT e->>'technique' FROM jsonb_array_elements(r.attack) e
-                       WHERE e->>'technique' IS NOT NULL ORDER BY 1)
+                       WHERE e->>'technique' IS NOT NULL ORDER BY 1), r.severity
              FROM unnest($3::text[], $4::bigint[], $5::text[], $6::text[], $7::text[],
-                         $8::text[], $9::jsonb[])
-                  AS r(id, version, title, message, explain, chk, attack)
+                         $8::text[], $9::jsonb[], $10::text[])
+                  AS r(id, version, title, message, explain, chk, attack, severity)
              ON CONFLICT (rule_set_id, rule_set_version, rule_id) DO UPDATE SET
                  rule_version = EXCLUDED.rule_version, title = EXCLUDED.title,
                  message = EXCLUDED.message, explain = EXCLUDED.explain,
                  \"check\" = EXCLUDED.\"check\", attack = EXCLUDED.attack,
-                 techniques = EXCLUDED.techniques",
+                 techniques = EXCLUDED.techniques, severity = EXCLUDED.severity",
             &[
-                &set, &version, &ids, &versions, &titles, &messages, &explains, &checks, &attacks,
+                &set,
+                &version,
+                &ids,
+                &versions,
+                &titles,
+                &messages,
+                &explains,
+                &checks,
+                &attacks,
+                &severities,
             ],
         )
         .await?;
@@ -127,8 +145,10 @@ pub async fn get(
     }))
 }
 
-/// Up to `limit` stored bundles `(set, version)` with no indexed rule, for
-/// the console's start-up backfill. Unverifiable bundles stay listed.
+/// Up to `limit` stored bundles `(set, version)` with no indexed rule, or
+/// with a rule indexed before schema 63 (no severity), for the console's
+/// start-up backfill, which re-indexes them. Unverifiable bundles stay
+/// listed.
 pub async fn missing_bundles(
     client: &Client,
     limit: i64,
@@ -139,6 +159,9 @@ pub async fn missing_bundles(
              WHERE NOT EXISTS (SELECT 1 FROM console_rule_meta m
                                WHERE m.rule_set_id = b.rule_set_id
                                  AND m.rule_set_version = b.version)
+                OR EXISTS (SELECT 1 FROM console_rule_meta m
+                           WHERE m.rule_set_id = b.rule_set_id
+                             AND m.rule_set_version = b.version AND m.severity IS NULL)
              ORDER BY b.rule_set_id, b.version LIMIT $1",
             &[&limit],
         )
