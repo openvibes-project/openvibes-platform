@@ -34,7 +34,7 @@ async fn an_unknown_newest_severity_gives_way_to_the_rules() {
     .await
     .unwrap();
     let list = run(&c, &every(), &AgentScope::Global).await;
-    let listed = row(&list, "baseline/port.redis.exposed").severity.clone();
+    let listed = row(&list, "baseline/port.redis.exposed").severity;
     let Lookup::Found(page) = check_summary(
         &c,
         "baseline",
