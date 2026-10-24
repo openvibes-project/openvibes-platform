@@ -865,6 +865,10 @@ types, unit tests and the demo end-to-end tests on pull requests; on pushes
 to `main` it also builds the demo and publishes it to GitHub Pages
 (https://openvibes-project.github.io/openvibes-platform/). A failing check
 stops the deploy. The main CI workflow runs the live tests.
+Both workflows install the browsers through the local action
+`.github/actions/console-browsers`, which keeps the Ubuntu packages the
+browsers need in the Actions cache: the runner's mirror has been slow enough
+(44 KB/s for 117 MB) to run the console job into its timeout.
 
 ## Host export (#119)
 

@@ -1,0 +1,63 @@
+name: Install console browsers
+description: >-
+  Installs Playwright browsers with the Ubuntu packages they need, keeping
+  the packages in the Actions cache. The runner's Ubuntu mirror can crawl:
+  on 2026-10-23 it served the 117 MB of packages at 44 KB/s and ran three
+  console jobs into their timeout.
+inputs:
+  browsers:
+    description: Playwright browser names, separated by spaces
+    required: true
+  web:
+    description: The console frontend folder, from the repository root
+    default: crates/openvibes-console/web
+runs:
+  using: composite
+  steps:
+    - name: Name the package cache
+      id: key
+      shell: bash
+      env:
+        WEB: ${{ inputs.web }}
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        version=$(node -p "require('./$WEB/node_modules/playwright-core/package.json').version")
+        prefix="browser-debs-$ImageOS-playwright-$version-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "key=$prefix${BROWSERS// /-}" >> "$GITHUB_OUTPUT"
+
+    # Any browser set from the same Playwright version will do: apt fetches
+    # only the packages it lacks.
+    - name: Restore the packages
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/browser-debs
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+
+    - name: Install the browsers and their packages
+      shell: bash
+      env:
+        WEB: ${{ inputs.web }}
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        shopt -s nullglob
+        debs=~/.cache/browser-debs
+        mkdir -p "$debs"
+        cached=("$debs"/*.deb)
+        echo "${#cached[@]} packages restored from the cache"
+        if (( ${#cached[@]} )); then sudo cp -n "${cached[@]}" /var/cache/apt/archives/; fi
+        # shellcheck disable=SC2086 # one word per browser
+        "$WEB/node_modules/.bin/playwright" install --with-deps $BROWSERS
+        installed=(/var/cache/apt/archives/*.deb)
+        if (( ${#installed[@]} )); then cp -n "${installed[@]}" "$debs"/; fi
+
+    # Saved only when nothing matched, so each pull request does not keep
+    # its own copy; runs on main fill the cache that pull requests read.
+    - name: Save the packages
+      if: steps.restore.outputs.cache-matched-key == ''
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/browser-debs
+        key: ${{ steps.key.outputs.key }}
