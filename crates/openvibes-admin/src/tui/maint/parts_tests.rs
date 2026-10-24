@@ -211,7 +211,7 @@ fn unticking_the_agent_asks_starting_on_no() {
     let text = screen(&app);
     assert!(text.contains("Remove the agent?"), "{text}");
     assert_eq!(detail(&app), "its data goes too");
-    assert!(text.contains("[ Yes ]  No"), "{text}");
+    assert!(text.contains(" Yes  [ No ]"), "{text}");
     app.key(Key::Enter);
     assert!(app.question.is_none() && app.asking.is_none());
     assert!(calls(&app).is_empty());

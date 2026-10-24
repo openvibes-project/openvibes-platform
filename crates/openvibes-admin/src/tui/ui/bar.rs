@@ -191,9 +191,11 @@ impl Bar {
                     (theme.dim(), theme.highlight())
                 };
                 let right = vec![
-                    Span::styled(if *yes { " Yes " } else { "[ Yes ]" }, y),
+                    // The brackets mark the chosen button, so the choice
+                    // reads without colour too.
+                    Span::styled(if *yes { "[ Yes ]" } else { " Yes " }, y),
                     Span::raw(" "),
-                    Span::styled(if *yes { "[ No ]" } else { " No " }, n),
+                    Span::styled(if *yes { " No " } else { "[ No ]" }, n),
                     Span::raw("  "),
                     Span::styled(format!(" {} ", theme.left_right()), theme.key()),
                     Span::raw(" "),
@@ -332,7 +334,7 @@ mod tests {
             t[1]
         );
         assert!(
-            t[1].contains(" Yes  [ No ]   ⭠⭢   Enter  Confirm"),
+            t[1].contains("[ Yes ]  No    ⭠⭢   Enter  Confirm"),
             "{:?}",
             t[1]
         );
