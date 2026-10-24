@@ -798,7 +798,7 @@ pub async fn finding_summary(client: &Client) -> Result<FindingSummary, StoreErr
 
 /// Counts open failing pairs and their severities for agents visible in
 /// SQL, by the Compliance list's one definition
-/// ([`crate::check_list_sql::open_failing`]: not ended, seen within its
+/// (`check_list_sql::open_failing`: not ended, seen within its
 /// window, and open, an expired acceptance included), so the menu count
 /// and the dashboard's Breakdown tile agree with the list they open.
 pub async fn finding_summary_in_scope(
