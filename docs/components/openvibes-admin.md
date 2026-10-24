@@ -866,7 +866,10 @@ length 0), or one outside its validity, and records nothing then. Offline comman
 
 **Replacing the intermediate** (`helper ca-replace [--root-key PATH]`,
 `src/setup/replace.rs`; the runbook is packaging.md "Replacing the
-intermediate CA"): under the Setup lock, like `setup-step`. The new
+intermediate CA"): under the Setup lock, like `setup-step`. While
+`previous.crt` exists it refuses first, changing nothing ("The previous
+intermediate is still trusted until YYYY-MM-DD, while agents move over:
+replace it again after that."). The new
 intermediate comes from the request folder with your own CA (after
 `ca-request` and `ca-accept`; its `root.crt` must equal
 `/etc/openvibes/pki/root.crt`, else "Your CA's certificate is not this
@@ -882,7 +885,11 @@ changes. Then `previous.crt` (the old first certificate) and
 `ingest.toml`, default 30, + 1 day) are written 0644 root, the new key
 replaces `intermediate.key`, `intermediate.crt` becomes new + old, the
 request folder goes, and the certificates step reissues and restarts the
-services. Stdout has one line per finished stage (`Making the new
+services. If that reissue fails, the error starts "The intermediate was
+replaced, but the server certificates were not reissued: run Repair in
+Maintenance (they stay valid until then)."; the certificates check is
+Todo while a server certificate is not signed by the bundle's first
+certificate, so Repair reissues them. Stdout has one line per finished stage (`Making the new
 intermediate`, `Trusting the old and the new one`, `Issuing the server
 certificates`, `Restarting the services`), then
 `done<TAB>EXPIRES<TAB>PREVIOUS_UNTIL` (both `YYYY-MM-DD`); a failure is one

@@ -7,7 +7,7 @@
 
 use std::{fs, os::unix::fs::DirBuilderExt, path::Path, process::ExitCode};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use platform_host::{
     CONFIG_DIR,
     runner::{Program::Admin, Runner},
@@ -165,7 +165,12 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
     pki::remove_stage(ctx)?;
     println!("Trusting the old and the new one");
 
-    certificates_apply(ctx)?;
+    certificates_apply(ctx).map_err(|error| {
+        format!(
+            "The intermediate was replaced, but the server certificates were not reissued: run \
+             Repair in Maintenance (they stay valid until then). {error}"
+        )
+    })?;
     println!("Issuing the server certificates");
     println!("Restarting the services");
     Ok(format!(
@@ -178,6 +183,18 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
 /// Replaces the intermediate; the stage (with any root key copy) is gone
 /// whatever happened.
 pub fn replace<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String> {
+    // Another replacement now would drop the intermediate most agents
+    // still hold certificates from.
+    if ctx.exists(PREVIOUS) {
+        let until = ctx.read(PREVIOUS_UNTIL)?;
+        let until = DateTime::parse_from_rfc3339(until.trim())
+            .map_err(|error| format!("{PREVIOUS_UNTIL}: {error}"))?;
+        return Err(format!(
+            "The previous intermediate is still trusted until {}, while agents move over: \
+             replace it again after that.",
+            until.format("%Y-%m-%d")
+        ));
+    }
     let result = run(ctx, root_key);
     let stage = ctx.path(STAGE);
     if stage.exists()

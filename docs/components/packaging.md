@@ -532,7 +532,8 @@ ca-replace`, password-gated like the other Setup verbs):
    kept at install (`--root-key PATH`): it must be the key of this host's
    root, and its copy lives only in `/run/openvibes-ca` (tmpfs) while the
    new intermediate is signed, removed whatever happens. A refusal changes
-   nothing.
+   nothing. While an earlier replacement's old intermediate is still
+   trusted, Replace refuses and says until when.
 2. **Trust both:** the new intermediate is recorded (`ca
    import-intermediate`), its key becomes
    `/var/lib/openvibes-ingest/intermediate.key`, and
@@ -544,7 +545,9 @@ ca-replace`, password-gated like the other Setup verbs):
    `/etc/openvibes/pki/previous-until` (now + `client_certificate_days` + 1
    day; both 0644 root, read by the TUI).
 3. **Issue:** the ingest, distribution and console certificates are issued
-   again from the new intermediate and the services restart.
+   again from the new intermediate and the services restart. If that
+   fails, run Repair in Maintenance: the old certificates stay valid until
+   then, and Repair reissues every one not signed by the new intermediate.
 4. **Agents move over by themselves:** each renews at two thirds of its
    certificate's lifetime and gets a certificate from the new intermediate;
    until then it keeps connecting with the old one's.

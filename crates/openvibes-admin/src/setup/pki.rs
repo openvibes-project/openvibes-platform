@@ -350,6 +350,20 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
             return Ok(StepState::Todo);
         }
     }
+    // After a replaced intermediate, until they are issued again from it.
+    if let Some(issuer) = ctx
+        .read(INTERMEDIATE)
+        .ok()
+        .and_then(|bundle| platform_pki::first_certificate(&bundle).ok())
+    {
+        let signed = |tls: &Tls| {
+            ctx.read(tls.cert)
+                .is_ok_and(|pem| platform_pki::verify_signed_by(&pem, &issuer).is_ok())
+        };
+        if !chosen(ctx).all(signed) {
+            return Ok(StepState::Todo);
+        }
+    }
     // The console's chain is public (browsers get it anyway) and the TUI,
     // which is not root, reads its expiry: an older install wrote it 0640.
     let world_readable = |path: &str| {

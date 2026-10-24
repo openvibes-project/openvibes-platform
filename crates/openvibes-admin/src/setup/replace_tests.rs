@@ -7,7 +7,10 @@ use chrono::{Duration, Utc};
 use platform_pki::KeyAndCert;
 
 use super::{PREVIOUS, PREVIOUS_UNTIL, replace};
+use platform_host::{Step, StepState};
+
 use crate::setup::{
+    check,
     fake::{Fake, plan},
     pki::{INTERMEDIATE, INTERMEDIATE_KEY, ROOT_CERT, drop_previous},
     pki_tests::{ADMIN, issuing, with},
@@ -28,7 +31,11 @@ fn intermediate(root: &KeyAndCert) -> (String, String) {
 
 /// An installed host: its root and the intermediate in use.
 fn installed(test: &str) -> (Fake, KeyAndCert, (String, String)) {
-    let fake = issuing(test);
+    host(issuing(test))
+}
+
+/// `fake` with a root and the intermediate in use.
+fn host(fake: Fake) -> (Fake, KeyAndCert, (String, String)) {
     let root = platform_pki::generate_root(Utc::now()).unwrap();
     let old = intermediate(&root);
     fake.file(ROOT_CERT, &root.cert_pem);
@@ -257,4 +264,80 @@ fn drop_previous_without_the_files_does_nothing() {
     let (fake, _, old) = installed("replace-drop-none");
     assert_eq!(drop_previous(&fake.ctx(&plan(&[Ingest]))), Ok(None));
     assert_eq!(fake.text(INTERMEDIATE), old.0);
+}
+
+#[test]
+fn replace_refuses_while_the_previous_is_trusted() {
+    let (fake, _, old) = installed("replace-pending");
+    fake.file(PREVIOUS, &old.0);
+    fake.file(PREVIOUS_UNTIL, "2026-11-25T10:00:00Z\n");
+    assert_eq!(
+        replace(&fake.ctx(&plan(&[Ingest])), Some(KEY)).unwrap_err(),
+        "The previous intermediate is still trusted until 2026-11-25, while agents move over: \
+         replace it again after that."
+    );
+    assert_eq!(fake.text(INTERMEDIATE), old.0);
+    assert_eq!(fake.text(INTERMEDIATE_KEY), old.1);
+    assert_eq!(fake.text(PREVIOUS_UNTIL), "2026-11-25T10:00:00Z\n");
+    assert!(fake.calls.borrow().is_empty());
+}
+
+const NAMES: [&str; 4] = ["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"];
+
+/// Ingest's certificate for NAMES, issued by `issuer` (certificate, key).
+fn ingest_certificate(fake: &Fake, issuer: &(String, String)) {
+    let names: Vec<String> = NAMES.iter().map(|n| (*n).to_owned()).collect();
+    let issued = platform_pki::Issuer::load(&issuer.0, &issuer.1)
+        .unwrap()
+        .issue_server(&names, Utc::now())
+        .unwrap();
+    fake.file("/etc/openvibes/tls/ingest.crt", &issued.cert_pem);
+    fake.file("/etc/openvibes/tls/ingest.key", &issued.key_pem);
+    fake.file(
+        "/etc/openvibes/tls/setup-names",
+        &format!("{}\n", NAMES.join("\n")),
+    );
+}
+
+#[test]
+fn a_failed_reissue_after_the_swap_says_run_repair() {
+    let fake = Fake::new("replace-reissue-fails");
+    fake.fail(&with(&ADMIN, &["ca", "issue-server"]), "boom");
+    let (fake, root, old) = host(fake);
+    ingest_certificate(&fake, &old);
+    let new = intermediate(&root);
+    careful_request(&fake, &new.0, &new.1, &root.cert_pem);
+    let mut plan = plan(&[Ingest]);
+    plan.ca = CaMode::Careful;
+    assert!(matches!(
+        check(&fake.ctx(&plan), Step::Certificates),
+        StepState::Done(_)
+    ));
+    let error = replace(&fake.ctx(&plan), None).unwrap_err();
+    assert!(
+        error.starts_with(
+            "The intermediate was replaced, but the server certificates were not reissued: \
+             run Repair in Maintenance (they stay valid until then)."
+        ),
+        "{error}"
+    );
+    assert!(error.contains("boom"), "{error}");
+    assert_eq!(certificates(&fake.text(INTERMEDIATE)).len(), 2);
+    // Repair reissues: ingest's certificate is not from the new intermediate.
+    assert_eq!(check(&fake.ctx(&plan), Step::Certificates), StepState::Todo);
+}
+
+#[test]
+fn server_certificates_from_the_new_intermediate_are_done() {
+    let (fake, root, old) = installed("replace-check-signed");
+    let new = intermediate(&root);
+    fake.file(INTERMEDIATE, &format!("{}{}", new.0, old.0));
+    ingest_certificate(&fake, &old);
+    let plan = plan(&[Ingest]);
+    assert_eq!(check(&fake.ctx(&plan), Step::Certificates), StepState::Todo);
+    ingest_certificate(&fake, &new);
+    assert!(matches!(
+        check(&fake.ctx(&plan), Step::Certificates),
+        StepState::Done(_)
+    ));
 }
