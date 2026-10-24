@@ -248,10 +248,14 @@ A repaired step reads "repaired: ..." in the list, and the journal line of each 
 **Health**: one line per check, problems first, each marked `problem` or
 `ok`, with the problem count in the title: each installed unit (a problem
 unless active and, where it has an endpoint, ready); the ingest and
-distribution server certificates and the intermediate (a problem under 14
-days to expiry, which the daily renewal timer should have prevented: see
-`journalctl -u openvibes-certificates` or Status › certificate renewal › Log;
-also a problem when a
+distribution server certificates, the console's chain (read by its leaf) and
+the intermediate. A server certificate is a problem only under 14 days to
+expiry, when the daily renewal timer has failed ("automatic renewal is
+failing, see Status › certificate renewal › Logs"); a certificate with more
+days left is no problem, however near its renewal. The intermediate (judged
+by its first certificate) is a problem under 60 days: "replace the
+intermediate in Maintenance › Certificates". An expired one always is. Also a
+problem when a
 server certificate misses an address this host now has, e.g. after DHCP:
 "run Repair in Maintenance"; a CA certificate, which names no host, is not
 checked for addresses);

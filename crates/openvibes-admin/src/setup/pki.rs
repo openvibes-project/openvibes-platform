@@ -316,6 +316,9 @@ pub(crate) const RENEW_AT_DAYS: i64 = 30;
 /// Health reports a server certificate this close to expiry: the timer
 /// should have renewed it by now.
 pub(crate) const RENEW_DAYS: i64 = 14;
+/// Health asks for a new intermediate this close to its expiry: nothing
+/// renews it by itself.
+pub(crate) const INTERMEDIATE_WARN_DAYS: i64 = 60;
 
 /// The plan's names, then the host's own addresses (board #71: the console
 /// opens by IP over a VPN). An address that changes (DHCP) makes the check

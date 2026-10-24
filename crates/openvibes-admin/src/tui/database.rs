@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use platform_host::{Database, DiskUse, Host, HostError, ServiceStatus};
 
 use super::app::App;
-use crate::setup::pki::RENEW_DAYS;
+use crate::setup::pki::{INTERMEDIATE_WARN_DAYS, RENEW_DAYS};
 
 /// Disk use from which Health reports a problem.
 const DISK_FULL_PERCENT: u8 = 90;
@@ -17,6 +17,8 @@ const DISK_FULL_PERCENT: u8 = 90;
 const RULES_WARN_DAYS: i64 = 90;
 /// Days before a site rule set expires that Health warns (board #107).
 const SITE_WARN_DAYS: i64 = 30;
+/// The intermediate's file; it is judged by its first certificate.
+const INTERMEDIATE: &str = "/etc/openvibes/pki/intermediate.crt";
 
 /// The health checks' state.
 #[derive(Default)]
@@ -103,9 +105,28 @@ pub fn checks(
                 if expires <= now {
                     check(true, format!("{path}: expired on {date}"))
                 } else {
+                    // Server certificates renew themselves: only a failing
+                    // renewal is a problem. Nothing renews the intermediate.
+                    let (limit, advice) = if *path == INTERMEDIATE {
+                        (
+                            INTERMEDIATE_WARN_DAYS,
+                            "replace the intermediate in Maintenance › Certificates",
+                        )
+                    } else {
+                        (
+                            RENEW_DAYS,
+                            "automatic renewal is failing, see Status › certificate renewal › Logs",
+                        )
+                    };
+                    let problem = days < limit;
+                    let advice = if problem {
+                        format!(": {advice}")
+                    } else {
+                        String::new()
+                    };
                     check(
-                        days < RENEW_DAYS,
-                        format!("{path}: expires in {days} days ({date})"),
+                        problem,
+                        format!("{path}: expires in {days} days ({date}){advice}"),
                     )
                 }
             }

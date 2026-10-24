@@ -315,3 +315,56 @@ fn tune_line_shows_the_summary_or_the_hint() {
     assert!(hint.text.contains("turn the assistant on in Setup again"));
     assert!(tune_check(false, None).is_none());
 }
+
+/// The problem texts for one certificate read `days` before its end.
+fn certificate_line(path: &'static str, days_left: i64) -> String {
+    let pem = platform_pki::generate_root(Utc::now()).unwrap().cert_pem;
+    let now = platform_pki::not_after(&pem).unwrap() - Duration::days(days_left);
+    let lines = checks(
+        &[] as &[ServiceStatus],
+        &[(path, Ok(pem))],
+        Ok(String::new()),
+        Ok(Vec::new()),
+        Ok(String::new()),
+        now,
+    );
+    let line = lines.iter().find(|c| c.text.starts_with(path)).unwrap();
+    format!("{}|{}", line.problem, line.text)
+}
+
+#[test]
+fn a_server_certificate_close_to_expiry_says_renewal_is_failing() {
+    let line = certificate_line("/etc/openvibes/tls/ingest.crt", 10);
+    let (problem, text) = line.split_once('|').unwrap();
+    assert_eq!(problem, "true");
+    assert!(
+        text.starts_with("/etc/openvibes/tls/ingest.crt: expires in 10 days (")
+            && text.ends_with(
+                "): automatic renewal is failing, see Status › certificate renewal › Logs"
+            ),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_server_certificate_with_20_days_is_fine() {
+    assert!(certificate_line("/etc/openvibes/tls/ingest.crt", 20).starts_with("false|"));
+}
+
+#[test]
+fn an_intermediate_within_60_days_says_replace_it() {
+    let line = certificate_line("/etc/openvibes/pki/intermediate.crt", 50);
+    let (problem, text) = line.split_once('|').unwrap();
+    assert_eq!(problem, "true");
+    assert!(
+        text.starts_with("/etc/openvibes/pki/intermediate.crt: expires in 50 days (")
+            && text.ends_with("): replace the intermediate in Maintenance › Certificates"),
+        "{text}"
+    );
+    assert!(certificate_line("/etc/openvibes/pki/intermediate.crt", 70).starts_with("false|"));
+}
+
+#[test]
+fn the_console_chain_is_checked() {
+    assert!(platform_host::CERTIFICATES.contains(&"/etc/openvibes/tls/console-chain.pem"));
+}
