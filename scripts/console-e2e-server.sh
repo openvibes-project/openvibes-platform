@@ -5,7 +5,8 @@
 # alex (admin) and sam (analyst), imported findings for six hosts, and
 # eight enrolled hosts with their facts (OS, version, hostname, address), one
 # finding and one alarm each (page-1's alarm with two siblings), and three
-# hosts per browser with vulnerabilities for vulnerabilities.spec.ts. Needs
+# hosts per browser with vulnerabilities for vulnerabilities.spec.ts, and four
+# per browser with compliance findings and health for compliance.spec.ts. Needs
 # OPENVIBES_TEST_DATABASE_URL (scripts/test-db.sh locally; the CI job sets it)
 # and the binaries built by scripts/test-console-e2e.sh.
 set -euo pipefail
@@ -151,6 +152,32 @@ SELECT 'agent.00000000-0000-4000-8000-0000000001' || n || h, 'DSA-E2E-' || p || 
     jsonb_build_array(jsonb_build_object('name', pkg, 'installed', installed, 'fixed', fixed)), now(), NULL, now(), false
 FROM e2e_browsers, (VALUES (1, 1, 'openssl', '3.0.1', '3.0.2'), (2, 1, 'openssl', '3.0.1', '3.0.2'), (3, 1, 'openssl', '3.0.1', '3.0.2'),
                            (3, 2, 'secretpkg', '1', '2'), (1, 3, 'bash', '5.0', '5.1')) AS x (h, a, pkg, installed, fixed);
+SQL
+# The Compliance journey (compliance.spec.ts), one rule set e2e-comp-P per
+# browser P = n, on hosts with heartbeat health that runs the set (version 1,
+# the hardening collector ok) and no other finding: comp-P-1 fails
+# harden.ssh.e2e_a (high) and harden.ssh.e2e_b (medium), comp-P-2 fails
+# e2e_a, comp-P-3 fails nothing (it passes both), and other-comp-P-1, outside
+# the lead's reach, fails e2e_a and harden.ssh.e2e_c (low). No rule metadata:
+# a check shows its rule ID.
+psql -qX -v ON_ERROR_STOP=1 "${database_url}" >/dev/null <<'SQL'
+CREATE TEMP TABLE e2e_browsers AS
+SELECT * FROM (VALUES (1, 'chromium'), (2, 'firefox'), (3, 'webkit')) AS b (n, p);
+INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version, hostname, os_id, os_version, last_address,
+                    health, health_at)
+SELECT 'agent.00000000-0000-4000-8000-0000000002' || n || h, 'active', now() - interval '1 day', now(), '0.4.2',
+    name || '.example.test', 'debian', '12', ('203.0.113.' || (n * 10 + h))::inet,
+    jsonb_build_object('rule_sets', jsonb_build_array(jsonb_build_object('id', 'e2e-comp-' || p, 'version', 1)),
+                       'last_scan', '{"collectors": {"hardening": "ok"}}'::jsonb), now()
+FROM e2e_browsers, LATERAL (VALUES (1, 'comp-' || p || '-1'), (2, 'comp-' || p || '-2'), (3, 'comp-' || p || '-3'),
+                                   (4, 'other-comp-' || p || '-1')) AS x (h, name);
+INSERT INTO current_findings
+SELECT (jsonb_populate_record(c, jsonb_build_object('agent_id', 'agent.00000000-0000-4000-8000-0000000002' || n || h,
+    'origin', 'online', 'authenticated', true, 'rule_set_id', 'e2e-comp-' || p, 'rule_id', 'harden.ssh.e2e_' || r,
+    'severity', x.sev, 'message', 'Seeded for the Compliance journey'))).*
+FROM current_findings c, e2e_browsers,
+     (VALUES (1, 'a', 'high'), (1, 'b', 'medium'), (2, 'a', 'high'), (4, 'a', 'high'), (4, 'c', 'low')) AS x (h, r, sev)
+WHERE c.agent_id = 'import.00000000000000000000000000000000' AND c.rule_id = 'time.unsynced';
 SQL
 
 exec "${bin}/openvibes-console" --config "${work}/console.toml"

@@ -43,9 +43,10 @@ export async function firstSignIn(browser: Browser, username: string, oneTime: s
   return page;
 }
 
-/** The Compliance list's first check, on its page (approved screen 28, roles 5c). */
+/** The Compliance list's first check, on its page (approved screen 28, roles 5c),
+ * leaving out compliance.spec.ts's per-browser sets (e2e-comp-P), which it triages. */
 export async function openFirstCheck(page: Page) {
   await page.goto("/compliance");
-  await page.locator(".view tbody tr").first().locator('a[href^="/compliance/"]').first().click();
+  await page.locator('.view tbody tr a[href^="/compliance/"]:not([href^="/compliance/e2e-comp-"])').first().click();
   await page.getByRole("table", { name: "Hosts", exact: true }).waitFor();
 }
