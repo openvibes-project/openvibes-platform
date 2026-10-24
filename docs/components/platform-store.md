@@ -770,7 +770,9 @@ has a failing or passing host in reach; otherwise `Lookup::Missing`.
 seen by the day's end and ended (else, when not failing, last seen) at or
 after its start. History merges `console_finding_triage_history` of hosts
 in reach, episode starts and ends, and `rule_bundles` publishes, newest
-first, 50 at most. `check_summary::evidence` turns `detection -> 'inputs'`
+first, 50 at most. The header's `open` counts the failing pairs whose state is open (an
+expired acceptance counts); a Hosts row carries the pair's
+`accepted_until`, kept after it expires. `check_summary::evidence` turns `detection -> 'inputs'`
 into evidence, a value only for a complete input. `check_related`
 parses the port or unit from the rule's indexed expression
 (`member_of`, `rule_port`, `rule_unit`; schema 63 adds

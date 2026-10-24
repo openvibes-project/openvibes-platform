@@ -33,9 +33,11 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
   const { data, route, reaches, facts } = ctx;
   const title = (message: string) => (message.split(/[;.]\s/)[0] ?? message).replace(/\.$/, "");
 
-  /** The check's pairs in reach, as the list counts them, or null when the list has no row for it. */
-  const pairsOf = (set: string, rule: string) => {
-    if (!set || !rule || [...set].length > 256 || [...rule].length > 256 || hasControl(set) || hasControl(rule)) return null;
+  /** The check's pairs in reach, as the list counts them, or null when the list has no row for it. `asked` is the set as
+   * the route has it: `~unknown` is the empty stored set (findings from before rule sets, page.rs `stored`). */
+  const pairsOf = (asked: string, rule: string) => {
+    const set = asked === "~unknown" ? "" : asked;
+    if (!asked || !rule || [...set].length > 256 || [...rule].length > 256 || hasControl(set) || hasControl(rule)) return null;
     const shipped = data.rules.find((r) => r.ruleSetId === set && r.ruleId === rule);
     const extra = EXTRA_META.find((m) => m.ruleSetId === set && m.ruleId === rule);
     const now = Date.parse(ctx.iso());
@@ -46,7 +48,7 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
     const failing = found.filter(failingOf).map((f) => {
       const t = data.triage.get(ctx.triageKey(f.agent_id, set, rule));
       const expired = t?.state === "accepted_risk" && t.accepted_until != null && Date.parse(t.accepted_until) <= now;
-      return { f, state: t === undefined || expired ? "open" : t.state, assignee: t?.assigned_to ?? null, version: t?.version ?? 0 };
+      return { f, state: t === undefined || expired ? "open" : t.state, assignee: t?.assigned_to ?? null, version: t?.version ?? 0, until: t?.accepted_until ?? null };
     });
     const failingAgents = new Set(failing.map((p) => p.f.agent_id));
     const passing = data.agents.filter((a) => a.status === "active" && !failingAgents.has(a.id) && reaches("compliance.read", a.id)
@@ -55,8 +57,9 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
     return { now, shipped, extra, found, failing, passing, failingOf };
   };
 
-  route("GET", "/api/v1/compliance/checks/{set}/{rule}/summary", "compliance.read", ({ set = "", rule = "" }) => {
-    const p = pairsOf(set, rule);
+  route("GET", "/api/v1/compliance/checks/{set}/{rule}/summary", "compliance.read", ({ set: asked = "", rule = "" }) => {
+    const set = asked === "~unknown" ? "" : asked;
+    const p = pairsOf(asked, rule);
     if (!p) return notFound();
     const { now, shipped, extra, found, failing, passing } = p;
     const newest = [...found].sort((a, b) => Number(p.failingOf(b)) - Number(p.failingOf(a))
@@ -97,10 +100,10 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
     const triage = failing.some((x) => reaches("compliance.triage", x.f.agent_id));
     const body: CheckSummaryPage = {
       header: {
-        title: extra?.title ?? (shipped ? title(shipped.message) : rule), severity, rule_set_id: set,
+        title: extra?.title ?? (shipped ? title(shipped.message) : rule), severity, rule_set_id: asked,
         rule_set_version: shipped || extra ? (set0?.current_version ?? null) : null, rule_id: rule,
         rule_version: newest?.rule_version ?? (shipped || extra ? 1 : null), area,
-        failing: failing.length, checked: failing.length + passing.length,
+        failing: failing.length, open: failing.filter((x) => x.state === "open").length, checked: failing.length + passing.length,
         assignee: people.length === 0 ? { kind: "none" } : people.length === 1 && one ? { kind: "one", id: one.user_id, name: one.display_name } : { kind: "several", count: people.length },
       },
       tiles: {
@@ -142,11 +145,11 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
     const person = (u: string | null) => { const x = data.access.users.find((v) => v.username === u); return x ? { id: x.user_id, name: x.display_name } : null; };
     const rows = [
       ...p.failing.map((x) => ({
-        ...host(x.f.agent_id), state: x.state, assignee: person(x.assignee), checked_at: x.f.last_observed_at, triage_version: x.version,
+        ...host(x.f.agent_id), state: x.state, assignee: person(x.assignee), checked_at: x.f.last_observed_at, triage_version: x.version, accepted_until: x.until,
         evidence: (x.f.detection?.inputs ?? []).map((i) => (i.status === "complete" || i.status == null
           ? { fact: i.key, value: String(i.value) } : { fact: i.key, status: i.status })),
       })),
-      ...p.passing.map((a) => ({ ...host(a.id), state: "passing", assignee: null, checked_at: a.last_seen_at ?? null, triage_version: null, evidence: [] })),
+      ...p.passing.map((a) => ({ ...host(a.id), state: "passing", assignee: null, checked_at: a.last_seen_at ?? null, triage_version: null, accepted_until: null, evidence: [] })),
     ].sort((a, b) => (a.hostname === null ? 1 : b.hostname === null ? -1 : byteOrder(a.hostname, b.hostname)) || byteOrder(a.agent_id, b.agent_id));
     const segments = { all: rows.length, failing: p.failing.length, passing: p.passing.length };
     const chosen = rows.filter((r) => segment === "all" || (segment === "passing") === (r.state === "passing"));

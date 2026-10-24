@@ -3510,6 +3510,12 @@ export interface components {
              * @description Failing hosts in reach.
              */
             failing: number;
+            /**
+             * Format: int64
+             * @description Of those, open (an expired acceptance counts): what the header's Set
+             *     state and Assign change.
+             */
+            open: number;
             /** @description Rule id. */
             rule_id: string;
             /** @description Rule set id. */
@@ -3534,6 +3540,11 @@ export interface components {
         };
         /** @description One row of the Hosts table. */
         CheckHostRowView: {
+            /**
+             * @description RFC 3339: until when the risk is accepted, kept after it expires
+             *     (the state then reads open); null for a passing host.
+             */
+            accepted_until?: string | null;
             /** @description Last address. */
             address?: string | null;
             /** @description Agent id. */
@@ -9620,7 +9631,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description Rule set id */
+                /** @description Rule set id, or ~unknown for findings from before rule sets */
                 rule_set_id: string;
                 /** @description Rule id */
                 rule_id: string;
@@ -9690,7 +9701,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Rule set id */
+                /** @description Rule set id, or ~unknown for findings from before rule sets */
                 rule_set_id: string;
                 /** @description Rule id */
                 rule_id: string;

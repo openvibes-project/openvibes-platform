@@ -43,6 +43,9 @@ pub struct CheckHeader {
     pub area: &'static str,
     /// Failing hosts.
     pub failing: i64,
+    /// Of those, open (an expired acceptance counts): what the header's
+    /// Set state and Assign change.
+    pub open: i64,
     /// Failing and passing hosts.
     pub checked: i64,
     /// Who the open failing pairs are assigned to.
@@ -165,6 +168,7 @@ struct RawFinding {
 #[derive(Deserialize)]
 struct Raw {
     failing: i64,
+    open: i64,
     passing: i64,
     agents: Vec<String>,
     failing_agents: Vec<String>,
@@ -243,6 +247,7 @@ pub async fn check_summary(
                 .or(raw.finding.as_ref().map(|f| f.rule_version)),
             area: check_area(rule_id),
             failing: raw.failing,
+            open: raw.open,
             checked: raw.failing + raw.passing,
             assignee: match people.len() {
                 0 => AssigneeSummary::None,
@@ -329,6 +334,9 @@ pub struct CheckHostRow {
     /// The triage version for If-Match (0 without a triage row); none
     /// for a passing host.
     pub triage_version: Option<i64>,
+    /// Until when the risk is accepted (kept after it expires, when the
+    /// state reads open again); none for a passing host.
+    pub accepted_until: Option<DateTime<Utc>>,
 }
 
 /// Pairs per segment.
@@ -437,6 +445,7 @@ pub async fn check_hosts(
                     assignee: assignee.map(|id| (id, r.get(8))),
                     checked_at: r.get(9),
                     triage_version: r.get(10),
+                    accepted_until: r.get(11),
                 })
             })
             .collect(),

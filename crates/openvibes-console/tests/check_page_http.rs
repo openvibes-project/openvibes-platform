@@ -107,6 +107,7 @@ async fn the_summary_has_every_card() {
         (h["failing"].clone(), h["checked"].clone()),
         (json!(2), json!(3))
     );
+    assert_eq!(h["open"], 2, "both failing pairs are open");
     assert_eq!(h["assignee"]["kind"], "one");
     assert_eq!(body["tiles"]["passing"], 1);
     assert_eq!(body["tiles"]["days"].as_array().unwrap().len(), 14);
@@ -366,4 +367,40 @@ async fn triage_needs_a_failing_host_in_reach() {
     let (_, body) = fx.call(&viewer, "GET", &summary(ROOT), None).await;
     assert_eq!(body["can"]["triage"], true);
     fx.db.drop().await;
+}
+
+/// A finding from before rule sets (stored with an empty rule set, as an
+/// agent export imports it) is the check `~unknown/{rule}`, as every other
+/// compliance route spells it; the page echoes `~unknown`.
+#[tokio::test]
+async fn a_legacy_check_is_reached_as_unknown() {
+    let Some(fx) = Fx::new().await else { return };
+    seed(&fx).await;
+    let client = fx.db.pool.get().await.unwrap();
+    client
+        .batch_execute(&format!(
+            "INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id, rule_version, severity,
+                    first_observed_at, last_observed_at, last_observed_day, scan_id, confidence, message, evidence,
+                    received_at, origin, authenticated, source) VALUES
+                ('{W1}', '', 'ssh.root_login', 'f', 1, 'high', now(), now(), current_date, 's', 90, 'legacy', '{{}}',
+                 now(), 'import', true, 'changes')"
+        ))
+        .await
+        .unwrap();
+    let (status, body) = fx
+        .call(&fx.admin, "GET", &summary("~unknown/ssh.root_login"), None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["header"]["rule_set_id"], "~unknown");
+    assert_eq!(body["header"]["failing"], 1);
+    let (status, body) = fx
+        .call(
+            &fx.admin,
+            "GET",
+            &hosts("~unknown/ssh.root_login", ""),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["rows"][0]["agent_id"], W1);
 }

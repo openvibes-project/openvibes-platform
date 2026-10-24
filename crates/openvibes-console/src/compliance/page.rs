@@ -41,6 +41,16 @@ fn not_found() -> Response {
 
 /// A rule set or rule id the page can have: 1 to 256 characters, no
 /// control character.
+/// The rule set as stored: `~unknown` (findings from before rule sets, as
+/// every compliance route spells them) is empty.
+fn stored(rule_set_id: &str) -> &str {
+    if rule_set_id == "~unknown" {
+        ""
+    } else {
+        rule_set_id
+    }
+}
+
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.chars().count() <= 256 && !id.chars().any(char::is_control)
 }
@@ -59,7 +69,7 @@ async fn holds(
 
 /// A check's page above the Hosts table.
 #[utoipa::path(get, path = "/api/v1/compliance/checks/{rule_set_id}/{rule_id}/summary", tag = "compliance",
-    params(("rule_set_id" = String, Path, description = "Rule set id"), ("rule_id" = String, Path, description = "Rule id")),
+    params(("rule_set_id" = String, Path, description = "Rule set id, or ~unknown for findings from before rule sets"), ("rule_id" = String, Path, description = "Rule id")),
     responses((status = 200, description = "The page in the caller's reach", body = CheckSummaryView),
         (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Needs compliance.read", body = ProblemDetails, content_type = "application/problem+json"),
@@ -83,7 +93,7 @@ pub(crate) async fn check_summary_page(
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    let s = match check_summary(&client, &rule_set_id, &rule_id, &read, Utc::now()).await {
+    let s = match check_summary(&client, stored(&rule_set_id), &rule_id, &read, Utc::now()).await {
         Ok(Lookup::Found(s)) => s,
         Ok(Lookup::Missing | Lookup::SeveralCves(_)) => return not_found(),
         Err(_) => return unavailable_auth(),
@@ -115,7 +125,10 @@ pub(crate) async fn check_summary_page(
         ask: state.assistant.is_some() && assistant,
         export,
     };
-    axum::Json(CheckSummaryView::new(s, can)).into_response()
+    let mut view = CheckSummaryView::new(s, can);
+    // The page's links and actions use the id as requested (`~unknown`, not empty).
+    view.header.rule_set_id = rule_set_id;
+    axum::Json(view).into_response()
 }
 
 /// Segment and page. Empty values count as absent.
@@ -134,7 +147,7 @@ pub(crate) struct CheckHostsParams {
 /// A check's Hosts table: its failing hosts in any triage state and its
 /// passing hosts.
 #[utoipa::path(get, path = "/api/v1/compliance/checks/{rule_set_id}/{rule_id}/hosts", tag = "compliance",
-    params(("rule_set_id" = String, Path, description = "Rule set id"), ("rule_id" = String, Path, description = "Rule id"), CheckHostsParams),
+    params(("rule_set_id" = String, Path, description = "Rule set id, or ~unknown for findings from before rule sets"), ("rule_id" = String, Path, description = "Rule id"), CheckHostsParams),
     responses((status = 200, description = "A page of the hosts in the caller's reach", body = CheckHostsPageView),
         (status = 400, description = "invalid_query, naming the parameter", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"),
@@ -179,7 +192,7 @@ pub(crate) async fn check_hosts_page(
     };
     match check_hosts(
         &client,
-        &rule_set_id,
+        stored(&rule_set_id),
         &rule_id,
         &read,
         segment,

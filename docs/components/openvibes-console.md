@@ -1002,12 +1002,16 @@ hidden). Tests: `tests/check_list_http.rs`; demo:
 `compliance.read`; session or bearer; roles 5c rulings 8, 11-17) answer a
 check's page over the store's `check_summary` and `check_hosts`, under the
 Compliance list's rules, so the page agrees with its row. Ids are 1 to 256
-characters with no control character. A check the list would not show in
+characters with no control character. A finding from before rule sets (stored with an
+empty set, as an agent export imports it) is reached as `~unknown`, which
+the header echoes. A check the list would not show in
 reach (no failing or passing host in reach, or a rule without metadata
 known only from hosts out of reach) answers 404 `check_not_found`.
 
 The summary carries `header` (`title`, `severity`, `rule_set_version` and
-`rule_version` of the newest indexed version, `area`, `failing`, `checked`
+`rule_version` of the newest indexed version, `area`, `failing`, `open`
+(of those, open: an expired acceptance counts; what the header's Set state
+and Assign change), `checked`
 = failing + passing, `assignee`), `tiles` (`failing`, `passing`,
 `first_seen` `{at, hostname}`, `days`: 14 failing-host counts per UTC day,
 oldest first, a finding counted from first seen to its end, or to its last
@@ -1045,7 +1049,8 @@ collector reads several sources (`kernel.modules.disabled` names
 `/etc/ssh/sshd_config` and the files it includes); empty for a passing host
 or a finding without detection), `assignee`, `checked_at` (last
 observation, or the passing host's heartbeat health) and `triage_version`
-(0 without triage; null when passing). `segments` count `all`, `failing`
+(0 without triage; null when passing), `accepted_until` (an acceptance's
+end, kept after it expires; null when passing). `segments` count `all`, `failing`
 and `passing`. Tests: `tests/check_page_http.rs`; demo:
 `web/src/demo/routes/checkSummary.ts`.
 

@@ -90,6 +90,11 @@ async fn check_summary_stays_inside_the_scope() {
     assert_eq!((s.tiles.failing, s.tiles.passing), (3, 2));
     assert_eq!((g.tiles.failing, g.tiles.passing), (4, 2));
     assert_eq!((s.header.failing, s.header.checked), (3, 5));
+    assert_eq!(
+        (s.header.open, g.header.open),
+        (2, 3),
+        "open failing pairs: hosts 1 and 3 (expired acceptance), and 4 out of reach"
+    );
     assert_eq!(s.header.title, "SSH port exposed");
     assert_eq!(s.header.rule_set_version, Some(2));
     assert_eq!(s.header.rule_version, Some(2));
@@ -317,6 +322,11 @@ async fn segments_add_up_and_page() {
         "expired acceptance is open"
     );
     assert!(all.rows[2].evidence.is_empty(), "no detection");
+    assert!(
+        all.rows[3].accepted_until.is_some_and(|t| t < Utc::now()),
+        "host 3's expired acceptance keeps its date, as the old panel showed"
+    );
+    assert!(all.rows[0].accepted_until.is_none() && all.rows[1].accepted_until.is_none());
     let passing = &all.rows[1];
     assert!(
         passing.evidence.is_empty()

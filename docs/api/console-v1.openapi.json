@@ -3670,7 +3670,7 @@
           {
             "name": "rule_set_id",
             "in": "path",
-            "description": "Rule set id",
+            "description": "Rule set id, or ~unknown for findings from before rule sets",
             "required": true,
             "schema": {
               "type": "string"
@@ -3788,7 +3788,7 @@
           {
             "name": "rule_set_id",
             "in": "path",
-            "description": "Rule set id",
+            "description": "Rule set id, or ~unknown for findings from before rule sets",
             "required": true,
             "schema": {
               "type": "string"
@@ -13961,6 +13961,7 @@
           "rule_id",
           "area",
           "failing",
+          "open",
           "checked",
           "assignee"
         ],
@@ -13982,6 +13983,11 @@
             "type": "integer",
             "format": "int64",
             "description": "Failing hosts in reach."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those, open (an expired acceptance counts): what the header's Set\nstate and Assign change."
           },
           "rule_id": {
             "type": "string",
@@ -14029,6 +14035,13 @@
           "evidence"
         ],
         "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339: until when the risk is accepted, kept after it expires\n(the state then reads open); null for a passing host."
+          },
           "address": {
             "type": [
               "string",

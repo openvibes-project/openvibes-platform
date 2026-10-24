@@ -35,6 +35,9 @@ pub(crate) struct CheckHeaderView {
     pub area: String,
     /// Failing hosts in reach.
     pub failing: i64,
+    /// Of those, open (an expired acceptance counts): what the header's Set
+    /// state and Assign change.
+    pub open: i64,
     /// Failing and passing hosts in reach.
     pub checked: i64,
     /// Who the open failing hosts are assigned to.
@@ -221,6 +224,9 @@ pub(crate) struct CheckHostRowView {
     /// The triage version for If-Match (0 without triage); null for a
     /// passing host.
     pub triage_version: Option<i64>,
+    /// RFC 3339: until when the risk is accepted, kept after it expires
+    /// (the state then reads open); null for a passing host.
+    pub accepted_until: Option<String>,
 }
 
 /// Hosts per segment.
@@ -258,6 +264,7 @@ impl CheckSummaryView {
                 rule_version: h.rule_version,
                 area: h.area.into(),
                 failing: h.failing,
+                open: h.open,
                 checked: h.checked,
                 assignee: h.assignee.into(),
             },
@@ -342,6 +349,7 @@ impl From<CheckHostsPage> for CheckHostsPageView {
                         .map(|(id, name)| AlarmListPersonView { id, name }),
                     checked_at: r.checked_at.map(rfc3339),
                     triage_version: r.triage_version,
+                    accepted_until: r.accepted_until.map(rfc3339),
                 })
                 .collect(),
             total: p.total,

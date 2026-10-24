@@ -41,7 +41,7 @@ k AS MATERIALIZED (
 f AS MATERIALIZED (
   SELECT f.agent_id, f.severity, f.rule_version, f.message, f.first_observed_at, f.last_observed_at,
          f.ended_at, f.detection, {failing} AS failing, {state} AS state, t.assigned_to,
-         COALESCE(t.version, 0)::bigint AS triage_version
+         t.accepted_until, COALESCE(t.version, 0)::bigint AS triage_version
   FROM current_findings f JOIN k ON k.rule_set_id = f.rule_set_id AND k.rule_id = f.rule_id
   JOIN hosts h ON h.agent_id = f.agent_id
   LEFT JOIN console_finding_triage t
@@ -82,6 +82,7 @@ ev AS (
   FROM rule_bundles b WHERE b.rule_set_id = $3::text AND EXISTS (SELECT 1 FROM k))
 SELECT jsonb_build_object(
   'failing', (SELECT count(*) FROM f WHERE failing),
+  'open', (SELECT count(*) FROM f WHERE failing AND state = 'open'),
   'passing', (SELECT count(*) FROM pass),
   'failing_agents', (SELECT COALESCE(jsonb_agg(agent_id), '[]') FROM f WHERE failing),
   'agents', (SELECT COALESCE(jsonb_agg(agent_id), '[]') FROM (SELECT agent_id FROM f WHERE failing
@@ -127,9 +128,9 @@ pub(crate) fn hosts() -> String {
         "WITH {base},
 pairs AS (
   SELECT f.agent_id, f.state, f.detection -> 'inputs' AS inputs, f.assigned_to, f.last_observed_at AS checked_at,
-         f.triage_version FROM f WHERE f.failing
+         f.triage_version, f.accepted_until FROM f WHERE f.failing
   UNION ALL
-  SELECT p.agent_id, 'passing', NULL, NULL, p.health_at, NULL FROM pass p),
+  SELECT p.agent_id, 'passing', NULL, NULL, p.health_at, NULL, NULL FROM pass p),
 counts AS (SELECT jsonb_build_object('all', count(*), 'failing', count(*) FILTER (WHERE state <> 'passing'),
                                      'passing', count(*) FILTER (WHERE state = 'passing')) AS c FROM pairs),
 page AS (
@@ -138,7 +139,7 @@ page AS (
   WHERE $6::text = 'all' OR ($6::text = 'passing') = (p.state = 'passing')
   ORDER BY ord LIMIT $7 OFFSET $8)
 SELECT c.c, p.agent_id, p.hostname, p.os, p.address, p.state, p.inputs, p.assigned_to::text, u.display_name,
-       p.checked_at, p.triage_version
+       p.checked_at, p.triage_version, p.accepted_until
 FROM counts c LEFT JOIN page p ON true
 LEFT JOIN console_users u ON u.user_id = p.assigned_to
 ORDER BY p.ord",
