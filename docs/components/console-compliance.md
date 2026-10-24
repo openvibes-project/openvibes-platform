@@ -125,6 +125,9 @@ comes from the signed rule sets' optional `explain` and `check` fields.
   citations. Old list URLs keep `state=all` and `severity`; the old
   `window`/`since` is dropped. Views saved in the browser under
   `/compliance` or `/findings` move to the person's account once.
+- Bulk on list rows changed: Add to case from a row now adds only the
+  check's failing (not ended) findings, never a fixed host, and list rows
+  have no Reopen; reopen hosts from the check page's Hosts card.
 - Passing is inferred from heartbeat health (above), so a host shows as
   passing only once it sends health with its rule sets.
 - Rules without `explain` and `check` text show their message and "No fix

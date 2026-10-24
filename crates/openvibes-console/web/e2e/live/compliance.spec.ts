@@ -32,6 +32,13 @@ test("a team lead's Compliance holds only their hosts' checks, passing is inferr
   const set = `e2e-comp-${p}`;
   const tag = `${p}-${Date.now().toString(36)}`;
   await signIn(page, "alex");
+  // The journey mitigates comp-P-1; reopening first and last keeps a retry
+  // (CI's retries: 1) or a second run on the same server starting from the seed.
+  const reopen = async () => {
+    const r = await api(page, "POST", "/api/v1/compliance/bulk", { action: "state", state: "open", items: [{ rule_set_id: set, rule_id: A }] });
+    expect(r.status).toBe(200);
+  };
+  await reopen();
   const created = await api(page, "POST", "/api/v1/host-groups", {
     name: `compliance ${tag}`, kind: "rule", conditions: [{ field: "hostname", negate: false, values: [`comp-${p}-*`] }],
   });
@@ -105,5 +112,6 @@ test("a team lead's Compliance holds only their hosts' checks, passing is inferr
     await expect(row(B).getByRole("progressbar")).toHaveAccessibleName("Hosts: 1 open · 2 pass");
   } finally {
     await lead.context().close();
+    await reopen();
   }
 });

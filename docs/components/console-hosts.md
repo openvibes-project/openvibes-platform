@@ -29,7 +29,11 @@ the old Agents view and host panel. The shared pieces they are built from
   screen readers. The FilterBar's chips are Status (online, offline, revoked,
   imported), OS, Group, Label, Problems (has critical, has open alarms,
   none open; a host with no report in the last day is never "none open"
-  while compliance is in reach, since its failing count is unknown) and Agent (older than the latest, the latest), each value with
+  while compliance is in reach, since its failing count is unknown. The
+  ceilings: staleness is the last contact, not the last scan, so a host
+  that still sends heartbeats but no longer scans shows its last findings
+  until they are a day old, then 0, and can be "none open"; an imported
+  host, which never reports, always shows "—") and Agent (older than the latest, the latest), each value with
   the server's count under the other filters; saved views and columns are
   the page `hosts`. Columns: Host and IP; OS (distribution, family); Groups
   (two, then "+n"); Labels; Open problems (alarms, critical, failing, "—"
