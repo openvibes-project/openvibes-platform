@@ -323,6 +323,12 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 # The console's certificate chain is public, and the TUI reads its expiry
 # (before this version it was 0640): upgrades make it readable at once.
 [ -f %{_sysconfdir}/openvibes/tls/console-chain.pem ] && chmod 0644 %{_sysconfdir}/openvibes/tls/console-chain.pem || :
+# A host set up before the renewal timer existed: the preset applies only on
+# first install and Setup's services step enabled the timers back then, so
+# enable it here (not on a first install: Setup does that).
+if [ $1 -ge 2 ] && [ -f %{_sysconfdir}/openvibes/tls/setup-names ]; then
+    systemctl enable -q --now openvibes-certificates.timer || :
+fi
 %posttrans -n openvibes-admin
 %restart_renamed openvibes-maintenance.service openvibes-maintenance.timer
 # Before v0.2.7 Setup's agent.toml for the local agent listed collectors

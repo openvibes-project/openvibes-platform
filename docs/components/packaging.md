@@ -176,6 +176,8 @@ directory itself, so no tmpfiles.d entry is needed.
   `openvibes-admin helper certificates-renew` as root (it writes
   `/etc/openvibes/tls` and restarts the TLS services, so no
   `ProtectSystem`). Skipped unless `setup.toml` and `tls/setup-names` exist.
+  On an upgrade of a host already set up (`tls/setup-names` exists), the
+  admin package's `%post` enables and starts the timer, so no manual step.
 - `openvibes-console.service`: runs as `openvibes-console`, with the same
   systemd sandbox. It has only `CAP_NET_BIND_SERVICE` to bind the configured
   HTTPS listener on port 443. It is disabled by the package preset until
