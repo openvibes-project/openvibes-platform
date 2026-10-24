@@ -17249,6 +17249,9 @@
       "HostTilesView": {
         "type": "object",
         "description": "The four tiles; each absent without its permission on this host.",
+        "required": [
+          "compliance_stale"
+        ],
         "properties": {
           "compliance_failing": {
             "type": [
@@ -17256,7 +17259,11 @@
               "null"
             ],
             "format": "int64",
-            "description": "Failing compliance checks (`compliance.read`)."
+            "description": "Failing compliance checks (`compliance.read`): the Compliance\nlist's open failing pairs, seen within the last day."
+          },
+          "compliance_stale": {
+            "type": "boolean",
+            "description": "The host has not reported in the last day (the Compliance list's\nwindow), so `compliance_failing` can't be trusted: the page shows\n\"No report in the last day\" instead."
           },
           "open_alarms": {
             "type": [

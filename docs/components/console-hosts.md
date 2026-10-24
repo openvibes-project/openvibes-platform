@@ -80,7 +80,11 @@ the old Agents view and host panel. The shared pieces they are built from
   - **Tiles:** Open alarms, Compliance failing, Vulnerabilities (each only
     with its read permission on this host) and Software, linking to
     `/alarms?host=ID`, `/compliance?host=ID`, `/vulnerabilities?host=ID`
-    and `/hosts/ID/software`.
+    and `/hosts/ID/software`. A host with no report in the last day
+    (`tiles.compliance_stale`: its last contact is older than the
+    Compliance list's 24-hour window) shows "—" and "No report in the last
+    day" on the Compliance tile, with no link, and the same words in the
+    failing-checks card, instead of a count the list would not show.
   - **Left column:** Details (host name, agent ID, system, running kernel,
     IP, agent version, software as of, status, enrolled, revoked,
     capabilities); Protection (threat alarms, the hardening row, last
@@ -101,17 +105,15 @@ the old Agents view and host panel. The shared pieces they are built from
   - **The host filter:** Alarms, Compliance and Vulnerabilities take
     `host=ID` (`views/lists/HostChip.tsx`), shown as a removable chip
     "Host: web-01 ×" and sent as `agent_id` (alarms) or `host`
-    (vulnerabilities); Compliance reads `/compliance/groups?agent_id=`,
-    that host's findings by rule with its own triage (Include resolved,
-    Reopen and bulk close work as usual). Bulk actions then name the host
-    (`agent_id`), so they touch it alone. The Compliance tile and "Show all
-    n" add `window=all`, so the view asks for every current finding of the
-    host (`since` 1970, allowed with `agent_id` only) and a host silent for
-    days lists what the tile counts; removing the chip drops both. The page counts what these lists
-    show by default: open-triaged alarms, checks and advisories, and
-    vulnerabilities mapped at confidence 80 or more; the Hosts list's
-    failing count is open-triaged checks too (an ended finding, fixed, is
-    not failing on either, as on the Compliance list), and its critical count the
+    (vulnerabilities); Compliance sends `host` to `/compliance-list`, the
+    host's checks with its own triage. Bulk actions then name the host
+    (`agent_id`), so they touch it alone; removing the chip drops it. The
+    page counts what these lists show by default: open-triaged alarms and
+    advisories, vulnerabilities mapped at confidence 80 or more, and the
+    Compliance list's open failing checks (`check_list_sql::open_failing`:
+    not ended, seen within the last day, triage open, with an expired
+    acceptance open again). The Hosts list's failing count is the same
+    definition, and its critical count the
     critical advisories as the page counts them.
   **Last test** shows when the host last raised the harmless test alarm
   and test finding (`openvibes-test alarm|finding`, from `last_test` in

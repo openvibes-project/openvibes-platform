@@ -8,6 +8,7 @@ import { distribution, distributionName, inGroup, isActive, osFamily } from "../
 import { json, problem, severityRank } from "../http";
 import { older } from "../versionOrder";
 import { hostServices } from "./assets";
+import { complianceStale, openFailing } from "./checkList";
 import { LATEST_AGENT_VERSION } from "./session";
 
 const TOP = 3;
@@ -30,9 +31,7 @@ export function topVulnerabilities({ vulnerabilities }: DemoContext, id: string)
 }
 
 export function registerHostSummaryRoute(ctx: DemoContext) {
-  const { data, route, agentById, reaches, facts, hostPackages, triageKey } = ctx;
-  const findingOpen = (x: { agent_id: string; rule_set_id: string; rule_id: string; ended_at?: string | null }) =>
-    x.ended_at == null && (data.triage.get(triageKey(x.agent_id, x.rule_set_id, x.rule_id))?.state ?? "open") === "open";
+  const { data, route, agentById, reaches, facts, hostPackages } = ctx;
   route("GET", "/api/v1/hosts/{id}/summary", "hosts.read", ({ id = "" }) => {
     const agent = agentById(id);
     if (!agent) return problem(404, "host_not_found", "No such host");
@@ -45,7 +44,8 @@ export function registerHostSummaryRoute(ctx: DemoContext) {
       .map((a) => ({ id: Number(a.id), rule_id: a.rule_id, message: a.message, severity: a.severity, last_seen: a.last_seen }))) : null;
     const vulns = here("vulnerabilities.read") ? topVulnerabilities(ctx, id) : null;
     // Failing and not triaged away, as the Compliance list counts open hosts.
-    const failing = here("compliance.read") ? top(data.findings.filter((x) => x.agent_id === id && findingOpen(x))
+    const now = Date.parse(ctx.iso());
+    const failing = here("compliance.read") ? top(data.findings.filter((x) => x.agent_id === id && openFailing(ctx, x, now))
       .sort((a, b) => rank(a.severity) - rank(b.severity) || b.last_observed_at.localeCompare(a.last_observed_at))
       .map((x) => ({ rule_set_id: x.rule_set_id, rule_id: x.rule_id, severity: x.severity, message: x.message }))) : null;
 
@@ -64,7 +64,8 @@ export function registerHostSummaryRoute(ctx: DemoContext) {
         enrolled_at: agent.enrolled_at, revoked_at: agent.revoked_at ?? null, last_seen_at: agent.last_seen_at ?? null,
         inventory_at: agent.inventory_at ?? null, capabilities: agent.capabilities,
       },
-      tiles: { open_alarms: alarms?.total ?? null, compliance_failing: failing?.total ?? null, vulnerabilities: vulns?.total ?? null, software: packages },
+      tiles: { open_alarms: alarms?.total ?? null, compliance_failing: failing?.total ?? null,
+        compliance_stale: complianceStale(agent.last_seen_at, now), vulnerabilities: vulns?.total ?? null, software: packages },
       protection: {
         threat_alarms: agent.alarms ?? null,
         // As GET /api/v1/agents/{id} answers it in the demo.

@@ -8,6 +8,7 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::{
     Client, StoreError,
+    check_list_sql::{WINDOW, open_failing},
     console_read::{
         Agent, AgentScope, Certificate, PageLimit, agent_in_scope, certificates_in_scope,
     },
@@ -84,8 +85,12 @@ pub struct HostSummary {
     /// Open advisories (one item each), with `vulnerabilities.read` here;
     /// in the Vulnerabilities list's priority order.
     pub top_vulnerabilities: Option<Top<VulnRow>>,
-    /// Failing checks, with `compliance.read` here.
+    /// Failing checks, with `compliance.read` here: the Compliance list's
+    /// open failing pairs (`check_list_sql::open_failing`).
     pub top_failing: Option<Top<TopFailing>>,
+    /// No report in the last day (the Compliance list's window): failing
+    /// can't be counted, so the page says so instead of a count.
+    pub compliance_stale: bool,
     /// Installed packages.
     pub packages: i64,
     /// Listening ports (protocol and port).
@@ -136,7 +141,7 @@ pub async fn summary(
     let threshold = now - Duration::minutes(OFFLINE_AFTER_MINUTES);
     let f = client
         .query_one(
-            "SELECT host(a.last_address), console_distribution_name(a.distribution), a.os_family,
+            &format!("SELECT host(a.last_address), console_distribution_name(a.distribution), a.os_family,
                     CASE WHEN a.status = 'imported' THEN 'imported' WHEN a.status = 'revoked' THEN 'revoked'
                          WHEN agent_seen_at(a.agent_id, a.last_seen_at) >= $2 THEN 'online'
                          ELSE 'offline' END,
@@ -146,9 +151,11 @@ pub async fn summary(
                     (SELECT count(DISTINCT (protocol, port)) FROM host_listeners
                       WHERE agent_id = $1 AND exposed),
                     (SELECT count(*) FROM host_services WHERE agent_id = $1),
-                    (SELECT count(*) FROM certificates WHERE agent_id = $1)
+                    (SELECT count(*) FROM certificates WHERE agent_id = $1),
+                    COALESCE(agent_seen_at(a.agent_id, a.last_seen_at) < $4::timestamptz - {WINDOW}, true)
              FROM agents a WHERE a.agent_id = $1",
-            &[&agent_id, &threshold, &latest],
+            ),
+            &[&agent_id, &threshold, &latest, &now],
         )
         .await?;
     // Reach was checked by `agent_in_scope` above.
@@ -174,6 +181,7 @@ pub async fn summary(
         top_alarms: None,
         top_vulnerabilities: None,
         top_failing: None,
+        compliance_stale: f.get(10),
         packages: f.get(5),
         listening_ports: f.get(6),
         exposed_ports: f.get(7),
@@ -186,7 +194,7 @@ pub async fn summary(
         s.top_alarms = Some(top_alarms(client, agent_id, None, 3).await?);
     }
     if scopes.compliance.is_some_and(|c| s.reaches(c)) {
-        s.top_failing = Some(top_failing(client, agent_id).await?);
+        s.top_failing = Some(top_failing(client, agent_id, now).await?);
     }
     if scopes.vulnerabilities.is_some_and(|v| s.reaches(v)) {
         s.top_vulnerabilities = Some(top_vulnerabilities(client, agent_id).await?);
@@ -234,17 +242,22 @@ pub(crate) async fn top_alarms(
     }))
 }
 
-async fn top_failing(client: &Client, agent_id: &str) -> Result<Top<TopFailing>, StoreError> {
+async fn top_failing(
+    client: &Client,
+    agent_id: &str,
+    now: DateTime<Utc>,
+) -> Result<Top<TopFailing>, StoreError> {
+    let failing = open_failing("$2");
     let rows = client
         .query(
             &format!(
-                "SELECT c.rule_set_id, c.rule_id, c.severity, c.message, count(*) OVER ()
-                 FROM current_findings c
+                "SELECT f.rule_set_id, f.rule_id, f.severity, f.message, count(*) OVER ()
+                 FROM current_findings f
                  LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
-                 WHERE c.agent_id = $1 AND c.ended_at IS NULL AND COALESCE(t.state, 'open') = 'open'
-                 ORDER BY {RANK}, c.last_observed_at DESC, c.rule_set_id, c.rule_id LIMIT 3"
+                 WHERE f.agent_id = $1 AND {failing}
+                 ORDER BY {RANK}, f.last_observed_at DESC, f.rule_set_id, f.rule_id LIMIT 3"
             ),
-            &[&agent_id],
+            &[&agent_id, &now],
         )
         .await?;
     Ok(top(&rows, |r| TopFailing {

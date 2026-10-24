@@ -3,7 +3,10 @@
 //! group membership, the `counts` CTE, the sort keys and the statement.
 //! Only fixed internal strings are formatted in; every value is bound.
 
-use crate::{console_read::agent_visibility, host_list::HostSort};
+use crate::{
+    check_list_sql::open_failing, console_read::agent_visibility, host_list::HostSort,
+    status::OFFLINE_AFTER_MINUTES,
+};
 
 /// One filter whose own condition the counts of its values leave out.
 #[derive(Clone, Copy, PartialEq)]
@@ -127,6 +130,10 @@ fn base() -> String {
     let alarms = agent_visibility("a.agent_id", "$4", "$5");
     let vulns = agent_visibility("a.agent_id", "$6", "$7");
     let compliance = agent_visibility("a.agent_id", "$8", "$9");
+    // `$1` is the offline threshold, so this is the statement's `now`.
+    let failing = open_failing(&format!(
+        "$1::timestamptz + interval '{OFFLINE_AFTER_MINUTES} minutes'"
+    ));
     format!(
         "base AS MATERIALIZED (
   SELECT a.agent_id, a.hostname, a.last_address, a.os_id, a.os_version, a.distribution,
@@ -138,10 +145,9 @@ fn base() -> String {
                                     AND al.state = 'open' AND al.source = 'agent') END AS open_alarms,
          CASE WHEN {vulns} THEN COALESCE((SELECT v.critical FROM host_listed_critical v
                                            WHERE v.agent_id = a.agent_id), 0)::bigint END AS critical,
-         CASE WHEN {compliance} THEN (SELECT count(*) FROM current_findings cf
-                                        LEFT JOIN console_finding_triage ct USING (agent_id, rule_set_id, rule_id)
-                                        WHERE cf.agent_id = a.agent_id AND cf.ended_at IS NULL
-                                          AND COALESCE(ct.state, 'open') = 'open') END AS failing
+         CASE WHEN {compliance} THEN (SELECT count(*) FROM current_findings f
+                                        LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
+                                        WHERE f.agent_id = a.agent_id AND {failing}) END AS failing
   FROM agents a CROSS JOIN LATERAL (SELECT agent_seen_at(a.agent_id, a.last_seen_at) AS seen) s
   WHERE {hosts}
     AND ($11::text IS NULL OR strpos(lower(a.hostname), lower($11)) > 0

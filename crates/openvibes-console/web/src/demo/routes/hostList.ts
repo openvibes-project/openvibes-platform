@@ -9,6 +9,7 @@ import type { DemoData } from "../data";
 import { distribution, distributionName, hasControl, inCidr, inGroup, isActive, osFamily } from "../hostGroups";
 import { json, problem } from "../http";
 import { LATEST_AGENT_VERSION } from "./session";
+import { openFailing } from "./checkList";
 import { compareVersions, older } from "../versionOrder";
 
 /** Code-unit order, as the server's COLLATE "C". */
@@ -70,9 +71,9 @@ export function registerHostListRoutes(ctx: DemoContext) {
         groups: isActive(f) ? data.access.host_groups.filter((g) => inGroup(f, g)).map((g) => g.asset_group_id) : [],
         open_alarms: reaches("alarms.read", agent.id) ? data.alarms.filter((a) => a.agent_id === agent.id && a.state === "open").length : null,
         critical: reaches("vulnerabilities.read", agent.id) ? listedCritical(data, agent.id) : null,
-        // Not triaged away, as the Compliance list and the host page count them.
+        // Open failing checks, as the Compliance list and the host page count them.
         failing: reaches("compliance.read", agent.id)
-          ? data.findings.filter((x) => x.agent_id === agent.id && x.ended_at == null && (data.triage.get(ctx.triageKey(agent.id, x.rule_set_id, x.rule_id))?.state ?? "open") === "open").length : null,
+          ? data.findings.filter((x) => x.agent_id === agent.id && openFailing(ctx, x, Date.parse(ctx.iso()))).length : null,
         older: agent.scanner_version ? older(agent.scanner_version, latest) : null,
         // Online with alarms off by a fault (alarms_status: off by choice is quiet).
         alarms_off: agent.status === "active" && agent.alarms?.state === "off" && agent.alarms.fault,

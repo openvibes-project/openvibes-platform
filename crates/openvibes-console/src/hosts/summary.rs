@@ -146,6 +146,7 @@ fn view(s: HostSummary, can: HostActionsView) -> HostSummaryView {
         tiles: HostTilesView {
             open_alarms: total(s.top_alarms.as_ref()),
             compliance_failing: total(s.top_failing.as_ref()),
+            compliance_stale: s.compliance_stale,
             vulnerabilities: total(s.top_vulnerabilities.as_ref()),
             software: Some(s.packages),
         },

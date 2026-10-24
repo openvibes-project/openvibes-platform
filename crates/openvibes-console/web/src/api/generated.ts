@@ -4896,9 +4896,16 @@ export interface components {
         HostTilesView: {
             /**
              * Format: int64
-             * @description Failing compliance checks (`compliance.read`).
+             * @description Failing compliance checks (`compliance.read`): the Compliance
+             *     list's open failing pairs, seen within the last day.
              */
             compliance_failing?: number | null;
+            /**
+             * @description The host has not reported in the last day (the Compliance list's
+             *     window), so `compliance_failing` can't be trusted: the page shows
+             *     "No report in the last day" instead.
+             */
+            compliance_stale: boolean;
             /**
              * Format: int64
              * @description Open agent alarms (`alarms.read`).

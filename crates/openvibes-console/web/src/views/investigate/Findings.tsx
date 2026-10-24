@@ -81,11 +81,13 @@ export function bulkItems(rows: readonly CheckListRow[], host: string | null) {
   return rows.filter(canChange).map((r) => ({ rule_set_id: r.rule_set_id, rule_id: r.rule_id, ...on, open_only: true }));
 }
 
-/** The ticked rows a bulk action can change, how many, their open hosts, and the actions to leave out when none can. */
+/** The ticked rows a bulk action can change, how many, their open hosts, and the actions to leave out:
+ * all when none fails anywhere; Set state and Assign when no failing host is open (Add to case still adds them). */
 export function listBulk(chosen: readonly CheckListRow[]) {
   const rows = chosen.filter(canChange);
-  const without: BulkAction[] = rows.length === 0 ? ["state", "assign", "case"] : [];
-  return { rows, changes: rows.length, open: rows.reduce((n, r) => n + r.open, 0), without,
+  const open = rows.reduce((n, r) => n + r.open, 0);
+  const without: BulkAction[] = rows.length === 0 ? ["state", "assign", "case"] : open === 0 ? ["state", "assign"] : [];
+  return { rows, changes: rows.length, open, without,
     note: "Nothing selected can be triaged: every host in reach passes these checks." };
 }
 

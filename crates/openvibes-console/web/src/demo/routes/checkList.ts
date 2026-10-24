@@ -36,6 +36,18 @@ const invalid = (field: string) => problem(400, "invalid_query", "Compliance que
 const AREAS: [string, string][] = [["port.", "Network exposure"], ["package.", "Packages"], ["harden.ssh.", "SSH"], ["harden.net.", "Network"],
   ["harden.kernel.", "Kernel"], ["harden.modules.", "Kernel"], ["harden.files.", "Files"], ["harden.fs.", "Files"], ["harden.accounts.", "Accounts"],
   ["harden.login.", "Accounts"], ["harden.lsm.", "Security modules"], ["harden.services.", "Services"], ["test.", "Tests"]];
+/** A current finding fails at `now`: not ended and seen within the last day (ruling 2; check_list_sql::failing). */
+export const isFailing = (f: { ended_at?: string | null; last_observed_at: string }, now: number) =>
+  f.ended_at == null && Date.parse(f.last_observed_at) >= now - DAY;
+/** A failing pair's triage state: no triage is open, and so is an expired acceptance (check_list_sql::PAIR_STATE). */
+export const pairState = (t: { state: string; accepted_until?: string | null } | undefined, now: number) =>
+  t === undefined || (t.state === "accepted_risk" && t.accepted_until != null && Date.parse(t.accepted_until) <= now) ? "open" : t.state;
+/** An open failing pair, as the host page's tile and the Hosts list count them (check_list_sql::open_failing). */
+export const openFailing = (ctx: DemoContext, f: { agent_id: string; rule_set_id: string; rule_id: string; ended_at?: string | null; last_observed_at: string }, now: number) =>
+  isFailing(f, now) && pairState(ctx.data.triage.get(ctx.triageKey(f.agent_id, f.rule_set_id, f.rule_id)), now) === "open";
+/** No report in the last day: the Compliance list's window, so the host page shows no failing count. */
+export const complianceStale = (lastSeen: string | null | undefined, now: number) => lastSeen == null || Date.parse(lastSeen) < now - DAY;
+
 export const checkArea = (ruleId: string) => AREAS.find(([prefix]) => ruleId.startsWith(prefix))?.[1] ?? "Other";
 
 export function registerCheckListRoute(ctx: DemoContext) {
@@ -73,7 +85,6 @@ export function registerCheckListRoute(ctx: DemoContext) {
     const title = (message: string) => (message.split(/[;.]\s/)[0] ?? message).replace(/\.$/, "");
     for (const r of data.rules) metas.set(`${r.ruleSetId}/${r.ruleId}`, { ruleSetId: r.ruleSetId, ruleId: r.ruleId, title: title(r.message), severity: r.severity });
     for (const m of EXTRA_META) metas.set(`${m.ruleSetId}/${m.ruleId}`, m);
-    const failingFrom = now - DAY;
     const finds = new Map<string, Fnd[]>();
     const firsts = new Map<string, number>();
     const triageOf = new Map<string, { state: string; assignee: string | null }>();
@@ -82,10 +93,9 @@ export function registerCheckListRoute(ctx: DemoContext) {
       if (!ctx.reaches("compliance.read", f.agent_id)) continue;
       const key = `${f.rule_set_id}/${f.rule_id}`;
       const seen = Date.parse(f.last_observed_at);
-      finds.set(key, [...(finds.get(key) ?? []), { agent: f.agent_id, severity: f.severity, seen, failing: f.ended_at == null && seen >= failingFrom && active.has(f.agent_id) }]);
+      finds.set(key, [...(finds.get(key) ?? []), { agent: f.agent_id, severity: f.severity, seen, failing: isFailing(f, now) && active.has(f.agent_id) }]);
       const t = data.triage.get(ctx.triageKey(f.agent_id, f.rule_set_id, f.rule_id));
-      const expired = t?.state === "accepted_risk" && t.accepted_until != null && Date.parse(t.accepted_until) <= now;
-      triageOf.set(`${key}|${f.agent_id}`, { state: t === undefined || expired ? "open" : t.state, assignee: t?.assigned_to ?? null });
+      triageOf.set(`${key}|${f.agent_id}`, { state: pairState(t, now), assignee: t?.assigned_to ?? null });
       firsts.set(`${key}|${f.agent_id}`, Date.parse(f.first_observed_at));
     }
     const groupsOf = new Map<string, string[]>();

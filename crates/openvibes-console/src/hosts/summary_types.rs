@@ -43,8 +43,13 @@ pub(crate) struct HostFactsView {
 pub(crate) struct HostTilesView {
     /// Open agent alarms (`alarms.read`).
     pub open_alarms: Option<i64>,
-    /// Failing compliance checks (`compliance.read`).
+    /// Failing compliance checks (`compliance.read`): the Compliance
+    /// list's open failing pairs, seen within the last day.
     pub compliance_failing: Option<i64>,
+    /// The host has not reported in the last day (the Compliance list's
+    /// window), so `compliance_failing` can't be trusted: the page shows
+    /// "No report in the last day" instead.
+    pub compliance_stale: bool,
     /// Open vulnerabilities (`vulnerabilities.read`).
     pub vulnerabilities: Option<i64>,
     /// Installed packages (`hosts.read`).

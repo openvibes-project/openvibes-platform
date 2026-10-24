@@ -119,6 +119,9 @@ describe("Compliance list", () => {
     if (!ssh || !passing) throw new Error("fixture");
     expect(listBulk([ssh, passing])).toMatchObject({ changes: 1, open: 3, without: [] });
     expect(listBulk([passing])).toMatchObject({ changes: 0, open: 0, without: ["state", "assign", "case"] });
+    // Failing, but no failing host open (State: Mitigated): nothing to set or assign; Add to case still adds them.
+    const mitigated = row({ open: 0, mitigated: 5 });
+    expect(listBulk([mitigated, passing])).toMatchObject({ changes: 1, open: 0, without: ["state", "assign"] });
   });
 
   it("says why when nothing selected can change, and only then", () => {

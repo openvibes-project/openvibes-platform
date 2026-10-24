@@ -1082,7 +1082,10 @@ demo: `web/src/demo/routes/vulnSummary.ts`.
 `GET /api/v1/hosts/{agent_id}/summary` (needs `hosts.read`; session or
 bearer) answers everything above the fold on the host page (plan ruling
 10): `host` (header and Details facts), `tiles` (`open_alarms`,
-`compliance_failing`, `vulnerabilities`, `software`), `protection` (threat
+`compliance_failing`, `compliance_stale`, `vulnerabilities`, `software`;
+failing is the Compliance list's open failing pairs, and `compliance_stale`
+is true when the host's last contact is older than that list's 24-hour
+window), `protection` (threat
 alarms and the last test), `groups`, `labels`, the five newest
 `certificates` with `certificate_count`, the `top_alarms`,
 `top_vulnerabilities` and `top_failing` lists (three items and a `total`;

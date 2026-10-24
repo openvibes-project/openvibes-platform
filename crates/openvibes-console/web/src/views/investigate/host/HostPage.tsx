@@ -71,8 +71,10 @@ export function HostView({ summary, agent, agentError }: { summary: HostSummary;
       error={error}
       tiles={[
         tile("Open alarms", tiles.open_alarms, "/alarms", q),
-        // Every current finding, as the tile counts them (a host silent for days too).
-        tile("Compliance failing", tiles.compliance_failing, "/compliance", q),
+        // The Compliance list's failing (seen within a day): a host silent for a day has no count to show.
+        tiles.compliance_stale && tiles.compliance_failing != null
+          ? <Tile key="Compliance failing" label="Compliance failing" value={null} to={{ view: "/compliance", params: q }} note="No report in the last day" />
+          : tile("Compliance failing", tiles.compliance_failing, "/compliance", q),
         tile("Vulnerabilities", tiles.vulnerabilities, "/vulnerabilities", q),
         tile("Software", tiles.software, `${hostPath(host.id)}/software`),
       ]}

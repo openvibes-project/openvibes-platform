@@ -16,7 +16,7 @@ use crate::{check_area::collectors_ok_sql, check_list::CheckSort, vuln_list_sql:
 
 /// How far back a finding still counts as failing: the window the
 /// Compliance groups use by default (`compliance/groups.rs`, 24 hours).
-const WINDOW: &str = "interval '24 hours'";
+pub(crate) const WINDOW: &str = "interval '24 hours'";
 
 /// Severities, most severe first; `r.sev` is a position in it.
 pub(crate) const SEVERITIES: &str = "ARRAY['critical','high','medium','low','info']";
@@ -25,6 +25,15 @@ pub(crate) const SEVERITIES: &str = "ARRAY['critical','high','medium','low','inf
 /// open (ruling 2) and seen within the window.
 pub(crate) fn failing(now: &str) -> String {
     format!("(f.ended_at IS NULL AND f.last_observed_at >= ({now})::timestamptz - {WINDOW})")
+}
+
+/// A current finding `f`, with its triage `t`, is an open failing pair at
+/// `now` (an SQL timestamptz expression): failing, and open by
+/// [`PAIR_STATE`] (an expired acceptance is open). The host page's tile and
+/// the Hosts list count these, so they agree with the Compliance list.
+pub(crate) fn open_failing(now: &str) -> String {
+    let state = PAIR_STATE.replace("$12::timestamptz", &format!("({now})::timestamptz"));
+    format!("({} AND {state} = 'open')", failing(now))
 }
 
 /// A current finding `f` keeps its host from passing: failing, or an open
