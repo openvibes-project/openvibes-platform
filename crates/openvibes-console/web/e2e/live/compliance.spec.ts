@@ -7,6 +7,7 @@
 import { type Page, expect, test } from "@playwright/test";
 
 import templates from "../../src/api/templates.json" with { type: "json" };
+import { confirmMitigate, hostsCardParts, openMitigate } from "../demo/list-helpers";
 import { api, firstSignIn, signIn } from "./helpers";
 
 type Count = { value: string; count: number };
@@ -19,9 +20,7 @@ type List = {
 
 const BROWSER: Record<string, number> = { chromium: 1, firefox: 2, webkit: 3 };
 const rows = (page: Page) => page.getByRole("table", { name: "Compliance" }).locator("tbody tr");
-const card = (page: Page, title: RegExp) => page.locator(".person-card").filter({ has: page.getByRole("heading", { name: title }) });
-const hosts = (page: Page) => card(page, /^Hosts/).getByRole("table", { name: "Hosts", exact: true }).locator("tbody > tr");
-const segments = (page: Page) => page.getByRole("radiogroup", { name: "Hosts by state" });
+const { hosts, pickSegment } = hostsCardParts();
 const countOf = (counts: Count[], value: string) => counts.find((c) => c.value === value)?.count ?? 0;
 const A = "harden.ssh.e2e_a";
 const B = "harden.ssh.e2e_b";
@@ -86,23 +85,19 @@ test("a team lead's Compliance holds only their hosts' checks, passing is inferr
     await expect(lead.getByRole("heading", { level: 1 })).toHaveText(A);
     await expect(hosts(lead)).toHaveCount(3);
     await expect(hosts(lead).filter({ hasText: `other-comp-${p}-1` })).toHaveCount(0);
-    await segments(lead).getByRole("radio", { name: /^Passing/ }).click();
+    await pickSegment(lead, /^Passing/);
     await expect(lead).toHaveURL(/[?&]segment=passing/);
     await expect(hosts(lead)).toHaveCount(1);
     await expect(hosts(lead)).toContainText(`comp-${p}-3`);
     await expect(hosts(lead)).toContainText("Passing");
-    await segments(lead).getByRole("radio", { name: /^Failing/ }).click();
+    await pickSegment(lead, /^Failing/);
     await expect(hosts(lead)).toHaveCount(2);
 
     // 3. Mitigate comp-P-1 alone.
     await hosts(lead).filter({ hasText: `comp-${p}-1` }).getByRole("checkbox").check();
     const bar = lead.getByRole("region", { name: "Bulk actions" });
     await expect(bar).toContainText("1 selected");
-    await bar.getByRole("button", { name: /^Set state/ }).click();
-    await lead.getByRole("menuitem", { name: /^Mitigate/ }).click();
-    const dialog = lead.getByRole("dialog", { name: "Mitigate" });
-    await dialog.getByRole("textbox").fill("PermitRootLogin no");
-    await dialog.getByRole("button", { name: "Mitigate 1 host" }).click();
+    await confirmMitigate(await openMitigate(lead, bar.getByRole("button", { name: /^Set state/ })), "PermitRootLogin no", "Mitigate 1 host");
     await expect(lead.locator(".toast").last()).toContainText("1 changed");
     await expect(hosts(lead).filter({ hasText: `comp-${p}-1` })).toContainText("Mitigated");
 

@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { alarmPath, checkPath, complianceQuery, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
 
+// An old panel link opens the object's page, with no panel left.
+const opensPage = (view: string, search: string, want: string) => {
+  const loc = parseLocation(view, search, "/");
+  expect(loc.panels).toEqual([]);
+  expect(formatLocation(loc, "/")).toBe(want);
+};
+
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
     const loc = parseLocation("/console/compliance", "?open=package%3Ab%2FR-1&open=port%3Atcp%3A443&q=web", "/console/");
@@ -42,9 +49,7 @@ describe("location", () => {
     ["/", "?open=alarm%3A9000", "/alarms/9000"],
     ["/cases", "?status=open&open=case%3Ac-1&open=alarm%3A12", "/alarms/12"],
   ])("old_alarm_links_open_the_page: an old alarm panel on %s%s is the alarm's page, %s", (view, search, want) => {
-    const loc = parseLocation(view, search, "/");
-    expect(loc.panels).toEqual([]);
-    expect(formatLocation(loc, "/")).toBe(want);
+    opensPage(view, search, want);
   });
 
   it.each([
@@ -54,9 +59,7 @@ describe("location", () => {
     // A host or an alarm panel still wins.
     ["/", "?open=advisory%3AX-1&open=alarm%3A7", "/alarms/7"],
   ])("old_advisory_links_open_the_page: an old advisory panel on %s%s is the vulnerability's page, %s", (view, search, want) => {
-    const loc = parseLocation(view, search, "/");
-    expect(loc.panels).toEqual([]);
-    expect(formatLocation(loc, "/")).toBe(want);
+    opensPage(view, search, want);
   });
 
   it.each([
@@ -69,9 +72,7 @@ describe("location", () => {
     // A host, an alarm or an advisory panel still wins.
     ["/", "?open=finding%3Ab%2FR-1&open=advisory%3AX-1", "/vulnerabilities/X-1"],
   ])("old_finding_links_open_the_page: an old finding panel on %s%s is the check's page, %s", (view, search, want) => {
-    const loc = parseLocation(view, search, "/");
-    expect(loc.panels).toEqual([]);
-    expect(formatLocation(loc, "/")).toBe(want);
+    opensPage(view, search, want);
   });
 
   it("names the page an object opens instead of a panel", () => {

@@ -1,5 +1,6 @@
-import AxeBuilder from "@axe-core/playwright";
 import { type Page, expect, test } from "@playwright/test";
+
+import { confirmMitigate, expectNoAxeViolations, hostsCardParts, openMitigate } from "./list-helpers";
 
 // A check's page (approved screen 28) on the demo: the demo answers
 // GET /api/v1/compliance/checks/{set}/{rule}/summary and /hosts like
@@ -10,10 +11,9 @@ import { type Page, expect, test } from "@playwright/test";
 const ROOT = "harden.ssh.permit_root_login";
 const PAGE = `/compliance/hardening-linux-l1/${ROOT}`;
 const SSH = /\/compliance\/baseline\/port\.ssh\.exposed$/;
+const setState = (page: Page) => page.locator(".person-page__actions").getByRole("button", { name: /^Set state/ });
 const heading = (page: Page) => page.getByRole("heading", { level: 1 });
-const card = (page: Page, title: string | RegExp) => page.locator(".person-card").filter({ has: page.getByRole("heading", { name: title }) });
-const hosts = (page: Page) => card(page, /^Hosts/).getByRole("table", { name: "Hosts", exact: true }).locator("tbody > tr");
-const segments = (page: Page) => page.getByRole("radiogroup", { name: "Hosts by state" });
+const { card, hosts, segments, pickSegment } = hostsCardParts();
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
@@ -82,11 +82,11 @@ test("the header, tiles and cards say what the check is and where it fails", asy
 test("switches the Hosts segments, and an unknown one reads as All", async ({ page }) => {
   await page.goto(PAGE);
   await expect(hosts(page)).not.toHaveCount(0);
-  await segments(page).getByRole("radio", { name: /^Failing/ }).click();
+  await pickSegment(page, /^Failing/);
   await expect(page).toHaveURL(/[?&]segment=failing/);
   await expect(hosts(page)).toHaveCount(5);
   for (const text of await hosts(page).allTextContents()) expect(text).not.toContain("Passing");
-  await segments(page).getByRole("radio", { name: /^Passing/ }).click();
+  await pickSegment(page, /^Passing/);
   await expect(page).toHaveURL(/[?&]segment=passing/);
   for (const text of await hosts(page).allTextContents()) expect(text).toContain("Passing");
   await page.goto(`${PAGE}?segment=bogus`);
@@ -96,7 +96,7 @@ test("switches the Hosts segments, and an unknown one reads as All", async ({ pa
 test("the Failing segment narrows by triage state, with counts; another segment drops the state", async ({ page }) => {
   await page.goto(PAGE);
   await expect(page.getByRole("radiogroup", { name: "Failing hosts by triage state" })).toHaveCount(0);
-  await segments(page).getByRole("radio", { name: /^Failing/ }).click();
+  await pickSegment(page, /^Failing/);
   const states = page.getByRole("radiogroup", { name: "Failing hosts by triage state" });
   await expect(states.getByRole("radio", { name: /^All failing\s*5$/ })).toHaveAttribute("aria-checked", "true");
   await expect(states.getByRole("radio", { name: /^Open\s*2$/ })).toBeVisible();
@@ -107,7 +107,7 @@ test("the Failing segment narrows by triage state, with counts; another segment 
   await states.getByRole("radio", { name: /^False positive/ }).click();
   await expect(hosts(page)).toHaveCount(1);
   await expect(hosts(page)).toContainText("False positive");
-  await segments(page).getByRole("radio", { name: /^All/ }).click();
+  await pickSegment(page, /^All/);
   await expect(page).not.toHaveURL(/[?&]state=/);
   await expect(states).toHaveCount(0);
   // An unknown state reads as every failing host.
@@ -125,7 +125,7 @@ test("passing rows have no checkbox; failing rows do, and open their evidence", 
   await expect(hosts(page).first()).toContainText("Passing");
   await expect(hosts(page).getByRole("checkbox")).toHaveCount(0);
   await expect(hosts(page).getByRole("button", { name: /^View evidence on / })).toHaveCount(0);
-  await segments(page).getByRole("radio", { name: /^Failing/ }).click();
+  await pickSegment(page, /^Failing/);
   await expect(hosts(page).getByRole("checkbox")).toHaveCount(5);
   await hosts(page).first().getByRole("button", { name: /^View evidence on / }).click();
   await expect(card(page, /^Hosts/).getByText("Why it triggered")).toBeVisible();
@@ -140,11 +140,7 @@ test("tick a failing host and set its state; Reopen opens it again", async ({ pa
   await first.getByRole("checkbox").check();
   const bar = page.getByRole("region", { name: "Bulk actions" });
   await expect(bar).toContainText("1 selected");
-  await bar.getByRole("button", { name: /^Set state/ }).click();
-  await page.getByRole("menuitem", { name: /^Mitigate/ }).click();
-  const dialog = page.getByRole("dialog", { name: "Mitigate" });
-  await dialog.getByRole("textbox").fill("PermitRootLogin no");
-  await dialog.getByRole("button", { name: "Mitigate 1 host" }).click();
+  await confirmMitigate(await openMitigate(page, bar.getByRole("button", { name: /^Set state/ })), "PermitRootLogin no", "Mitigate 1 host");
   await expect(page.locator(".toast").last()).toContainText("1 changed");
   const row = hosts(page).filter({ hasText: name });
   await expect(row).toContainText("Mitigated");
@@ -156,15 +152,12 @@ test("tick a failing host and set its state; Reopen opens it again", async ({ pa
 
 test("the header's Set state confirms the open failing host count", async ({ page }) => {
   await page.goto(PAGE);
-  await page.locator(".person-page__actions").getByRole("button", { name: /^Set state/ }).click();
-  await page.getByRole("menuitem", { name: /^Mitigate/ }).click();
-  const dialog = page.getByRole("dialog", { name: "Mitigate" });
+  const dialog = await openMitigate(page, setState(page));
   await expect(dialog).toContainText("Changes up to 2 open failing hosts");
-  await dialog.getByRole("textbox").fill("rolled out the hardened sshd_config");
-  await dialog.getByRole("button", { name: /^Mitigate/ }).click();
+  await confirmMitigate(dialog, "rolled out the hardened sshd_config", /^Mitigate/);
   await expect(page.locator(".toast").last()).toContainText("2 changed");
   // Nothing is open any more: Set state and Assign go from the header.
-  await expect(page.locator(".person-page__actions").getByRole("button", { name: /^Set state/ })).toHaveCount(0);
+  await expect(setState(page)).toHaveCount(0);
 });
 
 for (const scheme of ["light", "dark"] as const) {
@@ -174,6 +167,6 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(hosts(page).first()).toBeVisible();
     await hosts(page).filter({ hasText: "Open" }).first().getByRole("button", { name: /^View evidence on / }).click();
     await expect(card(page, /^Hosts/).getByText("Why it triggered")).toBeVisible();
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await expectNoAxeViolations(page);
   });
 }

@@ -9,9 +9,9 @@ vi.hoisted(() => {
   Object.assign(globalThis, { window: { location: { pathname: "/compliance", search: "" }, history: { replaceState() {} }, addEventListener() {}, removeEventListener() {} } });
 });
 
-import type { CheckList, CheckListRow, Session } from "../../api/types";
-import { SessionContext } from "../../app/session";
+import type { CheckList, CheckListRow } from "../../api/types";
 import { BulkBar } from "../../panels/triage/BulkBar";
+import { withSession } from "../../test-session";
 import { CheckListBody, apiQuery, bulkItems, checkFilters, checkKeyOf, listBulk } from "./Findings";
 
 const row = (over: Partial<CheckListRow> = {}): CheckListRow => ({
@@ -127,13 +127,12 @@ describe("Compliance list", () => {
   });
 
   it("says why when nothing selected can change, and only then", () => {
-    const session = { principal: { id: "u-me", username: "me", display_name: "Me" }, capabilities: [] } as unknown as Session;
     const bar = (rows: CheckListRow[]) => {
       const bulk = listBulk(rows);
-      return renderToStaticMarkup(<SessionContext.Provider value={{ session, demo: false, can: () => true, canEverywhere: () => true }}>
+      return renderToStaticMarkup(withSession(
         <BulkBar kind="compliance" noun="checks" count={rows.length} items={() => []} onClear={() => undefined} newCase={() => ({ title: "x" })}
-          without={bulk.without} changes={bulk.changes} note={bulk.note} />
-      </SessionContext.Provider>);
+          without={bulk.without} changes={bulk.changes} note={bulk.note} />,
+      ));
     };
     const [ssh, , passing] = list().items;
     if (!ssh || !passing) throw new Error("fixture");

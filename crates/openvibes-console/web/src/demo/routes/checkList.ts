@@ -14,7 +14,8 @@
 import type { CheckList, CheckListRow } from "../../api/types";
 import { type CheckMeta, EXTRA_META } from "../checkSeed";
 import type { DemoContext } from "../context";
-import { hasControl, inGroup, isActive } from "../hostGroups";
+import { inGroup, isActive } from "../hostGroups";
+import { listQueryError } from "../listQuery";
 import { json, problem } from "../http";
 
 type Pair = { agent: string; groups: string[]; state: string; assignee: string | null; first: number };
@@ -55,22 +56,13 @@ export function registerCheckListRoute(ctx: DemoContext) {
   route("GET", "/api/v1/compliance-list", "compliance.read", (_, query) => {
     for (const key of query.keys()) if (!PARAMS.includes(key)) return invalid("query");
     const get = (k: string) => query.get(k) || null;
-    const closed: [string, string | null, string[]][] = [["state", get("state"), STATES], ["severity", get("severity"), SEVERITIES],
-      ["sort", get("sort"), SORTS], ["dir", get("dir"), ["asc", "desc"]]];
-    for (const [field, value, allowed] of closed) if (value !== null && !allowed.includes(value)) return invalid(field);
-    for (const [field, max] of [["q", 200], ["rule_set", 200], ["area", 100], ["host", 100]] as const) {
-      const v = get(field);
-      if (v !== null && ([...v].length > max || hasControl(v))) return invalid(field);
-    }
-    // Ids have the demo's shapes (grp-…, u-…), standing in for the server's UUID check.
+    const bad = listQueryError(query, "Compliance query parameters are invalid", [["state", STATES], ["severity", SEVERITIES], ["sort", SORTS], ["dir", ["asc", "desc"]]],
+      [["q", 200], ["rule_set", 200], ["area", 100], ["host", 100]]);
+    if (bad) return bad;
     const group = get("group");
-    if (group !== null && !/^grp-[a-z0-9-]{1,64}$/.test(group)) return invalid("group");
     const assignee = get("assignee");
-    if (assignee !== null && assignee !== "me" && assignee !== "unassigned" && !/^u-[a-z0-9-]{1,32}$/.test(assignee)) return invalid("assignee");
     const offset = Number(get("offset") ?? 0);
     const limit = Number(get("limit") ?? 50);
-    if (!Number.isInteger(offset) || offset < 0 || offset > 100_000) return invalid("offset");
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) return invalid("limit");
 
     const chosen = { state: get("state") ?? "open", severity: get("severity"), ruleSet: get("rule_set"), area: get("area"),
       q: (get("q") ?? "").trim().toLowerCase() };

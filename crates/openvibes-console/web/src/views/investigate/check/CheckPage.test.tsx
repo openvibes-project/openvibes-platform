@@ -136,10 +136,13 @@ const row = (agent: string, over: Partial<Row> = {}): Row => ({
   checked_at: "2026-10-22T10:00:00Z", triage_version: 1, accepted_until: null, origin: "online", ...over,
 });
 
+const table = (rows: Row[], props: Partial<React.ComponentProps<typeof HostsTable>> = {}) =>
+  render(<HostsTable rows={rows} selected={new Set()} onSelect={() => undefined} triage set="s" rule="r" {...props} />);
+const passing = () => row("agent-2", { state: "passing", triage_version: null });
+
 describe("hosts card", () => {
   it("ticks failing rows only; a passing row has no checkbox", () => {
-    const html = render(<HostsTable rows={[row("agent-1"), row("agent-2", { state: "passing", triage_version: null })]} selected={new Set()} onSelect={() => undefined}
-      triage set="s" rule="r" />);
+    const html = table([row("agent-1"), passing()]);
     expect(html.match(/type="checkbox"/g)).toHaveLength(2); // the header's and agent-1's
     expect(html).toContain('aria-label="Select host-1"');
     expect(text(html)).toContain("Passing");
@@ -148,8 +151,7 @@ describe("hosts card", () => {
   it("shows evidence as fact = value plus the file, and a masked value only as its status", () => {
     expect(evidenceText({ fact: "sshd.permitrootlogin", value: "yes", file: "/etc/ssh/sshd_config" })).toBe("sshd.permitrootlogin = yes (/etc/ssh/sshd_config)");
     expect(evidenceText({ fact: "user.password", status: "masked" })).toBe("user.password (masked)");
-    const html = render(<HostsTable rows={[row("agent-1", { evidence: [{ fact: "sshd.permitrootlogin", value: "yes", file: "/etc/ssh/sshd_config" }, { fact: "k", status: "masked" }] })]}
-      selected={new Set()} onSelect={() => undefined} triage set="s" rule="r" />);
+    const html = table([row("agent-1", { evidence: [{ fact: "sshd.permitrootlogin", value: "yes", file: "/etc/ssh/sshd_config" }, { fact: "k", status: "masked" }] })]);
     const t = text(html);
     expect(t).toContain("sshd.permitrootlogin = yes");
     expect(t).toContain("/etc/ssh/sshd_config");
@@ -157,27 +159,25 @@ describe("hosts card", () => {
   });
 
   it("each failing row opens its evidence, the observation and why it triggered", () => {
-    const html = render(<HostsTable rows={[row("agent-1"), row("agent-2", { state: "passing", triage_version: null })]} selected={new Set()} onSelect={() => undefined}
-      triage set="s" rule="r" />);
+    const html = table([row("agent-1"), passing()]);
     expect(html.match(/>View evidence</g)).toHaveLength(1);
     expect(html).toContain('aria-expanded="false"');
   });
 
   it("says until when a risk is accepted, and when an acceptance expired", () => {
-    const t = text(render(<HostsTable rows={[row("agent-1", { state: "accepted_risk", accepted_until: "2099-01-01T00:00:00Z" }),
-      row("agent-2", { state: "open", accepted_until: "2020-01-01T00:00:00Z" })]} selected={new Set()} onSelect={() => undefined} triage set="s" rule="r" />));
+    const t = text(table([row("agent-1", { state: "accepted_risk", accepted_until: "2099-01-01T00:00:00Z" }),
+      row("agent-2", { state: "open", accepted_until: "2020-01-01T00:00:00Z" })]));
     expect(t).toMatch(/until /);
     expect(t).toMatch(/acceptance expired /);
   });
 
   it("shows each host's open cases", () => {
-    const t = text(render(<HostsTable rows={[row("agent-1")]} selected={new Set()} onSelect={() => undefined} triage set="s" rule="r" cases={new Map([["agent-1", [104]]])} />));
+    const t = text(table([row("agent-1")], { cases: new Map([["agent-1", [104]]]) }));
     expect(t).toContain("C-104");
   });
 
   it("without triage but with cases, each failing row has its own Add to case", () => {
-    const html = render(<HostsTable rows={[row("agent-1"), row("agent-2", { state: "passing", triage_version: null })]} selected={new Set()} onSelect={() => undefined}
-      triage={false} addToCase title="Root login" set="s" rule="r" />);
+    const html = table([row("agent-1"), passing()], { triage: false, addToCase: true, title: "Root login" });
     expect(html).not.toContain('type="checkbox"');
     expect(html.match(/aria-label="Add Root login on host-\d to a case"/g)).toEqual(['aria-label="Add Root login on host-1 to a case"']);
   });
@@ -187,13 +187,12 @@ describe("hosts card", () => {
   });
 
   it("marks an imported host, as the old panel did", () => {
-    const t = text(render(<HostsTable rows={[row("agent-1", { origin: "import" }), row("agent-2", { origin: "online" })]} selected={new Set()} onSelect={() => undefined}
-      triage set="s" rule="r" />));
+    const t = text(table([row("agent-1", { origin: "import" }), row("agent-2", { origin: "online" })]));
     expect(t.match(/imported/g)).toHaveLength(1);
   });
 
   it("names each View evidence by its host", () => {
-    const html = render(<HostsTable rows={[row("agent-1"), row("agent-2")]} selected={new Set()} onSelect={() => undefined} triage set="s" rule="r" />);
+    const html = table([row("agent-1"), row("agent-2")]);
     expect(html).toContain('aria-label="View evidence on host-1"');
     expect(html).toContain('aria-label="View evidence on host-2"');
   });
