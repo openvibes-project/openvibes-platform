@@ -10,9 +10,9 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
   // Bulk triage (triage v2): the same rules as one item, applied to each;
   // what cannot change is skipped with the reason.
   type Triage = { state: string; assigned_to: string | null; note: string | null; accepted_until: string | null };
-  /** `openOnly`: an advisory-wide pair or a list row's (`open_only`), which a close or assign changes only while open (bulk_triage.rs). */
+  /** `openOnly`: a rule- or advisory-wide pair or a list row's (`open_only`), which a close or assign changes only while open (bulk_triage.rs); `row` names its CVE or check. */
   type Target = { id: string; named: boolean; caseKind: "alarm" | "compliance_finding" | "vulnerability"; caseRef: string;
-    current: () => Triage; write: (next: Triage) => void; openOnly?: boolean; advisory?: string };
+    current: () => Triage; write: (next: Triage) => void; openOnly?: boolean; row?: string };
   type Picked = { found: Target[]; missing: string[] };
   type Skip = { id: string; reason: string };
   const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -27,7 +27,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     return true;
   };
   const findingTargets = (item: Record<string, unknown>, into: Picked): boolean => {
-    if (typeof item.rule_set_id !== "string" || typeof item.rule_id !== "string" || item.open_only === true) return false;
+    if (typeof item.rule_set_id !== "string" || typeof item.rule_id !== "string" || (item.open_only !== undefined && typeof item.open_only !== "boolean")) return false;
     const agent = typeof item.agent_id === "string" ? item.agent_id : null;
     const set = item.rule_set_id === "~unknown" ? "" : item.rule_set_id;
     const rule = item.rule_id;
@@ -38,7 +38,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
         const t = data.triage.get(triageKey(f.agent_id, set, rule));
         return { state: t?.state ?? "open", assigned_to: t?.assigned_to ?? null, note: t?.note ?? null, accepted_until: t?.accepted_until ?? null };
       };
-      into.found.push({ id: `${f.agent_id}/${set}/${rule}`, named: agent !== null, caseKind: "compliance_finding", caseRef: `${f.agent_id}/${set}/${rule}`, current,
+      into.found.push({ id: `${f.agent_id}/${set}/${rule}`, named: agent !== null, openOnly: agent === null || item.open_only === true, row: `${set}/${rule}`, caseKind: "compliance_finding", caseRef: `${f.agent_id}/${set}/${rule}`, current,
         write: (next) => { setTriage(f.agent_id, set, rule, next); } });
     }
     return true;
@@ -52,20 +52,22 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     const hits = vulnerabilities().filter((v) => v.advisory_id === advisory && (agent === null || v.agent_id === agent) && fixable(v));
     if (hits.length === 0) into.missing.push(agent ? `${agent}/${advisory}` : advisory);
     for (const v of hits) {
-      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, openOnly: agent === null || item.open_only === true, advisory, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
+      into.found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, openOnly: agent === null || item.open_only === true, row: advisory, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
         current: () => ({ state: v.triage_state, assigned_to: v.assigned_to ?? null, note: null, accepted_until: null }),
         write: (next) => { v.triage_state = next.state; v.assigned_to = next.assigned_to; v.triage_version += 1; } });
     }
     return true;
   };
   const targetsOf = { alarms: alarmTargets, compliance: findingTargets, vulnerabilities: vulnerabilityTargets };
-  /** A close or assign: closed `openOnly` pairs are not part of it (bulk_triage/vulns.rs). A named one says "not open"; so does an advisory with no open pair left. */
+  /** Open as the store sees it: no triage, open, or an accepted risk whose expiry has passed. */
+  const isOpen = (t: Triage) => t.state === "open" || (t.state === "accepted_risk" && t.accepted_until !== null && Date.parse(t.accepted_until) <= Date.now());
+  /** A close or assign: closed `openOnly` pairs are not part of it (bulk_triage/vulns.rs, compliance.rs). A named one says "not open"; so does a row with no open pair left. */
   const openTargets = (picked: Picked, skipped: Skip[]): Target[] => {
-    const kept = picked.found.filter((t) => !t.openOnly || t.current().state === "open");
+    const kept = picked.found.filter((t) => !t.openOnly || isOpen(t.current()));
     for (const t of picked.found) {
       if (kept.includes(t)) continue;
-      const id = t.named ? t.id : (t.advisory ?? t.id);
-      if (!t.named && kept.some((k) => k.advisory === t.advisory)) continue;
+      const id = t.named ? t.id : (t.row ?? t.id);
+      if (!t.named && kept.some((k) => k.row === t.row)) continue;
       if (!skipped.some((s) => s.id === id)) skipped.push({ id, reason: "not open" });
     }
     return kept;
@@ -80,7 +82,7 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
     let changed = 0;
     for (const t of state === "open" ? picked.found : openTargets(picked, skipped)) {
       // A rule or advisory's closed hosts keep their decision (as the server).
-      if (state !== "open" && !t.named && t.current().state !== "open") { skipped.push({ id: t.id, reason: "already closed" }); continue; }
+      if (state !== "open" && !t.named && !isOpen(t.current())) { skipped.push({ id: t.id, reason: "already closed" }); continue; }
       if (state === "open" && !t.named && t.current().state === "open") { skipped.push({ id: t.id, reason: "already open" }); continue; }
       t.write({ state, note, assigned_to: t.current().assigned_to, accepted_until: state === "accepted_risk" ? text(body.accepted_until) : null });
       changed += 1;
@@ -96,7 +98,9 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
         skipped.push({ id: t.id, reason: "assignee unavailable" });
         continue;
       }
-      t.write({ ...current, assigned_to: assignee });
+      // An expired accepted risk is open: written back open, with no expiry.
+      const expired = current.state === "accepted_risk" && isOpen(current);
+      t.write({ ...current, ...(expired ? { state: "open", accepted_until: null } : {}), assigned_to: assignee });
       changed += 1;
     }
     return changed;

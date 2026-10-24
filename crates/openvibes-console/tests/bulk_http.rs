@@ -581,7 +581,7 @@ async fn items_go_into_one_open_case_and_vulnerabilities_triage_per_host() {
         "{body}"
     );
     assert_eq!(body["skipped"][0]["reason"], "not open", "{body}");
-    // `open_only` belongs to vulnerability items only.
+    // `open_only` belongs to vulnerability and compliance items only.
     let wrong =
         json!({"action": "assign", "assignee": null, "items": [{"id": "1", "open_only": true}]});
     let (status, _, _) = call(
@@ -592,6 +592,78 @@ async fn items_go_into_one_open_case_and_vulnerabilities_triage_per_host() {
         &csrf,
         Some(wrong),
         None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    db.drop().await;
+}
+
+/// A Compliance list row (one check) closes only its open, failing pairs, with
+/// or without the Host chip; `open_only` stays refused on alarm items.
+#[tokio::test]
+async fn compliance_rows_close_only_open_failing_pairs() {
+    let (db, router, _) = setup().await;
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .batch_execute(&format!(
+            "INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id, rule_version,
+                severity, first_observed_at, last_observed_at, last_observed_day, scan_id, confidence,
+                message, evidence, received_at, origin, authenticated, ended_at)
+             VALUES ('{WEB}', 'baseline', 'ssh', 'f', 1, 'low', now(), now(), current_date, 's', 90, 'm', '{{}}', now(), 'online', true, NULL),
+                    ('{DB}', 'baseline', 'ssh', 'f', 1, 'low', now(), now(), current_date, 's', 90, 'm', '{{}}', now(), 'online', true, now() - interval '1 hour'),
+                    ('{WEB}', 'baseline', 'telnet', 'f', 1, 'low', now(), now(), current_date, 's', 90, 'm', '{{}}', now(), 'online', true, NULL);
+             INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state, rule_version, note,
+                version, updated_at, updated_by)
+             VALUES ('{WEB}', 'baseline', 'telnet', 'mitigated', 1, 'n', 1, now(), 't');"
+        ))
+        .await
+        .unwrap();
+    let (cookie, csrf) = login(&router, "alice").await;
+    let post = |path: &'static str, body: serde_json::Value| {
+        let (router, cookie, csrf) = (router.clone(), cookie.clone(), csrf.clone());
+        async move {
+            let (status, body, _) =
+                call(&router, "POST", path, &cookie, &csrf, Some(body), None).await;
+            (status, body)
+        }
+    };
+    let close = |items: serde_json::Value| json!({"action": "state", "state": "mitigated", "note": "fixed", "items": items});
+    // The check's row, no Host chip: web's failing pair only; db's ended one
+    // is not expanded.
+    let (status, body) = post(
+        "/api/v1/compliance/bulk",
+        close(json!([{"rule_set_id": "baseline", "rule_id": "ssh", "open_only": true}])),
+    )
+    .await;
+    assert_eq!(
+        (status, body["changed"].as_u64()),
+        (StatusCode::OK, Some(1)),
+        "{body}"
+    );
+    assert_eq!(body["skipped"].as_array().unwrap().len(), 0, "{body}");
+    // With the Host chip: web's mitigated telnet pair is left alone.
+    let (status, body) = post(
+        "/api/v1/compliance/bulk",
+        close(json!([{"rule_set_id": "baseline", "rule_id": "telnet", "agent_id": WEB, "open_only": true}])),
+    )
+    .await;
+    assert_eq!(
+        (status, body["changed"].as_u64()),
+        (StatusCode::OK, Some(0)),
+        "{body}"
+    );
+    assert_eq!(
+        body["skipped"][0]["id"],
+        format!("{WEB}/baseline/telnet"),
+        "{body}"
+    );
+    assert_eq!(body["skipped"][0]["reason"], "not open", "{body}");
+    // Not for alarm items.
+    let (status, _) = post(
+        "/api/v1/alarms/bulk",
+        json!({"action": "assign", "assignee": null, "items": [{"id": "1", "open_only": true}]}),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);

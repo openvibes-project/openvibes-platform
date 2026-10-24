@@ -139,8 +139,8 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
     .unwrap()
     .unwrap();
     assert_eq!((done.changed, done.skipped.len()), (2, 0));
-    // A rule-wide close leaves an already closed host's decision alone; a
-    // named host changes as asked.
+    // A rule-wide close leaves a closed host's decision alone ("not open");
+    // a named host changes as asked.
     let one = [(
         "baseline".to_owned(),
         "port.ssh.exposed".to_owned(),
@@ -171,11 +171,9 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
     .unwrap()
     .unwrap();
     assert_eq!(again.changed, 0);
-    assert!(
-        again
-            .skipped
-            .iter()
-            .all(|(_, why)| *why == "already closed")
+    assert_eq!(
+        again.skipped,
+        [("baseline/port.ssh.exposed".to_owned(), "not open")]
     );
     let db_state: String = client
         .query_one(

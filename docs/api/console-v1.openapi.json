@@ -13120,7 +13120,7 @@
       },
       "BulkItem": {
         "type": "object",
-        "description": "One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`\n(every host in scope), with `agent_id` for one host. Vulnerabilities:\n`advisory_id` (every host where it is open), with `agent_id` for one;\n`open_only` (a Vulnerabilities list row) keeps a close or assign to open\npairs even with `agent_id`.",
+        "description": "One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`\n(every host in scope), with `agent_id` for one host. Vulnerabilities:\n`advisory_id` (every host where it is open), with `agent_id` for one;\n`open_only` (a Vulnerabilities list row) keeps a close or assign to open\npairs even with `agent_id`; so for a check row (compliance, which also\nleaves ended findings alone).",
         "properties": {
           "advisory_id": {
             "type": [
@@ -13145,7 +13145,7 @@
           },
           "open_only": {
             "type": "boolean",
-            "description": "Vulnerabilities: change only open pairs on a close or assign, even\non the named host (a list row); a reopen ignores it. Default false."
+            "description": "Vulnerabilities and compliance: change only open pairs on a close or\nassign, even on the named host (a list row); a reopen ignores it.\nDefault false."
           },
           "rule_id": {
             "type": [

@@ -42,6 +42,11 @@ describe("demo check page", () => {
     expect(body.details.applies_to).toBe("All hosts");
     expect(body.history.some((e) => e.kind === "published")).toBe(true);
     expect(body.can.triage).toBe(true);
+    // Triage needs a failing host: a check only passing offers none.
+    const passingOnly = (await list()).find((r) => r.failing === 0);
+    if (!passingOnly) throw new Error("fixture");
+    const p = (await summary(passingOnly.rule_set_id, passingOnly.rule_id)).body;
+    expect([p.can.triage, p.can.assign]).toEqual([false, false]);
     const avahi = (await summary("hardening-linux-l1", "harden.services.avahi")).body;
     expect(avahi.details.applies_to).toBe("Linux hosts");
   });

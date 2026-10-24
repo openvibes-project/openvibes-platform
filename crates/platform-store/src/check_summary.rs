@@ -134,6 +134,9 @@ pub struct CheckPageSummary {
     pub related: CheckRelated,
     /// The hosts in reach with a pair, for the actions' permissions.
     pub agents: Vec<String>,
+    /// Of those, the failing ones, for triage and assign (a passing host
+    /// has nothing to triage).
+    pub failing_agents: Vec<String>,
 }
 
 fn millis<'de, D: serde::Deserializer<'de>>(d: D) -> Result<DateTime<Utc>, D::Error> {
@@ -164,6 +167,7 @@ struct Raw {
     failing: i64,
     passing: i64,
     agents: Vec<String>,
+    failing_agents: Vec<String>,
     people: Vec<(String, String)>,
     first_seen: Option<FirstSeen>,
     severity: Option<String>,
@@ -275,6 +279,7 @@ pub async fn check_summary(
             same_area: raw.same_area,
         },
         agents: raw.agents,
+        failing_agents: raw.failing_agents,
     }))
 }
 

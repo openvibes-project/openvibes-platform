@@ -83,6 +83,7 @@ ev AS (
 SELECT jsonb_build_object(
   'failing', (SELECT count(*) FROM f WHERE failing),
   'passing', (SELECT count(*) FROM pass),
+  'failing_agents', (SELECT COALESCE(jsonb_agg(agent_id), '[]') FROM f WHERE failing),
   'agents', (SELECT COALESCE(jsonb_agg(agent_id), '[]') FROM (SELECT agent_id FROM f WHERE failing
                                                                 UNION SELECT agent_id FROM pass) a),
   'people', (SELECT COALESCE(jsonb_agg(DISTINCT jsonb_build_array(u.user_id::text, u.display_name)), '[]')

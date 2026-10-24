@@ -3158,7 +3158,8 @@ export interface components {
          *     (every host in scope), with `agent_id` for one host. Vulnerabilities:
          *     `advisory_id` (every host where it is open), with `agent_id` for one;
          *     `open_only` (a Vulnerabilities list row) keeps a close or assign to open
-         *     pairs even with `agent_id`.
+         *     pairs even with `agent_id`; so for a check row (compliance, which also
+         *     leaves ended findings alone).
          */
         BulkItem: {
             /** @description Advisory of a vulnerability. */
@@ -3168,8 +3169,9 @@ export interface components {
             /** @description The platform's alarm id. */
             id?: string | null;
             /**
-             * @description Vulnerabilities: change only open pairs on a close or assign, even
-             *     on the named host (a list row); a reopen ignores it. Default false.
+             * @description Vulnerabilities and compliance: change only open pairs on a close or
+             *     assign, even on the named host (a list row); a reopen ignores it.
+             *     Default false.
              */
             open_only?: boolean;
             /** @description Rule of a compliance finding. */

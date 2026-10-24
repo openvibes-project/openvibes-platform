@@ -327,3 +327,43 @@ async fn each_action_is_allowed_by_its_permission_on_a_host_in_reach() {
     );
     fx.db.drop().await;
 }
+
+#[tokio::test]
+async fn triage_needs_a_failing_host_in_reach() {
+    let Some(fx) = Fx::new().await else { return };
+    seed(&fx).await;
+    let viewer = user(&fx, "tv", 3, &["compliance.read"], Reach::All).await;
+    let win = fx
+        .role(
+            "Win triage",
+            &["compliance.read", "compliance.triage", "compliance.export"],
+            Reach::Groups(vec![WIN.into()]),
+        )
+        .await;
+    fx.db
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .execute(
+            "INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+             VALUES (gen_random_uuid(), $1::text::uuid, $2, now(), 'test')",
+            &[&uid(3), &win],
+        )
+        .await
+        .unwrap();
+    // ASLR fails only on L1; W1 and W2, in reach of the triage role, pass it.
+    let (_, body) = fx.call(&viewer, "GET", &summary(ASLR), None).await;
+    assert_eq!(
+        (
+            &body["can"]["triage"],
+            &body["can"]["assign"],
+            &body["can"]["export"]
+        ),
+        (&json!(false), &json!(false), &json!(true))
+    );
+    // Root login fails on W1.
+    let (_, body) = fx.call(&viewer, "GET", &summary(ROOT), None).await;
+    assert_eq!(body["can"]["triage"], true);
+    fx.db.drop().await;
+}

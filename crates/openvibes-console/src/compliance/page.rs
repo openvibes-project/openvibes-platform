@@ -89,9 +89,16 @@ pub(crate) async fn check_summary_page(
         Err(_) => return unavailable_auth(),
     };
     let scope = |p| scope_of(&capabilities, p);
+    // Triage and assign act on failing hosts only: a passing host has nothing to triage.
+    let triage = holds(
+        &client,
+        &s.failing_agents,
+        scope(Permission::ComplianceTriage),
+    )
+    .await;
     let holds = |p| holds(&client, &s.agents, scope(p));
     let (Ok(triage), Ok(case_write), Ok(case_read), Ok(assistant), Ok(export)) = (
-        holds(Permission::ComplianceTriage).await,
+        triage,
         holds(Permission::CasesWrite).await,
         holds(Permission::CasesRead).await,
         holds(Permission::AssistantUse).await,

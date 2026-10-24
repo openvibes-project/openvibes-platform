@@ -35,7 +35,11 @@ const FILES: [(&str, &str); 25] = [
     ("etc_security_opasswd", "/etc/security/opasswd"),
 ];
 
-/// Fact-key prefix → the file or directory read, first match wins.
+/// Fact-key prefix → the file or directory read, first match wins. Some
+/// name the first of several sources: `kernel.modules.disabled` also reads
+/// `/run/modprobe.d/` and `/usr/lib/modprobe.d/`, `service.enabled`
+/// `/usr/lib/systemd/system/`, `pam.pwquality.` `pwquality.conf.d/`, and
+/// `os.` falls back to `/usr/lib/os-release`.
 const PREFIXES: [(&str, &str); 17] = [
     // Includes are followed from it (the agent's `sshd.rs`).
     ("sshd.", "/etc/ssh/sshd_config"),

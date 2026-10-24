@@ -1,18 +1,20 @@
 //! An ended finding (the host was fixed) is not failing anywhere (step 5c
-//! ruling): the host page's failing checks, the compliance summary and
-//! latest list, and the groups' counts agree with the Compliance list. The
+//! ruling): the host page's failing checks, the Hosts list, the compliance
+//! summary and latest list, the groups' counts and the assistant's reads
+//! agree with the Compliance list. The
 //! per-rule endpoint list keeps ended rows for its "fixed" badge.
 
 mod common;
 
 use chrono::{Duration, Utc};
 use platform_store::{
+    assistant::{self, GroupFilter},
     console_read::{
         AgentScope, FindingGroupEndpointQuery, FindingGroupQuery, LatestQuery, PageLimit,
         finding_group_endpoints_in_scope, finding_groups_in_scope, finding_summary_in_scope,
         latest_findings_in_scope,
     },
-    host_list::HostScopes,
+    host_list::{HostQuery, HostScopes, HostSort, hosts},
     host_summary::summary,
 };
 
@@ -57,6 +59,49 @@ async fn ended_findings_are_not_failing_anywhere() {
     let top = host.top_failing.unwrap();
     assert_eq!(top.total, 1, "the host page: open.rule only");
     assert_eq!(top.items[0].rule_id, "open.rule");
+
+    let list = HostQuery {
+        q: None,
+        status: None,
+        os_family: None,
+        group: None,
+        label: None,
+        problems: None,
+        agent: None,
+        sort: HostSort::Host,
+        descending: false,
+        offset: 0,
+        limit: 50,
+    };
+    let list = hosts(&c, &list, &scopes, None, Utc::now()).await.unwrap();
+    let a1 = list.rows.iter().find(|r| r.agent_id == A1).unwrap();
+    assert_eq!(
+        a1.failing,
+        Some(1),
+        "the Hosts list agrees with the host page"
+    );
+
+    // The assistant's reads: groups, endpoints and per-agent counts.
+    let all = assistant::AgentScope::All;
+    let since = Utc::now() - Duration::hours(24);
+    let groups = assistant::finding_groups(&c, &all, &GroupFilter::default(), since, 50)
+        .await
+        .unwrap();
+    let fixed = groups
+        .items
+        .iter()
+        .find(|i| i.rule_id == "fixed.rule")
+        .unwrap();
+    assert_eq!(fixed.endpoints, 1, "A2 only");
+    let page = assistant::finding_endpoints(&c, &all, "baseline", "fixed.rule", since, 50)
+        .await
+        .unwrap();
+    assert_eq!((page.total, page.older, page.items.len()), (1, 0, 1));
+    assert_eq!(page.items[0].agent_id, A2);
+    let agents = assistant::agent_summaries(&c, &all, "e1", since, 5)
+        .await
+        .unwrap();
+    assert_eq!(agents.items[0].findings, 1);
 
     let s = finding_summary_in_scope(&c, &g).await.unwrap();
     assert_eq!((s.total, s.impacted_agents, s.critical), (2, 2, 1));

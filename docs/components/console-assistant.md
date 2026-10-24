@@ -21,6 +21,10 @@ The console runs every lookup the model is offered
 | `fleet_overview` (agents, findings and vulnerabilities together) | `vulnerabilities.read` with the same scope as `hosts.read` | agent scope |
 | `rule_description` | `rules.read` (global, as on the Rules page) for any published rule; otherwise the latest published definition of a rule the user has findings for (the Compliance page shows the version each finding was evaluated against) | rule set resolved from the user's findings |
 
+The compliance lookups count only findings that have not ended (an ended
+finding, fixed, is not failing), as the Compliance list does: groups,
+endpoints and each agent's finding count (`platform_store::assistant`).
+
 A lookup the user may not run is still offered. Running it answers the
 model with "error: the user has no access to vulnerabilities (or rules);
 tell them so" (`LookupError::Forbidden`), so the answer says the user has

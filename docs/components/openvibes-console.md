@@ -1023,7 +1023,8 @@ port its expression names with the hosts in reach exposing it; `service`
 `same_area` `{checks, worst}`, other failing checks in reach in the area)
 and `can` (`triage` and `assign`: `compliance.triage`; `add_to_case`:
 `cases.write` and `cases.read`; `ask`: `assistant.use` with the assistant
-on; `export`: `compliance.export`; each held on a host with a pair). The
+on; `export`: `compliance.export`; each held on a host with a pair, and
+triage and assign on a failing one: a passing host has nothing to triage). The
 port and unit come from the rule's expression, indexed in
 `console_rule_meta.expression` (schema 63).
 
@@ -1034,7 +1035,14 @@ the host, `os`, `address`, `state` (the triage state, or `passing`),
 `evidence` (`{fact, value?, status?, file?}` from the finding's P17
 `detection.inputs`: a value only for a complete input, else `masked`,
 `summarized` or `truncated`; `file` from `compliance/evidence.rs`
-`fact_file`, the file the agent's collectors read; empty for a passing host
+`fact_file`, the file the agent's collectors read: one label where the
+collector reads several sources (`kernel.modules.disabled` names
+`/etc/modprobe.d/`, also `/run/modprobe.d/` and `/usr/lib/modprobe.d/`;
+`service.enabled` names `/etc/systemd/system/`, also
+`/usr/lib/systemd/system/`; `pam.pwquality.*` names
+`/etc/security/pwquality.conf`, also `pwquality.conf.d/`; `os.*` names
+`/etc/os-release`, else `/usr/lib/os-release`; `sshd.*` names
+`/etc/ssh/sshd_config` and the files it includes); empty for a passing host
 or a finding without detection), `assignee`, `checked_at` (last
 observation, or the passing host's heartbeat health) and `triage_version`
 (0 without triage; null when passing). `segments` count `all`, `failing`

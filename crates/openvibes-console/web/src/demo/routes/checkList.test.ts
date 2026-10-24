@@ -148,4 +148,25 @@ describe("demo Compliance list", () => {
     expect(listed).toContain("site/site.change_window.exceeded");
     expect(listed).not.toContain("hardening-linux-l1/harden.kernel.aslr");
   });
+
+  it("bulk on a check row changes only open, failing pairs (compliance.rs)", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    type Done = { changed: number; skipped: { id: string; reason: string }[] };
+    const bulk = async (body: Record<string, unknown>) => (await (await server.handle("POST", "/api/v1/compliance/bulk", body)).json()) as Done;
+    const set = "hardening-linux-l1";
+    const row = (rule: string, extra: Record<string, unknown> = {}) => ({ rule_set_id: set, rule_id: rule, ...extra });
+    // aslr: agent-00001's finding has ended, so only agent-00002 is reached.
+    expect(await bulk({ action: "assign", assignee: "sam", items: [row("harden.kernel.aslr")] })).toMatchObject({ changed: 1, skipped: [] });
+    // permit_empty_passwords: agent-00001 open, agent-00002 an expired acceptance (open): both change.
+    expect(await bulk({ action: "state", state: "mitigated", note: "fixed", items: [row("harden.ssh.permit_empty_passwords")] })).toMatchObject({ changed: 2, skipped: [] });
+    // permit_root_login: agent-00004 (mitigated), -05 (accepted, not expired) and -07 are left alone.
+    expect(await bulk({ action: "assign", assignee: "sam", items: [row("harden.ssh.permit_root_login")] })).toMatchObject({ changed: 2, skipped: [] });
+    // With the Host chip, a closed pair says "not open" (and a reopen is unchanged: named pairs change).
+    const chip = await bulk({ action: "state", state: "false_positive", note: "lab", items: [row("harden.ssh.permit_root_login", { agent_id: "agent-00004", open_only: true })] });
+    expect(chip).toMatchObject({ changed: 0, skipped: [{ id: `agent-00004/${set}/harden.ssh.permit_root_login`, reason: "not open" }] });
+    expect((await bulk({ action: "state", state: "open", items: [row("harden.ssh.permit_root_login", { agent_id: "agent-00004", open_only: true })] })).changed).toBe(1);
+    // Nothing open is left on the closed-out row.
+    expect(await bulk({ action: "assign", assignee: "sam", items: [row("harden.ssh.permit_empty_passwords")] })).toMatchObject({ changed: 0, skipped: [{ id: `${set}/harden.ssh.permit_empty_passwords`, reason: "not open" }] });
+    expect((await server.handle("POST", "/api/v1/alarms/bulk", { action: "assign", assignee: null, items: [{ id: "1", open_only: true }] })).status).toBe(400);
+  });
 });

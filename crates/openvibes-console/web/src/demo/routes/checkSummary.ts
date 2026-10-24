@@ -12,6 +12,7 @@ import { EXTRA_META } from "../checkSeed";
 import type { DemoContext } from "../context";
 import { distribution, distributionName, hasControl } from "../hostGroups";
 import { json, problem, severityRank } from "../http";
+import { ASSISTANT_AVAILABLE } from "./assistant";
 import { checkArea } from "./checkList";
 
 const DAY = 86_400_000;
@@ -92,7 +93,8 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
     const unit = rule.startsWith("harden.services.") ? memberOf(expression, "service.enabled") : null;
     const agents = [...failing.map((x) => x.f.agent_id), ...passing.map((a) => a.id)];
     const anyHost = (permission: Parameters<typeof reaches>[0]) => agents.some((a) => reaches(permission, a));
-    const triage = anyHost("compliance.triage");
+    // Triage acts on failing hosts only (page.rs): a passing host has nothing to triage.
+    const triage = failing.some((x) => reaches("compliance.triage", x.f.agent_id));
     const body: CheckSummaryPage = {
       header: {
         title: extra?.title ?? (shipped ? title(shipped.message) : rule), severity, rule_set_id: set,
@@ -115,7 +117,7 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
       },
       can: {
         triage, assign: triage, add_to_case: anyHost("cases.write") && anyHost("cases.read"),
-        ask: anyHost("assistant.use"), export: anyHost("compliance.export"),
+        ask: ASSISTANT_AVAILABLE && anyHost("assistant.use"), export: anyHost("compliance.export"),
       },
     };
     return json(body);

@@ -110,7 +110,8 @@ the old Agents view and host panel. The shared pieces they are built from
     days lists what the tile counts; removing the chip drops both. The page counts what these lists
     show by default: open-triaged alarms, checks and advisories, and
     vulnerabilities mapped at confidence 80 or more; the Hosts list's
-    failing count is open-triaged checks too, and its critical count the
+    failing count is open-triaged checks too (an ended finding, fixed, is
+    not failing on either, as on the Compliance list), and its critical count the
     critical advisories as the page counts them.
   **Last test** shows when the host last raised the harmless test alarm
   and test finding (`openvibes-test alarm|finding`, from `last_test` in
