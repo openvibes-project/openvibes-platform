@@ -57,7 +57,7 @@ pub(crate) struct CheckListParams {
     limit: Option<String>,
 }
 
-fn invalid_query(field: &str) -> Response {
+pub(crate) fn invalid_query(field: &str) -> Response {
     let mut p = ProblemDetails::new(
         StatusCode::BAD_REQUEST,
         "invalid_query",

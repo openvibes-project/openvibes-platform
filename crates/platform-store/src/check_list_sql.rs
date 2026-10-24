@@ -19,11 +19,11 @@ use crate::{check_area::collectors_ok_sql, check_list::CheckSort, vuln_list_sql:
 const WINDOW: &str = "interval '24 hours'";
 
 /// Severities, most severe first; `r.sev` is a position in it.
-const SEVERITIES: &str = "ARRAY['critical','high','medium','low','info']";
+pub(crate) const SEVERITIES: &str = "ARRAY['critical','high','medium','low','info']";
 
 /// A current finding `f` fails at `now` (an SQL timestamptz expression):
 /// open (ruling 2) and seen within the window.
-fn failing(now: &str) -> String {
+pub(crate) fn failing(now: &str) -> String {
     format!("(f.ended_at IS NULL AND f.last_observed_at >= ({now})::timestamptz - {WINDOW})")
 }
 
@@ -189,7 +189,7 @@ const ASSIGNEE_OK: &str = "(c.state IS NOT NULL AND (($10::text IS NULL AND NOT 
 
 /// A failing finding's triage state (no row is open, an accepted risk
 /// expired by `$12` is open), over `t`.
-const PAIR_STATE: &str =
+pub(crate) const PAIR_STATE: &str =
     "COALESCE(CASE WHEN t.state = 'accepted_risk' AND t.accepted_until <= $12::timestamptz
                 THEN 'open' ELSE t.state END, 'open')";
 

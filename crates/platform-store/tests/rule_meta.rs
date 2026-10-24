@@ -54,6 +54,7 @@ fn row(id: &str) -> RuleMetaRow {
             ("TA0004".into(), Some("T1059.004".into())),
         ],
         severity: Some(Severity::High),
+        expression: Some("'nginx' in facts['process.names']".into()),
     }
 }
 
@@ -135,7 +136,7 @@ async fn missing_bundles_lists_only_unindexed_bundles() {
     db.drop().await;
 }
 
-/// Schema 63: each rule's severity is indexed; a bundle indexed before it
+/// Schema 63: each rule's severity and expression are indexed; a bundle indexed before it
 /// (a row without one) is listed again, so the start-up backfill re-indexes it.
 #[tokio::test]
 async fn severity_is_indexed_and_old_rows_are_re_indexed() {
@@ -167,15 +168,20 @@ async fn severity_is_indexed_and_old_rows_are_re_indexed() {
         rule_meta::missing_bundles(&client, 10).await.unwrap(),
         [("baseline".to_owned(), 2)]
     );
-    let severity: Option<String> = client
+    let r = client
         .query_one(
-            "SELECT severity FROM console_rule_meta WHERE rule_set_version = 1",
+            "SELECT severity, expression FROM console_rule_meta WHERE rule_set_version = 1",
             &[],
         )
         .await
-        .unwrap()
-        .get(0);
+        .unwrap();
+    let (severity, expression): (Option<String>, Option<String>) = (r.get(0), r.get(1));
     assert_eq!(severity.as_deref(), Some("high"));
+    assert_eq!(
+        expression.as_deref(),
+        Some("'nginx' in facts['process.names']"),
+        "schema 63 indexes the expression too"
+    );
     db.drop().await;
 }
 

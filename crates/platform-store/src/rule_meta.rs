@@ -29,6 +29,8 @@ pub struct RuleMetaRow {
     /// The rule's severity (schema 63; `None` is re-listed by
     /// [`missing_bundles`]).
     pub severity: Option<Severity>,
+    /// The rule's expression (schema 63).
+    pub expression: Option<String>,
 }
 
 /// An indexed rule.
@@ -65,6 +67,7 @@ pub async fn upsert_from_bundle(
         .iter()
         .map(|r| r.severity.map(wire::severity))
         .collect();
+    let expressions: Vec<Option<&str>> = rows.iter().map(|r| r.expression.as_deref()).collect();
     let attacks: Vec<Value> = rows
         .iter()
         .map(|r| {
@@ -77,18 +80,19 @@ pub async fn upsert_from_bundle(
     client
         .execute(
             "INSERT INTO console_rule_meta (rule_set_id, rule_set_version, rule_id, rule_version,
-                 title, message, explain, \"check\", attack, techniques, severity)
+                 title, message, explain, \"check\", attack, techniques, severity, expression)
              SELECT $1, $2, r.id, r.version, r.title, r.message, r.explain, r.chk, r.attack,
                  ARRAY(SELECT DISTINCT e->>'technique' FROM jsonb_array_elements(r.attack) e
-                       WHERE e->>'technique' IS NOT NULL ORDER BY 1), r.severity
+                       WHERE e->>'technique' IS NOT NULL ORDER BY 1), r.severity, r.expression
              FROM unnest($3::text[], $4::bigint[], $5::text[], $6::text[], $7::text[],
-                         $8::text[], $9::jsonb[], $10::text[])
-                  AS r(id, version, title, message, explain, chk, attack, severity)
+                         $8::text[], $9::jsonb[], $10::text[], $11::text[])
+                  AS r(id, version, title, message, explain, chk, attack, severity, expression)
              ON CONFLICT (rule_set_id, rule_set_version, rule_id) DO UPDATE SET
                  rule_version = EXCLUDED.rule_version, title = EXCLUDED.title,
                  message = EXCLUDED.message, explain = EXCLUDED.explain,
                  \"check\" = EXCLUDED.\"check\", attack = EXCLUDED.attack,
-                 techniques = EXCLUDED.techniques, severity = EXCLUDED.severity",
+                 techniques = EXCLUDED.techniques, severity = EXCLUDED.severity,
+                 expression = EXCLUDED.expression",
             &[
                 &set,
                 &version,
@@ -100,6 +104,7 @@ pub async fn upsert_from_bundle(
                 &checks,
                 &attacks,
                 &severities,
+                &expressions,
             ],
         )
         .await?;

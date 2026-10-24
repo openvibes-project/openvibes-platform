@@ -38,6 +38,12 @@ pub mod check_area;
 pub mod check_list;
 /// The SQL of the Compliance list's one statement.
 mod check_list_sql;
+/// A check's Related card: its port, unit and same-area checks.
+pub mod check_related;
+/// A check's page: header, tiles, text, history and the Hosts table in scope.
+pub mod check_summary;
+/// The SQL of a check's page.
+mod check_summary_sql;
 /// Console reads and triage of threat alarms (P14).
 pub mod console_alarms;
 /// Local console credentials, throttles, pre-authentication, and sessions.

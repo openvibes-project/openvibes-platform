@@ -50,6 +50,7 @@ pub async fn rule_index(c: &mut Client) {
             .map(|t| ("TA0002".to_owned(), Some((*t).to_owned())))
             .collect(),
         severity: Some(openvibes_core::Severity::High),
+        expression: None,
     };
     rule_meta::upsert_from_bundle(
         c,

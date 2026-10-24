@@ -18,6 +18,7 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 deadpool-postgres.workspace = true
+openvibes-core.workspace = true
 
 [lints]
 workspace = true

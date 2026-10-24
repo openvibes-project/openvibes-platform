@@ -9,12 +9,15 @@ use axum::{
 use crate::http::AuthHttpState;
 
 pub(crate) mod bulk;
+mod evidence;
 pub(crate) mod group_triage;
 pub(crate) mod groups;
 pub(crate) mod history;
 pub(crate) mod latest;
 pub(crate) mod list_page;
 pub(crate) mod list_page_types;
+pub(crate) mod page;
+pub(crate) mod page_types;
 pub(crate) mod triage;
 pub(crate) mod triage_detail;
 mod types;
@@ -32,6 +35,14 @@ pub use types::{
 pub(crate) fn routes() -> Router<AuthHttpState> {
     Router::new()
         .route("/v1/compliance-list", get(list_page::list_check_page))
+        .route(
+            "/v1/compliance/checks/{rule_set_id}/{rule_id}/summary",
+            get(page::check_summary_page),
+        )
+        .route(
+            "/v1/compliance/checks/{rule_set_id}/{rule_id}/hosts",
+            get(page::check_hosts_page),
+        )
         .route(
             "/v1/compliance/summary",
             get(latest::authenticated_finding_summary),

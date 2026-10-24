@@ -77,6 +77,7 @@ pub async fn index_bundle(client: &Client, set: &str, version: i64) -> Result<bo
                     .map(|pair| (pair.tactic.clone(), pair.technique.clone()))
                     .collect(),
                 severity: Some(rule.severity),
+                expression: Some(rule.expression.clone()),
             })
         })
         .collect();

@@ -741,7 +741,7 @@ Schema 63 adds:
 - the extended statistics `current_findings_check` (ndistinct of rule
   set, rule and severity), without which the planner sorted the findings
   on disk;
-- `console_rule_meta.severity`, written by `rule_meta::upsert_from_bundle`.
+- `console_rule_meta.severity` and `expression`, written by `rule_meta::upsert_from_bundle`.
   Rows indexed before it have none; `missing_bundles` lists their bundles,
   so the console's start-up backfill re-indexes them;
 - `console_check_area`.
@@ -755,6 +755,28 @@ the host page's failing checks (`host_summary`), `finding_summary_in_scope`,
 Tests: `tests/check_list.rs`, `tests/check_list_filters.rs`,
 `tests/check_area.rs`, `tests/rule_meta.rs`; the 500,000-finding timing
 (`tests/check_list_timing.rs`) is in console-read.md.
+
+## A check's page (`check_summary`, `check_related`)
+
+`check_summary(client, rule_set_id, rule_id, &AgentScope, now) ->
+Lookup<CheckPageSummary>` and `check_hosts(client, rule_set_id, rule_id,
+&AgentScope, CheckHostSegment, offset, limit, now) -> Lookup<CheckHostsPage>`
+read one check under the list's definitions (`check_list_sql`'s
+`failing`, pair state and `passing_hosts_sql`), over the hosts in reach
+(`agent_visibility`). The check exists when its set's newest indexed
+version has it or a host in reach has a current finding for it, and it
+has a failing or passing host in reach; otherwise `Lookup::Missing`.
+`days` counts, per UTC day of the last 14, the findings in reach first
+seen by the day's end and ended (else, when not failing, last seen) at or
+after its start. History merges `console_finding_triage_history` of hosts
+in reach, episode starts and ends, and `rule_bundles` publishes, newest
+first, 50 at most. `check_summary::evidence` turns `detection -> 'inputs'`
+into evidence, a value only for a complete input. `check_related`
+parses the port or unit from the rule's indexed expression
+(`member_of`, `rule_port`, `rule_unit`; schema 63 adds
+`console_rule_meta.expression`, written with the severity) and counts the
+hosts in reach with it (`host_listeners` exposed, `host_services`).
+Tests: `tests/check_summary.rs`.
 
 ## The host page summary (`host_summary::summary`)
 

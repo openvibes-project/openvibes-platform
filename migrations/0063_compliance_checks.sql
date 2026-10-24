@@ -5,7 +5,9 @@
 -- NULL until the console re-indexes the bundle, which its start-up backfill
 -- does for rows without one), and the SQL twin of the store's `check_area`
 -- (check_area.rs; a test keeps the two equal over every baseline and
--- hardening rule ID). Additive.
+-- hardening rule ID). Each indexed rule's expression too, for a check's
+-- Related card (the port or unit a rule names; written with the severity,
+-- so the same backfill fills it). Additive.
 CREATE INDEX current_findings_open_check
     ON current_findings (rule_set_id, rule_id) WHERE ended_at IS NULL;
 
@@ -17,7 +19,8 @@ CREATE STATISTICS current_findings_check (ndistinct)
     ON rule_set_id, rule_id, severity FROM current_findings;
 
 ALTER TABLE console_rule_meta ADD COLUMN severity text
-    CHECK (severity IN ('critical', 'high', 'medium', 'low', 'info'));
+    CHECK (severity IN ('critical', 'high', 'medium', 'low', 'info')),
+    ADD COLUMN expression text;
 
 CREATE FUNCTION console_check_area(rule_id text) RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$

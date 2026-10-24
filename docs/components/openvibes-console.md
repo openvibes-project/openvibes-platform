@@ -995,6 +995,52 @@ views and hidden columns accept the page `compliance` (hideable: `area`,
 hidden). Tests: `tests/check_list_http.rs`; demo:
 `web/src/demo/routes/checkList.ts` (data in `web/src/demo/checkSeed.ts`).
 
+## A check's page
+
+`GET /api/v1/compliance/checks/{rule_set_id}/{rule_id}/summary` and
+`GET /api/v1/compliance/checks/{rule_set_id}/{rule_id}/hosts` (need
+`compliance.read`; session or bearer; roles 5c rulings 8, 11-17) answer a
+check's page over the store's `check_summary` and `check_hosts`, under the
+Compliance list's rules, so the page agrees with its row. Ids are 1 to 256
+characters with no control character. A check the list would not show in
+reach (no failing or passing host in reach, or a rule without metadata
+known only from hosts out of reach) answers 404 `check_not_found`.
+
+The summary carries `header` (`title`, `severity`, `rule_set_version` and
+`rule_version` of the newest indexed version, `area`, `failing`, `checked`
+= failing + passing, `assignee`), `tiles` (`failing`, `passing`,
+`first_seen` `{at, hostname}`, `days`: 14 failing-host counts per UTC day,
+oldest first, a finding counted from first seen to its end, or to its last
+sighting when it stopped being seen without ending), `text` (`explain`
+"Why it matters", `check` "How to fix", `message`), `details`
+(`applies_to`: "Linux hosts" for `hardening-linux-*`, "All hosts" for
+`baseline`, else "Hosts with this rule set"; `techniques`), `history` (at
+most 50, newest first: `triage` changes, `failing` episode starts,
+`passes_again` ends, `published` rule-set versions, all in reach),
+`related` (`port` `{protocol, port, hosts}` for a `port.*` rule, the first
+port its expression names with the hosts in reach exposing it; `service`
+`{unit, hosts}` for `harden.services.*`, hosts in reach running it;
+`same_area` `{checks, worst}`, other failing checks in reach in the area)
+and `can` (`triage` and `assign`: `compliance.triage`; `add_to_case`:
+`cases.write` and `cases.read`; `ask`: `assistant.use` with the assistant
+on; `export`: `compliance.export`; each held on a host with a pair). The
+port and unit come from the rule's expression, indexed in
+`console_rule_meta.expression` (schema 63).
+
+The Hosts table takes `segment` (`all` default, `failing`, `passing`),
+`offset` 0..=100000 and `limit` 1..=100 (default 50), 400 `invalid_query`
+naming the parameter otherwise. Rows (by host name, then agent id) carry
+the host, `os`, `address`, `state` (the triage state, or `passing`),
+`evidence` (`{fact, value?, status?, file?}` from the finding's P17
+`detection.inputs`: a value only for a complete input, else `masked`,
+`summarized` or `truncated`; `file` from `compliance/evidence.rs`
+`fact_file`, the file the agent's collectors read; empty for a passing host
+or a finding without detection), `assignee`, `checked_at` (last
+observation, or the passing host's heartbeat health) and `triage_version`
+(0 without triage; null when passing). `segments` count `all`, `failing`
+and `passing`. Tests: `tests/check_page_http.rs`; demo:
+`web/src/demo/routes/checkSummary.ts`.
+
 ## A vulnerability's page
 
 `GET /api/v1/vulnerabilities/{key}/summary` and
