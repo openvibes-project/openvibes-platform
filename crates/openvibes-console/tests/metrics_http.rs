@@ -426,6 +426,21 @@ async fn live_values_match_the_summaries_and_lists() {
                  (now() AT TIME ZONE 'UTC')::date, 's', 50, 'm', '{{}}', now(), 'online', false);"
         ));
     }
+    // Not open failing (the Compliance list's definition): ended, two days
+    // unseen, mitigated. Neither the summary nor the history counts them.
+    sql.push_str(&format!(
+        "INSERT INTO current_findings (agent_id, rule_id, last_finding_id, rule_version,
+             severity, first_observed_at, last_observed_at, last_observed_day, scan_id,
+             confidence, message, evidence, received_at, origin, authenticated, ended_at)
+         SELECT '{A}', r, 'f', 1, 'critical', now() - interval '3 days',
+             CASE WHEN r = 'stale' THEN now() - interval '2 days' ELSE now() END,
+             (now() AT TIME ZONE 'UTC')::date, 's', 50, 'm', '{{}}', now(), 'online', false,
+             CASE WHEN r = 'ended' THEN now() - interval '1 hour' END
+         FROM unnest(ARRAY['ended', 'stale', 'mitigated']) r;
+         INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state, rule_version,
+             note, version, updated_at, updated_by)
+         VALUES ('{A}', '', 'mitigated', 'mitigated', 1, 'n', 1, now(), 't');"
+    ));
     client.batch_execute(&sql).await.unwrap();
 
     let vulns = platform_store::vulns::summary(&client).await.unwrap();

@@ -796,8 +796,11 @@ pub async fn finding_summary(client: &Client) -> Result<FindingSummary, StoreErr
     finding_summary_in_scope(client, &AgentScope::Global).await
 }
 
-/// Counts current observations and severities for agents visible in SQL;
-/// an ended finding (the host was fixed) is not failing and not counted.
+/// Counts open failing pairs and their severities for agents visible in
+/// SQL, by the Compliance list's one definition
+/// ([`crate::check_list_sql::open_failing`]: not ended, seen within its
+/// window, and open, an expired acceptance included), so the menu count
+/// and the dashboard's Breakdown tile agree with the list they open.
 pub async fn finding_summary_in_scope(
     client: &Client,
     scope: &AgentScope,
@@ -805,18 +808,21 @@ pub async fn finding_summary_in_scope(
     let groups = scope.group_ids();
     let global = scope.is_global();
     let visible_agent = agent_visibility("a.agent_id", "$1", "$2");
+    let open_failing = crate::check_list_sql::open_failing("$3");
     let row = client
         .query_one(
             &format!(
-                "SELECT count(*), count(DISTINCT c.agent_id),
-                        count(*) FILTER (WHERE c.severity = 'critical'),
-                        count(*) FILTER (WHERE c.severity = 'high'),
-                        count(*) FILTER (WHERE c.severity = 'medium'),
-                        count(*) FILTER (WHERE c.severity = 'low')
-                 FROM current_findings c JOIN agents a USING (agent_id)
-                 WHERE c.ended_at IS NULL AND {visible_agent}"
+                "SELECT count(*), count(DISTINCT f.agent_id),
+                        count(*) FILTER (WHERE f.severity = 'critical'),
+                        count(*) FILTER (WHERE f.severity = 'high'),
+                        count(*) FILTER (WHERE f.severity = 'medium'),
+                        count(*) FILTER (WHERE f.severity = 'low')
+                 FROM current_findings f JOIN agents a USING (agent_id)
+                 LEFT JOIN console_finding_triage t
+                   ON t.agent_id = f.agent_id AND t.rule_set_id = f.rule_set_id AND t.rule_id = f.rule_id
+                 WHERE {open_failing} AND {visible_agent}"
             ),
-            &[&global, &groups],
+            &[&global, &groups, &Utc::now()],
         )
         .await?;
     Ok(FindingSummary {
@@ -911,11 +917,13 @@ pub async fn finding_groups_in_scope(
     let groups = scope.group_ids();
     let global = scope.is_global();
     let visible_agent = agent_visibility("a.agent_id", "$7", "$8");
+    // An expired acceptance is open, as on the Compliance list.
+    let triage_state = crate::check_list_sql::PAIR_STATE.replace("$12", "$10");
     let rows = client
         .query(
             &format!(
                 "WITH visible AS (
-                    SELECT c.*, a.hostname, COALESCE(t.state, 'open') AS triage_state
+                    SELECT c.*, a.hostname, {triage_state} AS triage_state
                     FROM current_findings c JOIN agents a USING (agent_id)
                     LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
                     WHERE c.ended_at IS NULL AND {visible_agent} AND ($9::text IS NULL OR c.agent_id = $9)
@@ -963,6 +971,7 @@ pub async fn finding_groups_in_scope(
                 &global,
                 &groups,
                 &query.agent_id,
+                &Utc::now(),
             ],
         )
         .await?;

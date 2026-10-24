@@ -201,4 +201,23 @@ describe("demo Compliance list", () => {
       items: [{ rule_set_id: pick.r.rule_set_id, rule_id: pick.r.rule_id, open_only: true, group: pick.g }] })).json()) as { changed: number };
     expect(done.changed).toBe(pick.r.open);
   });
+
+  it("the menu count's summary and the groups use the list's failing definition (finding_summary_in_scope)", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const total = async () => ((await (await server.handle("GET", "/api/v1/compliance/summary", undefined)).json()) as { total: number }).total;
+    const before = await total();
+    const pair = (agent: string) => server.data.findings.find((f) => f.rule_id === "harden.ssh.permit_empty_passwords" && f.agent_id === agent);
+    // agent-00002's expired acceptance counts as open; once it runs again, it no longer does.
+    const accepted = server.data.triage.get("agent-00002|hardening-linux-l1|harden.ssh.permit_empty_passwords");
+    if (!accepted || !pair("agent-00001")) throw new Error("seed");
+    const groups = async () => ((await (await server.handle("GET", "/api/v1/compliance/groups?limit=100", undefined)).json()) as
+      { items: { rule_id: string; triage_counts: { open: number; accepted_risk: number } }[] }).items.find((g) => g.rule_id === "harden.ssh.permit_empty_passwords");
+    expect((await groups())?.triage_counts).toMatchObject({ open: 2, accepted_risk: 0 });
+    accepted.accepted_until = new Date(Date.now() + 86_400_000).toISOString();
+    expect(await total()).toBe(before - 1);
+    // A stale pair (two days unseen, never ended) is not failing.
+    const stale = pair("agent-00001");
+    if (stale) stale.last_observed_at = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    expect(await total()).toBe(before - 2);
+  });
 });

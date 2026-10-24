@@ -35,9 +35,25 @@ pub const COLUMNS: [&str; 18] = [
 /// map important to high and moderate to medium (unrated is in no count),
 /// exploited is live. Each kind is one grouped scan joined on `agent_id`: a
 /// per-agent lateral probes every daily alarm partition once per host.
+/// Compliance counts are open failing pairs
+/// ([`crate::check_list_sql::open_failing`]), as the Compliance list and its
+/// summary count them; `$1` plus the offline delay is now.
 // ponytail: still a live count over every host per request; if it gets slow,
 // let current() compute only the kinds the requested metric needs.
-const HOST_COUNTS_SQL: &str = "
+fn host_counts_sql() -> String {
+    let open_failing = crate::check_list_sql::open_failing(&format!(
+        "$1::timestamptz + interval '{OFFLINE_AFTER_MINUTES} minutes'"
+    ));
+    format!(
+        "{HOST_COUNTS_HEAD}
+    FROM current_findings f LEFT JOIN console_finding_triage t
+      ON t.agent_id = f.agent_id AND t.rule_set_id = f.rule_set_id AND t.rule_id = f.rule_id
+    WHERE {open_failing} GROUP BY f.agent_id) f ON f.agent_id = a.agent_id"
+    )
+}
+
+/// [`host_counts_sql`] up to the compliance subquery's source.
+const HOST_COUNTS_HEAD: &str = "
 SELECT a.agent_id,
        CASE WHEN a.status IN ('revoked', 'imported') THEN a.status
             WHEN agent_seen_at(a.agent_id, a.last_seen_at) >= $1 THEN 'active'
@@ -68,10 +84,9 @@ LEFT JOIN (
           WHERE e.kev_added IS NOT NULL OR e.euvd_exploited))
     GROUP BY agent_id) x ON x.agent_id = a.agent_id
 LEFT JOIN (
-    SELECT agent_id,
-           count(*) FILTER (WHERE severity = 'critical') c, count(*) FILTER (WHERE severity = 'high') h,
-           count(*) FILTER (WHERE severity = 'medium') m, count(*) FILTER (WHERE severity = 'low') l
-    FROM current_findings GROUP BY agent_id) f ON f.agent_id = a.agent_id";
+    SELECT f.agent_id,
+           count(*) FILTER (WHERE f.severity = 'critical') c, count(*) FILTER (WHERE f.severity = 'high') h,
+           count(*) FILTER (WHERE f.severity = 'medium') m, count(*) FILTER (WHERE f.severity = 'low') l";
 
 /// How a metric is computed from one day's rows.
 pub enum Expr {
@@ -110,11 +125,12 @@ pub async fn record(
     tx.execute("DELETE FROM host_daily_counts WHERE day = $1", &[&day])
         .await?;
     let cols = COLUMNS[..16].join(", ");
+    let host_counts = host_counts_sql();
     let n = tx
         .execute(
             &format!(
                 "INSERT INTO host_daily_counts (day, agent_id, status, {cols})
-                 SELECT $2::date, agent_id, status, {cols} FROM ({HOST_COUNTS_SQL}) h"
+                 SELECT $2::date, agent_id, status, {cols} FROM ({host_counts}) h"
             ),
             &[&threshold(now), &day],
         )
@@ -159,10 +175,11 @@ pub async fn current(
     now: DateTime<Utc>,
     agents: Option<&[String]>,
 ) -> Result<i64, StoreError> {
+    let host_counts = host_counts_sql();
     Ok(client
         .query_one(
             &format!(
-                "SELECT {} FROM ({HOST_COUNTS_SQL}) h
+                "SELECT {} FROM ({host_counts}) h
                  WHERE ($2::text[] IS NULL OR agent_id = ANY($2))",
                 expr.select()
             ),
@@ -193,6 +210,7 @@ pub async fn top_hosts(
     limit: i64,
     agents: Option<&[String]>,
 ) -> Result<Vec<TopHost>, StoreError> {
+    let host_counts = host_counts_sql();
     let rows = client
         .query(
             &format!(
@@ -204,7 +222,7 @@ pub async fn top_hosts(
                            + vulns_critical + vulns_high + vulns_medium + vulns_low
                            + compliance_critical + compliance_high + compliance_medium
                            + compliance_low)::bigint AS open
-                   FROM ({HOST_COUNTS_SQL}) h JOIN agents a USING (agent_id)
+                   FROM ({host_counts}) h JOIN agents a USING (agent_id)
                    WHERE ($2::text[] IS NULL OR h.agent_id = ANY($2))) t
                  WHERE open > 0
                  ORDER BY serious DESC, open DESC, agent_id LIMIT $3"

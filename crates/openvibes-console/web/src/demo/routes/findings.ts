@@ -4,6 +4,7 @@ import { allowedStates, noteRequired } from "../../panels/triage/triage";
 import { demoMappings, pairView } from "../attack";
 import type { DemoContext } from "../context";
 import { json, page, problem } from "../http";
+import { openFailing } from "./checkList";
 
 export function registerFindingRoutes(ctx: DemoContext) {
   const { data, iso, findings, groups, triageKey, setTriage, triageProblem, audit, route } = ctx;
@@ -23,7 +24,9 @@ export function registerFindingRoutes(ctx: DemoContext) {
     });
 
   route("GET", "/api/v1/compliance/summary", "compliance.read", () => {
-    const open = findings().filter((f) => (data.triage.get(triageKey(f.agent_id, f.rule_set_id, f.rule_id))?.state ?? "open") === "open");
+    // The Compliance list's one failing definition (finding_summary_in_scope, check_list_sql::open_failing).
+    const now = Date.now();
+    const open = findings().filter((f) => openFailing(ctx, f, now));
     const count = (severity: Severity) => open.filter((f) => f.severity === severity).length;
     return json({ total: open.length, impacted_agents: new Set(open.map((f) => f.agent_id)).size, critical: count("critical"), high: count("high"), medium: count("medium"), low: count("low") });
   });
