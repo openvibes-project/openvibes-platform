@@ -234,11 +234,9 @@ jobs:
       # Pull requests without the heavy tier test in Chromium only; main,
       # nightly, manual runs and heavy PRs also run Firefox and WebKit.
       - name: Install pinned console browsers
-        env:
-          BROWSERS: ${{ needs.changes.outputs.heavy == 'true' && 'chromium firefox webkit' || 'chromium' }}
-        run: >-
-          crates/openvibes-console/web/node_modules/.bin/playwright
-          install --with-deps $BROWSERS
+        uses: ./.github/actions/console-browsers
+        with:
+          browsers: ${{ needs.changes.outputs.heavy == 'true' && 'chromium firefox webkit' || 'chromium' }}
 
       - name: Test console in real browsers
         env:
