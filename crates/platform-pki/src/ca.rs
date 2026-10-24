@@ -392,6 +392,13 @@ pub fn is_ca(cert_pem: &str) -> Result<bool, PkiError> {
     Ok(constraints.is_some_and(|extension| extension.value.ca))
 }
 
+/// Start of validity of the first certificate.
+pub fn not_before(cert_pem: &str) -> Result<DateTime<Utc>, PkiError> {
+    let der = der_of(cert_pem)?;
+    let seconds = parse(&der)?.validity().not_before.timestamp();
+    DateTime::from_timestamp(seconds, 0).ok_or(PkiError::InvalidPem)
+}
+
 /// End of validity of the first certificate.
 pub fn not_after(cert_pem: &str) -> Result<DateTime<Utc>, PkiError> {
     let der = der_of(cert_pem)?;

@@ -3,11 +3,15 @@
 
 use std::process::ExitCode;
 
-use super::{renew_gate, renew_run, system};
+use chrono::{Duration, Utc};
+
+use super::{renew_gate, renew_plan, renew_run, system};
 use crate::setup::{
     fake::{Fake, plan},
-    pki_tests::installed_certificates,
+    pki::{INTERMEDIATE, INTERMEDIATE_KEY},
+    pki_tests::{ADMIN, installed_certificates, with},
     plan::Component::*,
+    replace::{PREVIOUS, PREVIOUS_UNTIL},
 };
 
 #[test]
@@ -44,4 +48,50 @@ fn a_failed_renewal_exits_with_failure() {
     let (text, code) = renew_run(&fake.ctx(&plan(&[Ingest, Distribution])));
     assert!(text.starts_with("failed\t"), "{text}");
     assert_eq!(code, ExitCode::FAILURE);
+}
+
+#[test]
+fn a_setup_toml_that_cannot_be_read_fails_the_renewal() {
+    let fake = Fake::new("renew-broken-plan");
+    fake.file("/etc/openvibes/setup.toml", "components = [");
+    let (text, code) = renew_plan(&fake.root).unwrap_err();
+    assert!(text.starts_with("openvibes-admin: "), "{text}");
+    assert!(text.contains("setup.toml"), "{text}");
+    assert_eq!(code, ExitCode::FAILURE);
+}
+
+#[test]
+fn a_failed_renewal_keeps_the_previous_intermediate() {
+    let fake = Fake::new("renew-fails-keeps-previous");
+    let root = platform_pki::generate_root(Utc::now() - Duration::days(40)).unwrap();
+    let intermediate = || {
+        let (csr, key) = platform_pki::intermediate_request().unwrap();
+        let at = Utc::now() - Duration::days(40);
+        (
+            platform_pki::sign_intermediate(&root, &csr, at).unwrap(),
+            key,
+        )
+    };
+    let (old, new) = (intermediate(), intermediate());
+    let bundle = format!("{}{}", new.0, old.0);
+    fake.file(INTERMEDIATE, &bundle);
+    fake.file(INTERMEDIATE_KEY, &new.1);
+    fake.file(PREVIOUS, &old.0);
+    let yesterday = (Utc::now() - Duration::days(1)).to_rfc3339();
+    fake.file(PREVIOUS_UNTIL, &format!("{yesterday}\n"));
+    // Ingest moved over long ago, but this run's reissue fails.
+    let names = vec!["platform.example.com".to_owned()];
+    let issued = platform_pki::Issuer::load(&new.0, &new.1)
+        .unwrap()
+        .issue_server(&names, Utc::now() - Duration::days(32))
+        .unwrap();
+    fake.file("/etc/openvibes/tls/ingest.crt", &issued.cert_pem);
+    fake.file("/etc/openvibes/tls/ingest.key", &issued.key_pem);
+    fake.fail(&with(&ADMIN, &["ca", "issue-server"]), "boom");
+    fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
+    let (text, code) = renew_run(&fake.ctx(&plan(&[Ingest])));
+    assert!(text.starts_with("failed\t"), "{text}");
+    assert_eq!(code, ExitCode::FAILURE);
+    assert_eq!(fake.text(INTERMEDIATE), bundle);
+    assert!(fake.root.join(&PREVIOUS[1..]).exists());
 }

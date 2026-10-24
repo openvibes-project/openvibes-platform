@@ -253,7 +253,7 @@ fn host_ctx(plan: &Plan, repair: bool) -> Ctx<'_, SystemRunner> {
 
 /// `helper setup-status`: `STEP<TAB>STATE<TAB>DETAIL` per step.
 pub fn status() -> ExitCode {
-    let plan = match load_plan() {
+    let plan = match load_plan(Path::new("/")) {
         Ok(plan) => plan,
         Err(error) => {
             eprintln!("openvibes-admin helper: {error}");
@@ -282,7 +282,7 @@ fn begin() -> Result<(std::fs::File, Plan), ExitCode> {
         ExitCode::FAILURE
     })?;
 
-    let plan = load_plan().map_err(|error| {
+    let plan = load_plan(Path::new("/")).map_err(|error| {
         eprintln!("openvibes-admin: {error}");
         ExitCode::FAILURE
     })?;
@@ -291,10 +291,10 @@ fn begin() -> Result<(std::fs::File, Plan), ExitCode> {
 
 /// The plan; one from before the port choices is saved with the ports its
 /// services use (#76), so the TUI, which reads setup.toml, shows them too.
-fn load_plan() -> Result<Plan, String> {
-    let (plan, filled) = Plan::load_filled(Path::new("/"))?;
+fn load_plan(root: &Path) -> Result<Plan, String> {
+    let (plan, filled) = Plan::load_filled(root)?;
     if filled {
-        plan.save(Path::new("/"))?;
+        plan.save(root)?;
     }
     Ok(plan)
 }

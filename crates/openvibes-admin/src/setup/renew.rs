@@ -5,7 +5,7 @@ use std::{path::Path, process::ExitCode};
 
 use platform_host::{Step, StepState, runner::Runner};
 
-use super::{Ctx, host_ctx, load_plan, replace, run_step, setup_guard, system};
+use super::{Ctx, host_ctx, load_plan, plan::Plan, replace, run_step, setup_guard, system};
 
 /// A held Setup lock is no failure: that run changes the certificates or
 /// the timer comes again tomorrow. Any other lock error is.
@@ -25,7 +25,12 @@ fn renew_run<R: Runner>(ctx: &Ctx<R>) -> (String, ExitCode) {
     let state = run_step(ctx, Step::Certificates);
     let mut text = state.line();
     let mut failed = matches!(state, StepState::Failed(_) | StepState::Waiting(_));
-    match replace::drop_previous(ctx) {
+    // Not after a failed reissue: ingest may still issue from the old one.
+    let dropped = match state {
+        StepState::Done(_) => replace::drop_previous(ctx),
+        _ => Ok(None),
+    };
+    match dropped {
         Ok(Some(line)) => text = format!("{text}\n{line}"),
         Ok(None) => {}
         Err(error) => {
@@ -41,6 +46,12 @@ fn renew_run<R: Runner>(ctx: &Ctx<R>) -> (String, ExitCode) {
     (text, code)
 }
 
+/// The plan under `root`, or the log text and exit code. The unit runs
+/// only once `setup.toml` exists, so one it cannot read is a failure.
+fn renew_plan(root: &Path) -> Result<Plan, (String, ExitCode)> {
+    load_plan(root).map_err(|error| (format!("openvibes-admin: {error}"), ExitCode::FAILURE))
+}
+
 /// `helper certificates-renew`, run as root by the timer.
 pub fn renew() -> ExitCode {
     let locked = system::lock(Path::new("/"));
@@ -48,9 +59,12 @@ pub fn renew() -> ExitCode {
         println!("{text}");
         return code;
     }
-    let Ok(plan) = load_plan() else {
-        println!("certificate renewal skipped: OpenVIBES is not set up on this host");
-        return ExitCode::SUCCESS;
+    let plan = match renew_plan(Path::new("/")) {
+        Ok(plan) => plan,
+        Err((text, code)) => {
+            println!("{text}");
+            return code;
+        }
     };
     if let Err(code) = setup_guard() {
         return code;

@@ -68,6 +68,8 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `sha256_fingerprint(cert)`: SHA-256 of the DER encoding.
 - `is_ca(cert)`: whether the first certificate is a CA (basicConstraints
   CA:TRUE).
+- `not_before(cert)`, `not_after(cert)`: when the first certificate's
+  validity starts and ends.
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,
   `InvalidValidity`, `IssuerExpired`, `InvalidAgentId`, `NotIntermediate`,

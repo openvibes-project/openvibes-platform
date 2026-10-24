@@ -697,9 +697,10 @@ refused while one works):
   recover. Certificates issued for other names, or expiring within 30 days,
   are issued again (the daily `openvibes-certificates.timer` runs that one
   step as `helper certificates-renew`; it skips while another Setup run holds
-  the lock, and exits non-zero only when the renewal failed; it then drops
-  a replaced intermediate whose `previous-until` has passed, see
-  `helper ca-replace` under CA commands).
+  the lock, and exits non-zero only when the renewal failed or `setup.toml`
+  is there but cannot be read (the unit runs only once it exists); after a
+  successful renewal only, it drops a replaced intermediate once ingest
+  issues from the new one, see `helper ca-replace` under CA commands).
 - `setup --update [--backup PATH] [--update-repo-dir DIR]`: check
   PostgreSQL first (#292; the Backup and Update-the-database steps both do:
   a removed `postgresql-server` or a stopped service is installed and
@@ -886,9 +887,11 @@ whole stage on every exit. Every check (the key, `check_intermediate`
 against the root, `ca import-intermediate`) passes before anything on disk
 changes. Then `previous.crt` (the old first certificate) and
 `previous-until` (RFC 3339, now + `client_certificate_days` from
-`ingest.toml`, default 30, + 1 day) are written 0644 root, the new key
-replaces `intermediate.key`, `intermediate.crt` becomes new + old, the
-request folder goes, and the certificates step reissues and restarts the
+`ingest.toml`, default 30, + 1 day) are written 0644 root, then the new key and the bundle (new + old) are
+written beside their targets as `intermediate.key.new` and
+`intermediate.crt.new` and renamed over them, the bundle first and the
+key last (a failure puts the old bundle back and removes the `.new` and
+`previous.*` files: the old pair is in use again), the request folder goes, and the certificates step reissues and restarts the
 services. If that reissue fails, the error starts "The intermediate was
 replaced, but the server certificates were not reissued: run Repair in
 Maintenance (they stay valid until then)."; the certificates check is
@@ -898,7 +901,13 @@ intermediate`, `Trusting the old and the new one`, `Issuing the server
 certificates`, `Restarting the services`), then
 `done<TAB>EXPIRES<TAB>PREVIOUS_UNTIL` (both `YYYY-MM-DD`); a failure is one
 line on stderr prefixed `openvibes-admin helper: `, exit 1. The renewal
-timer's `pki::drop_previous` ends it. Tests: `src/setup/replace_tests.rs`.
+timer's `replace::drop_previous` ends it, after a successful renewal
+only: once `previous-until` has passed, `ingest.crt` is signed by the
+bundle's first certificate (a running ingest issues from the intermediate
+it read at start, so only its restart on a reissued certificate moves it
+over) and that certificate's start + `client_certificate_days` + 1 day
+has passed, it keeps the first certificate, restarts ingest and
+distribution, and removes `previous.*`. Tests: `src/setup/replace_tests.rs`.
 
 ## Test
 

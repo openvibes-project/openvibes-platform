@@ -514,7 +514,8 @@ journalctl -u openvibes-certificates
 ```
 
 (also Status › certificate renewal › Log in the TUI). A run that finds
-another Setup run in progress says so and tries again the next day. The
+another Setup run in progress says so and tries again the next day; one
+that cannot read `/etc/openvibes/setup.toml` fails and says why. The
 console's `console-chain.pem` is 0644 (the package's `%post` fixes an older
 0640 one): the TUI reads its expiry without root.
 
@@ -553,9 +554,13 @@ ca-replace`, password-gated like the other Setup verbs):
    until then it keeps connecting with the old one's.
    `openvibes-admin agent list --offline` shows the ones that did not.
 5. **The old one is dropped by itself:** the daily certificate renewal,
-   once `previous-until` has passed, keeps only the first certificate in
-   `intermediate.crt`, removes both files and restarts ingest and
-   distribution ("previous intermediate no longer trusted" in its log).
+   when it succeeded, `previous-until` has passed and ingest has issued
+   from the new intermediate for `client_certificate_days` + 1 day (its
+   own certificate is from the new one: until Repair reissues it, ingest
+   still hands out certificates from the old one), keeps only the first
+   certificate in `intermediate.crt`, removes both files and restarts
+   ingest and distribution ("previous intermediate no longer trusted" in
+   its log).
    An agent that was offline the whole time needs a new enrollment token.
 
 If nothing is done at all, every agent certificate expires on the

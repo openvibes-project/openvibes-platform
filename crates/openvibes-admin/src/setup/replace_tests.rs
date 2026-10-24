@@ -258,6 +258,7 @@ fn drop_previous_waits_then_drops() {
     fake.file(PREVIOUS, &old.0);
     let tomorrow = (Utc::now() + Duration::days(1)).to_rfc3339();
     fake.file(PREVIOUS_UNTIL, &format!("{tomorrow}\n"));
+    ingest_certificate(&fake, &new, 32);
     let plan = plan(&[Ingest, Distribution]);
     assert_eq!(drop_previous(&fake.ctx(&plan)), Ok(None));
     assert_eq!(fake.text(INTERMEDIATE), bundle);
@@ -308,12 +309,13 @@ fn replace_refuses_while_the_previous_is_trusted() {
 
 const NAMES: [&str; 4] = ["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"];
 
-/// Ingest's certificate for NAMES, issued by `issuer` (certificate, key).
-fn ingest_certificate(fake: &Fake, issuer: &(String, String)) {
+/// Ingest's certificate for NAMES, issued by `issuer` (certificate, key)
+/// `ago` days back.
+fn ingest_certificate(fake: &Fake, issuer: &(String, String), ago: i64) {
     let names: Vec<String> = NAMES.iter().map(|n| (*n).to_owned()).collect();
     let issued = platform_pki::Issuer::load(&issuer.0, &issuer.1)
         .unwrap()
-        .issue_server(&names, Utc::now())
+        .issue_server(&names, Utc::now() - Duration::days(ago))
         .unwrap();
     fake.file("/etc/openvibes/tls/ingest.crt", &issued.cert_pem);
     fake.file("/etc/openvibes/tls/ingest.key", &issued.key_pem);
@@ -328,7 +330,7 @@ fn a_failed_reissue_after_the_swap_says_run_repair() {
     let fake = Fake::new("replace-reissue-fails");
     fake.fail(&with(&ADMIN, &["ca", "issue-server"]), "boom");
     let (fake, root, old) = host(fake);
-    ingest_certificate(&fake, &old);
+    ingest_certificate(&fake, &old, 0);
     let new = intermediate(&root);
     careful_request(&fake, &new.0, &new.1, &root.cert_pem);
     let mut plan = plan(&[Ingest]);
@@ -363,12 +365,73 @@ fn server_certificates_from_the_new_intermediate_are_done() {
     let (fake, root, old) = installed("replace-check-signed");
     let new = intermediate(&root);
     fake.file(INTERMEDIATE, &format!("{}{}", new.0, old.0));
-    ingest_certificate(&fake, &old);
+    ingest_certificate(&fake, &old, 0);
     let plan = plan(&[Ingest]);
     assert_eq!(check(&fake.ctx(&plan), Step::Certificates), StepState::Todo);
-    ingest_certificate(&fake, &new);
+    ingest_certificate(&fake, &new, 0);
     assert!(matches!(
         check(&fake.ctx(&plan), Step::Certificates),
         StepState::Done(_)
     ));
+}
+
+#[test]
+fn the_old_intermediate_stays_until_ingest_issues_from_the_new_one() {
+    let fake = Fake::new("replace-drop-after-ingest");
+    fake.fail(&with(&ADMIN, &["ca", "issue-server"]), "boom");
+    let (fake, root, old) = host(fake);
+    ingest_certificate(&fake, &old, 0);
+    let new = intermediate(&root);
+    careful_request(&fake, &new.0, &new.1, &root.cert_pem);
+    let mut plan = plan(&[Ingest]);
+    plan.ca = CaMode::Careful;
+    assert!(replace(&fake.ctx(&plan), None).is_err());
+    // Ingest still issues from the old one: kept after previous-until.
+    let yesterday = (Utc::now() - Duration::days(1)).to_rfc3339();
+    fake.file(PREVIOUS_UNTIL, &format!("{yesterday}\n"));
+    assert_eq!(drop_previous(&fake.ctx(&plan)), Ok(None));
+    assert_eq!(certificates(&fake.text(INTERMEDIATE)).len(), 2);
+    // Reissued from the new one 30 days ago: its agents' certificates from
+    // the old one last client_certificate_days (30) + 1 from then.
+    ingest_certificate(&fake, &new, 30);
+    assert_eq!(drop_previous(&fake.ctx(&plan)), Ok(None));
+    assert_eq!(certificates(&fake.text(INTERMEDIATE)).len(), 2);
+    ingest_certificate(&fake, &new, 32);
+    assert_eq!(
+        drop_previous(&fake.ctx(&plan)),
+        Ok(Some("previous intermediate no longer trusted".into()))
+    );
+    assert_eq!(certificates(&fake.text(INTERMEDIATE)), [new.0]);
+}
+
+#[test]
+fn a_failed_swap_puts_the_old_pair_back() {
+    let (fake, root, old) = installed("replace-swap-fails");
+    let new = intermediate(&root);
+    careful_request(&fake, &new.0, &new.1, &root.cert_pem);
+    // The key cannot be renamed into place: a folder is in the way.
+    fake.remove(INTERMEDIATE_KEY);
+    std::fs::create_dir(fake.root.join(&INTERMEDIATE_KEY[1..])).unwrap();
+    let mut plan = plan(&[Ingest]);
+    plan.ca = CaMode::Careful;
+    assert!(replace(&fake.ctx(&plan), None).is_err());
+    assert_eq!(fake.text(INTERMEDIATE), old.0);
+    assert!(!fake.root.join(&PREVIOUS[1..]).exists());
+    assert!(!fake.root.join(&PREVIOUS_UNTIL[1..]).exists());
+    let mut left: Vec<_> = ["etc/openvibes/pki", "var/lib/openvibes-ingest"]
+        .iter()
+        .flat_map(|dir| std::fs::read_dir(fake.root.join(dir)).unwrap())
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect();
+    left.sort();
+    // The request stays for the next try.
+    assert_eq!(
+        left,
+        [
+            "intermediate.crt",
+            "intermediate.key",
+            "request",
+            "root.crt"
+        ]
+    );
 }

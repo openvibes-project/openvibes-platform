@@ -14,7 +14,7 @@ use std::fmt;
 pub use ca::{
     Issuer, KeyAndCert, Signed, check_intermediate, check_root_signed, check_signed_request,
     first_certificate, generate_root, intermediate_request, is_ca, issuer_common_name, not_after,
-    sha256_fingerprint, sign_intermediate, subject_alt_names, verify_signed_by,
+    not_before, sha256_fingerprint, sign_intermediate, subject_alt_names, verify_signed_by,
 };
 pub use client::{
     CheckedCsr, IssuedClient, check_csr, leaf_identity, leaf_validity, spki_sha256_of_cert,

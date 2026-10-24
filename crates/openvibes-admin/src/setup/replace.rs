@@ -33,6 +33,9 @@ use super::{
 pub(crate) const PREVIOUS: &str = "/etc/openvibes/pki/previous.crt";
 /// When the old one stops being trusted: one RFC 3339 instant.
 pub(crate) const PREVIOUS_UNTIL: &str = "/etc/openvibes/pki/previous-until";
+/// Ingest's own certificate: from the new intermediate once ingest issues
+/// from it.
+const INGEST_CERT: &str = "/etc/openvibes/tls/ingest.crt";
 
 /// A root key file that is not this root's (the TUI checks it first too).
 pub(crate) const NOT_THE_KEY: &str =
@@ -131,6 +134,62 @@ fn quick<R: Runner>(ctx: &Ctx<R>, root: &str, root_key: Option<&str>) -> Result<
     fs::remove_dir_all(ctx.path(ROOT_DIR)).map_err(|error| format!("{ROOT_DIR}: {error}"))
 }
 
+/// Puts the new key and the bundle (new + old) in place of the old pair.
+///
+/// `previous.*` go first: while they are there Replace refuses and they
+/// name the old one. The new key and bundle are then written whole beside
+/// their targets (`.new`), so only two renames are left to change what is
+/// in use: the bundle first, the key last. A failure at any point puts back
+/// what was renamed and removes the rest, so the old pair is in use again;
+/// only a crash between the two renames leaves the new bundle with the old
+/// key.
+fn swap<R: Runner>(
+    ctx: &Ctx<R>,
+    previous: &str,
+    until: &str,
+    new: &str,
+    new_key: &str,
+) -> Result<(), String> {
+    let old = ctx.read(INTERMEDIATE)?;
+    let (bundle, key) = (
+        format!("{INTERMEDIATE}.new"),
+        format!("{INTERMEDIATE_KEY}.new"),
+    );
+    let rename = |from: &str, to: &str| {
+        fs::rename(ctx.path(from), ctx.path(to)).map_err(|error| format!("{to}: {error}"))
+    };
+    let mut restored = true;
+    let result = (|| {
+        ctx.put(PREVIOUS, previous.as_bytes(), None, 0o644)?;
+        ctx.put(PREVIOUS_UNTIL, format!("{until}\n").as_bytes(), None, 0o644)?;
+        let ingest = Some(("openvibes-ingest", "openvibes-ingest"));
+        ctx.put(&key, new_key.as_bytes(), ingest, 0o600)?;
+        ctx.put(&bundle, format!("{new}{previous}").as_bytes(), None, 0o644)?;
+        rename(&bundle, INTERMEDIATE)?;
+        rename(&key, INTERMEDIATE_KEY).map_err(|error| {
+            match ctx.put(INTERMEDIATE, old.as_bytes(), None, 0o644) {
+                Ok(()) => error,
+                Err(again) => {
+                    restored = false;
+                    format!("{error}; the old {INTERMEDIATE} could not be put back: {again}")
+                }
+            }
+        })
+    })();
+    if result.is_err() {
+        // Kept when the old bundle is not back: they still name the old one.
+        let previous_files = if restored {
+            [PREVIOUS, PREVIOUS_UNTIL].as_slice()
+        } else {
+            &[]
+        };
+        for path in [bundle.as_str(), &key].iter().chain(previous_files) {
+            let _ = fs::remove_file(ctx.path(path));
+        }
+    }
+    result
+}
+
 /// The new intermediate staged and checked, then trusted beside the old
 /// one; the server certificates are reissued from it. Prints each finished
 /// stage; the new one's expiry and the old one's end, `YYYY-MM-DD<TAB>…`.
@@ -169,25 +228,7 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
     ])?;
     let until = Utc::now() + chrono::Duration::days(client_days(ctx) + 1);
     let until_text = until.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    ctx.put(PREVIOUS, previous.as_bytes(), None, 0o644)?;
-    ctx.put(
-        PREVIOUS_UNTIL,
-        format!("{until_text}\n").as_bytes(),
-        None,
-        0o644,
-    )?;
-    ctx.put(
-        INTERMEDIATE_KEY,
-        new_key.as_bytes(),
-        Some(("openvibes-ingest", "openvibes-ingest")),
-        0o600,
-    )?;
-    ctx.put(
-        INTERMEDIATE,
-        format!("{new}{previous}").as_bytes(),
-        None,
-        0o644,
-    )?;
+    swap(ctx, &previous, &until_text, &new, &new_key)?;
     if ctx.plan.ca == CaMode::Careful {
         pki::remove_request(ctx)?;
     }
@@ -209,8 +250,9 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
     ))
 }
 
-/// Removes the previous intermediate once nothing it signed is left; the
-/// log line when it did.
+/// Removes the previous intermediate once nothing it signed is left (after
+/// `PREVIOUS_UNTIL`, and `client_certificate_days` + 1 after ingest moved
+/// to the new one); the log line when it did.
 pub(crate) fn drop_previous<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {
     let Ok(until) = ctx.read(PREVIOUS_UNTIL) else {
         return Ok(None);
@@ -222,6 +264,23 @@ pub(crate) fn drop_previous<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, S
     }
     let first = platform_pki::first_certificate(&ctx.read(INTERMEDIATE)?)
         .map_err(|error| format!("{INTERMEDIATE}: {error:?}"))?;
+    // A running ingest issues from the intermediate it read at start: the
+    // new one only once it restarted on its certificate reissued from it.
+    // Agents' certificates from the old one last `client_certificate_days`
+    // from then.
+    if ctx.plan.has(Component::Ingest) {
+        let moved = ctx
+            .read(INGEST_CERT)
+            .ok()
+            .filter(|pem| platform_pki::verify_signed_by(pem, &first).is_ok())
+            .and_then(|pem| platform_pki::not_before(&pem).ok());
+        let Some(moved) = moved else {
+            return Ok(None);
+        };
+        if chrono::Utc::now() < moved + chrono::Duration::days(client_days(ctx) + 1) {
+            return Ok(None);
+        }
+    }
     ctx.put(INTERMEDIATE, first.as_bytes(), None, 0o644)?;
     // The services read the bundle at start. The date goes last: a failed
     // restart is tried again tomorrow.
