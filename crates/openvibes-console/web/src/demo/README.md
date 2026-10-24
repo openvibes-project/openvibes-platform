@@ -9,6 +9,7 @@ An in-browser implementation of /api/v1 over invented data, for the GitHub Pages
 | `data.ts` | The synthetic fleet, findings and advisories (deterministic, example.test hosts). |
 | `checkSeed.ts` | Hand-made compliance checks for the Compliance list (hardening and site rule sets, a check in every area, every triage state, an ended finding, an expired acceptance, a check only passing). |
 | `vulnSeed.ts` | Hand-made vulnerabilities for the cases the Vulnerabilities list and page must show (shared CVEs, due dates, assignees, a fixed pair, a lower-confidence match). |
+| `listQuery.ts` | Shared query validation for the list routes (`listQueryError`). |
 | `personas.ts` | The personas the demo can be viewed as (each signs in as a seeded person). |
 | `share.ts` | The server's access rules: roles into capabilities (rbac.rs) and the share check (share.rs). |
 | `http.ts` | Helpers the routes share: responses, paging, ranking, browser storage. |
