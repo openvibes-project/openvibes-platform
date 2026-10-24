@@ -235,7 +235,7 @@ async fn reaching(
 
 /// The expansion query: pairs, or (`Mode::Which`) the 1-based indexes of the items
 /// that reach any failing pair. `open[i]` keeps item `i` to its failing
-/// pairs still open at `now` (no triage, open, or an expired accepted risk);
+/// pairs (by the list's [`crate::check_list_sql::failing`]) still open at `now` (no triage, open, or an expired accepted risk);
 /// with `Mode::Which`, only the failing test applies.
 async fn rows(
     client: &Client,
@@ -263,6 +263,9 @@ async fn rows(
             format!("ORDER BY 2, 3, 1 LIMIT {}", MAX_ITEMS + 1),
         )
     };
+    // The Compliance list's failing test (open, seen within its window), so
+    // a row reaches exactly the pairs it counts.
+    let failing = crate::check_list_sql::failing("$7").replace("f.", "c.");
     let still_open = if mode != Mode::Open {
         "$7::timestamptz IS NOT NULL"
     } else {
@@ -281,7 +284,7 @@ async fn rows(
                  LEFT JOIN console_finding_triage t ON t.agent_id = c.agent_id
                      AND t.rule_set_id = c.rule_set_id AND t.rule_id = c.rule_id
                  WHERE {visible}
-                   AND (NOT k.open_only OR (c.ended_at IS NULL AND {still_open}))
+                   AND (NOT k.open_only OR ({failing} AND {still_open}))
                  {order}"
             ),
             &[

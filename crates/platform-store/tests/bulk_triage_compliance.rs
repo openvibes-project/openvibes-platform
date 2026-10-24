@@ -211,3 +211,74 @@ async fn a_named_host_without_open_only_still_changes_as_asked() {
     drop(c);
     db.drop().await;
 }
+
+/// Finding 1 (final review): a check row reaches only the pairs its list
+/// counts as failing. MAX_ITEMS + 1 unended pairs last seen two days ago
+/// (an offline host) and two fresh ones: the stale pairs are not changed,
+/// not added to a case and do not count toward the cap.
+#[tokio::test]
+async fn stale_pairs_are_not_reached_and_not_capped() {
+    let (db, mut c) = common::migrated().await;
+    let stale = bulk::MAX_ITEMS + 1;
+    c.batch_execute(&format!(
+        "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at)
+         SELECT 'agent.00000000-0000-4000-8000-' || lpad(n::text, 12, '0'), 'active', now(), 'h-' || n, now()
+         FROM generate_series(1, {stale} + 2) n;
+         INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id, rule_version,
+             severity, first_observed_at, last_observed_at, last_observed_day, scan_id, confidence,
+             message, evidence, received_at, origin, authenticated)
+         SELECT agent_id, '{set}', '{rule}', 'f', 1, 'low', now() - interval '3 days',
+             CASE WHEN agent_id > 'agent.00000000-0000-4000-8000-' || lpad('{stale}', 12, '0')
+                  THEN now() ELSE now() - interval '2 days' END,
+             current_date, 's', 90, 'm', '{{}}', now(), 'online', true
+         FROM agents;",
+        set = R.0,
+        rule = R.1,
+    ))
+    .await
+    .unwrap();
+    let scope = AgentScope::Global;
+    let now = Utc::now();
+    let done = bulk::compliance(&mut c, &scope, &row(None), close("x"), "ann", now)
+        .await
+        .unwrap()
+        .expect("stale pairs do not count toward the cap");
+    assert_eq!((done.changed, done.skipped.len()), (2, 0), "{done:?}");
+    let triaged: i64 = c
+        .query_one(
+            "SELECT count(*) FROM console_finding_triage WHERE state = 'mitigated'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(triaged, 2, "no stale pair is changed");
+    let case = bulk::expand_compliance(&c, &scope, &row(None), &[])
+        .await
+        .unwrap()
+        .expect("stale pairs do not count toward the cap");
+    assert_eq!(case.len(), 2, "only the failing pairs go to a case");
+    // One stale host named from the row (Host chip) is not a failing finding.
+    let first = "agent.00000000-0000-4000-8000-000000000001";
+    let done = bulk::compliance_open_only(
+        &mut c,
+        &scope,
+        &row(Some(first)),
+        &[true],
+        close("x"),
+        "ann",
+        now,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        done.skipped,
+        [(
+            format!("{first}/{}/{}", R.0, R.1),
+            "not found or out of scope"
+        )]
+    );
+    drop(c);
+    db.drop().await;
+}

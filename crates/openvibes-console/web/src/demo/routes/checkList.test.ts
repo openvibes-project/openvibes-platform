@@ -171,4 +171,20 @@ describe("demo Compliance list", () => {
     expect(await bulk({ action: "case", new_case_title: "aslr", items: [row("harden.kernel.aslr")] })).toMatchObject({ changed: 1, skipped: [] });
     expect((await server.handle("POST", "/api/v1/alarms/bulk", { action: "assign", assignee: null, items: [{ id: "1", open_only: true }] })).status).toBe(400);
   });
+
+  it("bulk on a check row skips stale pairs, as the list does (check_list_sql::failing)", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    type Done = { changed: number; skipped: { id: string; reason: string }[] };
+    const bulk = async (body: Record<string, unknown>) => (await (await server.handle("POST", "/api/v1/compliance/bulk", body)).json()) as Done;
+    const set = "hardening-linux-l1";
+    // permit_empty_passwords: agent-00001 last seen two days ago (offline, never ended); only agent-00002 is reached.
+    const stale = server.data.findings.find((f) => f.rule_id === "harden.ssh.permit_empty_passwords" && f.agent_id === "agent-00001");
+    if (!stale) throw new Error("seed");
+    stale.last_observed_at = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const item = { rule_set_id: set, rule_id: "harden.ssh.permit_empty_passwords" };
+    expect(await bulk({ action: "case", new_case_title: "x", items: [item] })).toMatchObject({ changed: 1 });
+    expect(await bulk({ action: "state", state: "mitigated", note: "x", items: [item] })).toMatchObject({ changed: 1, skipped: [] });
+    expect(await bulk({ action: "state", state: "mitigated", note: "x", items: [{ ...item, agent_id: "agent-00001", open_only: true }] }))
+      .toMatchObject({ changed: 0, skipped: [{ reason: "not found or out of scope" }] });
+  });
 });

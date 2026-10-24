@@ -3,6 +3,7 @@ import { caseSeverityOf, type CaseStore } from "../cases";
 import type { Permission } from "../../api/types";
 import type { DemoContext } from "../context";
 import { json, problem } from "../http";
+import { isFailing } from "./checkList";
 import type { Suppressions } from "../suppressions";
 
 export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; suppressions: Suppressions }) {
@@ -26,19 +27,23 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
       write: (next) => { alarm.state = next.state; alarm.triage = { ...next, version: alarm.triage.version + 1, updated_at: iso(), updated_by: actor }; } });
     return true;
   };
-  const findingTargets = (item: Record<string, unknown>, into: Picked): boolean => {
+  /** `reopen`: a reopen keeps every pair; otherwise a check row's (`openOnly`) pairs are only those the list counts failing (compliance.rs). */
+  const findingTargets = (item: Record<string, unknown>, into: Picked, reopen = false): boolean => {
     if (typeof item.rule_set_id !== "string" || typeof item.rule_id !== "string" || (item.open_only !== undefined && typeof item.open_only !== "boolean")) return false;
     const agent = typeof item.agent_id === "string" ? item.agent_id : null;
     const set = item.rule_set_id === "~unknown" ? "" : item.rule_set_id;
     const rule = item.rule_id;
-    const hits = findings().filter((f) => f.rule_set_id === set && f.rule_id === rule && (agent === null || f.agent_id === agent));
+    const openOnly = agent === null || item.open_only === true;
+    const now = Date.now();
+    const hits = findings().filter((f) => f.rule_set_id === set && f.rule_id === rule && (agent === null || f.agent_id === agent)
+      && (reopen || !openOnly || isFailing(f, now)));
     if (hits.length === 0) into.missing.push(agent ? `${agent}/${set}/${rule}` : `${set}/${rule}`);
     for (const f of hits) {
       const current = (): Triage => {
         const t = data.triage.get(triageKey(f.agent_id, set, rule));
         return { state: t?.state ?? "open", assigned_to: t?.assigned_to ?? null, note: t?.note ?? null, accepted_until: t?.accepted_until ?? null };
       };
-      into.found.push({ id: `${f.agent_id}/${set}/${rule}`, named: agent !== null, openOnly: agent === null || item.open_only === true, row: `${set}/${rule}`, caseKind: "compliance_finding", caseRef: `${f.agent_id}/${set}/${rule}`, current,
+      into.found.push({ id: `${f.agent_id}/${set}/${rule}`, named: agent !== null, openOnly, row: `${set}/${rule}`, caseKind: "compliance_finding", caseRef: `${f.agent_id}/${set}/${rule}`, current,
         write: (next) => { setTriage(f.agent_id, set, rule, next); } });
     }
     return true;
@@ -170,7 +175,8 @@ export function registerTriageRoutes(ctx: DemoContext & { cases: CaseStore; supp
       if (!ACTIONS.includes(action)) return problem(400, "invalid_action", "Use state, assign, case or (alarms) suppress");
       if (!allowed(action)) return problem(403, "permission_denied", "Permission denied");
       const picked: Picked = { found: [], missing: [] };
-      if (!items.every((item) => targetsOf[kind](item, picked))) return problem(400, "invalid_items", "An item does not fit this list");
+      const reopen = action === "state" && body.state === "open";
+      if (!items.every((item) => targetsOf[kind](item, picked, reopen))) return problem(400, "invalid_items", "An item does not fit this list");
       const skipped: Skip[] = picked.missing.map((id) => ({ id, reason: "not found or out of scope" }));
       const note = text(body.note).trim() || null;
       let changed: number | Response;
