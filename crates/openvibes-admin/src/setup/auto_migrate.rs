@@ -163,11 +163,15 @@ mod tests {
     use super::{Next, decide, run};
 
     /// Every platform service that touches the database is stopped while
-    /// its tables change (the model server has no database).
+    /// its tables change (the model server and the certificate timer have
+    /// no database).
     #[test]
     fn every_database_unit_stops_for_a_migration() {
         for unit in platform_host::Unit::ALL {
-            if unit != platform_host::Unit::Llm {
+            if !matches!(
+                unit,
+                platform_host::Unit::Llm | platform_host::Unit::Certificates
+            ) {
                 assert!(
                     super::STOP.contains(&unit.name()),
                     "{} keeps running",

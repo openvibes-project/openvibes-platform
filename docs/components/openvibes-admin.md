@@ -249,7 +249,9 @@ A repaired step reads "repaired: ..." in the list, and the journal line of each 
 `ok`, with the problem count in the title: each installed unit (a problem
 unless active and, where it has an endpoint, ready); the ingest and
 distribution server certificates and the intermediate (a problem under 14
-days to expiry, when Setup's repair renews them; also a problem when a
+days to expiry, which the daily renewal timer should have prevented: see
+`journalctl -u openvibes-certificates` or Status › certificate renewal › Log;
+also a problem when a
 server certificate misses an address this host now has, e.g. after DHCP:
 "run Repair in Maintenance"; a CA certificate, which names no host, is not
 checked for addresses);
@@ -684,8 +686,10 @@ refused while one works):
   away from are closed in firewalld. Then every step is checked, and only
   failed ones fixed. It
   never makes a new CA: with the CA files gone it stops and says how to
-  recover. Certificates issued for other names are issued again; one
-  expiring within 14 days is reported, not replaced.
+  recover. Certificates issued for other names, or expiring within 30 days,
+  are issued again (the daily `openvibes-certificates.timer` runs that one
+  step as `helper certificates-renew`; it skips while another Setup run holds
+  the lock, and exits non-zero only when the renewal failed).
 - `setup --update [--backup PATH] [--update-repo-dir DIR]`: check
   PostgreSQL first (#292; the Backup and Update-the-database steps both do:
   a removed `postgresql-server` or a stopped service is installed and

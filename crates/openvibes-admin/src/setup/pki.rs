@@ -311,7 +311,10 @@ fn chosen<'a, R: Runner>(ctx: &'a Ctx<'a, R>) -> impl Iterator<Item = &'static T
 }
 
 const TLS_NAMES: &str = "/etc/openvibes/tls/setup-names";
-/// Certificates this close to expiry are renewed (and Health reports them).
+/// The renewal timer reissues a server certificate this close to expiry.
+pub(crate) const RENEW_AT_DAYS: i64 = 30;
+/// Health reports a server certificate this close to expiry: the timer
+/// should have renewed it by now.
 pub(crate) const RENEW_DAYS: i64 = 14;
 
 /// The plan's names, then the host's own addresses (board #71: the console
@@ -340,18 +343,29 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         let pem = ctx.read(tls.cert)?;
         let expires =
             platform_pki::not_after(&pem).map_err(|error| format!("{}: {error:?}", tls.cert))?;
-        if expires - chrono::Utc::now() < chrono::Duration::days(RENEW_DAYS) {
-            return Ok(StepState::Failed(format!(
-                "{} expires on {}: renew it (docs/components/packaging.md, \"Renewing the server certificate\")",
-                tls.cert,
-                expires.format("%Y-%m-%d")
-            )));
+        if expires - chrono::Utc::now() < chrono::Duration::days(RENEW_AT_DAYS) {
+            return Ok(StepState::Todo);
         }
+    }
+    // The console's chain is public (browsers get it anyway) and the TUI,
+    // which is not root, reads its expiry: an older install wrote it 0640.
+    let world_readable = |path: &str| {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(ctx.path(path)).is_ok_and(|m| m.permissions().mode() & 0o777 == 0o644)
+    };
+    if chosen(ctx).any(|tls| tls.console && !world_readable(tls.cert)) {
+        return Ok(StepState::Todo);
     }
     Ok(StepState::Done(format!(
         "server certificates for {}",
         names.join(", ")
     )))
+}
+
+/// Removes the previous intermediate once nothing it signed is left; the
+/// log line when it did (Task 4).
+pub(crate) fn drop_previous<R: Runner>(_ctx: &Ctx<R>) -> Result<Option<String>, String> {
+    Ok(None)
 }
 
 pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -390,9 +404,12 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         let crt = format!("{out}/{}.crt", names[0]);
         let key = format!("{out}/{}.key", names[0]);
         if tls.console {
-            let chain = format!("{}{}", ctx.read(&crt)?, ctx.read(INTERMEDIATE)?);
+            // The issuer file may hold the old intermediate after the new.
+            let intermediate = platform_pki::first_certificate(&ctx.read(INTERMEDIATE)?)
+                .map_err(|error| format!("{INTERMEDIATE}: {error:?}"))?;
+            let chain = format!("{}{intermediate}", ctx.read(&crt)?);
             let owner = Some(("root", tls.owner));
-            ctx.put(tls.cert, chain.as_bytes(), owner, 0o640)?;
+            ctx.put(tls.cert, chain.as_bytes(), owner, 0o644)?;
             ctx.copy(&key, tls.key, owner, 0o640)?;
         } else {
             ctx.copy(&crt, tls.cert, None, 0o644)?;
@@ -425,3 +442,7 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
 #[cfg(test)]
 #[path = "pki_root_key_tests.rs"]
 mod root_key_tests;
+
+#[cfg(test)]
+#[path = "pki_renew_tests.rs"]
+mod renew_tests;

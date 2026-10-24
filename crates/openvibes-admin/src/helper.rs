@@ -109,6 +109,10 @@ pub enum HelperCommand {
     /// Gives the console's `admin` a new one-time password, unlocked and
     /// enabled; prints `done<TAB>PASSWORD` (Console sign-in, break-glass).
     AdminReset,
+    /// Renews the server certificates that expire within 30 days (run by
+    /// openvibes-certificates.timer as root); one log line, exit 0 unless
+    /// the renewal failed.
+    CertificatesRenew,
     /// Does nothing and prints `done<TAB>opened`: sudo checks the password
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
@@ -157,6 +161,7 @@ enum Verb {
     RulesApply,
     UpgradeMigrate,
     AgentConfigUpgrade,
+    CertificatesRenew,
     AdminReset,
     ShellOpen,
     CaRequest(Option<std::path::PathBuf>),
@@ -239,6 +244,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::RulesApply => Verb::RulesApply,
         HelperCommand::UpgradeMigrate => Verb::UpgradeMigrate,
         HelperCommand::AgentConfigUpgrade => Verb::AgentConfigUpgrade,
+        HelperCommand::CertificatesRenew => Verb::CertificatesRenew,
         HelperCommand::AdminReset => Verb::AdminReset,
         HelperCommand::ShellOpen => Verb::ShellOpen,
         HelperCommand::CaRequest { copy } => {
@@ -349,6 +355,7 @@ pub fn run(command: &HelperCommand) -> ExitCode {
             }
         }
         Verb::RulesApply => crate::setup::rules_apply(),
+        Verb::CertificatesRenew => crate::setup::renew(),
         Verb::UpgradeMigrate => crate::setup::upgrade_migrate(),
         Verb::AgentConfigUpgrade => crate::setup::agent_config_upgrade(),
         Verb::AdminReset => crate::setup::admin_reset::run(),
@@ -422,6 +429,7 @@ fn journal_units(unit: Unit) -> Vec<&'static str> {
             "openvibes-llm-proxy.service",
         ],
         Unit::Maintenance => vec![unit.name(), "openvibes-maintenance.service"],
+        Unit::Certificates => vec![unit.name(), "openvibes-certificates.service"],
         _ => vec![unit.name()],
     }
 }
@@ -459,6 +467,13 @@ mod journal_tests {
             [
                 "openvibes-maintenance.timer",
                 "openvibes-maintenance.service"
+            ]
+        );
+        assert_eq!(
+            super::journal_units(Unit::Certificates),
+            [
+                "openvibes-certificates.timer",
+                "openvibes-certificates.service"
             ]
         );
         assert_eq!(

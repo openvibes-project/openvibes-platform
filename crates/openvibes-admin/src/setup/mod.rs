@@ -30,6 +30,7 @@ pub(crate) mod ports;
 #[cfg(test)]
 mod ports_tests;
 pub mod remove;
+mod renew;
 pub(crate) mod request;
 mod run;
 #[cfg(test)]
@@ -45,6 +46,7 @@ use platform_host::{
     runner::{Runner, SystemRunner},
 };
 
+pub use renew::renew;
 pub use system::{Ctx, lock};
 
 pub(crate) use pki::fingerprint;
@@ -210,8 +212,8 @@ pub fn run_step<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         return apply(ctx, step);
     }
     match check(ctx, step) {
-        // A failed check (e.g. a certificate about to expire) is reported,
-        // not acted on.
+        // A failed check is reported, not acted on. (Certificates close to
+        // expiry are Todo: the renewal timer reissues them.)
         state @ (StepState::Done(_) | StepState::Skipped(_) | StepState::Failed(_)) => state,
         // Repair says what it changed: the journal line carries the detail.
         state => match apply(ctx, step) {

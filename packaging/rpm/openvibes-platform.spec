@@ -207,6 +207,8 @@ install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-vulns/NOTICE
 install -D -m 0644 $S/packaging/rpm/openvibes-ingest.service %{buildroot}%{_unitdir}/openvibes-ingest.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.service %{buildroot}%{_unitdir}/openvibes-maintenance.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.timer %{buildroot}%{_unitdir}/openvibes-maintenance.timer
+install -D -m 0644 $S/packaging/rpm/openvibes-certificates.service %{buildroot}%{_unitdir}/openvibes-certificates.service
+install -D -m 0644 $S/packaging/rpm/openvibes-certificates.timer %{buildroot}%{_unitdir}/openvibes-certificates.timer
 install -D -m 0644 $S/packaging/rpm/openvibes-migrate.service %{buildroot}%{_unitdir}/openvibes-migrate.service
 install -D -m 0644 $S/packaging/rpm/openvibes-rules-apply.service %{buildroot}%{_unitdir}/openvibes-rules-apply.service
 install -D -m 0644 $S/packaging/rpm/openvibes-ingest.sysusers %{buildroot}%{_sysusersdir}/openvibes-ingest.conf
@@ -317,16 +319,19 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %rename_pre admin openvibes-maintenance.service openvibes-maintenance.timer
 %post -n openvibes-admin
 %{_libexecdir}/openvibes/rename-account-admin post admin %{_sysconfdir}/openvibes/admin.toml
-%systemd_post openvibes-maintenance.timer
+%systemd_post openvibes-maintenance.timer openvibes-certificates.timer
+# The console's certificate chain is public, and the TUI reads its expiry
+# (before this version it was 0640): upgrades make it readable at once.
+[ -f %{_sysconfdir}/openvibes/tls/console-chain.pem ] && chmod 0644 %{_sysconfdir}/openvibes/tls/console-chain.pem || :
 %posttrans -n openvibes-admin
 %restart_renamed openvibes-maintenance.service openvibes-maintenance.timer
 # Before v0.2.7 Setup's agent.toml for the local agent listed collectors
 # without services: add it to that exact line only (one log line, never fails).
 %{_bindir}/openvibes-admin helper agent-config-upgrade || :
 %preun -n openvibes-admin
-%systemd_preun openvibes-maintenance.timer
+%systemd_preun openvibes-maintenance.timer openvibes-certificates.timer
 %postun -n openvibes-admin
-%systemd_postun openvibes-maintenance.timer
+%systemd_postun openvibes-maintenance.timer openvibes-certificates.timer
 # Removed from a host never installed (no setup.toml): an abandoned "Your
 # own CA" request goes too, its key included, and the folders it made when
 # left empty (never fails). So does the operator's copy of the request
@@ -492,6 +497,8 @@ fi
 %{_bindir}/openvibes-admin
 %{_unitdir}/openvibes-maintenance.service
 %{_unitdir}/openvibes-maintenance.timer
+%{_unitdir}/openvibes-certificates.service
+%{_unitdir}/openvibes-certificates.timer
 %{_unitdir}/openvibes-migrate.service
 %{_unitdir}/openvibes-rules-apply.service
 %{_sysusersdir}/openvibes-admin.conf

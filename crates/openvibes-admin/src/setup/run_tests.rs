@@ -31,6 +31,7 @@ fn chosen_services_are_enabled_and_started() {
             "--now",
             "openvibes-ingest.service",
             "openvibes-maintenance.timer",
+            "openvibes-certificates.timer",
             "openvibes-netlog.service",
             "openvibes-vulns.service"
         ]

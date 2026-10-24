@@ -10,7 +10,7 @@ polkit.addRule(function (action, subject) {
     var units = ["openvibes-ingest.service", "openvibes-distribution.service",
                  "openvibes-vulns.service", "openvibes-netlog.service", "openvibes-console.service",
                  "openvibes-llm.socket", "openvibes-signer.service",
-                 "openvibes-maintenance.timer"];
+                 "openvibes-maintenance.timer", "openvibes-certificates.timer"];
     var verbs = ["start", "stop", "restart"];
     if (units.indexOf(action.lookup("unit")) >= 0 &&
         verbs.indexOf(action.lookup("verb")) >= 0) {

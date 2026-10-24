@@ -19,13 +19,15 @@ pub enum Unit {
     Llm,
     /// `openvibes-maintenance.timer`.
     Maintenance,
+    /// `openvibes-certificates.timer` (renews the server certificates).
+    Certificates,
     /// `openvibes-signer.service` (own rules; no network, no readiness URL).
     Signer,
 }
 
 impl Unit {
     /// Every unit, in display order.
-    pub const ALL: [Unit; 8] = [
+    pub const ALL: [Unit; 9] = [
         Unit::Ingest,
         Unit::Distribution,
         Unit::Vulns,
@@ -33,6 +35,7 @@ impl Unit {
         Unit::Console,
         Unit::Llm,
         Unit::Maintenance,
+        Unit::Certificates,
         Unit::Signer,
     ];
 
@@ -47,6 +50,7 @@ impl Unit {
             Unit::Console => "openvibes-console.service",
             Unit::Llm => "openvibes-llm.socket",
             Unit::Maintenance => "openvibes-maintenance.timer",
+            Unit::Certificates => "openvibes-certificates.timer",
             Unit::Signer => "openvibes-signer.service",
         }
     }
@@ -62,6 +66,7 @@ impl Unit {
             Unit::Console => "console",
             Unit::Llm => "llm",
             Unit::Maintenance => "maintenance",
+            Unit::Certificates => "certificate renewal",
             Unit::Signer => "signer",
         }
     }
@@ -76,7 +81,7 @@ impl Unit {
             Unit::Vulns => Some("http://127.0.0.1:18483/ready"),
             Unit::Netlog => Some("http://127.0.0.1:18484/ready"),
             Unit::Console => Some("http://127.0.0.1:18482/ready"),
-            Unit::Llm | Unit::Maintenance | Unit::Signer => None,
+            Unit::Llm | Unit::Maintenance | Unit::Certificates | Unit::Signer => None,
         }
     }
 

@@ -50,6 +50,7 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/etc/openvibes/vulns.toml` | 0640 root:openvibes-vulns, `%config(noreplace)` | vulns |
 | `/usr/bin/openvibes-admin` | 0755 root | admin |
 | `/usr/lib/systemd/system/openvibes-maintenance.{service,timer}` | 0644 root | admin |
+| `/usr/lib/systemd/system/openvibes-certificates.{service,timer}` | 0644 root | admin |
 | `/usr/lib/systemd/system/openvibes-migrate.service` | 0644 root | admin |
 | `/usr/lib/systemd/system/openvibes-rules-apply.service` | 0644 root | admin |
 | `/usr/lib/sysusers.d/openvibes-admin.conf` | user `openvibes-admin` | admin |
@@ -170,6 +171,11 @@ directory itself, so no tmpfiles.d entry is needed.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes-admin`, with the same hardening.
+- `openvibes-certificates.timer` → `openvibes-certificates.service`: daily
+  (randomized within one hour, catches up after downtime) runs
+  `openvibes-admin helper certificates-renew` as root (it writes
+  `/etc/openvibes/tls` and restarts the TLS services, so no
+  `ProtectSystem`). Skipped unless `setup.toml` and `tls/setup-names` exist.
 - `openvibes-console.service`: runs as `openvibes-console`, with the same
   systemd sandbox. It has only `CAP_NET_BIND_SERVICE` to bind the configured
   HTTPS listener on port 443. It is disabled by the package preset until
@@ -495,20 +501,20 @@ names need quotes (`GRANT … TO "openvibes-ingest"`).
 
 ## Renewing the server certificate
 
-It lasts 90 days. Before it expires, stage a copy of the intermediate key for
-the admin user, issue, install, and restart:
+A server certificate lasts 90 days and renews itself: `openvibes-certificates.timer`
+runs daily and reissues the ingest, distribution and console certificates
+once one has under 30 days left (the Setup `certificates` step, started as
+`openvibes-admin helper certificates-renew`; the services restart to read
+the new files). Nothing is done by hand. To see what it did:
 
 ```sh
-S=/run/openvibes-ca
-install -d -o openvibes-admin -g openvibes-admin -m 0700 $S
-install -o openvibes-admin -m 0600 /var/lib/openvibes-ingest/intermediate.key $S/intermediate.key
-sudo -u openvibes-admin openvibes-admin ca issue-server ingest.example.com --san 10.0.0.5 \
-    --issuer-cert /etc/openvibes/pki/intermediate.crt --issuer-key $S/intermediate.key --out $S/tls
-install -m 0644 $S/tls/ingest.example.com.crt /etc/openvibes/tls/ingest.crt
-install -o openvibes-ingest -g openvibes-ingest -m 0600 $S/tls/ingest.example.com.key /etc/openvibes/tls/ingest.key
-rm -r $S   # /run is a tmpfs: the staged key copy never reached disk
-systemctl restart openvibes-ingest   # drains requests in flight first
+journalctl -u openvibes-certificates
 ```
+
+(also Status › certificate renewal › Log in the TUI). A run that finds
+another Setup run in progress says so and tries again the next day. The
+console's `console-chain.pem` is 0644 (the package's `%post` fixes an older
+0640 one): the TUI reads its expiry without root.
 
 ## Replacing the intermediate CA
 

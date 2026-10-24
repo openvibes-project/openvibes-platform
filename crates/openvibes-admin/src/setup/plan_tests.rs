@@ -142,7 +142,12 @@ fn every_component_names_its_packages() {
     );
     assert_eq!(
         Component::Ingest.units(),
-        [Unit::Ingest, Unit::Maintenance, Unit::Netlog]
+        [
+            Unit::Ingest,
+            Unit::Maintenance,
+            Unit::Certificates,
+            Unit::Netlog
+        ]
     );
 }
 
