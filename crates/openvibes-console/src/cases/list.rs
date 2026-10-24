@@ -10,10 +10,8 @@ use platform_store::console_cases::{
 };
 
 use super::permissions::{manager, may_assign, reader};
-use super::request::{
-    blank_is_absent, decode_cursor, encode_cursor, parse_time, precondition, title,
-};
-use super::responses::{answer, bad_request, detail_answer, invalid, permission_denied, refused};
+use super::request::{blank_is_absent, decode_cursor, encode_cursor, precondition, title};
+use super::responses::{answer, bad_request, detail_answer, permission_denied, refused};
 use super::types::{CaseListParams, CasePage, CreateCaseRequest, UpdateCaseRequest};
 use super::views::summary_view;
 use crate::{
@@ -224,18 +222,10 @@ pub(crate) async fn update_case(
     let Ok(Json(request)) = payload else {
         return bad_request("invalid_request", "The request body is invalid");
     };
-    let accepted_until = match request.accepted_until.as_deref().map(parse_time) {
-        Some(Some(at)) => Some(at),
-        Some(None) => {
-            return invalid(
-                "accepted_until",
-                "invalid_timestamp",
-                "Use an RFC 3339 time",
-            );
-        }
-        None => None,
-    };
     let assignee = request.assignee_user_id.map(|id| id.to_ascii_lowercase());
+    // Step 5d: a close takes only a closing note, sent as `resolution_note`
+    // until the route change (plan Task 4); `resolution` and
+    // `accepted_until` are ignored, as new closes set neither.
     let note = blank_is_absent(request.resolution_note.as_deref());
     let change = CaseChange {
         expected_version: expected,
@@ -243,9 +233,7 @@ pub(crate) async fn update_case(
         severity: &request.severity,
         status: &request.status,
         assignee_user_id: assignee.as_deref(),
-        resolution: request.resolution.as_deref(),
-        resolution_note: note,
-        accepted_until,
+        closing_note: note,
     };
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();

@@ -1,7 +1,7 @@
 # console-cases
 
 Cases over `/api/v1` (module `crates/openvibes-console/src/cases/`, store
-`platform_store::console_cases`, schema 36). Spec:
+`platform_store::console_cases`, schemas 35, 36 and 64). Spec:
 [2026-10-04-console-cases-design.md](../specs/2026-10-04-console-cases-design.md).
 The API, store and tests are built, and so are the web pages (list, case
 panel, "Add to case"; see [console-web.md](console-web.md#cases)).
@@ -20,8 +20,9 @@ its host, so a user with a limited scope never learns that an item outside it
 exists: it is left out of the case's items, counts and timeline, with no
 placeholder. A user sees a case if they can see at least one of its items, or
 opened it, or it is assigned to them; any other case answers 404, the same as
-one that does not exist. A case with no item is therefore seen only by who
-opened it or is assigned to it.
+one that does not exist. A case with no item is seen by who opened it, who
+it is assigned to, and anyone whose scope is every host (step 5d ruling 4;
+for a change, the scope of `cases.write`, which the route checks first).
 
 ## Interfaces
 
@@ -41,15 +42,15 @@ setting or changing the assignee also `cases.assign`.
 | `POST /api/v1/cases/{id}/notes` | `cases.write` | `201 CaseEventView`; body `{body}` |
 | `POST /api/v1/cases/{id}/items` | `cases.write` | `201 CaseItemView`; body `{kind, ref}` |
 | `DELETE /api/v1/cases/{id}/items/{item_id}` | `cases.write` | 204; open cases only |
-| `PUT /api/v1/cases/{id}/items/{item_id}/outcome` | `cases.write` | `CaseItemView`; body `{outcome: "resolved" \| "false_positive" \| "accepted_risk" \| null, note?}` |
+| `PUT /api/v1/cases/{id}/items/{item_id}/outcome` | `cases.write` | `CaseItemView`; body `{outcome: "resolved" \| "false_positive" \| "accepted_risk" \| "confirmed_malicious" \| "expected" \| null, note?}` (no re-open date field yet, so `accepted_risk` answers 422 `outcome_until_required` until the step-5d route change) |
 | `GET /api/v1/cases/for-item?kind=&ref=` | `cases.read` | `{items: [{case: CaseSummaryView, item_id, outcome}]}` |
 | `GET /api/v1/cases/assignees` | `cases.assign` | `{items: [{user_id, username, display_name}]}`: enabled users who hold `cases.read` |
 
 `CaseSummaryView` (also the head of `CaseDetailView`, which adds
 `resolution_note`, `items` and `events`): `case_id`, `number` (shown as
 `C-<number>`, never reused), `title`, `status` (`open`, `investigating`,
-`closed`), `resolution` (`mitigated`, `false_positive`, `accepted_risk`),
-`accepted_until`, `severity` (`critical`, `high`, `medium`, `low`),
+`closed`), `resolution` (`mitigated`, `false_positive`, `accepted_risk`; only
+on cases closed before step 5d), `accepted_until` (the same), `severity` (`critical`, `high`, `medium`, `low`),
 `assignee` and `opened_by` (`{user_id, username, display_name}`),
 `created_at`, `updated_at`, `closed_at`, `version`, `item_count` and
 `pending_item_count` (items the viewer can see; the second counts alarms,
@@ -78,16 +79,19 @@ open case.
 text; the resolution note for `resolved`; the outcome note for
 `item_outcome`) and `detail`: `{from, to}` for `status`, `severity` and
 `assigned` (usernames); `{item_id, item_kind, item_ref, item_agent_id}` on
-item entries; `{resolution, accepted_until}` for `resolved`; `{reason}` for
-`reopened` (`manual` or `accepted_risk_expired`). The timeline is oldest
+item entries, plus `{from, to, until}` on `item_outcome`; `{}` for `resolved`
+(before step 5d `{resolution, accepted_until}`); `{reason}` for `reopened`
+(`manual`, `accepted_risk_expired` or `evidence_returned`). The timeline is oldest
 first and append-only (a trigger refuses UPDATE and DELETE).
 
 ### Changing a case
 
 `PUT` replaces the editable fields, so send them all: `title` (1–120
 characters, trimmed), `severity`, `status`, `assignee_user_id` (absent or
-`null` means nobody) and, to close, `resolution`, `resolution_note` (1–4000
-characters) and `accepted_until` (RFC 3339). Sending the current values
+`null` means nobody) and, to close, the closing note in `resolution_note`
+(1–4000 characters). `resolution` and `accepted_until` are still accepted
+and ignored (step 5d; the request changes with the route change). Sending
+the current values
 changes nothing and writes nothing. The version rises with each change to
 those fields; notes, items and outcomes move `updated_at` only, so adding a
 note does not make someone else's edit stale. `If-Match` is the quoted
@@ -95,24 +99,27 @@ version from the last `ETag`.
 
 Statuses move freely between `open` and `investigating`. `closed` needs:
 
-1. a `resolution` (`mitigated`, `false_positive`, `accepted_risk`) and a
-   note;
-2. for `accepted_risk`, an `accepted_until` in the future (and no date for the
-   others);
-3. an outcome on every alarm, finding and vulnerability, `resolved` only
+1. a closing note (`closing_note` in the store, field errors
+   `closing_note_required`, `closing_note_not_allowed` on any other status,
+   `invalid_note`); new closes set no resolution;
+2. an outcome on every alarm, finding and vulnerability, `resolved` only
    while its evidence is still gone. Items the closing user cannot see are
    not theirs to clear: if any has no outcome, the answer is 409
    `hidden_items_unresolved` until someone with that scope clears them.
 
 Setting a status other than `closed` on a closed case reopens it and clears
-its resolution. A closed case keeps how it ended: changing the resolution,
-note or date, adding or removing items, and setting outcomes are 409
+its note (and an old case's resolution and date). A closed case keeps how it
+ended: a different closing note, adding or removing items, and setting
+outcomes are 409
 `case_closed` until it is reopened. Title, severity, assignee and notes can
 still change.
 
-An item outcome is `resolved` (only when `evidence_gone`; a note is optional),
-`false_positive` or `accepted_risk` (a note is required). Evidence is gone
-when:
+An item outcome is `resolved` (only when `evidence_gone`; a note is
+optional), `false_positive`, `accepted_risk`, `confirmed_malicious` or
+`expected` (a note is required). `accepted_risk` also needs `outcome_until`,
+a time after now and at most 365 days ahead (`outcome_until_required`,
+`_past`, `_too_far`); the other outcomes take none (`_not_allowed`). Any
+other outcome, or clearing it, drops the date. Evidence is gone when:
 
 - finding: the agent's current finding is missing or has ended
   (`ended_at` set);
@@ -130,10 +137,16 @@ Severity is set when the case is created (the highest item severity, with
 `important` counted as high, `moderate` as medium, and `info` and `unrated` as
 low; medium with none) and is changed only by hand.
 
-When `accepted_until` passes, the case reopens as `open` (audit actor
-`system`, timeline `reopened` with reason `accepted_risk_expired`), the items
-marked `accepted_risk` lose that outcome so someone decides again, and the
-resolution fields clear. This runs when cases are listed or read, so it happens
+When an item's `outcome_until` passes, its closed case reopens as `open`
+(audit actor `system`, timeline `reopened` with reason
+`accepted_risk_expired`, then an `item_outcome` entry per expired item, shown
+only to those who can see it) and only those items lose their outcome, so
+someone decides again; the case's note clears. A case closed before step 5d
+with a case-level `accepted_until` still reopens on that date, and then all
+its `accepted_risk` items lose the outcome. Migration 64 dated the existing
+`accepted_risk` items: the case's `accepted_until` when it was closed as
+accepted risk, otherwise `added_at` + 90 days (so one whose 90 days have
+passed reopens its closed case on the first check after the upgrade). This runs when cases are listed or read, so it happens
 the next time anyone looks. A case whose item has since joined another open
 case stays closed.
 
@@ -196,7 +209,7 @@ None.
 | item missing, or outside the caller's scope, or not in the case | 404 `item_not_found` (the same answer, so nothing is revealed) |
 | invalid JSON body, unknown field, invalid query or cursor, invalid `If-Match` | 400 |
 | missing `If-Match` / stale version | 428 / 412 `stale_case` |
-| invalid title, severity, status, resolution, note, date, kind or ref, assignee who cannot read cases, an outcome on a host or software, too many items | 422 `invalid_case` with `field_errors` (e.g. `resolution_note` / `resolution_note_required`) |
+| invalid title, severity, status, note, date, kind or ref, assignee who cannot read cases, an outcome on a host or software, too many items | 422 `invalid_case` with `field_errors` (e.g. `closing_note` / `closing_note_required`) |
 | item already in another open case | 409 `item_in_case`; `case_number` names that case only when the caller can see it, and the item |
 | item already in this case | 409 `item_already_in_case` |
 | case closed | 409 `case_closed` |
@@ -213,7 +226,7 @@ version.
 With `eval "$(scripts/test-db.sh)"`:
 
 ```sh
-cargo test -p platform-store --test console_cases        # rules, scope, exclusivity, close, evidence, audit, limits
+cargo test -p platform-store --test console_cases        # tests/console_cases/: rules, scope, exclusivity, close, outcomes, reopen, evidence, audit, limits, migration 64
 cargo test -p openvibes-console --lib cases              # cursors, validation messages
 cargo test -p openvibes-console --test cases_http        # routes, auth, CSRF, bearer, scope, versions
 cargo test -p openvibes-console --test auth_http database_builtin_permissions_match_the_rust_role_table

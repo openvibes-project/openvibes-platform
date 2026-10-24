@@ -1054,16 +1054,22 @@ permission-checked console API, so sharing never exposes data.
 - Tested by `tests/console_dashboards.rs` (ownership, sharing through global
   and scoped bindings, revoked binding, versions, limit, home fallback).
 
-## Cases (`console_cases::…`, schemas 35 and 36)
+## Cases (`console_cases::…`, schemas 35, 36 and 64)
 
 - `cases`: `case_id`, a `number` from an identity column (unique, never
   reused), `title` (1–120), `status` (`open`, `investigating`, `closed`),
   `resolution`, `resolution_note`, `accepted_until`, `severity`, assignee and
-  opener, times and `version`. CHECKs tie a closed case to its resolution,
-  note and close time, and accepted risk to its date.
+  opener, times and `version`. CHECKs tie a closed case to its note (the
+  closing note) and close time, allow a resolution only on a closed case
+  (since 64 new closes set none; older ones keep theirs), and tie accepted
+  risk to its date.
 - `case_items`: a link (`kind`, `ref`, `agent_id` for scope; null for
-  software) with `active` (true while the case is not closed), `outcome` and
-  `outcome_note`. `(case_id, kind, ref)` is unique, and a partial unique index
+  software) with `active` (true while the case is not closed), `outcome`
+  (`resolved`, `false_positive`, `accepted_risk`, and since 64
+  `confirmed_malicious` and `expected`), `outcome_note` (required for all but
+  `resolved`) and `outcome_until` (since 64: set exactly for `accepted_risk`,
+  partial index for the reopen check; backfilled as in
+  [console-cases.md](console-cases.md)). `(case_id, kind, ref)` is unique, and a partial unique index
   on `(kind, ref)` where `active` for alarms, findings and vulnerabilities puts
   each in at most one open case, even under concurrent requests. `seq` orders
   items added in the same instant.
@@ -1076,16 +1082,19 @@ permission-checked console API, so sharing never exposes data.
 
 `console_cases` takes the caller's `AgentScope` and user id on every call and
 applies `agent_visibility` in SQL: a case is visible through a visible item,
-or to its opener or assignee; items, counts and timeline entries about hidden
+or to its opener or assignee, and a case with no items also to a global
+scope; items, counts and timeline entries about hidden
 items are left out. Changes return `Result<_, Refusal>` (`NotFound`, `Stale`,
 `ItemInCase`, `ItemsUnresolved` and so on) and write the audit row and
-timeline entry in the same transaction. `reopen_due` runs two lazy checks that
+timeline entry in the same transaction. `reopen_due` runs the lazy checks that
 the console calls before it lists or reads cases: `reopen_expired` reopens
-closed cases whose accepted risk has run out, and `reopen_evidence_returned`
+cases closed before 64 whose case-level accepted risk has run out, an item
+check reopens closed cases with an item whose `outcome_until` has passed
+(clearing only those items), and `reopen_evidence_returned`
 reopens cases closed within the last 30 days whose `resolved` items have
 evidence again (migration 36 adds the partial index on `closed_at` it uses).
-Tested by `tests/console_cases.rs`, run as
-the console role. See [console-cases.md](console-cases.md).
+The module is the folder `src/console_cases/` (see its README). Tested by
+`tests/console_cases/` (one module per area), run as the console role. See [console-cases.md](console-cases.md).
 
 ## The rule signer's access (`signer::…`, schema 32, board #107)
 

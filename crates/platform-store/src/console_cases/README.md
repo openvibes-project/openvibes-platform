@@ -12,6 +12,6 @@ re-exported from `mod.rs`, so callers use `platform_store::console_cases::…`.
 | `items.rs` | Checking what an item points at; `create`, `add_item`, `remove_item` |
 | `outcomes.rs` | `set_outcome`: an item's outcome |
 | `close.rs` | `update`: fields, closing and a manual reopen |
-| `reopen.rs` | The lazy reopen checks the console runs before it reads cases |
+| `reopen.rs` | The lazy reopen checks the console runs before it reads cases: a pre-5d case's accepted risk, an item's accepted risk, returning evidence |
 | `events.rs` | Timeline entries, audit rows and `add_note` |
-| `tests.rs` | Unit tests of the checks (the database tests are in `tests/console_cases.rs`) |
+| `tests.rs` | Unit tests of the checks (the database tests are in `tests/console_cases/`) |

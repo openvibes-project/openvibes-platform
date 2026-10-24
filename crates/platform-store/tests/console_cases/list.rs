@@ -78,20 +78,15 @@ async fn for_item_finds_the_open_case_of_an_exclusive_item_and_the_cases_of_a_ho
         Some(OutcomeChange {
             outcome: "false_positive",
             note: Some("x"),
+            outcome_until: None,
         }),
     )
     .await
     .unwrap();
     let ready = fetch(&fx, &global(), ALICE, &first).await.unwrap();
-    update(
-        &mut fx,
-        &global(),
-        ALICE,
-        &ready,
-        &closing(&ready, "false_positive", "x"),
-    )
-    .await
-    .unwrap();
+    update(&mut fx, &global(), ALICE, &ready, &closing(&ready, "x"))
+        .await
+        .unwrap();
     assert!(
         cases::for_item(&fx.console, &global(), DAVE, "alarm", &alarm)
             .await
@@ -250,7 +245,7 @@ async fn the_list_filters_by_status_severity_assignee_and_text_and_pages() {
         &global(),
         ALICE,
         &made[2],
-        &closing(&made[2], "mitigated", "ok"),
+        &closing(&made[2], "ok"),
     )
     .await
     .unwrap();

@@ -98,6 +98,7 @@ async fn an_alarm_finding_or_vulnerability_is_in_one_open_case_and_is_freed_on_c
             Some(OutcomeChange {
                 outcome: "false_positive",
                 note: Some("expected"),
+                outcome_until: None,
             }),
         )
         .await
@@ -109,7 +110,7 @@ async fn an_alarm_finding_or_vulnerability_is_in_one_open_case_and_is_freed_on_c
         &global(),
         ALICE,
         &current,
-        &closing(&current, "false_positive", "Known"),
+        &closing(&current, "Known"),
     )
     .await
     .unwrap();
@@ -173,20 +174,15 @@ async fn a_reopen_conflict_names_the_other_case_only_to_someone_who_can_see_it()
         Some(OutcomeChange {
             outcome: "false_positive",
             note: Some("test"),
+            outcome_until: None,
         }),
     )
     .await
     .unwrap();
     let first = fetch(&fx, &global(), ALICE, &first).await.unwrap();
-    let closed = update(
-        &mut fx,
-        &global(),
-        ALICE,
-        &first,
-        &closing(&first, "mitigated", "Done"),
-    )
-    .await
-    .unwrap();
+    let closed = update(&mut fx, &global(), ALICE, &first, &closing(&first, "Done"))
+        .await
+        .unwrap();
     // Someone takes the db-01 alarm in a case Bob cannot see.
     let other = open_case(
         &mut fx.console,

@@ -90,8 +90,8 @@ async fn a_scoped_user_sees_only_cases_and_items_in_scope() {
     let bobs = open_case(&mut fx.console, &prod(), BOB, "Bob's own", &[]).await;
     assert!(fetch(&fx, &prod(), BOB, &bobs).await.is_some());
     assert!(
-        fetch(&fx, &global(), DAVE, &bobs).await.is_none(),
-        "an empty case is seen by whoever opened it or is assigned to it"
+        fetch(&fx, &global(), DAVE, &bobs).await.is_some(),
+        "an empty case is seen by readers of all hosts too (step 5d ruling 4)"
     );
     let assigned = update(
         &mut fx,
@@ -235,5 +235,56 @@ async fn malformed_items_are_invalid_not_missing() {
             "{kind} {reference}: {refused:?}"
         );
     }
+    fx.db.drop().await;
+}
+
+/// The ids of every case `user` lists.
+async fn listed(fx: &Fx, scope: AgentScope, user: &str) -> Vec<String> {
+    let all = CaseFilters {
+        status: Some("all".into()),
+        ..CaseFilters::default()
+    };
+    cases::list(&fx.console, &scope, user, &all, None, 50)
+        .await
+        .unwrap()
+        .iter()
+        .map(|c| c.case_id.clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn an_empty_case_is_visible_to_all_hosts_readers() {
+    let mut fx = setup().await;
+    // Opened by Bob (production only), assigned to nobody, no items.
+    let empty = open_case(&mut fx.console, &prod(), BOB, "Empty", &[]).await;
+    let id = empty.summary.case_id.as_str();
+    // Its creator, and a reader of all hosts, see it.
+    assert!(fetch(&fx, &prod(), BOB, &empty).await.is_some());
+    assert!(fetch(&fx, &global(), DAVE, &empty).await.is_some());
+    assert_eq!(listed(&fx, global(), DAVE).await, [id]);
+    // A reader of some groups who neither opened it nor has it does not.
+    let other = open_case(&mut fx.console, &global(), ALICE, "Alice's", &[]).await;
+    assert!(fetch(&fx, &prod(), BOB, &other).await.is_none());
+    assert_eq!(listed(&fx, prod(), BOB).await, [id]);
+    // Assigned to them, they see it.
+    let assigned = update(
+        &mut fx,
+        &global(),
+        ALICE,
+        &other,
+        &CaseChange {
+            assignee_user_id: Some(BOB),
+            ..same(&other, "open")
+        },
+    )
+    .await
+    .unwrap();
+    assert!(fetch(&fx, &prod(), BOB, &assigned).await.is_some());
+    // Once a case holds items, only its items decide (with opener and
+    // assignee): a db-01 item keeps it from Bob, a reader of all hosts
+    // still sees it.
+    let db_only = open_case(&mut fx.console, &global(), ALICE, "db", &[("host", DB)]).await;
+    assert!(fetch(&fx, &prod(), BOB, &db_only).await.is_none());
+    assert!(fetch(&fx, &global(), DAVE, &db_only).await.is_some());
     fx.db.drop().await;
 }

@@ -11,6 +11,7 @@ mod evidence;
 mod exclusive;
 mod limits;
 mod list;
+mod migration;
 mod outcomes;
 mod reopen;
 mod scope;
@@ -247,16 +248,13 @@ fn same<'a>(detail: &'a CaseDetail, status: &'a str) -> CaseChange<'a> {
         severity: &detail.summary.severity,
         status,
         assignee_user_id: detail.summary.assignee.as_ref().map(|u| u.user_id.as_str()),
-        resolution: None,
-        resolution_note: None,
-        accepted_until: None,
+        closing_note: None,
     }
 }
 
-fn closing<'a>(detail: &'a CaseDetail, resolution: &'a str, note: &'a str) -> CaseChange<'a> {
+fn closing<'a>(detail: &'a CaseDetail, note: &'a str) -> CaseChange<'a> {
     CaseChange {
-        resolution: Some(resolution),
-        resolution_note: Some(note),
+        closing_note: Some(note),
         ..same(detail, "closed")
     }
 }

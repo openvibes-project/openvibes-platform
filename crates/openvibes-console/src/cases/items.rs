@@ -150,7 +150,14 @@ pub(crate) async fn set_item_outcome(
     let change = request
         .outcome
         .as_deref()
-        .map(|outcome| OutcomeChange { outcome, note });
+        // ponytail: no request field for the re-open date yet, so
+        // accepted_risk is refused (outcome_until_required) until the
+        // step-5d route change (plan Task 4) adds one.
+        .map(|outcome| OutcomeChange {
+            outcome,
+            note,
+            outcome_until: None,
+        });
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };

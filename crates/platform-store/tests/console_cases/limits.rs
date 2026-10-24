@@ -116,15 +116,9 @@ async fn items_can_be_removed_from_an_open_case_only() {
         assert_eq!(refused.unwrap_err(), Refusal::ItemNotFound);
     }
     let host_item = item_id(&after, "host").to_owned();
-    let closed = update(
-        &mut fx,
-        &global(),
-        ALICE,
-        &after,
-        &closing(&after, "mitigated", "ok"),
-    )
-    .await
-    .unwrap();
+    let closed = update(&mut fx, &global(), ALICE, &after, &closing(&after, "ok"))
+        .await
+        .unwrap();
     let refused = cases::remove_item(
         &mut fx.console,
         &global(),
@@ -164,12 +158,12 @@ async fn the_database_refuses_what_the_rules_forbid() {
         )
         .await;
     assert!(result.is_err());
-    // A closed case needs its resolution, note and close time, and an
-    // accepted risk its date.
+    // A closed case needs its note and close time, only a closed case has a
+    // resolution (pre-5d closes), and an accepted risk its date.
     for set in [
         "status = 'closed'",
-        "status = 'closed', resolution = 'mitigated'",
-        "status = 'closed', resolution = 'mitigated', resolution_note = 'x'",
+        "resolution = 'mitigated'",
+        "status = 'closed', resolution_note = 'x'",
         "status = 'closed', resolution = 'accepted_risk', resolution_note = 'x', closed_at = now()",
         "title = ''",
         "severity = 'urgent'",
@@ -178,6 +172,22 @@ async fn the_database_refuses_what_the_rules_forbid() {
             .admin
             .execute(
                 &format!("UPDATE cases SET {set} WHERE case_id = $1::text::uuid"),
+                &[&first.summary.case_id],
+            )
+            .await;
+        assert!(result.is_err(), "{set}");
+    }
+    // Accepted risk on an item needs its date, and only it has one.
+    for set in [
+        "outcome = 'accepted_risk', outcome_note = 'x'",
+        "outcome_until = now() + interval '1 day'",
+        "outcome = 'expected', outcome_note = 'x', outcome_until = now() + interval '1 day'",
+        "outcome = 'expected'",
+    ] {
+        let result = fx
+            .admin
+            .execute(
+                &format!("UPDATE case_items SET {set} WHERE case_id = $1::text::uuid"),
                 &[&first.summary.case_id],
             )
             .await;

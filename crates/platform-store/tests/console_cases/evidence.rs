@@ -34,21 +34,16 @@ async fn closed_on_resolved_findings(fx: &mut Fx, title: &str) -> CaseDetail {
             Some(OutcomeChange {
                 outcome: "resolved",
                 note: None,
+                outcome_until: None,
             }),
         )
         .await
         .unwrap();
     }
     let ready = fetch(fx, &global(), ALICE, &case).await.unwrap();
-    update(
-        fx,
-        &global(),
-        ALICE,
-        &ready,
-        &closing(&ready, "mitigated", "Fixed"),
-    )
-    .await
-    .unwrap()
+    update(fx, &global(), ALICE, &ready, &closing(&ready, "Fixed"))
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -110,7 +105,10 @@ async fn evidence_that_returns_reopens_a_recently_closed_case() {
     assert_eq!(tail[1].kind, "reopened");
     assert!(tail[1].actor.is_none());
     assert_eq!(tail[1].detail["reason"], "evidence_returned");
-    assert_eq!(tail[1].detail["previous_resolution"], "mitigated");
+    assert!(
+        tail[1].detail["previous_resolution"].is_null(),
+        "closed with a note only"
+    );
     assert!(tail[1].detail.get("item_ref").is_none(), "names no item");
     assert_eq!(tail[0].kind, "item_outcome");
     assert_eq!(tail[0].detail["item_ref"], finding(WEB));
@@ -135,7 +133,7 @@ async fn evidence_that_returns_reopens_a_recently_closed_case() {
         &global(),
         ALICE,
         &reopened,
-        &closing(&reopened, "mitigated", "x"),
+        &closing(&reopened, "x"),
     )
     .await;
     assert_eq!(refused.unwrap_err(), Refusal::ItemsUnresolved(1));
@@ -168,6 +166,8 @@ async fn false_positive_and_accepted_risk_do_not_reopen_on_evidence() {
             Some(OutcomeChange {
                 outcome: decision,
                 note: Some("decided"),
+                outcome_until: (decision == "accepted_risk")
+                    .then(|| Utc::now() + Duration::days(90)),
             }),
         )
         .await
@@ -179,10 +179,7 @@ async fn false_positive_and_accepted_risk_do_not_reopen_on_evidence() {
         &global(),
         ALICE,
         &ready,
-        &CaseChange {
-            accepted_until: Some(Utc::now() + Duration::days(90)),
-            ..closing(&ready, "accepted_risk", "Accepted")
-        },
+        &closing(&ready, "Accepted"),
     )
     .await
     .unwrap();

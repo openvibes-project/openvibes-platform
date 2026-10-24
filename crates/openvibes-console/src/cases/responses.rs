@@ -66,17 +66,18 @@ pub(super) fn invalid_message(code: &str) -> &'static str {
         "invalid_kind" => "Use alarm, compliance_finding, vulnerability, host or software",
         "invalid_ref" => "The id does not have the shape of this kind of item",
         "too_many_items" => "A case is created with at most 50 items",
-        "resolution_required" => "A resolution is required to close a case",
-        "invalid_resolution" => "Use mitigated, false_positive or accepted_risk",
-        "resolution_note_required" => "A note is required to close a case",
+        "closing_note_required" => "A closing note is required to close a case",
+        "closing_note_not_allowed" => "Only closing a case takes a closing note",
         "invalid_note" => "Use 1 to 4000 characters of plain text",
         "note_required" => "A note is required for this outcome",
-        "invalid_outcome" => "Use resolved, false_positive or accepted_risk",
+        "invalid_outcome" => {
+            "Use resolved, false_positive, accepted_risk, confirmed_malicious or expected"
+        }
         "outcome_not_applicable" => "Hosts and software need no outcome",
-        "accepted_until_required" => "Accepted risk needs a date in the future",
-        "accepted_until_past" => "The date must be in the future",
-        "accepted_until_not_allowed" => "Only accepted risk has an end date",
-        "resolution_not_allowed" => "Only a closed case has a resolution",
+        "outcome_until_required" => "Accepted risk needs a re-open date",
+        "outcome_until_past" => "The date must be in the future",
+        "outcome_until_too_far" => "The date must be within 365 days",
+        "outcome_until_not_allowed" => "Only accepted risk has a re-open date",
         _ => "The value is not valid",
     }
 }
@@ -165,17 +166,16 @@ mod tests {
             "invalid_kind",
             "invalid_ref",
             "too_many_items",
-            "resolution_required",
-            "invalid_resolution",
-            "resolution_note_required",
+            "closing_note_required",
+            "closing_note_not_allowed",
             "invalid_note",
             "note_required",
             "invalid_outcome",
             "outcome_not_applicable",
-            "accepted_until_required",
-            "accepted_until_past",
-            "accepted_until_not_allowed",
-            "resolution_not_allowed",
+            "outcome_until_required",
+            "outcome_until_past",
+            "outcome_until_too_far",
+            "outcome_until_not_allowed",
         ] {
             assert_ne!(invalid_message(code), "The value is not valid", "{code}");
         }

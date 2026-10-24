@@ -824,7 +824,7 @@ async fn a_case_is_opened_read_changed_noted_and_closed_with_versions_and_audit(
     assert_eq!(status, StatusCode::OK, "{closed}");
     assert_eq!(etag.as_deref(), Some("\"3\""));
     assert_eq!(closed["status"], "closed");
-    assert_eq!(closed["resolution"], "mitigated");
+    assert_eq!(closed["resolution"], Value::Null, "new closes set none");
     assert_eq!(closed["resolution_note"], "Disabled root login");
     assert!(closed["closed_at"].is_string());
     assert!(
@@ -881,7 +881,7 @@ async fn a_case_is_opened_read_changed_noted_and_closed_with_versions_and_audit(
 }
 
 #[tokio::test]
-async fn closing_is_refused_without_a_resolution_a_note_or_a_date() {
+async fn closing_is_refused_without_a_closing_note() {
     let fx = fixture!();
     let alice = fx.session("alice").await;
     let case = fx
@@ -889,52 +889,23 @@ async fn closing_is_refused_without_a_resolution_a_note_or_a_date() {
         .await;
     let uri = case_uri(&case);
     let tomorrow = (Utc::now() + chrono::Duration::days(1)).to_rfc3339();
-    let yesterday = (Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+    // Step 5d: the closing note travels as `resolution_note` until the
+    // route change; `resolution` and `accepted_until` are ignored.
     for (changes, field, code) in [
         (
-            json!({"status": "closed"}),
-            "resolution",
-            "resolution_required",
-        ),
-        (
             json!({"status": "closed", "resolution": "mitigated"}),
-            "resolution_note",
-            "resolution_note_required",
+            "closing_note",
+            "closing_note_required",
         ),
         (
-            json!({"status": "closed", "resolution": "mitigated", "resolution_note": "   "}),
-            "resolution_note",
-            "resolution_note_required",
+            json!({"status": "closed", "resolution_note": "   "}),
+            "closing_note",
+            "closing_note_required",
         ),
         (
-            json!({"status": "closed", "resolution": "fixed", "resolution_note": "x"}),
-            "resolution",
-            "invalid_resolution",
-        ),
-        (
-            json!({"status": "closed", "resolution": "accepted_risk", "resolution_note": "x"}),
-            "accepted_until",
-            "accepted_until_required",
-        ),
-        (
-            json!({"status": "closed", "resolution": "accepted_risk", "resolution_note": "x", "accepted_until": yesterday}),
-            "accepted_until",
-            "accepted_until_past",
-        ),
-        (
-            json!({"status": "closed", "resolution": "mitigated", "resolution_note": "x", "accepted_until": tomorrow}),
-            "accepted_until",
-            "accepted_until_not_allowed",
-        ),
-        (
-            json!({"status": "closed", "resolution": "mitigated", "resolution_note": "x", "accepted_until": "next week"}),
-            "accepted_until",
-            "invalid_timestamp",
-        ),
-        (
-            json!({"status": "open", "resolution": "mitigated"}),
-            "resolution",
-            "resolution_not_allowed",
+            json!({"status": "open", "resolution_note": "x"}),
+            "closing_note",
+            "closing_note_not_allowed",
         ),
         (json!({"status": "done"}), "status", "invalid_status"),
         (
@@ -972,7 +943,7 @@ async fn closing_is_refused_without_a_resolution_a_note_or_a_date() {
         (same["version"].clone(), same["status"].clone()),
         (json!(1), json!("open"))
     );
-    // A date and a note are enough for accepted risk, and it carries both.
+    // A note is enough; a resolution and a date are not stored.
     let (status, closed, _) = fx
         .send(
             &alice,
@@ -983,11 +954,26 @@ async fn closing_is_refused_without_a_resolution_a_note_or_a_date() {
         )
         .await;
     assert_eq!(status, StatusCode::OK, "{closed}");
-    assert_eq!(closed["resolution"], "accepted_risk");
-    assert!(closed["accepted_until"].is_string());
-    // A closed case keeps how it ended, takes no items and no outcomes.
+    assert_eq!(closed["resolution_note"], "Until the rebuild");
+    assert_eq!(
+        (
+            closed["resolution"].clone(),
+            closed["accepted_until"].clone()
+        ),
+        (Value::Null, Value::Null)
+    );
+    // A closed case keeps its note, takes no items and no outcomes.
     let (status, problem, _) = fx
-        .send(&alice, "PUT", &uri, Some(put_body(&closed, json!({"resolution": "mitigated", "resolution_note": "Changed", "accepted_until": null}))), Some(&version(&closed)))
+        .send(
+            &alice,
+            "PUT",
+            &uri,
+            Some(put_body(
+                &closed,
+                json!({"status": "closed", "resolution_note": "Changed"}),
+            )),
+            Some(&version(&closed)),
+        )
         .await;
     assert_eq!(
         (status, problem["code"].clone()),
@@ -1799,9 +1785,23 @@ async fn accepted_risk_that_runs_out_reopens_the_case_when_it_is_next_read() {
     let uri = case_uri(&case);
     let until = (Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
     let (status, closed, _) = fx
-        .send(&alice, "PUT", &uri, Some(put_body(&case, json!({"status": "closed", "resolution": "accepted_risk", "resolution_note": "Until Friday", "accepted_until": until}))), Some("\"1\""))
+        .send(
+            &alice,
+            "PUT",
+            &uri,
+            Some(put_body(
+                &case,
+                json!({"status": "closed", "resolution_note": "Until Friday"}),
+            )),
+            Some("\"1\""),
+        )
         .await;
     assert_eq!(status, StatusCode::OK, "{closed}");
+    // A case closed as accepted risk before step 5d.
+    fx.sql(&format!(
+        "UPDATE cases SET resolution = 'accepted_risk', accepted_until = '{until}'"
+    ))
+    .await;
     let (_, still_closed) = fx.get(&alice, &uri).await;
     assert_eq!(still_closed["status"], "closed");
     // Time passes.

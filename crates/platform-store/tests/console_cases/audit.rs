@@ -141,6 +141,7 @@ async fn every_change_writes_its_audit_row_in_the_same_transaction() {
         Some(OutcomeChange {
             outcome: "false_positive",
             note: Some("fp"),
+            outcome_until: None,
         }),
     )
     .await
@@ -184,7 +185,7 @@ async fn every_change_writes_its_audit_row_in_the_same_transaction() {
         &global(),
         ALICE,
         &renamed,
-        &closing(&renamed, "false_positive", "fp"),
+        &closing(&renamed, "fp"),
     )
     .await
     .unwrap();

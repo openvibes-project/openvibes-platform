@@ -29,6 +29,17 @@ pub const MAX_NOTE_CHARS: usize = 4000;
 /// How long after closing a case is watched for the evidence of its
 /// `resolved` items coming back, in days.
 pub const EVIDENCE_WATCH_DAYS: i64 = 30;
+/// How far ahead an item's accepted risk may run, in days.
+pub const MAX_ACCEPT_DAYS: i64 = 365;
+/// The outcomes an alarm, finding or vulnerability can take; each needs a
+/// note except `resolved`.
+pub const OUTCOMES: [&str; 5] = [
+    "resolved",
+    "false_positive",
+    "accepted_risk",
+    "confirmed_malicious",
+    "expected",
+];
 /// Cases looked at per call of the lazy reopen checks.
 const REOPEN_BATCH: i64 = 100;
 /// Cases returned for one host or software item.
@@ -102,9 +113,10 @@ pub struct CaseSummary {
     pub title: String,
     /// `open`, `investigating` or `closed`.
     pub status: String,
-    /// `mitigated`, `false_positive` or `accepted_risk` once closed.
+    /// `mitigated`, `false_positive` or `accepted_risk` on a case closed
+    /// before step 5d; new closes set none.
     pub resolution: Option<String>,
-    /// When accepted risk runs out.
+    /// When a pre-5d case's accepted risk runs out.
     pub accepted_until: Option<DateTime<Utc>>,
     /// `critical`, `high`, `medium` or `low`.
     pub severity: String,
@@ -141,10 +153,12 @@ pub struct CaseItem {
     pub hostname: Option<String>,
     /// True while the case is not closed.
     pub active: bool,
-    /// `resolved`, `false_positive` or `accepted_risk`.
+    /// One of [`OUTCOMES`].
     pub outcome: Option<String>,
-    /// Why, for the last two.
+    /// Why, for every outcome but `resolved`.
     pub outcome_note: Option<String>,
+    /// When an `accepted_risk` outcome runs out and the case reopens.
+    pub outcome_until: Option<DateTime<Utc>>,
     /// Who added it.
     pub added_by: UserRef,
     /// When.
@@ -182,7 +196,7 @@ pub struct CaseEvent {
 pub struct CaseDetail {
     /// The list fields.
     pub summary: CaseSummary,
-    /// Why it was closed.
+    /// The closing note.
     pub resolution_note: Option<String>,
     /// Visible items, oldest first.
     pub items: Vec<CaseItem>,
@@ -249,13 +263,10 @@ pub struct CaseChange<'a> {
     pub status: &'a str,
     /// Assignee's user id, or nobody.
     pub assignee_user_id: Option<&'a str>,
-    /// How the case ended; only when `status` is `closed`.
-    pub resolution: Option<&'a str>,
-    /// Why; required with a resolution.
-    pub resolution_note: Option<&'a str>,
-    /// When accepted risk runs out; required for `accepted_risk` and a
-    /// future time.
-    pub accepted_until: Option<DateTime<Utc>>,
+    /// The closing note, stored as `resolution_note`: required when
+    /// `status` is `closed` (the current one while a closed case stays
+    /// closed), and absent otherwise.
+    pub closing_note: Option<&'a str>,
 }
 
 /// A new case.
@@ -274,10 +285,13 @@ pub struct NewCase<'a> {
 /// An item's outcome.
 #[derive(Clone, Copy, Debug)]
 pub struct OutcomeChange<'a> {
-    /// `resolved`, `false_positive` or `accepted_risk`.
+    /// One of [`OUTCOMES`].
     pub outcome: &'a str,
-    /// Required for the last two.
+    /// Required for all but `resolved`.
     pub note: Option<&'a str>,
+    /// Required for `accepted_risk`, and only there: a time in the next
+    /// [`MAX_ACCEPT_DAYS`] days.
+    pub outcome_until: Option<DateTime<Utc>>,
 }
 
 /// Who is asking about a case and what they can see.

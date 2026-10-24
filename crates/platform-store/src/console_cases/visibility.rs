@@ -17,12 +17,16 @@ pub(super) fn item_visible(item: &str) -> String {
 }
 
 /// A case the caller can see: they opened it, it is assigned to them, or
-/// one of its items is visible to them. Uses `$1`, `$2` and `$3`.
+/// one of its items is visible to them; a case with no items also when
+/// their scope is every host (spec §6, step 5d ruling 4). Uses `$1`, `$2`
+/// and `$3`.
 pub(super) fn case_visible(case: &str) -> String {
     format!(
         "({case}.opened_by_user_id = $3::text::uuid
           OR {case}.assignee_user_id IS NOT DISTINCT FROM $3::text::uuid
-          OR EXISTS (SELECT 1 FROM case_items vi WHERE vi.case_id = {case}.case_id AND {}))",
+          OR EXISTS (SELECT 1 FROM case_items vi WHERE vi.case_id = {case}.case_id AND {})
+          OR ($1::boolean
+              AND NOT EXISTS (SELECT 1 FROM case_items ei WHERE ei.case_id = {case}.case_id)))",
         item_visible("vi")
     )
 }
@@ -148,6 +152,7 @@ pub(super) fn item_from_row(row: &Row) -> CaseItem {
         title: row.get(12),
         severity: row.get(13),
         evidence_gone: row.get(14),
+        outcome_until: row.get(15),
     }
 }
 
@@ -205,7 +210,7 @@ pub(super) async fn read_items(
             &format!(
                 "SELECT i.item_id::text, i.kind, i.ref, i.agent_id, ha.hostname, i.active,
                     i.outcome, i.outcome_note, i.added_by_user_id::text, ub.username,
-                    ub.display_name, i.added_at, {title}, {severity}, {gone}
+                    ub.display_name, i.added_at, {title}, {severity}, {gone}, i.outcome_until
                  FROM case_items i
                  JOIN console_users ub ON ub.user_id = i.added_by_user_id
                  LEFT JOIN agents ha ON ha.agent_id = i.agent_id

@@ -201,11 +201,19 @@ pub struct UpdateCaseRequest {
     pub assignee_user_id: Option<String>,
     /// How it ended, required with `closed`: `mitigated`, `false_positive`
     /// or `accepted_risk`. Absent otherwise.
+    #[expect(
+        dead_code,
+        reason = "ignored since step 5d; goes with the route change"
+    )]
     pub resolution: Option<String>,
     /// Why, required with a resolution (at most 4000 characters).
     pub resolution_note: Option<String>,
     /// Required for `accepted_risk` (RFC 3339, in the future): the case
     /// reopens when it passes.
+    #[expect(
+        dead_code,
+        reason = "ignored since step 5d; goes with the route change"
+    )]
     pub accepted_until: Option<String>,
 }
 

@@ -23,7 +23,6 @@ pub(super) struct Locked {
     pub(super) assignee: Option<String>,
     pub(super) resolution: Option<String>,
     pub(super) resolution_note: Option<String>,
-    pub(super) accepted_until: Option<DateTime<Utc>>,
     pub(super) version: i64,
 }
 
@@ -41,7 +40,7 @@ pub(super) async fn lock_case(
         .query_opt(
             &format!(
                 "SELECT c.number, c.title, c.status, c.severity, c.assignee_user_id::text,
-                    c.resolution, c.resolution_note, c.accepted_until, c.version::bigint
+                    c.resolution, c.resolution_note, c.version::bigint
                  FROM cases c WHERE c.case_id = $4::text::uuid AND {visible} FOR UPDATE OF c"
             ),
             viewer_params!(viewer, &case_id),
@@ -55,41 +54,17 @@ pub(super) async fn lock_case(
         assignee: row.get(4),
         resolution: row.get(5),
         resolution_note: row.get(6),
-        accepted_until: row.get(7),
-        version: row.get(8),
+        version: row.get(7),
     }))
 }
 
-/// Checks the resolution fields a request states for its new status.
-pub(super) fn resolution_valid(
-    change: &CaseChange<'_>,
-    now: DateTime<Utc>,
-) -> Result<(), (&'static str, &'static str)> {
-    if change.status != "closed" {
-        return if change.resolution.is_some()
-            || change.resolution_note.is_some()
-            || change.accepted_until.is_some()
-        {
-            Err(("resolution", "resolution_not_allowed"))
-        } else {
-            Ok(())
-        };
-    }
-    let Some(resolution) = change.resolution else {
-        return Err(("resolution", "resolution_required"));
-    };
-    if !matches!(resolution, "mitigated" | "false_positive" | "accepted_risk") {
-        return Err(("resolution", "invalid_resolution"));
-    }
-    match change.resolution_note {
-        None => return Err(("resolution_note", "resolution_note_required")),
-        Some(note) if !note_ok(note) => return Err(("resolution_note", "invalid_note")),
-        Some(_) => {}
-    }
-    match (resolution == "accepted_risk", change.accepted_until) {
-        (true, None) => Err(("accepted_until", "accepted_until_required")),
-        (true, Some(until)) if until <= now => Err(("accepted_until", "accepted_until_past")),
-        (false, Some(_)) => Err(("accepted_until", "accepted_until_not_allowed")),
+/// Checks the closing note a request states for its new status: required
+/// with `closed`, absent otherwise.
+pub(super) fn closing_valid(change: &CaseChange<'_>) -> Result<(), (&'static str, &'static str)> {
+    match (change.status == "closed", change.closing_note) {
+        (false, Some(_)) => Err(("closing_note", "closing_note_not_allowed")),
+        (true, None) => Err(("closing_note", "closing_note_required")),
+        (true, Some(note)) if !note_ok(note) => Err(("closing_note", "invalid_note")),
         _ => Ok(()),
     }
 }
@@ -153,9 +128,10 @@ pub(super) async fn reopen_conflict(
     Ok(row.map(|row| row.get::<_, bool>(1).then(|| row.get::<_, i64>(0))))
 }
 
-/// Changes a case's title, severity, status, assignee and resolution with a
-/// version check. Closing needs a resolution, a note, a future date for
-/// accepted risk and an outcome on every alarm, finding and vulnerability;
+/// Changes a case's title, severity, status and assignee with a version
+/// check. Closing needs a closing note and an outcome on every alarm,
+/// finding and vulnerability, hidden ones included; it sets no resolution
+/// (step 5d), and a case closed before keeps its own while it stays closed;
 /// reopening needs that none of its items has joined another open case.
 /// Sending the current values changes nothing and writes nothing.
 pub async fn update(
@@ -175,7 +151,7 @@ pub async fn update(
     if !matches!(change.status, "open" | "investigating" | "closed") {
         return Ok(Err(Refusal::Invalid("status", "invalid_status")));
     }
-    if let Err((field, code)) = resolution_valid(change, now) {
+    if let Err((field, code)) = closing_valid(change) {
         return Ok(Err(Refusal::Invalid(field, code)));
     }
     let viewer = Viewer::new(scope, user_id);
@@ -188,11 +164,7 @@ pub async fn update(
     }
     let (was_closed, will_close) = (current.status == "closed", change.status == "closed");
     // Nothing else about how a closed case ended changes while it stays closed.
-    let same_resolution = current.resolution.as_deref() == change.resolution
-        && current.resolution_note.as_deref() == change.resolution_note
-        && current.accepted_until.map(|at| at.timestamp_micros())
-            == change.accepted_until.map(|at| at.timestamp_micros());
-    if was_closed && will_close && !same_resolution {
+    if was_closed && will_close && current.resolution_note.as_deref() != change.closing_note {
         return refuse(tx, Refusal::Closed).await;
     }
     let assignee_changed = current.assignee.as_deref() != change.assignee_user_id;
@@ -228,10 +200,11 @@ pub async fn update(
     }
     tx.execute(
         "UPDATE cases SET title = $2, severity = $3, status = $4,
-            assignee_user_id = $5::text::uuid, resolution = $6, resolution_note = $7,
-            accepted_until = $8, closed_at = CASE WHEN $4 = 'closed'
-                THEN COALESCE(closed_at, $9) END,
-            version = version + 1, updated_at = $9
+            assignee_user_id = $5::text::uuid, resolution_note = $6,
+            resolution = CASE WHEN $4 = 'closed' THEN resolution END,
+            accepted_until = CASE WHEN $4 = 'closed' THEN accepted_until END,
+            closed_at = CASE WHEN $4 = 'closed' THEN COALESCE(closed_at, $7) END,
+            version = version + 1, updated_at = $7
          WHERE case_id = $1::text::uuid",
         &[
             &case_id,
@@ -239,9 +212,7 @@ pub async fn update(
             &change.severity,
             &change.status,
             &change.assignee_user_id,
-            &change.resolution,
-            &change.resolution_note,
-            &change.accepted_until,
+            &change.closing_note,
             &now,
         ],
     )
@@ -298,9 +269,8 @@ pub async fn update(
             now,
             Some(user_id),
             "resolved",
-            change.resolution_note,
-            json!({ "resolution": change.resolution,
-                    "accepted_until": change.accepted_until.map(|at| at.to_rfc3339()) }),
+            change.closing_note,
+            json!({}),
         )
         .await?;
         audit(
@@ -308,7 +278,7 @@ pub async fn update(
             Some(user_id),
             "case.close",
             case_id,
-            json!({ "number": current.number, "resolution": change.resolution }),
+            json!({ "number": current.number }),
         )
         .await?;
     } else if was_closed && !will_close {

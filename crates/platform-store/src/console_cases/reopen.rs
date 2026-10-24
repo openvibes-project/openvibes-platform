@@ -11,71 +11,127 @@ use super::{
 };
 use crate::{Client, StoreError};
 
+/// What reopens a closed case because of some of its items, which lose
+/// their outcome so that someone decides again.
+struct Trigger {
+    /// Why, on the timeline and in the audit row.
+    reason: &'static str,
+    /// A condition on the closed case `c`; `$1` is [`Trigger::at`].
+    case: &'static str,
+    /// A condition on the item `i`; `$1` is [`Trigger::at`].
+    item: String,
+    /// The time the conditions compare with.
+    at: DateTime<Utc>,
+    /// The time of the reopen.
+    now: DateTime<Utc>,
+}
+
 /// Reopens recently closed cases whose `resolved` evidence has come back,
 /// as the platform (audit actor `system`).
 ///
 /// Only cases closed within [`EVIDENCE_WATCH_DAYS`] are looked at, which
 /// keeps the check bounded, and only items with the outcome `resolved`:
-/// `false_positive` and `accepted_risk` are decisions, not evidence (accepted
-/// risk reopens on its date, see [`reopen_expired`]). Each returning item
-/// loses its outcome, so someone decides again; the other outcomes stay.
-/// A case with an item that has since joined another open case is left
-/// closed. The timeline gets one `reopened` entry that names no item, and
-/// an `item_outcome` entry per returning item, which, like every item entry,
-/// only those who can see the item are shown. Returns how many reopened.
+/// the other outcomes are decisions, not evidence (accepted risk reopens on
+/// its date, see [`reopen_due`]). Each returning item loses its outcome, so
+/// someone decides again; the other outcomes stay. A case with an item that
+/// has since joined another open case is left closed. The timeline gets one
+/// `reopened` entry that names no item, and an `item_outcome` entry per
+/// returning item, which, like every item entry, only those who can see the
+/// item are shown. Returns how many reopened.
 pub async fn reopen_evidence_returned(
     client: &mut Client,
     now: DateTime<Utc>,
 ) -> Result<u32, StoreError> {
-    let since = now - chrono::Duration::days(EVIDENCE_WATCH_DAYS);
     let gone = item_gone();
-    let returned = format!(
-        "i.outcome = 'resolved' AND i.kind IN ('alarm', 'compliance_finding', 'vulnerability')
-         AND NOT ({gone})"
-    );
+    reopen_on_items(
+        client,
+        Trigger {
+            reason: "evidence_returned",
+            case: "c.closed_at >= $1",
+            item: format!(
+                "i.outcome = 'resolved'
+                 AND i.kind IN ('alarm', 'compliance_finding', 'vulnerability') AND NOT ({gone})"
+            ),
+            at: now - chrono::Duration::days(EVIDENCE_WATCH_DAYS),
+            now,
+        },
+    )
+    .await
+}
+
+/// Reopens closed cases with an item whose accepted risk ran out
+/// (`outcome_until`, step 5d), as the platform, the way
+/// [`reopen_evidence_returned`] does: only those items lose their outcome.
+async fn reopen_item_acceptance_expired(
+    client: &mut Client,
+    now: DateTime<Utc>,
+) -> Result<u32, StoreError> {
+    reopen_on_items(
+        client,
+        Trigger {
+            reason: "accepted_risk_expired",
+            case: "true",
+            item: "i.outcome = 'accepted_risk' AND i.outcome_until <= $1".to_owned(),
+            at: now,
+            now,
+        },
+    )
+    .await
+}
+
+/// Reopens up to [`REOPEN_BATCH`] closed cases that `trigger` names.
+async fn reopen_on_items(client: &mut Client, trigger: Trigger) -> Result<u32, StoreError> {
+    let Trigger {
+        reason,
+        case,
+        item,
+        at,
+        now,
+    } = trigger;
     let due = client
         .query(
             &format!(
                 "SELECT c.case_id::text FROM cases c
-                 WHERE c.status = 'closed' AND c.closed_at >= $1
-                   AND EXISTS (SELECT 1 FROM case_items i
-                               WHERE i.case_id = c.case_id AND {returned})
+                 WHERE c.status = 'closed' AND {case}
+                   AND EXISTS (SELECT 1 FROM case_items i WHERE i.case_id = c.case_id AND {item})
                  ORDER BY c.closed_at DESC LIMIT $2"
             ),
-            &[&since, &REOPEN_BATCH],
+            &[&at, &REOPEN_BATCH],
         )
         .await?;
     let mut reopened = 0;
     for row in due {
         let case_id: String = row.get(0);
         let tx = client.transaction().await?;
+        // Both conditions in each query, so that `$1` is always typed.
         let locked = tx
             .query_opt(
-                "SELECT number FROM cases
-                 WHERE case_id = $1::text::uuid AND status = 'closed' AND closed_at >= $2
-                 FOR UPDATE SKIP LOCKED",
-                &[&case_id, &since],
+                &format!(
+                    "SELECT c.number, c.resolution FROM cases c
+                     WHERE c.case_id = $2::text::uuid AND c.status = 'closed' AND {case}
+                       AND EXISTS (SELECT 1 FROM case_items i
+                                   WHERE i.case_id = c.case_id AND {item})
+                     FOR UPDATE OF c SKIP LOCKED"
+                ),
+                &[&at, &case_id],
             )
             .await?;
         let Some(locked) = locked else {
             tx.rollback().await?;
             continue;
         };
-        let number: i64 = locked.get(0);
+        let (number, previous): (i64, Option<String>) = (locked.get(0), locked.get(1));
         let items = tx
             .query(
                 &format!(
-                    "SELECT i.item_id::text, i.kind, i.ref, i.agent_id FROM case_items i
-                     WHERE i.case_id = $1::text::uuid AND {returned}
+                    "SELECT i.item_id::text, i.kind, i.ref, i.agent_id, i.outcome
+                     FROM case_items i JOIN cases c ON c.case_id = i.case_id
+                     WHERE i.case_id = $2::text::uuid AND {case} AND {item}
                      ORDER BY i.seq"
                 ),
-                &[&case_id],
+                &[&at, &case_id],
             )
             .await?;
-        if items.is_empty() {
-            tx.rollback().await?;
-            continue;
-        }
         let taken = tx
             .query_opt(
                 "SELECT 1 FROM case_items mine
@@ -97,7 +153,9 @@ pub async fn reopen_evidence_returned(
                 "UPDATE case_items SET active = true,
                     outcome = CASE WHEN item_id::text = ANY($2) THEN NULL ELSE outcome END,
                     outcome_note = CASE WHEN item_id::text = ANY($2) THEN NULL
-                                        ELSE outcome_note END
+                                        ELSE outcome_note END,
+                    outcome_until = CASE WHEN item_id::text = ANY($2) THEN NULL
+                                         ELSE outcome_until END
                  WHERE case_id = $1::text::uuid",
                 &[&case_id, &ids],
             )
@@ -111,13 +169,6 @@ pub async fn reopen_evidence_returned(
             }
             Err(error) => return Err(error.into()),
         }
-        let previous: Option<String> = tx
-            .query_one(
-                "SELECT resolution FROM cases WHERE case_id = $1::text::uuid",
-                &[&case_id],
-            )
-            .await?
-            .get(0);
         tx.execute(
             "UPDATE cases SET status = 'open', resolution = NULL, resolution_note = NULL,
                 accepted_until = NULL, closed_at = NULL, version = version + 1,
@@ -133,14 +184,24 @@ pub async fn reopen_evidence_returned(
             None,
             "reopened",
             None,
-            json!({ "reason": "evidence_returned", "status": "open",
-                    "previous_resolution": previous }),
+            json!({ "reason": reason, "status": "open", "previous_resolution": previous }),
         )
         .await?;
         let mut named = Vec::with_capacity(items.len());
         for item in &items {
-            let (item_id, kind, reference, agent_id): (String, String, String, Option<String>) =
-                (item.get(0), item.get(1), item.get(2), item.get(3));
+            let (item_id, kind, reference, agent_id, from): (
+                String,
+                String,
+                String,
+                Option<String>,
+                Option<String>,
+            ) = (
+                item.get(0),
+                item.get(1),
+                item.get(2),
+                item.get(3),
+                item.get(4),
+            );
             push_event(
                 &tx,
                 &case_id,
@@ -149,8 +210,8 @@ pub async fn reopen_evidence_returned(
                 "item_outcome",
                 None,
                 json!({ "item_id": item_id, "item_kind": kind, "item_ref": reference,
-                        "item_agent_id": agent_id, "from": "resolved", "to": null,
-                        "reason": "evidence_returned" }),
+                        "item_agent_id": agent_id, "from": from, "to": null,
+                        "reason": reason }),
             )
             .await?;
             named.push(json!({ "kind": kind, "ref": reference }));
@@ -160,7 +221,7 @@ pub async fn reopen_evidence_returned(
             None,
             "case.reopen",
             &case_id,
-            json!({ "number": number, "reason": "evidence_returned", "items": named }),
+            json!({ "number": number, "reason": reason, "items": named }),
         )
         .await?;
         tx.commit().await?;
@@ -169,15 +230,18 @@ pub async fn reopen_evidence_returned(
     Ok(reopened)
 }
 
-/// Both lazy reopen checks, for the console to run before it lists or reads
-/// cases: accepted risk that has run out, and evidence that has returned.
+/// The lazy reopen checks, for the console to run before it lists or reads
+/// cases: accepted risk that has run out (the case's, then each item's),
+/// and evidence that has returned.
 pub async fn reopen_due(client: &mut Client, now: DateTime<Utc>) -> Result<u32, StoreError> {
-    Ok(reopen_expired(client, now).await? + reopen_evidence_returned(client, now).await?)
+    Ok(reopen_expired(client, now).await?
+        + reopen_item_acceptance_expired(client, now).await?
+        + reopen_evidence_returned(client, now).await?)
 }
 
-/// Reopens closed cases whose accepted risk has run out, as the platform
-/// (audit actor `system`). Items whose acceptance expired lose that
-/// outcome, so someone decides again. A case with an item that has since
+/// Reopens cases closed as accepted risk before step 5d whose case-level
+/// `accepted_until` has run out, as the platform (audit actor `system`).
+/// Its accepted-risk items lose that outcome, so someone decides again. A case with an item that has since
 /// joined another open case is left closed. Returns how many reopened.
 pub async fn reopen_expired(client: &mut Client, now: DateTime<Utc>) -> Result<u32, StoreError> {
     let due = client
@@ -225,7 +289,8 @@ pub async fn reopen_expired(client: &mut Client, now: DateTime<Utc>) -> Result<u
             .execute(
                 "UPDATE case_items SET active = true,
                     outcome = CASE WHEN outcome = 'accepted_risk' THEN NULL ELSE outcome END,
-                    outcome_note = CASE WHEN outcome = 'accepted_risk' THEN NULL ELSE outcome_note END
+                    outcome_note = CASE WHEN outcome = 'accepted_risk' THEN NULL ELSE outcome_note END,
+                    outcome_until = CASE WHEN outcome = 'accepted_risk' THEN NULL ELSE outcome_until END
                  WHERE case_id = $1::text::uuid",
                 &[&case_id],
             )
