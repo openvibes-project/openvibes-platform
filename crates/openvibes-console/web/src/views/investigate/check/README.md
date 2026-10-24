@@ -6,6 +6,5 @@ A check's page (approved screen 28; roles spec §10.3, step 5c rulings 8-17), at
 |---|---|
 | `CheckPage.tsx` | The page: header (Set state, Assign and Add to case on the check's open failing hosts, Ask about this, ⋯ Export and Copy link), four tiles (failing on, passing, first seen, the last 14 days as bars); Export's CSV rows. |
 | `CheckCards.tsx` | Why it matters, How to fix (else a link to the rule set), Details, History; Hosts (All, Failing, Passing; evidence as `fact = value` and the file; View evidence opens the observation and why it triggered; ticks on failing rows and a bulk bar on host and check pairs, Reopen included) and Related (port, service, same area). |
-| `CheckPage.test.tsx` | The page and the Hosts table as markup. |
 
-More: [docs/components/console-web.md](../../../../../../../docs/components/console-web.md)
+More: [docs/components/console-compliance.md](../../../../../../../docs/components/console-compliance.md), [docs/components/console-web.md](../../../../../../../docs/components/console-web.md)
