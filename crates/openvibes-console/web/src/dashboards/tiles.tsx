@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { useResource } from "../api/client";
 import type { AgentSummary, FindingSummary, Permission, TopHosts, VulnerabilitySummary } from "../api/types";
 import { nav } from "../app/nav";
+import { unitOf } from "../app/menuCount";
 import { useSession } from "../app/session";
 import { ObjectLink, SeverityBadge } from "../ui/bits";
 import { count } from "../ui/format";
@@ -103,13 +104,15 @@ export function BreakdownTile({ widget }: WidgetProps) {
       : source === "compliance" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/compliance", { severity: s }) }))
       : source === "vulnerabilities" ? (vulns.data?.by_severity ?? []).map((row) => ({ key: row.severity, label: row.severity, value: row.count, tone: row.severity, go: () => nav.view("/vulnerabilities", { severity: row.severity }) }))
         : (["active", "stale", "revoked", "imported"] as const).map((s) => ({ key: s, label: s, value: agents.data?.[s] ?? 0, tone: { active: "low", stale: "medium", revoked: "high", imported: "unrated" }[s], go: () => nav.view("/hosts", { status: { active: "online", stale: "offline", revoked: "revoked", imported: "imported" }[s] }) }));
+  // Compliance counts failing findings, while the list it opens counts checks.
+  const unit = unitOf(source) && ` ${unitOf(source)}`;
   return (
     <div className="stack">
-      <div className="bar" role="img" aria-label={parts.map((p) => `${p.value} ${p.label}`).join(", ")}>
+      <div className="bar" role="img" aria-label={parts.map((p) => `${p.value} ${p.label}${unit}`).join(", ")}>
         {parts.map((p) => p.value > 0 && <span key={p.key} className={p.tone} style={{ flexGrow: p.value }} />)}
       </div>
       <div className="legend">
-        {parts.map((p) => <button key={p.key} type="button" className="legend__item" onClick={p.go}><span className={`legend__dot ${p.tone}`} />{p.label}<span className="num">{count(p.value)}</span></button>)}
+        {parts.map((p) => <button key={p.key} type="button" className="legend__item" onClick={p.go} title={unit ? `${p.value} ${p.label}${unit}` : undefined}><span className={`legend__dot ${p.tone}`} />{p.label}<span className="num">{count(p.value)}</span></button>)}
       </div>
     </div>
   );

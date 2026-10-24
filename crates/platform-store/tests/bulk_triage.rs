@@ -249,27 +249,6 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
     db.drop().await;
 }
 
-#[tokio::test]
-async fn more_than_ten_thousand_items_are_refused() {
-    let (db, mut client, _) = setup().await;
-    let ids: Vec<i64> = (1..=10_001).collect();
-    assert_eq!(
-        bulk::alarms(
-            &mut client,
-            &AgentScope::Global,
-            &ids,
-            mitigate(Some("x")),
-            "a",
-            Utc::now()
-        )
-        .await
-        .unwrap(),
-        Err(BulkRefusal::Count)
-    );
-    drop(client);
-    db.drop().await;
-}
-
 async fn triage_of(
     c: &deadpool_postgres::Client,
     agent: &str,

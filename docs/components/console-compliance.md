@@ -140,8 +140,11 @@ comes from the signed rule sets' optional `explain` and `check` fields.
 - Fixed (ended) findings no longer count as failing anywhere, so existing
   compliance counts (host page, dashboards, Hosts list) may drop.
 - The Compliance menu count, the dashboard's Breakdown tile and the
-  `compliance.open.*` metrics (and top hosts) now count open failing pairs
-  only (`check_list_sql::open_failing`): findings unseen for a day and
+  `compliance.open.*` metrics (and top hosts) now count open failing
+  findings only (`check_list_sql::open_failing`). They count findings (host
+  and check pairs), while the list counts checks, so the two numbers differ
+  whenever a check fails on several hosts; the menu count and the tile say
+  "N failing findings". Findings unseen for a day and
   mitigated, accepted or false-positive ones leave them, so these numbers
   may drop after the upgrade; recorded history before it keeps its old
   values. The groups read counts an expired acceptance as open.

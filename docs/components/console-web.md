@@ -792,8 +792,9 @@ for the pages not yet moved; its saved views stay in the browser.
   longer count as failing anywhere, so compliance counts may drop, and a
   host with no report in the last day shows "—" for failing checks on the
   host page and the Hosts list. The Compliance menu count and the
-  dashboard's Breakdown tile count open failing pairs only, as the list
-  does; see
+  dashboard's Breakdown tile count failing findings (host and check pairs,
+  open, by the list's failing definition), while the list counts checks;
+  their title and label say "N failing findings". See
   [console-compliance.md](console-compliance.md#upgrading).
 
 ## Configuration

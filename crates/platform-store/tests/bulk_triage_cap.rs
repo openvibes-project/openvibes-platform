@@ -1,12 +1,13 @@
 //! The bulk cap counts the pairs a vulnerability action changes: a CVE row's
 //! closed pairs are not expanded, so a widespread, mostly closed advisory
-//! still closes or assigns its few open pairs.
+//! still closes or assigns its few open pairs. More than the cap of named
+//! items is refused outright.
 
 mod common;
 
 use chrono::Utc;
 use platform_store::{
-    bulk_triage::{self as bulk, BulkChange, MAX_ITEMS},
+    bulk_triage::{self as bulk, BulkChange, BulkRefusal, MAX_ITEMS},
     console_read::AgentScope,
 };
 
@@ -76,6 +77,25 @@ async fn closed_pairs_do_not_count_toward_the_cap() {
         .await
         .unwrap();
     assert_eq!(refused, Err(bulk::BulkRefusal::Count));
+    drop(c);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn more_than_ten_thousand_items_are_refused() {
+    let (db, mut c) = common::migrated().await;
+    let ids: Vec<i64> = (1..=10_001).collect();
+    let close = BulkChange::State {
+        state: "mitigated",
+        note: Some("x"),
+        accepted_until: None,
+    };
+    assert_eq!(
+        bulk::alarms(&mut c, &AgentScope::Global, &ids, close, "a", Utc::now())
+            .await
+            .unwrap(),
+        Err(BulkRefusal::Count)
+    );
     drop(c);
     db.drop().await;
 }
