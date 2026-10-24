@@ -67,12 +67,46 @@ async fn check_list_counts_stay_inside_the_scope() {
     assert_eq!(row(&scoped, ASLR).failing, 0);
     assert_eq!(
         (row(&scoped, ASLR).passing, row(&global, ASLR).passing),
-        (9, 9)
+        (10, 10)
     );
     let groups: Vec<&str> = scoped.counts.groups.iter().map(|g| g.1.as_str()).collect();
     assert_eq!(groups, ["Alpha", "Web"], "Other is never named");
     assert_eq!(scoped.summary.hosts, 3);
     assert_eq!(global.summary.hosts, 4);
+    // A site rule open only out of reach is never named, though hosts 8
+    // and 9 in reach run site-x; the global reader sees it.
+    let secret = "site-x/secret.rule".to_owned();
+    assert!(!keys(&scoped).contains(&secret), "{:?}", keys(&scoped));
+    assert_eq!(scoped.total, 6);
+    assert_eq!(
+        scoped
+            .counts
+            .rule_sets
+            .iter()
+            .find(|s| s.0 == "site-x")
+            .map(|s| s.1),
+        Some(1),
+        "custom.check only"
+    );
+    assert_eq!(
+        scoped
+            .counts
+            .areas
+            .iter()
+            .find(|a| a.0 == "Other")
+            .map(|a| a.1),
+        Some(1)
+    );
+    assert_eq!(
+        scoped
+            .counts
+            .state
+            .iter()
+            .find(|s| s.0 == CheckState::All)
+            .map(|s| s.1),
+        Some(6)
+    );
+    assert!(keys(&global).contains(&secret));
     // A check failing only out of reach, with no passing host in reach, has
     // no row.
     let off = run(&c, &every(), &AgentScope::AssetGroups(vec![])).await;
@@ -93,15 +127,19 @@ async fn passing_needs_an_assigned_healthy_rule_set() {
     // 5 stale, 6 baseline not assigned, 7 baseline refused, 8 ports failed
     // (so neither its port rules nor site-x's, which need every collector),
     // 10 baseline never accepted (no version), 11 on baseline 1 (no redis
-    // rule); 9 passes its legacy scan row three days old and site-x.
+    // rule), 12 baseline at version 2^64 - 1 (the list still answers); 9
+    // passes its legacy scan row three days old.
     for (n, want) in [
         (5, vec![]),
         (6, vec![ROOT, ASLR]),
         (7, vec![ROOT, ASLR]),
         (8, vec![TELNET, ROOT, ASLR]),
-        (9, vec![SSH, TELNET, REDIS, ROOT, ASLR, CUSTOM]),
+        // A site rule without metadata is a check only where a host in
+        // reach has a finding for it: not with host 9 alone.
+        (9, vec![SSH, TELNET, REDIS, ROOT, ASLR]),
         (10, vec![ROOT, ASLR]),
         (11, vec![SSH, TELNET, ROOT, ASLR]),
+        (12, vec![ROOT, ASLR]),
     ] {
         let id: &'static str = Box::leak(h(n).into_boxed_str());
         let page = run(&c, &host(id), &scope).await;
@@ -131,7 +169,7 @@ async fn ended_findings_are_not_failing() {
     // An open P13 match older than the window is neither failing nor
     // passing (its host may be stuck in a resync).
     let root = row(&page, ROOT);
-    assert_eq!((root.failing, root.passing), (2, 6));
+    assert_eq!((root.failing, root.passing), (2, 7));
     let h1 = h(1);
     let one = CheckQuery {
         host: Some(&h1),
@@ -182,7 +220,7 @@ async fn passing_hosts_sql_agrees_with_the_list() {
     let (db, c) = common::migrated().await;
     let (web, _) = fixture(&c).await;
     let page = run(&c, &every(), &AgentScope::AssetGroups(vec![web])).await;
-    let reach: Vec<String> = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11].map(h).to_vec();
+    let reach: Vec<String> = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12].map(h).to_vec();
     let sql = format!(
         "SELECT x.rule_set_id || '/' || x.rule_id, count(*) FROM ({}) x GROUP BY 1",
         passing_hosts_sql(

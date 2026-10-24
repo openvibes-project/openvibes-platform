@@ -44,14 +44,17 @@ fn blocks(now: &str) -> String {
 /// set id → accepted version (NULL unless it is active with heartbeat
 /// health at most 24 hours old): those its health lists with a version
 /// (the agent reports none for a set it never accepted), not
-/// `not_assigned` and not refused.
+/// `not_assigned` and not refused. A version is kept only as 1–18 digits,
+/// so the `::bigint` casts on it never fail the statement; any other value
+/// (above `i64::MAX`, fractional, a string) is not running.
 fn healthy_sets(now: &str) -> String {
     format!(
         "CASE WHEN a.status = 'active' AND a.health_at >= ({now})::timestamptz - interval '24 hours' THEN (
          SELECT COALESCE(jsonb_object_agg(e ->> 'id', e -> 'version'), '{{}}')
          FROM jsonb_array_elements(CASE WHEN jsonb_typeof(a.health -> 'rule_sets') = 'array'
                                         THEN a.health -> 'rule_sets' ELSE '[]'::jsonb END) e
-         WHERE jsonb_typeof(e -> 'version') = 'number' AND (e ->> 'state') IS DISTINCT FROM 'not_assigned'
+         WHERE jsonb_typeof(e -> 'version') = 'number' AND (e ->> 'version') ~ '^[0-9]{{1,18}}$'
+           AND (e ->> 'state') IS DISTINCT FROM 'not_assigned'
            AND COALESCE(e ->> 'refused', 'false') = 'false') END"
     )
 }
@@ -60,8 +63,9 @@ fn healthy_sets(now: &str) -> String {
 const OK_COLLECTORS: &str = "jsonb_path_query_array(a.health,
        '$.last_scan.collectors.keyvalue() ? (@.value == \"ok\").key', '{}', true)";
 
-/// `a`'s last scan reported its collectors, every one `ok`.
+/// `a`'s last scan reported at least one collector, every one `ok`.
 const ALL_OK: &str = "(jsonb_typeof(a.health -> 'last_scan' -> 'collectors') = 'object'
+       AND a.health -> 'last_scan' -> 'collectors' <> '{}'::jsonb
        AND NOT jsonb_path_exists(a.health, '$.last_scan.collectors.* ? (@ != \"ok\")', '{}', true))";
 
 /// A host with `sets`, `colls` and `all_ok` (from [`healthy_sets`],
@@ -199,10 +203,11 @@ const PAIR_STATE: &str =
 /// `fcube` (failing pairs per check, pair state, assignee and class:
 /// `fall` as open and unassigned, `ftri` moved to its state); `checks`
 /// (the rules of each set's newest indexed version and every check with
-/// an open finding on any host, which names no host; a check without
-/// metadata leaves the list once no host anywhere has an open finding
-/// for it, even when hosts in reach still pass it); `pcube` (passing hosts per check and class: the class's hosts when
-/// they run the check, less those a finding [`blocks`]). Grouping by a class
+/// a current finding on a host in reach, so a site rule found only out of
+/// reach is never named; a check without metadata leaves the list once no
+/// host in reach has a finding for it, even when hosts in reach still
+/// pass it); `pcube` (passing hosts per check and class: the class's hosts
+/// when they run the check, less those a finding [`blocks`]). Grouping by a class
 /// number, not the mask, lets the 500,000-finding aggregate hash (a
 /// varbit key sorted them on disk), and counts passing hosts exactly per
 /// group.
@@ -256,7 +261,7 @@ checks AS MATERIALIZED (
   SELECT m.rule_set_id, m.rule_id FROM console_rule_meta m
   WHERE m.rule_set_version = (SELECT max(x.rule_set_version) FROM console_rule_meta x WHERE x.rule_set_id = m.rule_set_id)
   UNION
-  SELECT DISTINCT rule_set_id, rule_id FROM current_findings WHERE ended_at IS NULL),
+  SELECT DISTINCT rule_set_id, rule_id FROM fall),
 pcube AS MATERIALIZED (
   SELECT k.rule_set_id, k.rule_id, c.in_group, c.mask, c.n - COALESCE(x.n, 0) AS n
   FROM checks k CROSS JOIN classes c

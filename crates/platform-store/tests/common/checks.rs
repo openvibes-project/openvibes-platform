@@ -1,5 +1,5 @@
 //! The Compliance list fixture shared by `check_list.rs` and
-//! `check_list_filters.rs`: eleven hosts, three groups, six checks.
+//! `check_list_filters.rs`: twelve hosts, three groups, six checks in reach.
 #![allow(dead_code, reason = "each test binary uses some of these")]
 
 use chrono::Utc;
@@ -42,7 +42,8 @@ FROM (VALUES
   (1, 'site-x', 'custom.check', 'low', now(), false),
   (2, 'site-x', 'custom.check', 'low', now(), false),
   (3, 'site-x', 'custom.check', 'low', now(), false),
-  (4, 'site-x', 'custom.check', 'low', now(), false)) v(h, s, r, sev, seen, ended);
+  (4, 'site-x', 'custom.check', 'low', now(), false),
+  (4, 'site-x', 'secret.rule', 'high', now(), false)) v(h, s, r, sev, seen, ended);
 INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state, rule_version, assigned_to,
                                     note, accepted_until, version, updated_at, updated_by)
 SELECT 'agent.00000000-0000-4000-8000-0000000000' || lpad(v.h::text, 2, '0'), v.s, v.r, v.state, 1, v.who::uuid,
@@ -64,12 +65,13 @@ VALUES ('agent.00000000-0000-4000-8000-000000000009', 'hardening-linux-l1', 'har
         'medium', now() - interval '5 days', now() - interval '3 days', current_date - 3, 's', 90, 'm', '{}',
         now(), 'online', true, 'scan');";
 
-/// Group Web (the scope) holds hosts 1–3 and 5–11; Alpha holds host 1;
+/// Group Web (the scope) holds hosts 1–3 and 5–12; Alpha holds host 1;
 /// Other holds host 4, out of reach. Every host is active with fresh
 /// health running baseline 2 and hardening-linux-l1 1, except: 5 (health
 /// two days old), 6 (baseline `not_assigned`), 7 (baseline refused), 8
 /// (the ports collector failed), 10 (baseline with no version: never
-/// accepted), 11 (baseline 1, which has no port.redis.exposed). Hosts 8
+/// accepted), 11 (baseline 1, which has no port.redis.exposed), 12
+/// (baseline at a version above `i64::MAX`: not running). Hosts 8
 /// and 9 also run site-x 3 (no metadata; its rules need every collector ok).
 ///
 /// - baseline/port.ssh.exposed (newest meta "SSH port exposed"): host 1
@@ -83,6 +85,7 @@ VALUES ('agent.00000000-0000-4000-8000-000000000009', 'hardening-linux-l1', 'har
 ///   old (neither failing nor passing).
 /// - hardening-linux-l1/harden.kernel.aslr: host 4; host 9's legacy scan
 ///   row is three days old (passing).
+/// - site-x/secret.rule (no metadata): host 4 only, so never named in reach.
 /// - site-x/custom.check (no metadata, low): host 1 open (Ann), 2 open
 ///   (Bob), 3 accepted risk (Ann, until next month).
 pub async fn fixture(c: &Client) -> (String, String) {
@@ -106,7 +109,7 @@ pub async fn fixture(c: &Client) -> (String, String) {
                   ('hardening-linux-l1', 1, 'harden.kernel.aslr', 1, 'ASLR off', 'm', '[]', '{{}}', 'medium');",
         k = "07".repeat(32),
     );
-    for n in 1..=11u8 {
+    for n in 1..=12u8 {
         let health = match n {
             6 => HEALTHY.replace(
                 r#"{"id":"baseline","version":2}"#,
@@ -130,6 +133,10 @@ pub async fn fixture(c: &Client) -> (String, String) {
                 r#"{"id":"baseline","version":2}"#,
                 r#"{"id":"baseline","version":null}"#,
             ),
+            12 => HEALTHY.replace(
+                r#"{"id":"baseline","version":2}"#,
+                r#"{"id":"baseline","version":18446744073709551615}"#,
+            ),
             11 => HEALTHY.replace(
                 r#"{"id":"baseline","version":2}"#,
                 r#"{"id":"baseline","version":1}"#,
@@ -149,7 +156,7 @@ pub async fn fixture(c: &Client) -> (String, String) {
     }
     sql += FINDINGS;
     c.batch_execute(&sql).await.unwrap();
-    let web: Vec<String> = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11].map(h).to_vec();
+    let web: Vec<String> = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12].map(h).to_vec();
     let web: Vec<&str> = web.iter().map(String::as_str).collect();
     let web = super::manual_group(c, "Web", &web).await;
     let alpha = super::manual_group(c, "Alpha", &[&h(1)]).await;

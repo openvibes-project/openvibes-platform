@@ -52,7 +52,8 @@ pub fn check_area(rule_id: &str) -> &'static str {
 
 /// The collectors the check's facts come from, each of which must have run
 /// ok for a host to pass it; `None` for a rule ID with no known prefix (a
-/// site rule): then every collector the host reported must be ok.
+/// site rule): then the host must have reported at least one collector,
+/// every one ok.
 #[must_use]
 pub fn check_collectors(rule_id: &str) -> Option<&'static [&'static str]> {
     COLLECTORS

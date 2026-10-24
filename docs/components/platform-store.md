@@ -688,14 +688,16 @@ A host passes a check when:
 - it is active and its heartbeat health (`agents.health`) is at most 24
   hours old;
 - the health lists the rule set with a version (the agent reports none
-  for a set it never accepted), neither `not_assigned` nor refused;
+  for a set it never accepted; a version that is not 1–18 digits is
+  ignored, so no reported value can fail the statement), neither
+  `not_assigned` nor refused;
 - the indexed bundle of that version has the rule (`console_rule_meta`;
   a rule no indexed bundle of the set has passes at any version);
 - the rule's collectors (`check_area::check_collectors`: `port.*` ports,
   `package.*` packages, `harden.*` hardening, `harden.net.ip_forward`
   hardening and packages, `test.*` processes, from the agent's `scan.rs`)
   ran `ok` in its last scan; a rule ID with no known prefix (a site rule)
-  needs every collector the host reported to be `ok`;
+  needs at least one collector reported and every one `ok`;
 - no finding blocks it: a failing one, or an unended P13 match
   (`source = 'changes'`) however old. A host stuck in a resync keeps fresh
   health while its open matches age; such a pair is neither failing nor
@@ -703,10 +705,11 @@ A host passes a check when:
 
 A failing pair's state is its triage state (no row is open, an accepted
 risk past `now` is open). Checks are the rules of each set's newest
-indexed version plus every check with an open finding on any host; a row
-needs a failing or passing pair in reach. A check without metadata leaves
-the list once no host anywhere has an open finding for it, even when
-hosts in reach still pass it. Title: the rule's newest indexed title,
+indexed version plus every check with a current finding on a host in
+reach (a site rule found only out of reach is never named); a row needs
+a failing or passing pair in reach. A check without metadata leaves the
+list once no host in reach has a finding for it, even when hosts in
+reach still pass it. Title: the rule's newest indexed title,
 else its ID. Severity: the newest failing finding's in reach, else the
 newest other finding's, else the rule's indexed severity
 (`console_rule_meta.severity`, schema 63), else `None`. Area: `check_area`

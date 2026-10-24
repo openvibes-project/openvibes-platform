@@ -163,8 +163,8 @@ running baseline and hardening-linux-l1, 85 indexed rules, 500,000 current
 findings, 50 per host, 1 % triaged, 1 % of hosts with stale health and 1 %
 with baseline not assigned, ten manual groups). The default list (open, by
 severity, 50 rows, every count and the summary) measured a median of
-768 ms over 5 runs (744–795 ms) at full reach (85 rows, 10,000 hosts) and
-281 ms (278–282 ms) scoped to two manual groups. Run it with
+753 ms over 5 runs (741–842 ms) at full reach (85 rows, 10,000 hosts) and
+266 ms (257–267 ms) scoped to two manual groups. Run it with
 `cargo test -p platform-store --test check_list_timing -- --ignored --nocapture`;
 it fails above 2 s. The cost is one serial pass over the findings joined
 to the hosts in reach and hashed per check, severity and host class
