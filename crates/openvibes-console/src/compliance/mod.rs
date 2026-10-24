@@ -13,6 +13,8 @@ pub(crate) mod group_triage;
 pub(crate) mod groups;
 pub(crate) mod history;
 pub(crate) mod latest;
+pub(crate) mod list_page;
+pub(crate) mod list_page_types;
 pub(crate) mod triage;
 pub(crate) mod triage_detail;
 mod types;
@@ -29,6 +31,7 @@ pub use types::{
 /// triage.
 pub(crate) fn routes() -> Router<AuthHttpState> {
     Router::new()
+        .route("/v1/compliance-list", get(list_page::list_check_page))
         .route(
             "/v1/compliance/summary",
             get(latest::authenticated_finding_summary),

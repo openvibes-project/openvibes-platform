@@ -4,6 +4,7 @@ import catalogue from "../api/permissions.json";
 import templates from "../api/templates.json";
 import type { StoredGroup } from "./hostGroups";
 import { ADMIN_ROLE, type StoredReach } from "./share";
+import { type CheckFinding, seedChecks } from "./checkSeed";
 import { seedVulnerabilities } from "./vulnSeed";
 import type {
   Agent, AuditEvent, Certificate, Cve, EnrollmentToken, Finding as FindingView,
@@ -249,6 +250,9 @@ export function buildDemoData(now = Date.now()) {
 
   seedVulnerabilities(now, (id) => { const a = reporting.find((x) => x.id === id); return a ? a.hostname ?? null : undefined; }, advisories, vulnerabilities);
 
+  const checkFindings: CheckFinding[] = [];
+  seedChecks(now, (id) => reporting.some((x) => x.id === id), checkFindings, triage);
+
   const groups = hostGroups(agents, now);
   // Each group's history (the audit rows the group page shows), newest first.
   const groupChanges = groups.map((g) => ({
@@ -418,7 +422,7 @@ export function buildDemoData(now = Date.now()) {
   });
 
   return {
-    now, rules: RULES, agents, addresses, labels, groupChanges, certificates, findings, triage, advisories, vulnerabilities, access,
+    now, rules: RULES, agents, addresses, labels, groupChanges, certificates, findings, checkFindings, triage, advisories, vulnerabilities, access,
     enrollmentTokens, ruleSets, bundles, serviceAccounts, serviceTokens, audit, alarms,
     dashboards: [
       { dashboard_id: "d-admin-morning", owner: "u-admin", name: "My morning check", shared_role_id: null as string | null,

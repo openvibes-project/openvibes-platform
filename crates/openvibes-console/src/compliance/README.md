@@ -9,6 +9,7 @@ Compliance in the console: the latest findings and finding groups, history, tria
 | `groups.rs` | Findings grouped by rule, and the endpoints of one group. |
 | `group_triage.rs` | Triage of every endpoint in one finding group at once. |
 | `triage.rs` | One finding's triage: read and update. |
+| `list_page.rs`, `list_page_types.rs` | `GET /v1/compliance-list`: the list by check, its parameters, validation, answer types and the call into the store. |
 | `history.rs` | Finding history: the list and one event. |
 | `bulk.rs` | Bulk triage of alarms, findings or vulnerabilities. |
 | `bulk/` | The bulk "suppress" action. |

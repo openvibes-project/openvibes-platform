@@ -687,6 +687,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compliance-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Compliance list. */
+        get: operations["list_check_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/compliance/bulk": {
         parameters: {
             query?: never;
@@ -3354,6 +3371,116 @@ export interface components {
              * @description The new password, at least 15 characters and different from the current.
              */
             new_password: string;
+        };
+        /** @description Rows per filter value, each with the other filters applied. */
+        CheckCountsView: {
+            /** @description By area (every area of rows in reach). */
+            area: components["schemas"]["CountView"][];
+            /** @description By assignee. */
+            assignee: components["schemas"]["VulnAssigneeCountsView"];
+            /** @description By group. */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description By rule set (every set of rows in reach). */
+            rule_set: components["schemas"]["CountView"][];
+            /** @description By severity. */
+            severity: components["schemas"]["CountView"][];
+            /** @description By state. */
+            state: components["schemas"]["CountView"][];
+        };
+        /** @description One row: a check (a rule of a rule set). */
+        CheckListRowView: {
+            /**
+             * Format: int64
+             * @description Accepted risk (not expired).
+             */
+            accepted_risk: number;
+            /** @description What the check is about (derived from the rule id). */
+            area: string;
+            /** @description Who the open failing hosts are assigned to. */
+            assignee: components["schemas"]["VulnAssigneeView"];
+            /**
+             * Format: int64
+             * @description Hosts failing the check.
+             */
+            failing: number;
+            /**
+             * Format: int64
+             * @description False positive.
+             */
+            false_positive: number;
+            /**
+             * Format: int64
+             * @description Mitigated.
+             */
+            mitigated: number;
+            /**
+             * Format: int64
+             * @description Failing hosts by triage state: open (an expired acceptance counts).
+             */
+            open: number;
+            /**
+             * Format: int64
+             * @description Hosts inferred to pass it.
+             */
+            passing: number;
+            /** @description Rule id. */
+            rule_id: string;
+            /** @description Rule set id. */
+            rule_set_id: string;
+            /**
+             * @description `critical`, `high`, `medium`, `low` or `info`: the newest finding's,
+             *     else the rule's indexed severity; absent with neither.
+             */
+            severity?: string | null;
+            /** @description RFC 3339: the earliest first-seen time of the failing hosts. */
+            since?: string | null;
+            /** @description The rule's title (its newest indexed version), else the rule id. */
+            title: string;
+        };
+        /** @description One page of the Compliance list. */
+        CheckListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["CheckCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["CheckListRowView"][];
+            /** @description Summary line. */
+            summary: components["schemas"]["CheckSummaryLineView"];
+            /**
+             * Format: int64
+             * @description Rows matching every filter.
+             */
+            total: number;
+        };
+        /**
+         * @description "N checks failing on N hosts · N critical · N unassigned", then a count
+         *     per rule set, over rows with an open failing host matching every filter
+         *     but state.
+         */
+        CheckSummaryLineView: {
+            /**
+             * Format: int64
+             * @description Of those rows, critical.
+             */
+            critical: number;
+            /**
+             * Format: int64
+             * @description Rows with an open failing host.
+             */
+            failing_checks: number;
+            /**
+             * Format: int64
+             * @description Hosts with an open failing pair in those rows.
+             */
+            hosts: number;
+            /** @description Those rows per rule set, by id. */
+            rule_sets: components["schemas"]["CountView"][];
+            /**
+             * Format: int64
+             * @description With no open failing host assigned.
+             */
+            unassigned: number;
         };
         ClientTurn: {
             answer: string;
@@ -9064,6 +9191,87 @@ export interface operations {
                 };
             };
             /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_check_page: {
+        parameters: {
+            query?: {
+                /** @description Title, rule ID or rule set (contains). */
+                q?: string;
+                /** @description open (default), mitigated, accepted_risk, false_positive, passing or all. */
+                state?: string;
+                /** @description critical, high, medium, low or info. */
+                severity?: string;
+                /** @description A rule set id. */
+                rule_set?: string;
+                /** @description An area, for example SSH or Network exposure. */
+                area?: string;
+                /** @description A host group id. */
+                group?: string;
+                /** @description An agent id. */
+                host?: string;
+                /** @description me, unassigned or a user id. */
+                assignee?: string;
+                /** @description severity (default), failing, since or title. */
+                sort?: string;
+                /** @description asc or desc (default). */
+                dir?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of checks in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs compliance.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -965,6 +965,36 @@ page `vulnerabilities` (hideable: `package`, `cvss`, `epss`, `hosts`, `due`,
 `assignee`; Severity and Advisory are never hidden).
 Tests: `tests/vuln_list_http.rs`; demo: `web/src/demo/routes/vulnList.ts`.
 
+## Compliance list
+
+`GET /api/v1/compliance-list` (needs `compliance.read`; session or bearer;
+roles 5c) pages the Compliance list, one row per check (a rule of a rule
+set), over the store's `check_list`. `GET /api/v1/compliance/*` stays as it
+is. A row has the hosts that fail the check (a current finding, not ended,
+seen within 24 hours) and the hosts inferred to pass it (heartbeat health
+lists the rule set, not `not_assigned`, not refused; the collectors ran ok;
+no failing finding). Filters (one value each, ANDed): `q` (title, rule id or
+rule set), `state` (`open` by default, `mitigated`, `accepted_risk`,
+`false_positive`, `passing` or `all`; a row matches when one host is in
+that state, an expired acceptance is open), `severity` (`critical`, `high`,
+`medium`, `low`, `info`), `rule_set`, `area` (derived from the rule id),
+`group` (UUID), `host` (agent id) and `assignee` (`me` is the session
+user's id, `unassigned` or a user UUID; passing hosts have none). `sort` is
+`severity` (default), `failing`, `since` or `title`; `dir` is `desc` by
+default; `offset` 0..=100000 and `limit` 1..=100 (default 50). An invalid
+value or an unknown parameter is 400 `invalid_query` naming the parameter.
+Rows carry `severity` (the newest finding's, else the rule's indexed one;
+absent with neither), `area`, `failing`, `passing`, the failing hosts by
+triage state (`open`, `mitigated`, `accepted_risk`, `false_positive`),
+`since` and `assignee` (as on Vulnerabilities). `counts` hold every
+filter's values with the other filters applied; `summary` ("N checks
+failing on N hosts, N critical, N unassigned" and a count per rule set)
+counts rows with an open failing host under every filter but state. Saved
+views and hidden columns accept the page `compliance` (hideable: `area`,
+`failing`, `hosts`, `since`, `assignee`; Severity and Check are never
+hidden). Tests: `tests/check_list_http.rs`; demo:
+`web/src/demo/routes/checkList.ts` (data in `web/src/demo/checkSeed.ts`).
+
 ## A vulnerability's page
 
 `GET /api/v1/vulnerabilities/{key}/summary` and

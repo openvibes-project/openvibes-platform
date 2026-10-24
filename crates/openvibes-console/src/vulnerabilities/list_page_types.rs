@@ -183,7 +183,7 @@ impl From<VulnListRow> for VulnListRowView {
     }
 }
 
-fn counts<T>(rows: Vec<(T, i64)>, name: impl Fn(T) -> String) -> Vec<CountView> {
+pub(crate) fn counts<T>(rows: Vec<(T, i64)>, name: impl Fn(T) -> String) -> Vec<CountView> {
     rows.into_iter()
         .map(|(v, count)| CountView {
             value: name(v),
