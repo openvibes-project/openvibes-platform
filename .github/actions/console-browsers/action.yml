@@ -53,10 +53,13 @@ runs:
         installed=(/var/cache/apt/archives/*.deb)
         if (( ${#installed[@]} )); then cp -n "${installed[@]}" "$debs"/; fi
 
-    # Saved only when nothing matched, so each pull request does not keep
-    # its own copy; runs on main fill the cache that pull requests read.
+    # Pull requests read the cache that runs on main fill. A pull request
+    # saves only when nothing matched, so each one does not keep its own
+    # copy; main also saves a browser set it lacked (a fallback match).
     - name: Save the packages
-      if: steps.restore.outputs.cache-matched-key == ''
+      if: >-
+        steps.restore.outputs.cache-hit != 'true' &&
+        (github.event_name != 'pull_request' || steps.restore.outputs.cache-matched-key == '')
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/browser-debs
