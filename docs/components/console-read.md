@@ -156,3 +156,19 @@ to two manual groups. Run it with
 `cargo test -p platform-store --test vuln_list_timing records_cve_page_summary_latency_for_a_kernel_cve -- --ignored --nocapture`;
 it fails above 2 s. The same-package candidates need no narrowing to the
 releases in reach at this size.
+
+Compliance list (2026-10-24, same cluster and settings): the step 5c
+ruling 18 fleet generated in SQL (10,000 hosts with heartbeat health
+running baseline and hardening-linux-l1, 85 indexed rules, 500,000 current
+findings, 50 per host, 1 % triaged, 1 % of hosts with stale health and 1 %
+with baseline not assigned, ten manual groups). The default list (open, by
+severity, 50 rows, every count and the summary) measured a median of
+689 ms over 5 runs (674–730 ms) at full reach (85 rows, 10,000 hosts) and
+347 ms (344–363 ms) scoped to two manual groups. Run it with
+`cargo test -p platform-store --test check_list_timing -- --ignored --nocapture`;
+it fails above 2 s. The cost is one serial pass over the findings joined
+to the hosts in reach and hashed per check, severity and host class
+(about 0.35 s), and the summary's per-host probe for an open failing pair
+(about 0.15 s). Grouping by the varbit group mask instead sorted the
+500,000 rows on disk (0.9 s), and listing passing hosts pair by pair
+instead of counting them per class took 4.7 s.

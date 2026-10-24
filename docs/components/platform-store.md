@@ -674,6 +674,53 @@ alarms-off part. Tests: `tests/alarm_list.rs`; the 200,000-alarm timing
 One row and one page per CVE; the queries, their counts and timing are in
 [console-vulnerabilities.md](console-vulnerabilities.md#the-store).
 
+## The Compliance list (`check_list::check_list`, `check_area`, schema 63)
+
+`check_list(client, &CheckQuery, &AgentScope, actor_id, now) -> CheckListPage`:
+one statement returns one row per check (rule set and rule), the total,
+the count for every value of every filter with the other filters applied,
+and the summary line (roles spec §10.3; step 5c rulings 2–7, user
+decision 1). A row's pairs are the hosts in the `compliance.read` scope
+that fail it (a current finding with `ended_at IS NULL` seen within the
+last 24 hours, the Compliance groups' default window) or pass it. A host
+passes a check when it is active, its heartbeat health (`agents.health`)
+is at most 24 hours old and lists the rule set neither `not_assigned` nor
+refused, the collector of the rule's prefix (`check_area::check_collector`:
+`port.*` ports, `package.*` packages, `harden.*` hardening, `test.*`
+processes, from the agent's `scan.rs`; unknown prefixes are not checked)
+reported `ok` in its last scan, and it does not fail the check. A failing
+pair's state is its triage state (no row is open, an accepted risk past
+`now` is open). Checks are the rules of each set's newest indexed version
+in `console_rule_meta` plus every failing check; a row needs a failing or
+passing pair. Title: the rule's newest indexed title, else its ID;
+severity: the newest failing finding's in reach, else the newest ended
+or stale one's, else `None`; area: `check_area` (ruling 3), with the SQL
+twin `console_check_area(text)`; since: the earliest first-seen of the
+failing pairs; assignee: as the Vulnerabilities list (`AssigneeSummary`).
+
+Filters (one value each, all combining): state (`open`, `mitigated`,
+`accepted_risk`, `false_positive`, `passing`, `all`; a row matches when
+one of its pairs is in it), severity, rule set, area, group and host (they
+narrow the pairs) and assignee (state and assignee hold on the same pair;
+a passing pair has no assignee and matches only no filter). Search `q`
+matches the title, rule ID and rule set. Sorts: severity (then failing
+hosts), failing, since and title; nulls last, ties by key in the same
+direction. `offset` 0–100000, `limit` 1–100. Rule set and area values are
+those of rows in reach, each with its count under the other filters.
+Summary, over the rows matching every filter but the state's that have an
+open failing pair: how many, on how many hosts, how many critical, how
+many with no open pair assigned, and how many per rule set.
+
+`check_list::passing_hosts_sql(hosts, checks, now)` is the same passing
+rule as an SQL fragment listing (host, check) pairs, for a check's page;
+a test keeps it equal to the list's counts. The list counts passing hosts
+per host class instead (hosts alike in group side, mask, rule sets and ok
+collectors), so the counts per group are exact without listing pairs.
+Schema 63 adds `current_findings (rule_set_id, rule_id) WHERE ended_at IS
+NULL` and `console_check_area`. Tests: `tests/check_list.rs`,
+`tests/check_list_filters.rs`, `tests/check_area.rs`; the 500,000-finding
+timing (`tests/check_list_timing.rs`) is in console-read.md.
+
 ## The host page summary (`host_summary::summary`)
 
 `summary(client, agent_id, &HostScopes, latest, now) -> Option<HostSummary>`:
