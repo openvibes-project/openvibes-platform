@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 base64.workspace = true
 chrono.workspace = true
+pem.workspace = true
 rcgen.workspace = true
 ring.workspace = true
 time.workspace = true

@@ -128,6 +128,14 @@ pub fn sign_intermediate(
         .map_err(|_| PkiError::Generation)
 }
 
+/// The first certificate of a PEM bundle, re-encoded as its own PEM. An
+/// issuer file may hold the new intermediate followed by the old one.
+pub fn first_certificate(pem: &str) -> Result<String, PkiError> {
+    let der = der_of(pem)?;
+    let config = pem::EncodeConfig::new().set_line_ending(pem::LineEnding::LF);
+    Ok(pem::encode_config(&pem::Pem::new("CERTIFICATE", der), config) + "\n")
+}
+
 pub(crate) fn der_of(pem: &str) -> Result<Vec<u8>, PkiError> {
     let (_, pem) = parse_x509_pem(pem.as_bytes()).map_err(|_| PkiError::InvalidPem)?;
     Ok(pem.contents)
@@ -147,9 +155,10 @@ pub struct Issuer {
 }
 
 impl Issuer {
-    /// Loads an issuing CA. The key must match the certificate and the
+    /// Loads an issuing CA from the first certificate of `cert_pem`. The key must match the certificate and the
     /// certificate must be a CA.
     pub fn load(cert_pem: &str, key_pem: &str) -> Result<Self, PkiError> {
+        let cert_pem = &first_certificate(cert_pem)?;
         let der = der_of(cert_pem)?;
         let cert = parse(&der)?;
         let is_ca = cert

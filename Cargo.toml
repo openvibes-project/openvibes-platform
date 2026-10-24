@@ -20,6 +20,7 @@ tokio-postgres = { version = "0.7.18", features = ["with-chrono-0_4", "with-serd
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 deadpool-postgres = { version = "0.14.2", features = ["rt_tokio_1"] }
 clap = { version = "4.6.7", features = ["derive"] }
+pem = "4"
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
 x509-parser = { version = "0.18", features = ["verify"] }
 time = "0.3"

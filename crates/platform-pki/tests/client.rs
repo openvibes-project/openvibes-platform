@@ -2,8 +2,8 @@
 
 use chrono::{Duration, Utc};
 use platform_pki::{
-    Issuer, PkiError, check_csr, generate_root, intermediate_request, sign_intermediate,
-    spki_sha256_of_cert, verify_signed_by,
+    Issuer, PkiError, check_csr, first_certificate, generate_root, intermediate_request,
+    sign_intermediate, spki_sha256_of_cert, verify_signed_by,
 };
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, PublicKeyData};
 use x509_parser::extensions::GeneralName;
@@ -215,4 +215,21 @@ fn validity_is_bounded_and_never_outlives_the_issuer() {
     );
     let expired = old.issue_client(&checked, AGENT, now + Duration::days(3), 30);
     assert_eq!(expired.err(), Some(PkiError::IssuerExpired));
+}
+
+#[test]
+fn issuer_from_a_bundle_uses_the_first_certificate() {
+    let now = Utc::now();
+    let root = generate_root(now).unwrap();
+    let (csr1, _) = intermediate_request().unwrap();
+    let a1 = sign_intermediate(&root, &csr1, now).unwrap();
+    let (csr2, key2) = intermediate_request().unwrap();
+    let a2 = sign_intermediate(&root, &csr2, now).unwrap();
+    let bundle = format!("{a2}{a1}");
+    let issuer = Issuer::load(&bundle, &key2).unwrap();
+    let checked = check_csr(&csr(&KeyPair::generate().unwrap(), None)).unwrap();
+    let issued = issuer.issue_client(&checked, AGENT, now, 30).unwrap();
+    assert_eq!(issued.chain_pem.len(), 2);
+    assert_eq!(issued.chain_pem[1], first_certificate(&bundle).unwrap());
+    assert_eq!(issued.chain_pem[1].trim_end(), a2.trim_end());
 }
