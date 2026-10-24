@@ -11,6 +11,7 @@ mod frontend_contract;
 pub(crate) mod headers;
 pub(crate) mod middleware;
 pub(crate) mod openapi;
+mod openapi_schemas;
 pub(crate) mod pagination;
 pub(crate) mod problem;
 mod router;
