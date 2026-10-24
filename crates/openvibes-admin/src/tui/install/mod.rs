@@ -11,7 +11,7 @@ mod paste;
 mod quick;
 mod review;
 mod run;
-mod steps;
+pub(super) mod steps;
 mod welcome;
 pub(super) use run::draw;
 #[cfg(test)]

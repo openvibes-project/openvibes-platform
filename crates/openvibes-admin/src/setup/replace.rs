@@ -31,6 +31,10 @@ pub(crate) const PREVIOUS: &str = "/etc/openvibes/pki/previous.crt";
 /// When the old one stops being trusted: one RFC 3339 instant.
 pub(crate) const PREVIOUS_UNTIL: &str = "/etc/openvibes/pki/previous-until";
 
+/// A root key file that is not this root's (the TUI checks it first too).
+pub(crate) const NOT_THE_KEY: &str =
+    "Not the key of this host's root: pick the root key kept at install.";
+
 /// The agents' certificate lifetime, `client_certificate_days` (default 30).
 fn client_days<R: Runner>(ctx: &Ctx<R>) -> i64 {
     ctx.read(&format!("{CONFIG_DIR}/ingest.toml"))
@@ -71,7 +75,7 @@ fn careful<R: Runner>(ctx: &Ctx<R>, root: &str) -> Result<(), String> {
 /// Signs a new intermediate with the root key, as at install; the key's
 /// copy lives in tmpfs and the caller removes the stage.
 fn quick<R: Runner>(ctx: &Ctx<R>, root: &str, root_key: Option<&str>) -> Result<(), String> {
-    let mismatch = || "Not the key of this host's root: pick the root key kept at install.";
+    let mismatch = || NOT_THE_KEY;
     let key = ctx.read(root_key.ok_or_else(mismatch)?)?;
     Issuer::load(root, &key).map_err(|_| mismatch())?;
     pki::fresh_stage(ctx)?;
@@ -180,6 +184,14 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
     ))
 }
 
+/// Why another replacement waits (the TUI says it before asking).
+pub(crate) fn still_trusted(until: &str) -> String {
+    format!(
+        "The previous intermediate is still trusted until {until}, while agents move over: \
+         replace it again after that."
+    )
+}
+
 /// Replaces the intermediate; the stage (with any root key copy) is gone
 /// whatever happened.
 pub fn replace<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String> {
@@ -189,11 +201,7 @@ pub fn replace<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String
         let until = ctx.read(PREVIOUS_UNTIL)?;
         let until = DateTime::parse_from_rfc3339(until.trim())
             .map_err(|error| format!("{PREVIOUS_UNTIL}: {error}"))?;
-        return Err(format!(
-            "The previous intermediate is still trusted until {}, while agents move over: \
-             replace it again after that.",
-            until.format("%Y-%m-%d")
-        ));
+        return Err(still_trusted(&until.format("%Y-%m-%d").to_string()));
     }
     let result = run(ctx, root_key);
     let stage = ctx.path(STAGE);

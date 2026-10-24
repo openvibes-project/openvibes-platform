@@ -20,6 +20,7 @@ use crate::{
     setup::request::RequestState,
     tui::{
         app::{App, Key},
+        ca_request::sentence,
         nav::Screen,
         run::{Call, Kind, Work},
         ui::{
@@ -61,18 +62,6 @@ impl Install {
     /// The choice rows: the root key file only for OpenVIBES makes one.
     fn choice_rows(&self) -> usize {
         if self.ca == Ca::OpenVibes { 4 } else { 3 }
-    }
-}
-
-/// What the helper's failure says, without its prefixes.
-fn sentence(why: &str) -> String {
-    match why.rsplit_once("openvibes-admin helper: ") {
-        Some((_, said)) => said.trim().to_owned(),
-        None => why
-            .strip_prefix("failed: ")
-            .unwrap_or(why)
-            .trim()
-            .to_owned(),
     }
 }
 
@@ -347,7 +336,7 @@ impl<H: Host> App<H> {
     /// `ca-request`, with a copy in the operator's home: the helper takes
     /// its own copy again, or writes one beside another file, and says
     /// where.
-    fn make_request(&mut self) {
+    pub(in crate::tui) fn make_request(&mut self) {
         let base =
             (self.install.home.as_ref()).map(|home| format!("{home}/openvibes-intermediate.csr"));
         let call = Call::CaRequest(base);

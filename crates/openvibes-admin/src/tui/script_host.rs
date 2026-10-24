@@ -183,6 +183,14 @@ pub(super) fn screen(app: &App<SetupHost>) -> String {
         .collect()
 }
 
+/// The screen below the location line, each line without its trailing
+/// blanks: what a mockup shows, whatever the host name and version.
+pub(super) fn body(app: &App<SetupHost>) -> String {
+    let text = screen(app);
+    let lines: Vec<&str> = text.lines().skip(7).map(str::trim_end).collect();
+    lines.join("\n")
+}
+
 pub(super) fn type_text(app: &mut App<SetupHost>, text: &str) {
     for c in text.chars() {
         app.key(Key::Char(c));
