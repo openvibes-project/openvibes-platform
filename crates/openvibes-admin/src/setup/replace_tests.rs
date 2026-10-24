@@ -6,13 +6,13 @@ use std::os::unix::fs::PermissionsExt;
 use chrono::{Duration, Utc};
 use platform_pki::KeyAndCert;
 
-use super::{PREVIOUS, PREVIOUS_UNTIL, replace};
+use super::{PREVIOUS, PREVIOUS_UNTIL, PROGRESS, drop_previous, replace};
 use platform_host::{Step, StepState};
 
 use crate::setup::{
     check,
     fake::{Fake, plan},
-    pki::{INTERMEDIATE, INTERMEDIATE_KEY, ROOT_CERT, drop_previous},
+    pki::{INTERMEDIATE, INTERMEDIATE_KEY, ROOT_CERT, ca_apply},
     pki_tests::{ADMIN, issuing, with},
     plan::{CaMode, Component::*},
     request::REQUEST_DIR,
@@ -131,6 +131,30 @@ fn replace_careful_trusts_old_and_new() {
     assert!(fake.called(&["/usr/bin/systemctl", "try-restart"]));
     assert!(!fake.root.join(&REQUEST_DIR[1..]).exists());
     assert!(!fake.root.join("run/openvibes-ca").exists());
+    // The TUI's progress file goes once it succeeded.
+    assert!(!fake.root.join(PROGRESS).exists());
+}
+
+#[test]
+fn repair_never_installs_a_replace_request() {
+    // An own-CA Replace left after ca-accept: the request is ca-replace's.
+    let (fake, root, old) = installed("replace-left-request");
+    let new = intermediate(&root);
+    careful_request(&fake, &new.0, &new.1, &root.cert_pem);
+    let mut plan = plan(&[Ingest]);
+    plan.ca = CaMode::Careful;
+    let mut ctx = fake.ctx(&plan);
+    ctx.repair = true;
+    assert!(matches!(ca_apply(&ctx), Ok(StepState::Done(_))));
+    assert_eq!(fake.text(INTERMEDIATE), old.0);
+    assert_eq!(fake.text(INTERMEDIATE_KEY), old.1);
+    assert!(
+        fake.root
+            .join(&REQUEST_DIR[1..])
+            .join("intermediate.crt")
+            .exists()
+    );
+    assert!(!fake.called(&with(&ADMIN, &["ca", "import-intermediate"])));
 }
 
 /// Nothing on disk changed and nothing ran.
@@ -323,6 +347,13 @@ fn a_failed_reissue_after_the_swap_says_run_repair() {
     );
     assert!(error.contains("boom"), "{error}");
     assert_eq!(certificates(&fake.text(INTERMEDIATE)).len(), 2);
+    // The TUI's step list: what finished before the failure.
+    let progress = std::fs::read_to_string(fake.root.join(PROGRESS)).unwrap();
+    assert_eq!(
+        progress,
+        "Making the new intermediate\nTrusting the old and the new one\n"
+    );
+    assert_eq!(mode(&fake, &format!("/{PROGRESS}")), 0o644);
     // Repair reissues: ingest's certificate is not from the new intermediate.
     assert_eq!(check(&fake.ctx(&plan), Step::Certificates), StepState::Todo);
 }

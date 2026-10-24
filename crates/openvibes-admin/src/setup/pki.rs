@@ -221,6 +221,11 @@ pub(super) fn remove_request<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
 }
 
 fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    // A request beside an installed CA is `ca-replace`'s: installing it
+    // here would drop the intermediate enrolled agents hold (ruling 8).
+    if installed(ctx) {
+        return Ok(StepState::Done(root_summary(ctx)?));
+    }
     let request = |name: &str| format!("{REQUEST_DIR}/{name}");
     let names = [
         "intermediate.key",
@@ -377,44 +382,6 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         "server certificates for {}",
         names.join(", ")
     )))
-}
-
-/// Removes the previous intermediate once nothing it signed is left (see
-/// `replace`); the log line when it did.
-pub(crate) fn drop_previous<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {
-    use super::replace::{PREVIOUS, PREVIOUS_UNTIL};
-    let Ok(until) = ctx.read(PREVIOUS_UNTIL) else {
-        return Ok(None);
-    };
-    let until = chrono::DateTime::parse_from_rfc3339(until.trim())
-        .map_err(|error| format!("{PREVIOUS_UNTIL}: {error}"))?;
-    if chrono::Utc::now() < until {
-        return Ok(None);
-    }
-    let first = platform_pki::first_certificate(&ctx.read(INTERMEDIATE)?)
-        .map_err(|error| format!("{INTERMEDIATE}: {error:?}"))?;
-    ctx.put(INTERMEDIATE, first.as_bytes(), None, 0o644)?;
-    // The services read the bundle at start. The date goes last: a failed
-    // restart is tried again tomorrow.
-    let units = [Component::Ingest, Component::Distribution]
-        .into_iter()
-        .filter(|component| ctx.plan.has(*component))
-        .map(|component| format!("openvibes-{}", component.name()));
-    let mut args = vec!["try-restart".to_owned()];
-    args.extend(units);
-    ctx.ok(
-        Systemctl,
-        &args.iter().map(String::as_str).collect::<Vec<_>>(),
-    )?;
-    for path in [PREVIOUS, PREVIOUS_UNTIL] {
-        match fs::remove_file(ctx.path(path)) {
-            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                return Err(format!("{path}: {error}"));
-            }
-            _ => {}
-        }
-    }
-    Ok(Some("previous intermediate no longer trusted".into()))
 }
 
 pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {

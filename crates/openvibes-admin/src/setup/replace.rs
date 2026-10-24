@@ -3,14 +3,17 @@
 //! everything from now on) and the old one second, so agents keep
 //! connecting with what the old one signed until they renew onto the new
 //! one; the daily renewal drops the old one after `PREVIOUS_UNTIL`
-//! (`pki::drop_previous`).
+//! (`drop_previous`).
 
 use std::{fs, os::unix::fs::DirBuilderExt, path::Path, process::ExitCode};
 
 use chrono::{DateTime, Utc};
 use platform_host::{
     CONFIG_DIR,
-    runner::{Program::Admin, Runner},
+    runner::{
+        Program::{Admin, Systemctl},
+        Runner,
+    },
 };
 use platform_pki::Issuer;
 
@@ -20,7 +23,7 @@ use super::{
         self, ADMIN_OWNER, INT, INTERMEDIATE, INTERMEDIATE_KEY, ROOT_CERT, ROOT_DIR, STAGE,
         certificates_apply,
     },
-    plan::CaMode,
+    plan::{CaMode, Component},
     request::{REQUEST_DIR, message},
     setup_guard,
 };
@@ -34,6 +37,26 @@ pub(crate) const PREVIOUS_UNTIL: &str = "/etc/openvibes/pki/previous-until";
 /// A root key file that is not this root's (the TUI checks it first too).
 pub(crate) const NOT_THE_KEY: &str =
     "Not the key of this host's root: pick the root key kept at install.";
+
+/// The stages finished so far, one line each, for the TUI's step list
+/// (under the root; 0644, replaced whole; emptied when a run starts and
+/// removed when one succeeds).
+pub(crate) const PROGRESS: &str = "run/openvibes-admin/ca-replace-progress";
+
+/// Says `stage` is done: on standard output and in `PROGRESS`. The
+/// progress file is only a display: failing to write it fails nothing.
+fn finished<R: Runner>(ctx: &Ctx<R>, done: &mut String, stage: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    println!("{stage}");
+    done.push_str(stage);
+    done.push('\n');
+    let file = ctx.path(PROGRESS);
+    if let Some(dir) = file.parent() {
+        let _ = fs::create_dir_all(dir);
+        let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o755));
+    }
+    let _ = crate::model_progress::replace_file(&file, done);
+}
 
 /// The agents' certificate lifetime, `client_certificate_days` (default 30).
 fn client_days<R: Runner>(ctx: &Ctx<R>) -> i64 {
@@ -112,6 +135,8 @@ fn quick<R: Runner>(ctx: &Ctx<R>, root: &str, root_key: Option<&str>) -> Result<
 /// one; the server certificates are reissued from it. Prints each finished
 /// stage; the new one's expiry and the old one's end, `YYYY-MM-DD<TAB>…`.
 fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String> {
+    let mut done = String::new();
+    let _ = crate::model_progress::replace_file(&ctx.path(PROGRESS), "");
     let root = ctx.read(ROOT_CERT)?;
     let previous = platform_pki::first_certificate(&ctx.read(INTERMEDIATE)?)
         .map_err(|error| format!("{INTERMEDIATE}: {error:?}"))?;
@@ -128,7 +153,7 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
     Issuer::load(&new, &new_key).map_err(|e| message(&e))?;
     platform_pki::check_intermediate(&new, &root, Utc::now()).map_err(|e| message(&e))?;
     let expires = platform_pki::not_after(&new).map_err(|e| message(&e))?;
-    println!("Making the new intermediate");
+    finished(ctx, &mut done, "Making the new intermediate");
 
     // Recorded first: the import checks it once more before anything on
     // disk changes.
@@ -167,7 +192,7 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
         pki::remove_request(ctx)?;
     }
     pki::remove_stage(ctx)?;
-    println!("Trusting the old and the new one");
+    finished(ctx, &mut done, "Trusting the old and the new one");
 
     certificates_apply(ctx).map_err(|error| {
         format!(
@@ -175,13 +200,50 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
              Repair in Maintenance (they stay valid until then). {error}"
         )
     })?;
-    println!("Issuing the server certificates");
-    println!("Restarting the services");
+    finished(ctx, &mut done, "Issuing the server certificates");
+    finished(ctx, &mut done, "Restarting the services");
     Ok(format!(
         "{}\t{}",
         expires.format("%Y-%m-%d"),
         until.format("%Y-%m-%d")
     ))
+}
+
+/// Removes the previous intermediate once nothing it signed is left; the
+/// log line when it did.
+pub(crate) fn drop_previous<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {
+    let Ok(until) = ctx.read(PREVIOUS_UNTIL) else {
+        return Ok(None);
+    };
+    let until = chrono::DateTime::parse_from_rfc3339(until.trim())
+        .map_err(|error| format!("{PREVIOUS_UNTIL}: {error}"))?;
+    if chrono::Utc::now() < until {
+        return Ok(None);
+    }
+    let first = platform_pki::first_certificate(&ctx.read(INTERMEDIATE)?)
+        .map_err(|error| format!("{INTERMEDIATE}: {error:?}"))?;
+    ctx.put(INTERMEDIATE, first.as_bytes(), None, 0o644)?;
+    // The services read the bundle at start. The date goes last: a failed
+    // restart is tried again tomorrow.
+    let units = [Component::Ingest, Component::Distribution]
+        .into_iter()
+        .filter(|component| ctx.plan.has(*component))
+        .map(|component| format!("openvibes-{}", component.name()));
+    let mut args = vec!["try-restart".to_owned()];
+    args.extend(units);
+    ctx.ok(
+        Systemctl,
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+    )?;
+    for path in [PREVIOUS, PREVIOUS_UNTIL] {
+        match fs::remove_file(ctx.path(path)) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{path}: {error}"));
+            }
+            _ => {}
+        }
+    }
+    Ok(Some("previous intermediate no longer trusted".into()))
 }
 
 /// Why another replacement waits (the TUI says it before asking).
@@ -204,6 +266,9 @@ pub fn replace<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String
         return Err(still_trusted(&until.format("%Y-%m-%d").to_string()));
     }
     let result = run(ctx, root_key);
+    if result.is_ok() {
+        let _ = fs::remove_file(ctx.path(PROGRESS));
+    }
     let stage = ctx.path(STAGE);
     if stage.exists()
         && let Err(error) = fs::remove_dir_all(&stage)

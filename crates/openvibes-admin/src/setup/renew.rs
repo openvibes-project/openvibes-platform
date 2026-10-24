@@ -5,7 +5,7 @@ use std::{path::Path, process::ExitCode};
 
 use platform_host::{Step, StepState, runner::Runner};
 
-use super::{Ctx, host_ctx, load_plan, pki, run_step, setup_guard, system};
+use super::{Ctx, host_ctx, load_plan, replace, run_step, setup_guard, system};
 
 /// A held Setup lock is no failure: that run changes the certificates or
 /// the timer comes again tomorrow. Any other lock error is.
@@ -25,7 +25,7 @@ fn renew_run<R: Runner>(ctx: &Ctx<R>) -> (String, ExitCode) {
     let state = run_step(ctx, Step::Certificates);
     let mut text = state.line();
     let mut failed = matches!(state, StepState::Failed(_) | StepState::Waiting(_));
-    match pki::drop_previous(ctx) {
+    match replace::drop_previous(ctx) {
         Ok(Some(line)) => text = format!("{text}\n{line}"),
         Ok(None) => {}
         Err(error) => {

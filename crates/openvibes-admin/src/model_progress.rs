@@ -46,6 +46,12 @@ fn done_bytes(models: &Path, name: &str) -> u64 {
 }
 
 fn write(file: &Path, done: u64, total: u64) -> std::io::Result<()> {
+    replace_file(file, &format!("{done} {total}\n"))
+}
+
+/// Writes `text` to `file` (0644) through a temporary file renamed over
+/// it, so a reader never sees half of it (`ca-replace`'s progress too).
+pub fn replace_file(file: &Path, text: &str) -> std::io::Result<()> {
     let tmp = file.with_extension("tmp");
     // The directory is root's, but never follow a link at the name.
     let mut out = fs::OpenOptions::new()
@@ -56,7 +62,7 @@ fn write(file: &Path, done: u64, total: u64) -> std::io::Result<()> {
         .custom_flags(libc::O_NOFOLLOW)
         .open(&tmp)?;
     out.set_permissions(fs::Permissions::from_mode(0o644))?;
-    writeln!(out, "{done} {total}")?;
+    out.write_all(text.as_bytes())?;
     fs::rename(&tmp, file)
 }
 
