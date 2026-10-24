@@ -77,9 +77,11 @@ const canChange = (r: CheckListRow) => r.failing > 0;
 
 /** What a bulk action sends for these rows (ruling 10): each failing check, on the Host chip's host when set,
  * open pairs only (`open_only`), so passing hosts and closed pairs are never touched. */
-export function bulkItems(rows: readonly CheckListRow[], host: string | null) {
+export function bulkItems(rows: readonly CheckListRow[], host: string | null, group: string | null = null) {
   const on = host ? { agent_id: host } : {};
-  return rows.filter(canChange).map((r) => ({ rule_set_id: r.rule_set_id, rule_id: r.rule_id, ...on, open_only: true }));
+  // The Group filter's rows count its hosts only; so does what they change (bulk_triage::ListRow).
+  const within = group ? { group } : {};
+  return rows.filter(canChange).map((r) => ({ rule_set_id: r.rule_set_id, rule_id: r.rule_id, ...on, open_only: true, ...within }));
 }
 
 /** The ticked rows a bulk action can change, how many, their open hosts, and the actions to leave out:
@@ -204,7 +206,7 @@ function CheckListView() {
         <CheckListBody list={data} hidden={hidden ?? []} offset={Math.max(0, Number(params.get(PAGE)) || 0)} selected={selected} onSelect={setSelected} cases={cases} />
       )}
       <BulkBar kind="compliance" noun={selected.size === 1 ? "check" : "checks"} count={selected.size} onClear={() => setSelected(new Set())}
-        items={() => bulkItems(chosen, host)} changes={bulk.changes} without={bulk.without} note={bulk.note}
+        items={() => bulkItems(chosen, host, params.get("group"))} changes={bulk.changes} without={bulk.without} note={bulk.note}
         confirm={<p>Changes up to {plural(bulk.open, "open host")}. Mitigated, accepted and false-positive hosts are left as they are, and passing hosts are never touched.</p>}
         newCase={() => ({ title: `${chosen.length} ${chosen.length === 1 ? "check" : "checks"}: ${chosen[0]?.rule_id ?? ""} ${chosen[0]?.title ?? ""}`.trim(),
           severity: highest(chosen.flatMap((r) => (r.severity ? [r.severity] : []))) })} />

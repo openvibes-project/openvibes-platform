@@ -18,6 +18,36 @@ pub use vulns::{expand_vulnerabilities, vulnerabilities, vulnerabilities_open_on
 mod compliance;
 pub use compliance::{compliance, compliance_open_only, expand_compliance};
 
+/// What a list row adds to its item (missing: the default). `open_only`:
+/// a close or assign changes the row's pairs only while open (and, for a
+/// check row, failing), even on one named host; a reopen ignores it.
+/// `group`: the Group filter the row was counted under (a lowercase group
+/// id); the item then reaches only that group's hosts, still inside reach,
+/// so the confirmation's count is the row's.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ListRow {
+    /// Change open pairs only.
+    pub open_only: bool,
+    /// Keep to this host group's members.
+    pub group: Option<String>,
+}
+
+impl ListRow {
+    /// A list row with no Group filter.
+    #[must_use]
+    pub const fn open() -> Self {
+        Self {
+            open_only: true,
+            group: None,
+        }
+    }
+
+    fn of(rows: &[Self], i: usize) -> (bool, Option<&str>) {
+        rows.get(i)
+            .map_or((false, None), |r| (r.open_only, r.group.as_deref()))
+    }
+}
+
 /// Most items one bulk action changes (after hosts are expanded).
 // ponytail: one transaction per item keeps the single-item rules exact;
 // 10,000 items take seconds. Batch the writes if that ever matters.

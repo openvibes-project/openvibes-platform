@@ -57,7 +57,7 @@ async fn closed_pairs_do_not_count_toward_the_cap() {
         &mut c,
         &AgentScope::Global,
         &one,
-        &[true],
+        &[bulk::ListRow::open()],
         assign,
         "ann",
         now,

@@ -122,6 +122,8 @@ describe("Vulnerabilities list", () => {
     // The Host chip names the host; open_only keeps its closed pairs out of reach.
     expect(bulkItems([row(), row({ key: "CVE-2026-10051" })], "agent-1"))
       .toEqual([{ advisory_id: "DSA-5891-1", agent_id: "agent-1", open_only: true }, { advisory_id: "FEDORA-2026-1", agent_id: "agent-1", open_only: true }]);
+    // With the Group filter set, the row's counts are the group's, and so is what it changes.
+    expect(bulkItems([row()], null, "grp-web")).toEqual([{ advisory_id: "DSA-5891-1", open_only: true, group: "grp-web" }, { advisory_id: "FEDORA-2026-1", open_only: true, group: "grp-web" }]);
   });
 
   it("sends no version-range (CPE:) advisory, and offers nothing for rows that cannot change", () => {

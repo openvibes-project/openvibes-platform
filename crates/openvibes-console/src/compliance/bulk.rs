@@ -12,7 +12,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use platform_store::{
-    bulk_triage::{self as store, BulkChange, BulkRefusal, BulkResult, MAX_ITEMS},
+    bulk_triage::{self as store, BulkChange, BulkRefusal, BulkResult, ListRow, MAX_ITEMS},
     console_cases::{self, NewCase, Refusal},
     console_read::AgentScope,
 };
@@ -32,7 +32,9 @@ use crate::{
 /// `advisory_id` (every host where it is open), with `agent_id` for one;
 /// `open_only` (a Vulnerabilities list row) keeps a close or assign to open
 /// pairs even with `agent_id`; so for a check row (compliance, which also
-/// leaves ended findings alone).
+/// leaves pairs alone that the list does not count failing). `group` (a
+/// list row counted under a Group filter) keeps the item to that group's
+/// hosts, still inside the caller's reach.
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BulkItem {
@@ -51,6 +53,9 @@ pub struct BulkItem {
     /// Default false.
     #[serde(default)]
     pub open_only: bool,
+    /// Vulnerabilities and compliance: a host group id (UUID); only that
+    /// group's hosts are reached (the list's Group filter).
+    pub group: Option<String>,
 }
 
 /// One action on many items.
@@ -164,10 +169,25 @@ pub(crate) async fn bulk_vulnerabilities(
 /// (advisory, host?). `None` if an item does not fit the kind.
 enum Items {
     Alarms(Vec<i64>),
-    /// (rule set, rule, host?) and each item's `open_only`.
-    Compliance(Vec<(String, String, Option<String>)>, Vec<bool>),
-    /// (advisory, host?) and each item's `open_only`.
-    Vulnerabilities(Vec<(String, Option<String>)>, Vec<bool>),
+    /// (rule set, rule, host?) and each item's list row.
+    Compliance(Vec<(String, String, Option<String>)>, Vec<ListRow>),
+    /// (advisory, host?) and each item's list row.
+    Vulnerabilities(Vec<(String, Option<String>)>, Vec<ListRow>),
+}
+
+/// Each item's `open_only` and lowercased `group`; `None` if a group is not
+/// a UUID.
+fn list_rows(items: &[BulkItem]) -> Option<Vec<ListRow>> {
+    items
+        .iter()
+        .map(|i| match i.group.as_deref() {
+            Some(g) if !crate::alarms::list::is_uuid(g) => None,
+            g => Some(ListRow {
+                open_only: i.open_only,
+                group: g.map(str::to_ascii_lowercase),
+            }),
+        })
+        .collect()
 }
 
 fn parse_items(kind: Kind, items: &[BulkItem]) -> Option<Items> {
@@ -177,7 +197,7 @@ fn parse_items(kind: Kind, items: &[BulkItem]) -> Option<Items> {
             && item.rule_id.is_some() == b
             && item.advisory_id.is_some() == c
             && (d || item.agent_id.is_none())
-            && (c || b || !item.open_only)
+            && (c || b || (!item.open_only && item.group.is_none()))
     };
     match kind {
         Kind::Alarms => items
@@ -201,7 +221,8 @@ fn parse_items(kind: Kind, items: &[BulkItem]) -> Option<Items> {
                 })
             })
             .collect::<Option<Vec<_>>>()
-            .map(|keys| Items::Compliance(keys, items.iter().map(|i| i.open_only).collect())),
+            .zip(list_rows(items))
+            .map(|(keys, rows)| Items::Compliance(keys, rows)),
         Kind::Vulnerabilities => items
             .iter()
             .map(|i| {
@@ -213,9 +234,8 @@ fn parse_items(kind: Kind, items: &[BulkItem]) -> Option<Items> {
                 })
             })
             .collect::<Option<Vec<_>>>()
-            .map(|pairs| {
-                Items::Vulnerabilities(pairs, items.iter().map(|i| i.open_only).collect())
-            }),
+            .zip(list_rows(items))
+            .map(|(pairs, rows)| Items::Vulnerabilities(pairs, rows)),
     }
 }
 
@@ -363,8 +383,8 @@ async fn add_to_case(
                 Err(_) => return unavailable_auth(),
             }
         }
-        Items::Vulnerabilities(items, _) => {
-            match store::expand_vulnerabilities(client, scope, items).await {
+        Items::Vulnerabilities(items, rows) => {
+            match store::expand_vulnerabilities(client, scope, items, rows).await {
                 Ok(Some(found)) => found
                     .into_iter()
                     .map(|(a, adv)| ("vulnerability", format!("{a}/{adv}")))

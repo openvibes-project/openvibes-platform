@@ -112,6 +112,8 @@ describe("Compliance list", () => {
       { rule_set_id: "baseline", rule_id: "port.redis.exposed", open_only: true },
     ]);
     expect(bulkItems([ssh], "agent-1")).toEqual([{ rule_set_id: "hardening-linux-l1", rule_id: "harden.ssh.permit_root_login", agent_id: "agent-1", open_only: true }]);
+    // With the Group filter set, the row's counts are the group's, and so is what it changes.
+    expect(bulkItems([ssh], null, "grp-web")).toEqual([{ rule_set_id: "hardening-linux-l1", rule_id: "harden.ssh.permit_root_login", open_only: true, group: "grp-web" }]);
   });
 
   it("counts a passing-only check for nothing, and offers nothing for a selection of only those", () => {

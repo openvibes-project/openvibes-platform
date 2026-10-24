@@ -13129,7 +13129,7 @@
       },
       "BulkItem": {
         "type": "object",
-        "description": "One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`\n(every host in scope), with `agent_id` for one host. Vulnerabilities:\n`advisory_id` (every host where it is open), with `agent_id` for one;\n`open_only` (a Vulnerabilities list row) keeps a close or assign to open\npairs even with `agent_id`; so for a check row (compliance, which also\nleaves ended findings alone).",
+        "description": "One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`\n(every host in scope), with `agent_id` for one host. Vulnerabilities:\n`advisory_id` (every host where it is open), with `agent_id` for one;\n`open_only` (a Vulnerabilities list row) keeps a close or assign to open\npairs even with `agent_id`; so for a check row (compliance, which also\nleaves pairs alone that the list does not count failing). `group` (a\nlist row counted under a Group filter) keeps the item to that group's\nhosts, still inside the caller's reach.",
         "properties": {
           "advisory_id": {
             "type": [
@@ -13144,6 +13144,13 @@
               "null"
             ],
             "description": "One host only."
+          },
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vulnerabilities and compliance: a host group id (UUID); only that\ngroup's hosts are reached (the list's Group filter)."
           },
           "id": {
             "type": [

@@ -150,4 +150,18 @@ describe("demo Vulnerabilities list", () => {
     expect(skipped.changed).toBe(0);
     expect(skipped.skipped.map((s) => s.reason)).toContain("not found or out of scope");
   });
+
+  it("bulk on a row under a Group filter changes only the group's open hosts, the count the row shows", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const list = async (q: string) => (await (await server.handle("GET", `${URL}?${q}`, undefined)).json()) as VulnList;
+    const all = await list("limit=100");
+    const groups = server.data.access.host_groups.map((g) => g.asset_group_id);
+    const pick = (await Promise.all(groups.map(async (g) => ({ g, rows: (await list(`group=${g}&limit=100`)).items }))))
+      .flatMap(({ g, rows }) => rows.map((r) => ({ g, r, whole: all.items.find((a) => a.key === r.key) })))
+      .find(({ r, whole }) => r.open > 0 && r.advisories.length === 1 && whole && whole.open > r.open);
+    if (!pick) throw new Error("no row whose group side differs");
+    const done = (await (await server.handle("POST", "/api/v1/vulnerabilities/bulk", { action: "state", state: "mitigated", note: "x",
+      items: pick.r.advisories.map((advisory_id) => ({ advisory_id, open_only: true, group: pick.g })) })).json()) as { changed: number };
+    expect(done.changed).toBe(pick.r.open);
+  });
 });

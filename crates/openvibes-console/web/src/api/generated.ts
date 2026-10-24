@@ -3159,13 +3159,20 @@ export interface components {
          *     `advisory_id` (every host where it is open), with `agent_id` for one;
          *     `open_only` (a Vulnerabilities list row) keeps a close or assign to open
          *     pairs even with `agent_id`; so for a check row (compliance, which also
-         *     leaves ended findings alone).
+         *     leaves pairs alone that the list does not count failing). `group` (a
+         *     list row counted under a Group filter) keeps the item to that group's
+         *     hosts, still inside the caller's reach.
          */
         BulkItem: {
             /** @description Advisory of a vulnerability. */
             advisory_id?: string | null;
             /** @description One host only. */
             agent_id?: string | null;
+            /**
+             * @description Vulnerabilities and compliance: a host group id (UUID); only that
+             *     group's hosts are reached (the list's Group filter).
+             */
+            group?: string | null;
             /** @description The platform's alarm id. */
             id?: string | null;
             /**

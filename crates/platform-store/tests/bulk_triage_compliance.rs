@@ -76,10 +76,18 @@ async fn compliance_rows_change_only_open_failing_pairs() {
     // leave it alone ("not open"); the rule-wide one never lists it.
     let on_h2 = row(Some(id(2)));
     for change in [close("x"), BulkChange::Assign(Some("bob"))] {
-        let done = bulk::compliance_open_only(&mut c, &scope, &on_h2, &[true], change, "ann", now)
-            .await
-            .unwrap()
-            .unwrap();
+        let done = bulk::compliance_open_only(
+            &mut c,
+            &scope,
+            &on_h2,
+            &[bulk::ListRow::open()],
+            change,
+            "ann",
+            now,
+        )
+        .await
+        .unwrap()
+        .unwrap();
         assert_eq!(done.changed, 0, "{done:?}");
         assert_eq!(
             done.skipped,
@@ -144,10 +152,18 @@ async fn compliance_rows_change_only_open_failing_pairs() {
     // it is "not found or out of scope"; a reopen still reopens the closed
     // pairs (h1, h2, h5) and finds h3 already open.
     let on_h3 = row(Some(id(3)));
-    let done = bulk::compliance_open_only(&mut c, &scope, &on_h3, &[true], close("x"), "ann", now)
-        .await
-        .unwrap()
-        .unwrap();
+    let done = bulk::compliance_open_only(
+        &mut c,
+        &scope,
+        &on_h3,
+        &[bulk::ListRow::open()],
+        close("x"),
+        "ann",
+        now,
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(done.changed, 0, "{done:?}");
     assert_eq!(
         done.skipped,
@@ -165,12 +181,12 @@ async fn compliance_rows_change_only_open_failing_pairs() {
         .unwrap();
     let hosts: Vec<&str> = rule_wide.iter().map(|(a, _, _)| a.as_str()).collect();
     assert_eq!(hosts, [id(1), id(2), id(5)]);
-    let named = bulk::expand_compliance(&c, &scope, &row(Some(id(3))), &[false])
+    let named = bulk::expand_compliance(&c, &scope, &row(Some(id(3))), &[bulk::ListRow::default()])
         .await
         .unwrap()
         .unwrap();
     assert_eq!(named.len(), 1);
-    let chip = bulk::expand_compliance(&c, &scope, &row(Some(id(3))), &[true])
+    let chip = bulk::expand_compliance(&c, &scope, &row(Some(id(3))), &[bulk::ListRow::open()])
         .await
         .unwrap()
         .unwrap();
@@ -264,7 +280,7 @@ async fn stale_pairs_are_not_reached_and_not_capped() {
         &mut c,
         &scope,
         &row(Some(first)),
-        &[true],
+        &[bulk::ListRow::open()],
         close("x"),
         "ann",
         now,

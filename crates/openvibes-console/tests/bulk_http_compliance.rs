@@ -310,3 +310,74 @@ async fn compliance_rows_close_only_open_failing_pairs() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     db.drop().await;
 }
+
+/// A row counted under a Group filter sends `group`: only that group's hosts
+/// change, for a check row and a CVE row alike; a group that is not a UUID,
+/// or one on an alarm item, is refused.
+#[tokio::test]
+async fn a_group_row_reaches_only_its_group() {
+    let (db, router, _) = setup().await;
+    let client = db.pool.get().await.unwrap();
+    client
+        .batch_execute(&format!(
+            "INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id, rule_version,
+                severity, first_observed_at, last_observed_at, last_observed_day, scan_id, confidence,
+                message, evidence, received_at, origin, authenticated)
+             SELECT g, 'baseline', 'ssh', 'f', 1, 'low', now(), now(), current_date, 's', 90, 'm', '{{}}', now(), 'online', true
+             FROM unnest(ARRAY['{WEB}', '{DB}']) g;"
+        ))
+        .await
+        .unwrap();
+    let web = common::manual_group(&client, "web", &[WEB])
+        .await
+        .to_uppercase();
+    drop(client);
+    let (cookie, csrf) = login(&router, "alice").await;
+    let close = |items: serde_json::Value| json!({"action": "state", "state": "mitigated", "note": "fixed", "items": items});
+    for (path, item) in [
+        (
+            "/api/v1/compliance/bulk",
+            json!({"rule_set_id": "baseline", "rule_id": "ssh", "open_only": true, "group": web}),
+        ),
+        (
+            "/api/v1/vulnerabilities/bulk",
+            json!({"advisory_id": "FEDORA-1", "open_only": true, "group": web}),
+        ),
+    ] {
+        let (status, body, _) = call(
+            &router,
+            "POST",
+            path,
+            &cookie,
+            &csrf,
+            Some(close(json!([item]))),
+            None,
+        )
+        .await;
+        assert_eq!(
+            (status, body["changed"].as_u64()),
+            (StatusCode::OK, Some(1)),
+            "{path}: {body}"
+        );
+    }
+    for (path, item) in [
+        (
+            "/api/v1/compliance/bulk",
+            json!({"rule_set_id": "baseline", "rule_id": "ssh", "group": "web"}),
+        ),
+        ("/api/v1/alarms/bulk", json!({"id": "1", "group": web})),
+    ] {
+        let (status, _, _) = call(
+            &router,
+            "POST",
+            path,
+            &cookie,
+            &csrf,
+            Some(close(json!([item]))),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}");
+    }
+    db.drop().await;
+}

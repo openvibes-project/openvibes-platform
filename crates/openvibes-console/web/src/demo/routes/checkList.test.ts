@@ -187,4 +187,18 @@ describe("demo Compliance list", () => {
     expect(await bulk({ action: "state", state: "mitigated", note: "x", items: [{ ...item, agent_id: "agent-00001", open_only: true }] }))
       .toMatchObject({ changed: 0, skipped: [{ reason: "not found or out of scope" }] });
   });
+
+  it("bulk on a row under a Group filter changes only the group's open hosts, the count the row shows", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const list = async (q: string) => (await (await server.handle("GET", `${URL}?${q}`, undefined)).json()) as CheckList;
+    const all = await list("limit=100");
+    const groups = server.data.access.host_groups.map((g) => g.asset_group_id);
+    const pick = (await Promise.all(groups.map(async (g) => ({ g, rows: (await list(`group=${g}&limit=100`)).items }))))
+      .flatMap(({ g, rows }) => rows.map((r) => ({ g, r, whole: all.items.find((a) => a.rule_id === r.rule_id && a.rule_set_id === r.rule_set_id) })))
+      .find(({ r, whole }) => r.open > 0 && whole && whole.open > r.open);
+    if (!pick) throw new Error("no row whose group side differs");
+    const done = (await (await server.handle("POST", "/api/v1/compliance/bulk", { action: "state", state: "mitigated", note: "x",
+      items: [{ rule_set_id: pick.r.rule_set_id, rule_id: pick.r.rule_id, open_only: true, group: pick.g }] })).json()) as { changed: number };
+    expect(done.changed).toBe(pick.r.open);
+  });
 });

@@ -3,7 +3,7 @@
 
 use chrono::{DateTime, Utc};
 
-use super::{BulkChange, BulkRefusal, BulkResult, MAX_ITEMS, audit, check, spared};
+use super::{BulkChange, BulkRefusal, BulkResult, ListRow, MAX_ITEMS, audit, check, spared};
 use crate::{
     Client, StoreError,
     console_read::{AgentScope, agent_visibility},
@@ -26,15 +26,16 @@ pub async fn compliance(
     compliance_open_only(client, scope, items, &[], change, actor, now).await
 }
 
-/// [`compliance`], where `open_only[i]` (missing: false) marks item `i` as a
-/// check row's: a close or assign then changes its pairs only while failing
-/// and open ("not open" otherwise), even on one named host. A rule-wide item
-/// is always so; a reopen ignores the flag and keeps its own rules.
+/// [`compliance`], where `rows[i]` (missing: the default) is item `i`'s
+/// check row: with `open_only` a close or assign changes its pairs only
+/// while failing and open ("not open" otherwise), even on one named host
+/// (a rule-wide item is always so; a reopen ignores the flag and keeps its
+/// own rules); with `group`, only that group's hosts.
 pub async fn compliance_open_only(
     client: &mut Client,
     scope: &AgentScope,
     items: &[Item],
-    open_only: &[bool],
+    rows: &[ListRow],
     change: BulkChange<'_>,
     actor: &str,
     now: DateTime<Utc>,
@@ -49,11 +50,9 @@ pub async fn compliance_open_only(
     let filtered: Vec<bool> = items
         .iter()
         .enumerate()
-        .map(|(i, (_, _, agent))| {
-            !reopen && (agent.is_none() || open_only.get(i).copied().unwrap_or(false))
-        })
+        .map(|(i, (_, _, agent))| !reopen && (agent.is_none() || ListRow::of(rows, i).0))
         .collect();
-    let Some(matched) = rows(client, scope, items, &filtered, now, Mode::Open)
+    let Some(matched) = query(client, scope, items, &filtered, rows, now, Mode::Open)
         .await?
         .map(|rows| {
             rows.iter()
@@ -75,7 +74,7 @@ pub async fn compliance_open_only(
         })
         .collect();
     let failing = if missed.iter().any(|&i| filtered[i]) {
-        reaching(client, scope, items, now).await?
+        reaching(client, scope, items, rows, now).await?
     } else {
         std::collections::HashSet::new()
     };
@@ -103,7 +102,7 @@ pub async fn compliance_open_only(
             s == set
                 && r == rule
                 && a.as_deref() == Some(agent.as_str())
-                && (reopen || !open_only.get(i).copied().unwrap_or(false))
+                && (reopen || !ListRow::of(rows, i).0)
         });
         // An expired accepted risk is open (when closing or assigning; a
         // reopen still sees its stored state and clears it).
@@ -181,29 +180,36 @@ pub async fn compliance_open_only(
 
 /// The (agent, rule set, rule) findings these items name in scope: a rule
 /// without a host is every host with a current finding of it. A rule-wide
-/// item, or one with `open_only[i]` (missing: false), reaches failing (not
-/// ended) findings only, closed ones included. `None` when they are more
-/// than [`MAX_ITEMS`].
+/// item, or one whose row (`rows[i]`, missing: the default) is
+/// `open_only`, reaches failing findings only (as the list counts them),
+/// closed ones included; a row's `group` keeps to that group's hosts.
+/// `None` when they are more than [`MAX_ITEMS`].
 pub async fn expand_compliance(
     client: &Client,
     scope: &AgentScope,
     items: &[Item],
-    open_only: &[bool],
+    rows: &[ListRow],
 ) -> Result<Option<Vec<(String, String, String)>>, StoreError> {
     let failing: Vec<bool> = items
         .iter()
         .enumerate()
-        .map(|(i, (_, _, agent))| agent.is_none() || open_only.get(i).copied().unwrap_or(false))
+        .map(|(i, (_, _, agent))| agent.is_none() || ListRow::of(rows, i).0)
         .collect();
-    Ok(
-        rows(client, scope, items, &failing, Utc::now(), Mode::Failing)
-            .await?
-            .map(|rows| {
-                rows.iter()
-                    .map(|r| (r.get(0), r.get(1), r.get(2)))
-                    .collect()
-            }),
+    Ok(query(
+        client,
+        scope,
+        items,
+        &failing,
+        rows,
+        Utc::now(),
+        Mode::Failing,
     )
+    .await?
+    .map(|rows| {
+        rows.iter()
+            .map(|r| (r.get(0), r.get(1), r.get(2)))
+            .collect()
+    }))
 }
 
 /// What [`rows`] asks for.
@@ -222,10 +228,11 @@ async fn reaching(
     client: &Client,
     scope: &AgentScope,
     items: &[Item],
+    rows: &[ListRow],
     now: DateTime<Utc>,
 ) -> Result<std::collections::HashSet<usize>, StoreError> {
     let all = vec![true; items.len()];
-    let found = rows(client, scope, items, &all, now, Mode::Which).await?;
+    let found = query(client, scope, items, &all, rows, now, Mode::Which).await?;
     Ok(found
         .unwrap_or_default()
         .iter()
@@ -236,15 +243,18 @@ async fn reaching(
 /// The expansion query: pairs, or (`Mode::Which`) the 1-based indexes of the items
 /// that reach any failing pair. `open[i]` keeps item `i` to its failing
 /// pairs (by the list's [`crate::check_list_sql::failing`]) still open at `now` (no triage, open, or an expired accepted risk);
-/// with `Mode::Which`, only the failing test applies.
-async fn rows(
+/// with `Mode::Which`, only the failing test applies. A row's `group`
+/// keeps its item to that group's members in every mode.
+async fn query(
     client: &Client,
     scope: &AgentScope,
     items: &[Item],
     open: &[bool],
+    rows: &[ListRow],
     now: DateTime<Utc>,
     mode: Mode,
 ) -> Result<Option<Vec<tokio_postgres::Row>>, StoreError> {
+    let groups: Vec<Option<&str>> = (0..items.len()).map(|i| ListRow::of(rows, i).1).collect();
     let (sets, rules, agents): (Vec<&str>, Vec<&str>, Vec<Option<&str>>) = items.iter().fold(
         (Vec::new(), Vec::new(), Vec::new()),
         |(mut s, mut r, mut a), (set, rule, agent)| {
@@ -276,8 +286,8 @@ async fn rows(
         .query(
             &format!(
                 "SELECT DISTINCT {select}
-                 FROM unnest($1::text[], $2::text[], $3::text[], $6::bool[])
-                     WITH ORDINALITY AS k(rule_set_id, rule_id, agent_id, open_only, i)
+                 FROM unnest($1::text[], $2::text[], $3::text[], $6::bool[], $8::text[])
+                     WITH ORDINALITY AS k(rule_set_id, rule_id, agent_id, open_only, grp, i)
                  JOIN current_findings c ON c.rule_set_id = k.rule_set_id AND c.rule_id = k.rule_id
                      AND (k.agent_id IS NULL OR c.agent_id = k.agent_id)
                  JOIN agents a ON a.agent_id = c.agent_id
@@ -285,6 +295,8 @@ async fn rows(
                      AND t.rule_set_id = c.rule_set_id AND t.rule_id = c.rule_id
                  WHERE {visible}
                    AND (NOT k.open_only OR ({failing} AND {still_open}))
+                   AND (k.grp IS NULL OR EXISTS (SELECT 1 FROM console_host_group_membership m
+                        WHERE m.agent_id = c.agent_id AND m.asset_group_id::text = k.grp))
                  {order}"
             ),
             &[
@@ -295,6 +307,7 @@ async fn rows(
                 &scope.group_ids(),
                 &open,
                 &now,
+                &groups,
             ],
         )
         .await?;

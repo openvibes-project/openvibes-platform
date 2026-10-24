@@ -387,11 +387,18 @@ async fn bulk_on_cve_rows_changes_only_open_pairs() {
     // pair is still left alone, for a close and an assignment alike.
     let on_h2 = [("DEBIAN-A".to_owned(), Some(h2.to_owned()))];
     for change in [mitigate(Some("again")), BulkChange::Assign(Some("ann"))] {
-        let done =
-            bulk::vulnerabilities_open_only(&mut c, &scope, &on_h2, &[true], change, "ann", now)
-                .await
-                .unwrap()
-                .unwrap();
+        let done = bulk::vulnerabilities_open_only(
+            &mut c,
+            &scope,
+            &on_h2,
+            &[bulk::ListRow::open()],
+            change,
+            "ann",
+            now,
+        )
+        .await
+        .unwrap()
+        .unwrap();
         assert_eq!(done.changed, 0, "{done:?}");
         assert_eq!(why(&done, &format!("{h2}/DEBIAN-A")), Some("not open"));
     }
