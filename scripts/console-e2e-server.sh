@@ -168,7 +168,8 @@ INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version
 SELECT 'agent.00000000-0000-4000-8000-0000000002' || n || h, 'active', now() - interval '1 day', now(), '0.4.2',
     name || '.example.test', 'debian', '12', ('203.0.113.' || (n * 10 + h))::inet,
     jsonb_build_object('rule_sets', jsonb_build_array(jsonb_build_object('id', 'e2e-comp-' || p, 'version', 1)),
-                       'last_scan', '{"collectors": {"hardening": "ok"}}'::jsonb), now()
+                       'last_scan', jsonb_build_object('collectors', '{"hardening": "ok"}'::jsonb,
+                                                       'finished_at_unix_ms', (extract(epoch FROM now()) * 1000)::bigint)), now()
 FROM e2e_browsers, LATERAL (VALUES (1, 'comp-' || p || '-1'), (2, 'comp-' || p || '-2'), (3, 'comp-' || p || '-3'),
                                    (4, 'other-comp-' || p || '-1')) AS x (h, name);
 INSERT INTO current_findings

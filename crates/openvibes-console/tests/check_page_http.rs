@@ -35,9 +35,9 @@ async fn seed(fx: &Fx) -> String {
     client
         .batch_execute(&format!(
             "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at, health, health_at) VALUES
-                ('{W1}', 'active', now(), 'win-01', now(), '{HEALTH}', now()),
-                ('{W2}', 'active', now(), 'win-02', now(), '{HEALTH}', now()),
-                ('{L1}', 'active', now(), 'lin-01', now(), '{HEALTH}', now());
+                ('{W1}', 'active', now(), 'win-01', now(), jsonb_set('{HEALTH}'::jsonb, '{{last_scan,finished_at_unix_ms}}', to_jsonb((extract(epoch FROM now()) * 1000)::bigint)), now()),
+                ('{W2}', 'active', now(), 'win-02', now(), jsonb_set('{HEALTH}'::jsonb, '{{last_scan,finished_at_unix_ms}}', to_jsonb((extract(epoch FROM now()) * 1000)::bigint)), now()),
+                ('{L1}', 'active', now(), 'lin-01', now(), jsonb_set('{HEALTH}'::jsonb, '{{last_scan,finished_at_unix_ms}}', to_jsonb((extract(epoch FROM now()) * 1000)::bigint)), now());
              INSERT INTO console_host_group_members (asset_group_id, agent_id, added_at, added_by)
                 VALUES ('{WIN}', '{W1}', now(), 't'), ('{WIN}', '{W2}', now(), 't');
              INSERT INTO rule_sets (rule_set_id) VALUES ('hardening-linux-l1');

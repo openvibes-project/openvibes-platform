@@ -19,6 +19,14 @@ pub fn h(n: u8) -> String {
 pub const HEALTHY: &str = r#"{"rule_sets":[{"id":"baseline","version":2},{"id":"hardening-linux-l1","version":1}],
   "last_scan":{"collectors":{"ports":"ok","packages":"ok","hardening":"ok","processes":"ok"}}}"#;
 
+/// `health` (a JSON literal) as SQL, its last scan finished just now:
+/// passing needs a scan within the last day.
+pub fn fresh_scan(health: &str) -> String {
+    format!(
+        "jsonb_set('{health}'::jsonb, '{{last_scan,finished_at_unix_ms}}', to_jsonb((extract(epoch FROM now()) * 1000)::bigint))"
+    )
+}
+
 /// Every finding as (host, set, rule, severity, last seen, ended), then
 /// every triage row as (host, set, rule, state, assignee, accepted until).
 pub const FINDINGS: &str = "
@@ -150,8 +158,9 @@ pub async fn fixture(c: &Client) -> (String, String) {
         };
         sql += &format!(
             "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, hostname, health, health_at)
-             VALUES ('{}', 'active', now(), now(), 'host-{n}', '{health}', {at});",
-            h(n)
+             VALUES ('{}', 'active', now(), now(), 'host-{n}', {}, {at});",
+            h(n),
+            fresh_scan(&health)
         );
     }
     sql += FINDINGS;

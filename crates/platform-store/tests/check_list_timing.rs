@@ -50,7 +50,8 @@ async fn fleet(c: &Client) {
                     CASE WHEN n % 100 = 1 THEN '{{\"id\":\"baseline\",\"version\":null,\"state\":\"not_assigned\"}}'::jsonb
                          ELSE '{{\"id\":\"baseline\",\"version\":1}}'::jsonb END,
                     '{{\"id\":\"hardening-linux-l1\",\"version\":1}}'::jsonb),
-                  'last_scan', '{{\"collectors\":{{\"ports\":\"ok\",\"packages\":\"ok\",\"hardening\":\"ok\",\"processes\":\"ok\"}}}}'::jsonb),
+                  'last_scan', '{{\"collectors\":{{\"ports\":\"ok\",\"packages\":\"ok\",\"hardening\":\"ok\",\"processes\":\"ok\"}}}}'::jsonb
+                    || jsonb_build_object('finished_at_unix_ms', (extract(epoch FROM now()) * 1000)::bigint)),
                 CASE WHEN n % 100 = 2 THEN now() - interval '2 days' ELSE now() END
          FROM generate_series(1, 10000) n;
          CREATE TEMP TABLE gen AS SELECT agent_id, substr(hostname, 6)::int AS n FROM agents;

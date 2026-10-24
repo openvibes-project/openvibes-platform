@@ -9,7 +9,7 @@
 // ponytail: a host passes a check when it is active, runs the check's rule set
 // (its report lists it with a version and not `not_assigned`) and has no failing
 // finding for it; failing, too, only counts on an active host. The server also asks
-// that the collectors the rule reads ran ok and that the running version
+// that the collectors the rule reads ran ok in a last scan within the day and that the running version
 // indexes the rule; the demo has neither.
 import type { CheckList, CheckListRow } from "../../api/types";
 import { type CheckMeta, EXTRA_META } from "../checkSeed";

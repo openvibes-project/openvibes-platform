@@ -68,17 +68,41 @@ fn healthy_sets(now: &str) -> String {
     )
 }
 
-/// The collectors `a`'s last scan reports `ok`, as a jsonb array of names.
-const OK_COLLECTORS: &str = "jsonb_path_query_array(a.health,
-       '$.last_scan.collectors.keyvalue() ? (@.value == \"ok\").key', '{}', true)";
+/// `a`'s last scan finished within [`WINDOW`] of `now`; `finished_at_unix_ms`
+/// is read as 1–18 digits before the cast (anything else is old, never an error).
+fn scan_fresh(now: &str) -> String {
+    format!(
+        "(CASE WHEN jsonb_typeof(a.health -> 'last_scan' -> 'finished_at_unix_ms') = 'number'
+              AND (a.health -> 'last_scan' ->> 'finished_at_unix_ms') ~ '^[0-9]{{1,18}}$'
+         THEN (a.health -> 'last_scan' ->> 'finished_at_unix_ms')::bigint
+              >= (extract(epoch FROM ({now})::timestamptz - {WINDOW}) * 1000)::bigint
+         ELSE false END)"
+    )
+}
 
-/// `a`'s last scan reported at least one collector, every one `ok`.
-const ALL_OK: &str = "(jsonb_typeof(a.health -> 'last_scan' -> 'collectors') = 'object'
-       AND a.health -> 'last_scan' -> 'collectors' <> '{}'::jsonb
-       AND NOT jsonb_path_exists(a.health, '$.last_scan.collectors.* ? (@ != \"ok\")', '{}', true))";
+/// The collectors `a`'s last scan reports `ok`, as a jsonb array of names;
+/// none when that scan is older than [`WINDOW`] at `now` ([`scan_fresh`]).
+fn ok_collectors(now: &str) -> String {
+    format!(
+        "CASE WHEN {} THEN jsonb_path_query_array(a.health,
+       '$.last_scan.collectors.keyvalue() ? (@.value == \"ok\").key', '{{}}', true) ELSE '[]'::jsonb END",
+        scan_fresh(now)
+    )
+}
+
+/// `a`'s last scan, within [`WINDOW`] at `now`, reported at least one
+/// collector, every one `ok`.
+fn all_ok(now: &str) -> String {
+    format!(
+        "({} AND jsonb_typeof(a.health -> 'last_scan' -> 'collectors') = 'object'
+       AND a.health -> 'last_scan' -> 'collectors' <> '{{}}'::jsonb
+       AND NOT jsonb_path_exists(a.health, '$.last_scan.collectors.* ? (@ != \"ok\")', '{{}}', true))",
+        scan_fresh(now)
+    )
+}
 
 /// A host with `sets`, `colls` and `all_ok` (from [`healthy_sets`],
-/// [`OK_COLLECTORS`] and [`ALL_OK`]) runs the check (`set`, `rule`): it runs
+/// [`ok_collectors`] and [`all_ok`]) runs the check (`set`, `rule`): it runs
 /// the set at a version whose indexed bundle has the rule (any version
 /// when no indexed bundle of the set has it), and the rule's collectors
 /// (`check_area::check_collectors`) ran ok.
@@ -100,15 +124,16 @@ fn runs(sets: &str, colls: &str, all_ok: &str, set: &str, rule: &str) -> String 
 /// heartbeat health is at most 24 hours old and lists the rule set with a
 /// version, neither `not_assigned` nor refused, that version's indexed
 /// bundle has the rule (any version when none has it), the rule's
-/// collectors ran `ok` in its last scan (every reported collector for a
-/// rule ID with no known prefix), and no finding blocks it (failing, or
+/// collectors ran `ok` in its last scan, which finished within the last
+/// day (every reported collector for a rule ID with no known prefix), and
+/// no finding blocks it (failing, or
 /// an unended P13 match). The list counts the same rule per host class
 /// instead (`classes`, `pcube`).
 pub fn passing_hosts_sql(hosts: &str, checks: &str, now: &str) -> String {
     let runs = runs(
         &healthy_sets(now),
-        OK_COLLECTORS,
-        ALL_OK,
+        &ok_collectors(now),
+        &all_ok(now),
         "k.rule_set_id",
         "k.rule_id",
     );
@@ -128,12 +153,14 @@ pub fn passing_hosts_sql(hosts: &str, checks: &str, now: &str) -> String {
 }
 
 /// The Vulnerabilities list's hosts in reach (`vuln_list_sql::HOSTS`) with
-/// each host's [`healthy_sets`], [`OK_COLLECTORS`] and [`ALL_OK`] (`sets`,
+/// each host's [`healthy_sets`], [`ok_collectors`] and [`all_ok`] (`sets`,
 /// `colls`, `all_ok`), worked out once per agent in its grouped subquery.
 fn hosts_in_reach() -> String {
     format!(
-        "(SELECT a.agent_id, {} AS sets, {OK_COLLECTORS} AS colls, {ALL_OK} AS all_ok,{HOSTS_BODY}",
-        healthy_sets("$12")
+        "(SELECT a.agent_id, {} AS sets, {} AS colls, {} AS all_ok,{HOSTS_BODY}",
+        healthy_sets("$12"),
+        ok_collectors("$12"),
+        all_ok("$12")
     )
 }
 
