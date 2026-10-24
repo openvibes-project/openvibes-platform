@@ -1244,6 +1244,19 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .unwrap();
     assert_eq!(ended["ended_at"], "2026-09-28T12:00:00+00:00");
     assert_eq!(ended["end_approximate"], true);
+    // Ended, the match is not failing: the latest list leaves it out. It
+    // opens again so the list below pages two open matches.
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .execute(
+            "UPDATE current_findings SET ended_at = NULL, end_approximate = false
+             WHERE agent_id = 'agent.00000000-0000-4000-8000-000000000102'",
+            &[],
+        )
+        .await
+        .unwrap();
     let vuln_summary = router
         .clone()
         .oneshot(

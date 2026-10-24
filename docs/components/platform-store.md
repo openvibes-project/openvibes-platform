@@ -746,6 +746,12 @@ Schema 63 adds:
   so the console's start-up backfill re-indexes them;
 - `console_check_area`.
 
+Ended findings are not failing anywhere else either (step 5c ruling):
+the host page's failing checks (`host_summary`), `finding_summary_in_scope`,
+`latest_findings_in_scope` and `finding_groups_in_scope` leave rows with
+`ended_at` set out; only the per-rule endpoint list keeps them, for its
+"fixed" badge (`tests/ended_findings.rs`).
+
 Tests: `tests/check_list.rs`, `tests/check_list_filters.rs`,
 `tests/check_area.rs`, `tests/rule_meta.rs`; the 500,000-finding timing
 (`tests/check_list_timing.rs`) is in console-read.md.
@@ -760,7 +766,8 @@ package, listening and exposed port, service and certificate counts),
 `host_labels::of_host` (groups and labels; a revoked host keeps its labels and is in
 no group), the five newest certificates, `rules::last_tests`, and the top
 three of each problem kind with its total: open agent alarms and failing
-checks most severe then newest first, and open vulnerabilities through
+checks (triage open, not ended: an ended finding is fixed, as on the
+Compliance list) most severe then newest first, and open vulnerabilities through
 `vulns::list_in_scope` with the host as its filter, one item per advisory
 (first in priority order). Groups and labels come from
 `host_labels::of_host`, which skips the reach check `host_labels` makes. Each problem list is `None` unless its scope

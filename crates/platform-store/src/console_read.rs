@@ -796,7 +796,8 @@ pub async fn finding_summary(client: &Client) -> Result<FindingSummary, StoreErr
     finding_summary_in_scope(client, &AgentScope::Global).await
 }
 
-/// Counts current observations and severities for agents visible in SQL.
+/// Counts current observations and severities for agents visible in SQL;
+/// an ended finding (the host was fixed) is not failing and not counted.
 pub async fn finding_summary_in_scope(
     client: &Client,
     scope: &AgentScope,
@@ -813,7 +814,7 @@ pub async fn finding_summary_in_scope(
                         count(*) FILTER (WHERE c.severity = 'medium'),
                         count(*) FILTER (WHERE c.severity = 'low')
                  FROM current_findings c JOIN agents a USING (agent_id)
-                 WHERE {visible_agent}"
+                 WHERE c.ended_at IS NULL AND {visible_agent}"
             ),
             &[&global, &groups],
         )
@@ -838,6 +839,7 @@ pub async fn latest_findings(
 
 /// Returns latest observations only for agents visible through the supplied
 /// SQL-enforced scope, before filters, ordering, or cursor pagination.
+/// Ended findings (fixed) are left out, as everywhere "failing" is meant.
 pub async fn latest_findings_in_scope(
     client: &Client,
     query: &LatestQuery,
@@ -856,7 +858,7 @@ pub async fn latest_findings_in_scope(
                     c.scan_id, c.authenticated, c.origin, c.first_observed_at,
                     c.last_observed_at, c.received_at, c.detection
              FROM current_findings c JOIN agents a USING (agent_id)
-             WHERE {visible_agent}
+             WHERE c.ended_at IS NULL AND {visible_agent}
                AND ($1::text IS NULL OR c.severity = $1)
                AND ($10::text IS NULL OR c.agent_id = $10)
                AND ($6::boolean = false OR
@@ -896,7 +898,8 @@ pub async fn latest_findings_in_scope(
     Ok(Page { items, next })
 }
 
-/// Groups current latest snapshots once per rule set and rule. The caller's
+/// Groups current latest snapshots once per rule set and rule, ended
+/// findings (fixed) left out of every count. The caller's
 /// asset scope is applied before aggregation; imported installations are
 /// visible only to a global reader until an association contract exists.
 pub async fn finding_groups_in_scope(
@@ -915,7 +918,7 @@ pub async fn finding_groups_in_scope(
                     SELECT c.*, a.hostname, COALESCE(t.state, 'open') AS triage_state
                     FROM current_findings c JOIN agents a USING (agent_id)
                     LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
-                    WHERE {visible_agent} AND ($9::text IS NULL OR c.agent_id = $9)
+                    WHERE c.ended_at IS NULL AND {visible_agent} AND ($9::text IS NULL OR c.agent_id = $9)
                  ), grouped AS (
                     SELECT rule_set_id, rule_id,
                            count(*) FILTER (WHERE last_observed_at >= $1)::bigint AS endpoint_count,

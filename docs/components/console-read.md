@@ -32,15 +32,19 @@ agent visibility in SQL for the supplied global or host-group scope.
   `latest_finding_in_scope`, `finding_history_in_scope`, and
   `finding_event_in_scope` enforce the same membership predicate directly in
   SQL before aggregate, filter, cursor, and detail operations. Hidden detail
-  rows are returned as absent. The authenticated console does not expose
+  rows are returned as absent. `finding_summary_in_scope` and
+  `latest_findings_in_scope` leave ended findings (fixed) out, as the
+  Compliance list does; the single-finding reads keep them. The authenticated console does not expose
   production data routes until these store functions are wired to permission
   checks.
 - `finding_groups_in_scope` groups current snapshots by rule set and rule
-  only after applying asset scope, and returns in-window endpoint counts,
+  only after applying asset scope, leaves ended findings out of every
+  count, and returns in-window endpoint counts,
   severity, version and triage rollups plus older endpoint counts.
   `finding_group_endpoints_in_scope` pages the visible endpoints (with each
   one's triage state, version, assignee username and accepted-until, and
-  for a P13 agent `ended_at`/`end_approximate` once the match ended) and
+  for a P13 agent `ended_at`/`end_approximate` once the match ended, ended
+  rows included for the "fixed" badge) and
   hides a group with no recent in-scope endpoint. The authenticated console exposes
   opaque cursors bound to the time window and caller scope, and provides
   atomic endpoint triage through the companion `console_triage` store module.

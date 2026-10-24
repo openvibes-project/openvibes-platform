@@ -241,7 +241,7 @@ async fn top_failing(client: &Client, agent_id: &str) -> Result<Top<TopFailing>,
                 "SELECT c.rule_set_id, c.rule_id, c.severity, c.message, count(*) OVER ()
                  FROM current_findings c
                  LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
-                 WHERE c.agent_id = $1 AND COALESCE(t.state, 'open') = 'open'
+                 WHERE c.agent_id = $1 AND c.ended_at IS NULL AND COALESCE(t.state, 'open') = 'open'
                  ORDER BY {RANK}, c.last_observed_at DESC, c.rule_set_id, c.rule_id LIMIT 3"
             ),
             &[&agent_id],
