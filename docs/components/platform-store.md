@@ -1097,6 +1097,44 @@ evidence again (migration 36 adds the partial index on `closed_at` it uses).
 The module is the folder `src/console_cases/` (see its README). Tested by
 `tests/console_cases/` (one module per area), run as the console role. See [console-cases.md](console-cases.md).
 
+### The Cases list (`case_list::case_list`, step 5d)
+
+`case_list(client, &CaseQuery, &AgentScope, actor_id, now) -> CaseListPage`
+(step 5d rulings 2, 4, 6–10): one statement (`case_list_sql`) returns the
+page, the total, the count for every value of every filter with the
+other filters applied, and the summary line. It reuses the cases'
+visibility: `vi` holds the items `item_visible` passes (software is seen
+by every reader), `r` the cases `case_visible_with` passes, its item
+test read from `vi`'s per-case counts rather than one lookup per case
+(1.39 s of a 1.6 s scoped run before). Everything a row shows or counts
+comes from visible items only.
+
+- Filters (one value each, ANDed): status (active = not closed, the
+  default; open, investigating, closed, all), severity, assignee (me,
+  unassigned, a user id; a non-UUID matches nothing), contains (a
+  visible alarm, vulnerability or finding), host and group (a visible item
+  on that host, or on a host in the group), updated (today = since
+  midnight UTC of `now`, the same for every viewer; week = the last 7
+  days; quiet = not for 7 days or more). Search: the title, `C-104`,
+  `104`, or the opener's display or user name.
+- Counts: every status, severity, contains and updated value; people
+  assigned a visible case; groups holding a host the viewer sees, plus the
+  chosen one when the scope reaches it. Host and search narrow every count.
+- Summary: of the cases matching every filter but the status's that are
+  not closed, open, investigating, unassigned and ready to close (every
+  visible item that takes an outcome has one; a case with none is ready).
+- Rows: number, title, status, severity, opener, assignee, the newest
+  `note` event (first 120 characters and its time), distinct visible
+  hosts by name, visible items per kind, `with_outcome`/`takes_outcome`
+  (alarms, findings and vulnerabilities only), `updated_at`.
+- Sorts: updated (default, newest first), severity, number, opened; ties
+  by case id in the same direction. Offset 0–100000, limit 1–100.
+
+Tests: `tests/case_list.rs` (including `case_list_counts_stay_inside_the_scope`);
+`tests/case_list_timing.rs` (ignored; 10,000 hosts, 20,000 cases, 200,000
+items, 60,000 events): default list, 2026-10-25, median 382 ms at full
+reach and 206 ms scoped to two of ten groups, no index needed.
+
 ## The rule signer's access (`signer::…`, schema 32, board #107)
 
 Migration 32 creates the `openvibes-signer` role with column grants for a

@@ -8,7 +8,7 @@ use crate::{StoreError, console_read::agent_visibility};
 
 /// Items an item row may be seen through: software always, the rest when
 /// their agent is in the caller's scope. Uses `$1` and `$2`.
-pub(super) fn item_visible(item: &str) -> String {
+pub(crate) fn item_visible(item: &str) -> String {
     format!(
         "({item}.agent_id IS NULL OR EXISTS (SELECT 1 FROM agents a
             WHERE a.agent_id = {item}.agent_id AND {}))",
@@ -20,14 +20,25 @@ pub(super) fn item_visible(item: &str) -> String {
 /// one of its items is visible to them; a case with no items also when
 /// their scope is every host (spec §6, step 5d ruling 4). Uses `$1`, `$2`
 /// and `$3`.
-pub(super) fn case_visible(case: &str) -> String {
+pub(crate) fn case_visible(case: &str) -> String {
+    let has_visible_item = format!(
+        "EXISTS (SELECT 1 FROM case_items vi WHERE vi.case_id = {case}.case_id AND {})",
+        item_visible("vi")
+    );
+    case_visible_with(case, &has_visible_item)
+}
+
+/// [`case_visible`] with `has_visible_item`, an SQL test that the case holds
+/// an item [`item_visible`] passes, worked out by the caller (the Cases
+/// list reads it from items it has already filtered, rather than one
+/// lookup per case).
+pub(crate) fn case_visible_with(case: &str, has_visible_item: &str) -> String {
     format!(
         "({case}.opened_by_user_id = $3::text::uuid
           OR {case}.assignee_user_id IS NOT DISTINCT FROM $3::text::uuid
-          OR EXISTS (SELECT 1 FROM case_items vi WHERE vi.case_id = {case}.case_id AND {})
+          OR {has_visible_item}
           OR ($1::boolean
-              AND NOT EXISTS (SELECT 1 FROM case_items ei WHERE ei.case_id = {case}.case_id)))",
-        item_visible("vi")
+              AND NOT EXISTS (SELECT 1 FROM case_items ei WHERE ei.case_id = {case}.case_id)))"
     )
 }
 

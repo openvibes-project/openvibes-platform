@@ -330,12 +330,14 @@ pub use close::update;
 pub use events::add_note;
 use items::free_text_ok;
 pub use items::{add_item, create, remove_item};
+pub(crate) use list::case_number;
 pub use list::{
     ACTIVE_ITEMS_LIMIT, AssigneeFilter, CaseCursor, CaseFilters, active_items, assignees, for_item,
     get, list,
 };
 pub use outcomes::set_outcome;
 pub use reopen::{reopen_due, reopen_evidence_returned, reopen_expired};
+pub(crate) use visibility::{case_visible_with, item_visible};
 
 /// True for a canonical UUID (8-4-4-4-12 hex, any case). Other ids are simply
 /// not found, before any query, so a cast can never fail.

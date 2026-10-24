@@ -14,7 +14,7 @@ use super::{
 use crate::{Client, StoreError, console_read::AgentScope};
 
 /// The `C-104`, `c104` or `104` a search text may be.
-pub(super) fn case_number(text: &str) -> Option<i64> {
+pub(crate) fn case_number(text: &str) -> Option<i64> {
     let digits = text
         .strip_prefix("C-")
         .or_else(|| text.strip_prefix("c-"))
