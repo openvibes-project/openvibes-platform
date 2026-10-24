@@ -19,7 +19,11 @@ use ratatui::{
 
 use super::{Page, Then, folder::Browse};
 use crate::{
-    setup::{pki::ROOT_CERT, plan::plan_of, replace::NOT_THE_KEY},
+    setup::{
+        pki::ROOT_CERT,
+        plan::plan_of,
+        replace::{NOT_THE_KEY, PROGRESS},
+    },
     tui::{
         app::{App, Key, Question},
         ca_request::{self, Picked, pick},
@@ -37,6 +41,8 @@ use crate::{
     },
 };
 
+/// What Issuing the server certificates issues, said while it runs.
+const ISSUED: &str = "ingest, distribution, console";
 const STEPS: [&str; 4] = [
     "Making the new intermediate",
     "Trusting the old and the new one",
@@ -88,41 +94,60 @@ fn line(t: &crate::tui::ui::theme::Theme, said: Result<&str, &str>) -> Vec<Line<
 
 fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) {
     let t = &app.theme;
-    let titles: Vec<String> = STEPS[usize::from(!app.maint.certs.quick)..]
-        .iter()
-        .map(|s| (*s).to_owned())
-        .collect();
-    // One helper call does every step and prints each one it finished;
-    // it reports only once it ends, so nothing is ticked before that.
-    let out = match &run.states[0] {
-        Some(StepState::Done(out)) => out.as_str(),
-        _ => "",
+    let all = &STEPS[usize::from(!app.maint.certs.quick)..];
+    // One helper call does every step. Done: the lines it printed; until
+    // then, or when it failed, the progress file it writes as it goes
+    // (as the model download's, `parts_run::model_progress`).
+    let said = match &run.states[0] {
+        Some(StepState::Done(out)) => out.clone(),
+        _ => std::fs::read_to_string(app.root.join(PROGRESS)).unwrap_or_default(),
     };
-    let states: Vec<Option<StepState>> = titles
+    let finished = all
         .iter()
-        .map(|title| {
-            out.lines()
-                .any(|l| l == title)
-                .then(|| StepState::Done(String::new()))
+        .take_while(|step| said.lines().any(|l| l == **step))
+        .count();
+    let failed = run.states[0].as_ref().filter(|s| !s.finished());
+    let running = Some(finished).filter(|i| run.running() && *i < all.len());
+    let titles: Vec<String> = all
+        .iter()
+        .enumerate()
+        .map(|(i, step)| match running {
+            Some(at) if at == i && *step == STEPS[2] => format!("{step}  {ISSUED}"),
+            _ => (*step).to_owned(),
         })
         .collect();
-    let bar = if run.running() {
-        Bar::Busy {
-            text: format!("{}…", run.work.kind.doing()),
+    let states: Vec<Option<StepState>> = (0..all.len())
+        .map(|i| match failed {
+            _ if i < finished => Some(StepState::Done(String::new())),
+            Some(why) if i == finished => Some(why.clone()),
+            _ => None,
+        })
+        .collect();
+    let bar = match running {
+        Some(i) => Bar::Busy {
+            text: format!("Step {} of {}: {}", i + 1, all.len(), all[i]),
             tick: app.tick_count,
-        }
-    } else {
-        Bar::only(&[("Enter", "Back")])
+        },
+        None if run.running() => Bar::Busy {
+            text: "Finishing…".into(),
+            tick: app.tick_count,
+        },
+        None => Bar::only(&[("Enter", "Back")]),
     };
     let area = frame::draw(frame, t, head, Some(&run.work.kind.doing()), &app.bar(bar));
     let mut lines = vec![Line::raw("")];
-    lines.extend(steps::lines(t, &titles, &states, None, app.tick_count, 10));
-    match &run.states[0] {
+    lines.extend(steps::lines(
+        t,
+        &titles,
+        &states,
+        running,
+        app.tick_count,
+        10,
+    ));
+    match failed {
         _ if run.running() => {}
-        Some(state) if !state.finished() => {
-            lines.extend(line(t, Err(&ca_request::sentence(state.detail()))));
-        }
-        _ => lines.extend(line(
+        Some(state) => lines.extend(line(t, Err(&ca_request::sentence(state.detail())))),
+        None => lines.extend(line(
             t,
             Ok(&format!("{} ({})", run.work.kind.done(), run.took())),
         )),
@@ -375,7 +400,7 @@ impl<H: Host> App<H> {
     fn ask_replace(&mut self) {
         self.question = Some((
             Question::Maint {
-                text: "Replace the intermediate?".into(),
+                text: "Replace it?".into(),
                 detail: "agents keep working".into(),
                 then: Then::Replace,
             },

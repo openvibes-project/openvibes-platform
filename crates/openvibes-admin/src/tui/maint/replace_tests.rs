@@ -10,12 +10,15 @@ use super::{
     certs_page_tests::{day, framed, keys, menu, ours, page_body, put},
     certs_tests::{app_with, pki, plan_text},
 };
-use crate::tui::{
-    app::{App, Key},
-    install::{Stage, Which},
-    maint::Page,
-    nav::Screen,
-    script_host::{SetupHost, body, screen, type_text},
+use crate::{
+    setup::replace::PROGRESS,
+    tui::{
+        app::{App, Key},
+        install::{Stage, Which},
+        maint::Page,
+        nav::Screen,
+        script_host::{SetupHost, body, screen, type_text},
+    },
 };
 
 const ROOT: &str = "/etc/openvibes/pki/root.crt";
@@ -119,10 +122,10 @@ fn replace_quick_wrong_key_then_right_key_then_runs() {
 
     app.key(Key::Enter);
     assert!(app.question.as_ref().is_some_and(|(_, yes)| *yes));
-    // Rule 30's buttons always show: the detail is cut to make room.
+    // Ruling 10: short enough for rule 30's buttons.
     let text = screen(&app);
     assert!(
-        text.contains("│ Replace the intermediate? agents keep … [ Yes ]  No"),
+        text.contains("│ Replace it? agents keep working") && text.contains("[ Yes ]  No"),
         "{text}"
     );
     app.key(Key::Enter);
@@ -295,8 +298,70 @@ fn a_refused_replace_says_why() {
     let text = screen(&app);
     assert!(
         text.contains("    ✗ There is no signed request: make the request and add both")
-            && text.contains("    · Trusting the old and the new one")
+            && text.contains("    ✗ Trusting the old and the new one")
             && text.contains("Enter  Back"),
         "{text}"
     );
+}
+
+/// Quick, the right root key picked, then Replace, Yes and the password.
+fn quick_replacing(answer: Option<Result<String, HostError>>, progress: &str) -> App<SetupHost> {
+    let (pems, root) = pki(10);
+    let mut app = app_with(pems);
+    put(&app, ROOT, &root.cert_pem);
+    put(&app, "/media/usb/openvibes-root.key", &root.key_pem);
+    app.install.home = Some(app.root.join("media/usb").display().to_string());
+    match answer {
+        Some(answer) => app.host.answers.borrow_mut().push_back(answer),
+        // A helper still running: the worker never answers.
+        None => {
+            app.worker = Some(Box::new(|_, _, _| {
+                let (tx, rx) = std::sync::mpsc::channel();
+                std::mem::forget(tx);
+                rx
+            }))
+        }
+    }
+    put(&app, PROGRESS, progress);
+    app.open_page(Page::Certificates);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    for key in [Key::Enter, Key::Down, Key::Enter, Key::Enter, Key::Enter] {
+        app.key(key);
+    }
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app
+}
+
+#[test]
+fn replace_shows_the_step_running_and_where_it_failed() {
+    // certs4a.py #8: two stages done, the third running.
+    let app = quick_replacing(None, &format!("{}\n{}\n", STEPS[0], STEPS[1]));
+    let text = screen(&app);
+    for want in [
+        "    ✓ Making the new intermediate",
+        "    ✓ Trusting the old and the new one",
+        " Issuing the server certificates  ingest, distribution, console",
+        "    · Restarting the services",
+        "Step 3 of 4: Issuing the server certificates",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+    // Failed after the swap: ✓ ✓ ✗ ·, and the helper's sentence.
+    let why = "openvibes-admin helper: The intermediate was replaced, but the server \
+               certificates were not reissued: run Repair in Maintenance.";
+    let failed = Err(HostError::Failed(why.into()));
+    let app = quick_replacing(Some(failed), &format!("{}\n{}\n", STEPS[0], STEPS[1]));
+    let text = screen(&app);
+    for want in [
+        "    ✓ Making the new intermediate",
+        "    ✓ Trusting the old and the new one",
+        "    ✗ Issuing the server certificates",
+        "    · Restarting the services",
+        "    ✗ The intermediate was replaced, but the server certificates were not",
+        "Enter  Back",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
 }

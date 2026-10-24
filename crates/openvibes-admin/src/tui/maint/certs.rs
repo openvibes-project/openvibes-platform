@@ -292,6 +292,8 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn certificates_key(&mut self, key: Key) {
+        // Said for one Enter: a move or another Enter takes it away.
+        self.maint.certs.refused = None;
         if self.move_row(&key, ACTIONS.len()) || key != Key::Enter {
             return;
         }

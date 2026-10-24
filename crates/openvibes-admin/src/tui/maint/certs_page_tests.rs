@@ -177,6 +177,9 @@ fn certificates_page_shows_the_previous_intermediate() {
     );
     assert!(text.contains(&want), "{text}");
     assert!(app.host.calls.borrow().is_empty());
+    // A move takes it away.
+    app.key(Key::Up);
+    assert!(!screen(&app).contains("still trusted"), "{}", screen(&app));
 }
 
 #[test]

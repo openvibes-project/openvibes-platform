@@ -52,7 +52,7 @@ print(page("Certificates 4a: replacing the intermediate when OpenVIBES made the 
     ("The right file", "Checked at once: the key matches the OpenVIBES root on this host.",
      replace(RIGHT, 1, bar("{k} Enter {/} Replace"), "{g}✓ The key matches the OpenVIBES root on this host.{/}")),
     ("Enter: the question", "Says why nothing breaks.",
-     replace(RIGHT, 1, ask("Replace the intermediate?", "agents keep working"))),
+     replace(RIGHT, 1, ask("Replace it?", "agents keep working"))),
     ("Yes: your password", "Asked in the bar, like Update and Repair.",
      replace(RIGHT, 1, bar(PW + "Replace", "{k} Esc {/} Cancel", nav=False))),
     ("Enter: it runs", "The same step list as Update; your own CA has no first step.",
