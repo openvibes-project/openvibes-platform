@@ -125,7 +125,9 @@ reason `not open`. Hosts out
 of the actor's reach are never touched. A reopen (`state: open`) is the
 exception: it reopens the closed pairs and skips the open ones ("already
 open"). Triage on one CVE row shows on its sibling rows, which share the
-advisory's pairs.
+advisory's pairs. With the Group filter set, list rows also send `group`, so they
+reach only that group's hosts, the ones the row counts
+([console-triage.md](console-triage.md#a-row-under-a-group-filter)).
 
 An item may add `open_only: true` (default false; only on vulnerability
 items, refused elsewhere as `invalid_items`). The Vulnerabilities list sends
