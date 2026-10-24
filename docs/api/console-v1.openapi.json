@@ -16936,7 +16936,14 @@
       "HostProblemsView": {
         "type": "object",
         "description": "Problem counts; absent where the viewer may not read that kind for the host.",
+        "required": [
+          "compliance_stale"
+        ],
         "properties": {
+          "compliance_stale": {
+            "type": "boolean",
+            "description": "Compliance is in reach but the host sent no report in the last day\n(the host page's `tiles.compliance_stale`): the failing count is\nunknown, shown \"—\", and \"none open\" leaves the host out."
+          },
           "critical": {
             "type": [
               "integer",
@@ -16951,7 +16958,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Failing compliance checks."
+            "description": "Failing compliance checks; absent too when `compliance_stale`."
           },
           "open_alarms": {
             "type": [

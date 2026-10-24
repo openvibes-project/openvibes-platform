@@ -9,7 +9,7 @@ import type { DemoData } from "../data";
 import { distribution, distributionName, hasControl, inCidr, inGroup, isActive, osFamily } from "../hostGroups";
 import { json, problem } from "../http";
 import { LATEST_AGENT_VERSION } from "./session";
-import { openFailing } from "./checkList";
+import { complianceStale, openFailing } from "./checkList";
 import { compareVersions, older } from "../versionOrder";
 
 /** Code-unit order, as the server's COLLATE "C". */
@@ -18,7 +18,7 @@ const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 type Facet = "status" | "os" | "group" | "label" | "problems" | "agent";
 type Host = {
   agent: Agent; status: string; family: string | null; address: string | null; labels: string[]; groups: string[];
-  open_alarms: number | null; critical: number | null; failing: number | null; older: boolean | null; alarms_off: boolean;
+  open_alarms: number | null; critical: number | null; failing: number | null; compliance_stale: boolean; older: boolean | null; alarms_off: boolean;
 };
 
 const STATUS = ["online", "offline", "revoked", "imported"];
@@ -26,8 +26,9 @@ const PROBLEMS = ["critical", "alarms", "none"];
 const AGENT = ["older", "latest"];
 const SORTS = ["host", "heartbeat", "version", "problems"];
 const statusOf = (a: Agent) => (a.status === "active" ? "online" : a.status === "stale" ? "offline" : a.status);
+// A compliance-stale host's failing count is unknown, so it is not "none open" (host_list_sql::NONE_OPEN).
 const noneOpen = (h: Host) => (h.open_alarms !== null || h.critical !== null || h.failing !== null)
-  && !h.open_alarms && !h.critical && !h.failing;
+  && !h.compliance_stale && !h.open_alarms && !h.critical && !h.failing;
 const problemHit = (h: Host, p: string) => (p === "critical" ? (h.critical ?? 0) > 0 : p === "alarms" ? (h.open_alarms ?? 0) > 0 : noneOpen(h));
 const invalid = (field: string) => problem(400, "invalid_query", "Host query parameters are invalid",
   { field_errors: [{ field, code: "invalid", message: `The ${field} parameter is invalid` }] });
@@ -65,6 +66,7 @@ export function registerHostListRoutes(ctx: DemoContext) {
       if (q && !(agent.hostname ?? "").toLowerCase().includes(q) && !agent.id.toLowerCase().startsWith(q)
         && !(address ?? "").startsWith(q) && !(q.includes("/") && address && inCidr(address, q))) return [];
       const f = facts(agent);
+      const stale = reaches("compliance.read", agent.id) && complianceStale(agent.last_seen_at, Date.parse(ctx.iso()));
       return [{
         agent, address, status: statusOf(agent), family: osFamily(f), labels: [...(data.labels.get(agent.id) ?? [])].sort(byteOrder),
         // Members are active hosts only (console_host_in_group).
@@ -72,7 +74,9 @@ export function registerHostListRoutes(ctx: DemoContext) {
         open_alarms: reaches("alarms.read", agent.id) ? data.alarms.filter((a) => a.agent_id === agent.id && a.state === "open").length : null,
         critical: reaches("vulnerabilities.read", agent.id) ? listedCritical(data, agent.id) : null,
         // Open failing checks, as the Compliance list and the host page count them.
-        failing: reaches("compliance.read", agent.id)
+        // No report in the last day: unknown, as on the host page (complianceStale).
+        compliance_stale: stale,
+        failing: reaches("compliance.read", agent.id) && !stale
           ? data.findings.filter((x) => x.agent_id === agent.id && openFailing(ctx, x, Date.parse(ctx.iso()))).length : null,
         older: agent.scanner_version ? older(agent.scanner_version, latest) : null,
         // Online with alarms off by a fault (alarms_status: off by choice is quiet).
@@ -142,7 +146,7 @@ export function registerHostListRoutes(ctx: DemoContext) {
           os: { id: h.agent.os_id ?? null, version: h.agent.os_version ?? null, distribution: dist && distributionName(dist), family: h.family },
           groups: groups.slice(0, 2).map((id) => ({ id, name: groupOf.get(id)?.name ?? id, kind: groupOf.get(id)?.kind ?? "manual" })),
           group_count: groups.length, labels: h.labels,
-          problems: { open_alarms: h.open_alarms, critical: h.critical, failing: h.failing },
+          problems: { open_alarms: h.open_alarms, critical: h.critical, failing: h.failing, compliance_stale: h.compliance_stale },
           agent: { version: h.agent.scanner_version ?? null, older: h.older }, alarms_off: h.alarms_off,
         };
       }),

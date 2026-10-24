@@ -4773,13 +4773,19 @@ export interface components {
         /** @description Problem counts; absent where the viewer may not read that kind for the host. */
         HostProblemsView: {
             /**
+             * @description Compliance is in reach but the host sent no report in the last day
+             *     (the host page's `tiles.compliance_stale`): the failing count is
+             *     unknown, shown "—", and "none open" leaves the host out.
+             */
+            compliance_stale: boolean;
+            /**
              * Format: int64
              * @description Critical vulnerabilities.
              */
             critical?: number | null;
             /**
              * Format: int64
-             * @description Failing compliance checks.
+             * @description Failing compliance checks; absent too when `compliance_stale`.
              */
             failing?: number | null;
             /**

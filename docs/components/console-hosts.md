@@ -28,11 +28,15 @@ the old Agents view and host panel. The shared pieces they are built from
   page (a new tab works too); an empty cell shows "—" with its meaning for
   screen readers. The FilterBar's chips are Status (online, offline, revoked,
   imported), OS, Group, Label, Problems (has critical, has open alarms,
-  none open) and Agent (older than the latest, the latest), each value with
+  none open; a host with no report in the last day is never "none open"
+  while compliance is in reach, since its failing count is unknown) and Agent (older than the latest, the latest), each value with
   the server's count under the other filters; saved views and columns are
   the page `hosts`. Columns: Host and IP; OS (distribution, family); Groups
   (two, then "+n"); Labels; Open problems (alarms, critical, failing, "—"
-  where the viewer may not read that kind on the host); Last heartbeat with
+  where the viewer may not read that kind on the host; failing is also "—",
+  "No report in the last day", when the host's last contact is older than
+  the Compliance list's 24-hour window, `problems.compliance_stale`, as on
+  the host page); Last heartbeat with
   the status, and an "Alarms off" warning beside it when the host is online
   with threat alarms off by a fault (`alarms_off`; off by choice stays
   quiet); Agent version (amber, with a title, when older than the

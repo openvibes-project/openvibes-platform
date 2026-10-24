@@ -41,4 +41,15 @@ describe("demo Hosts list", () => {
     expect(body.counts.label.map((c) => c.value)).toContain("kiosk");
     expect(body.counts.label.at(-1)).toEqual({ value: "kiosk", count: 0 });
   });
+
+  it("leaves a host silent for a day out of none open, its failing count unknown", async () => {
+    const all = (await get("/api/v1/hosts?limit=100")).body;
+    const rest = (await get("/api/v1/hosts?limit=100&offset=100")).body.items;
+    const items = [...all.items, ...rest];
+    const stale = items.filter((h) => h.problems.compliance_stale);
+    expect(stale.length).toBeGreaterThan(0);
+    for (const h of stale) expect(h.problems.failing).toBeNull();
+    const none = (await get("/api/v1/hosts?problems=none&limit=100")).body.items.map((h) => h.id);
+    for (const h of stale) expect(none).not.toContain(h.id);
+  });
 });

@@ -613,7 +613,11 @@ Scope (spec §6): rows, total, counts and summary come only from hosts in
 `HostScopes.hosts`. Open alarms, critical vulnerabilities and failing
 checks are each counted only where `alarms`, `vulnerabilities` or
 `compliance` reaches the host (`None` on the row otherwise, and not counted
-in that problem value); "none open" needs at least one kind in reach. Group
+in that problem value); "none open" needs at least one kind in reach. A
+host in compliance reach whose last contact is older than the 24-hour
+window (`check_list_sql::WINDOW`, the base of `host_summary`'s
+`compliance_stale`) has `compliance_stale` and no failing count, and is
+never "none open". Group
 values are groups with a host in scope (plus the chosen one, if it has
 one); label values are the 50 most used on hosts in scope (plus the chosen
 one, if present there). Group membership is read from the stored table

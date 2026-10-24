@@ -103,7 +103,7 @@ function columns(latest: string | null): Column<HostRow>[] {
       <span className="nowrap">
         <Count n={h.problems.open_alarms} what="open alarms" tone="bad-text" /> {h.problems.open_alarms === 1 ? "alarm" : "alarms"} ·{" "}
         <Count n={h.problems.critical} what="critical vulnerabilities" tone="bad-text" /> critical ·{" "}
-        <Count n={h.problems.failing} what="failing checks" tone="warn-text" /> failing
+        {h.problems.compliance_stale ? <Dash text="No report in the last day" /> : <Count n={h.problems.failing} what="failing checks" tone="warn-text" />} failing
       </span>
     ) },
     { key: "heartbeat", header: header("heartbeat"), width: "120px", sort: (h) => h.last_seen_at, render: (h) => (

@@ -4,7 +4,9 @@
 //! Only fixed internal strings are formatted in; every value is bound.
 
 use crate::{
-    check_list_sql::open_failing, console_read::agent_visibility, host_list::HostSort,
+    check_list_sql::{WINDOW, open_failing},
+    console_read::agent_visibility,
+    host_list::HostSort,
     status::OFFLINE_AFTER_MINUTES,
 };
 
@@ -28,8 +30,10 @@ const FACETS: [Facet; 6] = [
     Facet::Agent,
 ];
 
-/// No visible problem of any kind, on a host where at least one kind is in reach.
+/// No visible problem of any kind, on a host where at least one kind is in
+/// reach and whose compliance, when in reach, is known (not stale).
 const NONE_OPEN: &str = "(b.open_alarms IS NOT NULL OR b.critical IS NOT NULL OR b.failing IS NOT NULL)
+    AND NOT b.compliance_stale
     AND COALESCE(b.open_alarms, 0) = 0 AND COALESCE(b.critical, 0) = 0 AND COALESCE(b.failing, 0) = 0";
 
 /// One filter over a `base b` row; `$13`–`$18` are the chosen values (NULL
@@ -125,15 +129,18 @@ fn counts() -> String {
 /// CTE `base`: hosts in the hosts scope (`$2`,`$3`) matching the search
 /// (`$11`: name contains, agent id or address starts with; `$12` CIDR), with status (`$1` online threshold), agent age
 /// (`$10` latest) and each problem count gated by its own scope (`$4`–`$9`).
+/// A host in compliance reach with no report in the last day (the host
+/// page's `compliance_stale`) has `compliance_stale` and no failing count:
+/// its findings are not current, so 0 would be a wrong answer.
 fn base() -> String {
     let hosts = agent_visibility("a.agent_id", "$2", "$3");
     let alarms = agent_visibility("a.agent_id", "$4", "$5");
     let vulns = agent_visibility("a.agent_id", "$6", "$7");
     let compliance = agent_visibility("a.agent_id", "$8", "$9");
     // `$1` is the offline threshold, so this is the statement's `now`.
-    let failing = open_failing(&format!(
-        "$1::timestamptz + interval '{OFFLINE_AFTER_MINUTES} minutes'"
-    ));
+    let now = format!("$1::timestamptz + interval '{OFFLINE_AFTER_MINUTES} minutes'");
+    let failing = open_failing(&now);
+    let stale = format!("({compliance} AND COALESCE(s.seen < {now} - {WINDOW}, true))");
     format!(
         "base AS MATERIALIZED (
   SELECT a.agent_id, a.hostname, a.last_address, a.os_id, a.os_version, a.distribution,
@@ -145,7 +152,8 @@ fn base() -> String {
                                     AND al.state = 'open' AND al.source = 'agent') END AS open_alarms,
          CASE WHEN {vulns} THEN COALESCE((SELECT v.critical FROM host_listed_critical v
                                            WHERE v.agent_id = a.agent_id), 0)::bigint END AS critical,
-         CASE WHEN {compliance} THEN (SELECT count(*) FROM current_findings f
+         {stale} AS compliance_stale,
+         CASE WHEN {compliance} AND NOT {stale} THEN (SELECT count(*) FROM current_findings f
                                         LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
                                         WHERE f.agent_id = a.agent_id AND {failing}) END AS failing
   FROM agents a CROSS JOIN LATERAL (SELECT agent_seen_at(a.agent_id, a.last_seen_at) AS seen) s
@@ -194,7 +202,7 @@ SELECT CASE WHEN p.ord IS NOT DISTINCT FROM (SELECT min(ord) FROM page) THEN m.m
        gr.ids, gr.names, gr.kinds, gr.n,
        ARRAY(SELECT l.label FROM console_host_labels l WHERE l.agent_id = p.agent_id ORDER BY l.label COLLATE \"C\"),
        p.open_alarms, p.critical, p.failing, p.scanner_version, p.older,
-       p.health_at IS NOT NULL, p.alarms_health
+       p.health_at IS NOT NULL, p.alarms_health, p.compliance_stale
 FROM meta m LEFT JOIN page p ON true
 LEFT JOIN LATERAL (
   SELECT (array_agg(g.asset_group_id::text ORDER BY lower(g.name), g.asset_group_id))[1:2] AS ids,

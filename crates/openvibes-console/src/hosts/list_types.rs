@@ -37,8 +37,12 @@ pub(crate) struct HostProblemsView {
     pub open_alarms: Option<i64>,
     /// Critical vulnerabilities.
     pub critical: Option<i64>,
-    /// Failing compliance checks.
+    /// Failing compliance checks; absent too when `compliance_stale`.
     pub failing: Option<i64>,
+    /// Compliance is in reach but the host sent no report in the last day
+    /// (the host page's `tiles.compliance_stale`): the failing count is
+    /// unknown, shown "—", and "none open" leaves the host out.
+    pub compliance_stale: bool,
 }
 
 /// The host's agent.
@@ -176,6 +180,7 @@ impl From<HostRow> for HostRowView {
                 open_alarms: r.open_alarms,
                 critical: r.critical,
                 failing: r.failing,
+                compliance_stale: r.compliance_stale,
             },
             agent: HostAgentView {
                 version: r.scanner_version,

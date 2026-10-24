@@ -211,12 +211,12 @@ async fn problem_counts_follow_each_permission() {
     assert!(
         page.rows
             .iter()
-            .all(|r| r.critical.is_some() && r.failing.is_some())
+            .all(|r| r.critical.is_some() && (r.failing.is_some() || r.compliance_stale))
     );
     assert_eq!(n(&page.counts.problems, Problems::OpenAlarms), 0);
     assert_eq!(n(&page.counts.problems, Problems::Critical), 2);
-    // win-01 (alarm unseen), app-01, old-01, imp-01
-    assert_eq!(n(&page.counts.problems, Problems::NoneOpen), 4);
+    // win-01 (alarm unseen), app-01, old-01; imp-01 never reported (unknown)
+    assert_eq!(n(&page.counts.problems, Problems::NoneOpen), 3);
     let filtered = HostQuery {
         problems: Some(Problems::OpenAlarms),
         ..query()
@@ -326,7 +326,8 @@ async fn paging_and_sort_are_stable() {
     let page = run(&c, &sorted(HostSort::Problems, true), &everywhere(), None).await;
     assert_eq!(ids(&page), [1, 2, 3, 4, 5, 6, 7, 8].map(id));
     let page = run(&c, &sorted(HostSort::Problems, false), &everywhere(), None).await;
-    assert_eq!(ids(&page), [6, 7, 8, 3, 4, 5, 1, 2].map(id));
+    // mail-01's finding is two days old, so its count is unknown (0 here).
+    assert_eq!(ids(&page), [5, 6, 7, 8, 3, 4, 1, 2].map(id));
     let page = run(&c, &sorted(HostSort::Version, false), &everywhere(), None).await;
     assert_eq!(ids(&page), [1, 4, 7, 5, 2, 3, 6, 8].map(id));
     db.drop().await;
@@ -418,7 +419,8 @@ async fn a_triaged_finding_is_not_failing() {
     let page = run(&c, &query(), &everywhere(), None).await;
     let row = |n: u8| page.rows.iter().find(|r| r.agent_id == id(n)).unwrap();
     assert_eq!(row(1).failing, Some(0));
-    assert_eq!(row(5).failing, Some(1));
+    // mail-01 sent nothing for two days: unknown, not its old finding.
+    assert_eq!(row(5).failing, None);
     db.drop().await;
 }
 
@@ -465,5 +467,45 @@ async fn critical_counts_what_the_host_page_lists() {
     let top = s.top_vulnerabilities.unwrap();
     assert_eq!(top.total, 4);
     assert!(top.items.iter().all(|v| v.severity == "critical"));
+    db.drop().await;
+}
+
+/// A host with no report in the last day (the Compliance list's window, as
+/// the host page's `compliance_stale`) has an unknown failing count: not
+/// 0, so "none open" leaves it out. Without compliance in reach its other
+/// kinds still decide.
+#[tokio::test]
+async fn a_host_silent_for_a_day_is_unknown_not_none_open() {
+    let (db, c) = common::migrated().await;
+    fleet(&c).await;
+    let page = run(&c, &query(), &everywhere(), None).await;
+    let row = |n: u8| page.rows.iter().find(|r| r.agent_id == id(n)).unwrap();
+    // db-01 a day, mail-01 two days (its finding unknown too), imp-01 never.
+    for n in [3, 5, 8] {
+        assert!(row(n).compliance_stale, "host {n}");
+        assert_eq!(row(n).failing, None, "host {n}");
+    }
+    for n in [1, 2, 4, 6, 7] {
+        assert!(!row(n).compliance_stale, "host {n}");
+    }
+    assert_eq!(row(1).failing, Some(1));
+    // win-01 is out (alarm), so app-01 and old-01; imp-01 is unknown.
+    assert_eq!(n(&page.counts.problems, Problems::NoneOpen), 2);
+    let none = HostQuery {
+        problems: Some(Problems::NoneOpen),
+        ..query()
+    };
+    assert_eq!(
+        names(&run(&c, &none, &everywhere(), None).await),
+        ["app-01", "old-01"]
+    );
+
+    let no_compliance = HostScopes {
+        compliance: None,
+        ..everywhere()
+    };
+    let page = run(&c, &none, &no_compliance, None).await;
+    assert!(page.rows.iter().all(|r| !r.compliance_stale));
+    assert!(ids(&page).contains(&id(8)));
     db.drop().await;
 }
