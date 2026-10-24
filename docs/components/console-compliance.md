@@ -139,7 +139,7 @@ comes from the signed rule sets' optional `explain` and `check` fields.
 - Store: `tests/check_list.rs`, `tests/check_list_filters.rs`,
   `tests/check_area.rs`, `tests/check_summary.rs`,
   `tests/bulk_triage_compliance.rs`, `tests/ended_findings.rs`,
-  `tests/host_list.rs` (stale hosts), `tests/host_summary.rs`; timing
+  `tests/host_list_stale.rs`, `tests/host_summary.rs`; timing
   (ignored, the ruling 18 fleet; the list and a widespread check's page,
   full and scoped, under 2 s):
   `cargo test -p platform-store --test check_list_timing -- --ignored --nocapture --test-threads=1`.
