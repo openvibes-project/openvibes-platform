@@ -448,7 +448,7 @@ folder has a `README.md` listing its files, checked by
 
 To add an endpoint: write the handler in its area's file, add the route to
 that area's `routes()`, put its types in the area's `*_types.rs` or
-`types.rs`, add `#[utoipa::path]` and list it in `http/openapi.rs`, then
+`types.rs`, add `#[utoipa::path]` and list it in `http/openapi.rs` (a schema no path names goes in `http/openapi_schemas.rs`), then
 regenerate `docs/api/console-v1.openapi.json` (`export_openapi`) and the web
 client (`npm --prefix crates/openvibes-console/web run generate:api`).
 
