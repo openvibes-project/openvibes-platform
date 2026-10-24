@@ -101,8 +101,9 @@ fn runs(sets: &str, colls: &str, all_ok: &str, set: &str, rule: &str) -> String 
 /// version, neither `not_assigned` nor refused, that version's indexed
 /// bundle has the rule (any version when none has it), the rule's
 /// collectors ran `ok` in its last scan (every reported collector for a
-/// rule ID with no known prefix), and no finding [`blocks`] it. The list
-/// counts the same rule per host class instead (`classes`, `pcube`).
+/// rule ID with no known prefix), and no finding blocks it (failing, or
+/// an unended P13 match). The list counts the same rule per host class
+/// instead (`classes`, `pcube`).
 pub fn passing_hosts_sql(hosts: &str, checks: &str, now: &str) -> String {
     let runs = runs(
         &healthy_sets(now),
