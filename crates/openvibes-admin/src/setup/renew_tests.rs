@@ -95,3 +95,19 @@ fn a_failed_renewal_keeps_the_previous_intermediate() {
     assert_eq!(fake.text(INTERMEDIATE), bundle);
     assert!(fake.root.join(&PREVIOUS[1..]).exists());
 }
+
+#[test]
+fn the_timer_undoes_a_replace_that_never_took_effect() {
+    let fake = Fake::new("renew-interrupted");
+    let old = crate::setup::pki_tests::certificate(&["ca"], 400);
+    let old = platform_pki::first_certificate(&old).unwrap();
+    fake.file(INTERMEDIATE, &old);
+    fake.file(PREVIOUS, &old);
+    fake.file(PREVIOUS_UNTIL, "2026-11-25T10:00:00Z\n");
+    let (text, _) = renew_run(&fake.ctx(&plan(&[Ingest])));
+    assert!(
+        text.starts_with("removed an interrupted replacement that never took effect\n"),
+        "{text}"
+    );
+    assert!(!fake.root.join(&PREVIOUS[1..]).exists());
+}

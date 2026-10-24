@@ -556,12 +556,18 @@ ca-replace`, password-gated like the other Setup verbs):
 5. **The old one is dropped by itself:** the daily certificate renewal,
    when it succeeded, `previous-until` has passed and ingest has issued
    from the new intermediate for `client_certificate_days` + 1 day (its
-   own certificate is from the new one: until Repair reissues it, ingest
-   still hands out certificates from the old one), keeps only the first
+   own certificate is from the new one: until the daily renewal or Repair
+   reissues it, ingest still hands out certificates from the old one), keeps only the first
    certificate in `intermediate.crt`, removes both files and restarts
    ingest and distribution ("previous intermediate no longer trusted" in
    its log).
    An agent that was offline the whole time needs a new enrollment token.
+
+A replacement cut short by a crash or power loss mends itself: the next
+Replace, daily renewal or Repair finishes one whose new bundle is in place
+without its key ("finished an interrupted replacement"), and undoes one
+that never changed the bundle ("removed an interrupted replacement that
+never took effect"), so Replace does not refuse for a month.
 
 If nothing is done at all, every agent certificate expires on the
 intermediate's last day.

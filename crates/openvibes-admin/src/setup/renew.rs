@@ -22,9 +22,14 @@ fn renew_gate<T>(locked: &Result<T, String>) -> Option<(String, ExitCode)> {
 
 /// The step, then the old intermediate's removal; the log text and exit code.
 fn renew_run<R: Runner>(ctx: &Ctx<R>) -> (String, ExitCode) {
+    // A Replace a crash cut short first: its key may not match the bundle.
+    let (recovered, mut failed) = match replace::finish_interrupted(ctx) {
+        Ok(line) => (line, false),
+        Err(error) => (Some(format!("failed\t{error}")), true),
+    };
     let state = run_step(ctx, Step::Certificates);
     let mut text = state.line();
-    let mut failed = matches!(state, StepState::Failed(_) | StepState::Waiting(_));
+    failed |= matches!(state, StepState::Failed(_) | StepState::Waiting(_));
     // Not after a failed reissue: ingest may still issue from the old one.
     let dropped = match state {
         StepState::Done(_) => replace::drop_previous(ctx),
@@ -37,6 +42,9 @@ fn renew_run<R: Runner>(ctx: &Ctx<R>) -> (String, ExitCode) {
             text = format!("{text}\nfailed\t{error}");
             failed = true;
         }
+    }
+    if let Some(line) = recovered {
+        text = format!("{line}\n{text}");
     }
     let code = if failed {
         ExitCode::FAILURE

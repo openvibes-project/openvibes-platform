@@ -21,7 +21,7 @@ use crate::setup::{
 const KEY: &str = "/media/usb/openvibes-root.key";
 
 /// A new intermediate of `root`: (certificate, key).
-fn intermediate(root: &KeyAndCert) -> (String, String) {
+pub(super) fn intermediate(root: &KeyAndCert) -> (String, String) {
     let (csr, key) = platform_pki::intermediate_request().unwrap();
     (
         platform_pki::sign_intermediate(root, &csr, Utc::now()).unwrap(),
@@ -30,7 +30,7 @@ fn intermediate(root: &KeyAndCert) -> (String, String) {
 }
 
 /// An installed host: its root and the intermediate in use.
-fn installed(test: &str) -> (Fake, KeyAndCert, (String, String)) {
+pub(super) fn installed(test: &str) -> (Fake, KeyAndCert, (String, String)) {
     host(issuing(test))
 }
 
@@ -46,7 +46,7 @@ fn host(fake: Fake) -> (Fake, KeyAndCert, (String, String)) {
     (fake, root, old)
 }
 
-fn certificates(bundle: &str) -> Vec<String> {
+pub(super) fn certificates(bundle: &str) -> Vec<String> {
     bundle
         .split_inclusive("-----END CERTIFICATE-----\n")
         .map(str::to_owned)
@@ -293,7 +293,12 @@ fn drop_previous_without_the_files_does_nothing() {
 
 #[test]
 fn replace_refuses_while_the_previous_is_trusted() {
-    let (fake, _, old) = installed("replace-pending");
+    // An earlier Replace that finished: new + old, the new key.
+    let (fake, root, old) = installed("replace-pending");
+    let new = intermediate(&root);
+    let bundle = format!("{}{}", new.0, old.0);
+    fake.file(INTERMEDIATE, &bundle);
+    fake.file(INTERMEDIATE_KEY, &new.1);
     fake.file(PREVIOUS, &old.0);
     fake.file(PREVIOUS_UNTIL, "2026-11-25T10:00:00Z\n");
     assert_eq!(
@@ -301,8 +306,8 @@ fn replace_refuses_while_the_previous_is_trusted() {
         "The previous intermediate is still trusted until 2026-11-25, while agents move over: \
          replace it again after that."
     );
-    assert_eq!(fake.text(INTERMEDIATE), old.0);
-    assert_eq!(fake.text(INTERMEDIATE_KEY), old.1);
+    assert_eq!(fake.text(INTERMEDIATE), bundle);
+    assert_eq!(fake.text(INTERMEDIATE_KEY), new.1);
     assert_eq!(fake.text(PREVIOUS_UNTIL), "2026-11-25T10:00:00Z\n");
     assert!(fake.calls.borrow().is_empty());
 }

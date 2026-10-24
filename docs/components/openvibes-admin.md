@@ -891,7 +891,9 @@ changes. Then `previous.crt` (the old first certificate) and
 written beside their targets as `intermediate.key.new` and
 `intermediate.crt.new` and renamed over them, the bundle first and the
 key last (a failure puts the old bundle back and removes the `.new` and
-`previous.*` files: the old pair is in use again), the request folder goes, and the certificates step reissues and restarts the
+`previous.*` files: the old pair is in use again; when the old bundle
+cannot be put back, everything stays for the recovery below; each rename
+syncs its folder), the request folder goes, and the certificates step reissues and restarts the
 services. If that reissue fails, the error starts "The intermediate was
 replaced, but the server certificates were not reissued: run Repair in
 Maintenance (they stay valid until then)."; the certificates check is
@@ -900,7 +902,18 @@ certificate, so Repair reissues them. Stdout has one line per finished stage (`M
 intermediate`, `Trusting the old and the new one`, `Issuing the server
 certificates`, `Restarting the services`), then
 `done<TAB>EXPIRES<TAB>PREVIOUS_UNTIL` (both `YYYY-MM-DD`); a failure is one
-line on stderr prefixed `openvibes-admin helper: `, exit 1. The renewal
+line on stderr prefixed `openvibes-admin helper: `, exit 1. A crash part
+way through the swap is ended by `replace::finish_interrupted`, run under
+the Setup lock at the start of `ca-replace` (before the refusal), of
+`certificates-renew` and of the certificates step's apply (so Repair, whose
+check is Todo then, runs it): an `intermediate.key.new` that loads against
+the bundle's first certificate is renamed into place ("finished an
+interrupted replacement"); otherwise, when `previous.crt` is still the
+bundle's first certificate (or, without it, `.new` files are left), the
+`.new` files and `previous.*` are removed ("removed an interrupted
+replacement that never took effect"). Its line is printed by `ca-replace`,
+heads the renewal's log and prefixes the step's detail. It is not in
+`ca_check`: `setup-status` runs the checks without the lock, mid-swap. The renewal
 timer's `replace::drop_previous` ends it, after a successful renewal
 only: once `previous-until` has passed, `ingest.crt` is signed by the
 bundle's first certificate (a running ingest issues from the intermediate

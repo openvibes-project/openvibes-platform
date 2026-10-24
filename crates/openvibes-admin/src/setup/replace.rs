@@ -140,9 +140,8 @@ fn quick<R: Runner>(ctx: &Ctx<R>, root: &str, root_key: Option<&str>) -> Result<
 /// name the old one. The new key and bundle are then written whole beside
 /// their targets (`.new`), so only two renames are left to change what is
 /// in use: the bundle first, the key last. A failure at any point puts back
-/// what was renamed and removes the rest, so the old pair is in use again;
-/// only a crash between the two renames leaves the new bundle with the old
-/// key.
+/// what was renamed and removes the rest, so the old pair is in use again.
+/// A crash part way is ended by `finish_interrupted`.
 fn swap<R: Runner>(
     ctx: &Ctx<R>,
     previous: &str,
@@ -151,13 +150,7 @@ fn swap<R: Runner>(
     new_key: &str,
 ) -> Result<(), String> {
     let old = ctx.read(INTERMEDIATE)?;
-    let (bundle, key) = (
-        format!("{INTERMEDIATE}.new"),
-        format!("{INTERMEDIATE_KEY}.new"),
-    );
-    let rename = |from: &str, to: &str| {
-        fs::rename(ctx.path(from), ctx.path(to)).map_err(|error| format!("{to}: {error}"))
-    };
+    let (bundle, key) = staged();
     let mut restored = true;
     let result = (|| {
         ctx.put(PREVIOUS, previous.as_bytes(), None, 0o644)?;
@@ -165,8 +158,8 @@ fn swap<R: Runner>(
         let ingest = Some(("openvibes-ingest", "openvibes-ingest"));
         ctx.put(&key, new_key.as_bytes(), ingest, 0o600)?;
         ctx.put(&bundle, format!("{new}{previous}").as_bytes(), None, 0o644)?;
-        rename(&bundle, INTERMEDIATE)?;
-        rename(&key, INTERMEDIATE_KEY).map_err(|error| {
+        rename(ctx, &bundle, INTERMEDIATE)?;
+        rename(ctx, &key, INTERMEDIATE_KEY).map_err(|error| {
             match ctx.put(INTERMEDIATE, old.as_bytes(), None, 0o644) {
                 Ok(()) => error,
                 Err(again) => {
@@ -176,14 +169,10 @@ fn swap<R: Runner>(
             }
         })
     })();
-    if result.is_err() {
-        // Kept when the old bundle is not back: they still name the old one.
-        let previous_files = if restored {
-            [PREVIOUS, PREVIOUS_UNTIL].as_slice()
-        } else {
-            &[]
-        };
-        for path in [bundle.as_str(), &key].iter().chain(previous_files) {
+    // When the old bundle is not back, all stay: `finish_interrupted`
+    // renames the key next time.
+    if result.is_err() && restored {
+        for path in [bundle.as_str(), &key, PREVIOUS, PREVIOUS_UNTIL] {
             let _ = fs::remove_file(ctx.path(path));
         }
     }
@@ -305,6 +294,66 @@ pub(crate) fn drop_previous<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, S
     Ok(Some("previous intermediate no longer trusted".into()))
 }
 
+/// Renames `from` over `to` and syncs the folder, so the rename itself
+/// survives a crash.
+fn rename<R: Runner>(ctx: &Ctx<R>, from: &str, to: &str) -> Result<(), String> {
+    let target = ctx.path(to);
+    fs::rename(ctx.path(from), &target)
+        .and_then(|()| match target.parent() {
+            Some(dir) => fs::File::open(dir)?.sync_all(),
+            None => Ok(()),
+        })
+        .map_err(|error| format!("{to}: {error}"))
+}
+
+/// Where `swap` writes the new bundle and key before renaming them.
+fn staged() -> (String, String) {
+    (
+        format!("{INTERMEDIATE}.new"),
+        format!("{INTERMEDIATE_KEY}.new"),
+    )
+}
+
+/// Ends a Replace a crash cut short inside `swap` (callers hold the Setup
+/// lock): the bundle renamed but not the key is finished; a swap whose
+/// bundle still has the old one first is undone, so Replace does not
+/// refuse for a month. The line saying which, when it did.
+pub(crate) fn finish_interrupted<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {
+    let (bundle, key) = staged();
+    let left = ctx.exists(&bundle) || ctx.exists(&key);
+    if !left && !ctx.exists(PREVIOUS) {
+        return Ok(None);
+    }
+    let first = platform_pki::first_certificate(&ctx.read(INTERMEDIATE)?)
+        .map_err(|error| format!("{INTERMEDIATE}: {error:?}"))?;
+    if ctx
+        .read(&key)
+        .is_ok_and(|pem| Issuer::load(&first, &pem).is_ok())
+    {
+        rename(ctx, &key, INTERMEDIATE_KEY)?;
+        return Ok(Some("finished an interrupted replacement".into()));
+    }
+    // previous.crt is the old first certificate: still first, nothing took.
+    let never = match ctx.read(PREVIOUS) {
+        Ok(previous) => previous == first,
+        Err(_) => left,
+    };
+    if !never {
+        return Ok(None);
+    }
+    for path in [bundle.as_str(), &key, PREVIOUS, PREVIOUS_UNTIL] {
+        match fs::remove_file(ctx.path(path)) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{path}: {error}"));
+            }
+            _ => {}
+        }
+    }
+    Ok(Some(
+        "removed an interrupted replacement that never took effect".into(),
+    ))
+}
+
 /// Why another replacement waits (the TUI says it before asking).
 pub(crate) fn still_trusted(until: &str) -> String {
     format!(
@@ -316,6 +365,9 @@ pub(crate) fn still_trusted(until: &str) -> String {
 /// Replaces the intermediate; the stage (with any root key copy) is gone
 /// whatever happened.
 pub fn replace<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String> {
+    if let Some(line) = finish_interrupted(ctx)? {
+        println!("{line}");
+    }
     // Another replacement now would drop the intermediate most agents
     // still hold certificates from.
     if ctx.exists(PREVIOUS) {
@@ -371,3 +423,7 @@ pub fn ca_replace(root_key: Option<&Path>) -> ExitCode {
 #[cfg(test)]
 #[path = "replace_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "replace_interrupted_tests.rs"]
+mod interrupted_tests;

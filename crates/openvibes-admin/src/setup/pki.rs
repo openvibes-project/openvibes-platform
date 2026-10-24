@@ -386,6 +386,8 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
 }
 
 pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    // Repair's way out of a Replace a crash cut short (key and bundle apart).
+    let recovered = super::replace::finish_interrupted(ctx)?.map_or(String::new(), |l| l + "; ");
     let names = certificate_names(ctx);
     fresh_stage(ctx)?;
     ctx.copy(
@@ -449,7 +451,7 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         0o644,
     )?;
     Ok(StepState::Done(format!(
-        "server certificates for {} (valid 90 days)",
+        "{recovered}server certificates for {} (valid 90 days)",
         names.join(", ")
     )))
 }
