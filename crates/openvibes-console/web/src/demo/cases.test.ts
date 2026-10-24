@@ -260,38 +260,55 @@ describe("demo cases: outcomes and closing", () => {
     expect((await outcome(alarmItem, { outcome: "resolved" })).body.outcome).toBe("resolved");
   });
 
-  it("closes only with a resolution, a note, a future date for accepted risk and an outcome on every item", async () => {
+  it("closes only with a closing note and an outcome on every item; accepted risk takes a date per item", async () => {
     const server = createDemoServer({ persona: "analyst" });
     const { alarm, finding, findingRef } = await freeObjects(server);
     const made = (await call<CaseDetail>(server, "POST", "/api/v1/cases", {
       title: "Close me", items: [{ kind: "alarm", ref: alarm.id }, { kind: "compliance_finding", ref: findingRef }, { kind: "host", ref: finding.agent_id }],
     })).body;
     const url = `/api/v1/cases/${made.case_id}`;
+    type Answer = CaseDetail & { code?: string; field_errors?: { field: string; code: string }[] };
     const base = { title: "Close me", severity: made.severity, status: "closed", assignee_user_id: null };
-    const put = (body: Record<string, unknown>, version: number) => call<CaseDetail & { field_errors?: { field: string; code: string }[] }>(server, "PUT", url, { ...base, ...body }, { "If-Match": `"${version}"` });
+    const put = (body: Record<string, unknown>, version: number) => call<Answer>(server, "PUT", url, { ...base, ...body }, { "If-Match": `"${version}"` });
     const code = async (body: Record<string, unknown>) => (await put(body, 1)).body.field_errors?.[0]?.code;
-    expect(await code({})).toBe("resolution_required");
-    expect(await code({ resolution: "fixed", resolution_note: "n" })).toBe("invalid_resolution");
-    expect(await code({ resolution: "mitigated" })).toBe("resolution_note_required");
-    expect(await code({ resolution: "mitigated", resolution_note: "   " })).toBe("resolution_note_required");
-    expect(await code({ resolution: "accepted_risk", resolution_note: "n" })).toBe("accepted_until_required");
-    expect(await code({ resolution: "accepted_risk", resolution_note: "n", accepted_until: future(-1) })).toBe("accepted_until_past");
-    expect(await code({ resolution: "mitigated", resolution_note: "n", accepted_until: future() })).toBe("accepted_until_not_allowed");
-    expect(await code({ resolution: "mitigated", resolution_note: "n", accepted_until: "tomorrow" })).toBe("invalid_timestamp");
-    expect(await code({ status: "open", resolution: "mitigated", resolution_note: "n" })).toBe("resolution_not_allowed");
+    expect(await code({})).toBe("closing_note_required");
+    expect(await code({ closing_note: "   " })).toBe("closing_note_required");
+    expect(await code({ closing_note: "x".repeat(4001) })).toBe("invalid_note");
+    expect(await code({ status: "open", closing_note: "n" })).toBe("closing_note_not_allowed");
+    // The case-level resolution and date are gone (400 naming the field); the old note field is unknown.
+    for (const field of ["resolution", "accepted_until"]) {
+      const removed = await put({ closing_note: "n", [field]: field === "resolution" ? "mitigated" : future() }, 1);
+      expect(removed.status).toBe(400);
+      expect(removed.body.field_errors?.[0]?.field).toBe(field);
+    }
+    expect((await put({ resolution_note: "n" }, 1)).status).toBe(400);
     // The alarm and the finding still need an outcome; the host does not.
-    const stuck = await put({ resolution: "mitigated", resolution_note: "Fixed." }, 1);
+    const stuck = await put({ closing_note: "Fixed." }, 1);
     expect(stuck.status).toBe(409);
     expect(stuck.body).toMatchObject({ code: "items_unresolved" });
-    for (const item of made.items.filter((i) => i.kind !== "host")) {
-      await call(server, "PUT", `${url}/items/${item.item_id}/outcome`, { outcome: "accepted_risk", note: "Known." });
+    const [alarmItem, findingItem] = made.items.filter((i) => i.kind !== "host") as [CaseItem, CaseItem];
+    const outcome = (item: CaseItem, body: Record<string, unknown>) => call<CaseItem & { field_errors?: { field: string; code: string }[] }>(server, "PUT", `${url}/items/${item.item_id}/outcome`, body);
+    for (const [body, wrong] of [
+      [{ outcome: "accepted_risk", note: "Known." }, "outcome_until_required"],
+      [{ outcome: "accepted_risk", note: "Known.", outcome_until: "tomorrow" }, "invalid_timestamp"],
+      [{ outcome: "accepted_risk", note: "Known.", outcome_until: future(-1) }, "outcome_until_past"],
+      [{ outcome: "accepted_risk", note: "Known.", outcome_until: future(366) }, "outcome_until_too_far"],
+      [{ outcome: "expected", note: "Known.", outcome_until: future() }, "outcome_until_not_allowed"],
+      [{ outcome: "mitigated", note: "Known." }, "invalid_outcome"],
+    ] as const) {
+      const refused = await outcome(alarmItem, body);
+      expect(refused.status, wrong).toBe(422);
+      expect(refused.body.field_errors?.[0]?.code).toBe(wrong);
     }
-    const done = await put({ resolution: "accepted_risk", resolution_note: "Known and watched.", accepted_until: future() }, 1);
+    const until = future();
+    expect((await outcome(alarmItem, { outcome: "accepted_risk", note: "Known.", outcome_until: until })).body).toMatchObject({ outcome: "accepted_risk", outcome_until: until });
+    expect((await outcome(findingItem, { outcome: "confirmed_malicious", note: "Planted." })).body).toMatchObject({ outcome: "confirmed_malicious", outcome_until: null });
+    const done = await put({ closing_note: " Known and watched. " }, 1);
     expect(done.status).toBe(200);
-    expect(done.body).toMatchObject({ status: "closed", resolution: "accepted_risk", resolution_note: "Known and watched.", version: 2, pending_item_count: 0 });
+    expect(done.body).toMatchObject({ status: "closed", resolution: null, accepted_until: null, resolution_note: "Known and watched.", version: 2, pending_item_count: 0 });
     expect(done.body.closed_at).toBeTruthy();
     expect(done.body.items.every((i) => !i.active)).toBe(true);
-    expect(done.body.events.at(-1)).toMatchObject({ kind: "resolved", body: "Known and watched." });
+    expect(done.body.events.at(-1)).toMatchObject({ kind: "resolved", body: "Known and watched.", detail: {} });
     // Closing frees the items for another case.
     const reuse = await call(server, "POST", "/api/v1/cases", { title: "Again", items: [{ kind: "alarm", ref: alarm.id }] });
     expect(reuse.status).toBe(201);
@@ -299,7 +316,7 @@ describe("demo cases: outcomes and closing", () => {
     expect((await call(server, "POST", `${url}/items`, { kind: "host", ref: finding.agent_id })).body).toMatchObject({ code: "case_closed" });
     expect((await call(server, "DELETE", `${url}/items/${made.items[2]?.item_id}`)).status).toBe(409);
     expect((await call(server, "PUT", `${url}/items/${made.items[0]?.item_id}/outcome`, { outcome: null })).body.code).toBe("case_closed");
-    expect((await call(server, "PUT", url, { ...base, resolution: "mitigated", resolution_note: "Changed my mind." }, { "If-Match": '"2"' })).body).toMatchObject({ code: "case_closed" });
+    expect((await call(server, "PUT", url, { ...base, closing_note: "Changed my mind." }, { "If-Match": '"2"' })).body).toMatchObject({ code: "case_closed" });
     expect((await call(server, "POST", `${url}/notes`, { body: "Still watching." })).status).toBe(201);
     // Reopening is refused while an item sits in another open case, and works once it does not.
     const blocked = await call(server, "PUT", url, { ...base, status: "open" }, { "If-Match": '"2"' });
@@ -321,26 +338,44 @@ describe("demo cases: outcomes and closing", () => {
     const item = made.items[0] as CaseItem;
     expect((await call(server, "PUT", `/api/v1/cases/${made.case_id}/items/${item.item_id}/outcome`, { outcome: "resolved" })).status).toBe(200);
     // The demo's alarm workflow does not reopen a mitigated alarm, so the evidence stays gone and the case closes.
-    const closing = await call<CaseDetail>(server, "PUT", `/api/v1/cases/${made.case_id}`, { title: "Back again", severity: made.severity, status: "closed", resolution: "mitigated", resolution_note: "Gone." }, { "If-Match": '"1"' });
+    const closing = await call<CaseDetail>(server, "PUT", `/api/v1/cases/${made.case_id}`, { title: "Back again", severity: made.severity, status: "closed", closing_note: "Gone." }, { "If-Match": '"1"' });
     expect(closing.status).toBe(200);
   });
 
-  it("reopens a case when its accepted risk runs out, and clears the accepted outcomes", async () => {
+  it("reopens a closed case when an item's accepted risk runs out, and clears only that outcome", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       const server = createDemoServer({ persona: "admin" });
       const { alarm } = await freeObjects(server);
       const made = (await call<CaseDetail>(server, "POST", "/api/v1/cases", { title: "Accepted", items: [{ kind: "alarm", ref: alarm.id }] })).body;
       const url = `/api/v1/cases/${made.case_id}`;
-      await call(server, "PUT", `${url}/items/${made.items[0]?.item_id}/outcome`, { outcome: "accepted_risk", note: "For now." });
-      const until = future(10);
-      const closed = await call<CaseDetail>(server, "PUT", url, { title: "Accepted", severity: made.severity, status: "closed", resolution: "accepted_risk", resolution_note: "For now.", accepted_until: until }, { "If-Match": '"1"' });
+      await call(server, "PUT", `${url}/items/${made.items[0]?.item_id}/outcome`, { outcome: "accepted_risk", note: "For now.", outcome_until: future(10) });
+      const closed = await call<CaseDetail>(server, "PUT", url, { title: "Accepted", severity: made.severity, status: "closed", closing_note: "For now." }, { "If-Match": '"1"' });
       expect(closed.status).toBe(200);
       vi.setSystemTime(Date.now() + 11 * day);
       const reopened = await get(server, made.case_id);
-      expect(reopened).toMatchObject({ status: "open", resolution: null, accepted_until: null, pending_item_count: 1 });
-      expect(reopened.items[0]).toMatchObject({ outcome: null, active: true });
-      expect(reopened.events.at(-1)).toMatchObject({ kind: "reopened", actor: null, detail: { reason: "accepted_risk_expired" } });
+      expect(reopened).toMatchObject({ status: "open", resolution: null, resolution_note: null, pending_item_count: 1 });
+      expect(reopened.items[0]).toMatchObject({ outcome: null, outcome_until: null, active: true });
+      expect(reopened.events.slice(-2)).toMatchObject([
+        { kind: "reopened", actor: null, detail: { reason: "accepted_risk_expired" } },
+        { kind: "item_outcome", actor: null, detail: { from: "accepted_risk", to: null, reason: "accepted_risk_expired" } },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears an item's run-out acceptance on an open case, so it is no longer ready", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const server = createDemoServer({ persona: "admin" });
+      const { alarm } = await freeObjects(server);
+      const made = (await call<CaseDetail>(server, "POST", "/api/v1/cases", { title: "Accepted open", items: [{ kind: "alarm", ref: alarm.id }] })).body;
+      await call(server, "PUT", `/api/v1/cases/${made.case_id}/items/${made.items[0]?.item_id}/outcome`, { outcome: "accepted_risk", note: "For now.", outcome_until: future(1) });
+      vi.setSystemTime(Date.now() + 2 * day);
+      const later = await get(server, made.case_id);
+      expect(later).toMatchObject({ status: "open", pending_item_count: 1 });
+      expect(later.events.at(-1)).toMatchObject({ kind: "item_outcome", actor: null, detail: { reason: "accepted_risk_expired" } });
     } finally {
       vi.useRealTimers();
     }
@@ -349,12 +384,12 @@ describe("demo cases: outcomes and closing", () => {
 
 describe("demo cases: scope", () => {
   /** A store whose viewer sees only the hosts in `visible`. */
-  function scoped(visible: string[], persisted?: { value: unknown }) {
+  function scoped(visible: string[], persisted?: { value: unknown }, global = false) {
     const me = { user_id: "u-ola", username: "ola", display_name: "Ola" };
-    const state: CaseState = { v: 2, next_number: 1, next_event: 1, cases: [], items: [], events: [] };
+    const state: CaseState = { v: 3, next_number: 1, next_event: 1, cases: [], items: [], events: [] };
     const world: CaseWorld = {
       me, people: [me, { user_id: "u-sam", username: "sam", display_name: "Sam" }], assignable: ["u-ola", "u-sam"],
-      canSee: (id) => visible.includes(id), hostname: (id) => id,
+      canSee: (id) => visible.includes(id), global, hostname: (id) => id,
       facts: (kind, ref) => kind === "host" ? { agent_id: ref, title: ref, severity: null, gone: false }
         : kind === "alarm" ? { agent_id: ref === "1" ? "agent-a" : "agent-b", title: `alarm ${ref}`, severity: "high", gone: false } : undefined,
       audit: () => undefined,
@@ -403,9 +438,33 @@ describe("demo cases: scope", () => {
     narrow.state.items.push(...state.items);
     const visible = made.items[0] as CaseItem;
     expect(narrow.store.setOutcome(made.case_id, visible.item_id, { outcome: "false_positive", note: "n" }).status).toBe(200);
-    const close = narrow.store.update(made.case_id, { title: "Both", severity: "high", status: "closed", resolution: "mitigated", resolution_note: "n" }, '"1"');
+    const close = narrow.store.update(made.case_id, { title: "Both", severity: "high", status: "closed", closing_note: "n" }, '"1"');
     expect(close.status).toBe(409);
     expect((close.body as { code: string }).code).toBe("hidden_items_unresolved");
+  });
+
+  it("lets hosts decide: a case with no host-bound item is seen by readers of every host only", () => {
+    const all = scoped(["agent-a"], undefined, true);
+    const empty = all.store.create({ title: "Empty" }).body as CaseDetail;
+    const lead = scoped(["agent-a"]);
+    lead.state.cases.push(...all.state.cases.map((c) => ({ ...c, opened_by_user_id: "u-sam" })));
+    expect(lead.store.get(empty.case_id).status).toBe(404);
+    const other = scoped([], undefined, true);
+    other.state.cases.push(...all.state.cases.map((c) => ({ ...c, opened_by_user_id: "u-sam" })));
+    expect(other.store.get(empty.case_id).status).toBe(200);
+  });
+
+  it("still reopens a case closed before step 5d as accepted risk when its date passes", () => {
+    const { store, state } = scoped(["agent-a"]);
+    const made = store.create({ title: "Old", items: [{ kind: "alarm", ref: "1" }] }).body as CaseDetail;
+    const [c, item] = [state.cases[0], state.items[0]];
+    if (!c || !item) throw new Error("no case");
+    Object.assign(c, { status: "closed", resolution: "accepted_risk", accepted_until: new Date(Date.now() - 1000).toISOString(), resolution_note: "n", closed_at: new Date().toISOString() });
+    Object.assign(item, { active: false, outcome: "accepted_risk", outcome_note: "n" });
+    const reopened = store.get(made.case_id).body as CaseDetail;
+    expect(reopened).toMatchObject({ status: "open", resolution: null, accepted_until: null });
+    expect(reopened.items[0]).toMatchObject({ outcome: null, active: true });
+    expect(reopened.events.at(-1)).toMatchObject({ kind: "reopened", detail: { reason: "accepted_risk_expired", previous_resolution: "accepted_risk" } });
   });
 
   it("keeps its state in the persistence it is given and loads it back", () => {

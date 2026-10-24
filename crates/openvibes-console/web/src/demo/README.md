@@ -19,8 +19,10 @@ An in-browser implementation of /api/v1 over invented data, for the GitHub Pages
 | `versionOrder.ts` | Agent version order, the twin of the store's version_order.rs (same table test). |
 | `assignments.ts` | The demo's rule-set assignment API, with real status codes. |
 | `cases.ts` | The demo's cases store and its rules. |
+| `caseRules.ts` | The cases' checks that need no state: problem answers and messages, titles, notes, ids, outcomes and the closing note. |
+| `caseReopen.ts` | The cases' lazy reopen checks: run-out accepted risk (the case's before step 5d, each item's since) and returned evidence. |
 | `suppressions.ts` | Alarm suppressions with approval, as the store decides them, kept in browser storage. |
-| `caseSeed.ts` | The cases the demo starts with. |
+| `caseSeed.ts` | The cases the demo starts with: every outcome, an empty case, a software-only one, one with an item the pilot lead cannot see, a run-out acceptance and a quiet case. |
 | `dashboards.ts` | The demo's dashboard store, kept in browser storage. |
 | `routes/` | One file per API area, registered by server.ts. |
 

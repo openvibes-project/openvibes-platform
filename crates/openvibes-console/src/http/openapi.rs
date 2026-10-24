@@ -158,6 +158,7 @@ use utoipa::OpenApi;
         crate::rules::draft_publish::draft_changes,
         crate::rules::draft_publish::publish_drafts,
         crate::cases::list::list_cases,
+        crate::cases::list_page::list_case_page,
         crate::cases::list::create_case,
         crate::cases::items::cases_for_item,
         crate::cases::lookups::list_assignees,

@@ -42,14 +42,15 @@ setting or changing the assignee also `cases.assign`.
 
 | Route | Needs | Result |
 |---|---|---|
-| `GET /api/v1/cases` | `cases.read` | `CasePage` `{items, next_cursor}`. Filters `status` (`open`, `investigating`, `closed`, `all`; default open and investigating), `severity`, `assignee` (a user id, `me`, `none`), `q` (title text or `C-104`), `cursor`, `limit` 1–100 (50). Newest change first |
+| `GET /api/v1/cases` | `cases.read` | `CasePage` `{items, next_cursor}`. Filters `status` (`open`, `investigating`, `closed`, `all`; default open and investigating), `severity`, `assignee` (a user id, `me`, `none`), `q` (title text or `C-104`), `cursor`, `limit` 1–100 (50). Newest change first. Kept for Add to case, the palette and the badges |
+| `GET /api/v1/case-list` | `cases.read` | `CaseListView`: the Cases list page (see below) |
 | `POST /api/v1/cases` | `cases.write` (`cases.assign` with an assignee) | `201 CaseDetailView` + `ETag`. Body `{title, severity?, assignee_user_id?, items?: [{kind, ref}]}`, at most 50 items |
 | `GET /api/v1/cases/{id}` | `cases.read` | `CaseDetailView` + `ETag` (the version) |
 | `PUT /api/v1/cases/{id}` | `cases.write` (`cases.assign` to change the assignee), `If-Match` | `CaseDetailView` + new `ETag` |
 | `POST /api/v1/cases/{id}/notes` | `cases.write` | `201 CaseEventView`; body `{body}` |
 | `POST /api/v1/cases/{id}/items` | `cases.write` | `201 CaseItemView`; body `{kind, ref}` |
 | `DELETE /api/v1/cases/{id}/items/{item_id}` | `cases.write` | 204; open cases only |
-| `PUT /api/v1/cases/{id}/items/{item_id}/outcome` | `cases.write` | `CaseItemView`; body `{outcome: "resolved" \| "false_positive" \| "accepted_risk" \| "confirmed_malicious" \| "expected" \| null, note?}` (no re-open date field yet, so `accepted_risk` answers 422 `outcome_until_required` until the step-5d route change) |
+| `PUT /api/v1/cases/{id}/items/{item_id}/outcome` | `cases.write` | `CaseItemView`; body `{outcome: "resolved" \| "false_positive" \| "accepted_risk" \| "confirmed_malicious" \| "expected" \| null, note?, outcome_until?}` (`outcome_until` an RFC 3339 time, only with `accepted_risk`; a malformed one is 422 `invalid_timestamp` on that field) |
 | `GET /api/v1/cases/for-item?kind=&ref=` | `cases.read` | `{items: [{case: CaseSummaryView, item_id, outcome}]}` |
 | `GET /api/v1/cases/assignees` | `cases.assign` | `{items: [{user_id, username, display_name}]}`: enabled users who hold `cases.read` |
 
@@ -65,7 +66,8 @@ findings and vulnerabilities without an outcome).
 
 `CaseItemView`: `item_id`, `kind` (`alarm`, `finding`, `vulnerability`,
 `host`, `software`), `ref`, `agent_id`, `hostname`, `active`, `outcome`,
-`outcome_note`, `added_by`, `added_at`, `title`, `severity`, `evidence_gone`.
+`outcome_note`, `outcome_until` (accepted risk's re-open date), `added_by`,
+`added_at`, `title`, `severity`, `evidence_gone`.
 
 | `kind` | `ref` (as the web panels write it) | Exclusive | Needs an outcome |
 |---|---|---|---|
@@ -91,13 +93,42 @@ item entries, plus `{from, to, until}` on `item_outcome`; `{}` for `resolved`
 (`manual`, `accepted_risk_expired` or `evidence_returned`). The timeline is oldest
 first and append-only (a trigger refuses UPDATE and DELETE).
 
+### The Cases list page (`GET /api/v1/case-list`)
+
+Step 5d rulings 5–10, following the other list pages (`compliance-list`):
+query parameters `q` (title, `C-<number>`, the number, or the opener's
+name), `status` (`active`, the default: not closed; `open`,
+`investigating`, `closed`, `all`), `severity`, `assignee` (`me` from the
+session, `unassigned`, or a user id), `contains` (`alarms`,
+`vulnerabilities`, `findings`: a visible item of that kind), `host` (an
+agent id), `group` (a host group id), `updated` (`today` since midnight
+UTC, `week`, `quiet`: not for 7 days or more), `sort` (`updated`, the
+default, `severity`, `number`, `opened`; ties by case id), `dir`, `offset`
+0–100000 and `limit` 1–100 (50). Empty values count as absent; anything
+else, an unknown parameter included, is 400 `invalid_query` naming it.
+The lazy reopen checks run first. The answer is `{items, total, counts,
+summary, generated_at}`: each row has `case_id`, `number`, `title`,
+`status`, `severity`, `opened_by`, `assignee`, `latest_note` (`{text, at}`,
+the newest note's first 120 characters), `hosts` (the first five visible
+hosts, `{agent_id, hostname}`), `host_count`, `kinds` (visible items per
+kind), `with_outcome` / `takes_outcome` (visible alarms, findings and
+vulnerabilities) and `updated_at`; `counts` has every value of `status`,
+`severity`, `contains`, `updated`, `group` and `assignee` with the other
+filters applied; `summary` is `{open, investigating, unassigned,
+ready_to_close}` over the cases that are not closed under every filter but
+status, ready by close's own rule (hidden items included). The page
+`cases` keeps saved views and hidden columns (`severity`, `status`,
+`assignee`, `hosts`, `items`, `updated`; case and title never hide).
+
 ### Changing a case
 
 `PUT` replaces the editable fields, so send them all: `title` (1–120
 characters, trimmed), `severity`, `status`, `assignee_user_id` (absent or
-`null` means nobody) and, to close, the closing note in `resolution_note`
-(1–4000 characters). `resolution` and `accepted_until` are still accepted
-and ignored (step 5d; the request changes with the route change). Sending
+`null` means nobody) and, to close, `closing_note` (1–4000 characters,
+stored as the detail's `resolution_note`; a case that stays closed sends the
+one it has). `resolution` and `accepted_until` are refused since step 5d
+(400 `invalid_request` naming the field; `null` counts as absent), as the
+items carry how a case ended; an old case's own stay readable. Sending
 the current values
 changes nothing and writes nothing. The version rises with each change to
 those fields; notes, items and outcomes move `updated_at` only, so adding a
@@ -241,5 +272,7 @@ With `eval "$(scripts/test-db.sh)"`:
 cargo test -p platform-store --test console_cases        # tests/console_cases/: rules, scope, exclusivity, close, outcomes, reopen, evidence, audit, limits, migration 64
 cargo test -p openvibes-console --lib cases              # cursors, validation messages
 cargo test -p openvibes-console --test cases_http        # routes, auth, CSRF, bearer, scope, versions
+cargo test -p openvibes-console --test case_list_http    # the Cases list page: validation, rows, counts, reach, saved views
+cargo test -p openvibes-console --test case_outcomes_http # the five outcomes, outcome_until, closing_note
 cargo test -p openvibes-console --test auth_http database_builtin_permissions_match_the_rust_role_table
 ```

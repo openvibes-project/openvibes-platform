@@ -471,6 +471,7 @@ async fn every_route_needs_a_session() {
     let item = "00000000-0000-4000-8000-000000000001";
     for (method, uri) in [
         ("GET", "/api/v1/cases".to_owned()),
+        ("GET", "/api/v1/case-list".to_owned()),
         ("POST", "/api/v1/cases".to_owned()),
         ("GET", "/api/v1/cases/for-item?kind=host&ref=x".to_owned()),
         ("GET", "/api/v1/cases/assignees".to_owned()),
@@ -509,6 +510,7 @@ async fn without_cases_read_or_manage_every_route_is_forbidden() {
     let item = created["items"][0]["item_id"].as_str().unwrap();
     for (method, uri, body) in [
         ("GET", "/api/v1/cases".to_owned(), None),
+        ("GET", "/api/v1/case-list".to_owned(), None),
         (
             "GET",
             "/api/v1/cases/for-item?kind=host&ref=x".to_owned(),
@@ -590,6 +592,7 @@ async fn bearer_tokens_are_refused_even_for_reads() {
     ] {
         for (method, uri) in [
             ("GET", "/api/v1/cases"),
+            ("GET", "/api/v1/case-list"),
             ("GET", "/api/v1/cases/assignees"),
             ("GET", "/api/v1/cases/for-item?kind=host&ref=x"),
             ("GET", "/api/v1/cases/00000000-0000-4000-8000-000000000000"),
@@ -795,7 +798,7 @@ async fn a_case_is_opened_read_changed_noted_and_closed_with_versions_and_audit(
     // Closing needs outcomes first.
     let close = put_body(
         &saved,
-        json!({"status": "closed", "resolution": "mitigated", "resolution_note": "Disabled root login"}),
+        json!({"status": "closed", "closing_note": "Disabled root login"}),
     );
     let (status, problem, _) = fx
         .send(&alice, "PUT", &uri, Some(close.clone()), Some("\"2\""))
@@ -889,21 +892,20 @@ async fn closing_is_refused_without_a_closing_note() {
         .await;
     let uri = case_uri(&case);
     let tomorrow = (Utc::now() + chrono::Duration::days(1)).to_rfc3339();
-    // Step 5d: the closing note travels as `resolution_note` until the
-    // route change; `resolution` and `accepted_until` are ignored.
+    // Step 5d: closing takes a closing note only.
     for (changes, field, code) in [
         (
-            json!({"status": "closed", "resolution": "mitigated"}),
+            json!({"status": "closed"}),
             "closing_note",
             "closing_note_required",
         ),
         (
-            json!({"status": "closed", "resolution_note": "   "}),
+            json!({"status": "closed", "closing_note": "   "}),
             "closing_note",
             "closing_note_required",
         ),
         (
-            json!({"status": "open", "resolution_note": "x"}),
+            json!({"status": "open", "closing_note": "x"}),
             "closing_note",
             "closing_note_not_allowed",
         ),
@@ -943,13 +945,36 @@ async fn closing_is_refused_without_a_closing_note() {
         (same["version"].clone(), same["status"].clone()),
         (json!(1), json!("open"))
     );
-    // A note is enough; a resolution and a date are not stored.
+    // The case-level resolution and date are gone: naming one is refused.
+    for (field, value) in [
+        ("resolution", json!("accepted_risk")),
+        ("accepted_until", json!(tomorrow)),
+    ] {
+        let mut changes = json!({"status": "closed", "closing_note": "Until the rebuild"});
+        changes[field] = value;
+        let (status, problem, _) = fx
+            .send(
+                &alice,
+                "PUT",
+                &uri,
+                Some(put_body(&case, changes)),
+                Some("\"1\""),
+            )
+            .await;
+        assert_eq!(
+            (status, problem["code"].clone()),
+            (StatusCode::BAD_REQUEST, json!("invalid_request")),
+            "{field}"
+        );
+        assert_eq!(problem["field_errors"][0]["field"], field);
+    }
+    // `null` for either is as good as leaving it out.
     let (status, closed, _) = fx
         .send(
             &alice,
             "PUT",
             &uri,
-            Some(put_body(&case, json!({"status": "closed", "resolution": "accepted_risk", "resolution_note": "Until the rebuild", "accepted_until": tomorrow}))),
+            Some(put_body(&case, json!({"status": "closed", "closing_note": "Until the rebuild", "resolution": null, "accepted_until": null}))),
             Some("\"1\""),
         )
         .await;
@@ -970,7 +995,7 @@ async fn closing_is_refused_without_a_closing_note() {
             &uri,
             Some(put_body(
                 &closed,
-                json!({"status": "closed", "resolution_note": "Changed"}),
+                json!({"status": "closed", "closing_note": "Changed"}),
             )),
             Some(&version(&closed)),
         )
@@ -1143,7 +1168,16 @@ async fn an_item_cannot_be_in_two_open_cases() {
         assert_eq!(status, StatusCode::OK, "{set}");
     }
     let (status, closed, _) = fx
-        .send(&alice, "PUT", &case_uri(&first), Some(put_body(&first, json!({"status": "closed", "resolution": "false_positive", "resolution_note": "Known"}))), Some("\"1\""))
+        .send(
+            &alice,
+            "PUT",
+            &case_uri(&first),
+            Some(put_body(
+                &first,
+                json!({"status": "closed", "closing_note": "Known"}),
+            )),
+            Some("\"1\""),
+        )
         .await;
     assert_eq!(status, StatusCode::OK, "{closed}");
     let (status, added, _) = fx
@@ -1335,7 +1369,7 @@ async fn a_scoped_user_sees_and_adds_only_what_is_in_scope() {
             &case_uri(&mixed),
             Some(put_body(
                 &seen,
-                json!({"status": "closed", "resolution": "mitigated", "resolution_note": "Done"}),
+                json!({"status": "closed", "closing_note": "Done"}),
             )),
             Some(&version(&seen)),
         )
@@ -1791,7 +1825,7 @@ async fn accepted_risk_that_runs_out_reopens_the_case_when_it_is_next_read() {
             &uri,
             Some(put_body(
                 &case,
-                json!({"status": "closed", "resolution_note": "Until Friday"}),
+                json!({"status": "closed", "closing_note": "Until Friday"}),
             )),
             Some("\"1\""),
         )
@@ -1872,7 +1906,7 @@ async fn resolved_evidence_that_returns_reopens_the_case_when_it_is_next_read() 
             &uri,
             Some(put_body(
                 &case,
-                json!({"status": "closed", "resolution": "mitigated", "resolution_note": "Fixed"}),
+                json!({"status": "closed", "closing_note": "Fixed"}),
             )),
             Some("\"1\""),
         )

@@ -1,6 +1,6 @@
 use axum::http::{HeaderMap, StatusCode};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::DateTime;
+use chrono::{DateTime, Utc};
 use platform_store::console_cases::{self as store, CaseSummary};
 
 use crate::{ProblemDetails, http::headers::parse_if_match_version};
@@ -31,6 +31,13 @@ pub(super) fn title(raw: &str) -> &str {
 /// is as good as none.
 pub(super) fn blank_is_absent(note: Option<&str>) -> Option<&str> {
     note.map(str::trim).filter(|note| !note.is_empty())
+}
+
+/// An RFC 3339 time, if it is one.
+pub(super) fn parse_time(text: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(text)
+        .ok()
+        .map(|at| at.with_timezone(&Utc))
 }
 
 /// The answer to a change that states no usable `If-Match`, or its version.

@@ -8,8 +8,8 @@ use chrono::Utc;
 use platform_store::console_cases::{self as store, OutcomeChange};
 
 use super::permissions::{manager, reader};
-use super::request::blank_is_absent;
-use super::responses::{answer, bad_request, refused};
+use super::request::{blank_is_absent, parse_time};
+use super::responses::{answer, bad_request, invalid, refused};
 use super::types::{
     AddCaseNoteRequest, CaseItemRef, ForItemParams, ItemCasesView, SetCaseItemOutcomeRequest,
 };
@@ -147,17 +147,17 @@ pub(crate) async fn set_item_outcome(
         return bad_request("invalid_request", "The request body is invalid");
     };
     let note = blank_is_absent(request.note.as_deref());
-    let change = request
-        .outcome
-        .as_deref()
-        // ponytail: no request field for the re-open date yet, so
-        // accepted_risk is refused (outcome_until_required) until the
-        // step-5d route change (plan Task 4) adds one.
-        .map(|outcome| OutcomeChange {
-            outcome,
-            note,
-            outcome_until: None,
-        });
+    let outcome_until = match request.outcome_until.as_deref().map(parse_time) {
+        Some(None) => {
+            return invalid("outcome_until", "invalid_timestamp", "Use an RFC 3339 time");
+        }
+        until => until.flatten(),
+    };
+    let change = request.outcome.as_deref().map(|outcome| OutcomeChange {
+        outcome,
+        note,
+        outcome_until,
+    });
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };

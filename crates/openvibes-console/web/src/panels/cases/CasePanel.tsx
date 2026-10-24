@@ -1,7 +1,7 @@
 // One case: its status, severity and assignee, the items it gathers (each
-// opens its own panel), notes, and the timeline. Closing needs a
-// resolution, a note and an outcome on every alarm, finding and
-// vulnerability, so the panel shows what is still missing.
+// opens its own panel), notes, and the timeline. Closing needs a closing
+// note and an outcome on every alarm, finding and vulnerability, so the
+// panel shows what is still missing.
 import { type FormEvent, useState } from "react";
 
 import { invalidate, request, useResource } from "../../api/client";
@@ -18,8 +18,8 @@ import { Select } from "../../ui/Select";
 import { SelectField } from "../../ui/Field";
 import { toast } from "../../ui/toast";
 import {
-  CASE_KINDS, type CaseFields, type CaseKind, type CloseForm, caseErrorText, caseNumber, blockingItems, closeProblems, endingOf, eventText, isStale,
-  itemPanel, kindIcon, kindLabel, localDay, needsOutcome, outcomeChoices, outcomeLabel, outcomeNeedsNote, refHint, refLabel, resolutionLabel, severities, updateBody,
+  CASE_KINDS, type CaseFields, type CaseKind, type CloseForm, caseErrorText, caseNumber, blockingItems, closeProblems, eventText, isStale,
+  itemPanel, kindIcon, kindLabel, localDay, needsOutcome, outcomeBody, outcomeChoices, outcomeLabel, outcomeNeedsNote, refHint, refLabel, resolutionLabel, severities, updateBody,
 } from "./cases";
 
 /** Runs a change, tells the user why it failed, and reloads when what is on screen is out of date. */
@@ -134,10 +134,10 @@ function Details({ c, manage }: { c: CaseDetail; manage: boolean }) {
   const [busy, setBusy] = useState(false);
   const isClosed = c.status === "closed";
   const dirty = draft.title.trim() !== c.title || draft.severity !== c.severity || draft.assignee !== (c.assignee?.user_id ?? "");
-  const ending = isClosed ? { resolution: c.resolution ?? "", note: c.resolution_note ?? "", accepted_until: c.accepted_until ?? null } : undefined;
-  const send = async (status: string, withEnding: typeof ending, done: string) => {
+  const ending = isClosed ? c.resolution_note ?? "" : undefined;
+  const send = async (status: string, closingNote: string | undefined, done: string) => {
     setBusy(true);
-    const saved = await attempt(() => request("PUT", casePath(c), updateBody(draft, status, withEnding), { "if-match": `"${c.version}"` }), done);
+    const saved = await attempt(() => request("PUT", casePath(c), updateBody(draft, status, closingNote), { "if-match": `"${c.version}"` }), done);
     setBusy(false);
     return saved;
   };
@@ -146,8 +146,8 @@ function Details({ c, manage }: { c: CaseDetail; manage: boolean }) {
     <div className="panel-body stack">
       {c.status === "closed" && (
         <dl className="kv">
-          <dt>Resolution</dt><dd>{resolutionLabel[c.resolution ?? ""] ?? c.resolution ?? "—"}</dd>
-          {c.resolution_note && <><dt>Note</dt><dd>{c.resolution_note}</dd></>}
+          {c.resolution && <><dt>Resolution</dt><dd>{resolutionLabel[c.resolution] ?? c.resolution}</dd></>}
+          {c.resolution_note && <><dt>Closing note</dt><dd>{c.resolution_note}</dd></>}
           {c.accepted_until && <><dt>Accepted until</dt><dd>{when(c.accepted_until)}; the case reopens then</dd></>}
           {c.closed_at && <><dt>Closed</dt><dd>{when(c.closed_at)}</dd></>}
         </dl>
@@ -174,7 +174,7 @@ function Details({ c, manage }: { c: CaseDetail; manage: boolean }) {
             {isClosed && <button type="button" className="button button--small" disabled={busy} onClick={() => void send("open", undefined, "Case reopened")}>Reopen</button>}
           </div>
           {closing && !isClosed && <CloseCase c={c} busy={busy} onCancel={() => setClosing(false)}
-            onClose={(form) => void send("closed", endingOf(form), "Case closed")} />}
+            onClose={(form) => void send("closed", form.note, "Case closed")} />}
         </>
       ) : (
         <dl className="kv">
@@ -188,21 +188,13 @@ function Details({ c, manage }: { c: CaseDetail; manage: boolean }) {
 }
 
 function CloseCase({ c, busy, onClose, onCancel }: { c: CaseDetail; busy: boolean; onClose: (form: CloseForm) => void; onCancel: () => void }) {
-  const [form, setForm] = useState<CloseForm>({ resolution: "", note: "", acceptedUntil: "" });
-  const [tomorrow] = useState(() => localDay(new Date(Date.now() + 86_400_000)));
+  const [form, setForm] = useState<CloseForm>({ note: "" });
   const problems = closeProblems(form, c.items);
   const blocking = blockingItems(c.items);
   return (
     <div className="confirm" role="group" aria-label="Close this case">
-      <p className="confirm__text"><strong>Close {caseNumber(c.number)}</strong>: say how it ended. Its items are freed for other cases.</p>
-      <SelectField label="Resolution">
-        <Select label="Resolution" value={form.resolution} onChange={(resolution) => setForm({ ...form, resolution })}
-          options={[{ value: "", label: "Choose…" }, ...Object.entries(resolutionLabel).map(([value, label]) => ({ value, label }))]} />
-      </SelectField>
-      {form.resolution === "accepted_risk" && (
-        <label className="field">Accepted until<input className="input" type="date" min={tomorrow} value={form.acceptedUntil} onChange={(event) => setForm({ ...form, acceptedUntil: event.target.value })} /></label>
-      )}
-      <label className="field">Note<textarea className="textarea" rows={3} maxLength={4000} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} placeholder="Why it can close (required)" /></label>
+      <p className="confirm__text"><strong>Close {caseNumber(c.number)}</strong>: sum up how it ended. Its items are freed for other cases.</p>
+      <label className="field">Closing note<textarea className="textarea" rows={3} maxLength={4000} value={form.note} onChange={(event) => setForm({ note: event.target.value })} placeholder="A short summary (required)" /></label>
       {blocking.length > 0 && (
         <div>
           <p className="confirm__text">Still need an outcome (set it on the item below):</p>
@@ -226,6 +218,7 @@ function OutcomeBadge({ item }: { item: CaseItem }) {
   return (
     <>
       <span className={`badge badge--plain ${item.outcome === "resolved" ? "badge--ok" : item.outcome === "accepted_risk" ? "badge--info" : ""}`}>{outcomeLabel[item.outcome] ?? item.outcome}</span>
+      {item.outcome_until && <span title="The outcome clears then, and a closed case reopens">until {when(item.outcome_until)}</span>}
       {stale && <span className="badge badge--bad badge--plain" title="The evidence is back, so this item blocks closing until it has another outcome">Evidence is back</span>}
     </>
   );
@@ -234,12 +227,15 @@ function OutcomeBadge({ item }: { item: CaseItem }) {
 function OutcomeControl({ c, item, label }: { c: CaseDetail; item: CaseItem; label: string }) {
   const [outcome, setOutcome] = useState(item.outcome ?? "");
   const [note, setNote] = useState(item.outcome_note ?? "");
+  const [until, setUntil] = useState(item.outcome_until ? localDay(new Date(item.outcome_until)) : "");
+  const [tomorrow] = useState(() => localDay(new Date(Date.now() + 86_400_000)));
   const [busy, setBusy] = useState(false);
-  const changed = outcome !== (item.outcome ?? "") || (outcome !== "" && note.trim() !== (item.outcome_note ?? ""));
+  const changed = outcome !== (item.outcome ?? "") || (outcome !== "" && note.trim() !== (item.outcome_note ?? ""))
+    || (outcome === "accepted_risk" && until !== (item.outcome_until ? localDay(new Date(item.outcome_until)) : ""));
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
-    await attempt(() => request("PUT", `${casePath(c)}/items/${encodeURIComponent(item.item_id)}/outcome`, outcome === "" ? { outcome: null } : { outcome, note: note.trim() || null }), outcome === "" ? "Outcome cleared" : "Outcome saved");
+    await attempt(() => request("PUT", `${casePath(c)}/items/${encodeURIComponent(item.item_id)}/outcome`, outcomeBody(outcome, note, until)), outcome === "" ? "Outcome cleared" : "Outcome saved");
     setBusy(false);
   };
   return (
@@ -254,6 +250,9 @@ function OutcomeControl({ c, item, label }: { c: CaseDetail; item: CaseItem; lab
       {outcome !== "" && (
         <input className="input grow" value={note} onChange={(event) => setNote(event.target.value)} required={outcomeNeedsNote(outcome)} maxLength={4000}
           placeholder={outcomeNeedsNote(outcome) ? "Why (required)" : "Note (optional)"} aria-label={`Note for ${label}`} />
+      )}
+      {outcome === "accepted_risk" && (
+        <input className="input" type="date" required min={tomorrow} value={until} onChange={(event) => setUntil(event.target.value)} aria-label={`Re-open date for ${label}`} />
       )}
       <button type="submit" className="button button--small" disabled={busy || !changed}>{busy ? "Saving…" : outcome === "" ? "Clear" : "Save outcome"}</button>
     </form>
@@ -282,7 +281,7 @@ function ItemRow({ c, item, manage }: { c: CaseDetail; item: CaseItem; manage: b
       {item.outcome_note && <p className="case-item__note">{item.outcome_note}</p>}
       {editable && (
         <div className="case-item__controls row row--wrap">
-          {needsOutcome(item) && <OutcomeControl key={`${item.outcome}:${item.outcome_note}:${item.evidence_gone}`} c={c} item={item} label={label} />}
+          {needsOutcome(item) && <OutcomeControl key={`${item.outcome}:${item.outcome_note}:${item.outcome_until}:${item.evidence_gone}`} c={c} item={item} label={label} />}
           <Confirm label={`Remove ${label} from this case? The timeline keeps that it was here.`}
             onConfirm={async () => {
               try {

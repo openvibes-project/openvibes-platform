@@ -26,8 +26,11 @@ export const refHint: Record<CaseKind, string> = {
 };
 const statusLabel: Record<string, string> = { open: "Open", investigating: "Investigating", closed: "Closed" };
 const statusTone: Record<string, string> = { open: "bad", investigating: "warn", closed: "ok" };
+/** How a case closed before step 5d ended; new closes set none (the items carry the outcomes). */
 export const resolutionLabel: Record<string, string> = { mitigated: "Mitigated", false_positive: "False positive", accepted_risk: "Accepted risk" };
-export const outcomeLabel: Record<string, string> = { resolved: "Resolved", false_positive: "False positive", accepted_risk: "Accepted risk" };
+export const outcomeLabel: Record<string, string> = {
+  resolved: "Fixed", false_positive: "False positive", accepted_risk: "Risk accepted", confirmed_malicious: "Confirmed malicious", expected: "Expected activity",
+};
 export const severities = ["critical", "high", "medium", "low"] as const;
 
 export const caseNumber = (number: number) => `C-${number}`;
@@ -96,13 +99,17 @@ export function blockingItems(items: readonly CaseItem[]): CaseItem[] {
 
 type OutcomeChoice = { value: string; label: string; disabled: boolean; hint: string | undefined };
 
-/** The outcomes an item can take: "resolved" only while its evidence is gone. */
+/** The outcomes an item can take: "resolved" (Fixed) only while its evidence is gone. */
 export function outcomeChoices(item: Pick<CaseItem, "evidence_gone">): OutcomeChoice[] {
-  return [
-    { value: "resolved", label: "Resolved", disabled: !item.evidence_gone, hint: item.evidence_gone ? undefined : "Only when the evidence is gone" },
-    { value: "false_positive", label: "False positive", disabled: false, hint: undefined },
-    { value: "accepted_risk", label: "Accepted risk", disabled: false, hint: undefined },
-  ];
+  return Object.entries(outcomeLabel).map(([value, label]) => value === "resolved"
+    ? { value, label, disabled: !item.evidence_gone, hint: item.evidence_gone ? undefined : "Only when the evidence is gone" }
+    : { value, label, disabled: false, hint: undefined });
+}
+
+/** The outcome PUT body; accepted risk carries its re-open date (a local day, ended). */
+export function outcomeBody(outcome: string, note: string, until: string) {
+  if (outcome === "") return { outcome: null };
+  return { outcome, note: note.trim() || null, ...(outcome === "accepted_risk" ? { outcome_until: endOfLocalDay(until) } : {}) };
 }
 
 /** Outcomes other than "resolved" need a note saying why. */
@@ -114,37 +121,26 @@ export function endOfLocalDay(day: string): string | null {
   return year && month && d ? new Date(year, month - 1, d, 23, 59, 59).toISOString() : null;
 }
 
-export type CloseForm = { resolution: string; note: string; acceptedUntil: string };
+/** Closing asks for a closing note only (step 5d); the items carry how it ended. */
+export type CloseForm = { note: string };
 
 /** What still prevents closing, in words; empty when the case can close. */
-export function closeProblems(form: CloseForm, items: readonly CaseItem[], now = Date.now()): string[] {
+export function closeProblems(form: CloseForm, items: readonly CaseItem[]): string[] {
   const problems: string[] = [];
-  if (!(form.resolution in resolutionLabel)) problems.push("Choose how the case ended.");
-  if (form.note.trim() === "") problems.push("Add a note saying why.");
-  if (form.resolution === "accepted_risk") {
-    const until = endOfLocalDay(form.acceptedUntil);
-    if (until === null) problems.push("Choose the date the risk is accepted until.");
-    else if (Date.parse(until) <= now) problems.push("The date must be in the future.");
-  }
+  if (form.note.trim() === "") problems.push("Add a closing note.");
   const blocking = blockingItems(items);
   if (blocking.length > 0) problems.push(`${plural(blocking.length, "item")} still ${blocking.length === 1 ? "needs" : "need"} an outcome.`);
   return problems;
 }
 
 export type CaseFields = { title: string; severity: string; assignee: string };
-type Ending = { resolution: string; note: string; accepted_until: string | null };
-
-/** The PUT body: the API replaces every editable field, so all are sent. */
-export function updateBody(fields: CaseFields, status: string, ending?: Ending) {
+/** The PUT body: the API replaces every editable field, so all are sent;
+ * a closed case (closing, or staying closed) states its closing note. */
+export function updateBody(fields: CaseFields, status: string, closingNote?: string) {
   return {
     title: fields.title.trim(), severity: fields.severity, status, assignee_user_id: fields.assignee || null,
-    ...(status === "closed" && ending ? { resolution: ending.resolution, resolution_note: ending.note.trim(), accepted_until: ending.accepted_until } : {}),
+    ...(status === "closed" && closingNote !== undefined ? { closing_note: closingNote.trim() } : {}),
   };
-}
-
-/** The closing form as an `Ending` (accepted risk carries its date). */
-export function endingOf(form: CloseForm): Ending {
-  return { resolution: form.resolution, note: form.note, accepted_until: form.resolution === "accepted_risk" ? endOfLocalDay(form.acceptedUntil) : null };
 }
 
 type Detail = Record<string, unknown>;
@@ -168,8 +164,10 @@ export function eventText(event: CaseEvent, titleOf: (itemId: string) => string 
     case "item_removed": return `removed ${item()}`;
     case "item_outcome": return text(d.to) ? `marked ${item()} as ${(outcomeLabel[text(d.to) ?? ""] ?? "").toLowerCase()}` : `cleared the outcome of ${item()}`;
     case "resolved": {
+      // Cases closed before step 5d name a resolution; new closes do not.
+      const resolution = resolutionLabel[text(d.resolution) ?? ""];
       const until = text(d.accepted_until);
-      return `closed the case as ${(resolutionLabel[text(d.resolution) ?? ""] ?? "resolved").toLowerCase()}${until ? ` until ${date(until)}` : ""}`;
+      return resolution ? `closed the case as ${resolution.toLowerCase()}${until ? ` until ${date(until)}` : ""}` : "closed the case";
     }
     case "reopened":
       if (d.reason === "accepted_risk_expired") return "reopened the case because the accepted risk ran out";

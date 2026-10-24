@@ -101,9 +101,9 @@ test("Add to case on a command seen once puts that sibling in a case", async ({ 
   await menu.getByRole("button", { name: "New case…" }).click();
   await menu.getByLabel("Title").fill("Someone read passwd");
   await menu.getByRole("button", { name: "Open case" }).click();
-  await expect(page.locator(".toast")).toContainText("Opened C-105");
+  await expect(page.locator(".toast")).toContainText("Opened C-111");
   await page.keyboard.press("Escape");
-  await expect(once).toContainText("C-105");
+  await expect(once).toContainText("C-111");
 });
 
 test("the last 24 hours draw as bars, with the same numbers in a table", async ({ page }) => {

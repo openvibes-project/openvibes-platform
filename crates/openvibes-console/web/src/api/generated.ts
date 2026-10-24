@@ -543,6 +543,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/case-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Cases list. */
+        get: operations["list_case_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases": {
         parameters: {
             query?: never;
@@ -3236,13 +3253,31 @@ export interface components {
             /** @description Enabled users who hold `cases.read`. */
             items: components["schemas"]["CaseUserView"][];
         };
+        /** @description Cases per filter value, each with the other filters applied. */
+        CaseCountsView: {
+            /** @description By assignee. */
+            assignee: components["schemas"]["VulnAssigneeCountsView"];
+            /** @description By Contains value. */
+            contains: components["schemas"]["CountView"][];
+            /** @description By group (groups with a host the viewer sees, plus the chosen one). */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description By severity. */
+            severity: components["schemas"]["CountView"][];
+            /** @description By status. */
+            status: components["schemas"]["CountView"][];
+            /** @description By Updated value. */
+            updated: components["schemas"]["CountView"][];
+        };
         /** @description A case with the items and timeline the viewer can see. */
         CaseDetailView: components["schemas"]["CaseSummaryView"] & {
             /** @description The timeline, oldest first, without entries about hidden items. */
             events: components["schemas"]["CaseEventView"][];
             /** @description Visible items, oldest first. */
             items: components["schemas"]["CaseItemView"][];
-            /** @description Why it was closed. */
+            /**
+             * @description The closing note (for a case closed before step 5d, its resolution
+             *     note).
+             */
             resolution_note?: string | null;
         };
         /** @description One timeline entry. */
@@ -3272,6 +3307,13 @@ export interface components {
              *     `item_removed`, `item_outcome`, `resolved` or `reopened`.
              */
             kind: string;
+        };
+        /** @description A host of a visible item. */
+        CaseHostView: {
+            /** @description Agent id. */
+            agent_id: string;
+            /** @description Host name, when known. */
+            hostname?: string | null;
         };
         /** @description An item to add: what it is and its id. */
         CaseItemRef: {
@@ -3306,10 +3348,18 @@ export interface components {
             item_id: string;
             /** @description `alarm`, `finding`, `vulnerability`, `host` or `software`. */
             kind: string;
-            /** @description `resolved`, `false_positive` or `accepted_risk`. */
+            /**
+             * @description `resolved`, `false_positive`, `accepted_risk`,
+             *     `confirmed_malicious` or `expected`.
+             */
             outcome?: string | null;
-            /** @description Why, for the last two. */
+            /** @description Why, for all but `resolved`. */
             outcome_note?: string | null;
+            /**
+             * @description For `accepted_risk`: when it runs out (RFC 3339). The outcome then
+             *     clears, and a closed case reopens.
+             */
+            outcome_until?: string | null;
             /**
              * @description The object's id as the console's panels write it: the alarm id;
              *     `agent/rule_set/rule` for a finding; `agent/advisory` for a
@@ -3325,6 +3375,98 @@ export interface components {
             /** @description What to show for it, when it still exists. */
             title?: string | null;
         };
+        /** @description Visible items per kind. */
+        CaseKindsView: {
+            /**
+             * Format: int64
+             * @description Alarms.
+             */
+            alarms: number;
+            /**
+             * Format: int64
+             * @description Compliance findings.
+             */
+            findings: number;
+            /**
+             * Format: int64
+             * @description Hosts.
+             */
+            hosts: number;
+            /**
+             * Format: int64
+             * @description Software.
+             */
+            software: number;
+            /**
+             * Format: int64
+             * @description Vulnerabilities.
+             */
+            vulnerabilities: number;
+        };
+        /** @description One row: a case. Items, hosts and counts are only those the viewer sees. */
+        CaseListRowView: {
+            assignee?: null | components["schemas"]["CaseUserView"];
+            /** @description Stable UUID. */
+            case_id: string;
+            /**
+             * Format: int64
+             * @description Distinct hosts of visible items.
+             */
+            host_count: number;
+            /** @description The first five distinct hosts of visible items, by name. */
+            hosts: components["schemas"]["CaseHostView"][];
+            /** @description Visible items per kind. */
+            kinds: components["schemas"]["CaseKindsView"];
+            latest_note?: null | components["schemas"]["CaseNoteView"];
+            /**
+             * Format: int64
+             * @description Shown as `C-<number>`.
+             */
+            number: number;
+            /** @description Who opened it. */
+            opened_by: components["schemas"]["CaseUserView"];
+            /** @description `critical`, `high`, `medium` or `low`. */
+            severity: string;
+            /** @description `open`, `investigating` or `closed`. */
+            status: string;
+            /**
+             * Format: int64
+             * @description Visible alarms, findings and vulnerabilities (the items that take one).
+             */
+            takes_outcome: number;
+            /** @description Title. */
+            title: string;
+            /** @description Last change (RFC 3339). */
+            updated_at: string;
+            /**
+             * Format: int64
+             * @description Visible alarms, findings and vulnerabilities with an outcome.
+             */
+            with_outcome: number;
+        };
+        /** @description One page of the Cases list. */
+        CaseListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["CaseCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["CaseListRowView"][];
+            /** @description Summary line. */
+            summary: components["schemas"]["CaseSummaryLineView"];
+            /**
+             * Format: int64
+             * @description Cases matching every filter.
+             */
+            total: number;
+        };
+        /** @description The newest note on a case. */
+        CaseNoteView: {
+            /** @description RFC 3339. */
+            at: string;
+            /** @description Its first 120 characters. */
+            text: string;
+        };
         /** @description A page of cases, newest change first. */
         CasePage: {
             /** @description The cases the viewer can see. */
@@ -3332,9 +3474,36 @@ export interface components {
             /** @description Pass as `cursor` for the next page; absent on the last page. */
             next_cursor?: string | null;
         };
+        /**
+         * @description "N open · N investigating · N unassigned · N ready to close", over the
+         *     cases matching every filter but status that are not closed. Ready uses
+         *     close's own rule, hidden items included.
+         */
+        CaseSummaryLineView: {
+            /**
+             * Format: int64
+             * @description Investigating.
+             */
+            investigating: number;
+            /**
+             * Format: int64
+             * @description Open.
+             */
+            open: number;
+            /**
+             * Format: int64
+             * @description Ready to close.
+             */
+            ready_to_close: number;
+            /**
+             * Format: int64
+             * @description Not assigned.
+             */
+            unassigned: number;
+        };
         /** @description One case as listed. Counts include only items the viewer can see. */
         CaseSummaryView: {
-            /** @description When accepted risk runs out and the case reopens (RFC 3339). */
+            /** @description For such a case closed as accepted risk: when it reopens (RFC 3339). */
             accepted_until?: string | null;
             assignee?: null | components["schemas"]["CaseUserView"];
             /** @description Stable UUID. */
@@ -3360,7 +3529,11 @@ export interface components {
              * @description Visible alarms, findings and vulnerabilities that have no outcome.
              */
             pending_item_count: number;
-            /** @description `mitigated`, `false_positive` or `accepted_risk`, once closed. */
+            /**
+             * @description How a case closed before step 5d ended (`mitigated`,
+             *     `false_positive` or `accepted_risk`), shown read-only; new closes
+             *     set none, as the items carry the outcomes.
+             */
             resolution?: string | null;
             /** @description `critical`, `high`, `medium` or `low`. */
             severity: string;
@@ -5728,13 +5901,19 @@ export interface components {
         };
         /** @description Sets or clears an item's outcome. */
         SetCaseItemOutcomeRequest: {
-            /** @description Required for `false_positive` and `accepted_risk`. */
+            /** @description Required for all but `resolved` (1 to 4000 characters). */
             note?: string | null;
             /**
-             * @description `resolved` (only when the evidence is gone), `false_positive` or
-             *     `accepted_risk`; absent or `null` clears it.
+             * @description `resolved` (only when the evidence is gone), `false_positive`,
+             *     `accepted_risk`, `confirmed_malicious` or `expected`; absent or
+             *     `null` clears it.
              */
             outcome?: string | null;
+            /**
+             * @description Required for `accepted_risk`, and only there: an RFC 3339 time in
+             *     the next 365 days, when the acceptance runs out.
+             */
+            outcome_until?: string | null;
         };
         /** @description A set's new default. */
         SetRuleSetDefaultRequest: {
@@ -6259,20 +6438,14 @@ export interface components {
         };
         /** @description Replaces a case's editable fields; send every field. */
         UpdateCaseRequest: {
-            /**
-             * @description Required for `accepted_risk` (RFC 3339, in the future): the case
-             *     reopens when it passes.
-             */
-            accepted_until?: string | null;
             /** @description A user with `cases.read`; absent or `null` means nobody. */
             assignee_user_id?: string | null;
             /**
-             * @description How it ended, required with `closed`: `mitigated`, `false_positive`
-             *     or `accepted_risk`. Absent otherwise.
+             * @description A short summary of how it ended (1 to 4000 characters): required
+             *     with `closed`, absent otherwise. On a case that stays closed it must
+             *     be the one it has.
              */
-            resolution?: string | null;
-            /** @description Why, required with a resolution (at most 4000 characters). */
-            resolution_note?: string | null;
+            closing_note?: string | null;
             /** @description `critical`, `high`, `medium` or `low`. */
             severity: string;
             /**
@@ -8702,6 +8875,87 @@ export interface operations {
                 };
             };
             /** @description Update unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_case_page: {
+        parameters: {
+            query?: {
+                /** @description Title, `C-<number>`, the number, or the opener's name (contains). */
+                q?: string;
+                /** @description active (default: not closed), open, investigating, closed or all. */
+                status?: string;
+                /** @description critical, high, medium or low. */
+                severity?: string;
+                /** @description me, unassigned or a user id. */
+                assignee?: string;
+                /** @description alarms, vulnerabilities or findings: holds a visible item of that kind. */
+                contains?: string;
+                /** @description An agent id: a visible item on that host. */
+                host?: string;
+                /** @description A host group id: a visible item on a host in it. */
+                group?: string;
+                /** @description today, week (the last 7 days) or quiet (not for 7 days or more). */
+                updated?: string;
+                /** @description updated (default), severity, number or opened. */
+                sort?: string;
+                /** @description asc or desc (default). */
+                dir?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the cases the caller can see */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and callers without cases.read are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

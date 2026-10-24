@@ -23,9 +23,11 @@ pub struct CaseSummaryView {
     pub title: String,
     /// `open`, `investigating` or `closed`.
     pub status: String,
-    /// `mitigated`, `false_positive` or `accepted_risk`, once closed.
+    /// How a case closed before step 5d ended (`mitigated`,
+    /// `false_positive` or `accepted_risk`), shown read-only; new closes
+    /// set none, as the items carry the outcomes.
     pub resolution: Option<String>,
-    /// When accepted risk runs out and the case reopens (RFC 3339).
+    /// For such a case closed as accepted risk: when it reopens (RFC 3339).
     pub accepted_until: Option<String>,
     /// `critical`, `high`, `medium` or `low`.
     pub severity: String,
@@ -75,10 +77,14 @@ pub struct CaseItemView {
     pub hostname: Option<String>,
     /// True while the case is not closed.
     pub active: bool,
-    /// `resolved`, `false_positive` or `accepted_risk`.
+    /// `resolved`, `false_positive`, `accepted_risk`,
+    /// `confirmed_malicious` or `expected`.
     pub outcome: Option<String>,
-    /// Why, for the last two.
+    /// Why, for all but `resolved`.
     pub outcome_note: Option<String>,
+    /// For `accepted_risk`: when it runs out (RFC 3339). The outcome then
+    /// clears, and a closed case reopens.
+    pub outcome_until: Option<String>,
     /// Who added it.
     pub added_by: CaseUserView,
     /// RFC 3339.
@@ -124,7 +130,8 @@ pub struct CaseDetailView {
     /// The list fields.
     #[serde(flatten)]
     pub case: CaseSummaryView,
-    /// Why it was closed.
+    /// The closing note (for a case closed before step 5d, its resolution
+    /// note).
     pub resolution_note: Option<String>,
     /// Visible items, oldest first.
     pub items: Vec<CaseItemView>,
@@ -199,22 +206,18 @@ pub struct UpdateCaseRequest {
     pub status: String,
     /// A user with `cases.read`; absent or `null` means nobody.
     pub assignee_user_id: Option<String>,
-    /// How it ended, required with `closed`: `mitigated`, `false_positive`
-    /// or `accepted_risk`. Absent otherwise.
-    #[expect(
-        dead_code,
-        reason = "ignored since step 5d; goes with the route change"
-    )]
-    pub resolution: Option<String>,
-    /// Why, required with a resolution (at most 4000 characters).
-    pub resolution_note: Option<String>,
-    /// Required for `accepted_risk` (RFC 3339, in the future): the case
-    /// reopens when it passes.
-    #[expect(
-        dead_code,
-        reason = "ignored since step 5d; goes with the route change"
-    )]
-    pub accepted_until: Option<String>,
+    /// A short summary of how it ended (1 to 4000 characters): required
+    /// with `closed`, absent otherwise. On a case that stays closed it must
+    /// be the one it has.
+    pub closing_note: Option<String>,
+    /// Refused since step 5d (`invalid_request` naming it), as the items
+    /// carry the outcomes; `null` counts as absent.
+    #[schema(ignore)]
+    pub resolution: Option<serde_json::Value>,
+    /// Refused since step 5d, as [`Self::resolution`]; accepted risk's
+    /// date is per item (`outcome_until`).
+    #[schema(ignore)]
+    pub accepted_until: Option<serde_json::Value>,
 }
 
 /// A note for the timeline.
@@ -229,11 +232,15 @@ pub struct AddCaseNoteRequest {
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetCaseItemOutcomeRequest {
-    /// `resolved` (only when the evidence is gone), `false_positive` or
-    /// `accepted_risk`; absent or `null` clears it.
+    /// `resolved` (only when the evidence is gone), `false_positive`,
+    /// `accepted_risk`, `confirmed_malicious` or `expected`; absent or
+    /// `null` clears it.
     pub outcome: Option<String>,
-    /// Required for `false_positive` and `accepted_risk`.
+    /// Required for all but `resolved` (1 to 4000 characters).
     pub note: Option<String>,
+    /// Required for `accepted_risk`, and only there: an RFC 3339 time in
+    /// the next 365 days, when the acceptance runs out.
+    pub outcome_until: Option<String>,
 }
 
 /// Filters and paging for the case list.

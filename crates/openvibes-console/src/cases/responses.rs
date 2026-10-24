@@ -35,6 +35,21 @@ pub(super) fn bad_request(code: &'static str, title: &'static str) -> Response {
     problem_response(ProblemDetails::new(StatusCode::BAD_REQUEST, code, title))
 }
 
+/// A request field that step 5d removed: 400 `invalid_request` naming it.
+pub(super) fn removed_field(field: &str) -> Response {
+    let mut problem = ProblemDetails::new(
+        StatusCode::BAD_REQUEST,
+        "invalid_request",
+        "The request body is invalid",
+    );
+    problem.field_errors = Some(vec![FieldError {
+        field: field.to_owned(),
+        code: "not_supported".to_owned(),
+        message: "Cases close with a closing note only; each item carries its outcome".to_owned(),
+    }]);
+    problem_response(problem)
+}
+
 pub(super) fn permission_denied() -> Response {
     problem_response(ProblemDetails::new(
         StatusCode::FORBIDDEN,
@@ -78,6 +93,7 @@ pub(super) fn invalid_message(code: &str) -> &'static str {
         "outcome_until_past" => "The date must be in the future",
         "outcome_until_too_far" => "The date must be within 365 days",
         "outcome_until_not_allowed" => "Only accepted risk has a re-open date",
+        "invalid_timestamp" => "Use an RFC 3339 time",
         _ => "The value is not valid",
     }
 }
@@ -176,6 +192,7 @@ mod tests {
             "outcome_until_past",
             "outcome_until_too_far",
             "outcome_until_not_allowed",
+            "invalid_timestamp",
         ] {
             assert_ne!(invalid_message(code), "The value is not valid", "{code}");
         }

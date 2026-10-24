@@ -13,6 +13,8 @@ use crate::http::AuthHttpState;
 
 pub(crate) mod items;
 pub(crate) mod list;
+pub(crate) mod list_page;
+pub(crate) mod list_page_types;
 pub(crate) mod lookups;
 mod permissions;
 mod request;
@@ -32,6 +34,7 @@ pub use types::{
 pub(crate) fn routes() -> Router<AuthHttpState> {
     Router::new()
         .route("/v1/cases", get(list::list_cases).post(list::create_case))
+        .route("/v1/case-list", get(list_page::list_case_page))
         .route("/v1/cases/for-item", get(items::cases_for_item))
         .route("/v1/cases/assignees", get(lookups::list_assignees))
         .route("/v1/cases/active-items", get(lookups::active_items))

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../../api/client";
 import type { CaseEvent, CaseItem, CaseSummary } from "../../api/types";
-import { afterAgent, caseBadges, statusBadge, localDay, blockingItems, caseErrorText, caseQuery, closeProblems, endOfLocalDay, endingOf, eventText, findingRef, itemPanel, outcomeChoices, refLabel, selectCases, updateBody, vulnerabilityRef } from "./cases";
+import { afterAgent, caseBadges, statusBadge, localDay, blockingItems, caseErrorText, caseQuery, closeProblems, endOfLocalDay, eventText, findingRef, itemPanel, outcomeBody, outcomeChoices, refLabel, selectCases, updateBody, vulnerabilityRef } from "./cases";
 
 const item = (over: Partial<CaseItem>): CaseItem => ({
   item_id: "i", kind: "alarm", ref: "1", active: true, added_at: "2026-01-01T00:00:00Z", added_by: { user_id: "u", username: "sam", display_name: "Sam" },
@@ -65,33 +65,31 @@ describe("closing", () => {
 
   it("says what is missing, in the order of the form", () => {
     const done = [item({ outcome: "false_positive" })];
-    const now = Date.parse("2026-10-04T12:00:00Z");
-    expect(closeProblems({ resolution: "", note: "", acceptedUntil: "" }, stuck, now)).toEqual([
-      "Choose how the case ended.", "Add a note saying why.", "1 item still needs an outcome.",
-    ]);
-    expect(closeProblems({ resolution: "mitigated", note: " fixed ", acceptedUntil: "" }, done, now)).toEqual([]);
-    expect(closeProblems({ resolution: "accepted_risk", note: "n", acceptedUntil: "" }, done, now)).toEqual(["Choose the date the risk is accepted until."]);
-    expect(closeProblems({ resolution: "accepted_risk", note: "n", acceptedUntil: "2026-10-03" }, done, now)).toEqual(["The date must be in the future."]);
-    expect(closeProblems({ resolution: "accepted_risk", note: "n", acceptedUntil: "2026-10-30" }, done, now)).toEqual([]);
-    expect(closeProblems({ resolution: "mitigated", note: "n", acceptedUntil: "" }, [item({}), item({ item_id: "z" })], now)).toEqual(["2 items still need an outcome."]);
+    expect(closeProblems({ note: "" }, stuck)).toEqual(["Add a closing note.", "1 item still needs an outcome."]);
+    expect(closeProblems({ note: " fixed " }, done)).toEqual([]);
+    expect(closeProblems({ note: "n" }, [item({}), item({ item_id: "z" })])).toEqual(["2 items still need an outcome."]);
   });
 
-  it("builds the PUT body with every editable field, the ending only when closing, and accepted risk's date at the end of the day", () => {
+  it("builds the PUT body with every editable field and the closing note only for a closed case", () => {
     const fields = { title: " Title ", severity: "high", assignee: "" };
     expect(updateBody(fields, "investigating")).toEqual({ title: "Title", severity: "high", status: "investigating", assignee_user_id: null });
-    expect(updateBody(fields, "open", { resolution: "mitigated", note: "x", accepted_until: null })).not.toHaveProperty("resolution");
-    expect(updateBody({ ...fields, assignee: "u-sam" }, "closed", endingOf({ resolution: "mitigated", note: " done ", acceptedUntil: "2031-01-15" })))
-      .toEqual({ title: "Title", severity: "high", status: "closed", assignee_user_id: "u-sam", resolution: "mitigated", resolution_note: "done", accepted_until: null });
-    expect(updateBody(fields, "closed", endingOf({ resolution: "accepted_risk", note: "n", acceptedUntil: "2031-01-15" })).accepted_until)
-      .toBe(new Date(2031, 0, 15, 23, 59, 59).toISOString());
+    expect(updateBody(fields, "open", "x")).not.toHaveProperty("closing_note");
+    expect(updateBody({ ...fields, assignee: "u-sam" }, "closed", " done "))
+      .toEqual({ title: "Title", severity: "high", status: "closed", assignee_user_id: "u-sam", closing_note: "done" });
     expect(endOfLocalDay("")).toBeNull();
+  });
+
+  it("sends accepted risk's re-open date at the end of the chosen day, and no date otherwise", () => {
+    expect(outcomeBody("accepted_risk", " n ", "2031-01-15")).toEqual({ outcome: "accepted_risk", note: "n", outcome_until: new Date(2031, 0, 15, 23, 59, 59).toISOString() });
+    expect(outcomeBody("expected", "n", "2031-01-15")).toEqual({ outcome: "expected", note: "n" });
+    expect(outcomeBody("", "n", "")).toEqual({ outcome: null });
   });
 
   it("offers 'resolved' only while the evidence is gone", () => {
     const resolved = (gone: boolean) => outcomeChoices({ evidence_gone: gone }).find((c) => c.value === "resolved");
     expect(resolved(false)).toMatchObject({ disabled: true });
     expect(resolved(true)).toMatchObject({ disabled: false });
-    expect(outcomeChoices({ evidence_gone: false }).filter((c) => !c.disabled).map((c) => c.value)).toEqual(["false_positive", "accepted_risk"]);
+    expect(outcomeChoices({ evidence_gone: false }).filter((c) => !c.disabled).map((c) => c.value)).toEqual(["false_positive", "accepted_risk", "confirmed_malicious", "expected"]);
   });
 });
 
@@ -108,6 +106,7 @@ describe("timeline and errors", () => {
     expect(eventText(event("item_outcome", { item_id: "i1", item_kind: "finding", item_ref: "a//R", to: "false_positive" }), titles)).toBe("marked compliance finding nginx → sh as false positive");
     expect(eventText(event("item_added", { item_id: "gone", item_kind: "compliance_finding", item_ref: "a/base/R-1" }), titles)).toBe("added compliance finding R-1 on a");
     expect(eventText(event("item_outcome", { item_id: "i1", item_kind: "alarm", item_ref: "9", to: null }), titles)).toBe("cleared the outcome of alarm nginx → sh");
+    expect(eventText(event("resolved", {}))).toBe("closed the case");
     expect(eventText(event("resolved", { resolution: "false_positive", accepted_until: null }))).toBe("closed the case as false positive");
     expect(eventText(event("resolved", { resolution: "accepted_risk", accepted_until: "2031-01-15T12:00:00Z" }))).toMatch(/^closed the case as accepted risk until .*2031/);
     expect(eventText(event("reopened", { reason: "manual" }))).toBe("reopened the case");

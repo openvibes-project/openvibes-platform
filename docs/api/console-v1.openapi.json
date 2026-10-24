@@ -2382,6 +2382,177 @@
         }
       }
     },
+    "/api/v1/case-list": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "The Cases list.",
+        "operationId": "list_case_page",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Title, `C-<number>`, the number, or the opener's name (contains).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "active (default: not closed), open, investigating, closed or all.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "description": "critical, high, medium or low.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "query",
+            "description": "me, unassigned or a user id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contains",
+            "in": "query",
+            "description": "alarms, vulnerabilities or findings: holds a visible item of that kind.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "description": "An agent id: a visible item on that host.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "description": "A host group id: a visible item on a host in it.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "updated",
+            "in": "query",
+            "description": "today, week (the last 7 days) or quiet (not for 7 days or more).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "updated (default), severity, number or opened.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc or desc (default).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the cases the caller can see",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and callers without cases.read are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cases": {
       "get": {
         "tags": [
@@ -13322,6 +13493,59 @@
           }
         }
       },
+      "CaseCountsView": {
+        "type": "object",
+        "description": "Cases per filter value, each with the other filters applied.",
+        "required": [
+          "status",
+          "severity",
+          "contains",
+          "updated",
+          "group",
+          "assignee"
+        ],
+        "properties": {
+          "assignee": {
+            "$ref": "#/components/schemas/VulnAssigneeCountsView",
+            "description": "By assignee."
+          },
+          "contains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By Contains value."
+          },
+          "group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCountView"
+            },
+            "description": "By group (groups with a host the viewer sees, plus the chosen one)."
+          },
+          "severity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By severity."
+          },
+          "status": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By status."
+          },
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "By Updated value."
+          }
+        }
+      },
       "CaseDetailView": {
         "allOf": [
           {
@@ -13354,7 +13578,7 @@
                   "string",
                   "null"
                 ],
-                "description": "Why it was closed."
+                "description": "The closing note (for a case closed before step 5d, its resolution\nnote)."
               }
             }
           }
@@ -13405,6 +13629,26 @@
           "kind": {
             "type": "string",
             "description": "`created`, `note`, `status`, `assigned`, `severity`, `item_added`,\n`item_removed`, `item_outcome`, `resolved` or `reopened`."
+          }
+        }
+      },
+      "CaseHostView": {
+        "type": "object",
+        "description": "A host of a visible item.",
+        "required": [
+          "agent_id"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name, when known."
           }
         }
       },
@@ -13483,14 +13727,21 @@
               "string",
               "null"
             ],
-            "description": "`resolved`, `false_positive` or `accepted_risk`."
+            "description": "`resolved`, `false_positive`, `accepted_risk`,\n`confirmed_malicious` or `expected`."
           },
           "outcome_note": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Why, for the last two."
+            "description": "Why, for all but `resolved`."
+          },
+          "outcome_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `accepted_risk`: when it runs out (RFC 3339). The outcome then\nclears, and a closed case reopens."
           },
           "ref": {
             "type": "string",
@@ -13509,6 +13760,196 @@
               "null"
             ],
             "description": "What to show for it, when it still exists."
+          }
+        }
+      },
+      "CaseKindsView": {
+        "type": "object",
+        "description": "Visible items per kind.",
+        "required": [
+          "alarms",
+          "findings",
+          "vulnerabilities",
+          "hosts",
+          "software"
+        ],
+        "properties": {
+          "alarms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Alarms."
+          },
+          "findings": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Compliance findings."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts."
+          },
+          "software": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Software."
+          },
+          "vulnerabilities": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Vulnerabilities."
+          }
+        }
+      },
+      "CaseListRowView": {
+        "type": "object",
+        "description": "One row: a case. Items, hosts and counts are only those the viewer sees.",
+        "required": [
+          "case_id",
+          "number",
+          "title",
+          "status",
+          "severity",
+          "opened_by",
+          "hosts",
+          "host_count",
+          "kinds",
+          "with_outcome",
+          "takes_outcome",
+          "updated_at"
+        ],
+        "properties": {
+          "assignee": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CaseUserView",
+                "description": "Who works on it."
+              }
+            ]
+          },
+          "case_id": {
+            "type": "string",
+            "description": "Stable UUID."
+          },
+          "host_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Distinct hosts of visible items."
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaseHostView"
+            },
+            "description": "The first five distinct hosts of visible items, by name."
+          },
+          "kinds": {
+            "$ref": "#/components/schemas/CaseKindsView",
+            "description": "Visible items per kind."
+          },
+          "latest_note": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CaseNoteView",
+                "description": "The newest note."
+              }
+            ]
+          },
+          "number": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Shown as `C-<number>`."
+          },
+          "opened_by": {
+            "$ref": "#/components/schemas/CaseUserView",
+            "description": "Who opened it."
+          },
+          "severity": {
+            "type": "string",
+            "description": "`critical`, `high`, `medium` or `low`."
+          },
+          "status": {
+            "type": "string",
+            "description": "`open`, `investigating` or `closed`."
+          },
+          "takes_outcome": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible alarms, findings and vulnerabilities (the items that take one)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Last change (RFC 3339)."
+          },
+          "with_outcome": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible alarms, findings and vulnerabilities with an outcome."
+          }
+        }
+      },
+      "CaseListView": {
+        "type": "object",
+        "description": "One page of the Cases list.",
+        "required": [
+          "items",
+          "total",
+          "counts",
+          "summary",
+          "generated_at"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/CaseCountsView",
+            "description": "Per-value counts."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaseListRowView"
+            },
+            "description": "The page."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CaseSummaryLineView",
+            "description": "Summary line."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Cases matching every filter."
+          }
+        }
+      },
+      "CaseNoteView": {
+        "type": "object",
+        "description": "The newest note on a case.",
+        "required": [
+          "text",
+          "at"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "text": {
+            "type": "string",
+            "description": "Its first 120 characters."
           }
         }
       },
@@ -13535,6 +13976,38 @@
           }
         }
       },
+      "CaseSummaryLineView": {
+        "type": "object",
+        "description": "\"N open · N investigating · N unassigned · N ready to close\", over the\ncases matching every filter but status that are not closed. Ready uses\nclose's own rule, hidden items included.",
+        "required": [
+          "open",
+          "investigating",
+          "unassigned",
+          "ready_to_close"
+        ],
+        "properties": {
+          "investigating": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Investigating."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open."
+          },
+          "ready_to_close": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Ready to close."
+          },
+          "unassigned": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Not assigned."
+          }
+        }
+      },
       "CaseSummaryView": {
         "type": "object",
         "description": "One case as listed. Counts include only items the viewer can see.",
@@ -13557,7 +14030,7 @@
               "string",
               "null"
             ],
-            "description": "When accepted risk runs out and the case reopens (RFC 3339)."
+            "description": "For such a case closed as accepted risk: when it reopens (RFC 3339)."
           },
           "assignee": {
             "oneOf": [
@@ -13609,7 +14082,7 @@
               "string",
               "null"
             ],
-            "description": "`mitigated`, `false_positive` or `accepted_risk`, once closed."
+            "description": "How a case closed before step 5d ended (`mitigated`,\n`false_positive` or `accepted_risk`), shown read-only; new closes\nset none, as the items carry the outcomes."
           },
           "severity": {
             "type": "string",
@@ -19336,14 +19809,21 @@
               "string",
               "null"
             ],
-            "description": "Required for `false_positive` and `accepted_risk`."
+            "description": "Required for all but `resolved` (1 to 4000 characters)."
           },
           "outcome": {
             "type": [
               "string",
               "null"
             ],
-            "description": "`resolved` (only when the evidence is gone), `false_positive` or\n`accepted_risk`; absent or `null` clears it."
+            "description": "`resolved` (only when the evidence is gone), `false_positive`,\n`accepted_risk`, `confirmed_malicious` or `expected`; absent or\n`null` clears it."
+          },
+          "outcome_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required for `accepted_risk`, and only there: an RFC 3339 time in\nthe next 365 days, when the acceptance runs out."
           }
         },
         "additionalProperties": false
@@ -20599,13 +21079,6 @@
           "status"
         ],
         "properties": {
-          "accepted_until": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Required for `accepted_risk` (RFC 3339, in the future): the case\nreopens when it passes."
-          },
           "assignee_user_id": {
             "type": [
               "string",
@@ -20613,19 +21086,12 @@
             ],
             "description": "A user with `cases.read`; absent or `null` means nobody."
           },
-          "resolution": {
+          "closing_note": {
             "type": [
               "string",
               "null"
             ],
-            "description": "How it ended, required with `closed`: `mitigated`, `false_positive`\nor `accepted_risk`. Absent otherwise."
-          },
-          "resolution_note": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Why, required with a resolution (at most 4000 characters)."
+            "description": "A short summary of how it ended (1 to 4000 characters): required\nwith `closed`, absent otherwise. On a case that stays closed it must\nbe the one it has."
           },
           "severity": {
             "type": "string",

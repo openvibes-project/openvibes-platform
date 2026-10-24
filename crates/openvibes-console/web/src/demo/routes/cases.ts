@@ -1,6 +1,7 @@
 import { splitRef } from "../../panels/cases/cases";
 import { seedCases } from "../caseSeed";
 import { createCaseStore } from "../cases";
+import { registerCaseListRoute } from "./caseList";
 import type { DemoContext } from "../context";
 import { browserPersistence, json, page, problem } from "../http";
 
@@ -17,6 +18,8 @@ export function registerCaseRoutes(ctx: DemoContext) {
       return data.access.users.filter((u) => u.enabled && rolesOf(u.user_id).some((r) => r.permissions.includes("cases.read"))).map((u) => u.user_id);
     },
     canSee: visible,
+    // The demo's one host scope (context.ts): every host when hosts.read reaches all.
+    global: !ctx.scoped,
     hostname: (agentId) => data.agents.find((a) => a.id === agentId)?.hostname ?? null,
     facts: (kind, ref) => {
       const [first, rest] = splitRef(ref);
@@ -47,6 +50,7 @@ export function registerCaseRoutes(ctx: DemoContext) {
     return result.status === 200 ? json(page(result.body as unknown[], query)) : send(result);
   };
   route("GET", "/api/v1/cases", "cases.read", (_, query) => listed(query));
+  registerCaseListRoute({ ...ctx, cases });
   // Setting or changing the assignee needs cases.assign too (cases/list.rs).
   const mayAssign = permissions.includes("cases.assign");
   const denied = () => problem(403, "permission_denied", "Permission denied");
