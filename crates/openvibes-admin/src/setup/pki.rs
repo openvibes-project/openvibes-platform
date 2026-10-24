@@ -278,8 +278,9 @@ struct Tls {
     stem: &'static str,
     cert: &'static str,
     key: &'static str,
-    /// Console: certificate then intermediate in one file, both 0640
-    /// root:openvibes-console; otherwise the key belongs to the service.
+    /// Console: certificate then intermediate in one file (0644) and the
+    /// key (0640), root:openvibes-console; otherwise the key belongs to
+    /// the service.
     console: bool,
     owner: &'static str,
 }
@@ -420,12 +421,10 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         let crt = format!("{out}/{}.crt", names[0]);
         let key = format!("{out}/{}.key", names[0]);
         if tls.console {
-            // The issuer file may hold the old intermediate after the new.
-            let intermediate = platform_pki::first_certificate(&ctx.read(INTERMEDIATE)?)
-                .map_err(|error| format!("{INTERMEDIATE}: {error:?}"))?;
-            let chain = format!("{}{intermediate}", ctx.read(&crt)?);
+            // Already the chain: the leaf, then its issuer (the bundle's
+            // first certificate only).
             let owner = Some(("root", tls.owner));
-            ctx.put(tls.cert, chain.as_bytes(), owner, 0o644)?;
+            ctx.copy(&crt, tls.cert, owner, 0o644)?;
             ctx.copy(&key, tls.key, owner, 0o640)?;
         } else {
             ctx.copy(&crt, tls.cert, None, 0o644)?;

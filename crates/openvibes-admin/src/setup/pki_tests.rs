@@ -247,13 +247,10 @@ fn certificates_are_issued_for_every_name_and_installed() {
         ]
     );
     assert_eq!(fake.text("/etc/openvibes/tls/ingest.crt"), "ingest CERT\n");
+    // As issued: `ca issue-server` writes the leaf, then its issuer.
     assert_eq!(
         fake.text("/etc/openvibes/tls/console-chain.pem"),
-        format!(
-            "console CERT\n{}",
-            platform_pki::first_certificate(&fake.text("/etc/openvibes/pki/intermediate.crt"))
-                .unwrap()
-        )
+        "console CERT\n"
     );
     use std::os::unix::fs::PermissionsExt;
     let mode = |abs: &str| {

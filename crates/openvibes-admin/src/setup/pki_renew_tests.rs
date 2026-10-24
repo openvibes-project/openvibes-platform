@@ -7,7 +7,7 @@ use platform_host::{Step, StepState};
 use crate::setup::{
     check,
     fake::{Fake, plan},
-    pki_tests::{certificate, installed_certificates, issuing},
+    pki_tests::{ADMIN, certificate, installed_certificates, with},
     plan::Component::*,
     run_step,
 };
@@ -58,7 +58,7 @@ fn a_console_chain_not_world_readable_is_todo() {
 
 #[test]
 fn renewal_writes_the_console_chain_0644_with_one_intermediate() {
-    let fake = issuing("renew-chain");
+    let fake = Fake::new("renew-chain");
     // The issuer file: the new intermediate, then the old one.
     let bundle = format!(
         "{}{}",
@@ -66,6 +66,23 @@ fn renewal_writes_the_console_chain_0644_with_one_intermediate() {
         certificate(&["old"], 100)
     );
     fake.file("/etc/openvibes/pki/intermediate.crt", &bundle);
+    fake.file("/var/lib/openvibes-ingest/intermediate.key", "KEY");
+    // As the real `ca issue-server`: the leaf, then its issuer.
+    fake.effect(&with(&ADMIN, &["ca", "issue-server"]), |root| {
+        let stage = root.join("run/openvibes-ca");
+        let issuer = std::fs::read_to_string(stage.join("issuer.crt")).unwrap();
+        let issuer = platform_pki::first_certificate(&issuer).unwrap();
+        for service in ["ingest", "distribution", "console"] {
+            let crt = stage.join(format!("{service}/platform.example.com.crt"));
+            if crt.parent().unwrap().exists() && !crt.exists() {
+                let leaf = platform_pki::first_certificate(&certificate(&NAMES, 90)).unwrap();
+                std::fs::write(&crt, format!("{leaf}{issuer}")).unwrap();
+                std::fs::write(crt.with_extension("key"), "KEY").unwrap();
+                return;
+            }
+        }
+        panic!("no output directory");
+    });
     fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
     let state = run_step(
         &fake.ctx(&plan(&[Ingest, Console, Distribution])),
@@ -73,11 +90,7 @@ fn renewal_writes_the_console_chain_0644_with_one_intermediate() {
     );
     assert!(matches!(state, StepState::Done(_)), "{state:?}");
     let chain = fake.text(CHAIN);
-    assert_eq!(
-        chain.matches("BEGIN CERTIFICATE").count(),
-        1,
-        "leaf is fake"
-    );
+    assert_eq!(chain.matches("BEGIN CERTIFICATE").count(), 2, "{chain}");
     assert!(chain.ends_with(&platform_pki::first_certificate(&bundle).unwrap()));
     let mode = std::fs::metadata(fake.root.join(CHAIN.trim_start_matches('/')))
         .unwrap()
