@@ -46,8 +46,9 @@ is addressed as `~unknown`.
   passes when it is active and in reach, its heartbeat health is at most
   24 hours old and lists the rule set with a version, neither
   `not_assigned` nor refused, that version's indexed bundle has the rule,
-  the rule's collectors ran `ok` in its last scan, and no finding blocks
-  it. **Ceilings:** the agent reports only a count of rules it could not
+  the rule's collectors ran `ok` in its last scan, that scan finished
+  within the 24-hour window (`last_scan.finished_at_unix_ms`, read as
+  digits before any cast), and no finding blocks it. **Ceilings:** the agent reports only a count of rules it could not
   evaluate, so a host whose facts for this one rule were missing passes;
   a site rule with no known prefix needs every reported collector `ok`;
   a host stuck in a resync with an unended P13 match is neither failing
@@ -55,7 +56,8 @@ is addressed as `~unknown`.
 - **"n of m"**: n failing hosts, m failing plus passing. The hosts bar
   shows open, mitigated, accepted and false positive among the failing,
   then pass.
-- **Severity:** the newest finding's, else the rule's indexed severity.
+- **Severity:** the newest finding's (an unknown value gives way), else
+  the rule's indexed severity; the page uses the same rule.
   **Title:** the newest indexed title, else the rule ID (a rule without
   metadata).
 - **A stale host** (last contact older than the 24-hour window) has no
@@ -90,14 +92,17 @@ evidence on a host opens its latest observation with "Why it triggered".
 ## Bulk
 
 Rows send `{rule_set_id, rule_id, open_only: true}` (plus `agent_id` with
-the Host chip). Set state and Assign change only open, failing pairs in
-reach; mitigated, accepted and false-positive pairs, ended findings,
+the Host chip, and `group` with the Group filter: only that group's hosts,
+which the row counts). Set state and Assign change only open pairs failing
+as the row counts them (seen within the window) in reach; mitigated, accepted and false-positive pairs, ended findings,
 passing hosts and hosts out of reach are never touched or counted toward
 the 10,000 cap, and a row with none open left is skipped as "not open".
 There is no Reopen on the list: it is on the page's Hosts card, which
 sends named `{agent_id, rule_set_id, rule_id}` pairs. **Add to case** from
-a row adds only its failing (not ended) findings, closed ones included; a
-named pair is added as before.
+a row adds only its failing findings (not ended, seen within the window),
+closed ones included; a named pair is added as before. The page offers Add
+to case only when a failing host is in the caller's `cases.write` and
+`cases.read` reach.
 
 ## Configuration
 
@@ -134,6 +139,17 @@ comes from the signed rule sets' optional `explain` and `check` fields.
   text yet" until the rule sets carry them.
 - Fixed (ended) findings no longer count as failing anywhere, so existing
   compliance counts (host page, dashboards, Hosts list) may drop.
+- The Compliance menu count, the dashboard's Breakdown tile and the
+  `compliance.open.*` metrics (and top hosts) now count open failing pairs
+  only (`check_list_sql::open_failing`): findings unseen for a day and
+  mitigated, accepted or false-positive ones leave them, so these numbers
+  may drop after the upgrade; recorded history before it keeps its old
+  values. The groups read counts an expired acceptance as open.
+- A host passes only when its last scan finished within the day; a host
+  that heartbeats but has not scanned for a day stops passing.
+- Bulk from a list row under a Group filter now reaches only that group's
+  hosts (Compliance and Vulnerabilities), and a check row no longer
+  reaches stale pairs.
 - Hosts with no report in the last day show "—" for failing checks
   instead of their last-known count, and are no longer "none open".
 
@@ -141,7 +157,9 @@ comes from the signed rule sets' optional `explain` and `check` fields.
 
 - Store: `tests/check_list.rs`, `tests/check_list_filters.rs`,
   `tests/check_area.rs`, `tests/check_summary.rs`,
-  `tests/bulk_triage_compliance.rs`, `tests/ended_findings.rs`,
+  `tests/bulk_triage_compliance.rs`, `tests/bulk_triage_group.rs`,
+  `tests/ended_findings.rs`, `tests/finding_summary_failing.rs`,
+  `tests/check_scan_age.rs`, `tests/check_severity_rule.rs`,
   `tests/host_list_stale.rs`, `tests/host_summary.rs`; timing
   (ignored, the ruling 18 fleet; the list and a widespread check's page,
   full and scoped, under 2 s):

@@ -43,8 +43,10 @@ advisories, open-only closes and assigns, `open_only` items) is in
 `rule_id`), with `agent_id` for the Host chip and `open_only` for a list
 row (`open_only` stays refused on alarm items, 400). A rule-wide item, or any
 item with `open_only`, makes Set state and Assign change only the pairs that
-are failing (not ended) and open: no triage, open, or an accepted risk whose
-expiry has passed. Other pairs are not expanded, so they neither count toward
+are failing as the list counts them (not ended and seen within the 24-hour
+window, `check_list_sql::failing`) and open: no triage, open, or an accepted
+risk whose expiry has passed. A stale pair (never ended, unseen for a day) is
+neither changed, added to a case nor counted toward the cap. Other pairs are not expanded, so they neither count toward
 the 10,000 cap nor appear in `skipped`; when none is left the row is skipped
 as "not open" (a named pair too). An assign on an expired acceptance writes it
 back open with no expiry, as in vulnerabilities. Ended findings and hosts out
@@ -56,6 +58,18 @@ finding has ended is "not found or out of scope". Code: `platform-store`
 `bulk_triage/compliance.rs`; demo `web/src/demo/routes/triage.ts`. The
 Compliance list and a check's page that send these items:
 [console-compliance.md](console-compliance.md#bulk).
+
+## A row under a Group filter
+
+Compliance and vulnerability items take an optional `group` (a host group
+UUID, lowercased; anything else is 400 `invalid_items`, as is `group` on an
+alarm item). The item then reaches only that group's members
+(`console_host_group_membership`), still inside the actor's reach, in every
+mode, a reopen included. The Compliance and Vulnerabilities lists send the
+Group filter's id with each row's items, so the confirmation's counts (the
+group side of the row) are what changes. Store: `bulk_triage::ListRow`
+(`open_only`, `group`) per item; `tests/bulk_triage_group.rs`,
+`tests/bulk_http_compliance.rs`.
 
 ## Configuration and failures
 

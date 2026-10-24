@@ -41,7 +41,9 @@ Show everything, without page changes for details:
     bar (open, mitigated, accepted, false positive, pass) named for screen
     readers, with the words under it. Bulk sends
     `{rule_set_id, rule_id, open_only: true}` (plus the Host chip's
-    `agent_id`): Set state and Assign change only open, failing hosts and ask
+    `agent_id`, and the Group filter's `group`, so a row under a group
+    changes only that group's hosts; the Vulnerabilities list sends it
+    too): Set state and Assign change only open, failing hosts and ask
     first ("Changes up to N open hosts"); a check no host fails counts for
     nothing, and a selection of only those offers no action and says why;
     there is no Reopen. Old URLs keep their meaning (`state=all` and
@@ -789,7 +791,9 @@ for the pages not yet moved; its saved views stay in the browser.
   `explain` and `check` text show their message. Fixed (ended) findings no
   longer count as failing anywhere, so compliance counts may drop, and a
   host with no report in the last day shows "—" for failing checks on the
-  host page and the Hosts list; see
+  host page and the Hosts list. The Compliance menu count and the
+  dashboard's Breakdown tile count open failing pairs only, as the list
+  does; see
   [console-compliance.md](console-compliance.md#upgrading).
 
 ## Configuration

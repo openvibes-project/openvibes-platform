@@ -760,8 +760,16 @@ One failing definition (step 5c ruling): `check_list_sql::failing(now)` (not
 ended, seen within `WINDOW`) and `open_failing(now)` (failing, and open by
 the pair state: no triage, open, or an expired acceptance) are the only
 SQL that says what fails. The list, a check's page, the host page's tile
-and top failing (`host_summary`) and the Hosts list's failing count
-(`host_list_sql`) all use them, so their numbers agree. A host whose last
+and top failing (`host_summary`), the Hosts list's failing count
+(`host_list_sql`), `finding_summary_in_scope` (the menu count and the
+Breakdown tile), the count history's compliance columns (`history.rs`
+`host_counts_sql`: metrics and top hosts) and bulk from a check row
+(`bulk_triage/compliance.rs`) all use them, so their numbers agree;
+`finding_groups_in_scope` takes its triage state from `PAIR_STATE` (an
+expired acceptance is open). Passing also needs the host's last scan to
+have finished within `WINDOW` (`scan_fresh`, read as 1–18 digits before
+the cast), shared by the list and `passing_hosts_sql`
+(`tests/check_scan_age.rs`, `tests/finding_summary_failing.rs`). A host whose last
 contact is older than `WINDOW` is compliance-stale on the host page and
 the Hosts list: no failing count rather than a misleading 0.
 
@@ -1136,8 +1144,10 @@ risk, when the vulnerability is fixed.
   assign expands open pairs only, so closed ones neither count toward the
   cap nor come back, and an item with none open is skipped as "not open";
   the vulnerability half is `bulk_triage/vulns.rs`; a rule-wide or
-  `open_only` compliance item does the same over failing (not ended), open
-  findings, `bulk_triage/compliance.rs`); each item goes
+  `open_only` compliance item does the same over open findings failing as
+  the list counts them (`check_list_sql::failing`), `bulk_triage/compliance.rs`;
+  `ListRow { open_only, group }` per item, where `group` keeps the item to
+  that host group's members, still in scope); each item goes
   through its single-item update, skipped items come back with a reason,
   one audit row per action.
 - `triage_history::events`: the newest 200 changes of an alarm, or of a
@@ -1145,7 +1155,7 @@ risk, when the vulnerability is fixed.
 - `console_cases::active_items`: refs of one kind in open cases the
   caller can see, with the case number.
 - Tests: `tests/migrate.rs` (`triage_v2_retires_investigating`),
-  `tests/vulnerability_triage.rs`, `tests/bulk_triage.rs`, `tests/bulk_triage_cap.rs`, `tests/bulk_triage_compliance.rs`.
+  `tests/vulnerability_triage.rs`, `tests/bulk_triage.rs`, `tests/bulk_triage_cap.rs`, `tests/bulk_triage_compliance.rs`, `tests/bulk_triage_group.rs`.
 
 ## Network devices (schema 46)
 

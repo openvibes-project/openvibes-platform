@@ -965,6 +965,10 @@ These fill gaps in the Compliance list and a check's page. Rule titles are alrea
 - **One failing definition.** The host page's tile and top failing, and the Hosts list's failing count, use the list's: a failing finding whose triage state is open (an expired acceptance counts as open), `check_list_sql::open_failing`.
 - **A host with no report in the last day is unknown, not 0.** When its last contact is older than the 24-hour window, the host page shows "—" with "No report in the last day" and no failing count, and the Hosts list shows "—" in its Problems column's compliance part and leaves the host out of "none open".
 - **The check page is timed too:** a widespread check's summary (Same area reads every failing finding in reach in the area) must answer within 2 s on the ruling 18 fleet, full and scoped.
+- **Bulk from a check row reaches what the row counts** (final review): a rule-wide or `open_only` item reaches only pairs failing by the list's definition (not ended and seen within the 24-hour window), in every mode (state, assign, add to case and the "not open" test); a stale, never-ended pair is neither changed, added to a case nor counted toward the cap.
+- **A row under a Group filter sends its group** (final review): compliance and vulnerability bulk items take an optional `group` (UUID); the item then reaches only that group's members, still inside reach, so the confirmation's count is the row's. Both lists send it when the Group filter is set.
+- **The compliance summary uses the one failing definition** (final review): `/v1/compliance/summary` (the menu count, the dashboard's Breakdown tile) and the count history (`compliance.open.*` metrics, top hosts) count open failing pairs (`check_list_sql::open_failing`), so they agree with the list they open; the older groups read counts an expired acceptance as open.
+- **Passing needs a recent scan** (final review): the host's last scan (`last_scan.finished_at_unix_ms`, read as 1–18 digits before any cast) must have finished within the 24-hour window, on the list and a check's page alike.
 
 ## 11. Dashboards
 
