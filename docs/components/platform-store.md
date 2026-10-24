@@ -756,6 +756,15 @@ the host page's failing checks (`host_summary`), `finding_summary_in_scope`,
 `ended_at` set out; only the per-rule endpoint list keeps them, for its
 "fixed" badge (`tests/ended_findings.rs`).
 
+One failing definition (step 5c ruling): `check_list_sql::failing(now)` (not
+ended, seen within `WINDOW`) and `open_failing(now)` (failing, and open by
+the pair state: no triage, open, or an expired acceptance) are the only
+SQL that says what fails. The list, a check's page, the host page's tile
+and top failing (`host_summary`) and the Hosts list's failing count
+(`host_list_sql`) all use them, so their numbers agree. A host whose last
+contact is older than `WINDOW` is compliance-stale on the host page and
+the Hosts list: no failing count rather than a misleading 0.
+
 Tests: `tests/check_list.rs`, `tests/check_list_filters.rs`,
 `tests/check_area.rs`, `tests/rule_meta.rs`; the 500,000-finding timing
 (`tests/check_list_timing.rs`) is in console-read.md.
@@ -784,7 +793,11 @@ parses the port or unit from the rule's indexed expression
 (`member_of`, `rule_port`, `rule_unit`; schema 63 adds
 `console_rule_meta.expression`, written with the severity) and counts the
 hosts in reach with it (`host_listeners` exposed, `host_services`).
-Tests: `tests/check_summary.rs`.
+Same area counts the other failing checks in reach whose
+`console_check_area` matches, reading every failing finding in reach in
+that area; its timing on the ruling 18 fleet is in console-read.md.
+Tests: `tests/check_summary.rs`; the overview is
+[console-compliance.md](console-compliance.md).
 
 ## The host page summary (`host_summary::summary`)
 

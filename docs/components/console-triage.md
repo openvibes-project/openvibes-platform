@@ -53,7 +53,9 @@ named host without `open_only` behave as before. Add to case from a row (rule-wi
 every failing finding, closed ones included, never an ended one; a named host
 without `open_only` is added as before. A named host with `open_only` whose
 finding has ended is "not found or out of scope". Code: `platform-store`
-`bulk_triage/compliance.rs`; demo `web/src/demo/routes/triage.ts`.
+`bulk_triage/compliance.rs`; demo `web/src/demo/routes/triage.ts`. The
+Compliance list and a check's page that send these items:
+[console-compliance.md](console-compliance.md#bulk).
 
 ## Configuration and failures
 

@@ -30,7 +30,8 @@ Show everything, without page changes for details:
   route asks `GET /api/v1/session` first and shows sign-in on 401. Sign out
   POSTs `/auth/v1/logout` with the session CSRF token.
 - **Views** (the same set v1 had):
-  - Compliance (`/compliance`, approved screen 27, roles 5c): one row per
+  - Compliance (`/compliance`, approved screen 27, roles 5c; overview in
+    [console-compliance.md](console-compliance.md)): one row per
     check (a rule of a rule set) over `GET /api/v1/compliance-list`, with the
     shared FilterBar (Severity, State, Rule set, Area, Group, Assignee; Host
     as a chip), the summary line ("N checks failing on N hosts · N critical ·
@@ -781,6 +782,15 @@ for the pages not yet moved; its saved views stay in the browser.
   keep their filters (`exploited`, `reboot`, `nofix`, `lowconf` become
   `signal`), and views saved in the browser move to the person's account;
   see [console-vulnerabilities.md](console-vulnerabilities.md#upgrading).
+- **Roles step 5c (Compliance):** one list row and one page per check. The
+  finding panel became the check's page `/compliance/{rule_set_id}/{rule_id}`;
+  old links (`?open=finding:set/rule`, dashboards, cases, the audit log)
+  redirect to it. Passing is inferred from heartbeat health; rules without
+  `explain` and `check` text show their message. Fixed (ended) findings no
+  longer count as failing anywhere, so compliance counts may drop, and a
+  host with no report in the last day shows "—" for failing checks on the
+  host page and the Hosts list; see
+  [console-compliance.md](console-compliance.md#upgrading).
 
 ## Configuration
 

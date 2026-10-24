@@ -894,7 +894,7 @@ These fill gaps in the Compliance list and a check's page. Rule titles are alrea
    - **Pairs under a row:** every host in reach with a current finding for the check (`current_findings`), plus the hosts that pass it (user decision 1).
    - **Failing** means a current finding with `ended_at IS NULL`, seen within the window the current Compliance list uses by default. Ended findings are no longer failing.
    - **Title, message, explain and check** come from `console_rule_meta`, using the newest indexed version of the rule. A check without metadata shows its rule ID.
-   - **Severity** is the severity of the newest finding.
+   - **Severity** is the severity of the newest finding, else the rule's indexed severity (`console_rule_meta.severity`, schema 63), so a check only passing hosts run still has one.
    - **Since** is the earliest first-seen time among the failing pairs.
    - **"n of m":** n is failing hosts; m is failing plus passing hosts.
    - **The hosts bar** shows open, mitigated, accepted and false-positive counts among the failing pairs (by triage state, with an expired acceptance counting as open), then pass.
@@ -937,7 +937,7 @@ These fill gaps in the Compliance list and a check's page. Rule titles are alrea
     - Reopen is offered only on the page's Hosts table;
     - passing hosts are never touched.
 
-    `open_only` is extended to compliance items.
+    `open_only` is extended to compliance items. Add to case from a row adds only its failing (not ended) pairs: a fixed host is not something to investigate from the list. A named pair keeps today's behaviour.
 11. **Hosts card segments:**
     - **All:** failing and passing;
     - **Failing:** a failing pair in any triage state;
@@ -958,6 +958,13 @@ These fill gaps in the Compliance list and a check's page. Rule titles are alrea
 16. **Ask about this** sends `{kind:"finding", id:"set/rule"}`, as the panel does today. It is shown with `assistant.use`.
 17. **⋯** holds Export (a CSV of the check's hosts in reach, with `compliance.export` or the existing findings export permission) and Copy link.
 18. **Performance:** the list must answer within 2 s at full reach on a fleet of 10,000 hosts with 500,000 current findings (50 per host, `docs/sizing.md` "Finding changes"), with heartbeat health for every host. Record the scoped time too. Migration 0063 adds an index on `current_findings (rule_set_id, rule_id) WHERE ended_at IS NULL`, plus any other index the timing test needs.
+
+**Amendments during implementation (2026-10-24):**
+
+- **Ended findings are not failing anywhere.** The host page, the Hosts list and the older `/v1/compliance/*` summary, groups and latest-finding reads (dashboards, the assistant) all leave findings with `ended_at` set out; only the per-rule endpoint list keeps them, for its "fixed" badge. Existing compliance counts can drop after the upgrade.
+- **One failing definition.** The host page's tile and top failing, and the Hosts list's failing count, use the list's: a failing finding whose triage state is open (an expired acceptance counts as open), `check_list_sql::open_failing`.
+- **A host with no report in the last day is unknown, not 0.** When its last contact is older than the 24-hour window, the host page shows "—" with "No report in the last day" and no failing count, and the Hosts list shows "—" in its Problems column's compliance part and leaves the host out of "none open".
+- **The check page is timed too:** a widespread check's summary (Same area reads every failing finding in reach in the area) must answer within 2 s on the ruling 18 fleet, full and scoped.
 
 ## 11. Dashboards
 

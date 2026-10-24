@@ -906,7 +906,10 @@ parameter takes it (`problems` counts are `critical`, `alarms`, `none`), so
 a chosen value filters. Rows, per-filter `counts` and the `summary` line
 are inside the caller's `hosts.read` reach; open-alarm, critical and failing
 counts are null for hosts outside the caller's `alarms.read`,
-`vulnerabilities.read` or `compliance.read` reach. `alarms_off` is true for an online
+`vulnerabilities.read` or `compliance.read` reach. `problems.compliance_stale`
+is true for a host in `compliance.read` reach whose last contact is older
+than 24 hours (as the host page's `tiles.compliance_stale`): its failing
+count is null too, and `problems=none` leaves it out. `alarms_off` is true for an online
 host whose threat alarms are off by a fault (the rule of the host's
 `alarms` status; off by choice is false). `latest_agent_version` is
 the update checker's last-known agent release (null when the checker is off

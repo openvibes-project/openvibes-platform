@@ -161,7 +161,8 @@ to two manual groups. Run it with
 it fails above 2 s. The same-package candidates need no narrowing to the
 releases in reach at this size.
 
-Compliance list (2026-10-24, same cluster and settings): the step 5c
+Compliance list (2026-10-24, same cluster and settings; see
+[console-compliance.md](console-compliance.md)): the step 5c
 ruling 18 fleet generated in SQL (10,000 hosts with heartbeat health
 running baseline and hardening-linux-l1, 85 indexed rules, 500,000 current
 findings, 50 per host, 1 % triaged, 1 % of hosts with stale health and 1 %
