@@ -294,16 +294,16 @@ pub(crate) fn drop_previous<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, S
     Ok(Some("previous intermediate no longer trusted".into()))
 }
 
-/// Renames `from` over `to` and syncs the folder, so the rename itself
-/// survives a crash.
+/// Renames `from` over `to`, then syncs the folder so the rename itself
+/// survives a crash. Only the rename decides: once it is done the file is
+/// in place, and a failed sync must not make the caller undo half a swap.
 fn rename<R: Runner>(ctx: &Ctx<R>, from: &str, to: &str) -> Result<(), String> {
     let target = ctx.path(to);
-    fs::rename(ctx.path(from), &target)
-        .and_then(|()| match target.parent() {
-            Some(dir) => fs::File::open(dir)?.sync_all(),
-            None => Ok(()),
-        })
-        .map_err(|error| format!("{to}: {error}"))
+    fs::rename(ctx.path(from), &target).map_err(|error| format!("{to}: {error}"))?;
+    if let Some(dir) = target.parent() {
+        let _ = fs::File::open(dir).and_then(|dir| dir.sync_all());
+    }
+    Ok(())
 }
 
 /// Where `swap` writes the new bundle and key before renaming them.

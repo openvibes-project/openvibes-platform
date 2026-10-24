@@ -893,7 +893,7 @@ written beside their targets as `intermediate.key.new` and
 key last (a failure puts the old bundle back and removes the `.new` and
 `previous.*` files: the old pair is in use again; when the old bundle
 cannot be put back, everything stays for the recovery below; each rename
-syncs its folder), the request folder goes, and the certificates step reissues and restarts the
+syncs its folder, best effort: only the rename's own result counts), the request folder goes, and the certificates step reissues and restarts the
 services. If that reissue fails, the error starts "The intermediate was
 replaced, but the server certificates were not reissued: run Repair in
 Maintenance (they stay valid until then)."; the certificates check is

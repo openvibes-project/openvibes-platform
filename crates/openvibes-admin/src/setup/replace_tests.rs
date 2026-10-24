@@ -61,7 +61,7 @@ fn mode(fake: &Fake, abs: &str) -> u32 {
         & 0o777
 }
 
-fn careful_request(fake: &Fake, cert: &str, key: &str, root: &str) {
+pub(super) fn careful_request(fake: &Fake, cert: &str, key: &str, root: &str) {
     for (name, text) in [
         ("intermediate.key", key),
         ("intermediate.csr", "CSR"),

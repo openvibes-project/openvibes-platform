@@ -96,3 +96,22 @@ fn repair_finishes_it_through_the_certificates_step() {
     let _ = crate::setup::pki::certificates_apply(&ctx);
     assert_eq!(fake.text(INTERMEDIATE_KEY), new.1);
 }
+
+#[test]
+fn a_folder_sync_that_fails_after_the_rename_is_no_failure() {
+    use std::os::unix::fs::PermissionsExt;
+    let (fake, root, old) = installed("interrupted-sync");
+    let new = intermediate(&root);
+    crate::setup::replace::tests::careful_request(&fake, &new.0, &new.1, &root.cert_pem);
+    let mut plan = plan(&[Ingest]);
+    plan.ca = crate::setup::plan::CaMode::Careful;
+    // Renames into the folder work; opening it to sync does not.
+    let pki = fake.root.join("etc/openvibes/pki");
+    let chmod = |mode| std::fs::set_permissions(&pki, std::fs::Permissions::from_mode(mode));
+    chmod(0o300).unwrap();
+    let _ = replace(&fake.ctx(&plan), None);
+    chmod(0o755).unwrap();
+    assert_eq!(fake.text(INTERMEDIATE), format!("{}{}", new.0, old.0));
+    assert_eq!(fake.text(INTERMEDIATE_KEY), new.1);
+    assert_eq!(fake.text(PREVIOUS), old.0);
+}
