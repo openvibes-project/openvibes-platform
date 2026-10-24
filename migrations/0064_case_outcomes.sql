@@ -8,11 +8,11 @@
 -- re-open date per item now: `outcome_until`.
 --
 -- Backfill: an accepted-risk item of a case closed as accepted risk takes
--- that case's `accepted_until`. Any other accepted-risk item had no date, so
--- it takes `added_at` + 90 days (the plan's choice: a quarter, well inside
--- the 365 days the console allows), which brings an old acceptance back for
--- review rather than leaving it undated. Such an item whose 90 days have passed reopens
--- its closed case on the console's next lazy check.
+-- that case's `accepted_until` (which reopens it as before). Any other
+-- accepted-risk item had no date, so it takes the upgrade time + 90 days (a
+-- quarter, well inside the 365 days the console allows): nothing reopens or
+-- loses its outcome on upgrade day, and each old acceptance comes back for
+-- review once.
 --
 -- The update only fills the new column and the relaxed check accepts every
 -- existing row, but the backfilled dates decide reopens, so it is marked
@@ -28,7 +28,7 @@ SET outcome_until = COALESCE(
     (SELECT c.accepted_until FROM cases c
      WHERE c.case_id = i.case_id AND c.status = 'closed' AND c.resolution = 'accepted_risk'),
     -- 90 days of 24 hours, so the server's time zone (DST) cannot shift it.
-    i.added_at + interval '2160 hours')
+    now() + interval '2160 hours')
 WHERE i.outcome = 'accepted_risk';
 -- IS NOT DISTINCT FROM: no date on an item without an outcome either.
 ALTER TABLE case_items ADD CONSTRAINT case_items_outcome_until_check
@@ -42,3 +42,11 @@ CREATE INDEX case_items_outcome_until_idx ON case_items (outcome_until)
 ALTER TABLE cases DROP CONSTRAINT cases_check;
 ALTER TABLE cases ADD CONSTRAINT cases_resolution_closed_check
     CHECK (resolution IS NULL OR status = 'closed');
+
+-- `(resolution = 'accepted_risk') = (accepted_until IS NOT NULL)` from
+-- migration 35 let a date stand without a resolution (a NULL passes a
+-- CHECK). No code wrote one; any such stray date is dropped first.
+UPDATE cases SET accepted_until = NULL WHERE resolution IS NULL AND accepted_until IS NOT NULL;
+ALTER TABLE cases DROP CONSTRAINT cases_check3;
+ALTER TABLE cases ADD CONSTRAINT cases_accepted_until_check
+    CHECK ((resolution IS NOT DISTINCT FROM 'accepted_risk') = (accepted_until IS NOT NULL));

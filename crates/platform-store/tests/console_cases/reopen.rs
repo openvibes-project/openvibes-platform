@@ -238,3 +238,138 @@ async fn an_expired_item_acceptance_reopens_the_case() {
     assert!(kinds[1].actor.is_none(), "the platform did it");
     fx.db.drop().await;
 }
+
+#[tokio::test]
+async fn an_expired_acceptance_on_an_open_case_needs_a_decision_again() {
+    let mut fx = setup().await;
+    let (alarm, web_finding) = (fx.web_alarm.clone(), finding(WEB));
+    let case = open_case(
+        &mut fx.console,
+        &global(),
+        ALICE,
+        "Still open",
+        &[("alarm", &alarm), ("compliance_finding", &web_finding)],
+    )
+    .await;
+    let soon = Utc::now() + Duration::days(1);
+    for (kind, decision, until) in [
+        ("alarm", "accepted_risk", Some(soon)),
+        ("compliance_finding", "false_positive", None),
+    ] {
+        outcome(
+            &mut fx,
+            &global(),
+            ALICE,
+            &case,
+            item_id(&case, kind),
+            Some(OutcomeChange {
+                outcome: decision,
+                note: Some("decided"),
+                outcome_until: until,
+            }),
+        )
+        .await
+        .unwrap();
+    }
+    let later = soon + Duration::minutes(1);
+    assert_eq!(
+        cases::reopen_due(&mut fx.console, later).await.unwrap(),
+        0,
+        "nothing to reopen"
+    );
+    let now_open = fetch(&fx, &global(), ALICE, &case).await.unwrap();
+    assert_eq!(now_open.summary.status, "open", "the status stays");
+    let alarm_item = now_open.items.iter().find(|i| i.kind == "alarm").unwrap();
+    assert_eq!(
+        (alarm_item.outcome.as_deref(), alarm_item.outcome_until),
+        (None, None)
+    );
+    assert_eq!(now_open.summary.pending_items, 1);
+    let last = now_open.events.last().unwrap();
+    assert_eq!(last.kind, "item_outcome");
+    assert!(last.actor.is_none());
+    assert_eq!(last.detail["reason"], "accepted_risk_expired");
+    assert_eq!(last.detail["from"], "accepted_risk");
+    let refused = update(
+        &mut fx,
+        &global(),
+        ALICE,
+        &now_open,
+        &closing(&now_open, "Done"),
+    )
+    .await;
+    assert_eq!(refused.unwrap_err(), Refusal::ItemsUnresolved(1));
+    fx.db.drop().await;
+}
+
+#[tokio::test]
+async fn cases_that_cannot_reopen_do_not_fill_the_batch() {
+    let mut fx = setup().await;
+    // 100 closed cases, closed last, each with an expired acceptance on an
+    // alarm another open case now holds: they stay closed.
+    fx.admin
+        .batch_execute(&format!(
+            "INSERT INTO cases (case_id, title, status, resolution_note, severity,
+                 opened_by_user_id, created_at, updated_at, closed_at)
+             SELECT ('00000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid, 'Stuck',
+                 'closed', 'n', 'low', '{ALICE}', now(), now(), now()
+             FROM generate_series(1, 100) n;
+             INSERT INTO cases (case_id, title, status, severity, opened_by_user_id,
+                 created_at, updated_at)
+             VALUES ('00000000-0000-4000-8000-100000000000', 'Holder', 'open', 'low',
+                 '{ALICE}', now(), now());
+             INSERT INTO case_items (item_id, case_id, kind, ref, agent_id, active, outcome,
+                 outcome_note, outcome_until, added_by_user_id, added_at)
+             SELECT gen_random_uuid(), ('00000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+                 'alarm', (1000 + n)::text, '{WEB}', false, 'accepted_risk', 'n',
+                 now() - interval '1 day', '{ALICE}', now()
+             FROM generate_series(1, 100) n;
+             INSERT INTO case_items (item_id, case_id, kind, ref, agent_id, active,
+                 added_by_user_id, added_at)
+             SELECT gen_random_uuid(), '00000000-0000-4000-8000-100000000000', 'alarm',
+                 (1000 + n)::text, '{WEB}', true, '{ALICE}', now()
+             FROM generate_series(1, 100) n;"
+        ))
+        .await
+        .unwrap();
+    // One case that can reopen, closed earlier than all of them.
+    let alarm = fx.web_alarm.clone();
+    let case = open_case(
+        &mut fx.console,
+        &global(),
+        ALICE,
+        "Free",
+        &[("alarm", &alarm)],
+    )
+    .await;
+    outcome(
+        &mut fx,
+        &global(),
+        ALICE,
+        &case,
+        item_id(&case, "alarm"),
+        Some(OutcomeChange {
+            outcome: "accepted_risk",
+            note: Some("n"),
+            outcome_until: Some(Utc::now() + Duration::days(1)),
+        }),
+    )
+    .await
+    .unwrap();
+    let ready = fetch(&fx, &global(), ALICE, &case).await.unwrap();
+    update(&mut fx, &global(), ALICE, &ready, &closing(&ready, "n"))
+        .await
+        .unwrap();
+    fx.admin
+        .execute(
+            "UPDATE cases SET closed_at = now() - interval '1 day' WHERE case_id = $1::text::uuid",
+            &[&case.summary.case_id],
+        )
+        .await
+        .unwrap();
+    let later = Utc::now() + Duration::days(2);
+    assert_eq!(cases::reopen_due(&mut fx.console, later).await.unwrap(), 1);
+    let reopened = fetch(&fx, &global(), ALICE, &case).await.unwrap();
+    assert_eq!(reopened.summary.status, "open");
+    fx.db.drop().await;
+}

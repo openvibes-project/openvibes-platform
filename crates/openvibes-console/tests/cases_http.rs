@@ -1987,3 +1987,77 @@ async fn writing_cases_without_cases_assign_cannot_set_the_assignee() {
     assert!(saved["assignee"].is_null());
     fx.db.drop().await;
 }
+
+/// A change is limited to what the caller can read: `cases.write` on every
+/// host with `cases.read` on production only changes nothing outside it.
+#[tokio::test]
+async fn a_change_stays_inside_the_cases_read_scope() {
+    let fx = fixture!();
+    let mut client = fx.db.pool.get().await.unwrap();
+    use platform_store::console_roles::Reach;
+    let writer =
+        common::create_role(&mut client, "Case writer", &["cases.write"], Reach::All).await;
+    let reader = common::create_role(
+        &mut client,
+        "Prod case reader",
+        &["cases.read"],
+        Reach::Groups(vec![PROD.to_owned()]),
+    )
+    .await;
+    let erin = "99999999-9999-4999-8999-999999999999";
+    user(
+        &mut client,
+        erin,
+        "aaaaaaaa-0000-4000-8000-000000000001",
+        "erin",
+        &writer,
+    )
+    .await;
+    client
+        .execute(
+            "INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+             VALUES ('aaaaaaaa-0000-4000-8000-000000000002', $1::text::uuid, $2, now(), 'test')",
+            &[&erin, &reader],
+        )
+        .await
+        .unwrap();
+    drop(client);
+    let alice = fx.session("alice").await;
+    let erin = fx.session("erin").await;
+    // An empty case of Alice's: a global write scope would see it.
+    let empty = fx.open(&alice, "Alice's", json!([])).await;
+    let uri = case_uri(&empty);
+    let (status, _) = fx.get(&erin, &uri).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, problem, _) = fx
+        .send(
+            &erin,
+            "PUT",
+            &uri,
+            Some(put_body(&empty, json!({"title": "Mine now"}))),
+            Some(&version(&empty)),
+        )
+        .await;
+    assert_eq!(
+        (status, problem["code"].clone()),
+        (StatusCode::NOT_FOUND, json!("case_not_found"))
+    );
+    // Her own case takes no item from a host she cannot read.
+    let own = fx
+        .open(&erin, "Erin's", json!([{"kind": "host", "ref": WEB}]))
+        .await;
+    let (status, problem, _) = fx
+        .send(
+            &erin,
+            "POST",
+            &format!("{}/items", case_uri(&own)),
+            Some(json!({"kind": "host", "ref": DB})),
+            None,
+        )
+        .await;
+    assert_eq!(
+        (status, problem["code"].clone()),
+        (StatusCode::NOT_FOUND, json!("item_not_found"))
+    );
+    fx.db.drop().await;
+}

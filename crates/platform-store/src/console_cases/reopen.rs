@@ -5,7 +5,7 @@ use serde_json::json;
 
 use super::{
     EVIDENCE_WATCH_DAYS, REOPEN_BATCH,
-    events::{audit, push_event},
+    events::{audit, push_event, touch},
     unique_violation,
     visibility::item_gone,
 };
@@ -79,6 +79,14 @@ async fn reopen_item_acceptance_expired(
     .await
 }
 
+/// A closed case `c` one of whose exclusive items another open case holds:
+/// it stays closed, and the checks skip it so that it cannot fill a batch.
+const TAKEN: &str = "SELECT 1 FROM case_items mine
+    JOIN case_items o ON o.kind = mine.kind AND o.ref = mine.ref AND o.active
+         AND o.case_id <> mine.case_id
+    WHERE mine.case_id = c.case_id
+      AND mine.kind IN ('alarm', 'compliance_finding', 'vulnerability')";
+
 /// Reopens up to [`REOPEN_BATCH`] closed cases that `trigger` names.
 async fn reopen_on_items(client: &mut Client, trigger: Trigger) -> Result<u32, StoreError> {
     let Trigger {
@@ -94,6 +102,7 @@ async fn reopen_on_items(client: &mut Client, trigger: Trigger) -> Result<u32, S
                 "SELECT c.case_id::text FROM cases c
                  WHERE c.status = 'closed' AND {case}
                    AND EXISTS (SELECT 1 FROM case_items i WHERE i.case_id = c.case_id AND {item})
+                   AND NOT EXISTS ({TAKEN})
                  ORDER BY c.closed_at DESC LIMIT $2"
             ),
             &[&at, &REOPEN_BATCH],
@@ -111,6 +120,7 @@ async fn reopen_on_items(client: &mut Client, trigger: Trigger) -> Result<u32, S
                      WHERE c.case_id = $2::text::uuid AND c.status = 'closed' AND {case}
                        AND EXISTS (SELECT 1 FROM case_items i
                                    WHERE i.case_id = c.case_id AND {item})
+                       AND NOT EXISTS ({TAKEN})
                      FOR UPDATE OF c SKIP LOCKED"
                 ),
                 &[&at, &case_id],
@@ -132,21 +142,6 @@ async fn reopen_on_items(client: &mut Client, trigger: Trigger) -> Result<u32, S
                 &[&at, &case_id],
             )
             .await?;
-        let taken = tx
-            .query_opt(
-                "SELECT 1 FROM case_items mine
-                 JOIN case_items o ON o.kind = mine.kind AND o.ref = mine.ref AND o.active
-                      AND o.case_id <> mine.case_id
-                 WHERE mine.case_id = $1::text::uuid
-                   AND mine.kind IN ('alarm', 'compliance_finding', 'vulnerability')
-                 LIMIT 1",
-                &[&case_id],
-            )
-            .await?;
-        if taken.is_some() {
-            tx.rollback().await?;
-            continue;
-        }
         let ids: Vec<String> = items.iter().map(|item| item.get(0)).collect();
         let activated = tx
             .execute(
@@ -234,9 +229,85 @@ async fn reopen_on_items(client: &mut Client, trigger: Trigger) -> Result<u32, S
 /// cases: accepted risk that has run out (the case's, then each item's),
 /// and evidence that has returned.
 pub async fn reopen_due(client: &mut Client, now: DateTime<Utc>) -> Result<u32, StoreError> {
-    Ok(reopen_expired(client, now).await?
+    let reopened = reopen_expired(client, now).await?
         + reopen_item_acceptance_expired(client, now).await?
-        + reopen_evidence_returned(client, now).await?)
+        + reopen_evidence_returned(client, now).await?;
+    clear_open_acceptances_expired(client, now).await?;
+    Ok(reopened)
+}
+
+/// Clears the accepted risk that ran out on items of cases that are not
+/// closed, as the platform: the item needs a decision again, so the case is
+/// no longer ready to close. The case's status stays; each item gets an
+/// `item_outcome` entry (reason `accepted_risk_expired`).
+async fn clear_open_acceptances_expired(
+    client: &mut Client,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
+    let due = client
+        .query(
+            "SELECT c.case_id::text FROM cases c JOIN case_items i ON i.case_id = c.case_id
+             WHERE c.status <> 'closed' AND i.outcome = 'accepted_risk' AND i.outcome_until <= $1
+             GROUP BY c.case_id ORDER BY min(i.outcome_until) LIMIT $2",
+            &[&now, &REOPEN_BATCH],
+        )
+        .await?;
+    for row in due {
+        let case_id: String = row.get(0);
+        let tx = client.transaction().await?;
+        // The case first, as every change locks it, so a close cannot race.
+        let locked = tx
+            .query_opt(
+                "SELECT number FROM cases
+                 WHERE case_id = $1::text::uuid AND status <> 'closed'
+                 FOR UPDATE SKIP LOCKED",
+                &[&case_id],
+            )
+            .await?;
+        let Some(locked) = locked else {
+            tx.rollback().await?;
+            continue;
+        };
+        let number: i64 = locked.get(0);
+        let items = tx
+            .query(
+                "UPDATE case_items SET outcome = NULL, outcome_note = NULL, outcome_until = NULL
+                 WHERE case_id = $1::text::uuid AND outcome = 'accepted_risk'
+                   AND outcome_until <= $2
+                 RETURNING item_id::text, kind, ref, agent_id",
+                &[&case_id, &now],
+            )
+            .await?;
+        let mut named = Vec::with_capacity(items.len());
+        for item in &items {
+            let (item_id, kind, reference, agent_id): (String, String, String, Option<String>) =
+                (item.get(0), item.get(1), item.get(2), item.get(3));
+            push_event(
+                &tx,
+                &case_id,
+                now,
+                None,
+                "item_outcome",
+                None,
+                json!({ "item_id": item_id, "item_kind": kind, "item_ref": reference,
+                        "item_agent_id": agent_id, "from": "accepted_risk", "to": null,
+                        "reason": "accepted_risk_expired" }),
+            )
+            .await?;
+            named.push(json!({ "kind": kind, "ref": reference }));
+        }
+        touch(&tx, &case_id, now).await?;
+        audit(
+            &tx,
+            None,
+            "case.item.outcome",
+            &case_id,
+            json!({ "number": number, "reason": "accepted_risk_expired", "items": named }),
+        )
+        .await?;
+        tx.commit().await?;
+    }
+    Ok(())
 }
 
 /// Reopens cases closed as accepted risk before step 5d whose case-level
@@ -246,10 +317,13 @@ pub async fn reopen_due(client: &mut Client, now: DateTime<Utc>) -> Result<u32, 
 pub async fn reopen_expired(client: &mut Client, now: DateTime<Utc>) -> Result<u32, StoreError> {
     let due = client
         .query(
-            "SELECT case_id::text FROM cases
-             WHERE status = 'closed' AND resolution = 'accepted_risk' AND accepted_until <= $1
-             ORDER BY accepted_until LIMIT 100",
-            &[&now],
+            &format!(
+                "SELECT c.case_id::text FROM cases c
+                 WHERE c.status = 'closed' AND c.resolution = 'accepted_risk'
+                   AND c.accepted_until <= $1 AND NOT EXISTS ({TAKEN})
+                 ORDER BY c.accepted_until LIMIT $2"
+            ),
+            &[&now, &REOPEN_BATCH],
         )
         .await?;
     let mut reopened = 0;

@@ -1090,7 +1090,8 @@ timeline entry in the same transaction. `reopen_due` runs the lazy checks that
 the console calls before it lists or reads cases: `reopen_expired` reopens
 cases closed before 64 whose case-level accepted risk has run out, an item
 check reopens closed cases with an item whose `outcome_until` has passed
-(clearing only those items), and `reopen_evidence_returned`
+(clearing only those items; on cases not closed it only clears them), and
+`reopen_evidence_returned`
 reopens cases closed within the last 30 days whose `resolved` items have
 evidence again (migration 36 adds the partial index on `closed_at` it uses).
 The module is the folder `src/console_cases/` (see its README). Tested by

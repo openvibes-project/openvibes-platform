@@ -5,9 +5,10 @@ use crate::{Permission, PermissionScope, access::guard::session_user, http::Auth
 
 use super::responses::permission_denied;
 
-/// A signed-in browser user holding `permissions`: their scope for the
-/// first, and their id. Bearer tokens are refused. For changes, CSRF and
-/// origin are checked first; the scope is that of the first permission.
+/// A signed-in browser user holding `permissions`: the scope all of them
+/// reach, and their id. Bearer tokens are refused. For changes, CSRF and
+/// origin are checked first. Narrowing to every permission's scope keeps a
+/// change (`cases.write`) inside what the caller can read (`cases.read`).
 pub(crate) async fn authorize(
     state: &AuthHttpState,
     headers: &HeaderMap,
@@ -15,7 +16,7 @@ pub(crate) async fn authorize(
     csrf_required: bool,
 ) -> Result<(AgentScope, String), Response> {
     let user = session_user(state, headers, csrf_required).await?;
-    let mut scope = None;
+    let mut scope: Option<AgentScope> = None;
     for permission in permissions {
         let Some(capability) = user
             .capabilities
@@ -24,11 +25,15 @@ pub(crate) async fn authorize(
         else {
             return Err(permission_denied());
         };
-        scope.get_or_insert_with(|| match &capability.scope {
+        let reach = match &capability.scope {
             PermissionScope::Global => AgentScope::Global,
             PermissionScope::AssetGroups { asset_group_ids } => {
                 AgentScope::AssetGroups(asset_group_ids.clone())
             }
+        };
+        scope = Some(match scope {
+            None => reach,
+            Some(so_far) => both(so_far, reach),
         });
     }
     scope
@@ -70,4 +75,16 @@ pub(super) async fn may_assign(
         .capabilities
         .iter()
         .any(|capability| capability.permission == Permission::CasesAssign))
+}
+
+/// The scope two scopes share.
+// ponytail: by group id, so two groups that hold the same host narrow to
+// fewer hosts than they share (the safe side); compare by host if it bites.
+fn both(left: AgentScope, right: AgentScope) -> AgentScope {
+    match (left, right) {
+        (AgentScope::Global, scope) | (scope, AgentScope::Global) => scope,
+        (AgentScope::AssetGroups(left), AgentScope::AssetGroups(right)) => {
+            AgentScope::AssetGroups(left.into_iter().filter(|g| right.contains(g)).collect())
+        }
+    }
 }

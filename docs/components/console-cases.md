@@ -21,8 +21,9 @@ exists: it is left out of the case's items, counts and timeline, with no
 placeholder. A user sees a case if they can see at least one of its items, or
 opened it, or it is assigned to them; any other case answers 404, the same as
 one that does not exist. A case with no item is seen by who opened it, who
-it is assigned to, and anyone whose scope is every host (step 5d ruling 4;
-for a change, the scope of `cases.write`, which the route checks first).
+it is assigned to, and anyone whose scope is every host (step 5d ruling 4).
+A change uses the scope that `cases.write` and `cases.read` share (by asset
+group), so it never reaches a case or item the caller cannot read.
 
 ## Interfaces
 
@@ -143,10 +144,15 @@ When an item's `outcome_until` passes, its closed case reopens as `open`
 only to those who can see it) and only those items lose their outcome, so
 someone decides again; the case's note clears. A case closed before step 5d
 with a case-level `accepted_until` still reopens on that date, and then all
-its `accepted_risk` items lose the outcome. Migration 64 dated the existing
+its `accepted_risk` items lose the outcome. On a case that is not closed,
+an acceptance that runs out clears the same lazy way (`item_outcome`
+with reason `accepted_risk_expired`, audit `case.item.outcome` by
+`system`) and the status stays, so the case is no longer ready to close.
+The checks skip closed cases one of whose items another open case holds,
+so those never fill the 100-case batch. Migration 64 dated the existing
 `accepted_risk` items: the case's `accepted_until` when it was closed as
-accepted risk, otherwise `added_at` + 90 days (so one whose 90 days have
-passed reopens its closed case on the first check after the upgrade). This runs when cases are listed or read, so it happens
+accepted risk, otherwise the upgrade time + 90 days, so nothing reopens or
+clears on upgrade day. This runs when cases are listed or read, so it happens
 the next time anyone looks. A case whose item has since joined another open
 case stays closed.
 
