@@ -1,7 +1,9 @@
 //! The Compliance list on the step 5c ruling 18 fleet: 10,000 hosts with
 //! heartbeat health, two rule sets of 42 and 43 rules, 500,000 current
-//! findings (50 per host). Ignored by default; run it explicitly. Timings
-//! are recorded in console-read.md.
+//! findings (50 per host). Ignored by default; run it explicitly with
+//! `--test-threads=1` (each test seeds its own fleet). Timings are
+//! recorded in console-read.md. The check page's summary is timed too: its
+//! Same area counts every failing finding in reach in the check's area.
 
 mod common;
 
@@ -11,7 +13,9 @@ use chrono::Utc;
 use platform_store::{
     Client,
     check_list::{CheckQuery, CheckSort, CheckState, check_list},
+    check_summary::check_summary,
     console_read::AgentScope,
+    vuln_summary::Lookup,
 };
 
 const ANN: &str = "00000000-0000-4000-8000-0000000000a1";
@@ -132,8 +136,22 @@ async fn records_check_list_latency_on_the_ruling_18_fleet() {
     eprintln!(
         "check list, full reach: median {full:?}, {total} rows, {hosts} hosts, {passing} passing on the page"
     );
-    let groups: Vec<String> = c
-        .query(
+    let (scoped, scoped_total, scoped_hosts, _) = median(&c, &two_groups(&c).await).await;
+    eprintln!(
+        "check list, two manual groups: median {scoped:?}, {scoped_total} rows, {scoped_hosts} hosts"
+    );
+    assert_eq!((total, hosts), (85, 10_000));
+    assert!(passing > 0);
+    assert!(scoped_hosts < hosts);
+    assert!(full < Duration::from_secs(2), "full reach {full:?}");
+    assert!(scoped < Duration::from_secs(2), "scoped {scoped:?}");
+    db.drop().await;
+}
+
+/// The fleet's two manual groups `manual 0` and `manual 1`.
+async fn two_groups(c: &Client) -> AgentScope {
+    AgentScope::AssetGroups(
+        c.query(
             "SELECT asset_group_id::text FROM console_asset_groups WHERE name IN ('manual 0', 'manual 1')",
             &[],
         )
@@ -141,15 +159,50 @@ async fn records_check_list_latency_on_the_ruling_18_fleet() {
         .unwrap()
         .iter()
         .map(|r| r.get(0))
-        .collect();
-    let (scoped, scoped_total, scoped_hosts, _) =
-        median(&c, &AgentScope::AssetGroups(groups)).await;
+        .collect(),
+    )
+}
+
+/// The page summary of `port.r20`, failing on about 59 % of hosts, whose
+/// area (Network exposure) holds 42 of the 85 checks: about 250,000
+/// failing findings for Same area at full reach.
+async fn page_median(c: &Client, scope: &AgentScope) -> (Duration, i64, i64) {
+    const RUNS: usize = 5;
+    let mut samples = Vec::with_capacity(RUNS);
+    let mut seen = (0, 0);
+    for _ in 0..RUNS {
+        let started = Instant::now();
+        let Lookup::Found(s) = check_summary(c, "baseline", "port.r20", scope, Utc::now())
+            .await
+            .unwrap()
+        else {
+            panic!("port.r20 not found");
+        };
+        samples.push(started.elapsed());
+        seen = (s.header.failing, s.related.same_area.checks);
+    }
+    samples.sort();
+    eprintln!("  all {samples:?}");
+    (samples[RUNS / 2], seen.0, seen.1)
+}
+
+/// Records the check page's summary (header, tiles, 14 days, history,
+/// Related with Same area) of a widespread check, full reach and scoped.
+#[tokio::test]
+#[ignore = "large-fleet timing; run explicitly"]
+async fn records_check_page_latency_on_the_ruling_18_fleet() {
+    let (db, c) = common::migrated().await;
+    c.batch_execute("SET statement_timeout = 0").await.unwrap();
+    fleet(&c).await;
+    let (full, failing, same) = page_median(&c, &AgentScope::Global).await;
     eprintln!(
-        "check list, two manual groups: median {scoped:?}, {scoped_total} rows, {scoped_hosts} hosts"
+        "check page, full reach: median {full:?}, failing on {failing}, {same} in the same area"
     );
-    assert_eq!((total, hosts), (85, 10_000));
-    assert!(passing > 0);
-    assert!(scoped_hosts < hosts);
+    let (scoped, scoped_failing, _) = page_median(&c, &two_groups(&c).await).await;
+    eprintln!("check page, two manual groups: median {scoped:?}, failing on {scoped_failing}");
+    assert_eq!(same, 41);
+    assert!(failing > 5_000);
+    assert!(scoped_failing < failing);
     assert!(full < Duration::from_secs(2), "full reach {full:?}");
     assert!(scoped < Duration::from_secs(2), "scoped {scoped:?}");
     db.drop().await;

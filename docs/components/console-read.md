@@ -169,8 +169,8 @@ with baseline not assigned, ten manual groups). The default list (open, by
 severity, 50 rows, every count and the summary) measured a median of
 753 ms over 5 runs (741–842 ms) at full reach (85 rows, 10,000 hosts) and
 266 ms (257–267 ms) scoped to two manual groups. Run it with
-`cargo test -p platform-store --test check_list_timing -- --ignored --nocapture`;
-it fails above 2 s. The cost is one serial pass over the findings joined
+`cargo test -p platform-store --test check_list_timing -- --ignored --nocapture --test-threads=1`
+(each test seeds its own fleet); it fails above 2 s. The cost is one serial pass over the findings joined
 to the hosts in reach and hashed per check, severity and host class
 (about 0.4 s), working out each host's rule sets, versions and collectors
 (about 0.1 s), and the summary's per-host probe for an open failing pair
@@ -179,3 +179,11 @@ severity) the planner expected 170,000 groups, sorted the 500,000 rows on
 disk and took 1.5 s; grouping by the varbit mask did the same (0.9 s
 before the blocking rule), and listing passing hosts pair by pair
 instead of counting them per class took 4.7 s.
+
+A check's page (2026-10-24, same fleet): the summary of `baseline/port.r20`
+(failing on 5,870 hosts; its area, Network exposure, holds 41 other checks
+and about 250,000 failing findings, which Same area reads through
+`console_check_area`) measured a median of 1.08 s over 5 runs
+(1.08–1.11 s) at full reach and 453 ms scoped to two manual groups (578
+failing hosts); the same file's `records_check_page_latency_on_the_ruling_18_fleet`
+fails above 2 s.
