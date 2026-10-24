@@ -59,10 +59,10 @@ describe("demo Compliance list", () => {
 
   it("has a check only passing, a finding that ended, and an acceptance that expired", async () => {
     const all = (await get("state=all&limit=100")).body;
-    expect(row(all, "harden.files.passwd_perms")).toMatchObject({ failing: 0, since: null, assignee: { kind: "none" } });
-    expect(row(all, "harden.files.passwd_perms")?.passing).toBeGreaterThan(0);
-    expect(ids((await get("state=passing&q=passwd_perms")).body)).toEqual(["harden.files.passwd_perms"]);
-    expect(ids((await get("q=passwd_perms")).body)).toEqual([]);
+    expect(row(all, "harden.files.passwd")).toMatchObject({ failing: 0, since: null, assignee: { kind: "none" } });
+    expect(row(all, "harden.files.passwd")?.passing).toBeGreaterThan(0);
+    expect(ids((await get("state=passing&q=files.passwd")).body)).toEqual(["harden.files.passwd"]);
+    expect(ids((await get("q=files.passwd")).body)).toEqual([]);
     // aslr: host 1's finding ended, host 2's still fails; the ended one counts for nothing.
     expect(row(all, "harden.kernel.aslr")).toMatchObject({ failing: 1, open: 1 });
     // permit_empty_passwords: one open, one accepted until a past date, which counts as open (Ola's).
@@ -72,7 +72,7 @@ describe("demo Compliance list", () => {
 
   it("takes the severity of the newest finding, else the indexed one", async () => {
     const all = (await get("state=all&limit=100")).body;
-    expect(row(all, "harden.files.passwd_perms")?.severity).toBe("high");
+    expect(row(all, "harden.files.passwd")?.severity).toBe("medium");
     expect(row(all, "port.docker_api.exposed")?.severity).toBe("critical");
     expect(all.items.every((r) => r.severity !== undefined)).toBe(true);
   });
@@ -97,7 +97,7 @@ describe("demo Compliance list", () => {
     expect(sam.total).toBeGreaterThan(0);
     expect(sam.items.every((r) => r.assignee.kind !== "none")).toBe(true);
     const unassigned = (await get("state=all&assignee=unassigned&limit=100")).body;
-    expect(row(unassigned, "harden.files.passwd_perms")).toBeUndefined();
+    expect(row(unassigned, "harden.files.passwd")).toBeUndefined();
     expect(unassigned.total).toBe(unassigned.counts.state.find((c) => c.value === "all")?.count);
     // me is the signed-in analyst
     const me = await get("assignee=me&limit=100", "analyst");
@@ -130,7 +130,22 @@ describe("demo Compliance list", () => {
 
   it("answers a host filter with that host's checks", async () => {
     const one = (await get("host=agent-00001&state=all&limit=100")).body;
-    expect(row(one, "harden.accounts.no_empty_passwords")).toMatchObject({ failing: 1, passing: 0 });
+    expect(row(one, "harden.accounts.empty_password")).toMatchObject({ failing: 1, passing: 0 });
     expect(one.items.every((r) => r.failing + r.passing === 1)).toBe(true);
+  });
+
+  it("agrees with the host page: the same open failing checks for one seeded host", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const summary = (await (await server.handle("GET", "/api/v1/hosts/agent-00001/summary", undefined)).json()) as
+      { host: { status: string }; tiles: { compliance_failing: number }; top_failing: { items: { rule_set_id: string; rule_id: string }[] } };
+    const list = (await (await server.handle("GET", `${URL}?host=agent-00001&limit=100`, undefined)).json()) as CheckList;
+    const listed = list.items.map((i) => `${i.rule_set_id}/${i.rule_id}`);
+    // The host page counts findings of any host; the list needs an active one (host 1 is).
+    expect(summary.host.status).toBe("online"); // the demo is seeded, so host 1 is always online
+    expect(summary.tiles.compliance_failing).toBe(list.total);
+    for (const i of summary.top_failing.items) expect(listed).toContain(`${i.rule_set_id}/${i.rule_id}`);
+    expect(listed).toContain("hardening-linux-l1/harden.ssh.permit_root_login");
+    expect(listed).toContain("site/site.change_window.exceeded");
+    expect(listed).not.toContain("hardening-linux-l1/harden.kernel.aslr");
   });
 });

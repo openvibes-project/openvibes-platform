@@ -7,8 +7,8 @@
 // with an open failing host under every filter but state, offset paging
 // (plan rulings 2-7).
 // ponytail: a host passes a check when it is active, runs the check's rule set
-// (its report lists it with a version and not `not_assigned`; the site set on
-// every fifth host) and has no failing finding for it. The server also asks
+// (its report lists it with a version and not `not_assigned`) and has no failing
+// finding for it; failing, too, only counts on an active host. The server also asks
 // that the collectors the rule reads ran ok and that the running version
 // indexes the rule; the demo has neither.
 import type { CheckList, CheckListRow } from "../../api/types";
@@ -77,11 +77,12 @@ export function registerCheckListRoute(ctx: DemoContext) {
     const finds = new Map<string, Fnd[]>();
     const firsts = new Map<string, number>();
     const triageOf = new Map<string, { state: string; assignee: string | null }>();
-    for (const f of [...data.findings.map((x) => ({ ...x, ended_at: null as string | null })), ...data.checkFindings]) {
+    const active = new Set(data.agents.filter((a) => a.status === "active").map((a) => a.id));
+    for (const f of data.findings) {
       if (!ctx.reaches("compliance.read", f.agent_id)) continue;
       const key = `${f.rule_set_id}/${f.rule_id}`;
       const seen = Date.parse(f.last_observed_at);
-      finds.set(key, [...(finds.get(key) ?? []), { agent: f.agent_id, severity: f.severity, seen, failing: f.ended_at === null && seen >= failingFrom }]);
+      finds.set(key, [...(finds.get(key) ?? []), { agent: f.agent_id, severity: f.severity, seen, failing: f.ended_at == null && seen >= failingFrom && active.has(f.agent_id) }]);
       const t = data.triage.get(ctx.triageKey(f.agent_id, f.rule_set_id, f.rule_id));
       const expired = t?.state === "accepted_risk" && t.accepted_until != null && Date.parse(t.accepted_until) <= now;
       triageOf.set(`${key}|${f.agent_id}`, { state: t === undefined || expired ? "open" : t.state, assignee: t?.assigned_to ?? null });
@@ -98,8 +99,7 @@ export function registerCheckListRoute(ctx: DemoContext) {
       return ids;
     };
     const runs = (agent: (typeof data.agents)[number], set: string) =>
-      agent.rule_sets.some((s) => s.id === set && s.version != null && s.state !== "not_assigned" && !s.refused)
-      || (set === "site" && Number(agent.id.slice(-5)) % 5 === 0);
+      agent.rule_sets.some((s) => s.id === set && s.version != null && s.state !== "not_assigned" && !s.refused);
 
     /** The rows over the pairs of hosts passing `hostOk` (the Host chip and, per count, a group). */
     const rowsOf = (hostOk: (agent: string) => boolean): Row[] => {

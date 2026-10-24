@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { EXTRA_META } from "./checkSeed";
 import { buildDemoData } from "./data";
 import { createDemoServer } from "./server";
 
@@ -19,9 +20,12 @@ describe("demo server", () => {
     ]);
     const data = buildDemoData();
     expect(data.findings.length).toBeGreaterThan(0);
+    // hardening-linux-l1 ships too (checkSeed.ts copies its ids); the site set is a site's own.
+    const hardening = new Set(EXTRA_META.filter((m) => m.ruleSetId === "hardening-linux-l1").map((m) => m.ruleId));
     for (const finding of data.findings) {
-      expect(finding.rule_set_id).toBe("baseline");
-      expect(shipped.has(finding.rule_id), finding.rule_id).toBe(true);
+      if (finding.rule_set_id === "site") continue;
+      expect(["baseline", "hardening-linux-l1"]).toContain(finding.rule_set_id);
+      expect((finding.rule_set_id === "baseline" ? shipped : hardening).has(finding.rule_id), finding.rule_id).toBe(true);
     }
   });
 

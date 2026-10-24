@@ -56,7 +56,7 @@ export function createDemoContext({ persona, now }: { persona: Persona; now: num
     data.audit.unshift(event);
   };
   const triageKey = (agentId: string, ruleSetId: string, ruleId: string) => `${agentId}|${ruleSetId}|${ruleId}`;
-  const findings = () => data.findings.filter((finding) => visible(finding.agent_id));
+  const findings = () => data.findings.filter((finding) => finding.ended_at == null && visible(finding.agent_id));
   const vulnerabilities = () => data.vulnerabilities.filter((item) => visible(item.agent_id) && item.fixed_at == null);
 
   /** Findings by rule, all visible hosts or one (`agent_id`, the host page's `/compliance?host=`). */

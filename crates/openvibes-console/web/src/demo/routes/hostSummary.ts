@@ -31,8 +31,8 @@ export function topVulnerabilities({ vulnerabilities }: DemoContext, id: string)
 
 export function registerHostSummaryRoute(ctx: DemoContext) {
   const { data, route, agentById, reaches, facts, hostPackages, triageKey } = ctx;
-  const findingOpen = (x: { agent_id: string; rule_set_id: string; rule_id: string }) =>
-    (data.triage.get(triageKey(x.agent_id, x.rule_set_id, x.rule_id))?.state ?? "open") === "open";
+  const findingOpen = (x: { agent_id: string; rule_set_id: string; rule_id: string; ended_at?: string | null }) =>
+    x.ended_at == null && (data.triage.get(triageKey(x.agent_id, x.rule_set_id, x.rule_id))?.state ?? "open") === "open";
   route("GET", "/api/v1/hosts/{id}/summary", "hosts.read", ({ id = "" }) => {
     const agent = agentById(id);
     if (!agent) return problem(404, "host_not_found", "No such host");

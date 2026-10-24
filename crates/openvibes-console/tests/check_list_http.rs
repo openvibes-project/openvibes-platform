@@ -387,3 +387,49 @@ async fn the_compliance_page_keeps_saved_views_and_hidden_columns() {
     }
     fx.db.drop().await;
 }
+
+#[tokio::test]
+async fn triage_states_are_counted_and_an_expired_acceptance_is_open() {
+    let Some(fx) = Fx::new().await else { return };
+    let client = fx.db.pool.get().await.unwrap();
+    let host = |n: u8| format!("agent.00000000-0000-4000-8000-0000000000c{n}");
+    let mut sql = String::new();
+    for (n, state, until) in [
+        (1, "mitigated", "NULL"),
+        (2, "accepted_risk", "now() + interval '30 days'"),
+        (3, "accepted_risk", "now() - interval '1 day'"),
+        (4, "open", "NULL"),
+    ] {
+        let a = host(n);
+        sql += &format!(
+            "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at)
+                VALUES ('{a}', 'active', now(), 'h{n}', now());
+             INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id, rule_version, severity,
+                    first_observed_at, last_observed_at, last_observed_day, scan_id, confidence, message, evidence,
+                    received_at, origin, authenticated, source)
+                VALUES ('{a}', 'site', 'x.check', 'f', 1, 'low', now() - interval '2 days', now(), current_date,
+                        's', 90, 'm', '{{}}', now(), 'online', true, 'changes');
+             INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state, rule_version, assigned_to,
+                    note, accepted_until, version, updated_at, updated_by)
+                VALUES ('{a}', 'site', 'x.check', '{state}', 1, NULL, 'n', {until}, 1, now(), 't');"
+        );
+    }
+    client.batch_execute(&sql).await.unwrap();
+    for (state, want) in [("open", 2), ("mitigated", 1), ("accepted_risk", 1)] {
+        let (_, body) = fx
+            .call(&fx.admin, "GET", &format!("{URL}?state={state}"), None)
+            .await;
+        assert_eq!(keys(&body), ["x.check"], "{state}");
+        assert_eq!(count(&body, "state", state), 1, "{state}");
+        let r = row(&body, "x.check");
+        assert_eq!(r["failing"], 4);
+        let field = if state == "accepted_risk" {
+            "accepted_risk"
+        } else {
+            state
+        };
+        assert_eq!(r[field], want, "{state}: the expired acceptance is open");
+        assert_eq!(r["false_positive"], 0);
+    }
+    fx.db.drop().await;
+}

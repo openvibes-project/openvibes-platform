@@ -72,7 +72,7 @@ export function registerHostListRoutes(ctx: DemoContext) {
         critical: reaches("vulnerabilities.read", agent.id) ? listedCritical(data, agent.id) : null,
         // Not triaged away, as the Compliance list and the host page count them.
         failing: reaches("compliance.read", agent.id)
-          ? data.findings.filter((x) => x.agent_id === agent.id && (data.triage.get(ctx.triageKey(agent.id, x.rule_set_id, x.rule_id))?.state ?? "open") === "open").length : null,
+          ? data.findings.filter((x) => x.agent_id === agent.id && x.ended_at == null && (data.triage.get(ctx.triageKey(agent.id, x.rule_set_id, x.rule_id))?.state ?? "open") === "open").length : null,
         older: agent.scanner_version ? older(agent.scanner_version, latest) : null,
         // Online with alarms off by a fault (alarms_status: off by choice is quiet).
         alarms_off: agent.status === "active" && agent.alarms?.state === "off" && agent.alarms.fault,
