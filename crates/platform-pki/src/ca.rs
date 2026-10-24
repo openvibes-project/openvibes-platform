@@ -128,12 +128,16 @@ pub fn sign_intermediate(
         .map_err(|_| PkiError::Generation)
 }
 
-/// The first certificate of a PEM bundle, re-encoded as its own PEM. An
-/// issuer file may hold the new intermediate followed by the old one.
+/// The first `CERTIFICATE` block of a PEM bundle, as its own PEM. An issuer
+/// file may hold the new intermediate followed by the old one.
 pub fn first_certificate(pem: &str) -> Result<String, PkiError> {
-    let der = der_of(pem)?;
-    let config = pem::EncodeConfig::new().set_line_ending(pem::LineEnding::LF);
-    Ok(pem::encode_config(&pem::Pem::new("CERTIFICATE", der), config) + "\n")
+    const BEGIN: &str = "-----BEGIN CERTIFICATE-----";
+    const END: &str = "-----END CERTIFICATE-----";
+    let start = pem.find(BEGIN).ok_or(PkiError::InvalidPem)?;
+    let len = pem[start..].find(END).ok_or(PkiError::InvalidPem)? + END.len();
+    let block = &pem[start..start + len];
+    parse_x509_pem(block.as_bytes()).map_err(|_| PkiError::InvalidPem)?;
+    Ok(format!("{}\n", block.replace("\r\n", "\n")))
 }
 
 pub(crate) fn der_of(pem: &str) -> Result<Vec<u8>, PkiError> {
