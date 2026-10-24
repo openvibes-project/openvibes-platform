@@ -3559,6 +3559,8 @@ export interface components {
             evidence: components["schemas"]["CheckEvidenceView"][];
             /** @description Host name. */
             hostname?: string | null;
+            /** @description `online` or `import` (an agent export); null for a passing host. */
+            origin?: string | null;
             /** @description Distribution, as the Hosts list names it. */
             os?: string | null;
             /** @description open, mitigated, accepted_risk, false_positive or passing. */
@@ -3576,6 +3578,8 @@ export interface components {
             rows: components["schemas"]["CheckHostRowView"][];
             /** @description Every segment's count. */
             segments: components["schemas"]["CheckSegmentsView"];
+            /** @description The failing hosts per triage state, whatever `state` is chosen. */
+            states: components["schemas"]["CheckStatesView"];
             /**
              * Format: int64
              * @description Hosts in the chosen segment.
@@ -3707,6 +3711,29 @@ export interface components {
             hosts: number;
             /** @description The systemd unit, linking to `/services/{unit}`. */
             unit: string;
+        };
+        /** @description Failing hosts per triage state. */
+        CheckStatesView: {
+            /**
+             * Format: int64
+             * @description Accepted risk.
+             */
+            accepted_risk: number;
+            /**
+             * Format: int64
+             * @description False positive.
+             */
+            false_positive: number;
+            /**
+             * Format: int64
+             * @description Mitigated.
+             */
+            mitigated: number;
+            /**
+             * Format: int64
+             * @description Open (an expired acceptance counts).
+             */
+            open: number;
         };
         /**
          * @description "N checks failing on N hosts · N critical · N unassigned", then a count
@@ -9624,6 +9651,11 @@ export interface operations {
             query?: {
                 /** @description all (default), failing or passing. */
                 segment?: string;
+                /**
+                 * @description With `segment=failing`: open, mitigated, accepted_risk or
+                 *     false_positive (absent: any). Refused with another segment.
+                 */
+                state?: string;
                 /** @description Rows to skip, 0 to 100000. */
                 offset?: string;
                 /** @description Page size, 1 to 100 (default 50). */

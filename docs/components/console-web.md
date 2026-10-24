@@ -103,10 +103,14 @@ Show everything, without page changes for details:
   else "No fix text yet" and the rule set), Details (rule and version, rule
   set and version, applies to, ATT&CK techniques), History (triage, started
   failing, passes again, rule-set publishes). Right: Hosts (All, Failing,
-  Passing; unknown `?segment=` is All; paged by 50) with each failing row's
+  Passing; unknown `?segment=` is All; paged by 50; inside Failing a second
+  row of chips, All failing, Open, Mitigated, Accepted risk, False positive
+  with counts, `?state=`, unknown is all failing, dropped with another
+  segment) with each failing row's
   evidence as `fact = value` (a masked, summarized or truncated value only
   by its status) and the file, the acceptance date (until, or expired once
-  past, as the panel showed), its open cases, and **View evidence**, which
+  past, as the panel showed), an `imported` badge for an agent-export
+  observation, its open cases, and **View evidence on <host>**, which
   opens the latest observation (`GET /api/v1/compliance/latest/{agent}/{set}/{rule}`)
   with `DetectionEvidence` ("Why it triggered", Show rule); ticks on failing
   rows only and a bulk bar on `{agent_id, rule_set_id, rule_id}` pairs with
@@ -116,7 +120,8 @@ Show everything, without page changes for details:
   entry: `nav.open({kind: "finding", id: "set/rule"})` (dashboards, the host
   page, cases, the audit log, the palette, assistant citations) and
   `?open=finding:set/rule` through `pagePath` and `settle()`'s replace; a
-  finding from before rule sets (`/rule`) is `~unknown/rule`. A host whose
+  finding from before rule sets (`/rule`) is `~unknown/rule`; its Details
+  say "No rule set (from before rule sets)" and How to fix links nowhere. A host whose
   match ended is no longer failing: History says when it passed again.
 
 ## Dashboards

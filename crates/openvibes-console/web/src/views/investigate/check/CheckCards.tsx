@@ -17,7 +17,7 @@ import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, TriageBadge }
 import { Card } from "../../../ui/detail/DetailPage";
 import { RelatedCard } from "../../../ui/detail/RelatedCard";
 import { SegmentChips } from "../../../ui/detail/SegmentChips";
-import { date, isPast, plural } from "../../../ui/format";
+import { date, isPast, plural, triageLabel } from "../../../ui/format";
 import { PAGE } from "../../../ui/list/filters";
 import { useSelection } from "../../../ui/selection";
 import { Pager } from "../Hosts";
@@ -31,13 +31,17 @@ export function WhyCard({ page }: { page: Page }) {
   return <Card title="Why it matters"><p>{page.text.explain ?? page.text.message}</p></Card>;
 }
 
-/** How to fix: the rule's `check` (the exact setting and command); without one, the rule to read. */
+/** Findings from before rule sets: the API's `~unknown`, a rule set no page shows. */
+const LEGACY = "~unknown";
+
+/** How to fix: the rule's `check` (the exact setting and command); without one, the rule to read (when it has a rule set). */
 export function FixCard({ page }: { page: Page }) {
   const fix = page.text.check;
+  const set = page.header.rule_set_id;
   return (
     <Card title="How to fix">
       {fix ? <p style={{ whiteSpace: "pre-wrap" }}>{fix}</p>
-        : <p className="subtle">No fix text yet. See the rule in <ObjectLink to={{ kind: "rule-set", id: page.header.rule_set_id }}>{page.header.rule_set_id}</ObjectLink>.</p>}
+        : <p className="subtle">No fix text yet.{set !== LEGACY && <> See the rule in <ObjectLink to={{ kind: "rule-set", id: set }}>{set}</ObjectLink>.</>}</p>}
     </Card>
   );
 }
@@ -48,7 +52,8 @@ export function DetailsCard({ page }: { page: Page }) {
     <Card title="Details">
       <dl className="kv">
         <dt>Rule</dt><dd><span className="mono">{header.rule_id}</span>{header.rule_version != null && ` · version ${header.rule_version}`}</dd>
-        <dt>Rule set</dt><dd><ObjectLink to={{ kind: "rule-set", id: header.rule_set_id }}>{header.rule_set_id}</ObjectLink>{header.rule_set_version != null && ` v${header.rule_set_version}`}</dd>
+        <dt>Rule set</dt><dd>{header.rule_set_id === LEGACY ? <span className="subtle">No rule set (from before rule sets)</span>
+          : <><ObjectLink to={{ kind: "rule-set", id: header.rule_set_id }}>{header.rule_set_id}</ObjectLink>{header.rule_set_version != null && ` v${header.rule_set_version}`}</>}</dd>
         <dt>Applies to</dt><dd>{details.applies_to}</dd>
         <dt>Reference</dt><dd>{details.techniques.length > 0 ? <span className="mono">{details.techniques.join(", ")}</span> : <span className="subtle">None</span>}</dd>
       </dl>
@@ -90,6 +95,14 @@ type Segment = (typeof SEGMENTS)[number];
 const SEGMENT_LABEL: Record<Segment, string> = { all: "All", failing: "Failing", passing: "Passing" };
 /** The URL's `segment`; anything unknown is All. */
 export const segmentOf = (value: string | null): Segment => SEGMENTS.find((s) => s === value) ?? "all";
+/** A failing pair's triage state, narrowing the Failing segment (the old panel's state chips). */
+const STATES = ["open", "mitigated", "accepted_risk", "false_positive"] as const;
+type State = (typeof STATES)[number];
+/** The URL's `state`; anything unknown is every failing host. */
+export const stateOf = (value: string | null): State | null => STATES.find((s) => s === value) ?? null;
+/** The state chips: All failing, then each state with its count. */
+export const stateOptions = (counts: CheckHostsPage["states"], failing: number) =>
+  [{ key: "", label: "All failing", count: failing }, ...STATES.map((s) => ({ key: s, label: triageLabel[s] ?? s, count: counts[s] }))];
 const PAGE_SIZE = 50;
 const CLOSED = new Set(["mitigated", "accepted_risk", "false_positive"]);
 
@@ -103,9 +116,10 @@ export function HostsCard({ page }: { page: Page }) {
   const { params } = useLocation();
   const { rule_set_id: set, rule_id: rule } = page.header;
   const segment = segmentOf(params.get("segment"));
+  const state = segment === "failing" ? stateOf(params.get("state")) : null;
   const offset = Math.max(0, Number(params.get(PAGE)) || 0);
-  const hosts = useResource<CheckHostsPage>(`/api/v1/compliance/checks/${encodeURIComponent(set)}/${encodeURIComponent(rule)}/hosts?segment=${segment}&offset=${offset}&limit=${PAGE_SIZE}`);
-  const [selected, setSelected] = useSelection(`${segment}:${offset}`);
+  const hosts = useResource<CheckHostsPage>(`/api/v1/compliance/checks/${encodeURIComponent(set)}/${encodeURIComponent(rule)}/hosts?segment=${segment}${state ? `&state=${state}` : ""}&offset=${offset}&limit=${PAGE_SIZE}`);
+  const [selected, setSelected] = useSelection(`${segment}:${state ?? ""}:${offset}`);
   const cases = useHostCaseBadges("compliance_finding", `${storedRuleSet(set)}/${rule}`);
   const data = hosts.data;
   const rows = data?.rows ?? [];
@@ -114,8 +128,11 @@ export function HostsCard({ page }: { page: Page }) {
   const counts = data?.segments;
   return (
     <Card id="hosts" flush title={<>Hosts <span className="subtle num">{(counts?.all ?? page.header.checked).toLocaleString()}</span></>}
-      aside={<SegmentChips label="Hosts by state" value={segment} onChange={(s) => nav.setParams({ segment: s === "all" ? null : s, [PAGE]: null })}
+      aside={<SegmentChips label="Hosts by state" value={segment} onChange={(s) => nav.setParams({ segment: s === "all" ? null : s, state: null, [PAGE]: null })}
         options={SEGMENTS.map((s) => ({ key: s, label: SEGMENT_LABEL[s], count: counts?.[s] ?? 0 }))} />}>
+      {segment === "failing" && data && <div className="person-card__body">
+        <SegmentChips label="Failing hosts by triage state" value={state ?? ""} onChange={(s) => nav.setParams({ state: s || null, [PAGE]: null })}
+          options={stateOptions(data.states, data.segments.failing)} /></div>}
       {hosts.error ? <div className="person-card__body"><ErrorBox error={hosts.error} /></div> : !data ? <Loading rows={3} /> : rows.length === 0
         ? <Empty title={`No ${segment === "all" ? "" : `${SEGMENT_LABEL[segment].toLowerCase()} `}hosts`} />
         : <HostsTable rows={rows} selected={selected} onSelect={setSelected} triage={page.can.triage} addToCase={page.can.add_to_case} title={page.header.title}
@@ -135,6 +152,7 @@ function StateCell({ r, cases }: { r: HostRow; cases: number[] | undefined }) {
   return (
     <span className="row">
       {r.state === "passing" ? <span className="badge badge--ok">Passing</span> : <TriageBadge state={r.state} />}
+      {r.origin === "import" && <span className="badge badge--info badge--plain" title="From an agent export file">imported</span>}
       {until && (r.state === "accepted_risk" && !isPast(until) ? <span className="subtle">until {date(until)}</span>
         : r.state !== "passing" && isPast(until) && <span className="badge badge--bad badge--plain">acceptance expired {date(until)}</span>)}
       <CaseBadge numbers={cases} />
@@ -179,7 +197,7 @@ export function HostsTable({ rows, selected, onSelect, triage, addToCase = false
                   <td><div className="stack">
                     {r.evidence.map((e, i) => <span key={`${e.fact}:${i}`}><span className="mono">{e.fact}{e.value != null ? ` = ${e.value}` : <span className="subtle"> ({e.status ?? "no value"})</span>}</span>
                       {e.file && <span className="subtle"> in <span className="mono">{e.file}</span></span>}</span>)}
-                    {failing && <button type="button" className="link-button" aria-expanded={open} onClick={() => setShown(flip(shown, r.agent_id))}>View evidence</button>}
+                    {failing && <button type="button" className="link-button" aria-label={`View evidence on ${name}`} aria-expanded={open} onClick={() => setShown(flip(shown, r.agent_id))}>View evidence</button>}
                   </div></td>
                   <td>{r.assignee?.name ?? <span className="subtle">—</span>}</td>
                   <td className="hide-narrow subtle"><Ago value={r.checked_at} /></td>

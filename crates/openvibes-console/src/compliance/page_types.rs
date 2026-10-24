@@ -227,6 +227,8 @@ pub(crate) struct CheckHostRowView {
     /// RFC 3339: until when the risk is accepted, kept after it expires
     /// (the state then reads open); null for a passing host.
     pub accepted_until: Option<String>,
+    /// `online` or `import` (an agent export); null for a passing host.
+    pub origin: Option<String>,
 }
 
 /// Hosts per segment.
@@ -240,6 +242,19 @@ pub(crate) struct CheckSegmentsView {
     pub passing: i64,
 }
 
+/// Failing hosts per triage state.
+#[derive(Serialize, ToSchema)]
+pub(crate) struct CheckStatesView {
+    /// Open (an expired acceptance counts).
+    pub open: i64,
+    /// Mitigated.
+    pub mitigated: i64,
+    /// Accepted risk.
+    pub accepted_risk: i64,
+    /// False positive.
+    pub false_positive: i64,
+}
+
 /// One page of the Hosts table.
 #[derive(Serialize, ToSchema)]
 pub(crate) struct CheckHostsPageView {
@@ -249,6 +264,8 @@ pub(crate) struct CheckHostsPageView {
     pub total: i64,
     /// Every segment's count.
     pub segments: CheckSegmentsView,
+    /// The failing hosts per triage state, whatever `state` is chosen.
+    pub states: CheckStatesView,
 }
 
 impl CheckSummaryView {
@@ -350,6 +367,7 @@ impl From<CheckHostsPage> for CheckHostsPageView {
                     checked_at: r.checked_at.map(rfc3339),
                     triage_version: r.triage_version,
                     accepted_until: r.accepted_until.map(rfc3339),
+                    origin: r.origin,
                 })
                 .collect(),
             total: p.total,
@@ -357,6 +375,12 @@ impl From<CheckHostsPage> for CheckHostsPageView {
                 all: g.all,
                 failing: g.failing,
                 passing: g.passing,
+            },
+            states: CheckStatesView {
+                open: p.states.open,
+                mitigated: p.states.mitigated,
+                accepted_risk: p.states.accepted_risk,
+                false_positive: p.states.false_positive,
             },
         }
     }

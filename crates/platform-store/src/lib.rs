@@ -40,6 +40,8 @@ pub mod check_list;
 mod check_list_sql;
 /// A check's Related card: its port, unit and same-area checks.
 pub mod check_related;
+/// A check's Hosts table by triage state.
+mod check_states;
 /// A check's page: header, tiles, text, history and the Hosts table in scope.
 pub mod check_summary;
 /// The SQL of a check's page.

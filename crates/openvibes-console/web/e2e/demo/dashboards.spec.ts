@@ -347,6 +347,23 @@ test("the List editor shows filters as chips, adds and removes them, and a Trend
   await expect(panel.getByRole("radio", { name: "10" })).toBeChecked();
 });
 
+test("a Select's filter narrows its options, and the open, filtered popup passes axe", async ({ page }) => {
+  const panel = await newWidget(page, /^Trend/);
+  await panel.getByRole("combobox", { name: "Compliance rule" }).click();
+  const popup = page.locator(".sel__popup");
+  const options = popup.getByRole("option");
+  const before = await options.count();
+  await page.getByRole("combobox", { name: "Filter Compliance rule" }).fill("ssh");
+  await expect.poll(() => options.count()).toBeLessThan(before);
+  expect(await options.count()).toBeGreaterThan(0);
+  for (const text of await options.allTextContents()) expect(text.toLowerCase()).toContain("ssh");
+  await page.getByRole("combobox", { name: "Filter Compliance rule" }).fill("no such rule anywhere");
+  await expect(options).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Filter Compliance rule" }).fill("ssh");
+  await expect(options.first()).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
 test("the Trend editor picks a rule from a searchable list", async ({ page }) => {
   const panel = await newWidget(page, /^Trend/);
   await expect(panel.getByText("Edit widget · Trend")).toBeVisible();

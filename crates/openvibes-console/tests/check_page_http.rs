@@ -225,6 +225,12 @@ async fn the_hosts_table_has_segments_evidence_and_pages() {
         ])
     );
     assert!(!body.to_string().contains("item_count"));
+    assert_eq!(w1["origin"], "online");
+    assert!(rows[2]["origin"].is_null(), "a passing host has no finding");
+    assert_eq!(
+        body["states"],
+        json!({"open": 2, "mitigated": 0, "accepted_risk": 0, "false_positive": 0})
+    );
     assert_eq!(rows[0]["evidence"], json!([]), "no detection");
     let w2 = &rows[2];
     assert_eq!(
@@ -245,8 +251,39 @@ async fn the_hosts_table_has_segments_evidence_and_pages() {
         (body["total"].clone(), body["rows"][0]["hostname"].clone()),
         (json!(3), json!("win-02"))
     );
+    // The Failing segment narrowed by triage state; the counts stay whole.
+    let (status, body) = fx
+        .call(
+            &fx.admin,
+            "GET",
+            &hosts(ROOT, "segment=failing&state=open"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["total"], 2);
+    let (_, body) = fx
+        .call(
+            &fx.admin,
+            "GET",
+            &hosts(ROOT, "segment=failing&state=mitigated"),
+            None,
+        )
+        .await;
+    assert_eq!(
+        (
+            body["total"].clone(),
+            body["rows"].clone(),
+            body["states"]["open"].clone()
+        ),
+        (json!(0), json!([]), json!(2))
+    );
     for (query, field) in [
         ("segment=open", "segment"),
+        ("segment=failing&state=passing", "state"),
+        ("segment=failing&state=bogus", "state"),
+        ("state=open", "state"),
+        ("segment=passing&state=open", "state"),
         ("offset=-1", "offset"),
         ("limit=101", "limit"),
         ("other=1", "query"),

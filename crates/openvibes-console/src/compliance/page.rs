@@ -11,7 +11,7 @@ use axum::{
 };
 use chrono::Utc;
 use platform_store::{
-    check_summary::{CheckHostSegment, Lookup, check_hosts, check_summary},
+    check_summary::{CheckHostSegment, CheckHostState, Lookup, check_hosts, check_summary},
     console_read::AgentScope,
     vuln_summary::reaches_any,
 };
@@ -39,8 +39,6 @@ fn not_found() -> Response {
     ))
 }
 
-/// A rule set or rule id the page can have: 1 to 256 characters, no
-/// control character.
 /// The rule set as stored: `~unknown` (findings from before rule sets, as
 /// every compliance route spells them) is empty.
 fn stored(rule_set_id: &str) -> &str {
@@ -51,6 +49,8 @@ fn stored(rule_set_id: &str) -> &str {
     }
 }
 
+/// A rule set or rule id the page can have: 1 to 256 characters, no
+/// control character.
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.chars().count() <= 256 && !id.chars().any(char::is_control)
 }
@@ -138,6 +138,9 @@ pub(crate) async fn check_summary_page(
 pub(crate) struct CheckHostsParams {
     /// all (default), failing or passing.
     segment: Option<String>,
+    /// With `segment=failing`: open, mitigated, accepted_risk or
+    /// false_positive (absent: any). Refused with another segment.
+    state: Option<String>,
     /// Rows to skip, 0 to 100000.
     offset: Option<String>,
     /// Page size, 1 to 100 (default 50).
@@ -172,15 +175,22 @@ pub(crate) async fn check_hosts_page(
     };
     let present = |v: &Option<String>| v.clone().filter(|v| !v.is_empty());
     let (segment, offset, limit) = (present(&p.segment), present(&p.offset), present(&p.limit));
+    let triage = present(&p.state);
     let parsed = (|| {
+        let segment = pick(segment.as_deref(), "segment", CheckHostSegment::parse)?
+            .unwrap_or(CheckHostSegment::All);
+        let state = pick(triage.as_deref(), "state", CheckHostState::parse)?;
+        if state.is_some() && segment != CheckHostSegment::Failing {
+            return Err("state");
+        }
         Ok((
-            pick(segment.as_deref(), "segment", CheckHostSegment::parse)?
-                .unwrap_or(CheckHostSegment::All),
+            segment,
+            state,
             number(offset.as_deref(), 0, 100_000, "offset")?,
             number(limit.as_deref(), 50, 100, "limit")?,
         ))
     })();
-    let (segment, offset, limit) = match parsed {
+    let (segment, pair_state, offset, limit) = match parsed {
         Ok(v) => v,
         Err(field) => return invalid_query(field),
     };
@@ -196,6 +206,7 @@ pub(crate) async fn check_hosts_page(
         &rule_id,
         &read,
         segment,
+        pair_state,
         offset,
         limit,
         Utc::now(),

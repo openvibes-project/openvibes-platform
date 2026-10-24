@@ -10,7 +10,7 @@ vi.hoisted(() => {
 
 import type { CheckHostsPage, CheckSummaryPage, Session } from "../../../api/types";
 import { SessionContext } from "../../../app/session";
-import { HostsTable, evidenceText, hostItems, segmentOf } from "./CheckCards";
+import { HostsTable, evidenceText, hostItems, segmentOf, stateOf, stateOptions } from "./CheckCards";
 import { CheckView, exportRows, headerItems } from "./CheckPage";
 
 type Row = CheckHostsPage["rows"][number];
@@ -72,6 +72,16 @@ describe("check page", () => {
     expect(bare).toContain('href="?open=rule-set%3Ahardening-linux-l1"');
   });
 
+  it("names no rule set for a check from before rule sets, and links nowhere", () => {
+    const html = render(<CheckView page={fixture({ header: { ...fixture().header, rule_set_id: "~unknown", rule_set_version: null },
+      text: { explain: null, check: null, message: "m" } })} />);
+    expect(html).not.toContain("rule-set%3A~unknown");
+    const t = text(html);
+    expect(t).toContain("Rule setNo rule set (from before rule sets)");
+    expect(t).toContain("How to fixNo fix text yet.");
+    expect(t).not.toContain("See the rule");
+  });
+
   it("lists the details and the history, newest first", () => {
     const t = text(render(<CheckView page={fixture()} />));
     expect(t).toContain(`${ROOT} · version 3`);
@@ -123,7 +133,7 @@ describe("check page", () => {
 
 const row = (agent: string, over: Partial<Row> = {}): Row => ({
   agent_id: agent, hostname: agent.replace("agent", "host"), os: "Fedora 44", address: "10.0.0.1", state: "open", evidence: [], assignee: null,
-  checked_at: "2026-10-22T10:00:00Z", triage_version: 1, accepted_until: null, ...over,
+  checked_at: "2026-10-22T10:00:00Z", triage_version: 1, accepted_until: null, origin: "online", ...over,
 });
 
 describe("hosts card", () => {
@@ -174,6 +184,28 @@ describe("hosts card", () => {
 
   it("sends ticked rows as host and check pairs, without open_only", () => {
     expect(hostItems([row("agent-1", { state: "mitigated" })], "s", "r")).toEqual([{ agent_id: "agent-1", rule_set_id: "s", rule_id: "r" }]);
+  });
+
+  it("marks an imported host, as the old panel did", () => {
+    const t = text(render(<HostsTable rows={[row("agent-1", { origin: "import" }), row("agent-2", { origin: "online" })]} selected={new Set()} onSelect={() => undefined}
+      triage set="s" rule="r" />));
+    expect(t.match(/imported/g)).toHaveLength(1);
+  });
+
+  it("names each View evidence by its host", () => {
+    const html = render(<HostsTable rows={[row("agent-1"), row("agent-2")]} selected={new Set()} onSelect={() => undefined} triage set="s" rule="r" />);
+    expect(html).toContain('aria-label="View evidence on host-1"');
+    expect(html).toContain('aria-label="View evidence on host-2"');
+  });
+
+  it("narrows the Failing segment by triage state, with counts; an unknown state is all failing", () => {
+    expect(stateOf("mitigated")).toBe("mitigated");
+    expect(stateOf("bogus")).toBeNull();
+    expect(stateOf(null)).toBeNull();
+    expect(stateOptions({ open: 2, mitigated: 1, accepted_risk: 1, false_positive: 0 }, 4)).toEqual([
+      { key: "", label: "All failing", count: 4 }, { key: "open", label: "Open", count: 2 }, { key: "mitigated", label: "Mitigated", count: 1 },
+      { key: "accepted_risk", label: "Accepted risk", count: 1 }, { key: "false_positive", label: "False positive", count: 0 },
+    ]);
   });
 
   it("reads an unknown segment as all", () => {

@@ -1033,6 +1033,8 @@ port and unit come from the rule's expression, indexed in
 `console_rule_meta.expression` (schema 63).
 
 The Hosts table takes `segment` (`all` default, `failing`, `passing`),
+`state` (with `segment=failing` only: `open`, `mitigated`, `accepted_risk`
+or `false_positive`; 400 naming `state` otherwise),
 `offset` 0..=100000 and `limit` 1..=100 (default 50), 400 `invalid_query`
 naming the parameter otherwise. Rows (by host name, then agent id) carry
 the host, `os`, `address`, `state` (the triage state, or `passing`),
@@ -1050,8 +1052,10 @@ collector reads several sources (`kernel.modules.disabled` names
 or a finding without detection), `assignee`, `checked_at` (last
 observation, or the passing host's heartbeat health) and `triage_version`
 (0 without triage; null when passing), `accepted_until` (an acceptance's
-end, kept after it expires; null when passing). `segments` count `all`, `failing`
-and `passing`. Tests: `tests/check_page_http.rs`; demo:
+end, kept after it expires; null when passing), `origin` (`online` or
+`import`; null when passing). `segments` count `all`, `failing` and
+`passing`; `states` count the failing hosts per triage state, whatever
+`state` is chosen (`total` is the chosen state's). Tests: `tests/check_page_http.rs`; demo:
 `web/src/demo/routes/checkSummary.ts`.
 
 ## A vulnerability's page

@@ -41,7 +41,7 @@ k AS MATERIALIZED (
 f AS MATERIALIZED (
   SELECT f.agent_id, f.severity, f.rule_version, f.message, f.first_observed_at, f.last_observed_at,
          f.ended_at, f.detection, {failing} AS failing, {state} AS state, t.assigned_to,
-         t.accepted_until, COALESCE(t.version, 0)::bigint AS triage_version
+         t.accepted_until, f.origin, COALESCE(t.version, 0)::bigint AS triage_version
   FROM current_findings f JOIN k ON k.rule_set_id = f.rule_set_id AND k.rule_id = f.rule_id
   JOIN hosts h ON h.agent_id = f.agent_id
   LEFT JOIN console_finding_triage t
@@ -120,7 +120,7 @@ SELECT jsonb_build_object(
 }
 
 /// The Hosts table (`$1`–`$5` as [`base`], `$6` segment, `$7` limit, `$8`
-/// offset): failing pairs in any triage state and passing hosts, the
+/// offset, `$9` a failing pair's state or empty for any): failing pairs in any triage state and passing hosts, the
 /// segment counts as JSON on every row, then the page by host name and
 /// agent id; an empty page is one row with the counts only.
 pub(crate) fn hosts() -> String {
@@ -128,18 +128,25 @@ pub(crate) fn hosts() -> String {
         "WITH {base},
 pairs AS (
   SELECT f.agent_id, f.state, f.detection -> 'inputs' AS inputs, f.assigned_to, f.last_observed_at AS checked_at,
-         f.triage_version, f.accepted_until FROM f WHERE f.failing
+         f.triage_version, f.accepted_until, f.origin FROM f WHERE f.failing
   UNION ALL
-  SELECT p.agent_id, 'passing', NULL, NULL, p.health_at, NULL, NULL FROM pass p),
+  SELECT p.agent_id, 'passing', NULL, NULL, p.health_at, NULL, NULL, NULL FROM pass p),
 counts AS (SELECT jsonb_build_object('all', count(*), 'failing', count(*) FILTER (WHERE state <> 'passing'),
-                                     'passing', count(*) FILTER (WHERE state = 'passing')) AS c FROM pairs),
+                                     'passing', count(*) FILTER (WHERE state = 'passing'),
+                                     'states', jsonb_build_object(
+                                       'open', count(*) FILTER (WHERE state = 'open'),
+                                       'mitigated', count(*) FILTER (WHERE state = 'mitigated'),
+                                       'accepted_risk', count(*) FILTER (WHERE state = 'accepted_risk'),
+                                       'false_positive', count(*) FILTER (WHERE state = 'false_positive'))) AS c
+          FROM pairs),
 page AS (
   SELECT p.*, h.hostname, h.os, h.address, row_number() OVER (ORDER BY h.hostname NULLS LAST, p.agent_id) AS ord
   FROM pairs p JOIN hosts h ON h.agent_id = p.agent_id
-  WHERE $6::text = 'all' OR ($6::text = 'passing') = (p.state = 'passing')
+  WHERE ($6::text = 'all' OR ($6::text = 'passing') = (p.state = 'passing'))
+    AND ($9::text = '' OR p.state = $9::text)
   ORDER BY ord LIMIT $7 OFFSET $8)
 SELECT c.c, p.agent_id, p.hostname, p.os, p.address, p.state, p.inputs, p.assigned_to::text, u.display_name,
-       p.checked_at, p.triage_version, p.accepted_until
+       p.checked_at, p.triage_version, p.accepted_until, p.origin
 FROM counts c LEFT JOIN page p ON true
 LEFT JOIN console_users u ON u.user_id = p.assigned_to
 ORDER BY p.ord",

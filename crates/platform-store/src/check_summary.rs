@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::Value;
 
+pub use crate::check_states::{CheckHostState, CheckStateCounts};
 pub use crate::vuln_summary::Lookup;
 use crate::{
     Client, StoreError,
@@ -337,6 +338,8 @@ pub struct CheckHostRow {
     /// Until when the risk is accepted (kept after it expires, when the
     /// state reads open again); none for a passing host.
     pub accepted_until: Option<DateTime<Utc>>,
+    /// The finding's origin (`online` or `import`); none for a passing host.
+    pub origin: Option<String>,
 }
 
 /// Pairs per segment.
@@ -359,6 +362,8 @@ pub struct CheckHostsPage {
     pub total: i64,
     /// Every segment's count.
     pub segments: CheckSegments,
+    /// The failing pairs per triage state, whatever state is chosen.
+    pub states: CheckStateCounts,
 }
 
 /// A finding's `detection -> 'inputs'` as evidence: a value only for a
@@ -387,8 +392,9 @@ pub fn evidence(inputs: &Value) -> Vec<Evidence> {
         .collect()
 }
 
-/// One page of the check's Hosts table within `scope`: `segment`,
-/// `offset` (0–100000) and `limit` (1–100).
+/// One page of the check's Hosts table within `scope`: `segment`, `state`
+/// (narrows the Failing segment; ignored by the others), `offset`
+/// (0–100000) and `limit` (1–100).
 #[allow(clippy::too_many_arguments, reason = "the key, scope, page and clock")]
 pub async fn check_hosts(
     client: &Client,
@@ -396,10 +402,12 @@ pub async fn check_hosts(
     rule_id: &str,
     scope: &AgentScope,
     segment: CheckHostSegment,
+    state: Option<CheckHostState>,
     offset: i64,
     limit: i64,
     now: DateTime<Utc>,
 ) -> Result<Lookup<CheckHostsPage>, StoreError> {
+    let state = state.filter(|_| segment == CheckHostSegment::Failing);
     let rows = client
         .query(
             &sql::hosts(),
@@ -412,21 +420,26 @@ pub async fn check_hosts(
                 &segment.as_str(),
                 &limit.clamp(1, 100),
                 &offset.clamp(0, 100_000),
+                &state.map_or("", CheckHostState::as_str),
             ],
         )
         .await?;
     let counts: Value = rows.first().map(|r| r.get(0)).unwrap_or_default();
+    let states: CheckStateCounts =
+        serde_json::from_value(counts["states"].clone()).map_err(|_| StoreError::Query)?;
     let segments: CheckSegments = serde_json::from_value(counts).map_err(|_| StoreError::Query)?;
     if segments.all == 0 {
         return Ok(Lookup::Missing);
     }
     Ok(Lookup::Found(CheckHostsPage {
-        total: match segment {
-            CheckHostSegment::All => segments.all,
-            CheckHostSegment::Failing => segments.failing,
-            CheckHostSegment::Passing => segments.passing,
+        total: match (segment, state) {
+            (CheckHostSegment::All, _) => segments.all,
+            (CheckHostSegment::Failing, Some(s)) => states.of(s),
+            (CheckHostSegment::Failing, None) => segments.failing,
+            (CheckHostSegment::Passing, _) => segments.passing,
         },
         segments,
+        states,
         rows: rows
             .iter()
             .filter_map(|r| {
@@ -446,6 +459,7 @@ pub async fn check_hosts(
                     checked_at: r.get(9),
                     triage_version: r.get(10),
                     accepted_until: r.get(11),
+                    origin: r.get(12),
                 })
             })
             .collect(),

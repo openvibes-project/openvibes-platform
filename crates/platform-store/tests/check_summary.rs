@@ -9,8 +9,8 @@ use common::checks::{ANN, SSH, TELNET, every, fixture, h, run};
 use platform_store::{
     Client,
     check_summary::{
-        CheckHostSegment, CheckHostsPage, CheckPageSummary, Evidence, Lookup, check_hosts,
-        check_summary, evidence,
+        CheckHostSegment, CheckHostState, CheckHostsPage, CheckPageSummary, Evidence, Lookup,
+        check_hosts, check_summary, evidence,
     },
     console_read::AgentScope,
     vuln_list::AssigneeSummary,
@@ -47,10 +47,32 @@ async fn hosts(
     offset: i64,
     limit: i64,
 ) -> Option<CheckHostsPage> {
+    hosts_in(c, key, scope, segment, None, offset, limit).await
+}
+
+async fn hosts_in(
+    c: &Client,
+    key: &str,
+    scope: &AgentScope,
+    segment: CheckHostSegment,
+    state: Option<CheckHostState>,
+    offset: i64,
+    limit: i64,
+) -> Option<CheckHostsPage> {
     let (set, rule) = split(key);
-    match check_hosts(c, set, rule, scope, segment, offset, limit, Utc::now())
-        .await
-        .unwrap()
+    match check_hosts(
+        c,
+        set,
+        rule,
+        scope,
+        segment,
+        state,
+        offset,
+        limit,
+        Utc::now(),
+    )
+    .await
+    .unwrap()
     {
         Lookup::Found(p) => Some(p),
         Lookup::Missing => None,
@@ -339,6 +361,37 @@ async fn segments_add_up_and_page() {
         .unwrap();
     assert_eq!(failing.total, 3);
     assert!(failing.rows.iter().all(|r| r.state != "passing"));
+    let t = failing.states;
+    assert_eq!(
+        (t.open, t.mitigated, t.accepted_risk, t.false_positive),
+        (2, 1, 0, 0),
+        "the failing pairs by triage state, an expired acceptance open"
+    );
+    assert!(
+        failing
+            .rows
+            .iter()
+            .all(|r| r.origin.as_deref() == Some("online"))
+    );
+    assert!(
+        all.rows[1].origin.is_none(),
+        "a passing host has no finding"
+    );
+    let mitigated = hosts_in(
+        &c,
+        SSH,
+        &scope,
+        CheckHostSegment::Failing,
+        Some(CheckHostState::Mitigated),
+        0,
+        100,
+    )
+    .await
+    .unwrap();
+    assert_eq!(mitigated.total, 1);
+    assert_eq!(mitigated.rows.len(), 1);
+    assert_eq!(mitigated.rows[0].state, "mitigated");
+    assert_eq!(mitigated.states.open, 2, "counts ignore the state chosen");
     let pass = hosts(&c, SSH, &scope, CheckHostSegment::Passing, 0, 100)
         .await
         .unwrap();

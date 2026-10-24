@@ -3,7 +3,7 @@
 // Compliance list must show (roles 5c): hardening-linux-l1 and a site rule
 // set next to baseline, a check in every area, every triage state, an
 // accepted risk that expired (counts as open), an ended finding (not
-// failing), assignees (one person, two, none) and checks no host fails
+// failing), an imported observation (an agent export), assignees (one person, two, none) and checks no host fails
 // (passing only). They join data.findings and data.triage, so every page
 // sees them. Hosts: every third runs no hardening, hosts 1-4 and every
 // fifth run the site set (data.ts).
@@ -35,11 +35,11 @@ export const EXTRA_META: CheckMeta[] = [
 ];
 
 type Seed = { rule: string; set?: string; severity: Severity; hosts: {
-  agent: string; days: number; state?: string; assignee?: string; until?: number; endedDaysAgo?: number }[] };
+  agent: string; days: number; state?: string; assignee?: string; until?: number; endedDaysAgo?: number; imported?: boolean }[] };
 
 const SEEDS: Seed[] = [
   { rule: "harden.ssh.permit_root_login", severity: "high", hosts: [
-    { agent: "agent-00001", days: 12, assignee: "sam" }, { agent: "agent-00002", days: 9 },
+    { agent: "agent-00001", days: 12, assignee: "sam" }, { agent: "agent-00002", days: 9, imported: true },
     { agent: "agent-00004", days: 20, state: "mitigated" }, { agent: "agent-00005", days: 6, state: "accepted_risk", until: 60 },
     { agent: "agent-00007", days: 3, state: "false_positive" }] },
   { rule: "harden.ssh.permit_empty_passwords", severity: "high", hosts: [
@@ -74,7 +74,7 @@ export function seedChecks(now: number, hostname: (agent: string) => string | nu
           observed_at_unix_ms: now - 5 * 60_000, rule_set_version: set === "site" ? 10 : 4, preimage_sha256: "c".repeat(64), truncated: false,
           inputs: [{ key: s.rule, status: "summarized", value: null, item_count: 1 }], steps: [{ expression: `facts['${s.rule}']`, result: true }],
         },
-        scan_id: `scan-${h.agent}-${Math.floor(now / DAY)}`, authenticated: true, origin: "online",
+        scan_id: `scan-${h.agent}-${Math.floor(now / DAY)}`, authenticated: true, origin: h.imported ? "import" : "online",
         first_observed_at: iso(now - h.days * DAY), last_observed_at: last, received_at: last,
         ended_at: h.endedDaysAgo == null ? null : iso(now - h.endedDaysAgo * DAY + HOUR),
       });

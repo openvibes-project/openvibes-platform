@@ -17,6 +17,7 @@ import { checkArea } from "./checkList";
 
 const DAY = 86_400_000;
 const SEVERITIES = ["critical", "high", "medium", "low", "info"];
+const STATES = ["open", "mitigated", "accepted_risk", "false_positive"];
 const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const invalid = (field: string) => problem(400, "invalid_query", "Compliance query parameters are invalid",
   { field_errors: [{ field, code: "invalid", message: `The ${field} parameter is invalid` }] });
@@ -127,9 +128,12 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
   });
 
   route("GET", "/api/v1/compliance/checks/{set}/{rule}/hosts", "compliance.read", ({ set = "", rule = "" }, query) => {
-    for (const k of query.keys()) if (!["segment", "offset", "limit"].includes(k)) return invalid("query");
+    for (const k of query.keys()) if (!["segment", "state", "offset", "limit"].includes(k)) return invalid("query");
     const segment = query.get("segment") || "all";
     if (!["all", "failing", "passing"].includes(segment)) return invalid("segment");
+    // A failing pair's triage state narrows the Failing segment only (page.rs).
+    const state = query.get("state") || null;
+    if (state !== null && (segment !== "failing" || !STATES.includes(state))) return invalid("state");
     const offset = Number(query.get("offset") || 0);
     const limit = Number(query.get("limit") || 50);
     if (!Number.isInteger(offset) || offset < 0 || offset > 100_000) return invalid("offset");
@@ -145,15 +149,17 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
     const person = (u: string | null) => { const x = data.access.users.find((v) => v.username === u); return x ? { id: x.user_id, name: x.display_name } : null; };
     const rows = [
       ...p.failing.map((x) => ({
-        ...host(x.f.agent_id), state: x.state, assignee: person(x.assignee), checked_at: x.f.last_observed_at, triage_version: x.version, accepted_until: x.until,
+        ...host(x.f.agent_id), state: x.state, assignee: person(x.assignee), checked_at: x.f.last_observed_at, triage_version: x.version, accepted_until: x.until, origin: x.f.origin,
         evidence: (x.f.detection?.inputs ?? []).map((i) => (i.status === "complete" || i.status == null
           ? { fact: i.key, value: String(i.value) } : { fact: i.key, status: i.status })),
       })),
-      ...p.passing.map((a) => ({ ...host(a.id), state: "passing", assignee: null, checked_at: a.last_seen_at ?? null, triage_version: null, accepted_until: null, evidence: [] })),
+      ...p.passing.map((a) => ({ ...host(a.id), state: "passing", assignee: null, checked_at: a.last_seen_at ?? null, triage_version: null, accepted_until: null, origin: null, evidence: [] })),
     ].sort((a, b) => (a.hostname === null ? 1 : b.hostname === null ? -1 : byteOrder(a.hostname, b.hostname)) || byteOrder(a.agent_id, b.agent_id));
     const segments = { all: rows.length, failing: p.failing.length, passing: p.passing.length };
-    const chosen = rows.filter((r) => segment === "all" || (segment === "passing") === (r.state === "passing"));
-    const body: CheckHostsPage = { rows: chosen.slice(offset, offset + limit), total: chosen.length, segments };
+    const states = { open: 0, mitigated: 0, accepted_risk: 0, false_positive: 0 };
+    for (const x of p.failing) states[x.state as keyof typeof states] += 1;
+    const chosen = rows.filter((r) => (segment === "all" || (segment === "passing") === (r.state === "passing")) && (state === null || r.state === state));
+    const body: CheckHostsPage = { rows: chosen.slice(offset, offset + limit), total: chosen.length, segments, states };
     return json(body);
   });
 }

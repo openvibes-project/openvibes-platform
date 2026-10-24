@@ -772,7 +772,9 @@ after its start. History merges `console_finding_triage_history` of hosts
 in reach, episode starts and ends, and `rule_bundles` publishes, newest
 first, 50 at most. The header's `open` counts the failing pairs whose state is open (an
 expired acceptance counts); a Hosts row carries the pair's
-`accepted_until`, kept after it expires. `check_summary::evidence` turns `detection -> 'inputs'`
+`accepted_until`, kept after it expires, and the finding's `origin`;
+`check_hosts` takes a `CheckHostState` that narrows the Failing segment
+and returns the failing pairs per state (`CheckStateCounts`; both in `check_states`, re-exported by `check_summary`). `check_summary::evidence` turns `detection -> 'inputs'`
 into evidence, a value only for a complete input. `check_related`
 parses the port or unit from the rule's indexed expression
 (`member_of`, `rule_port`, `rule_unit`; schema 63 adds

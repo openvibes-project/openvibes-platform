@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 test("a check's failing host explains itself and opens its original rule", async ({ page }) => {
   await page.goto("/compliance/baseline/port.redis.exposed?segment=failing");
   const panel = page.locator(".person-card").filter({ has: page.getByRole("heading", { name: /^Hosts/ }) });
-  await panel.getByRole("button", { name: "View evidence", exact: true }).first().click();
+  await panel.getByRole("button", { name: /^View evidence on / }).first().click();
   await expect(panel.getByText("Complete list of 2 values", { exact: false })).toBeVisible();
   await expect(panel.locator(".detection-verdict")).toContainText("Matched 1 of 1 condition");
   await panel.getByRole("button", { name: "Show rule" }).click();

@@ -93,14 +93,41 @@ test("switches the Hosts segments, and an unknown one reads as All", async ({ pa
   await expect(segments(page).getByRole("radio", { name: /^All/ })).toHaveAttribute("aria-checked", "true");
 });
 
+test("the Failing segment narrows by triage state, with counts; another segment drops the state", async ({ page }) => {
+  await page.goto(PAGE);
+  await expect(page.getByRole("radiogroup", { name: "Failing hosts by triage state" })).toHaveCount(0);
+  await segments(page).getByRole("radio", { name: /^Failing/ }).click();
+  const states = page.getByRole("radiogroup", { name: "Failing hosts by triage state" });
+  await expect(states.getByRole("radio", { name: /^All failing\s*5$/ })).toHaveAttribute("aria-checked", "true");
+  await expect(states.getByRole("radio", { name: /^Open\s*2$/ })).toBeVisible();
+  await states.getByRole("radio", { name: /^Mitigated\s*1$/ }).click();
+  await expect(page).toHaveURL(/[?&]state=mitigated/);
+  await expect(hosts(page)).toHaveCount(1);
+  await expect(hosts(page)).toContainText("Mitigated");
+  await states.getByRole("radio", { name: /^False positive/ }).click();
+  await expect(hosts(page)).toHaveCount(1);
+  await expect(hosts(page)).toContainText("False positive");
+  await segments(page).getByRole("radio", { name: /^All/ }).click();
+  await expect(page).not.toHaveURL(/[?&]state=/);
+  await expect(states).toHaveCount(0);
+  // An unknown state reads as every failing host.
+  await page.goto(`${PAGE}?segment=failing&state=bogus`);
+  await expect(hosts(page)).toHaveCount(5);
+});
+
+test("an imported host says so on its row", async ({ page }) => {
+  await page.goto(`${PAGE}?segment=failing`);
+  await expect(hosts(page).filter({ hasText: "imported" })).toHaveCount(1);
+});
+
 test("passing rows have no checkbox; failing rows do, and open their evidence", async ({ page }) => {
   await page.goto(`${PAGE}?segment=passing`);
   await expect(hosts(page).first()).toContainText("Passing");
   await expect(hosts(page).getByRole("checkbox")).toHaveCount(0);
-  await expect(hosts(page).getByRole("button", { name: "View evidence" })).toHaveCount(0);
+  await expect(hosts(page).getByRole("button", { name: /^View evidence on / })).toHaveCount(0);
   await segments(page).getByRole("radio", { name: /^Failing/ }).click();
   await expect(hosts(page).getByRole("checkbox")).toHaveCount(5);
-  await hosts(page).first().getByRole("button", { name: "View evidence" }).click();
+  await hosts(page).first().getByRole("button", { name: /^View evidence on / }).click();
   await expect(card(page, /^Hosts/).getByText("Why it triggered")).toBeVisible();
   await expect(card(page, /^Hosts/).locator(".detection-verdict")).toContainText("Matched 1 of 1 condition");
 });
@@ -145,7 +172,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(PAGE);
     await expect(hosts(page).first()).toBeVisible();
-    await hosts(page).filter({ hasText: "Open" }).first().getByRole("button", { name: "View evidence" }).click();
+    await hosts(page).filter({ hasText: "Open" }).first().getByRole("button", { name: /^View evidence on / }).click();
     await expect(card(page, /^Hosts/).getByText("Why it triggered")).toBeVisible();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   });

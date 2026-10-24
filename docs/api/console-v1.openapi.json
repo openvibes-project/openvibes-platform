@@ -3695,6 +3695,15 @@
             }
           },
           {
+            "name": "state",
+            "in": "query",
+            "description": "With `segment=failing`: open, mitigated, accepted_risk or\nfalse_positive (absent: any). Refused with another segment.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "offset",
             "in": "query",
             "description": "Rows to skip, 0 to 100000.",
@@ -14085,6 +14094,13 @@
             ],
             "description": "Host name."
           },
+          "origin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`online` or `import` (an agent export); null for a passing host."
+          },
           "os": {
             "type": [
               "string",
@@ -14112,7 +14128,8 @@
         "required": [
           "rows",
           "total",
-          "segments"
+          "segments",
+          "states"
         ],
         "properties": {
           "rows": {
@@ -14125,6 +14142,10 @@
           "segments": {
             "$ref": "#/components/schemas/CheckSegmentsView",
             "description": "Every segment's count."
+          },
+          "states": {
+            "$ref": "#/components/schemas/CheckStatesView",
+            "description": "The failing hosts per triage state, whatever `state` is chosen."
           },
           "total": {
             "type": "integer",
@@ -14377,6 +14398,38 @@
           "unit": {
             "type": "string",
             "description": "The systemd unit, linking to `/services/{unit}`."
+          }
+        }
+      },
+      "CheckStatesView": {
+        "type": "object",
+        "description": "Failing hosts per triage state.",
+        "required": [
+          "open",
+          "mitigated",
+          "accepted_risk",
+          "false_positive"
+        ],
+        "properties": {
+          "accepted_risk": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Accepted risk."
+          },
+          "false_positive": {
+            "type": "integer",
+            "format": "int64",
+            "description": "False positive."
+          },
+          "mitigated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Mitigated."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open (an expired acceptance counts)."
           }
         }
       },
