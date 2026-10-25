@@ -83,8 +83,18 @@ pub fn finished_rows(states: &[Option<StepState>], signed: Option<&str>) -> Vec<
             vec![dim("move it to a USB stick and keep it offline")],
         ));
     } else if let Some(ca) = ca {
-        let who = signed.map_or_else(|| ca.to_owned(), |who| format!("signed by {who}"));
+        let (what, sha) = match ca.split_once(", SHA-256 ") {
+            Some((what, sha)) => (what, Some(sha)),
+            None => (ca, None),
+        };
+        let who = signed.map_or_else(|| what.to_owned(), |who| format!("signed by {who}"));
         rows.push(row("Certificates", vec![bold(&who)]));
+        // Compared by hand, so shown whole: 16 bytes a line.
+        let bytes: Vec<&str> = sha.map_or_else(Vec::new, |sha| sha.split(':').collect());
+        for (i, half) in bytes.chunks(16).enumerate() {
+            let name = if i == 0 { "Root CA SHA-256" } else { "" };
+            rows.push(row(name, vec![bold(&half.join(":"))]));
+        }
         rows.push(row(
             "",
             vec![dim("browsers that trust your CA show no warning")],

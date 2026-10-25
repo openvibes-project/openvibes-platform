@@ -353,3 +353,32 @@ fn finished_screen_shows_the_password_once_and_next() {
         "{text}"
     );
 }
+
+/// 32 bytes, as `setup::pki::fingerprint` writes them.
+const FINGERPRINT: &str = "A9:01:02:03:04:05:06:07:08:09:0A:0B:0C:0D:0E:0F:\
+                           10:11:12:13:14:15:16:17:18:19:1A:1B:1C:1D:1E:FF";
+
+#[test]
+fn finished_shows_the_root_fingerprint_whole_at_80_columns() {
+    let ca = format!("done\troot certificate /etc/openvibes/pki/root.crt, SHA-256 {FINGERPRINT}");
+    // The plan, then each step up to the CA's.
+    let mut answers: Vec<_> = (0..6).map(|_| ok()).collect();
+    answers.push(Ok(ca));
+    let mut app = fresh(answers);
+    app.install.ca = Ca::Import;
+    go(&mut app);
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Finished));
+    let text = screen(&app);
+    let (first, second) = FINGERPRINT.split_at(48);
+    for line in [
+        "    Certificates        root certificate /etc/openvibes/pki/root.crt",
+        &format!("    Root CA SHA-256     {}", first.trim_end_matches(':')),
+        &format!("                        {second}"),
+        "                        browsers that trust your CA show no warning",
+    ] {
+        assert!(
+            text.lines().any(|l| l.trim_end() == line),
+            "missing {line:?} in\n{text}"
+        );
+    }
+}
