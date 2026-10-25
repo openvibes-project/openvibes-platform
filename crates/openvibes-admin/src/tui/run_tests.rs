@@ -385,3 +385,17 @@ fn a_finished_label_is_done_when_one_call_did_the_work() {
     assert_eq!(states[0], Some(StepState::Done("did it".into())));
     assert_eq!(states[1], Some(StepState::Skipped("first why".into())));
 }
+
+#[test]
+fn how_long_it_took_is_left_out_under_a_second() {
+    use std::time::Duration;
+    let start = Instant::now();
+    let took = |seconds: f64| {
+        let mut run = super::run::Run::new(fix(vec![Call::Setup(Step::Ready)]), start);
+        run.ended = Some(start + Duration::from_secs_f64(seconds));
+        run.took()
+    };
+    assert_eq!(took(0.4), "");
+    assert_eq!(took(12.0), " (12 s)");
+    assert_eq!(took(161.0), " (2 min 41 s)");
+}

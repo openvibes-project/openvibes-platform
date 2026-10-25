@@ -150,7 +150,7 @@ fn apply_saves_the_whole_plan_then_repairs() {
         "Install the assistant",
         "Download the model",
         "Ready",
-        "Assistant installed · ask it in the console (",
+        "Assistant installed · ask it in the console",
         "Enter  Back",
     ] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
@@ -244,7 +244,7 @@ fn removing_the_agent_runs_remove_steps_for_the_agent_only() {
         "Stop the agent",
         "Remove the agent",
         "Remove its data",
-        "Agent removed · nothing of it is left on this host (",
+        "Agent removed · nothing of it is left on this host",
     ] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
     }
@@ -450,7 +450,7 @@ fn removing_one_part_and_adding_the_other() {
     assert_eq!(made, all);
     let text = screen(&app);
     assert!(
-        text.contains("Agent removed and assistant installed ("),
+        text.contains("Agent removed and assistant installed"),
         "{text}"
     );
 }

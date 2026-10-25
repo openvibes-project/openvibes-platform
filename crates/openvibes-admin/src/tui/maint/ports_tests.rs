@@ -166,7 +166,7 @@ fn apply_moves_the_port() {
         "Open the new port",
         "Close the old port",
         "Ready",
-        "Moved to 18500 · new install line: console › Enrollment (",
+        "Moved to 18500 · new install line: console › Enrollment",
         "Enter  Back",
     ] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
@@ -192,7 +192,7 @@ fn the_console_question_and_result() {
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     assert!(
-        screen(&app).contains("Console moved to 8443 · https://platform.example.com:8443 ("),
+        screen(&app).contains("Console moved to 8443 · https://platform.example.com:8443"),
         "{}",
         screen(&app)
     );

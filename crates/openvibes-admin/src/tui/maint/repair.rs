@@ -399,16 +399,16 @@ impl<H: Host> App<H> {
                 match parse(out).iter().filter(|(_, s)| problem(s)).count() {
                     _ if parse(out).is_empty() => Some((
                         false,
-                        format!("The repair ran, but checking again failed ({took})"),
+                        format!("The repair ran, but checking again failed{took}"),
                     )),
-                    0 => Some((true, format!("Repaired: everything is in order ({took})"))),
-                    1 => Some((false, format!("1 problem left ({took})"))),
-                    n => Some((false, format!("{n} problems left ({took})"))),
+                    0 => Some((true, format!("Repaired: everything is in order{took}"))),
+                    1 => Some((false, format!("1 problem left{took}"))),
+                    n => Some((false, format!("{n} problems left{took}"))),
                 }
             }
             Some(_) if run.stopped_at() == Some(last) => Some((
                 false,
-                format!("The repair ran, but checking again failed ({took})"),
+                format!("The repair ran, but checking again failed{took}"),
             )),
             _ => return,
         };

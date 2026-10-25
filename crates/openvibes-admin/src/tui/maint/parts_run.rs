@@ -123,7 +123,7 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run:
     lines.push(Line::raw(""));
     if run.ok() {
         lines.push(Line::styled(
-            format!("    ✓ {} ({})", run.work.kind.done(), run.took()),
+            format!("    ✓ {}{}", run.work.kind.done(), run.took()),
             t.green(),
         ));
     } else if let Some(at) = run.stopped_at() {

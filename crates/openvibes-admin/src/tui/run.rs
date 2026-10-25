@@ -284,17 +284,18 @@ impl Run {
         self.states.get(self.work.calls.len() + j)?.as_ref()
     }
 
-    /// How long it took: "2 min 41 s", "12 s".
+    /// How long it took, to end a result line: " (2 min 41 s)", " (12 s)";
+    /// nothing under a second.
     pub fn took(&self) -> String {
         let s = self
             .ended
             .unwrap_or_else(Instant::now)
             .saturating_duration_since(self.started)
             .as_secs();
-        if s >= 60 {
-            format!("{} min {} s", s / 60, s % 60)
-        } else {
-            format!("{s} s")
+        match s {
+            0 => String::new(),
+            1..60 => format!(" ({s} s)"),
+            _ => format!(" ({} min {} s)", s / 60, s % 60),
         }
     }
 

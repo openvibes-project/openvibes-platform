@@ -91,7 +91,7 @@ fn apply_finishes_the_removal_without_saving_a_choice() {
     let text = screen(&app);
     assert!(!text.contains("Save the choice"), "{text}");
     assert!(
-        text.contains("Agent removed · nothing of it is left on this host ("),
+        text.contains("Agent removed · nothing of it is left on this host"),
         "{text}"
     ); // Back, and in again: finished, not "removal not finished" from the
     // package list read at start.

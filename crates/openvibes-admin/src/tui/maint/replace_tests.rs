@@ -138,7 +138,7 @@ fn replace_quick_wrong_key_then_right_key_then_runs() {
     assert!(text.contains("Esc  Cancel"), "{text}");
     app.key(Key::Enter);
     assert_eq!(calls(&app), [format!("ca-replace --root-key {key}")]);
-    let done = "Replaced · agents move over in 30 days · put the key offline again (0 s)";
+    let done = "Replaced · agents move over in 30 days · put the key offline again";
     assert_eq!(body(&app), done_body(&STEPS, done));
 
     // Back on the page, the old intermediate is still trusted.
@@ -249,7 +249,7 @@ fn replace_own_ca_paste_then_replace() {
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     assert_eq!(calls(&app)[2], "ca-replace");
-    let done = "Replaced · agents move over in 30 days (0 s)";
+    let done = "Replaced · agents move over in 30 days";
     assert_eq!(body(&app), done_body(&STEPS[1..], done));
 }
 

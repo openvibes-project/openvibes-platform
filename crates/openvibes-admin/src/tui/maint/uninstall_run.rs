@@ -42,7 +42,7 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run:
     lines.push(Line::raw(""));
     if run.ok() {
         lines.push(Line::styled(
-            format!("    ✓ OpenVIBES is removed from this host ({})", run.took()),
+            format!("    ✓ OpenVIBES is removed from this host{}", run.took()),
             t.green(),
         ));
         // What the helper reported (review I4): Purge's and the last step's

@@ -166,7 +166,7 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
         Some(state) => lines.extend(line(t, Err(&ca_request::sentence(state.detail())))),
         None => lines.extend(line(
             t,
-            Ok(&format!("{} ({})", run.work.kind.done(), run.took())),
+            Ok(&format!("{}{}", run.work.kind.done(), run.took())),
         )),
     }
     frame.render_widget(Paragraph::new(lines), area);

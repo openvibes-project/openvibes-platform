@@ -266,7 +266,7 @@ fn replace_imports_then_asks() {
     for want in [
         "    ✓ Trusting the old and the new one",
         "    ✓ Restarting the services",
-        "    ✓ Replaced · agents move over in 30 days (0 s)",
+        "    ✓ Replaced · agents move over in 30 days",
     ] {
         assert!(text.contains(want), "{want}\n{text}");
     }
