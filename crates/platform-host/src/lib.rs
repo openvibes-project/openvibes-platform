@@ -9,6 +9,7 @@ pub mod runner;
 pub mod service;
 pub mod setup;
 pub mod shell;
+mod stderr;
 pub mod unit;
 
 pub use service::{CONFIG_DIR, Service};
