@@ -271,14 +271,36 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
                 ])
             });
             lines.push(Line::raw(""));
-            for (step, state) in &problems {
-                let detail = if state.detail().is_empty() {
-                    state.label()
-                } else {
-                    state.detail()
-                };
+            // The actions stay in view: the problems get what is left, two
+            // lines each, else one, else as many as fit and how many more.
+            let rows: Vec<Row> = entries(&steps, half)
+                .iter()
+                .map(|(_, n, v)| Row::entry(n, v))
+                .collect();
+            let below = 1 + usize::from(half.is_some() && n > 0) + rows.len() * 2 + 1;
+            let room = usize::from(area.height).saturating_sub(lines.len() + below);
+            let details: Vec<(&Step, &str)> = problems
+                .iter()
+                .map(|(step, state)| {
+                    let detail = if state.detail().is_empty() {
+                        state.label()
+                    } else {
+                        state.detail()
+                    };
+                    (step, detail)
+                })
+                .collect();
+            let wrapped = |max| -> Vec<Vec<String>> {
+                details.iter().map(|(_, d)| wrap(d, 47, max)).collect()
+            };
+            let mut parts = wrapped(2);
+            if parts.iter().map(Vec::len).sum::<usize>() > room {
+                parts = wrapped(1);
+            }
+            let shown = if n > room { room.saturating_sub(1) } else { n };
+            for ((step, _), part) in details.iter().zip(parts).take(shown) {
                 // Wrapped under its own column, as the ✗ view wraps.
-                for (i, part) in wrap(detail, 47, 2).into_iter().enumerate() {
+                for (i, part) in part.into_iter().enumerate() {
                     let (mark, title) = match i {
                         0 => ("▲ ", step.title()),
                         _ => ("  ", ""),
@@ -290,6 +312,10 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
                         Span::styled(part, t.dim()),
                     ]));
                 }
+            }
+            if shown < n {
+                let more = format!("    {} {} more", t.down(), n - shown);
+                lines.push(Line::styled(more, t.dim()));
             }
             let fine = steps.len() - n;
             let others = if n == 0 { "steps" } else { "other steps" };
@@ -307,10 +333,6 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
                 ]));
             }
             // The list's own hint line is the one empty line above the actions.
-            let rows: Vec<Row> = entries(&steps, half)
-                .iter()
-                .map(|(_, n, v)| Row::entry(n, v))
-                .collect();
             let room = area
                 .height
                 .saturating_sub(u16::try_from(lines.len()).unwrap_or(u16::MAX));

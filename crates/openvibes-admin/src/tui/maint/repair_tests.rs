@@ -281,3 +281,44 @@ fn a_long_problem_wraps_under_its_column_at_80_columns() {
     );
     assert!(lines[2].contains("other steps in order"), "{text}");
 }
+
+/// More problems than 80×24 holds: one line each, then how many more; the
+/// actions stay in view.
+#[test]
+fn many_problems_leave_room_for_the_actions() {
+    let long = "a sentence long enough to need a second line at eighty columns, and then some";
+    let status: String = ["packages", "postgres", "certificates", "firewall"]
+        .iter()
+        .map(|s| format!("{s}\tfailed\t{long}\n"))
+        .collect();
+    let mut app = set_up(vec![Ok(status.clone())]);
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    for want in [
+        "4 problems found",
+        "▲ Install packages",
+        "⭣ 2 more",
+        "Fix 4 problems",
+        "Check again",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+    assert!(!text.contains("then some"), "one line each\n{text}");
+    // Two long problems: one line each too, so both and the actions fit.
+    let two: String = status.lines().take(2).map(|l| format!("{l}\n")).collect();
+    let mut app = set_up(vec![Ok(two)]);
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    for want in [
+        "▲ Install packages",
+        "▲ PostgreSQL",
+        "Fix 2 problems",
+        "Check again",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+}
