@@ -104,7 +104,7 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   `ca-replace /etc/openvibes/pki/intermediate.crt`, without the key path),
   and `ca-import` (`Privileged::CaImport(&Secret)`: the certificates and
   key go on stdin, never in argv; journalled and audit-noted as
-  `ca-import /etc/openvibes/pki/request`).
+  `ca-import /run/openvibes-import`).
   `Host::privileged` runs `sudo -S -k -p '' /usr/bin/openvibes-admin helper
   VERB…` with the password on stdin only (never in argv or the journal),
   followed by the verb's own input (`Privileged::stdin`: `ca-import`'s

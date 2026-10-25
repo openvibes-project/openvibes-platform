@@ -341,7 +341,7 @@ pub enum Privileged<'a> {
     /// /etc/openvibes/pki/intermediate.crt` (no key path).
     CaReplace(Option<&'a str>),
     /// `ca-import`: a company intermediate, its chain and key, on stdin
-    /// (never argv); journalled as `ca-import /etc/openvibes/pki/request`.
+    /// (never argv); journalled as `ca-import /run/openvibes-import`.
     CaImport(&'a Secret),
 }
 
@@ -435,7 +435,7 @@ impl Privileged<'_> {
             Privileged::CaRequest(_) => "ca-request /etc/openvibes/pki/request".into(),
             Privileged::CaAccept(..) => "ca-accept /etc/openvibes/pki/request".into(),
             Privileged::CaReplace(_) => "ca-replace /etc/openvibes/pki/intermediate.crt".into(),
-            Privileged::CaImport(_) => "ca-import /etc/openvibes/pki/request".into(),
+            Privileged::CaImport(_) => "ca-import /run/openvibes-import".into(),
             other => other.args().join(" "),
         }
     }
@@ -450,7 +450,7 @@ mod tests {
         let bundle = Secret::new("-----BEGIN PRIVATE KEY-----\nK\n".into());
         let import = Privileged::CaImport(&bundle);
         assert_eq!(import.args(), ["ca-import"]);
-        assert_eq!(import.journal(), "ca-import /etc/openvibes/pki/request");
+        assert_eq!(import.journal(), "ca-import /run/openvibes-import");
         assert!(!format!("{import:?}").contains("BEGIN"));
         let password = Secret::new("pw".into());
         let sudo = import.stdin(Some(&password)).unwrap();
