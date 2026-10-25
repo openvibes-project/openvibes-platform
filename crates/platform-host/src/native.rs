@@ -15,8 +15,8 @@ use crate::{
 
 const ADMIN: &str = "/usr/bin/openvibes-admin";
 const PROPERTIES: &str = "--property=Id,LoadState,ActiveState,UnitFileState,ActiveEnterTimestamp";
-/// The certificate timer's service: its last run failing is what Status
-/// shows of the timer, which keeps going either way.
+/// The certificate timer's service: its last run failing is said on the
+/// timer (`last_run_failed`), which keeps going either way.
 const RENEWAL: &str = "openvibes-certificates.service";
 
 /// The systemd backend.
@@ -135,8 +135,7 @@ impl<R: Runner> Host for Native<R> {
                 if field("Id") == RENEWAL && field("ActiveState") == "failed" {
                     let timer = services.iter_mut().find(|s| s.unit == Unit::Certificates);
                     if let Some(timer) = timer {
-                        timer.active = "failed".into();
-                        timer.since = None;
+                        timer.last_run_failed = true;
                     }
                 }
                 continue;
@@ -150,6 +149,7 @@ impl<R: Runner> Host for Native<R> {
                 enabled: field("UnitFileState") == "enabled",
                 ready: if running { self.ready(unit) } else { None },
                 since: (running && !since.is_empty()).then(|| since.to_owned()),
+                last_run_failed: false,
                 active,
             });
         }

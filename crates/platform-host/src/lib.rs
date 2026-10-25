@@ -54,6 +54,9 @@ pub struct ServiceStatus {
     pub ready: Option<bool>,
     /// When it became active.
     pub since: Option<String>,
+    /// A timer's last run failed (the certificate timer's service); the
+    /// timer itself goes on.
+    pub last_run_failed: bool,
 }
 
 /// An installed OpenVIBES package and the newer version the repository has.

@@ -54,7 +54,7 @@ pub fn items(services: &[ServiceStatus], checks: &[Check]) -> Vec<Item> {
     let installed = || services.iter().filter(|s| s.installed);
     let mut out = Vec::new();
     for s in installed() {
-        if s.unit == Unit::Certificates && s.active == "failed" {
+        if s.last_run_failed {
             // The timer goes on; its last run failed (platform-host).
             out.push(Item::Problem {
                 text: "certificate renewal failed: see Status › certificate renewal › Logs".into(),

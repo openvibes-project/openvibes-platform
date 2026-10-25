@@ -51,6 +51,7 @@ fn an_unreachable_database_is_a_problem_and_uninstalled_units_are_left_out() {
         active: "inactive".into(),
         ready: None,
         since: None,
+        last_run_failed: false,
     }];
     let checks = checks(
         &services,
@@ -257,6 +258,7 @@ fn distribution_with_no_rule_set_published_is_a_problem() {
         active: "active".into(),
         ready: Some(true),
         since: None,
+        last_run_failed: false,
     };
     let health = |installed, list: &str| {
         checks(

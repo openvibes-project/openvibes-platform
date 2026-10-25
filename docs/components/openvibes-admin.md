@@ -63,8 +63,9 @@ installed unit that is failed or inactive (`■ NAME is stopped`; not the
 model server or the maintenance timer, which idle by design), a unit not
 enabled at boot (`▲ NAME does not start at boot`; there is no boot switch),
 a certificate renewal whose last run failed (`openvibes-certificates.service`
-failed, though its timer goes on: "certificate renewal failed: see Status ›
-certificate renewal › Logs"),
+failed, `ServiceStatus::last_run_failed`; its timer keeps its own state and
+actions, and its Service page adds "▲ The last renewal failed: see Full log.":
+"certificate renewal failed: see Status › certificate renewal › Logs"),
 or a health check (certificates, a lost `chain.crt`, disk, feeds, signer, audit, tuning). `Enter`
 on a service opens it; on a stopped or not-enabled unit it starts or enables
 it (a Yes/No question in the bar, or the sudo password typed in the bar;

@@ -29,7 +29,8 @@ themselves and other deployments (pods, Kubernetes) can plug in later
 - `native::Native<R: Runner>`: the systemd implementation.
   - services: one `systemctl show --property=… UNITS…`, plus
     `openvibes-certificates.service`: when its last run failed, the
-    certificate timer reads `failed` (the timer itself goes on); readiness by
+    certificate timer's `last_run_failed` is set (its own state stays as
+    systemd reports it); readiness by
     `curl --silent --fail --max-time 1` on the default loopback endpoints
     (ingest 18480, distribution 18481, vulns 18483, console 18482 `/ready`,
     llm 18430 `/health`), only for active units;

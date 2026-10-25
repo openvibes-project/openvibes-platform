@@ -1,5 +1,5 @@
-//! The certificate timer's service: a failed renewal run reads as the
-//! timer failed, though the timer itself keeps going.
+//! The certificate timer's service: a failed renewal run is said on the
+//! timer, whose own state stays as systemd reports it.
 
 use platform_host::{
     Host, Unit,
@@ -32,7 +32,7 @@ impl Runner for Show {
 const TIMER: &str = "Id=openvibes-certificates.timer\nLoadState=loaded\nActiveState=active\n\
                      UnitFileState=enabled\nActiveEnterTimestamp=Sun 2026-09-27 09:00:00 UTC\n\n";
 
-fn renewal(state: &'static str) -> String {
+fn renewal(state: &'static str) -> (String, bool) {
     let show = format!(
         "{TIMER}Id=openvibes-certificates.service\nLoadState=loaded\nActiveState={state}\n\
          UnitFileState=static\nActiveEnterTimestamp=\n"
@@ -43,11 +43,11 @@ fn renewal(state: &'static str) -> String {
     let services = host.services().unwrap();
     assert_eq!(services.len(), 1, "the service is not a unit of its own");
     assert_eq!(services[0].unit, Unit::Certificates);
-    services[0].active.clone()
+    (services[0].active.clone(), services[0].last_run_failed)
 }
 
 #[test]
-fn a_failed_renewal_run_shows_as_failed() {
-    assert_eq!(renewal("failed"), "failed");
-    assert_eq!(renewal("inactive"), "active");
+fn a_failed_renewal_run_is_said_and_the_timer_keeps_its_state() {
+    assert_eq!(renewal("failed"), ("active".into(), true));
+    assert_eq!(renewal("inactive"), ("active".into(), false));
 }

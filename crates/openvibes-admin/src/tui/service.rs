@@ -114,6 +114,12 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, unit: Unit)
         Line::raw(""),
         Line::from(vec![Span::raw("    "), dot, Span::raw(state)]),
     ];
+    if status.is_some_and(|s| s.last_run_failed) {
+        lines.push(Line::from(vec![
+            Span::styled("    ▲ ", t.yellow()),
+            Span::raw("The last renewal failed: see Full log."),
+        ]));
+    }
     let rows: Vec<Row> = acts
         .iter()
         .map(|a| {
