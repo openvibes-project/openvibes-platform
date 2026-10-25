@@ -540,9 +540,14 @@ ca-replace`, password-gated like the other Setup verbs):
    agents trust only that one. With OpenVIBES' own CA, pick the root key
    kept at install (`--root-key PATH`): it must be the key of this host's
    root, and its copy lives only in `/run/openvibes-ca` (tmpfs) while the
-   new intermediate is signed, removed whatever happens. A refusal changes
-   nothing. While an earlier replacement's old intermediate is still
-   trusted, Replace refuses and says until when.
+   new intermediate is signed, removed whatever happens. With an
+   intermediate imported from your PKI, add the next one and its key as at
+   install (`ca-import`): it must be under the same root, since agents
+   trust only that one ("Replace: under NEW, not INSTALLED, so agents
+   would stop trusting this host. Ask for one under the same root."), and
+   `ca-replace` checks the whole path up to this host's `root.crt` again.
+   A refusal changes nothing. While an earlier replacement's old
+   intermediate is still trusted, Replace refuses and says until when.
 2. **Trust both:** the new intermediate is recorded (`ca
    import-intermediate`), its key becomes
    `/var/lib/openvibes-ingest/intermediate.key`, and
@@ -552,7 +557,10 @@ ca-replace`, password-gated like the other Setup verbs):
    only; both accept client certificates from either. The old one is kept
    in `/etc/openvibes/pki/previous.crt` and its end in
    `/etc/openvibes/pki/previous-until` (now + `client_certificate_days` + 1
-   day; both 0644 root, read by the TUI).
+   day; both 0644 root, read by the TUI). An imported one's CAs above it
+   replace `/etc/openvibes/pki/chain.crt` in the same swap (removed for a
+   two-level PKI); the previous chain is not kept, since the server
+   certificates are issued again at once.
 3. **Issue:** the ingest, distribution and console certificates are issued
    again from the new intermediate and the services restart. If that
    fails, run Repair in Maintenance: the old certificates stay valid until
@@ -573,7 +581,7 @@ ca-replace`, password-gated like the other Setup verbs):
 
 A replacement cut short by a crash or power loss mends itself: the next
 Replace, daily renewal or Repair finishes one whose new bundle is in place
-without its key ("finished an interrupted replacement"), and undoes one
+without its key or chain ("finished an interrupted replacement"), and undoes one
 that never changed the bundle ("removed an interrupted replacement that
 never took effect"), so Replace does not refuse for a month.
 

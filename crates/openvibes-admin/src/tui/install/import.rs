@@ -42,7 +42,7 @@ pub(super) const KEY_NOTE: &str = "It stays on this host, readable by root only.
 pub(super) const KEY_FIRST: &str = "Add the certificate first: the key is checked against it.";
 
 /// The certificate rows' indices on step 3: Certificate, Private key, Next.
-const CERT: usize = 3;
+pub(super) const CERT: usize = 3;
 pub(super) const KEY: usize = 4;
 pub(super) const NEXT: usize = 5;
 
@@ -65,7 +65,7 @@ pub enum Locked {
 
 impl Install {
     /// Both rows are added, or the helper kept them.
-    pub(super) fn both_added(&self) -> bool {
+    pub(in crate::tui) fn both_added(&self) -> bool {
         self.import_done.is_some() || self.imported.as_ref().is_some_and(|i| i.key.is_some())
     }
 
@@ -80,7 +80,7 @@ impl Install {
     }
 
     /// Everything Import added is forgotten (another choice was made).
-    pub(super) fn forget_import(&mut self) {
+    pub(in crate::tui) fn forget_import(&mut self) {
         self.forget_key();
         self.imported = None;
         self.import_done = None;
@@ -97,8 +97,8 @@ impl Install {
         self.unlocked = None;
     }
 
-    /// Step 3's Certificate and Private key rows.
-    pub(super) fn import_rows(&self, t: &Theme) -> Vec<Row> {
+    /// Step 3's Certificate and Private key rows (Replace's too).
+    pub(in crate::tui) fn import_rows(&self, t: &Theme) -> Vec<Row> {
         let added = |name: &str, said: Option<String>| Row::Entry {
             name: vec![Span::raw(name.to_owned())],
             value: match said {
@@ -239,6 +239,11 @@ impl<H: Host> App<H> {
         if self.install.import_done.is_some() {
             return self.next_step(2);
         }
+        self.send_import();
+    }
+
+    /// The chain and the plain key go to `ca-import` on stdin.
+    pub(in crate::tui) fn send_import(&mut self) {
         let Some(Imported {
             chain,
             key: Some((key, _)),

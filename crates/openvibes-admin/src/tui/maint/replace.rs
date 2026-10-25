@@ -3,7 +3,8 @@
 //! (`helper ca-replace`). With your own CA the install's request, paste
 //! and file screens add the signed certificate, the root kept; when
 //! OpenVIBES made the CA, the root key file kept offline at install is
-//! picked and checked here first, as the helper checks it again. Replace
+//! picked and checked here first, as the helper checks it again; an
+//! imported one comes through the install's Import rows (`import`). Replace
 //! asks, then the password, then the step list and one result line.
 
 use std::path::PathBuf;
@@ -58,6 +59,8 @@ pub struct Replace {
     /// The root key file picked, and its check.
     key: Option<(PathBuf, Result<(), String>)>,
     pick: Option<Browse>,
+    /// Imported: the days agents take to move over.
+    days: i64,
 }
 
 impl Replace {
@@ -94,7 +97,7 @@ fn line(t: &crate::tui::ui::theme::Theme, said: Result<&str, &str>) -> Vec<Line<
 
 fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) {
     let t = &app.theme;
-    let all = &STEPS[usize::from(!app.maint.certs.quick)..];
+    let all = &STEPS[usize::from(!app.maint.certs.quick())..];
     // One helper call does every step. Done: the lines it printed; until
     // then, or when it failed, the progress file it writes as it goes
     // (as the model download's, `parts_run::model_progress`).
@@ -165,14 +168,16 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     }
     let t = &app.theme;
     let row = app.nav.row;
-    let quick = app.maint.certs.quick;
+    let quick = app.maint.certs.quick();
     let install = &app.install;
     let home = install.home.as_deref();
     let root = replace
         .root
         .as_ref()
         .map(|r| r.as_ref().map(|(_, name)| name));
-    let (note, rows, enter, said) = if quick {
+    let (note, rows, enter, said) = if app.maint.certs.imported() {
+        import::page(app)
+    } else if quick {
         let file = match &replace.key {
             None => vec![Span::styled("not added yet", t.yellow())],
             Some((path, checked)) => vec![
@@ -307,7 +312,10 @@ impl<H: Host> App<H> {
             root: Some(root),
             ..Replace::default()
         };
-        if self.maint.certs.quick {
+        if self.maint.certs.imported() {
+            return self.open_import();
+        }
+        if self.maint.certs.quick() {
             self.nav.row = 0;
             return;
         }
@@ -342,7 +350,10 @@ impl<H: Host> App<H> {
             }
             return;
         }
-        let quick = self.maint.certs.quick;
+        if self.maint.certs.imported() {
+            return self.import_key(key);
+        }
+        let quick = self.maint.certs.quick();
         if self.move_row(&key, if quick { 2 } else { 4 }) || key != Key::Enter {
             return;
         }
@@ -410,7 +421,7 @@ impl<H: Host> App<H> {
 
     pub(super) fn replace_yes(&mut self) {
         let key = match &self.maint.replace.key {
-            Some((path, Ok(()))) if self.maint.certs.quick => Some(path.display().to_string()),
+            Some((path, Ok(()))) if self.maint.certs.quick() => Some(path.display().to_string()),
             _ => None,
         };
         let done = "Replaced".to_owned();
@@ -421,7 +432,10 @@ impl<H: Host> App<H> {
     /// A run ended: your own CA's certificate kept goes to Replace; a
     /// replacement says when agents have moved over.
     pub(super) fn replace_ended(&mut self) {
-        let quick = self.maint.certs.quick;
+        if self.import_ended_here() {
+            return;
+        }
+        let quick = self.maint.certs.quick();
         let Some(run) = self.run.as_mut() else { return };
         match &mut run.work.kind {
             Kind::Ca { .. }
@@ -452,3 +466,6 @@ impl<H: Host> App<H> {
         }
     }
 }
+
+#[path = "replace_import.rs"]
+mod import;

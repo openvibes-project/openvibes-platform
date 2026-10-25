@@ -128,8 +128,8 @@ fn split(bundle: &str) -> Result<(String, Zeroizing<String>), String> {
 /// Checks the bundle as the TUI did and stages it: the key first (0600),
 /// then our intermediate, the CAs between it and the root (`chain.crt`,
 /// only when there are any) and the root (0644). Nothing is written when
-/// a check fails, and nothing stays staged when a write fails. With a CA installed (Replace), the root must be the one
-/// agents already trust.
+/// a check fails, and nothing stays staged when a write fails. With a CA installed (Replace), the root must be
+/// the one agents already trust.
 pub fn import<R: Runner>(ctx: &Ctx<R>, bundle: &str, now: DateTime<Utc>) -> Result<Chain, String> {
     let (certs, key) = split(bundle)?;
     let chain = platform_pki::check_chain(&certs, now).map_err(|e| import_message(&e, "", None))?;
@@ -138,21 +138,7 @@ pub fn import<R: Runner>(ctx: &Ctx<R>, bundle: &str, now: DateTime<Utc>) -> Resu
     let key = platform_pki::pkcs8_pem(&key, None).map_err(|e| message(e.into()))?;
     platform_pki::check_key(&chain, &key, now).map_err(message)?;
     if super::pki::installed(ctx) {
-        let installed = ctx.read(super::pki::ROOT_CERT)?;
-        if installed.trim() != chain.root.trim() {
-            let cn = |pem: &str| {
-                platform_pki::issuer_common_name(pem)
-                    .ok()
-                    .flatten()
-                    .unwrap_or_else(|| "an unnamed CA".into())
-            };
-            return Err(format!(
-                "Replace: under {}, not {}, so agents would stop trusting this host. Ask for \
-                 one under the same root.",
-                cn(&chain.root),
-                cn(&installed)
-            ));
-        }
+        same_root(ctx, &chain.root)?;
     }
     let fail = |error: std::io::Error| format!("{IMPORT_DIR}: {error}");
     fs::create_dir_all(ctx.path(IMPORT_DIR)).map_err(fail)?;
@@ -180,6 +166,27 @@ pub fn import<R: Runner>(ctx: &Ctx<R>, bundle: &str, now: DateTime<Utc>) -> Resu
         }
     }
     Ok(chain)
+}
+
+/// Refuses a root other than the one agents trust (compared as DER).
+pub(super) fn same_root<R: Runner>(ctx: &Ctx<R>, root: &str) -> Result<(), String> {
+    let installed = ctx.read(super::pki::ROOT_CERT)?;
+    let der = |pem: &str| platform_pki::certificates(pem).ok();
+    if der(&installed).is_some() && der(&installed) == der(root) {
+        return Ok(());
+    }
+    let cn = |pem: &str| {
+        platform_pki::issuer_common_name(pem)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "an unnamed CA".into())
+    };
+    Err(format!(
+        "Replace: under {}, not {}, so agents would stop trusting this host. Ask for one under \
+         the same root.",
+        cn(root),
+        cn(&installed)
+    ))
 }
 
 /// Removes every staged file, the key first.

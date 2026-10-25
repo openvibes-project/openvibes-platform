@@ -338,6 +338,9 @@ impl<H: Host> App<H> {
                 if self.nav.screen == Screen::Maint(super::maint::Page::SignIn) {
                     self.signin_left();
                 }
+                if self.nav.screen == Screen::Maint(super::maint::Page::Replace) {
+                    self.replace_left();
+                }
                 self.nav.pop();
                 // A note from another screen is not news here.
                 self.message = None;

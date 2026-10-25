@@ -29,10 +29,21 @@ pub(super) fn import<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if installed(ctx) {
         return Ok(StepState::Done(root_summary(ctx)?));
     }
+    if !stage_import(ctx)? {
+        return Ok(StepState::Waiting(HELP.into()));
+    }
+    import_and_install(ctx)?;
+    remove_stage(ctx)?;
+    remove_request(ctx)?;
+    Ok(StepState::Done(root_summary(ctx)?))
+}
+
+/// Copies what `ca-import` staged into `INT`; false when nothing is.
+pub(super) fn stage_import<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
     let staged = |name: &str| format!("{IMPORT_DIR}/{name}");
     let names = ["intermediate.key", "intermediate.crt", "root.crt"];
     if !names.iter().all(|name| ctx.exists(&staged(name))) {
-        return Ok(StepState::Waiting(HELP.into()));
+        return Ok(false);
     }
     stage_from(ctx, IMPORT_DIR, &names)?;
     // Empty for a two-level PKI: `--chain` still checks the path.
@@ -43,10 +54,7 @@ pub(super) fn import<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         Vec::new()
     };
     ctx.put(&format!("{INT}/chain.crt"), &middle, ADMIN_OWNER, 0o644)?;
-    import_and_install(ctx)?;
-    remove_stage(ctx)?;
-    remove_request(ctx)?;
-    Ok(StepState::Done(root_summary(ctx)?))
+    Ok(true)
 }
 
 /// Imports the signed intermediate and installs the CA files; the staging

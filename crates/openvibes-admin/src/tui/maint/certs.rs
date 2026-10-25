@@ -1,8 +1,9 @@
-//! Maintenance › Certificates (certs2.py, certs4a.py): the server
-//! certificates renew themselves, so the page says when next; the
-//! intermediate, the previous one while agents move over, and the way to
-//! the Names page and to Replace the intermediate. The dates and names are
-//! read from the certificate files, not the plan.
+//! Maintenance › Certificates (certs2.py, certs4a.py, certs4b.py #10): the
+//! server certificates renew themselves, so the page says when next; the
+//! intermediate (an imported one: from your PKI, and the CAs above it), the
+//! previous one while agents move over, and the way to the Names page and
+//! to Replace the intermediate. The dates and names are read from the
+//! certificate files, not the plan; how the CA was made is the plan's.
 
 use std::path::Path;
 
@@ -17,7 +18,8 @@ use ratatui::{
 use super::{Page, info};
 use crate::{
     setup::{
-        pki::{RENEW_AT_DAYS, RENEW_DAYS},
+        pki::{RENEW_AT_DAYS, RENEW_DAYS, ROOT_CERT},
+        pki_import::CHAIN,
         plan::{CaMode, plan_of},
         replace::{PREVIOUS, PREVIOUS_UNTIL, still_trusted},
     },
@@ -50,10 +52,22 @@ type Pems<'a> = &'a [(&'a str, Result<String, HostError>)];
 #[derive(Debug, Default)]
 pub struct Certs {
     rows: Vec<(&'static str, Vec<Span<'static>>)>,
-    /// OpenVIBES made the CA: replacing needs the root key file.
-    pub(super) quick: bool,
+    /// How the CA was made; `None` when the plan cannot be read.
+    pub(super) ca: Option<CaMode>,
     /// Why Replace the intermediate did not open (ruling 7).
     refused: Option<String>,
+}
+
+impl Certs {
+    /// OpenVIBES made the CA: replacing needs the root key file.
+    pub(super) fn quick(&self) -> bool {
+        self.ca == Some(CaMode::Quick)
+    }
+
+    /// Imported from your PKI: Replace imports the next one.
+    pub(super) fn imported(&self) -> bool {
+        self.ca == Some(CaMode::Import)
+    }
 }
 
 fn pem_of<'a>(certs: Pems<'a>, path: &str) -> Option<&'a Result<String, HostError>> {
@@ -139,13 +153,31 @@ fn renewal(
     ]
 }
 
+/// The common names above an imported intermediate, root last: `CHAIN`'s
+/// CAs (none for a two-level PKI), then the root (both 0644).
+fn signed_by(root: &Path) -> Result<Vec<String>, String> {
+    let read = |abs: &str| std::fs::read_to_string(root.join(abs.trim_start_matches('/')));
+    let chain = match read(CHAIN) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        text => text.map_err(|e| format!("{CHAIN}: {e}"))?,
+    };
+    let root = read(ROOT_CERT).map_err(|e| format!("{ROOT_CERT}: {e}"))?;
+    let pems = format!("{chain}\n{root}");
+    pems.split_inclusive("-----END CERTIFICATE-----")
+        .filter(|pem| pem.contains("-----BEGIN CERTIFICATE-----"))
+        .map(|pem| platform_pki::common_name(pem).map_err(|e| format!("cannot be read ({e:?})")))
+        .collect()
+}
+
 fn report(
     t: &Theme,
     certs: Pems,
-    quick: bool,
+    ca: Option<CaMode>,
+    above: Option<Result<Vec<String>, String>>,
     previous: Option<Result<String, String>>,
     now: DateTime<Utc>,
 ) -> Vec<(&'static str, Vec<Span<'static>>)> {
+    let quick = ca == Some(CaMode::Quick);
     let mut rows = Vec::new();
     let red = |e: String| vec![Span::styled(e, t.red())];
     let server: Vec<Result<DateTime<Utc>, String>> = SERVER
@@ -179,6 +211,12 @@ fn report(
         });
         let value = match signed {
             Err(e) => red(e),
+            Ok((_, end)) if ca == Some(CaMode::Import) => {
+                vec![Span::raw(format!(
+                    "from your PKI · until {}",
+                    end.format("%Y-%m-%d")
+                ))]
+            }
             Ok((who, end)) => {
                 let end = format!(" · until {}", end.format("%Y-%m-%d"));
                 let who = if quick {
@@ -190,6 +228,21 @@ fn report(
             }
         };
         rows.push(("Intermediate", value));
+        match above {
+            Some(Ok(names)) => {
+                let mut spans = Vec::new();
+                for (i, name) in names.iter().enumerate() {
+                    if i + 1 == names.len() {
+                        spans.push(Span::styled(name.clone(), t.bold()));
+                    } else {
+                        spans.push(Span::raw(format!("{name} › ")));
+                    }
+                }
+                rows.push(("Signed by", spans));
+            }
+            Some(Err(e)) => rows.push(("Signed by", red(e))),
+            None => {}
+        }
         match previous {
             Some(Ok(date)) => {
                 let text = format!("trusted until {date}, as agents move over");
@@ -227,10 +280,10 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             .iter()
             .map(|(name, value)| info(name, value.clone())),
     );
-    let replace = if certs.quick {
-        "needs the offline root key file"
-    } else {
-        "a new request for your CA"
+    let replace = match certs.ca {
+        Some(CaMode::Quick) => "needs the offline root key file",
+        Some(CaMode::Import) => "import the next one from your PKI",
+        _ => "a new request for your CA",
     };
     let rows = [
         Row::entry(ACTIONS[0], "add or remove a name agents use"),
@@ -257,23 +310,25 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
 impl<H: Host> App<H> {
     /// Reads the certificate files again.
     pub(in crate::tui) fn read_certs(&mut self) {
-        let quick = self
+        let ca = self
             .host
             .setup_plan()
             .ok()
             .and_then(|text| plan_of(&text).ok())
-            .is_some_and(|plan| plan.ca == CaMode::Quick);
+            .map(|plan| plan.ca);
+        let above = (ca == Some(CaMode::Import)).then(|| signed_by(&self.root));
         let previous = previous_until(&self.root);
         let rows = report(
             &self.theme,
             &self.host.certificates(),
-            quick,
+            ca,
+            above,
             previous,
             Utc::now(),
         );
         self.maint.certs = Certs {
             rows,
-            quick,
+            ca,
             refused: None,
         };
         // Back from a replacement that ended: on Names (certs4a.py #10).

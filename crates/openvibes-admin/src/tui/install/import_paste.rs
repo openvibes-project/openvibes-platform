@@ -7,8 +7,8 @@ use platform_pki::{Chain, ChainError, KeyInfo, P12, PkiError};
 use zeroize::{Zeroize, Zeroizing};
 
 use super::{
-    Imported, Install, Locked, Which,
-    import::{KEY, KEY_FIRST, NEXT},
+    Imported, Install, Locked, Stage, Which,
+    import::{CERT, KEY, KEY_FIRST, NEXT},
     paste::{ended, holds_private_key},
 };
 use crate::{
@@ -16,6 +16,7 @@ use crate::{
     tui::{
         app::{App, Key},
         ca_request::{Picked, pick, read_bytes},
+        nav::Screen,
         password::{PasswordPrompt, Typed},
     },
 };
@@ -161,7 +162,14 @@ impl<H: Host> App<H> {
         install.error = None;
         install.import_done = None;
         self.nav.pop();
-        self.nav.row = if install.both_added() { NEXT } else { KEY };
+        // Step 3's rows start at CERT; Maintenance's Replace page at the top.
+        let first = if self.nav.screen == Screen::Install(Stage::Step(2)) {
+            CERT
+        } else {
+            0
+        };
+        let to = if install.both_added() { NEXT } else { KEY };
+        self.nav.row = to - CERT + first;
     }
 
     /// A locked key in the box asks its password in the bar, once for
