@@ -18,6 +18,7 @@ ours-rsa.trad-3des.pem   ours-rsa.key as traditional encrypted RSA PRIVATE KEY (
 short.crt/.key           Lime Lab Short CA, under issuing, valid until 2026-12-01
 strict.crt/.key          Lime Lab Strict CA, under the root, path length 0
 under-strict.crt/.key    Lime Lab Under Strict CA, a CA signed by strict
+twin-dc.crt/.key         Lime Lab Twin DC CA, under issuing, subject with two DC attributes
 leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
 weak.key                 RSA 1024
 p521.key                 EC P-521

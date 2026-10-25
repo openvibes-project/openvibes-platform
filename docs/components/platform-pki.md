@@ -10,7 +10,13 @@ and ingest do the file and database work.
 |---|---|---|---|
 | Root (`OpenVIBES Root CA`) | 10 years (3652 days) | CA, path length 1, keyCertSign + cRLSign | `generate_root(now)`, offline |
 | Intermediate (`OpenVIBES Intermediate CA`) | 2 years (730 days) | CA, path length 0 | key + CSR from `intermediate_request()` on the ingest host; signed offline by `sign_intermediate(&root, csr, now)` (capped at the root's expiry), which refuses a root key that is not the root certificate's (`KeyMismatch`) |
-| Server | 90 days | server auth, SANs from the given names | `Issuer::issue_server(names, now)`; `cert_pem` is leaf + intermediate |
+| Server | 90 days | server auth, SANs from the given names | `Issuer::issue_server(names, now)`; `cert_pem` is leaf + intermediate, then the CAs from `with_chain` |
+
+An intermediate imported from a company PKI takes the place of the one
+above; its root and any CAs between come from the company. Those middle CAs
+are stored apart (`chain.crt`), never as trust anchors: they ride along in
+server certificates (`Issuer::with_chain`) so clients can reach the root,
+while agent client certificates still chain to our intermediate only.
 
 All keys are ECDSA P-256. Serials are 16 bytes whose first two bits are
 `01` (126 random bits), so the DER encoding is always exactly those 16
@@ -78,6 +84,26 @@ its `README` lists them.
 
 ## Interface
 
+- `check_chain(certs_pem, now) -> Chain`: the first certificate is ours;
+  the path is built by signature from the rest, in any order, CRLF or not,
+  up to a self-signed root. Certificates not on the path are ignored. Every
+  certificate on the path must be a CA with keyCertSign when key usage is
+  present (`NotCa(cn)`); a missing issuer, the root included, is
+  `Missing(issuer cn)`. A CA with path length N may have at most N CAs
+  below it, ours included (`NoCaBelow(cn)`); ours may carry any path
+  length. Every certificate on the path must be valid at `now` and for 90
+  days more (`Expiring(earliest not_after)`). `Chain` holds ours, `middle`
+  (nearest first), `root`, our common name, the names above ours (root
+  last) and the earliest `not_after`. Names without a common name read
+  "an unnamed CA".
+- `check_key(&chain, pkcs8_pem, now) -> KeyInfo`: `key_info`, then
+  `Issuer::load` (`Pki(KeyMismatch)`), then a throwaway server certificate
+  whose issuer bytes must equal our subject bytes (`Pki(NameMismatch)`):
+  rcgen rebuilds the issuer name, and keeps one attribute per type, so a
+  name with two `DC`s, say, would not chain.
+- `Issuer::with_chain(middle_pem)`: the CAs to append to server
+  certificates (each must parse, `InvalidPem`).
+
 - `first_certificate(pem)`: the first `CERTIFICATE` block of a bundle as PEM
   (`InvalidPem` if none).
 - `Issuer::load(cert_pem, key_pem)`: issues from the first certificate of a
@@ -107,7 +133,7 @@ its `README` lists them.
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,
   `InvalidValidity`, `IssuerExpired`, `InvalidAgentId`, `NotIntermediate`,
   `NotForRequest`, `Several(n)`, `NotRoot`, `RootPathLen0`, `KeyLocked`,
-  `WrongPassword`, `WeakKey(bits)`, `OldEncryption`.
+  `WrongPassword`, `WeakKey(bits)`, `OldEncryption`, `NameMismatch`.
   Messages never contain key or certificate material.
 
 ## Test

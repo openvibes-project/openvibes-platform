@@ -6,6 +6,7 @@
 //! network: PEM strings in, PEM strings out.
 
 mod ca;
+mod chain;
 mod client;
 mod keys;
 mod token;
@@ -17,6 +18,7 @@ pub use ca::{
     first_certificate, generate_root, intermediate_request, is_ca, issuer_common_name, not_after,
     not_before, sha256_fingerprint, sign_intermediate, subject_alt_names, verify_signed_by,
 };
+pub use chain::{Chain, ChainError, check_chain, check_key};
 pub use client::{
     CheckedCsr, IssuedClient, check_csr, leaf_identity, leaf_validity, spki_sha256_of_cert,
 };
@@ -68,6 +70,9 @@ pub enum PkiError {
     /// The key is locked with an encryption OpenVIBES no longer opens
     /// (PBES1, or a traditional `DEK-Info` cipher other than AES or 3DES).
     OldEncryption,
+    /// The CA's name cannot be written back byte for byte as the issuer of
+    /// the certificates it signs, so they would not chain.
+    NameMismatch,
 }
 
 impl fmt::Display for PkiError {
@@ -91,6 +96,7 @@ impl fmt::Display for PkiError {
             Self::KeyLocked => "the private key is locked with a password",
             Self::WrongPassword => "wrong password",
             Self::OldEncryption => "the key's encryption is too old",
+            Self::NameMismatch => "the CA's name cannot be reproduced",
             Self::WeakKey(bits) => return write!(f, "an RSA key of {bits} bits is too weak"),
             Self::Several(n) => {
                 return write!(f, "{n} PEM blocks where one certificate was expected");

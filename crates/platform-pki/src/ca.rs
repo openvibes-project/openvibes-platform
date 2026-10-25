@@ -16,7 +16,7 @@ use crate::PkiError;
 
 const ROOT_DAYS: i64 = 3652;
 const INTERMEDIATE_DAYS: i64 = 730;
-const SERVER_DAYS: i64 = 90;
+pub(crate) const SERVER_DAYS: i64 = 90;
 
 /// A certificate and its private key, both PEM.
 #[derive(Clone)]
@@ -155,6 +155,7 @@ pub(crate) fn parse(der: &[u8]) -> Result<X509Certificate<'_>, PkiError> {
 pub struct Issuer {
     pub(crate) issuer: rcgen::Issuer<'static, KeyPair>,
     cert_pem: String,
+    chain_pem: String,
     pub(crate) not_after: DateTime<Utc>,
 }
 
@@ -184,8 +185,19 @@ impl Issuer {
         Ok(Self {
             issuer,
             cert_pem: cert_pem.to_owned(),
+            chain_pem: String::new(),
             not_after,
         })
+    }
+
+    /// Adds the CAs between this one and the root (PEM, nearest first) to
+    /// every server certificate. They are not checked against this CA.
+    pub fn with_chain(mut self, middle_pem: &str) -> Result<Self, PkiError> {
+        self.chain_pem = crate::chain::certificates(middle_pem)?
+            .iter()
+            .map(|der| crate::keys::pem("CERTIFICATE", der))
+            .collect();
+        Ok(self)
     }
 
     /// The issuing CA's certificate.
@@ -194,8 +206,8 @@ impl Issuer {
     }
 
     /// A TLS server certificate for `names` (DNS names or IP addresses),
-    /// valid 90 days, with a fresh key. `cert_pem` holds the leaf then this
-    /// CA's certificate.
+    /// valid 90 days, with a fresh key. `cert_pem` holds the leaf, this CA's
+    /// certificate, then the chain from [`Issuer::with_chain`].
     pub fn issue_server(
         &self,
         names: &[String],
@@ -216,7 +228,7 @@ impl Issuer {
             .signed_by(&key, &self.issuer)
             .map_err(|_| PkiError::Generation)?;
         Ok(KeyAndCert {
-            cert_pem: format!("{}{}", cert.pem(), self.cert_pem),
+            cert_pem: format!("{}{}{}", cert.pem(), self.cert_pem, self.chain_pem),
             key_pem: key.serialize_pem(),
         })
     }

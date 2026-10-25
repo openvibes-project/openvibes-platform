@@ -83,6 +83,15 @@ ca_ext ""
 ec under-strict.key P-256
 sign under-strict.crt under-strict.key "Lime Lab Under Strict CA" strict.crt strict.key
 
+# Two DC attributes: rcgen keeps one per type, so it cannot reproduce this
+# name as the issuer of what it signs.
+ec twin-dc.key P-256
+SERIAL=$((SERIAL + 1))
+openssl req -new -key twin-dc.key -subj "/DC=lab/DC=lime/O=Lime Lab/CN=Lime Lab Twin DC CA" \
+  -out "$TMP/csr"
+openssl x509 -req -in "$TMP/csr" -CA issuing.crt -CAkey issuing.key -set_serial "$SERIAL" \
+  -not_before "$FROM" -not_after "$UNTIL" -sha256 -extfile "$TMP/ext" -out twin-dc.crt
+
 rsa weak.key 1024
 ec p521.key P-521
 rsa big.key 6144
@@ -127,6 +136,7 @@ ours-rsa.trad-3des.pem   ours-rsa.key as traditional encrypted RSA PRIVATE KEY (
 short.crt/.key           Lime Lab Short CA, under issuing, valid until 2026-12-01
 strict.crt/.key          Lime Lab Strict CA, under the root, path length 0
 under-strict.crt/.key    Lime Lab Under Strict CA, a CA signed by strict
+twin-dc.crt/.key         Lime Lab Twin DC CA, under issuing, subject with two DC attributes
 leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
 weak.key                 RSA 1024
 p521.key                 EC P-521

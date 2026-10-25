@@ -385,7 +385,7 @@ fn hex(text: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-fn pem(label: &str, der: &[u8]) -> String {
+pub(crate) fn pem(label: &str, der: &[u8]) -> String {
     let body = STANDARD.encode(der);
     let lines: Vec<&str> = body
         .as_bytes()
