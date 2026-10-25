@@ -93,7 +93,7 @@ impl Install {
     }
 
     /// The help line after a .p12 filled both rows (Replace's too).
-    pub(in crate::tui) fn from_hint(&self) -> Option<String> {
+    pub(in crate::tui) fn p12_hint(&self) -> Option<String> {
         let file = self.imported.as_ref()?.from.as_ref()?;
         Some(format!(
             "From {file}. Delete that file now: its key is kept here."
@@ -155,7 +155,7 @@ impl Install {
 
     /// The help line on step 3's rows 3 to 5.
     pub(super) fn import_help(&self, row: usize) -> String {
-        if let Some(hint) = self.from_hint() {
+        if let Some(hint) = self.p12_hint() {
             return hint;
         }
         match &self.imported {
