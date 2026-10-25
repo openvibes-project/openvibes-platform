@@ -401,11 +401,13 @@ fn a_pfx_reads_as_at_install_under_replace() {
     std::fs::create_dir_all(&home).unwrap();
     std::fs::write(home.join("ours.pfx"), fixture_bytes()).unwrap();
     app.install.home = Some(home.display().to_string());
+    // The location itself, not its drawn line: a long host name cuts that.
+    app.hostname = "a-host-name-as-long-as-a-ci-runners".into();
+    let location = |app: &App<SetupHost>| crate::tui::nav::header(app).0;
     app.key(Key::Enter);
-    let text = screen(&app);
-    assert!(
-        text.contains(" · Maintenance › Certificates › Replace › Certificate "),
-        "{text}"
+    assert_eq!(
+        location(&app),
+        "a-host-name-as-long-as-a-ci-runners · Maintenance › Certificates › Replace › Certificate"
     );
     app.key(Key::Down);
     app.key(Key::Enter);
@@ -432,10 +434,9 @@ fn a_pfx_reads_as_at_install_under_replace() {
     );
     app.nav.row = 1;
     app.key(Key::Enter);
-    assert!(
-        screen(&app).contains(" · Maintenance › Certificates › Replace › Private key "),
-        "{}",
-        screen(&app)
+    assert_eq!(
+        location(&app),
+        "a-host-name-as-long-as-a-ci-runners · Maintenance › Certificates › Replace › Private key"
     );
 }
 
