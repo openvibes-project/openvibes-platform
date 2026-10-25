@@ -34,8 +34,12 @@ pub enum ChainError {
     NotCa(String),
     /// The CA that signed the last certificate found is not in the bundle.
     Missing(String),
+    /// The first certificate is a self-signed root, not an intermediate.
+    IsRoot(String),
     /// This CA's path length allows no more CAs below it.
     NoCaBelow(String),
+    /// A certificate on the path is not valid yet; when it starts.
+    NotYetValid(DateTime<Utc>),
     /// A certificate on the path is not valid now or for 90 days more; the
     /// earliest end of validity.
     Expiring(DateTime<Utc>),
@@ -49,7 +53,8 @@ impl From<PkiError> for ChainError {
     }
 }
 
-/// The DER of every `CERTIFICATE` block in `pem`, each parsed once.
+/// The DER of every `CERTIFICATE` block in `pem`, each parsed once; none
+/// for blank text.
 pub(crate) fn certificates(pem: &str) -> Result<Vec<Vec<u8>>, PkiError> {
     let ders = Pem::iter_from_buffer(pem.replace("\r\n", "\n").as_bytes())
         .map(|block| {
@@ -61,7 +66,7 @@ pub(crate) fn certificates(pem: &str) -> Result<Vec<Vec<u8>>, PkiError> {
             Ok(block.contents)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if ders.is_empty() {
+    if ders.is_empty() && !pem.trim().is_empty() {
         return Err(PkiError::InvalidPem);
     }
     Ok(ders)
@@ -90,7 +95,7 @@ fn can_sign(cert: &X509Certificate<'_>) -> bool {
 }
 
 fn self_signed(cert: &X509Certificate<'_>) -> bool {
-    cert.subject() == cert.issuer() && cert.verify_signature(None).is_ok()
+    cert.subject().as_raw() == cert.issuer().as_raw() && cert.verify_signature(None).is_ok()
 }
 
 /// Checks a pasted or imported bundle: the first certificate is ours, the
@@ -100,6 +105,9 @@ fn self_signed(cert: &X509Certificate<'_>) -> bool {
 /// 90 days more.
 pub fn check_chain(certs_pem: &str, now: DateTime<Utc>) -> Result<Chain, ChainError> {
     let ders = certificates(certs_pem).map_err(|_| ChainError::InvalidPem)?;
+    if ders.is_empty() {
+        return Err(ChainError::InvalidPem);
+    }
     let certs = ders
         .iter()
         .map(|der| parse(der))
@@ -111,11 +119,16 @@ pub fn check_chain(certs_pem: &str, now: DateTime<Utc>) -> Result<Chain, ChainEr
         if !can_sign(current) {
             return Err(ChainError::NotCa(cn(current.subject())));
         }
-        if path.len() > 1 && self_signed(current) {
+        if self_signed(current) {
+            if path.len() == 1 {
+                return Err(ChainError::IsRoot(cn(current.subject())));
+            }
             break;
         }
         let issuer = (1..certs.len()).find(|&i| {
+            // Agents chain by name, so the names must match as well.
             !path.contains(&i)
+                && current.issuer().as_raw() == certs[i].subject().as_raw()
                 && current
                     .verify_signature(Some(certs[i].public_key()))
                     .is_ok()
@@ -137,14 +150,17 @@ pub fn check_chain(certs_pem: &str, now: DateTime<Utc>) -> Result<Chain, ChainEr
         }
     }
     let at = |seconds| DateTime::from_timestamp(seconds, 0).ok_or(ChainError::InvalidPem);
+    let mut not_before = DateTime::<Utc>::MIN_UTC;
     let mut not_after = DateTime::<Utc>::MAX_UTC;
-    let mut started = true;
     for &i in &path {
         let validity = certs[i].validity();
+        not_before = not_before.max(at(validity.not_before.timestamp())?);
         not_after = not_after.min(at(validity.not_after.timestamp())?);
-        started &= at(validity.not_before.timestamp())? <= now;
     }
-    if !started || not_after < now + Duration::days(SERVER_DAYS) {
+    if not_before > now {
+        return Err(ChainError::NotYetValid(not_before));
+    }
+    if not_after < now + Duration::days(SERVER_DAYS) {
         return Err(ChainError::Expiring(not_after));
     }
     let pem_of = |i: usize| pem("CERTIFICATE", &ders[i]);

@@ -84,15 +84,18 @@ its `README` lists them.
 
 ## Interface
 
-- `check_chain(certs_pem, now) -> Chain`: the first certificate is ours;
-  the path is built by signature from the rest, in any order, CRLF or not,
-  up to a self-signed root. Certificates not on the path are ignored. Every
+- `check_chain(certs_pem, now) -> Chain`: the first certificate is ours
+  and must not be self-signed (`IsRoot(cn)`); the path is built from the
+  rest, in any order, CRLF or not, up to a self-signed root. Each link
+  needs both the signature and the issuer name (DER, byte for byte, as
+  agents chain by name). Certificates not on the path are ignored. Every
   certificate on the path must be a CA with keyCertSign when key usage is
   present (`NotCa(cn)`); a missing issuer, the root included, is
   `Missing(issuer cn)`. A CA with path length N may have at most N CAs
   below it, ours included (`NoCaBelow(cn)`); ours may carry any path
-  length. Every certificate on the path must be valid at `now` and for 90
-  days more (`Expiring(earliest not_after)`). `Chain` holds ours, `middle`
+  length. Every certificate on the path must have started by `now`
+  (`NotYetValid(latest not_before)`) and stay valid 90 days more
+  (`Expiring(earliest not_after)`). `Chain` holds ours, `middle`
   (nearest first), `root`, our common name, the names above ours (root
   last) and the earliest `not_after`. Names without a common name read
   "an unnamed CA".
@@ -102,13 +105,13 @@ its `README` lists them.
   rcgen rebuilds the issuer name, and keeps one attribute per type, so a
   name with two `DC`s, say, would not chain.
 - `Issuer::with_chain(middle_pem)`: the CAs to append to server
-  certificates (each must parse, `InvalidPem`).
-
+  certificates (each must parse, `InvalidPem`); blank text means none.
 - `first_certificate(pem)`: the first `CERTIFICATE` block of a bundle as PEM
   (`InvalidPem` if none).
 - `Issuer::load(cert_pem, key_pem)`: issues from the first certificate of a
-  bundle (the new intermediate may precede the old one), so `chain_pem` is
-  leaf plus that certificate only. Refuses a non-CA certificate (`NotCa`)
+  bundle (the new intermediate may precede the old one), so a server
+  certificate's `cert_pem` is the leaf, that certificate, then only the
+  CAs given to `with_chain`. Refuses a non-CA certificate (`NotCa`)
   and a key that does not belong to it (`KeyMismatch`).
 - `verify_signed_by(cert, issuer_cert)`: signature check (`NotSignedBy`).
 - `check_intermediate(cert, root_cert, now)`: a CA with path length 0 that

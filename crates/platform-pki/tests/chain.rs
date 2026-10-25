@@ -11,6 +11,7 @@ const ROOT: &str = include_str!("fixtures/root.crt");
 const ISSUING: &str = include_str!("fixtures/issuing.crt");
 const OURS_EC: &str = include_str!("fixtures/ours-ec.crt");
 const OURS_EC_KEY: &str = include_str!("fixtures/ours-ec.pkcs8.pem");
+const OURS_RSA: &str = include_str!("fixtures/ours-rsa.crt");
 const RSA_KEY: &str = include_str!("fixtures/ours-rsa.key");
 const LEAF: &str = include_str!("fixtures/leaf-not-ca.crt");
 const STRICT: &str = include_str!("fixtures/strict.crt");
@@ -82,6 +83,25 @@ fn a_leaf_is_not_a_ca() {
 }
 
 #[test]
+fn a_root_is_not_ours() {
+    assert_eq!(
+        check_chain(&format!("{ROOT}{ISSUING}"), now()),
+        Err(ChainError::IsRoot("Lime Lab Root CA".into()))
+    );
+}
+
+#[test]
+fn a_chain_not_valid_yet_is_refused() {
+    let early = Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap();
+    assert_eq!(
+        check_chain(&format!("{OURS_EC}{ISSUING}{ROOT}"), early),
+        Err(ChainError::NotYetValid(
+            Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()
+        ))
+    );
+}
+
+#[test]
 fn not_pem_is_refused() {
     assert_eq!(check_chain("", now()), Err(ChainError::InvalidPem));
     assert_eq!(check_chain("hello", now()), Err(ChainError::InvalidPem));
@@ -127,6 +147,19 @@ fn the_key_must_match() {
 }
 
 #[test]
+fn an_rsa_key_is_accepted() {
+    let chain = check_chain(&format!("{OURS_RSA}{ISSUING}{ROOT}"), now()).unwrap();
+    let key = platform_pki::pkcs8_pem(RSA_KEY, None).unwrap();
+    assert_eq!(
+        check_key(&chain, &key, now()),
+        Ok(KeyInfo {
+            kind: KeyKind::Rsa,
+            bits: 3072
+        })
+    );
+}
+
+#[test]
 fn a_name_rcgen_cannot_reproduce_is_refused() {
     let chain = check_chain(&format!("{TWIN_DC}{ISSUING}{ROOT}"), now()).unwrap();
     assert_eq!(
@@ -160,6 +193,16 @@ fn server_certificates_carry_the_chain() {
     let plain = Issuer::load(OURS_EC, OURS_EC_KEY).unwrap();
     let server = plain.issue_server(&["limebox.lan".into()], now()).unwrap();
     assert_eq!(blocks(&server.cert_pem).len(), 2);
+    // An empty middle (a two-tier PKI) is no chain either.
+    for empty in ["", " \n"] {
+        let server = Issuer::load(OURS_EC, OURS_EC_KEY)
+            .unwrap()
+            .with_chain(empty)
+            .unwrap()
+            .issue_server(&["limebox.lan".into()], now())
+            .unwrap();
+        assert_eq!(blocks(&server.cert_pem).len(), 2);
+    }
     assert!(
         Issuer::load(OURS_EC, OURS_EC_KEY)
             .unwrap()
