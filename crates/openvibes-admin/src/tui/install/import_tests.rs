@@ -58,12 +58,17 @@ pub(super) fn with_chain() -> App<SetupHost> {
     app
 }
 
-/// Both rows added.
-fn with_both() -> App<SetupHost> {
+pub(super) const IMPORTED: &str =
+    "imported\tLime Lab OpenVIBES CA\tLime Lab Issuing CA › Lime Lab Root CA\t2046-01-01\n";
+
+/// Both rows added: `ca-import` runs at once and asks the password.
+fn with_both(reply: Result<String, HostError>) -> App<SetupHost> {
     let mut app = with_chain();
+    answer(&app, reply);
     paste(&mut app, Which::Key, OURS_KEY);
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Install(Stage::Step(2)));
+    assert!(screen(&app).contains("Your password (sudo)"));
     app
 }
 
@@ -217,20 +222,8 @@ fn a_wrong_key_is_red() {
 }
 
 #[test]
-fn next_sends_the_bundle_on_stdin_never_argv() {
-    let mut app = with_both();
-    let text = screen(&app);
-    assert!(text.contains("✓ added · matches the certificate"), "{text}");
-    answer(
-        &app,
-        Ok(
-            "imported\tLime Lab OpenVIBES CA\tLime Lab Issuing CA › Lime Lab Root CA\t2046-01-01\n"
-                .into(),
-        ),
-    );
-    app.nav.row = 5;
-    app.key(Key::Enter);
-    assert!(screen(&app).contains("Your password (sudo)"));
+fn both_added_sends_the_bundle_on_stdin_at_once_and_next_moves_on() {
+    let mut app = with_both(Ok(IMPORTED.into()));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     assert_eq!(calls(&app), vec!["ca-import"]);
@@ -238,7 +231,9 @@ fn next_sends_the_bundle_on_stdin_never_argv() {
     // The helper has the key now: no copy is kept here.
     assert!(app.install.imported.as_ref().unwrap().key.is_none());
     let text = screen(&app);
+    assert!(text.contains("✓ added · Lime Lab OpenVIBES CA"), "{text}");
     assert!(text.contains("✓ added · matches the certificate"), "{text}");
+    assert!(text.contains("▸ Next                       ports"), "{text}");
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Install(Stage::Step(3)));
     assert_eq!(calls(&app).len(), 1);
@@ -246,17 +241,11 @@ fn next_sends_the_bundle_on_stdin_never_argv() {
 
 #[test]
 fn a_refused_import_keeps_both_rows() {
-    let mut app = with_both();
-    answer(
-        &app,
-        Err(HostError::Failed(
-            "openvibes-admin helper: Valid until 2026-12-01: under the 90 days a server \
-             certificate lasts."
-                .into(),
-        )),
-    );
-    app.nav.row = 5;
-    app.key(Key::Enter);
+    let mut app = with_both(Err(HostError::Failed(
+        "openvibes-admin helper: Valid until 2026-12-01: under the 90 days a server \
+         certificate lasts."
+            .into(),
+    )));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     let text = screen(&app);
@@ -270,13 +259,11 @@ fn a_refused_import_keeps_both_rows() {
     assert_eq!(app.nav.screen, Screen::Install(Stage::Step(2)));
 }
 
-/// A wrong sudo password, then Esc: the run stops and keeps no key.
+/// A wrong sudo password, then Esc: the run stops and keeps no key; Next
+/// asks again.
 #[test]
 fn a_cancelled_sudo_ask_wipes_the_bundle() {
-    let mut app = with_both();
-    answer(&app, Err(HostError::WrongPassword));
-    app.nav.row = 5;
-    app.key(Key::Enter);
+    let mut app = with_both(Err(HostError::WrongPassword));
     type_text(&mut app, "bad");
     app.key(Key::Enter);
     assert!(screen(&app).contains("Wrong password, 2 tries left."));
@@ -287,6 +274,12 @@ fn a_cancelled_sudo_ask_wipes_the_bundle() {
         call => panic!("{call:?}"),
     }
     assert!(app.install.import_done.is_none());
+    answer(&app, Ok(IMPORTED.into()));
+    app.nav.row = 5;
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    assert!(app.install.import_done.is_some());
 }
 
 #[test]
@@ -303,15 +296,18 @@ fn review_wants_both() {
     assert_eq!(app.install.not_ready(), None);
 }
 
-/// Leaving Import, or step 3, forgets the key.
+/// Leaving Import, or step 3, before the helper has the key forgets it.
 #[test]
 fn leaving_import_forgets_the_key() {
-    let mut app = with_both();
+    let mut app = with_both(Ok(IMPORTED.into()));
+    app.key(Key::Esc);
+    assert!(app.install.imported.as_ref().unwrap().key.is_some());
     app.nav.row = 0;
     app.key(Key::Char(' '));
     assert_eq!(app.install.ca, Ca::Own);
     assert!(app.install.imported.is_none());
-    let mut app = with_both();
+    let mut app = with_both(Ok(IMPORTED.into()));
+    app.key(Key::Esc);
     app.key(Key::Esc);
     assert_eq!(app.nav.screen, Screen::Install(Stage::Step(1)));
     // The certificate stays; its key is added again.

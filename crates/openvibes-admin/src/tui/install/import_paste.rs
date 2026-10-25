@@ -162,8 +162,8 @@ impl<H: Host> App<H> {
         self.added();
     }
 
-    /// Something was added: the box closes, the helper is asked again on
-    /// Next, and the cursor moves to what is left to do.
+    /// Something was added: the box closes, the cursor moves to what is
+    /// left to do, and at install both added go to the helper.
     fn added(&mut self) {
         let install = &mut self.install;
         install.close_box();
@@ -178,6 +178,11 @@ impl<H: Host> App<H> {
         };
         let to = if install.both_added() { NEXT } else { KEY };
         self.nav.row = to - CERT + first;
+        // At install the helper takes both at once, as with your own CA;
+        // Replace sends them only on Yes.
+        if first == CERT && install.both_added() {
+            self.import_next();
+        }
     }
 
     /// A locked key in the box asks its password in the bar, once for

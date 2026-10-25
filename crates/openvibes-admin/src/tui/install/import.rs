@@ -2,8 +2,9 @@
 //! its key. The chain and the key are pasted, read from a file, or both
 //! come from a .p12 / .pfx opened with its password in the bar. Each is
 //! checked at once here (the operator owns the files; the TUI decrypts the
-//! key), then Next sends the chain and the plain PKCS#8 key to `ca-import`
-//! on stdin, under the sudo password. The helper checks everything again.
+//! key). Once both are added, the chain and the plain PKCS#8 key go to
+//! `ca-import` on stdin, under the sudo password (Next sends them again
+//! after a refusal). The helper checks everything again.
 //! The decrypted key is forgotten once the helper has it, or when Import or
 //! the step is left. The boxes' checks and the password bar's keys are in
 //! `import_paste.rs`.
@@ -257,8 +258,9 @@ impl<H: Host> App<H> {
         self.install.error = None;
     }
 
-    /// Next: the helper takes the import (once), then the ports.
-    fn import_next(&mut self) {
+    /// The helper takes the import (once; again after a refusal or a
+    /// cancelled password), then Next goes to the ports.
+    pub(super) fn import_next(&mut self) {
         if self.install.import_done.is_some() {
             return self.next_step(2);
         }

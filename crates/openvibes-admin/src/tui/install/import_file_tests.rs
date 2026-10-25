@@ -4,8 +4,8 @@
 
 use super::{
     Locked, Stage, Which,
-    import_tests::{OURS, OURS_KEY, PASSWORD, import, with_chain},
-    steps_tests::folder,
+    import_tests::{IMPORTED, OURS, OURS_KEY, PASSWORD, import, with_chain},
+    steps_tests::{answer, folder},
 };
 use crate::tui::{
     app::{App, Key},
@@ -52,6 +52,7 @@ fn a_pfx_asks_its_password_then_fills_both_rows() {
     ] {
         assert!(flat(&text).contains(line), "{line}\n{text}");
     }
+    answer(&app, Ok(IMPORTED.into()));
     type_text(&mut app, PASSWORD);
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Install(Stage::Step(2)));
@@ -59,6 +60,11 @@ fn a_pfx_asks_its_password_then_fills_both_rows() {
         app.install.locked.is_none(),
         "the file's bytes are forgotten"
     );
+    // Both rows filled: the helper takes them at once.
+    assert!(screen(&app).contains("Your password (sudo)"));
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    assert!(app.install.import_done.is_some());
     let text = screen(&app);
     for line in [
         "✓ added · Lime Lab OpenVIBES CA",
