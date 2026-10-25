@@ -124,7 +124,8 @@ fn services_parse_systemctl_show() {
             "--property=Id,LoadState,ActiveState,UnitFileState,ActiveEnterTimestamp"
         ]
     );
-    assert_eq!(calls[0][3..], Unit::ALL.map(|u| u.name().to_owned()));
+    assert_eq!(calls[0][3..12], Unit::ALL.map(|u| u.name().to_owned()));
+    assert_eq!(calls[0][12..], ["openvibes-certificates.service"]);
 }
 
 #[test]

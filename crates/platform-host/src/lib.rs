@@ -99,6 +99,11 @@ pub const CERTIFICATES: [&str; 4] = [
     "/etc/openvibes/pki/intermediate.crt",
 ];
 
+/// The root agents trust, and the CAs between it and our intermediate
+/// (an imported or company-signed one under a sub-CA); both 0644.
+pub const ROOT_CERT: &str = "/etc/openvibes/pki/root.crt";
+pub const CHAIN: &str = "/etc/openvibes/pki/chain.crt";
+
 /// The rule signer's `status.json` (operators may read it).
 pub const SIGNER_STATUS: &str = "/var/lib/openvibes-signer/status.json";
 /// The site key's trust lines Setup saved (public).
@@ -194,6 +199,11 @@ pub trait Host {
     /// Each of [`CERTIFICATES`] that exists, as PEM text.
     fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
         Vec::new()
+    }
+    /// [`ROOT_CERT`] as text and whether [`CHAIN`] exists; `None` without
+    /// a readable root.
+    fn root_and_chain(&self) -> Option<(String, bool)> {
+        None
     }
     /// This host's own global IPv4 addresses ([`host_addresses`]).
     fn addresses(&self) -> Vec<String> {

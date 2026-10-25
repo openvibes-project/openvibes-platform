@@ -25,7 +25,7 @@ pub(super) const INT: &str = "/run/openvibes-ca/int";
 pub(super) const ROOT_DIR: &str = "/run/openvibes-ca/root";
 pub(crate) const INTERMEDIATE: &str = "/etc/openvibes/pki/intermediate.crt";
 /// The root certificate agents trust.
-pub const ROOT_CERT: &str = "/etc/openvibes/pki/root.crt";
+pub const ROOT_CERT: &str = platform_host::ROOT_CERT;
 pub(crate) const INTERMEDIATE_KEY: &str = "/var/lib/openvibes-ingest/intermediate.key";
 pub(super) const ADMIN_OWNER: Option<(&str, &str)> = Some(("openvibes-admin", "openvibes-admin"));
 

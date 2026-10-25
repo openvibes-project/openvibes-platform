@@ -14,6 +14,9 @@ use crate::{
 
 const ADMIN: &str = "/usr/bin/openvibes-admin";
 const PROPERTIES: &str = "--property=Id,LoadState,ActiveState,UnitFileState,ActiveEnterTimestamp";
+/// The certificate timer's service: its last run failing is what Status
+/// shows of the timer, which keeps going either way.
+const RENEWAL: &str = "openvibes-certificates.service";
 
 /// The systemd backend.
 pub struct Native<R: Runner> {
@@ -148,11 +151,12 @@ impl<R: Runner> Host for Native<R> {
     fn services(&self) -> Result<Vec<ServiceStatus>, HostError> {
         let mut args = vec!["show", PROPERTIES];
         args.extend(Unit::ALL.map(Unit::name));
+        args.push(RENEWAL);
         let out = self.run(Systemctl, &args)?;
         if out.status != 0 {
             return Err(HostError::Failed(printable(&out.stderr)));
         }
-        let mut services = Vec::new();
+        let mut services: Vec<ServiceStatus> = Vec::new();
         for block in out.stdout.split("\n\n") {
             let field = |name: &str| {
                 block
@@ -161,6 +165,13 @@ impl<R: Runner> Host for Native<R> {
                     .unwrap_or("")
             };
             let Some(unit) = Unit::parse(field("Id")) else {
+                if field("Id") == RENEWAL && field("ActiveState") == "failed" {
+                    let timer = services.iter_mut().find(|s| s.unit == Unit::Certificates);
+                    if let Some(timer) = timer {
+                        timer.active = "failed".into();
+                        timer.since = None;
+                    }
+                }
                 continue;
             };
             let active = field("ActiveState").to_owned();
@@ -349,6 +360,11 @@ impl<R: Runner> Host for Native<R> {
                 Err(error) => Some((path, Err(HostError::Failed(format!("{path}: {error}"))))),
             })
             .collect()
+    }
+
+    fn root_and_chain(&self) -> Option<(String, bool)> {
+        let root = std::fs::read_to_string(crate::ROOT_CERT).ok()?;
+        Some((root, std::path::Path::new(crate::CHAIN).exists()))
     }
 
     fn signer(&self) -> Option<crate::SignerFiles> {

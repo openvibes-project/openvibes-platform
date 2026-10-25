@@ -62,7 +62,10 @@ full, wrapped over up to 3 dim lines (cut with `…` only after the third). A pr
 installed unit that is failed or inactive (`■ NAME is stopped`; not the
 model server or the maintenance timer, which idle by design), a unit not
 enabled at boot (`▲ NAME does not start at boot`; there is no boot switch),
-or a health check (certificates, disk, feeds, signer, audit, tuning). `Enter`
+a certificate renewal whose last run failed (`openvibes-certificates.service`
+failed, though its timer goes on: "certificate renewal failed: see Status ›
+certificate renewal › Logs"),
+or a health check (certificates, a lost `chain.crt`, disk, feeds, signer, audit, tuning). `Enter`
 on a service opens it; on a stopped or not-enabled unit it starts or enables
 it (a Yes/No question in the bar, or the sudo password typed in the bar;
 see Service); on a health problem or a check it does nothing. A refresh
@@ -266,7 +269,11 @@ expiry, when the daily renewal timer has failed ("automatic renewal is
 failing, see Status › certificate renewal › Logs"); a certificate with more
 days left is no problem, however near its renewal. The intermediate (judged
 by its first certificate) is a problem under 60 days: "replace the
-intermediate in Maintenance › Certificates". An expired one always is. Also a
+intermediate in Maintenance › Certificates". An expired one always is. When
+our intermediate is not signed directly by `root.crt` and `chain.crt` is
+missing, the setup check's sentence is a problem too ("/etc/openvibes/pki/chain.crt
+is missing: restore it from a backup (agents could not reach the root)",
+`setup::pki_import::lost`, the files from `Host::root_and_chain`). Also a
 problem when a
 server certificate misses an address this host now has, e.g. after DHCP:
 "run Repair in Maintenance"; a CA certificate, which names no host, is not

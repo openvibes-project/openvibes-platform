@@ -27,7 +27,9 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   (spec §10). `listeners(port)` (Setup's console port row): the
   `ss -ltnpH` lines for that TCP port, by default none.
 - `native::Native<R: Runner>`: the systemd implementation.
-  - services: one `systemctl show --property=… UNITS…`; readiness by
+  - services: one `systemctl show --property=… UNITS…`, plus
+    `openvibes-certificates.service`: when its last run failed, the
+    certificate timer reads `failed` (the timer itself goes on); readiness by
     `curl --silent --fail --max-time 1` on the default loopback endpoints
     (ingest 18480, distribution 18481, vulns 18483, console 18482 `/ready`,
     llm 18430 `/health`), only for active units;
@@ -51,7 +53,8 @@ themselves and other deployments (pods, Kubernetes) can plug in later
     migrate and maintenance are journalled, the CLI writes their audit row;
   - certificates: reads `CERTIFICATES` (`/etc/openvibes/tls/ingest.crt`,
     `distribution.crt`, `/etc/openvibes/pki/intermediate.crt`, all 0644);
-    missing files are left out;
+    missing files are left out; `root_and_chain()` reads `ROOT_CERT` and
+    says whether `CHAIN` exists (Health's lost-chain check; none by default);
   - disk: `df --output=file,size,pcent,avail -h` on `/var/lib/pgsql` and each
     existing `/var/lib/openvibes-*`.
   - listeners: `ss -ltnpH sport = :PORT`, as the user (so processes of

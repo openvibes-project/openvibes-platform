@@ -368,3 +368,24 @@ fn an_intermediate_within_60_days_says_replace_it() {
 fn the_console_chain_is_checked() {
     assert!(platform_host::CERTIFICATES.contains(&"/etc/openvibes/tls/console-chain.pem"));
 }
+
+#[test]
+fn a_lost_chain_is_a_problem_in_the_setup_checks_words() {
+    use super::database::chain_check;
+    const ROOT: &str = include_str!("../../../platform-pki/tests/fixtures/root.crt");
+    // Under the issuing CA, and right under the root.
+    const OURS: &str = include_str!("../../../platform-pki/tests/fixtures/ours-ec.crt");
+    const DIRECT: &str = include_str!("../../../platform-pki/tests/fixtures/client-only.crt");
+    let ours = |pem: &str| vec![("/etc/openvibes/pki/intermediate.crt", Ok(pem.to_owned()))];
+    let lost = chain_check(&ours(OURS), Some((ROOT.into(), false))).unwrap();
+    assert!(lost.problem);
+    assert_eq!(
+        lost.text,
+        "/etc/openvibes/pki/chain.crt is missing: restore it from a backup (agents could not \
+         reach the root)"
+    );
+    assert_eq!(chain_check(&ours(OURS), Some((ROOT.into(), true))), None);
+    assert_eq!(chain_check(&ours(DIRECT), Some((ROOT.into(), false))), None);
+    assert_eq!(chain_check(&ours(OURS), None), None, "no root: nothing to say");
+    assert_eq!(chain_check(&[], Some((ROOT.into(), false))), None);
+}

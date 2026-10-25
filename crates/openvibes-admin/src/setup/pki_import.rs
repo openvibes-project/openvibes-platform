@@ -18,7 +18,7 @@ use super::{
 };
 
 /// The CAs between our intermediate and the root, nearest first.
-pub const CHAIN: &str = "/etc/openvibes/pki/chain.crt";
+pub const CHAIN: &str = platform_host::CHAIN;
 
 pub(super) const HELP: &str =
     "add the certificate and its key from your PKI: Install › Certificates";
@@ -112,14 +112,19 @@ pub(super) fn chain_lost<R: Runner>(ctx: &Ctx<R>) -> Option<StepState> {
     if ctx.exists(CHAIN) {
         return None;
     }
-    let ours = platform_pki::first_certificate(&ctx.read(INTERMEDIATE).ok()?).ok()?;
-    let root = ctx.read(ROOT_CERT).ok()?;
-    platform_pki::verify_signed_by(&ours, &root)
+    lost(&ctx.read(INTERMEDIATE).ok()?, &ctx.read(ROOT_CERT).ok()?).map(StepState::Failed)
+}
+
+/// Why, when `CHAIN` is gone and our intermediate is not signed by the
+/// root itself (Setup, Status and Maintenance › Certificates say it).
+pub fn lost(intermediate: &str, root: &str) -> Option<String> {
+    let ours = platform_pki::first_certificate(intermediate).ok()?;
+    platform_pki::verify_signed_by(&ours, root)
         .is_err()
         .then(|| {
-            StepState::Failed(format!(
+            format!(
                 "{CHAIN} is missing: restore it from a backup (agents could not reach the root)"
-            ))
+            )
         })
 }
 
