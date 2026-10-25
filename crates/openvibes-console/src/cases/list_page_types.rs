@@ -81,6 +81,9 @@ pub(crate) struct CaseListRowView {
     pub ready: bool,
     /// Last change (RFC 3339).
     pub updated_at: String,
+    /// How a case closed before step 5d ended (`mitigated`, `false_positive`,
+    /// `accepted_risk`); new closes set none, so only old closed cases have one.
+    pub resolution: Option<String>,
 }
 
 /// Cases per filter value, each with the other filters applied.
@@ -161,6 +164,7 @@ impl From<CaseListRow> for CaseListRowView {
             takes_outcome: r.takes_outcome,
             ready: r.ready,
             updated_at: time(r.updated_at),
+            resolution: r.resolution,
         }
     }
 }

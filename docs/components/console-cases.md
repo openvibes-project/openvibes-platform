@@ -3,8 +3,8 @@
 Cases over `/api/v1` (module `crates/openvibes-console/src/cases/`, store
 `platform_store::console_cases`, schemas 35, 36 and 64). Spec:
 [2026-10-04-console-cases-design.md](../specs/2026-10-04-console-cases-design.md).
-The API, store and tests are built, and so are the web pages (list, case
-panel, "Add to case"; see [console-web.md](console-web.md#cases)).
+The API, store and tests are built, and so are the web pages (the list, a
+case's page, "Add to case"; see [console-web.md](console-web.md#cases)).
 
 ## Purpose
 
@@ -114,8 +114,9 @@ the newest note's first 120 characters), `hosts` (the first five visible
 hosts, `{agent_id, hostname}`), `host_count`, `kinds` (visible items per
 kind), `with_outcome` / `takes_outcome` (visible alarms, findings and
 vulnerabilities), `ready` (not closed, and close would take it now: close's
-own rule, hidden items included; only this boolean is revealed) and
-`updated_at`; `counts` has every value of `status`,
+own rule, hidden items included; only this boolean is revealed),
+`updated_at` and `resolution` (how a case closed before step 5d ended;
+null for every other); `counts` has every value of `status`,
 `severity`, `contains`, `updated`, `group` and `assignee` with the other
 filters applied; `summary` is `{open, investigating, unassigned,
 ready_to_close}` over the cases that are not closed under every filter but

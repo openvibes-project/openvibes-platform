@@ -75,12 +75,24 @@ describe("location", () => {
     opensPage(view, search, want);
   });
 
+  it.each([
+    ["/cases", "?status=open&open=case%3Ac-1", "/cases/c-1"],
+    ["/alarms", "?open=case%3Aa%2Fb", "/cases/a%2Fb"],
+    ["/cases", "?open=case%3Anew", "/cases/new"],
+    // A host, an alarm, an advisory or a finding panel above it still wins.
+    ["/cases", "?open=case%3Ac-1&open=finding%3Ab%2FR-1", "/compliance/b/R-1"],
+  ])("old_case_links_open_the_page: an old case panel on %s%s is the case's page, %s", (view, search, want) => {
+    opensPage(view, search, want);
+  });
+
   it("names the page an object opens instead of a panel", () => {
     expect(pagePath({ kind: "finding", id: "hardening-linux-l1/harden.ssh.permit_root_login" })).toBe("/compliance/hardening-linux-l1/harden.ssh.permit_root_login");
     expect(alarmPath("7 /x")).toBe("/alarms/7%20%2Fx");
     expect(pagePath({ kind: "alarm", id: "7" })).toBe("/alarms/7");
     expect(pagePath({ kind: "agent", id: "a b" })).toBe("/hosts/a%20b");
     expect(pagePath({ kind: "advisory", id: "X 1" })).toBe("/vulnerabilities/X%201");
+    expect(pagePath({ kind: "case", id: "c 1" })).toBe("/cases/c%201");
+    expect(pagePath({ kind: "case", id: "new" })).toBe("/cases/new");
     expect(pagePath({ kind: "package", id: "x" })).toBeNull();
   });
 

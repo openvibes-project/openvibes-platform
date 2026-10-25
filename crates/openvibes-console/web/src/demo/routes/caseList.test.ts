@@ -11,7 +11,7 @@ import { createDemoServer } from "../server";
 type Row = {
   case_id: string; number: number; title: string; status: string; severity: string; assignee: { user_id: string } | null;
   latest_note: { text: string } | null; hosts: { agent_id: string }[]; host_count: number; with_outcome: number; takes_outcome: number;
-  kinds: Record<string, number>; ready: boolean; updated_at: string;
+  kinds: Record<string, number>; ready: boolean; updated_at: string; resolution?: string | null;
 };
 type Count = { value: string; count: number };
 type Body = {
@@ -84,6 +84,9 @@ describe("demo Cases list", () => {
       const detail = (await (await server.handle("GET", `/api/v1/cases/${r.case_id}`, undefined)).json()) as CaseDetail;
       for (const i of detail.items) if (i.outcome) outcomes.add(i.outcome);
       if (/Miner/.test(r.title)) expect(detail).toMatchObject({ status: "closed", resolution: null, resolution_note: expect.any(String) });
+      // The list row says how an old closed case ended; a new close has none.
+      expect(r.resolution ?? null).toBe(detail.resolution ?? null);
+      if (/^Clean up/.test(r.title)) expect(r.resolution).toBe("mitigated");
     }
     expect([...outcomes].sort()).toEqual(["accepted_risk", "confirmed_malicious", "expected", "false_positive", "resolved"]);
   });

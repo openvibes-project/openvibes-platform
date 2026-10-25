@@ -95,6 +95,7 @@ export type CaseSummary = S["CaseSummaryView"];
 export type CaseList = S["CaseListView"];
 export type CaseListRow = S["CaseListRowView"];
 export type CaseDetail = S["CaseDetailView"];
+export type CasePageSummary = S["CasePageSummaryView"];
 export type CaseItem = S["CaseItemView"];
 export type CaseEvent = S["CaseEventView"];
 export type CaseUser = S["CaseUserView"];

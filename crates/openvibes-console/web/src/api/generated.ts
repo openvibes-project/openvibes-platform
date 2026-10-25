@@ -3447,6 +3447,11 @@ export interface components {
              *     items count too; only this boolean is revealed).
              */
             ready: boolean;
+            /**
+             * @description How a case closed before step 5d ended (`mitigated`, `false_positive`,
+             *     `accepted_risk`); new closes set none, so only old closed cases have one.
+             */
+            resolution?: string | null;
             /** @description `critical`, `high`, `medium` or `low`. */
             severity: string;
             /** @description `open`, `investigating` or `closed`. */

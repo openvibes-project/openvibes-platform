@@ -57,8 +57,8 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
     out.push({ id: "a-density", group: "Actions", icon: "filter", label: "Toggle compact rows", run: () => setDensity(currentDensity() === "compact" ? "comfortable" : "compact") });
     if (query.trim() === "") {
       for (const ref of recent()) {
-        // A host is a page (approved screen 17), still a recent object.
-        const hint = ref.kind === "agent" ? "Host" : panels[ref.kind]?.label;
+        // A host and a case are pages (approved screens 17 and 32), still recent objects.
+        const hint = ref.kind === "agent" ? "Host" : ref.kind === "case" ? "Case" : panels[ref.kind]?.label;
         if (hint) out.push({ id: `r${ref.kind}:${ref.id}`, group: "Recent", icon: objectIcon(ref.kind), label: objectTitle(ref), hint, run: openObject(ref) });
       }
       return out;

@@ -13947,6 +13947,13 @@
             "type": "boolean",
             "description": "Not closed, and close would take it now (close's own rule: hidden\nitems count too; only this boolean is revealed)."
           },
+          "resolution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How a case closed before step 5d ended (`mitigated`, `false_positive`,\n`accepted_risk`); new closes set none, so only old closed cases have one."
+          },
           "severity": {
             "type": "string",
             "description": "`critical`, `high`, `medium` or `low`."

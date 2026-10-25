@@ -2,8 +2,7 @@
 // 6-10): one row per case, search and filter chips whose values and counts
 // come from the server, saved views, the person's columns, a summary line
 // and paging by offset (all in the URL). A row opens the case's page at
-// /cases/{id}; New case is /cases/new. Until the case page (screen 32) lands,
-// both show the case panel's content as a page, with a link back.
+// /cases/{id} (screen 32, views/investigate/case/); New case is /cases/new.
 import { useEffect, useState } from "react";
 
 import { invalidate, useResource } from "../../api/client";
@@ -11,8 +10,8 @@ import type { CaseList, CaseListRow } from "../../api/types";
 import { casePath, casesQuery, hostPath } from "../../app/location";
 import { nav, useLocation, viewLink } from "../../app/nav";
 import { useSession } from "../../app/session";
-import { CasePanel, NewCasePanel } from "../../panels/cases/CasePanel";
-import { caseNumber, statusBadge } from "../../panels/cases/cases";
+import { CaseStatusBadge } from "../../panels/cases/CaseBadge";
+import { caseNumber } from "../../panels/cases/cases";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
 import { type Column, DataTable } from "../../ui/DataTable";
 import { Icon, type IconName } from "../../ui/Icon";
@@ -21,12 +20,9 @@ import { type ListFilter, PAGE, hasFilters } from "../../ui/list/filters";
 import { importBrowserViews, useHiddenColumns } from "../../ui/list/savedViews";
 import { SummaryLine } from "../../ui/list/SummaryLine";
 import { useHostName } from "../lists/HostChip";
+import { CasePage, NoSuchCase } from "./case/CasePage";
+import { NewCasePage } from "./case/NewCasePage";
 import { Pager } from "./Hosts";
-
-export function CaseStatusBadge({ status, resolution }: { status: string; resolution?: string | null | undefined }) {
-  const badge = statusBadge(status, resolution);
-  return <span className={`badge badge--${badge.tone}`}>{badge.label}</span>;
-}
 
 const PAGE_SIZE = 50;
 /** The list's columns (keys as the console keeps hidden ones, page "cases"); Case and Title are never hidden. */
@@ -122,14 +118,14 @@ const columns: Column<CaseListRow>[] = [
   { key: "case", header: header("case"), width: "80px", sort: (r) => r.number, render: (r) => <span className="mono nowrap">{caseNumber(r.number)}</span> },
   { key: "title", header: header("title"), render: (r) => (
     <div className="cell-two">
-      <a className="truncate" {...viewLink(casePath(r.case_id))}>{r.title}</a>
+      <a className="truncate" {...viewLink(casePath(r.case_id))}><span className="sr-only">{caseNumber(r.number)} </span>{r.title}</a>
       <span className="subtle truncate">Opened by {r.opened_by.display_name}{r.latest_note && (
         <> · <span className="sr-only">Latest note, </span><Ago value={r.latest_note.at} />: <i>“{r.latest_note.text}”</i></>
       )}</span>
     </div>
   ) },
   { key: "severity", header: header("severity"), width: "100px", sort: (r) => r.severity, render: (r) => <SeverityBadge severity={r.severity} /> },
-  { key: "status", header: header("status"), width: "125px", hideBelow: 700, render: (r) => <CaseStatusBadge status={r.status} /> },
+  { key: "status", header: header("status"), width: "125px", hideBelow: 700, render: (r) => <CaseStatusBadge status={r.status} resolution={r.resolution} /> },
   { key: "assignee", header: header("assignee"), width: "130px", hideBelow: 820, render: (r) => <span className={r.assignee ? "truncate" : "subtle"}>{r.assignee?.display_name ?? "Unassigned"}</span> },
   { key: "hosts", header: header("hosts"), width: "200px", hideBelow: 1000, render: (r) => <Hosts row={r} /> },
   { key: "items", header: header("items"), width: "200px", hideBelow: 560, render: (r) => <Items row={r} /> },
@@ -208,17 +204,10 @@ export function caseIdOf(view: string): string | null {
   }
 }
 
-/** /cases/{id} and /cases/new until the case page (screen 32): the panel's content as a page, with a link back. */
-function CaseStandIn({ id }: { id: string | null }) {
-  return (
-    <div className="view">
-      <div className="view-pad" style={{ paddingTop: 20 }}><a className="subtle" {...viewLink("/cases")}>Cases</a></div>
-      {id === "new" ? <NewCasePanel /> : id ? <CasePanel key={id} id={id} /> : <Empty icon="cases" title="No such case">This address names no case. Go back to Cases to find it.</Empty>}
-    </div>
-  );
-}
-
+/** The list, a case's page (/cases/{id}, screen 32) or the new-case form (/cases/new). */
 export function Cases() {
   const { view } = useLocation();
-  return view.startsWith("/cases/") ? <CaseStandIn id={caseIdOf(view)} /> : <CaseListView />;
+  if (!view.startsWith("/cases/")) return <CaseListView />;
+  const id = caseIdOf(view);
+  return id === "new" ? <NewCasePage /> : id ? <CasePage key={id} id={id} /> : <NoSuchCase />;
 }

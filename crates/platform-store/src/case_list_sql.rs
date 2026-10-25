@@ -117,7 +117,7 @@ cg AS MATERIALIZED (
   FROM vi JOIN console_host_group_membership m ON m.agent_id = vi.agent_id),
 r AS MATERIALIZED (
   SELECT c.case_id, c.number, c.title, c.status, c.severity, c.assignee_user_id, c.opened_by_user_id,
-         c.created_at, c.updated_at,
+         c.created_at, c.updated_at, c.resolution,
          COALESCE(ag.alarms, 0) AS alarms, COALESCE(ag.findings, 0) AS findings,
          COALESCE(ag.vulnerabilities, 0) AS vulnerabilities, COALESCE(ag.host_items, 0) AS host_items,
          COALESCE(ag.software, 0) AS software, COALESCE(ag.takes, 0) AS takes, COALESCE(ag.done, 0) AS done,
@@ -222,7 +222,7 @@ SELECT CASE WHEN p.ord IS NOT DISTINCT FROM (SELECT min(ord) FROM page) THEN m.m
        p.opened_by_user_id::text, ou.username, ou.display_name,
        p.assignee_user_id::text, au.username, au.display_name, n.body, n.at, h.hosts,
        p.alarms, p.findings, p.vulnerabilities, p.host_items, p.software, p.takes, p.done, p.updated_at,
-       h.host_count, p.ready
+       h.host_count, p.ready, p.resolution
 FROM meta m LEFT JOIN page p ON true
 LEFT JOIN console_users ou ON ou.user_id = p.opened_by_user_id
 LEFT JOIN console_users au ON au.user_id = p.assignee_user_id

@@ -57,11 +57,12 @@ test("the summary counts what is ready to close, and the rows say which", async 
 
 test("the title is a real link to the case's page, which links back", async ({ page }) => {
   await page.goto("/cases?q=C-104");
-  const link = rows(page).getByRole("link", { name: /^Web servers starting shells/ });
+  // The link names the case for screen readers too ("C-104 Web servers…").
+  const link = rows(page).getByRole("link", { name: /^C-104 Web servers starting shells/ });
   await expect(link).toHaveAttribute("href", /^\/cases\/[0-9a-f-]+$/);
   await link.click();
   await expect(page).toHaveURL(/\/cases\/[0-9a-f-]+$/);
-  await expect(page.locator(".panel-header__kind")).toContainText("C-104");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("C-104");
   await page.getByRole("link", { name: "Cases", exact: true }).first().click();
   await expect(page).toHaveURL(/\/cases$/);
   await expect(rows(page)).toHaveCount(8);
@@ -76,7 +77,7 @@ test("New case is a link to /cases/new, and the new case opens on its page", asy
   await page.getByRole("button", { name: "Open case" }).click();
   await expect(page.locator(".toast")).toContainText("Opened C-111");
   await expect(page).toHaveURL(/\/cases\/[0-9a-f-]+$/);
-  await expect(page.locator(".panel-header__kind")).toContainText("C-111");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("C-111");
 });
 
 test("old_case_urls_keep_their_meaning: old filters and views saved in this browser come over", async ({ page }) => {

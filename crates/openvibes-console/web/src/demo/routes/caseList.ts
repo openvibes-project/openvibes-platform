@@ -125,7 +125,7 @@ export function registerCaseListRoute(ctx: DemoContext & { cases: CaseStore }) {
         kinds: { alarms: r.kinds.alarm, findings: r.kinds.compliance_finding, vulnerabilities: r.kinds.vulnerability, hosts: r.kinds.host, software: r.kinds.software },
         takes_outcome: r.visible.filter((i) => EXCLUSIVE_KINDS.has(i.kind)).length,
         with_outcome: r.visible.filter((i) => EXCLUSIVE_KINDS.has(i.kind) && i.outcome !== null).length,
-        ready: r.ready, updated_at: r.c.updated_at,
+        ready: r.ready, updated_at: r.c.updated_at, resolution: r.c.resolution,
       })),
       total: matching.length,
       counts: {

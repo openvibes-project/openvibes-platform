@@ -1,6 +1,6 @@
 # views/investigate
 
-The lists you investigate from. A row opens its panel from `panels/` in the inspector; a host, an alarm and a vulnerability open their pages.
+The lists you investigate from. A row opens its panel from `panels/` in the inspector; a host, an alarm, a check, a vulnerability and a case open their pages.
 
 | File | What it does |
 |---|---|
@@ -14,6 +14,7 @@ The lists you investigate from. A row opens its panel from `panels/` in the insp
 | `vulnerability/` | A vulnerability's page (screen 26); see its README. |
 | `Software.tsx` | Packages across the fleet. |
 | `Ports.tsx` | Open ports and running services across the fleet. |
-| `Cases.tsx` | The Cases list (screen 31): one row per case over `/api/v1/case-list`, server filters with counts (Host as a chip), saved views, columns, summary line (ready to close) and paging. A row opens `/cases/{id}`; New case is `/cases/new`; both show the case panel's content as a page until screen 32 (step 5d task 7). |
+| `Cases.tsx` | The Cases list (screen 31): one row per case over `/api/v1/case-list`, server filters with counts (Host as a chip), saved views, columns, summary line (ready to close) and paging. A row opens `/cases/{id}`; New case is `/cases/new`; routes both to `case/`. |
+| `case/` | A case's page (screen 32) and the new-case form; see its README. |
 
 More: [docs/components/console-web.md](../../../../../../docs/components/console-web.md)

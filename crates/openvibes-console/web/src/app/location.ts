@@ -89,7 +89,7 @@ export function casesQuery(query: string): string {
   return params.toString();
 }
 
-/** A case's page (approved screen 32; roles 5d ruling 11). */
+/** A case's page (approved screen 32; roles 5d ruling 11); `new` is the new-case form. */
 export const casePath = (id: string) => `/cases/${encodeURIComponent(id)}`;
 
 /** A host's page (approved screen 17). */
@@ -114,9 +114,9 @@ export function splitFindingId(id: string): [string, string] {
 /** The check a finding ref (`set/rule`, or `/rule` from before rule sets) names. */
 const findingPath = (id: string) => checkPath(...splitFindingId(id));
 
-const PAGES: Record<string, (id: string) => string> = { agent: hostPath, alarm: alarmPath, advisory: vulnPath, finding: findingPath };
+const PAGES: Record<string, (id: string) => string> = { agent: hostPath, alarm: alarmPath, advisory: vulnPath, finding: findingPath, case: casePath };
 
-/** The page an object opens instead of a panel: a host, an alarm, an advisory or a check (a finding); null for a panel. */
+/** The page an object opens instead of a panel: a host, an alarm, an advisory, a check (a finding) or a case; null for a panel. */
 export function pagePath(panel: PanelRef): string | null {
   return PAGES[panel.kind]?.(panel.id) ?? null;
 }
@@ -125,16 +125,16 @@ export function pagePath(panel: PanelRef): string | null {
  * Old addresses as today's (plan ruling 1; roles 5a): `/agents?…` is the
  * Hosts list, and a host, alarm, advisory or finding panel opened on any view
  * (`?open=agent:ID`, `?open=alarm:ID`, `?open=advisory:ID`,
- * `?open=finding:SET/RULE`, the assistant's `/agents?agent=ID`) is that
+ * `?open=finding:SET/RULE`, `?open=case:ID`, the assistant's `/agents?agent=ID`) is that
  * object's page, a whole page with no panels (as `nav.open` opens it). A host
  * panel wins over an alarm panel, an alarm over an advisory, an advisory over
- * a finding (roles 5c ruling 9). The old Vulnerabilities flags are today's signals (roles 5b ruling 7),
+ * a finding (roles 5c ruling 9), a finding over a case (roles 5d ruling 11). The old Vulnerabilities flags are today's signals (roles 5b ruling 7),
  * the old Compliance filters today's (roles 5c ruling 9), and the old Cases filters today's (roles 5d).
  */
 export function redirect(location: AppLocation): AppLocation {
   const host = location.view === "/agents" ? location.params.get("agent") : null;
   const panel = location.panels.find((p) => p.kind === "agent") ?? (host ? { kind: "agent", id: host }
-    : ["alarm", "advisory", "finding"].map((kind) => location.panels.find((p) => p.kind === kind)).find(Boolean));
+    : ["alarm", "advisory", "finding", "case"].map((kind) => location.panels.find((p) => p.kind === kind)).find(Boolean));
   const page = panel && pagePath(panel);
   if (page) return { view: page, panels: [], params: new URLSearchParams() };
   if (location.view === "/vulnerabilities") return { ...location, params: new URLSearchParams(vulnerabilitiesQuery(location.params.toString())) };

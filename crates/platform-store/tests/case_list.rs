@@ -167,6 +167,23 @@ async fn rows_carry_the_ruling_9_fields() {
 }
 
 #[tokio::test]
+async fn an_old_closed_case_keeps_how_it_ended() {
+    let (db, c) = common::migrated().await;
+    fixture(&c).await;
+    // A case closed before step 5d names its resolution; new closes set none.
+    c.execute(
+        "UPDATE cases SET resolution = 'mitigated' WHERE number = 2",
+        &[],
+    )
+    .await
+    .unwrap();
+    let page = run(&c, &query(), &AgentScope::Global).await;
+    assert_eq!(row(&page, 2).resolution.as_deref(), Some("mitigated"));
+    assert_eq!(row(&page, 1).resolution, None);
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn the_latest_note_previews_120_characters() {
     let (db, c) = common::migrated().await;
     fixture(&c).await;

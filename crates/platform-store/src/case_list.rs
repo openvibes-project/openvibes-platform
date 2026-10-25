@@ -187,6 +187,9 @@ pub struct CaseListRow {
     pub ready: bool,
     /// Last change.
     pub updated_at: DateTime<Utc>,
+    /// How a case closed before step 5d ended (`mitigated`, `false_positive`,
+    /// `accepted_risk`); new closes set none.
+    pub resolution: Option<String>,
 }
 
 /// Cases per filter value, each with the other filters applied.
@@ -358,6 +361,7 @@ fn case_row(row: &Row) -> Option<CaseListRow> {
         updated_at: row.get(22),
         host_count: row.get::<_, Option<i64>>(23).unwrap_or(0),
         ready: row.get::<_, Option<bool>>(24).unwrap_or(false),
+        resolution: row.get(25),
     })
 }
 

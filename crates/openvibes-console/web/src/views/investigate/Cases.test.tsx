@@ -57,10 +57,16 @@ describe("Cases list", () => {
     const html = render(list());
     for (const header of ["Case", "Title", "Severity", "Status", "Assignee", "Hosts", "Items", "Updated"]) expect(html).toContain(`>${header}<`);
     expect(html).toContain("C-104");
-    expect(html).toMatch(/<a [^>]*href="\/cases\/c-104"[^>]*>Shells started by nginx on web-01<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/cases\/c-104"[^>]*><span class="sr-only">C-104 <\/span>Shells started by nginx on web-01<\/a>/);
     expect(html).toContain("Opened by Sam Analyst");
     expect(html).toContain("Investigating");
     expect(html).toContain("Unassigned");
+  });
+
+  it("says how an old closed case ended in Status, a new close only Closed", () => {
+    const html = render(list({ items: [row({ status: "closed", resolution: "mitigated" }), row({ case_id: "c-2", number: 2, status: "closed", resolution: null })] }), [], "all");
+    expect(html).toContain("Closed · mitigated");
+    expect(html.match(/>Closed</g)).toHaveLength(1);
   });
 
   it("shows the latest note, named for screen readers", () => {
