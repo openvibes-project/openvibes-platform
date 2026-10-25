@@ -6,7 +6,8 @@
 # eight enrolled hosts with their facts (OS, version, hostname, address), one
 # finding and one alarm each (page-1's alarm with two siblings), and three
 # hosts per browser with vulnerabilities for vulnerabilities.spec.ts, and four
-# per browser with compliance findings and health for compliance.spec.ts. Needs
+# per browser with compliance findings and health for compliance.spec.ts, and
+# three per browser with one alarm each for cases.spec.ts. Needs
 # OPENVIBES_TEST_DATABASE_URL (scripts/test-db.sh locally; the CI job sets it)
 # and the binaries built by scripts/test-console-e2e.sh.
 set -euo pipefail
@@ -179,6 +180,24 @@ SELECT (jsonb_populate_record(c, jsonb_build_object('agent_id', 'agent.00000000-
 FROM current_findings c, e2e_browsers,
      (VALUES (1, 'a', 'high'), (1, 'b', 'medium'), (2, 'a', 'high'), (4, 'a', 'high'), (4, 'c', 'low')) AS x (h, r, sev)
 WHERE c.agent_id = 'import.00000000000000000000000000000000' AND c.rule_id = 'time.unsynced';
+SQL
+
+# The Cases journey (cases.spec.ts), one set per browser P = n: case-P-1
+# and case-P-2 (the lead's reach) and caseout-P-1 (outside it), each with one
+# open alarm and nothing else; the journey makes its cases through the API.
+psql -qX -v ON_ERROR_STOP=1 "${database_url}" >/dev/null <<'SQL'
+CREATE TEMP TABLE e2e_browsers AS
+SELECT * FROM (VALUES (1, 'chromium'), (2, 'firefox'), (3, 'webkit')) AS b (n, p);
+INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version, hostname, os_id, os_version, last_address)
+SELECT 'agent.00000000-0000-4000-8000-0000000003' || n || h, 'active', now() - interval '1 day', now(), '0.4.2',
+    name || '.example.test', 'debian', '12', ('192.0.2.' || (100 + n * 10 + h))::inet
+FROM e2e_browsers, LATERAL (VALUES (1, 'case-' || p || '-1'), (2, 'case-' || p || '-2'), (3, 'caseout-' || p || '-1')) AS x (h, name);
+INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version, rule_id, rule_version,
+    severity, confidence, message, first_seen, last_seen, count, process, ancestors, received_at, state)
+SELECT (now() AT TIME ZONE 'UTC')::date, agent_id, md5(agent_id), 'e2e', 1, 'e2e.case_alarm', 1, 'medium', 50,
+    'Case alarm on ' || split_part(hostname, '.', 1), now(), now(), 1,
+    '{"exe": "/usr/bin/curl", "args": ["curl", "http://198.51.100.9/x"]}', '[]', now(), 'open'
+FROM agents WHERE agent_id LIKE 'agent.00000000-0000-4000-8000-0000000003%';
 SQL
 
 exec "${bin}/openvibes-console" --config "${work}/console.toml"

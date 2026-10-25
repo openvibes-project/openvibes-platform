@@ -50,7 +50,7 @@ test("old_finding_links_open_the_page: addresses, dashboards, the host page, cas
   // A case's finding item.
   await page.goto("/cases");
   await page.getByRole("table", { name: "Cases" }).locator("tbody tr").filter({ hasText: "SSH open to the network" }).locator("td").nth(1).click();
-  const item = page.locator(".inspector").getByRole("list", { name: "Items" }).locator('a[href^="/compliance/"]');
+  const item = page.locator(".view").getByRole("table", { name: "Items" }).locator('a[href^="/compliance/"]');
   await expect(item).toHaveCount(1);
   await item.click();
   await expect(page).toHaveURL(SSH);

@@ -1,10 +1,10 @@
 // A row's open cases on the Alarms, Compliance and Vulnerabilities lists:
-// "being worked on" means in a case (triage v2).
+// "being worked on" means in a case (triage v2); and a case's status badge.
 import { useMemo } from "react";
 
 import { useResource } from "../../api/client";
 import { useSession } from "../../app/session";
-import { afterAgent, caseBadges, caseNumber } from "./cases";
+import { afterAgent, caseBadges, caseNumber, statusBadge } from "./cases";
 
 type Kind = "alarm" | "compliance_finding" | "vulnerability";
 
@@ -40,4 +40,10 @@ export function CaseBadge({ numbers }: Readonly<{ numbers: number[] | undefined 
       {caseNumber(first)}{rest.length > 0 && ` +${rest.length}`}
     </span>
   );
+}
+
+/** A case's status; a case closed before step 5d also says how it ended ("Closed · mitigated"). */
+export function CaseStatusBadge({ status, resolution }: { status: string; resolution?: string | null | undefined }) {
+  const badge = statusBadge(status, resolution);
+  return <span className={`badge badge--${badge.tone}`}>{badge.label}</span>;
 }

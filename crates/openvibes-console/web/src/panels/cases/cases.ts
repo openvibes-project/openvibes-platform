@@ -1,12 +1,11 @@
 // Cases, the parts that need no React: the item kinds and where each opens,
-// the list's query and filters, the rules that decide when a case can close,
+// the rules that decide when a case can close,
 // the request bodies and how the timeline and the API's refusals read.
 import { ApiError } from "../../api/client";
-import type { CaseEvent, CaseItem, CaseSummary } from "../../api/types";
+import type { CaseEvent, CaseItem } from "../../api/types";
 import type { PanelRef } from "../../app/location";
 import { date, plural } from "../../ui/format";
 import type { IconName } from "../../ui/Icon";
-import { matches } from "../../ui/table";
 
 export const CASE_KINDS = ["alarm", "compliance_finding", "vulnerability", "host", "software"] as const;
 export type CaseKind = (typeof CASE_KINDS)[number];
@@ -26,8 +25,11 @@ export const refHint: Record<CaseKind, string> = {
 };
 const statusLabel: Record<string, string> = { open: "Open", investigating: "Investigating", closed: "Closed" };
 const statusTone: Record<string, string> = { open: "bad", investigating: "warn", closed: "ok" };
+/** How a case closed before step 5d ended; new closes set none (the items carry the outcomes). */
 export const resolutionLabel: Record<string, string> = { mitigated: "Mitigated", false_positive: "False positive", accepted_risk: "Accepted risk" };
-export const outcomeLabel: Record<string, string> = { resolved: "Resolved", false_positive: "False positive", accepted_risk: "Accepted risk" };
+export const outcomeLabel: Record<string, string> = {
+  resolved: "Fixed", false_positive: "False positive", accepted_risk: "Risk accepted", confirmed_malicious: "Confirmed malicious", expected: "Expected activity",
+};
 export const severities = ["critical", "high", "medium", "low"] as const;
 
 export const caseNumber = (number: number) => `C-${number}`;
@@ -68,41 +70,28 @@ export function refLabel(kind: string, ref: string): string {
   }
 }
 
-/** The API path for the list's filters; the text filter stays local. */
-export function caseQuery(params: URLSearchParams): string {
-  const query = new URLSearchParams();
-  const status = params.get("status");
-  if (status && ["open", "investigating", "closed", "all"].includes(status)) query.set("status", status);
-  const severity = params.get("severity");
-  if (severity && (severities as readonly string[]).includes(severity)) query.set("severity", severity);
-  const assignee = params.get("assignee");
-  if (assignee === "me" || assignee === "none") query.set("assignee", assignee);
-  const text = query.toString();
-  return text === "" ? "/api/v1/cases" : `/api/v1/cases?${text}`;
-}
-
-/** The loaded cases that match the text filter (title, `C-104`, assignee). */
-export function selectCases(loaded: readonly CaseSummary[], params: URLSearchParams): CaseSummary[] {
-  const q = params.get("q") ?? "";
-  return loaded.filter((c) => matches([c.title, caseNumber(c.number), c.assignee?.username, c.assignee?.display_name ?? "unassigned"], q));
-}
-
 export const needsOutcome = (item: Pick<CaseItem, "kind">) => EXCLUSIVE_KINDS.has(item.kind);
 
-/** Items that stop the case from closing: no outcome yet, or "resolved" while the evidence is back. */
-export function blockingItems(items: readonly CaseItem[]): CaseItem[] {
-  return items.filter((item) => needsOutcome(item) && (item.outcome == null || (item.outcome === "resolved" && !item.evidence_gone)));
+/** Items that stop the case from closing: no outcome yet, "resolved" while the evidence is back,
+ * or risk accepted until a date that has passed (visibility.rs blocking_item). */
+export function blockingItems(items: readonly CaseItem[], now = Date.now()): CaseItem[] {
+  return items.filter((item) => needsOutcome(item) && (item.outcome == null || (item.outcome === "resolved" && !item.evidence_gone)
+    || (item.outcome === "accepted_risk" && item.outcome_until != null && Date.parse(item.outcome_until) <= now)));
 }
 
 type OutcomeChoice = { value: string; label: string; disabled: boolean; hint: string | undefined };
 
-/** The outcomes an item can take: "resolved" only while its evidence is gone. */
+/** The outcomes an item can take: "resolved" (Fixed) only while its evidence is gone. */
 export function outcomeChoices(item: Pick<CaseItem, "evidence_gone">): OutcomeChoice[] {
-  return [
-    { value: "resolved", label: "Resolved", disabled: !item.evidence_gone, hint: item.evidence_gone ? undefined : "Only when the evidence is gone" },
-    { value: "false_positive", label: "False positive", disabled: false, hint: undefined },
-    { value: "accepted_risk", label: "Accepted risk", disabled: false, hint: undefined },
-  ];
+  return Object.entries(outcomeLabel).map(([value, label]) => value === "resolved"
+    ? { value, label, disabled: !item.evidence_gone, hint: item.evidence_gone ? undefined : "Only when the evidence is gone" }
+    : { value, label, disabled: false, hint: undefined });
+}
+
+/** The outcome PUT body; accepted risk carries its re-open date (a local day, ended). */
+export function outcomeBody(outcome: string, note: string, until: string) {
+  if (outcome === "") return { outcome: null };
+  return { outcome, note: note.trim() || null, ...(outcome === "accepted_risk" ? { outcome_until: endOfLocalDay(until) } : {}) };
 }
 
 /** Outcomes other than "resolved" need a note saying why. */
@@ -114,37 +103,26 @@ export function endOfLocalDay(day: string): string | null {
   return year && month && d ? new Date(year, month - 1, d, 23, 59, 59).toISOString() : null;
 }
 
-export type CloseForm = { resolution: string; note: string; acceptedUntil: string };
+/** Closing asks for a closing note only (step 5d); the items carry how it ended. */
+export type CloseForm = { note: string };
 
 /** What still prevents closing, in words; empty when the case can close. */
-export function closeProblems(form: CloseForm, items: readonly CaseItem[], now = Date.now()): string[] {
+export function closeProblems(form: CloseForm, items: readonly CaseItem[]): string[] {
   const problems: string[] = [];
-  if (!(form.resolution in resolutionLabel)) problems.push("Choose how the case ended.");
-  if (form.note.trim() === "") problems.push("Add a note saying why.");
-  if (form.resolution === "accepted_risk") {
-    const until = endOfLocalDay(form.acceptedUntil);
-    if (until === null) problems.push("Choose the date the risk is accepted until.");
-    else if (Date.parse(until) <= now) problems.push("The date must be in the future.");
-  }
+  if (form.note.trim() === "") problems.push("Add a closing note.");
   const blocking = blockingItems(items);
   if (blocking.length > 0) problems.push(`${plural(blocking.length, "item")} still ${blocking.length === 1 ? "needs" : "need"} an outcome.`);
   return problems;
 }
 
 export type CaseFields = { title: string; severity: string; assignee: string };
-type Ending = { resolution: string; note: string; accepted_until: string | null };
-
-/** The PUT body: the API replaces every editable field, so all are sent. */
-export function updateBody(fields: CaseFields, status: string, ending?: Ending) {
+/** The PUT body: the API replaces every editable field, so all are sent;
+ * a closed case (closing, or staying closed) states its closing note. */
+export function updateBody(fields: CaseFields, status: string, closingNote?: string) {
   return {
     title: fields.title.trim(), severity: fields.severity, status, assignee_user_id: fields.assignee || null,
-    ...(status === "closed" && ending ? { resolution: ending.resolution, resolution_note: ending.note.trim(), accepted_until: ending.accepted_until } : {}),
+    ...(status === "closed" && closingNote !== undefined ? { closing_note: closingNote.trim() } : {}),
   };
-}
-
-/** The closing form as an `Ending` (accepted risk carries its date). */
-export function endingOf(form: CloseForm): Ending {
-  return { resolution: form.resolution, note: form.note, accepted_until: form.resolution === "accepted_risk" ? endOfLocalDay(form.acceptedUntil) : null };
 }
 
 type Detail = Record<string, unknown>;
@@ -166,10 +144,16 @@ export function eventText(event: CaseEvent, titleOf: (itemId: string) => string 
     case "severity": return `changed the severity from ${text(d.from) ?? "?"} to ${text(d.to) ?? "?"}`;
     case "item_added": return `added ${item()}`;
     case "item_removed": return `removed ${item()}`;
-    case "item_outcome": return text(d.to) ? `marked ${item()} as ${(outcomeLabel[text(d.to) ?? ""] ?? "").toLowerCase()}` : `cleared the outcome of ${item()}`;
+    case "item_outcome": {
+      if (text(d.to)) return `marked ${item()} as ${(outcomeLabel[text(d.to) ?? ""] ?? "").toLowerCase()}`;
+      const why = { accepted_risk_expired: "the risk acceptance ran out", evidence_returned: "the evidence returned" }[text(d.reason) ?? ""];
+      return `cleared the outcome of ${item()}${why ? `: ${why}, so it needs an outcome again` : ""}`;
+    }
     case "resolved": {
+      // Cases closed before step 5d name a resolution; new closes do not.
+      const resolution = resolutionLabel[text(d.resolution) ?? ""];
       const until = text(d.accepted_until);
-      return `closed the case as ${(resolutionLabel[text(d.resolution) ?? ""] ?? "resolved").toLowerCase()}${until ? ` until ${date(until)}` : ""}`;
+      return resolution ? `closed the case as ${resolution.toLowerCase()}${until ? ` until ${date(until)}` : ""}` : "closed the case";
     }
     case "reopened":
       if (d.reason === "accepted_risk_expired") return "reopened the case because the accepted risk ran out";
@@ -189,6 +173,14 @@ export function caseErrorText(error: unknown): string {
 
 /** True when a refusal means the data on screen is out of date. */
 export const isStale = (error: unknown) => error instanceof ApiError && (error.status === 412 || error.status === 404 || error.code === "items_unresolved" || error.code === "evidence_present");
+
+/** Risk accepted's date input range at `now`: tomorrow to the last day the
+ * API takes (outcomes.rs: at most MAX_ACCEPT_DAYS ahead, sent as the end of the day). */
+// The last day is 364 days ahead: day 365 ends after now + 365 days.
+export function acceptRange(now: number): [string, string] {
+  const day = 86_400_000;
+  return [localDay(new Date(now + day)), localDay(new Date(now + 364 * day))];
+}
 
 /** A local date as `YYYY-MM-DD`, the value of a date input. */
 export function localDay(value: Date): string {

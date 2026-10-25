@@ -89,6 +89,13 @@ describe("demo list columns", () => {
     expect((await call(server, "PUT", "/api/v1/list-columns/alarms", { hidden: ["severity"] })).status).toBe(422);
   });
 
+  it("keeps the cases page's views and columns, Case and Title never hidden (step 5d)", async () => {
+    const server = admin();
+    expect((await save(server, "Mine", "assignee=me", "cases")).status).toBe(201);
+    expect(await call(server, "PUT", "/api/v1/list-columns/cases", { hidden: ["hosts", "updated"] })).toMatchObject({ status: 200, body: { hidden: ["hosts", "updated"] } });
+    for (const locked of ["case", "title"]) expect((await call(server, "PUT", "/api/v1/list-columns/cases", { hidden: [locked] })).status).toBe(422);
+  });
+
   it("remembers hidden columns, never Host, nothing unknown or repeated", async () => {
     const server = admin();
     expect((await call(server, "GET", "/api/v1/list-columns/hosts")).body).toEqual({ hidden: [] });

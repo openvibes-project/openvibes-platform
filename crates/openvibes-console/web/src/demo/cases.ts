@@ -1,14 +1,20 @@
 // The demo's cases: the real API's routes, JSON shapes, status codes and
-// rules (crates/openvibes-console/src/cases/, platform-store console_cases.rs;
+// rules (crates/openvibes-console/src/cases/, platform-store console_cases/;
 // docs/components/console-cases.md), kept in memory and, in a browser, in
 // localStorage like the dashboards. What an item is (its title, severity,
 // whether its evidence is gone) comes from the rest of the demo through
 // `CaseWorld`, so alarms, findings and vulnerabilities stay the single truth.
+// The checks that need no state are in caseRules.ts, the lazy reopen in
+// caseReopen.ts, the Cases list page (GET /case-list) in routes/caseList.ts.
 import type { CaseDetail, CaseEvent, CaseItem, CaseSummary, CaseUser } from "../api/types";
 import { EXCLUSIVE_KINDS, type CaseKind, isCaseKind } from "../panels/cases/cases";
+import { reopenDue } from "./caseReopen";
+import {
+  type Body, type Result, badBody, closed, closingError, defaultSeverity, invalid, itemNotFound, notFound, outcomeError,
+  problem, refOk, removedField, severityOk, titleOk, noteOk,
+} from "./caseRules";
 
-type Result = { status: number; body?: unknown; etag?: string };
-type Body = Record<string, unknown>;
+export { caseSeverityOf } from "./caseRules";
 
 export type ItemFacts = { agent_id: string | null; title: string | null; severity: string | null; gone: boolean };
 export type CaseWorld = {
@@ -19,109 +25,68 @@ export type CaseWorld = {
   assignable: readonly string[];
   /** Whether the viewer's scope contains the host. */
   canSee: (agentId: string) => boolean;
+  /** Whether that scope is every host (a case with no host-bound item is then visible too). */
+  global: boolean;
   hostname: (agentId: string) => string | null;
-  /** The object as the viewer sees it now, or undefined when it does not exist for them. */
+  /** The object as it is now, whoever looks (the store checks the viewer's reach), or undefined when it does not exist. */
   facts: (kind: CaseKind, ref: string) => ItemFacts | undefined;
   audit: (action: string, target: string) => void;
 };
 
-type StoredCase = {
+export type StoredCase = {
   case_id: string; number: number; title: string; status: string; resolution: string | null; resolution_note: string | null;
   accepted_until: string | null; severity: string; assignee_user_id: string | null; opened_by_user_id: string;
   created_at: string; updated_at: string; closed_at: string | null; version: number;
 };
-type StoredItem = {
+export type StoredItem = {
   item_id: string; case_id: string; kind: CaseKind; ref: string; agent_id: string | null; active: boolean;
-  outcome: string | null; outcome_note: string | null; added_by_user_id: string; added_at: string;
+  outcome: string | null; outcome_note: string | null; outcome_until: string | null; added_by_user_id: string; added_at: string;
 };
 type StoredEvent = { event_id: number; case_id: string; at: string; actor_user_id: string | null; kind: string; body: string | null; detail: Body };
-// v 2: item kind `finding` became `compliance_finding`; older stores reseed.
-export type CaseState = { v: 2; next_number: number; next_event: number; cases: StoredCase[]; items: StoredItem[]; events: StoredEvent[] };
+// v 3: per-item outcome_until and the five outcomes (step 5d); older stores reseed.
+export type CaseState = { v: 3; next_number: number; next_event: number; cases: StoredCase[]; items: StoredItem[]; events: StoredEvent[] };
 type CasePersistence = { load: () => unknown; save: (state: CaseState) => void };
+/** One case the viewer sees, as the Cases list reads it. */
+export type ListedCase = { c: StoredCase; visible: StoredItem[]; ready: boolean; note: { text: string; at: string } | null; opener: CaseUser; assignee: CaseUser | null };
 
 const MAX_ITEMS = 500;
 const MAX_ON_CREATE = 50;
 const MAX_EVENTS = 2000;
-const messages: Record<string, string> = {
-  invalid_title: "Use 1 to 120 characters, without control characters",
-  invalid_severity: "Use critical, high, medium or low",
-  invalid_status: "Use open, investigating or closed",
-  invalid_kind: "Use alarm, compliance_finding, vulnerability, host or software",
-  invalid_ref: "The id does not have the shape of this kind of item",
-  too_many_items: "A case is created with at most 50 items",
-  resolution_required: "A resolution is required to close a case",
-  invalid_resolution: "Use mitigated, false_positive or accepted_risk",
-  resolution_note_required: "A note is required to close a case",
-  invalid_note: "Use 1 to 4000 characters of plain text",
-  note_required: "A note is required for this outcome",
-  invalid_outcome: "Use resolved, false_positive or accepted_risk",
-  outcome_not_applicable: "Hosts and software need no outcome",
-  accepted_until_required: "Accepted risk needs a date in the future",
-  accepted_until_past: "The date must be in the future",
-  accepted_until_not_allowed: "Only accepted risk has an end date",
-  resolution_not_allowed: "Only a closed case has a resolution",
-  invalid_timestamp: "Use an RFC 3339 time",
-  assignee_unavailable: "The assignee must be an enabled user who can read cases",
-};
-
-const problem = (status: number, code: string, title: string, extra: Body = {}): Result =>
-  ({ status, body: { status, code, title, request_id: "demo", ...extra } });
-const invalid = (field: string, code: string): Result =>
-  problem(422, "invalid_case", "The request is invalid", { field_errors: [{ field, code, message: messages[code] ?? "The value is not valid" }] });
-const notFound = () => problem(404, "case_not_found", "Case not found");
-const itemNotFound = () => problem(404, "item_not_found", "Item not found");
-const closed = () => problem(409, "case_closed", "The case is closed; reopen it first");
-
-const hasControl = (value: string) => [...value].some((ch) => ch < " " && ch !== "\n" && ch !== "\t");
-const titleOk = (title: string) => title.length >= 1 && [...title].length <= 120 && !hasControl(title);
-const noteOk = (note: string) => note.trim() !== "" && [...note].length <= 4000;
-const severityOk = (severity: string) => ["critical", "high", "medium", "low"].includes(severity);
-const identifier = /^[\w.:-]{1,128}$/;
-const freeText = (value: string) => value.length >= 1 && value.length <= 256 && !hasControl(value);
-
-/** The shape each kind's id has in the console's panels. */
-function refOk(kind: CaseKind, ref: string): boolean {
-  const [head = "", ...rest] = ref.split("/");
-  switch (kind) {
-    case "alarm": return /^[1-9]\d{0,17}$/.test(ref);
-    case "compliance_finding": return rest.length === 2 && identifier.test(head) && (rest[0] === "" || identifier.test(rest[0] ?? "")) && identifier.test(rest[1] ?? "");
-    case "vulnerability": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
-    case "host": return identifier.test(ref);
-    case "software": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
-  }
-}
-
-export const caseSeverityOf = (severity: string | null | undefined) =>
-  ({ critical: "critical", high: "high", important: "high", medium: "medium", moderate: "medium", low: "low", info: "low", unrated: "low" } as Record<string, string>)[severity ?? ""];
-const rank = (severity: string) => ["low", "medium", "high", "critical"].indexOf(severity);
-const defaultSeverity = (severities: (string | null)[]) =>
-  severities.map(caseSeverityOf).filter((s): s is string => s !== undefined).sort((a, b) => rank(b) - rank(a))[0] ?? "medium";
+/** A blank note is as good as none; a note is stored without the spaces around it (request.rs blank_is_absent). */
+const trimmed = (value: string | null) => (value === null || value.trim() === "" ? null : value.trim());
 
 export function createCaseStore(world: CaseWorld, seed: () => CaseState, persistence?: CasePersistence) {
   const saved = persistence?.load() as Partial<CaseState> | undefined;
-  const state: CaseState = saved?.v === 2 && Array.isArray(saved.cases) && Array.isArray(saved.items) && Array.isArray(saved.events)
+  const state: CaseState = saved?.v === 3 && Array.isArray(saved.cases) && Array.isArray(saved.items) && Array.isArray(saved.events)
     && typeof saved.next_number === "number" && typeof saved.next_event === "number" ? (saved as CaseState) : seed();
   const persist = () => persistence?.save(state);
   const now = () => new Date().toISOString();
   const me = world.me.user_id;
   const person = (id: string): CaseUser => world.people.find((p) => p.user_id === id) ?? { user_id: id, username: id, display_name: id };
 
+  /** Software is seen inside a case the viewer sees; the rest through its host. */
   const seesItem = (item: StoredItem) => item.agent_id === null || world.canSee(item.agent_id);
   const itemsOf = (c: StoredCase) => state.items.filter((i) => i.case_id === c.case_id);
-  /** The caller sees a case holding a visible item, or one they opened or are assigned to. */
-  const sees = (c: StoredCase) => c.opened_by_user_id === me || c.assignee_user_id === me || itemsOf(c).some(seesItem);
+  /** Opener, assignee, a host-bound item in scope, or (every host in scope) no host-bound item at all: hosts decide. */
+  const sees = (c: StoredCase) => c.opened_by_user_id === me || c.assignee_user_id === me
+    || itemsOf(c).some((i) => i.agent_id !== null && world.canSee(i.agent_id))
+    || (world.global && !itemsOf(c).some((i) => i.agent_id !== null));
   const find = (id: string) => { const c = state.cases.find((candidate) => candidate.case_id === id); return c && sees(c) ? c : undefined; };
 
   const factsOf = (item: StoredItem) => world.facts(item.kind, item.ref);
+  const exclusive = (item: StoredItem) => EXCLUSIVE_KINDS.has(item.kind);
+  // An alarm, finding or vulnerability that no longer exists has no evidence left.
+  const gone = (item: StoredItem) => factsOf(item)?.gone ?? true;
+  /** Stands in the way of closing: no outcome, resolved while the evidence is back, or risk accepted until a passed date (visibility.rs blocking_item). */
+  const blocking = (i: StoredItem) => exclusive(i) && (i.outcome === null || (i.outcome === "resolved" && !gone(i))
+    || (i.outcome === "accepted_risk" && i.outcome_until != null && Date.parse(i.outcome_until) <= Date.now()));
   const itemView = (item: StoredItem): CaseItem => {
     const facts = factsOf(item);
     return {
       item_id: item.item_id, kind: item.kind, ref: item.ref, agent_id: item.agent_id,
       hostname: item.agent_id === null ? null : world.hostname(item.agent_id), active: item.active,
-      outcome: item.outcome, outcome_note: item.outcome_note, added_by: person(item.added_by_user_id), added_at: item.added_at,
-      title: facts?.title ?? null, severity: facts?.severity ?? null,
-      // An alarm, finding or vulnerability that no longer exists has no evidence left.
-      evidence_gone: EXCLUSIVE_KINDS.has(item.kind) ? (facts ? facts.gone : true) : false,
+      outcome: item.outcome, outcome_note: item.outcome_note, outcome_until: item.outcome_until, added_by: person(item.added_by_user_id), added_at: item.added_at,
+      title: facts?.title ?? null, severity: facts?.severity ?? null, evidence_gone: exclusive(item) ? gone(item) : false,
     };
   };
   const summary = (c: StoredCase): CaseSummary => {
@@ -130,7 +95,7 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
       case_id: c.case_id, number: c.number, title: c.title, status: c.status, resolution: c.resolution, accepted_until: c.accepted_until,
       severity: c.severity, assignee: c.assignee_user_id === null ? null : person(c.assignee_user_id), opened_by: person(c.opened_by_user_id),
       created_at: c.created_at, updated_at: c.updated_at, closed_at: c.closed_at, version: c.version,
-      item_count: visible.length, pending_item_count: visible.filter((i) => EXCLUSIVE_KINDS.has(i.kind) && i.outcome === null).length,
+      item_count: visible.length, pending_item_count: visible.filter((i) => exclusive(i) && i.outcome === null).length,
     };
   };
   const eventView = (e: StoredEvent): CaseEvent =>
@@ -147,7 +112,7 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
     state.events.push({ event_id: state.next_event, case_id: c.case_id, at, actor_user_id: actor, kind, body, detail: extra });
     state.next_event += 1;
   };
-  const touch = (c: StoredCase, at = now()) => { c.updated_at = at; };
+  const touch = (c: StoredCase, at = now()) => { if (c.updated_at < at) c.updated_at = at; };
   const itemDetail = (item: StoredItem) => ({ item_id: item.item_id, item_kind: item.kind, item_ref: item.ref, item_agent_id: item.agent_id });
 
   /** The other open case that holds this exclusive item, if any. */
@@ -175,7 +140,7 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
     if (other) return inCase(other);
     const stored: StoredItem = {
       item_id: crypto.randomUUID(), case_id: c.case_id, kind: item.kind, ref: item.ref, agent_id: item.facts.agent_id, active: true,
-      outcome: null, outcome_note: null, added_by_user_id: me, added_at: at,
+      outcome: null, outcome_note: null, outcome_until: null, added_by_user_id: me, added_at: at,
     };
     state.items.push(stored);
     push(c, "item_added", null, itemDetail(stored), me, at);
@@ -183,22 +148,13 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
     return stored;
   };
 
-  /** Accepted risk that has run out reopens its case, and its accepted items are decided again. */
   const sweep = () => {
-    const t = Date.now();
-    for (const c of state.cases) {
-      if (c.status !== "closed" || c.resolution !== "accepted_risk" || c.accepted_until === null || Date.parse(c.accepted_until) > t) continue;
-      if (itemsOf(c).some((i) => holder(i, c.case_id))) continue;
-      Object.assign(c, { status: "open", resolution: null, resolution_note: null, accepted_until: null, closed_at: null, version: c.version + 1 });
-      for (const i of itemsOf(c)) {
-        i.active = true;
-        if (i.outcome === "accepted_risk") { i.outcome = null; i.outcome_note = null; }
-      }
-      touch(c);
-      push(c, "reopened", null, { reason: "accepted_risk_expired" }, null);
-      world.audit("case.reopen", c.case_id);
-      persist();
-    }
+    const changed = reopenDue({
+      cases: state.cases, itemsOf, exclusive, gone, audit: world.audit,
+      taken: (c) => itemsOf(c).some((i) => holder(i, c.case_id)),
+      push: (c, kind, body, extra, actor) => push(c, kind, body, extra, actor),
+    });
+    if (changed) persist();
   };
 
   return {
@@ -220,6 +176,19 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
       return { status: 200, body: rows.map(summary) };
     },
 
+    /** Every case the viewer sees, with what the Cases list reads of it (after the reopen checks). */
+    listed(): ListedCase[] {
+      sweep();
+      return state.cases.filter(sees).map((c) => {
+        const note = state.events.filter((e) => e.case_id === c.case_id && e.kind === "note").sort((a, b) => b.event_id - a.event_id)[0];
+        return {
+          c, visible: itemsOf(c).filter(seesItem), ready: c.status !== "closed" && !itemsOf(c).some(blocking),
+          note: note ? { text: [...(note.body ?? "")].slice(0, 120).join(""), at: note.at } : null,
+          opener: person(c.opened_by_user_id), assignee: c.assignee_user_id === null ? null : person(c.assignee_user_id),
+        };
+      });
+    },
+
     get(id: string): Result {
       sweep();
       const c = find(id);
@@ -227,12 +196,12 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
     },
 
     create(body: Body): Result {
-      if (typeof body.title !== "string") return problem(400, "invalid_request", "The request body is invalid");
+      if (typeof body.title !== "string") return badBody();
       const title = body.title.trim();
       if (!titleOk(title)) return invalid("title", "invalid_title");
       if (body.severity != null && (typeof body.severity !== "string" || !severityOk(body.severity))) return invalid("severity", "invalid_severity");
       const refs = body.items === undefined ? [] : body.items;
-      if (!Array.isArray(refs)) return problem(400, "invalid_request", "The request body is invalid");
+      if (!Array.isArray(refs)) return badBody();
       if (refs.length > MAX_ON_CREATE) return invalid("items", "too_many_items");
       const assignee = typeof body.assignee_user_id === "string" ? body.assignee_user_id.toLowerCase() : null;
       if (assignee !== null && !world.assignable.includes(assignee)) return invalid("assignee_user_id", "assignee_unavailable");
@@ -265,50 +234,40 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
       if (ifMatch === undefined) return problem(428, "precondition_required", "If-Match is required");
       const match = /^"(\d+)"$/.exec(ifMatch);
       if (!match) return problem(400, "invalid_precondition", "If-Match must contain one quoted version");
-      if (typeof body.title !== "string" || typeof body.severity !== "string" || typeof body.status !== "string") return problem(400, "invalid_request", "The request body is invalid");
+      if (typeof body.title !== "string" || typeof body.severity !== "string" || typeof body.status !== "string") return badBody();
+      const known = ["title", "severity", "status", "assignee_user_id", "closing_note", "resolution", "accepted_until"];
+      if (Object.keys(body).some((key) => !known.includes(key))) return badBody();
       const optional = (value: unknown) => value === undefined || value === null ? null : typeof value === "string" ? value : false;
-      const resolution = optional(body.resolution);
-      const rawNote = optional(body.resolution_note);
-      const rawUntil = optional(body.accepted_until);
+      const rawNote = optional(body.closing_note);
       const assigneeRaw = optional(body.assignee_user_id);
-      if (resolution === false || rawNote === false || rawUntil === false || assigneeRaw === false) return problem(400, "invalid_request", "The request body is invalid");
-      const until = rawUntil === null ? null : Date.parse(rawUntil);
-      if (until !== null && Number.isNaN(until)) return invalid("accepted_until", "invalid_timestamp");
+      if (rawNote === false || assigneeRaw === false) return badBody();
+      // Step 5d: the case-level resolution and date are refused; `null` counts as absent.
+      for (const field of ["resolution", "accepted_until"]) if (body[field] != null) return removedField(field);
       const title = body.title.trim();
-      const note = rawNote === null || rawNote.trim() === "" ? null : rawNote;
+      const note = trimmed(rawNote);
       const assignee = assigneeRaw === null ? null : assigneeRaw.toLowerCase();
       if (!titleOk(title)) return invalid("title", "invalid_title");
       if (!severityOk(body.severity)) return invalid("severity", "invalid_severity");
       if (!["open", "investigating", "closed"].includes(body.status)) return invalid("status", "invalid_status");
       const status = body.status;
-      if (status !== "closed") {
-        if (resolution !== null || note !== null || until !== null) return invalid("resolution", "resolution_not_allowed");
-      } else {
-        if (resolution === null) return invalid("resolution", "resolution_required");
-        if (!["mitigated", "false_positive", "accepted_risk"].includes(resolution)) return invalid("resolution", "invalid_resolution");
-        if (note === null) return invalid("resolution_note", "resolution_note_required");
-        if (!noteOk(note)) return invalid("resolution_note", "invalid_note");
-        if (resolution === "accepted_risk" && until === null) return invalid("accepted_until", "accepted_until_required");
-        if (resolution === "accepted_risk" && until !== null && until <= Date.now()) return invalid("accepted_until", "accepted_until_past");
-        if (resolution !== "accepted_risk" && until !== null) return invalid("accepted_until", "accepted_until_not_allowed");
-      }
+      const wrong = closingError(status, note);
+      if (wrong) return invalid(...wrong);
       sweep();
       const c = find(id);
       if (!c) return notFound();
       if (c.version !== Number(match[1])) return problem(412, "stale_case", "The case changed since you loaded it");
       const wasClosed = c.status === "closed";
       const willClose = status === "closed";
-      const sameEnding = c.resolution === resolution && c.resolution_note === note && (c.accepted_until === null ? null : Date.parse(c.accepted_until)) === until;
-      if (wasClosed && willClose && !sameEnding) return closed();
+      // Nothing else about how a closed case ended changes while it stays closed.
+      if (wasClosed && willClose && c.resolution_note !== note) return closed();
       const assigneeChanged = c.assignee_user_id !== assignee;
       if (assigneeChanged && assignee !== null && !world.assignable.includes(assignee)) return invalid("assignee_user_id", "assignee_unavailable");
       const fieldsChanged = c.title !== title || c.severity !== body.severity || assigneeChanged;
       if (!fieldsChanged && c.status === status) return ok(200, c);
       if (!wasClosed && willClose) {
-        const mine = itemsOf(c).filter((i) => EXCLUSIVE_KINDS.has(i.kind));
-        const standing = (i: StoredItem) => i.outcome === null || (i.outcome === "resolved" && !(factsOf(i)?.gone ?? true));
-        if (mine.some((i) => seesItem(i) && standing(i))) return problem(409, "items_unresolved", "Every alarm, compliance finding and vulnerability needs an outcome before the case closes");
-        if (mine.some((i) => !seesItem(i) && i.outcome === null)) return problem(409, "hidden_items_unresolved", "Items you cannot see still need an outcome; ask someone with access to them");
+        const standing = itemsOf(c).filter(blocking);
+        if (standing.some(seesItem)) return problem(409, "items_unresolved", "Every alarm, finding and vulnerability needs an outcome before the case closes");
+        if (standing.length > 0) return problem(409, "hidden_items_unresolved", "Items you cannot see still need an outcome; ask someone with access to them");
       }
       if (wasClosed && !willClose) {
         const clash = itemsOf(c).map((i) => holder(i, c.case_id)).find(Boolean);
@@ -316,16 +275,17 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
       }
       const at = now();
       const before = { severity: c.severity, status: c.status, assignee: c.assignee_user_id, resolution: c.resolution };
+      // A new close sets no resolution; an old closed case keeps its own while it stays closed.
       Object.assign(c, {
-        title, severity: body.severity, status, assignee_user_id: assignee, resolution, resolution_note: note,
-        accepted_until: until === null ? null : new Date(until).toISOString(), closed_at: willClose ? c.closed_at ?? at : null,
-        version: c.version + 1, updated_at: at,
+        title, severity: body.severity, status, assignee_user_id: assignee, resolution_note: note,
+        resolution: willClose ? c.resolution : null, accepted_until: willClose ? c.accepted_until : null,
+        closed_at: willClose ? c.closed_at ?? at : null, version: c.version + 1, updated_at: at,
       });
       if (wasClosed !== willClose) for (const i of itemsOf(c)) i.active = !willClose;
       if (assigneeChanged) push(c, "assigned", null, { from: before.assignee === null ? null : person(before.assignee).username, to: assignee === null ? null : person(assignee).username }, me, at);
       if (before.severity !== body.severity) push(c, "severity", null, { from: before.severity, to: body.severity }, me, at);
       if (willClose && !wasClosed) {
-        push(c, "resolved", note, { resolution, accepted_until: c.accepted_until }, me, at);
+        push(c, "resolved", note, {}, me, at);
         world.audit("case.close", c.case_id);
       } else if (wasClosed && !willClose) {
         push(c, "reopened", null, { reason: "manual", status, previous_resolution: before.resolution }, me, at);
@@ -339,7 +299,7 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
     },
 
     addNote(id: string, body: Body): Result {
-      if (typeof body.body !== "string") return problem(400, "invalid_request", "The request body is invalid");
+      if (typeof body.body !== "string") return badBody();
       if (!noteOk(body.body)) return invalid("body", "invalid_note");
       const c = find(id);
       if (!c) return notFound();
@@ -353,7 +313,7 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
     },
 
     addItem(id: string, body: Body): Result {
-      if (typeof body.kind !== "string" || typeof body.ref !== "string") return problem(400, "invalid_request", "The request body is invalid");
+      if (typeof body.kind !== "string" || typeof body.ref !== "string") return badBody();
       const c = find(id);
       if (!c) return notFound();
       if (c.status === "closed") return closed();
@@ -382,25 +342,29 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
 
     setOutcome(id: string, itemId: string, body: Body): Result {
       const outcome = body.outcome ?? null;
-      if (outcome !== null && (typeof outcome !== "string" || !["resolved", "false_positive", "accepted_risk"].includes(outcome))) return invalid("outcome", "invalid_outcome");
       const raw = body.note ?? null;
-      if (raw !== null && typeof raw !== "string") return problem(400, "invalid_request", "The request body is invalid");
-      const note = raw === null || raw.trim() === "" ? null : raw;
-      if (outcome !== null) {
-        if (note === null && outcome !== "resolved") return invalid("note", "note_required");
-        if (note !== null && !noteOk(note)) return invalid("note", "invalid_note");
-      }
+      const rawUntil = body.outcome_until ?? null;
+      if (Object.keys(body).some((key) => !["outcome", "note", "outcome_until"].includes(key))) return badBody();
+      if ((outcome !== null && typeof outcome !== "string") || (raw !== null && typeof raw !== "string") || (rawUntil !== null && typeof rawUntil !== "string")) return badBody();
+      // items.rs reads the date before the store checks the rest.
+      const until = rawUntil === null ? null : Date.parse(rawUntil);
+      if (until !== null && Number.isNaN(until)) return invalid("outcome_until", "invalid_timestamp");
+      const note = trimmed(raw);
+      const wrong = outcome === null ? null : outcomeError(outcome, note, until, Date.now());
+      if (wrong) return invalid(...wrong);
       const c = find(id);
       if (!c) return notFound();
       if (c.status === "closed") return closed();
       const item = itemsOf(c).find((i) => i.item_id === itemId && seesItem(i));
       if (!item) return itemNotFound();
-      if (!EXCLUSIVE_KINDS.has(item.kind)) return invalid("outcome", "outcome_not_applicable");
-      if (outcome === "resolved" && !(factsOf(item)?.gone ?? true)) return problem(409, "evidence_present", "The evidence is still there; mark it false positive or accepted risk instead");
+      if (!exclusive(item)) return invalid("outcome", "outcome_not_applicable");
+      if (outcome === "resolved" && !gone(item)) return problem(409, "evidence_present", "The evidence is still there; mark it false positive or accepted risk instead");
       if (item.outcome !== outcome || outcome !== null) {
-        push(c, "item_outcome", note, { ...itemDetail(item), from: item.outcome, to: outcome });
+        const at = until === null ? null : new Date(until).toISOString();
+        push(c, "item_outcome", note, { ...itemDetail(item), from: item.outcome, to: outcome, until: at });
         item.outcome = outcome;
         item.outcome_note = outcome === null ? null : note;
+        item.outcome_until = outcome === null ? null : at;
         touch(c);
         world.audit("case.item.outcome", c.case_id);
         persist();
@@ -414,8 +378,8 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
       if (kind === null || ref === null) return problem(400, "invalid_query", "kind and ref are required");
       if (!isCaseKind(kind)) return invalid("kind", "invalid_kind");
       if (!refOk(kind, ref)) return invalid("ref", "invalid_ref");
-      const exclusive = EXCLUSIVE_KINDS.has(kind);
-      const found = state.items.filter((i) => i.kind === kind && i.ref === ref && (!exclusive || i.active) && seesItem(i))
+      const isExclusive = EXCLUSIVE_KINDS.has(kind);
+      const found = state.items.filter((i) => i.kind === kind && i.ref === ref && (!isExclusive || i.active) && seesItem(i))
         .flatMap((i) => { const c = state.cases.find((candidate) => candidate.case_id === i.case_id); return c && sees(c) ? [{ c, i }] : []; })
         .sort((a, b) => b.c.updated_at.localeCompare(a.c.updated_at) || b.c.number - a.c.number).slice(0, 50);
       return { status: 200, body: { items: found.map(({ c, i }) => ({ case: summary(c), item_id: i.item_id, outcome: i.outcome })) } };

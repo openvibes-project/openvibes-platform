@@ -4,12 +4,13 @@ import type { ListColumns, SavedView } from "../../api/types";
 import type { DemoContext } from "../context";
 import { browserPersistence, json, problem } from "../http";
 
-/** The list pages and the columns each may hide (src/lists/mod.rs); a page's first column never (Host; alarms: Severity; vulnerabilities: Severity and Advisory; compliance: Severity and Check). */
+/** The list pages and the columns each may hide (src/lists/mod.rs); a page's first column never (Host; alarms: Severity; vulnerabilities: Severity and Advisory; compliance: Severity and Check; cases: Case and Title). */
 const HIDEABLE: Record<string, readonly string[]> = {
   hosts: ["os", "groups", "labels", "problems", "heartbeat", "agent"],
   alarms: ["alarm", "host", "count", "seen", "state", "assignee", "case"],
   vulnerabilities: ["package", "cvss", "epss", "hosts", "due", "assignee"],
   compliance: ["area", "failing", "hosts", "since", "assignee"],
+  cases: ["severity", "status", "assignee", "hosts", "items", "updated"],
 };
 const MAX_VIEWS = 50;
 const CONTROL = /\p{Cc}/u;

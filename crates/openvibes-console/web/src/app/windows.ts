@@ -15,7 +15,7 @@ let top = Math.max(10, ...windows.map((w) => w.z));
 function read(): Win[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
-    // A host, alarm, advisory or finding window from before their pages (approved screens 17, 30, 26 and 28) is dropped: they are pages now.
+    // A host, alarm, advisory, finding or case window from before their pages (approved screens 17, 30, 26, 28 and 32) is dropped: they are pages now.
     return Array.isArray(parsed) ? parsed.filter((w): w is Win => typeof w?.kind === "string" && typeof w?.id === "string" && pagePath(w as PanelRef) === null && typeof w?.x === "number").slice(0, 12) : [];
   } catch {
     return [];

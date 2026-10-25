@@ -10,10 +10,10 @@ use platform_store::console_cases::{
 };
 
 use super::permissions::{manager, may_assign, reader};
-use super::request::{
-    blank_is_absent, decode_cursor, encode_cursor, parse_time, precondition, title,
+use super::request::{blank_is_absent, decode_cursor, encode_cursor, precondition, title};
+use super::responses::{
+    answer, bad_request, detail_answer, permission_denied, refused, removed_field,
 };
-use super::responses::{answer, bad_request, detail_answer, invalid, permission_denied, refused};
 use super::types::{CaseListParams, CasePage, CreateCaseRequest, UpdateCaseRequest};
 use super::views::summary_view;
 use crate::{
@@ -224,28 +224,23 @@ pub(crate) async fn update_case(
     let Ok(Json(request)) = payload else {
         return bad_request("invalid_request", "The request body is invalid");
     };
-    let accepted_until = match request.accepted_until.as_deref().map(parse_time) {
-        Some(Some(at)) => Some(at),
-        Some(None) => {
-            return invalid(
-                "accepted_until",
-                "invalid_timestamp",
-                "Use an RFC 3339 time",
-            );
-        }
-        None => None,
-    };
+    // Step 5d: a close takes only a closing note; the items carry how it
+    // ended, so the case-level resolution and date are refused.
+    if request.resolution.is_some() {
+        return removed_field("resolution");
+    }
+    if request.accepted_until.is_some() {
+        return removed_field("accepted_until");
+    }
     let assignee = request.assignee_user_id.map(|id| id.to_ascii_lowercase());
-    let note = blank_is_absent(request.resolution_note.as_deref());
+    let note = blank_is_absent(request.closing_note.as_deref());
     let change = CaseChange {
         expected_version: expected,
         title: title(&request.title),
         severity: &request.severity,
         status: &request.status,
         assignee_user_id: assignee.as_deref(),
-        resolution: request.resolution.as_deref(),
-        resolution_note: note,
-        accepted_until,
+        closing_note: note,
     };
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();

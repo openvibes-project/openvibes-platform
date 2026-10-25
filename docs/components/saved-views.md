@@ -3,10 +3,15 @@
 `platform-store::saved_views` (schema 56) and `crates/openvibes-console/src/lists/`
 keep two things per person and list page (roles spec §10): named saved views
 (a URL query) and the columns the person hid. Pages are a fixed list in code
-(`lists::PAGES`: `hosts`, `alarms`); hideable columns per page are in
-`lists::hideable` (`hosts`: `os`, `groups`, `labels`, `problems`, `heartbeat`,
-`agent`; `host` never; `alarms`: `alarm`, `host`, `count`, `seen`, `state`,
-`assignee`, `case`; `severity` never).
+(`lists::PAGES`: `hosts`, `alarms`, `vulnerabilities`, `compliance`,
+`cases`); hideable columns per page are in `lists::hideable` (`hosts`: `os`,
+`groups`, `labels`, `problems`, `heartbeat`, `agent`; `host` never;
+`alarms`: `alarm`, `host`, `count`, `seen`, `state`, `assignee`, `case`;
+`severity` never; `vulnerabilities`: `package`, `cvss`, `epss`, `hosts`,
+`due`, `assignee`; `severity` and `advisory` never; `compliance`: `area`,
+`failing`, `hosts`, `since`, `assignee`; `severity` and `check` never;
+`cases`: `severity`, `status`, `assignee`, `hosts`, `items`, `updated`;
+`case` and `title` never).
 
 ## Interfaces
 

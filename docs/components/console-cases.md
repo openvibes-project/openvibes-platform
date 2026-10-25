@@ -1,10 +1,10 @@
 # console-cases
 
 Cases over `/api/v1` (module `crates/openvibes-console/src/cases/`, store
-`platform_store::console_cases`, schema 36). Spec:
+`platform_store::console_cases`, schemas 35, 36 and 64). Spec:
 [2026-10-04-console-cases-design.md](../specs/2026-10-04-console-cases-design.md).
-The API, store and tests are built, and so are the web pages (list, case
-panel, "Add to case"; see [console-web.md](console-web.md#cases)).
+The API, store and tests are built, and so are the web pages (the list, a
+case's page, "Add to case"; see [console-web.md](console-web.md#cases)).
 
 ## Purpose
 
@@ -18,10 +18,18 @@ a recorded decision to accept the risk or call it a false positive.
 A case stores links (kind and id), never copies. Each item's scope is that of
 its host, so a user with a limited scope never learns that an item outside it
 exists: it is left out of the case's items, counts and timeline, with no
-placeholder. A user sees a case if they can see at least one of its items, or
-opened it, or it is assigned to them; any other case answers 404, the same as
-one that does not exist. A case with no item is therefore seen only by who
-opened it or is assigned to it.
+placeholder. Hosts decide (user decision 2026-10-25): a user sees a case if
+one of its host-bound items is on a host in their scope, or they opened it,
+or it is assigned to them; any other case answers 404, the same as one that
+does not exist. A software item has no host, so it never makes a case
+visible: a case with no item, or with only software items, is seen by who
+opened it, who it is assigned to, and anyone whose scope is every host (step
+5d ruling 4). Software items are still shown inside a case the user can
+already see. The rule is one SQL fragment (`visibility::case_visible`, with
+`item_in_scope` deciding and `item_visible` choosing the items shown), used by
+every read, change, lock and count.
+A change uses the scope that `cases.write` and `cases.read` share (by asset
+group), so it never reaches a case or item the caller cannot read.
 
 ## Interfaces
 
@@ -34,22 +42,24 @@ setting or changing the assignee also `cases.assign`.
 
 | Route | Needs | Result |
 |---|---|---|
-| `GET /api/v1/cases` | `cases.read` | `CasePage` `{items, next_cursor}`. Filters `status` (`open`, `investigating`, `closed`, `all`; default open and investigating), `severity`, `assignee` (a user id, `me`, `none`), `q` (title text or `C-104`), `cursor`, `limit` 1–100 (50). Newest change first |
+| `GET /api/v1/cases` | `cases.read` | `CasePage` `{items, next_cursor}`. Filters `status` (`open`, `investigating`, `closed`, `all`; default open and investigating), `severity`, `assignee` (a user id, `me`, `none`), `q` (title text or `C-104`), `cursor`, `limit` 1–100 (50). Newest change first. Kept for Add to case, the palette and the badges |
+| `GET /api/v1/case-list` | `cases.read` | `CaseListView`: the Cases list page (see below) |
+| `GET /api/v1/cases/{id}/summary` | `cases.read` | `CasePageSummaryView`: a case's page above the fold (see below) |
 | `POST /api/v1/cases` | `cases.write` (`cases.assign` with an assignee) | `201 CaseDetailView` + `ETag`. Body `{title, severity?, assignee_user_id?, items?: [{kind, ref}]}`, at most 50 items |
 | `GET /api/v1/cases/{id}` | `cases.read` | `CaseDetailView` + `ETag` (the version) |
 | `PUT /api/v1/cases/{id}` | `cases.write` (`cases.assign` to change the assignee), `If-Match` | `CaseDetailView` + new `ETag` |
 | `POST /api/v1/cases/{id}/notes` | `cases.write` | `201 CaseEventView`; body `{body}` |
 | `POST /api/v1/cases/{id}/items` | `cases.write` | `201 CaseItemView`; body `{kind, ref}` |
 | `DELETE /api/v1/cases/{id}/items/{item_id}` | `cases.write` | 204; open cases only |
-| `PUT /api/v1/cases/{id}/items/{item_id}/outcome` | `cases.write` | `CaseItemView`; body `{outcome: "resolved" \| "false_positive" \| "accepted_risk" \| null, note?}` |
+| `PUT /api/v1/cases/{id}/items/{item_id}/outcome` | `cases.write` | `CaseItemView`; body `{outcome: "resolved" \| "false_positive" \| "accepted_risk" \| "confirmed_malicious" \| "expected" \| null, note?, outcome_until?}` (`outcome_until` an RFC 3339 time, only with `accepted_risk`; a malformed one is 422 `invalid_timestamp` on that field) |
 | `GET /api/v1/cases/for-item?kind=&ref=` | `cases.read` | `{items: [{case: CaseSummaryView, item_id, outcome}]}` |
 | `GET /api/v1/cases/assignees` | `cases.assign` | `{items: [{user_id, username, display_name}]}`: enabled users who hold `cases.read` |
 
 `CaseSummaryView` (also the head of `CaseDetailView`, which adds
 `resolution_note`, `items` and `events`): `case_id`, `number` (shown as
 `C-<number>`, never reused), `title`, `status` (`open`, `investigating`,
-`closed`), `resolution` (`mitigated`, `false_positive`, `accepted_risk`),
-`accepted_until`, `severity` (`critical`, `high`, `medium`, `low`),
+`closed`), `resolution` (`mitigated`, `false_positive`, `accepted_risk`; only
+on cases closed before step 5d), `accepted_until` (the same), `severity` (`critical`, `high`, `medium`, `low`),
 `assignee` and `opened_by` (`{user_id, username, display_name}`),
 `created_at`, `updated_at`, `closed_at`, `version`, `item_count` and
 `pending_item_count` (items the viewer can see; the second counts alarms,
@@ -57,7 +67,8 @@ findings and vulnerabilities without an outcome).
 
 `CaseItemView`: `item_id`, `kind` (`alarm`, `finding`, `vulnerability`,
 `host`, `software`), `ref`, `agent_id`, `hostname`, `active`, `outcome`,
-`outcome_note`, `added_by`, `added_at`, `title`, `severity`, `evidence_gone`.
+`outcome_note`, `outcome_until` (accepted risk's re-open date), `added_by`,
+`added_at`, `title`, `severity`, `evidence_gone`.
 
 | `kind` | `ref` (as the web panels write it) | Exclusive | Needs an outcome |
 |---|---|---|---|
@@ -78,16 +89,91 @@ open case.
 text; the resolution note for `resolved`; the outcome note for
 `item_outcome`) and `detail`: `{from, to}` for `status`, `severity` and
 `assigned` (usernames); `{item_id, item_kind, item_ref, item_agent_id}` on
-item entries; `{resolution, accepted_until}` for `resolved`; `{reason}` for
-`reopened` (`manual` or `accepted_risk_expired`). The timeline is oldest
+item entries, plus `{from, to, until}` on `item_outcome`; `{}` for `resolved`
+(before step 5d `{resolution, accepted_until}`); `{reason}` for `reopened`
+(`manual`, `accepted_risk_expired` or `evidence_returned`). The timeline is oldest
 first and append-only (a trigger refuses UPDATE and DELETE).
+
+### The Cases list page (`GET /api/v1/case-list`)
+
+Step 5d rulings 5–10, following the other list pages (`compliance-list`):
+query parameters `q` (title, `C-<number>`, the number, or the opener's
+name), `status` (`active`, the default: not closed; `open`,
+`investigating`, `closed`, `all`), `severity`, `assignee` (`me` from the
+session, `unassigned`, or a user id), `contains` (`alarms`,
+`vulnerabilities`, `findings`: a visible item of that kind), `host` (an
+agent id), `group` (a host group id), `updated` (`today` since midnight
+UTC, `week`, `quiet`: not for 7 days or more), `sort` (`updated`, the
+default, `severity`, `number`, `opened`; ties by case id), `dir`, `offset`
+0–100000 and `limit` 1–100 (50). Empty values count as absent; anything
+else, an unknown parameter included, is 400 `invalid_query` naming it.
+The lazy reopen checks run first. The answer is `{items, total, counts,
+summary, generated_at}`: each row has `case_id`, `number`, `title`,
+`status`, `severity`, `opened_by`, `assignee`, `latest_note` (`{text, at}`,
+the newest note's first 120 characters), `hosts` (the first five visible
+hosts, `{agent_id, hostname}`), `host_count`, `kinds` (visible items per
+kind), `with_outcome` / `takes_outcome` (visible alarms, findings and
+vulnerabilities), `ready` (not closed, and close would take it now: close's
+own rule, hidden items included; only this boolean is revealed),
+`updated_at` and `resolution` (how a case closed before step 5d ended;
+null for every other); `counts` has every value of `status`,
+`severity`, `contains`, `updated`, `group` and `assignee` with the other
+filters applied; `summary` is `{open, investigating, unassigned,
+ready_to_close}` over the cases that are not closed under every filter but
+status, ready by close's own rule (hidden items included). The page
+`cases` keeps saved views and hidden columns (`severity`, `status`,
+`assignee`, `hosts`, `items`, `updated`; case and title never hide).
+
+### A case's page (`GET /api/v1/cases/{id}/summary`)
+
+Step 5d rulings 12–14 (store `case_summary.rs` and `case_people.rs`, route
+`cases/page.rs`). Session only; the lazy reopen checks run first; a missing,
+malformed or invisible case is 404 `case_not_found`. The answer
+(`CasePageSummaryView`; the name `CaseSummaryView` was already the list
+item) is:
+
+- `header`: `case_id`, `number`, `title`, `status`, `severity`,
+  `opened_by`, `created_at`, `assignee`, `version`;
+- `tiles`: `items` (visible), `need_outcome` (visible alarms, findings and
+  vulnerabilities without an outcome), `hosts` (distinct visible hosts),
+  `open_for_seconds` (created to now, or to `closed_at`) and `ready` (not
+  closed and close's own rule, `blocking_item`, passes over every item,
+  hidden ones included: the same as the list's "ready to close");
+- `details`: title, severity, status, opener, created, updated, closed,
+  the pre-5d `resolution` and the `resolution_note`;
+- `hosts`: each visible item's host by name, `{agent_id, hostname, os,
+  problems: {alarms, critical_vulns, failing_checks, compliance_stale}}`;
+  each count is null unless the caller's `alarms.read`,
+  `vulnerabilities.read` or `compliance.read` reaches that host (open
+  agent alarms, `host_listed_critical` and `open_failing`, as the Hosts
+  list counts them). A host in compliance reach with no report in the
+  last day has `compliance_stale` true and a null failing count, since 0
+  would be wrong;
+- `people`: who can see it, `{names, total, complete}`: enabled people
+  with a live binding to Administrator or to a role holding `cases.read`
+  on all hosts, on a group holding a host of one of the case's host-bound
+  items in the caller's reach, or (the opener and the assignee) at any
+  scope. A person who sees the case only through a host the caller cannot
+  see is neither named nor counted, so `complete` is true exactly when
+  the caller reads cases on every host (the page shows "N", otherwise "at
+  least N"); it never depends on the case's hidden items. `names` (at most
+  20, by name) only with `access.read`, else null;
+- `can`: `edit` and `note` (`cases.write`, and the case visible in the
+  scope `cases.write` and `cases.read` share), `assign` (that and
+  `cases.assign`), `close` / `outcome` (that, not closed), `reopen` (that,
+  closed), `ask` (always false: the assistant takes no case reference) and
+  `export` (`cases.read`).
 
 ### Changing a case
 
 `PUT` replaces the editable fields, so send them all: `title` (1–120
 characters, trimmed), `severity`, `status`, `assignee_user_id` (absent or
-`null` means nobody) and, to close, `resolution`, `resolution_note` (1–4000
-characters) and `accepted_until` (RFC 3339). Sending the current values
+`null` means nobody) and, to close, `closing_note` (1–4000 characters,
+stored as the detail's `resolution_note`; a case that stays closed sends the
+one it has). `resolution` and `accepted_until` are refused since step 5d
+(400 `invalid_request` naming the field; `null` counts as absent), as the
+items carry how a case ended; an old case's own stay readable. Sending
+the current values
 changes nothing and writes nothing. The version rises with each change to
 those fields; notes, items and outcomes move `updated_at` only, so adding a
 note does not make someone else's edit stale. `If-Match` is the quoted
@@ -95,24 +181,27 @@ version from the last `ETag`.
 
 Statuses move freely between `open` and `investigating`. `closed` needs:
 
-1. a `resolution` (`mitigated`, `false_positive`, `accepted_risk`) and a
-   note;
-2. for `accepted_risk`, an `accepted_until` in the future (and no date for the
-   others);
-3. an outcome on every alarm, finding and vulnerability, `resolved` only
+1. a closing note (`closing_note` in the store, field errors
+   `closing_note_required`, `closing_note_not_allowed` on any other status,
+   `invalid_note`); new closes set no resolution;
+2. an outcome on every alarm, finding and vulnerability, `resolved` only
    while its evidence is still gone. Items the closing user cannot see are
    not theirs to clear: if any has no outcome, the answer is 409
    `hidden_items_unresolved` until someone with that scope clears them.
 
 Setting a status other than `closed` on a closed case reopens it and clears
-its resolution. A closed case keeps how it ended: changing the resolution,
-note or date, adding or removing items, and setting outcomes are 409
+its note (and an old case's resolution and date). A closed case keeps how it
+ended: a different closing note, adding or removing items, and setting
+outcomes are 409
 `case_closed` until it is reopened. Title, severity, assignee and notes can
 still change.
 
-An item outcome is `resolved` (only when `evidence_gone`; a note is optional),
-`false_positive` or `accepted_risk` (a note is required). Evidence is gone
-when:
+An item outcome is `resolved` (only when `evidence_gone`; a note is
+optional), `false_positive`, `accepted_risk`, `confirmed_malicious` or
+`expected` (a note is required). `accepted_risk` also needs `outcome_until`,
+a time after now and at most 365 days ahead (`outcome_until_required`,
+`_past`, `_too_far`); the other outcomes take none (`_not_allowed`). Any
+other outcome, or clearing it, drops the date. Evidence is gone when:
 
 - finding: the agent's current finding is missing or has ended
   (`ended_at` set);
@@ -130,10 +219,27 @@ Severity is set when the case is created (the highest item severity, with
 `important` counted as high, `moderate` as medium, and `info` and `unrated` as
 low; medium with none) and is changed only by hand.
 
-When `accepted_until` passes, the case reopens as `open` (audit actor
-`system`, timeline `reopened` with reason `accepted_risk_expired`), the items
-marked `accepted_risk` lose that outcome so someone decides again, and the
-resolution fields clear. This runs when cases are listed or read, so it happens
+When an item's `outcome_until` passes, its closed case reopens as `open`
+(audit actor `system`, timeline `reopened` with reason
+`accepted_risk_expired`, then an `item_outcome` entry per expired item, shown
+only to those who can see it) and only those items lose their outcome, so
+someone decides again; the case's note clears. A case closed before step 5d
+with a case-level `accepted_until` still reopens on that date, and then all
+its `accepted_risk` items lose the outcome. On a case that is not closed,
+an acceptance that runs out clears the same lazy way (`item_outcome`
+with reason `accepted_risk_expired`, audit `case.item.outcome` by
+`system`) and the status stays, so the case is no longer ready to close.
+Until that clearing runs, an `accepted_risk` item whose date has passed
+already counts as having no outcome (`blocking_item`): close refuses it
+(409 `items_unresolved`) and the case is not ready to close. The timeline
+reads such a clear as "The platform cleared the outcome of …: the risk
+acceptance ran out, so it needs an outcome again" ("the evidence
+returned" for a `resolved` item on reopen).
+The checks skip closed cases one of whose items another open case holds,
+so those never fill the 100-case batch. Migration 64 dated the existing
+`accepted_risk` items: the case's `accepted_until` when it was closed as
+accepted risk, otherwise the upgrade time + 90 days, so nothing reopens or
+clears on upgrade day. This runs when cases are listed or read, so it happens
 the next time anyone looks. A case whose item has since joined another open
 case stays closed.
 
@@ -196,7 +302,7 @@ None.
 | item missing, or outside the caller's scope, or not in the case | 404 `item_not_found` (the same answer, so nothing is revealed) |
 | invalid JSON body, unknown field, invalid query or cursor, invalid `If-Match` | 400 |
 | missing `If-Match` / stale version | 428 / 412 `stale_case` |
-| invalid title, severity, status, resolution, note, date, kind or ref, assignee who cannot read cases, an outcome on a host or software, too many items | 422 `invalid_case` with `field_errors` (e.g. `resolution_note` / `resolution_note_required`) |
+| invalid title, severity, status, note, date, kind or ref, assignee who cannot read cases, an outcome on a host or software, too many items | 422 `invalid_case` with `field_errors` (e.g. `closing_note` / `closing_note_required`) |
 | item already in another open case | 409 `item_in_case`; `case_number` names that case only when the caller can see it, and the item |
 | item already in this case | 409 `item_already_in_case` |
 | case closed | 409 `case_closed` |
@@ -213,8 +319,72 @@ version.
 With `eval "$(scripts/test-db.sh)"`:
 
 ```sh
-cargo test -p platform-store --test console_cases        # rules, scope, exclusivity, close, evidence, audit, limits
+cargo test -p platform-store --test console_cases        # tests/console_cases/: rules, scope, exclusivity, close, outcomes, reopen, evidence, audit, limits, migration 64
 cargo test -p openvibes-console --lib cases              # cursors, validation messages
-cargo test -p openvibes-console --test cases_http        # routes, auth, CSRF, bearer, scope, versions
+cargo test -p openvibes-console --test cases_http        # access: session, permissions, bearer, CSRF, cases.assign, a change's reach
+cargo test -p openvibes-console --test cases_http_lifecycle # open, read, change, note and close with versions and audit; the closing note
+cargo test -p openvibes-console --test cases_http_items  # exclusive items, removal, assignees
+cargo test -p openvibes-console --test cases_http_reopen # Fixed needs the evidence gone; lazy reopening
+cargo test -p openvibes-console --test cases_http_list   # a scoped user's view and adds; validation, paging, filters
+cargo test -p openvibes-console --test case_list_http    # the Cases list page: validation, rows, counts, reach, saved views
+cargo test -p platform-store --test case_summary         # the case page: scope, problems per kind, people, tiles
+cargo test -p openvibes-console --test case_page_http    # the case page route: shape, reach, names, can flags
+cargo test -p openvibes-console --test case_outcomes_http # the five outcomes, outcome_until, closing_note
 cargo test -p openvibes-console --test auth_http database_builtin_permissions_match_the_rust_role_table
 ```
+
+The web list: `npx vitest run src/views/investigate/Cases.test.tsx
+src/demo/routes/caseList.test.ts` and, in a browser, the demo e2e
+`e2e/demo/case-list.spec.ts` (filters across a reload, a saved view, a
+hidden column, the ready-to-close summary, old addresses, axe) and
+`e2e/demo/cases.spec.ts`; a case's page in `e2e/demo/case-page.spec.ts`.
+
+Live e2e (`scripts/test-console-e2e.sh`): `e2e/live/cases.spec.ts`, a team
+lead reaching only `case-P-*` (seeded with one alarm each per browser P,
+plus `caseout-P-1` outside the reach) lists only the cases with an item on
+their hosts and their own (the others answer 404), the list's counts agree
+with its rows and leave out the hidden item and host, and on a case's page
+they set an outcome, close the case with a note and reopen it. Every case
+carries the run's tag, and the seeded alarms are taken out of open cases
+first and last, so a retry or a second run on the same server passes.
+
+When the list or page SQL changes (`case_list*.rs`, `case_summary.rs`,
+`case_people.rs`), also run the ignored timing test:
+`cargo test -p platform-store --test case_list_timing -- --ignored --nocapture`
+(the Cases list at the ruling 16 scale, full and scoped, both under 2 s).
+
+## Upgrading
+
+Roles step 5d (schema 64):
+
+- **Closing asks only for a closing note.** The items carry the outcomes,
+  so Close case… no longer asks how the case ended. Cases closed before
+  the upgrade keep showing their case-level resolution and note.
+- **Two new outcomes**, Confirmed malicious and Expected activity. Risk
+  accepted needs a re-open date per item, at most 365 days ahead (the
+  page's date picker offers up to 364 days, whose end is always inside
+  that); when it
+  passes, that item's outcome clears and a closed case reopens. Existing
+  Risk accepted items were dated by the upgrade: the case's own date when
+  it was closed as accepted risk, otherwise 90 days after the upgrade.
+  That includes Risk accepted items on cases closed as mitigated or false
+  positive: those closed cases reopen about 90 days after the upgrade,
+  when the dates pass, and the items need an outcome again.
+- **Hosts decide who sees a case.** People whose reach is some host groups
+  no longer see a case whose only items are software (it has no host);
+  they still see one they opened or are assigned. A case with no host-bound
+  item is seen by people who read cases on every host.
+- **Changes stay within what you can read.** A case change uses the reach
+  that `cases.write` and `cases.read` share, and bulk actions on the lists
+  use the reach every needed permission shares: bulk suppress reaches only
+  hosts where the person holds both `alarms.triage` and `alarms.suppress`.
+  The reach is matched by host group, not by host: someone whose roles
+  reach the same hosts through different groups (say `cases.read` on one
+  group, `cases.write` on another holding the same hosts) may now be
+  refused where they were not before. It fails closed; give both
+  permissions on the same groups.
+- **The case side panel became a page**, `/cases/{id}`, and New case is
+  `/cases/new`. Old links (`?open=case:ID`, alarms, Add to case, the
+  palette, the badges) lead to the page; an old `?open=case:ID` address
+  is replaced in place, so Back skips it (e2e
+  `old_case_links_open_the_page`).

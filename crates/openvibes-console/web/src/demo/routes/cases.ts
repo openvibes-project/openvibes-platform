@@ -1,11 +1,13 @@
 import { splitRef } from "../../panels/cases/cases";
 import { seedCases } from "../caseSeed";
 import { createCaseStore } from "../cases";
+import { registerCaseListRoute } from "./caseList";
+import { registerCaseSummaryRoute } from "./caseSummary";
 import type { DemoContext } from "../context";
 import { browserPersistence, json, page, problem } from "../http";
 
 export function registerCaseRoutes(ctx: DemoContext) {
-  const { data, actor, me, permissions, rolesOf, visible, agentById, alarmList, findings, triageKey, hosts, hostPackages, audit, route, send } = ctx;
+  const { data, actor, me, permissions, capabilities, rolesOf, reaches, triageKey, hosts, hostPackages, audit, route, send } = ctx;
   // Cases: what an item is comes from the objects above, so triaging an
   // alarm or finding here changes what a case may record for it.
   const mitigated = (state: string | undefined) => state === "mitigated";
@@ -16,25 +18,29 @@ export function registerCaseRoutes(ctx: DemoContext) {
     get assignable() {
       return data.access.users.filter((u) => u.enabled && rolesOf(u.user_id).some((r) => r.permissions.includes("cases.read"))).map((u) => u.user_id);
     },
-    canSee: visible,
+    // The cases.read reach decides, as the server's case_visible.
+    canSee: (agentId) => reaches("cases.read", agentId),
+    global: capabilities.some((c) => c.permission === "cases.read" && c.scope.kind === "global"),
     hostname: (agentId) => data.agents.find((a) => a.id === agentId)?.hostname ?? null,
+    // Read from all the demo's data, whoever looks: the store checks the
+    // viewer's reach, and a hidden item's evidence still decides closing.
     facts: (kind, ref) => {
       const [first, rest] = splitRef(ref);
       if (kind === "alarm") {
-        const alarm = alarmList().find((a) => a.id === ref);
+        const alarm = data.alarms.find((a) => a.id === ref);
         return alarm && { agent_id: alarm.agent_id, title: alarm.message, severity: alarm.severity, gone: mitigated(alarm.state) };
       }
       if (kind === "compliance_finding") {
         const [set, rule] = splitRef(rest);
-        const finding = findings().find((f) => f.agent_id === first && f.rule_set_id === set && f.rule_id === rule);
+        const finding = data.findings.find((f) => f.ended_at == null && f.agent_id === first && f.rule_set_id === set && f.rule_id === rule);
         return finding && { agent_id: first, title: finding.message, severity: finding.severity, gone: mitigated(data.triage.get(triageKey(first, set, rule))?.state) };
       }
       if (kind === "vulnerability") {
-        const row = data.vulnerabilities.find((v) => v.agent_id === first && v.advisory_id === rest && visible(v.agent_id));
+        const row = data.vulnerabilities.find((v) => v.agent_id === first && v.advisory_id === rest);
         return row && { agent_id: first, title: row.title, severity: row.severity, gone: row.fixed_at != null };
       }
       if (kind === "host") {
-        const agent = agentById(ref);
+        const agent = data.agents.find((a) => a.id === ref);
         return agent && { agent_id: agent.id, title: agent.hostname ?? agent.id, severity: null, gone: false };
       }
       const present = hosts().some((agent) => hostPackages(agent.id).some((p) => `${p.manager}/${p.name}` === ref));
@@ -47,6 +53,8 @@ export function registerCaseRoutes(ctx: DemoContext) {
     return result.status === 200 ? json(page(result.body as unknown[], query)) : send(result);
   };
   route("GET", "/api/v1/cases", "cases.read", (_, query) => listed(query));
+  registerCaseListRoute({ ...ctx, cases });
+  registerCaseSummaryRoute({ ...ctx, cases });
   // Setting or changing the assignee needs cases.assign too (cases/list.rs).
   const mayAssign = permissions.includes("cases.assign");
   const denied = () => problem(403, "permission_denied", "Permission denied");

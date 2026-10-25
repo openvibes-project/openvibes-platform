@@ -970,6 +970,73 @@ These fill gaps in the Compliance list and a check's page. Rule titles are alrea
 - **The compliance summary uses the one failing definition** (final review): `/v1/compliance/summary` (the menu count, the dashboard's Breakdown tile) and the count history (`compliance.open.*` metrics, top hosts) count open failing findings (host and check pairs, `check_list_sql::open_failing`), by the same definition as the list they open; they count findings while the list counts checks (controller ruling), and the menu count and tile are labelled "N failing findings"; the older groups read counts an expired acceptance as open.
 - **Passing needs a recent scan** (final review): the host's last scan (`last_scan.finished_at_unix_ms`, read as 1–18 digits before any cast) must have finished within the 24-hour window, on the list and a check's page alike.
 
+### Plan rulings, 2026-10-25 (step 5d)
+
+These fill gaps in the Cases list and a case's page.
+
+**User decision (2026-10-25):**
+
+1. **"Close case…" asks for a closing note only.**
+   - Items carry the outcomes, and closing needs a short required summary note.
+   - The case-level `resolution` stays on old closed cases and is shown on them, but new closes no longer set it.
+   - Risk accepted keeps a re-open date, now per item.
+
+**Rulings:**
+
+1. **Outcome values.** The wire values are `resolved`, `false_positive`, `accepted_risk`, `confirmed_malicious` and `expected`. The labels are Fixed, False positive, Risk accepted, Confirmed malicious and Expected activity.
+   - A note is required for every outcome except `resolved`.
+   - `resolved` still needs the evidence to be gone (today's rule).
+   - `accepted_risk` needs `outcome_until`, a future date at most 365 days ahead (the same bound as today's case date).
+2. **Which items take an outcome.** Alarms, compliance findings and vulnerabilities take one, as today. Host and software items are context and take none.
+   - "n/m with an outcome" and "need an outcome" count only the items that take one.
+   - Close needs every one of them in the case, hidden ones included: today's `HiddenItemsUnresolved` stays.
+3. **Close and reopen.**
+   - Closing needs `closing_note` (1–4000 characters), stored in `resolution_note`. `resolution` stays null for new closes, and old rows keep theirs.
+   - When an item's `outcome_until` passes, the case reopens (lazily, as today) and that item's outcome clears. Today's case-level `accepted_until` reopen still works for old rows.
+   - Reopen stays on ⋯.
+4. **Visibility (spec §6).** A case is visible to its creator, its assignee, and anyone who can see one of its items' hosts. A case with no items is also visible to holders of `cases.read` on all hosts (step 5d added this; the SQL before it left that part out).
+5. **A new list route, `GET /v1/case-list`.** `GET /v1/cases` stays for its current users: Add to case, the palette and the badges.
+6. **Filter values** (one value per filter; all filters combine):
+   - **Status:** active (the default: not closed), open, investigating, closed, all.
+   - **Severity:** critical, high, medium, low.
+   - **Assignee:** me, unassigned, and people with at least one case visible to the viewer.
+   - **Contains:** alarms, vulnerabilities, findings. A case matches when it holds at least one visible item of that kind.
+   - **Host:** the Host chip; a case matches when it has a visible item on that host.
+   - **Group:** groups with at least one host the viewer can see, plus the chosen one; a case matches when it has a visible item on a host in the group.
+   - **Updated:** today, this week (the last 7 days), quiet (not updated for 7 days or more).
+7. **Search** covers the title, `C-<number>`, the number alone, and the opener's name.
+8. **Paging is by offset:** `offset` 0..=100000, `limit` 1..=100, default 50.
+   - **Sorts:** updated (the default, newest first), severity, number and opened.
+   - Ties are broken by case id.
+9. **Row fields:**
+   - number, title, opened by (name), the latest note (its first 120 characters and the time), severity, status, assignee;
+   - hosts: distinct visible item hosts;
+   - kinds: counts per kind among visible items;
+   - `with_outcome` / `takes_outcome` counts, among visible items;
+   - updated at.
+10. **The summary line:** "N open · N investigating · N unassigned · N ready to close". A case is ready to close when it is not closed and every visible item that takes an outcome has one.
+11. **Routes for the page:** `/cases/{id}`, with `GET /v1/cases/{id}/summary`. The existing `GET /v1/cases/{id}` stays as the full detail.
+    - Old links: `nav.open({kind:"case", id})` and `?open=case:ID` go to the page, with replace.
+    - `{kind:"case", id:"new"}` goes to `/cases/new`, which shows today's new-case form.
+12. **The summary view:**
+    - header facts: number, status, severity, opener, created, assignee;
+    - tiles:
+      - items, the count of visible items;
+      - need an outcome, the visible items still without one, or "Ready to close";
+      - hosts;
+      - open for: created → now, or created → closed_at.
+    - Details: title, severity, status, opener, created, updated, and the old resolution with its note if present;
+    - hosts: each visible host with its open problems — open alarms, critical vulnerabilities and failing checks — using the step-4 problem rules and `open_failing` from 5c, counted only where the viewer holds that kind's read permission;
+    - who can see it (ruling 13);
+    - `can`: `{ edit, assign, close, reopen, note, outcome, ask, export }`.
+13. **Who can see it:**
+    - the opener and the assignee;
+    - enabled people whose live role binding holds `cases.read` on all hosts, or on a group containing one of the case's item hosts.
+    - At most 20 names are listed, plus "and N more". The names are shown only to viewers holding `access.read`; everyone else sees the count only.
+14. **Ask about this** is shown when the assistant supports a `case` reference (check `assistant/`). If it doesn't, the page omits the button and the report says so.
+15. **⋯** holds Export (a CSV of the items and timeline, with `cases.read`), Copy link, and Reopen (on a closed case, with `cases.write`).
+16. **Performance:** the list must answer within 2 s at full reach on 10,000 hosts, 20,000 cases and 200,000 items. Record the scoped time too. Add indexes in migration 0064 if needed.
+
 ## 11. Dashboards
 
 - **Storage:** `console_dashboards.shared_role_id` becomes a visibility:

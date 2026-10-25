@@ -498,7 +498,8 @@ users: any signed-in user keeps their own, sees those shared with a role they
 hold, and chooses a home; service-account bearer tokens get 403. See
 [console-dashboards.md](console-dashboards.md).
 
-Cases (`/api/v1/cases` and below) are read with `cases.read` and changed with
+Cases (`/api/v1/cases` and below, and the Cases list page
+`GET /api/v1/case-list`) are read with `cases.read` and changed with
 `cases.write` (assignee changes `cases.assign`; schema 51; Analyst and Admin, host-scoped, so a
 scoped user sees and adds only what their asset groups cover). They are
 browser-session only like dashboards; service-account bearer tokens get 403.

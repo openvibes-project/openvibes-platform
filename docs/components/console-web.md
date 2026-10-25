@@ -389,36 +389,82 @@ A case gathers hosts, alarms, findings, vulnerabilities on a host and
 software, with notes and a timeline. It does not replace those views, and
 triage on alarms and findings stays as it is.
 
-- **Cases** (`/cases`, `g c`, `cases.read`): C-number, title, severity,
-  status (a closed case also says how it ended), assignee, items with the
-  count that still need an outcome, and last change. Chips: Open,
-  Investigating, Closed, Include closed (the default list shows open and
-  investigating), the four severities, Assigned to me and Unassigned. The
-  chips and severity go to the API; the text filter (title, `C-104`,
-  assignee) applies to what is loaded. **New case** (with `cases.write`)
-  opens a form in the inspector. A row opens the case.
-- **Case panel** (`case`, id is the case's UUID, `case:new` is the form):
-  - the header shows number, title, status, severity, assignee and how many
-    items are unresolved;
-  - with `cases.write`, title, severity and (with `cases.assign`) assignee (a picker from
-    `/cases/assignees`, plus Assign to me) save together with the version
-    (`If-Match`). Status moves open to investigating and back, and **Close
-    case…** asks for the resolution, a note and, for accepted risk, the date
-    it is accepted until (the case reopens then). It lists the alarms,
-    findings and vulnerabilities that still need an outcome and stays
-    disabled until the rules are met (`panels/cases/cases.ts`, `closeProblems`).
-    A closed case offers **Reopen**;
-  - **Items**: each row shows its kind, title, severity and host and opens
-    that object's own panel or page (alarm: its page `/alarms/<id>`, finding: the check's page `/compliance/<rule
-    set>/<rule>`, vulnerability `advisory:<advisory>`, host: its page,
-    software `package:<manager>/<name>`). Alarms, findings and
-    vulnerabilities take an outcome: resolved (offered only while the
-    evidence is gone), false positive or accepted risk (a note is required).
-    Hosts and software need none. **Remove** and **Add item** (kind and
-    pasted id) work on open cases;
-  - **Notes** (plain text) and the **Timeline**, newest first, with who did
-    what.
-  - Without `cases.write` the panel is read-only.
+- **Cases** (`/cases`, `g c`, `cases.read`; screen 31,
+  `views/investigate/Cases.tsx`): one row per case over
+  `GET /api/v1/case-list`, paged by offset, in the shared list pattern
+  (`FilterBar`, `SummaryLine`, Columns, saved views, page `cases`).
+  Columns: Case (`C-104`), Title (a real link to `/cases/{id}`, "Opened by
+  X" and the latest note, which a screen reader hears as "Latest note,
+  …"), Severity, Status, Assignee, Hosts (up to five, each a link to the
+  host's page, then "+N more hosts"), Items (an icon and count per kind,
+  "n/m with an outcome" with a bar whose `aria-valuetext` says the same,
+  and "Ready to close" when the row's `ready` is set) and Updated. Case and
+  Title never hide. Filters: Status (Open, Investigating, Closed, All
+  statuses; none chosen is "not closed"), Severity, Assignee (Me,
+  Unassigned, people), Contains (Alarms, Vulnerabilities, Compliance
+  findings), Host (a chip only while set, as on Compliance), Group and
+  Updated (Today, This week, Quiet for 7 days or more). Search covers the
+  title, `C-104`, the number and who opened it (no longer the assignee:
+  that is the Assignee filter). Sorts: Case, Severity and Updated (the
+  default, newest first). The summary line is "N open · N investigating ·
+  N unassigned · N ready to close", plus "closed cases hidden" while
+  Status is unset. Old addresses keep their meaning (`casesQuery` in
+  `app/location.ts`, in place): `assignee=none` is `unassigned`, `sort=number`
+  is the Case column, other old sorts go with their direction; views saved
+  in this browser (`openvibes.v2.views./cases`) are imported once.
+  **New case** (with `cases.write`) is a link to `/cases/new`, the
+  new-case form as a page (`views/investigate/case/NewCasePage.tsx`); a new
+  case then opens at `/cases/{id}` (in place of the form). The Status cell
+  of a case closed before step 5d says how it ended ("Closed · mitigated",
+  the row's `resolution`); the title link names the case for screen
+  readers ("C-104 …").
+- **A case's page** (`/cases/{id}`, approved screen 32,
+  `views/investigate/case/`): the summary route
+  (`/cases/{id}/summary`) feeds the header, tiles and left column, the full
+  detail (`/cases/{id}`) the items and timeline. A case the viewer can't
+  see is "No such case".
+  - **Header**: number and title, severity and status, who opened it,
+    the assignee, "N items on N hosts", updated. **Edit** (title,
+    severity, status open/investigating; `can.edit`), **Assign ▾**
+    (Assign to me, Unassigned, the people from `/cases/assignees`;
+    `can.assign`) and **Close case…** (`can.close`): a dialog asking
+    for the closing note, blocked with "N items still need an outcome"
+    (the visible ones, listed) or "An item you can't see still needs an
+    outcome" (ready is false with none visible; never named). Changes
+    send the version (`If-Match`). **⋯**: Start investigating or Back to
+    open (`can.edit`, one click), Export (`can.export`, a CSV of the items
+    and the timeline), Copy link, and Reopen (`can.reopen`).
+    No Ask about this: the assistant takes no case reference (ruling 14).
+  - **Tiles**: Items (to the Items card), Need an outcome (counting down to
+    "Ready to close"), Hosts (to the Hosts card), Open for.
+  - **Left**: Details (title, severity, status, assignee, opened, updated,
+    closed, and on a case closed before step 5d how it ended; the closing
+    note); Hosts in this case, each linking to its page with its open
+    alarms, critical vulnerabilities and failing checks linking to those
+    lists filtered to the host ("No compliance report in the last day"
+    when stale); Who can see it ("N people", or "at least N" when the
+    count is partial; the first 20 names with `access.read`, "and N
+    more").
+  - **Right**: Items, as screen 32's table: Kind, Item (it opens its own
+    page: alarm, check, vulnerability, host; software its panel; a line
+    with its outcome and note), Severity, Host, Outcome and ✕. Kind,
+    Severity and Host hide on a narrow card. Alarms, findings and
+    vulnerabilities take an **Outcome** (Fixed only while the evidence is
+    gone, "evidence still there" otherwise); a changed choice opens a
+    full-width sub-row with the note (required for all but Fixed), the
+    re-open date for Risk accepted (tomorrow to 364 days ahead, so the
+    end of the last day stays within the API's 365 days) and Save.
+    ✕ (**Remove**, confirmed in a sub-row) and **Add item** (kind and
+    pasted id) with `can.outcome` (a case not closed). The close dialog's
+    live hint says "Add a closing note." until there is one. Then
+    **Notes and timeline**: the note box at the top (`can.note`), every
+    entry newest first.
+  - **Old links**: the `case` panel is gone. `nav.open({kind: "case", id})`,
+    `ObjectLink`s (an alarm's Details, Add to case, a vulnerability's
+    Cases), the palette's recent cases and `?open=case:ID` reach the page
+    (`pagePath` in `app/location.ts`, in place, so history keeps no dead
+    entry); `case:new` is `/cases/new`. A floating case window saved before
+    is dropped.
 - **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.write`): a button on
   an alarm's page (Details, and a command seen once), on each host row of a finding and of an advisory, on the
   host page and its top vulnerabilities, and on the software panel. Its dialog
@@ -796,6 +842,14 @@ for the pages not yet moved; its saved views stay in the browser.
   open, by the list's failing definition), while the list counts checks;
   their title and label say "N failing findings". See
   [console-compliance.md](console-compliance.md#upgrading).
+- **Roles step 5d (Cases):** the case panel became the case's page
+  `/cases/{id}` (New case is `/cases/new`); old links (`?open=case:ID`)
+  redirect to it. Closing asks only for a closing note, as the items carry
+  the outcomes; two new outcomes (Confirmed malicious, Expected activity);
+  Risk accepted dates are per item, and old ones were backfilled. A case
+  with no host-bound item is seen only by its opener, its assignee and
+  people who read cases on every host. See
+  [console-cases.md](console-cases.md#upgrading).
 
 ## Configuration
 
@@ -855,7 +909,8 @@ retired `/assistant`, bulk triage, one host's accepted risk with an
 assignee and date (refused for an unknown assignee, shown again on
 reselect), a dashboard shared with a role and seen
 read-only, the two-team journey (`teams.spec.ts`), the Hosts journey
-(`hosts.spec.ts`, see console-hosts.md), and axe in both themes.
+(`hosts.spec.ts`, see console-hosts.md), the Cases journey (`cases.spec.ts`,
+see console-cases.md), and axe in both themes.
 The live tests also check the service accounts empty state on a fresh server
 and the People and Audit filtered empty states at narrow widths in light and
 dark themes. Audit distinguishes an empty date range from filters that hide existing events.

@@ -1054,16 +1054,22 @@ permission-checked console API, so sharing never exposes data.
 - Tested by `tests/console_dashboards.rs` (ownership, sharing through global
   and scoped bindings, revoked binding, versions, limit, home fallback).
 
-## Cases (`console_cases::…`, schemas 35 and 36)
+## Cases (`console_cases::…`, schemas 35, 36 and 64)
 
 - `cases`: `case_id`, a `number` from an identity column (unique, never
   reused), `title` (1–120), `status` (`open`, `investigating`, `closed`),
   `resolution`, `resolution_note`, `accepted_until`, `severity`, assignee and
-  opener, times and `version`. CHECKs tie a closed case to its resolution,
-  note and close time, and accepted risk to its date.
+  opener, times and `version`. CHECKs tie a closed case to its note (the
+  closing note) and close time, allow a resolution only on a closed case
+  (since 64 new closes set none; older ones keep theirs), and tie accepted
+  risk to its date.
 - `case_items`: a link (`kind`, `ref`, `agent_id` for scope; null for
-  software) with `active` (true while the case is not closed), `outcome` and
-  `outcome_note`. `(case_id, kind, ref)` is unique, and a partial unique index
+  software) with `active` (true while the case is not closed), `outcome`
+  (`resolved`, `false_positive`, `accepted_risk`, and since 64
+  `confirmed_malicious` and `expected`), `outcome_note` (required for all but
+  `resolved`) and `outcome_until` (since 64: set exactly for `accepted_risk`,
+  partial index for the reopen check; backfilled as in
+  [console-cases.md](console-cases.md)). `(case_id, kind, ref)` is unique, and a partial unique index
   on `(kind, ref)` where `active` for alarms, findings and vulnerabilities puts
   each in at most one open case, even under concurrent requests. `seq` orders
   items added in the same instant.
@@ -1075,17 +1081,89 @@ permission-checked console API, so sharing never exposes data.
   INSERT, UPDATE, DELETE on `case_items`, and SELECT, INSERT on `case_events`.
 
 `console_cases` takes the caller's `AgentScope` and user id on every call and
-applies `agent_visibility` in SQL: a case is visible through a visible item,
-or to its opener or assignee; items, counts and timeline entries about hidden
+applies `agent_visibility` in SQL: a case is visible through a host-bound
+item in scope (`item_in_scope`; a software item never makes a case
+visible, user decision 2026-10-25 "hosts decide"), or to its opener or
+assignee, and a case with no host-bound item (none, or only software) also
+to a global scope; items, counts and timeline entries about hidden
 items are left out. Changes return `Result<_, Refusal>` (`NotFound`, `Stale`,
 `ItemInCase`, `ItemsUnresolved` and so on) and write the audit row and
-timeline entry in the same transaction. `reopen_due` runs two lazy checks that
+timeline entry in the same transaction. `reopen_due` runs the lazy checks that
 the console calls before it lists or reads cases: `reopen_expired` reopens
-closed cases whose accepted risk has run out, and `reopen_evidence_returned`
+cases closed before 64 whose case-level accepted risk has run out, an item
+check reopens closed cases with an item whose `outcome_until` has passed
+(clearing only those items; on cases not closed it only clears them), and
+`reopen_evidence_returned`
 reopens cases closed within the last 30 days whose `resolved` items have
 evidence again (migration 36 adds the partial index on `closed_at` it uses).
-Tested by `tests/console_cases.rs`, run as
-the console role. See [console-cases.md](console-cases.md).
+The module is the folder `src/console_cases/` (see its README). Tested by
+`tests/console_cases/` (one module per area), run as the console role. See [console-cases.md](console-cases.md).
+
+### The Cases list (`case_list::case_list`, step 5d)
+
+`case_list(client, &CaseQuery, &AgentScope, actor_id, now) -> CaseListPage`
+(step 5d rulings 2, 4, 6–10): one statement (`case_list_sql`) returns the
+page, the total, the count for every value of every filter with the
+other filters applied, and the summary line. It reuses the cases'
+visibility: `vi` holds the items `item_visible` passes (software shows
+inside a case already seen), `r` the cases `case_visible_with` passes, its
+host-bound-item test read from `vi`'s per-case counts rather than one
+lookup per case (1.39 s of a 1.6 s scoped run before). Everything a row shows or counts
+comes from visible items only.
+
+- Filters (one value each, ANDed): status (active = not closed, the
+  default; open, investigating, closed, all), severity, assignee (me,
+  unassigned, a user id; a non-UUID matches nothing), contains (a
+  visible alarm, vulnerability or finding), host and group (a visible item
+  on that host, or on a host in the group), updated (today = since
+  midnight UTC of `now`, the same day for every viewer whatever their
+  time zone; week = the last 7
+  days; quiet = not for 7 days or more). Search: the title, `C-104`,
+  `104`, or the opener's display or user name.
+- Counts: every status, severity, contains and updated value; people
+  assigned a visible case; groups holding a host the viewer sees, plus the
+  chosen one when the scope reaches it. Host and search narrow every count.
+- Summary: applies every filter except status (so the status filter never
+  empties it), over the cases that are not closed: open, investigating,
+  unassigned and ready to close. Ready uses close's own rule
+  (`blocking_item`, shared with close): no item, visible or hidden, lacks an
+  outcome, is `resolved` with its evidence back, or is `accepted_risk`
+  with its date passed (not yet cleared); only that boolean per
+  case is revealed.
+- Rows: number, title, status, severity, opener, assignee, the newest
+  `note` event (first 120 characters and its time), the first five
+  distinct visible hosts by name and `host_count` (all of them), visible items per kind, `with_outcome`/`takes_outcome`
+  (alarms, findings and vulnerabilities only), `ready` (close's own rule,
+  hidden items included, as the summary's "ready to close"), `updated_at`.
+- Sorts: updated (default, newest first), severity, number, opened; ties
+  by case id in the same direction. Offset 0–100000, limit 1–100.
+
+Tests: `tests/case_list/` (`rows.rs`, including
+`case_list_counts_stay_inside_the_scope`; `filters.rs`: filters, search, sorts),
+`tests/case_list_scope.rs` (hosts decide, ready to close, the host cap);
+`tests/case_list_timing.rs` (ignored; 10,000 hosts, 20,000 cases, 200,000
+items, 60,000 events): default list, 2026-10-25, median 458 ms at full
+reach and 272 ms scoped to two of ten groups, no index needed.
+
+### A case's page (`case_summary::case_summary`, step 5d)
+
+`case_summary(client, case_id, &HostScopes, user_id, now) ->
+Option<CasePageSummary>` (rulings 12–13): `HostScopes.hosts` is the
+`cases.read` scope and decides the case (`case_visible`; `None` when
+missing or unseen); the other three gate each host's problem counts (open
+agent alarms, `host_listed_critical`, `open_failing`, null where that
+kind's scope does not reach the host, and the failing count also when the
+host is `compliance_stale`: no report in the last day, the Hosts list's
+rule). It returns the case with visible
+counts (`case_counts`), `ready` (not closed, no `blocking_item` among all
+items), `open_for_seconds`, the visible items' hosts by name and who can
+see it (`case_people.rs`: enabled live bindings that are Administrator or
+hold `cases.read` on all hosts, on a group holding a host-bound item's
+host in the viewer's reach, or at any scope for the opener and assignee;
+at most 20 names, the total, and `complete` = the viewer's scope is
+global). `case_visible_to(client, scope, user_id, case_id)` answers whether a
+scope sees the case (the page's `can` flags). Tests:
+`tests/case_summary.rs`.
 
 ## The rule signer's access (`signer::…`, schema 32, board #107)
 

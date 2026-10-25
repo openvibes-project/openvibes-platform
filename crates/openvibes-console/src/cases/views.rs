@@ -48,6 +48,7 @@ pub(super) fn item_view(item: CaseItem) -> CaseItemView {
         active: item.active,
         outcome: item.outcome,
         outcome_note: item.outcome_note,
+        outcome_until: item.outcome_until.map(time),
         added_by: user_view(item.added_by),
         added_at: time(item.added_at),
         title: item.title,
