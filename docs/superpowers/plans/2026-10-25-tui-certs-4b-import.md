@@ -15,7 +15,7 @@
 - Every file stays under 500 lines; near-full files (`helper.rs` 498, `setup/plan.rs` 479, `setup/pki.rs` 465, `tui/install/certs.rs` 440, `tui/install/certs_tests.rs` 480, `tui/maint/replace.rs` 454, `platform-pki/src/ca.rs` 419, `platform-host/src/setup.rs` 455) get new code in new files.
 - A private key never appears on a command line, in the journal, in the audit log, or in an error message. Typed passwords and decrypted keys are held in `zeroize::Zeroizing`.
 - The helper never trusts the TUI: `ca-import` re-runs every check on what it receives.
-- Accepted keys: EC P-256, EC P-384, RSA 2048–8192, Ed25519; PEM labels `PRIVATE KEY`, `RSA PRIVATE KEY`, `EC PRIVATE KEY`, `ENCRYPTED PRIVATE KEY`; `.p12`/`.pfx` with PBES2 (AES) or legacy PBES1 (3DES/RC2).
+- Accepted keys: EC P-256, EC P-384, RSA 2048–4096 (ring's limit; Task 1 ruling), Ed25519; PEM labels `PRIVATE KEY`, `RSA PRIVATE KEY`, `EC PRIVATE KEY`, `ENCRYPTED PRIVATE KEY`; `.p12`/`.pfx` with PBES2 (AES) or legacy PBES1 (3DES/RC2).
 - Our intermediate and every CA above it must be valid now and for at least 90 days more (`SERVER_DAYS`).
 - New dependencies: `p12-keystore = "0.4.1"`, `pkcs5 = "0.8.1"` (features `pbes2`), `der = "0.8.2"` — the latter two are already in `p12-keystore`'s tree, so the lockfile gains only that family. `docs/dependencies.md` is updated in the same commit (versions, licences, indirect count). `cargo audit` stays clean.
 - Copy is verbatim from `approved.md` rule 56 / `certs4b.py`, except where a Ruling below says otherwise.
@@ -140,7 +140,7 @@
     - `Pki(WeakKey(b))` → "A {b}-bit RSA key is too weak: 2048 bits or more."
     - `Pki(WrongPassword)` → "Wrong password for {file}." (pasted key: "Wrong password.")
     - `Pki(KeyMismatch)` → "Not the key of {name}: paste the key it was made with."
-    - `Pki(NameMismatch)` → P5's line; `Pki(UnsupportedKey)` → "This key type is not supported: use RSA (2048 bits or more), EC P-256 or P-384, or Ed25519."; `InvalidPem` → "This is not a certificate in PEM form (-----BEGIN CERTIFICATE-----)."
+    - `Pki(NameMismatch)` → P5's line; `Pki(UnsupportedKey)` → "This key type is not supported: use RSA (2048 to 4096 bits), EC P-256 or P-384, or Ed25519."; `InvalidPem` → "This is not a certificate in PEM form (-----BEGIN CERTIFICATE-----)."
     - different root → "Replace: under {new root}, not {installed root}, so agents would stop trusting this host. Ask for one under the same root."
 
 - [ ] **Step 1: Failing tests.** `import_tests.rs` (fake runner, fixtures from `platform-pki/tests/fixtures` via `include_str!`): `stages_the_three_files_and_the_key` (modes 0600/0644, key first via `fake` write order), `refuses_and_writes_nothing` (wrong key → error text, `IMPORT_DIR` empty), `an_installed_ca_needs_the_same_root`, `chain_is_left_out_when_there_is_none`. platform-host: `ca_import_keeps_the_pem_out_of_argv_and_journal` (args == ["ca-import"], journal has no "BEGIN"), and a native test with a recording runner that stdin == "pw\n" + bundle (and bundle alone as root). `tests/helper.rs`: `ca-import` takes no arguments (an extra argument is refused).
