@@ -75,6 +75,15 @@ pub struct Work {
 }
 
 impl Work {
+    /// Wipes the key any `ca-import` call carries: the run is over.
+    pub fn wipe(&mut self) {
+        for call in &mut self.calls {
+            if let Call::CaImport(bundle) = call {
+                zeroize::Zeroize::zeroize(&mut *bundle.0);
+            }
+        }
+    }
+
     /// Every call is its own row (the caller titles them).
     pub fn new(kind: Kind, calls: Vec<Call>) -> Work {
         let labels = (0..calls.len())

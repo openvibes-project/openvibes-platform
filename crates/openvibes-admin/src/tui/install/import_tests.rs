@@ -160,6 +160,7 @@ fn a_locked_key_asks_its_password_in_the_bar() {
         "It stays on this host, readable by root only.",
         "Its password:",
         "Enter  Unlock",
+        "✓ A private key, locked with a password",
     ] {
         assert!(text.contains(line), "{line}\n{text}");
     }
@@ -267,6 +268,25 @@ fn a_refused_import_keeps_both_rows() {
     assert!(text.contains("✓ added · Lime Lab OpenVIBES CA"), "{text}");
     assert!(text.contains("✓ added · matches the certificate"), "{text}");
     assert_eq!(app.nav.screen, Screen::Install(Stage::Step(2)));
+}
+
+/// A wrong sudo password, then Esc: the run stops and keeps no key.
+#[test]
+fn a_cancelled_sudo_ask_wipes_the_bundle() {
+    let mut app = with_both();
+    answer(&app, Err(HostError::WrongPassword));
+    app.nav.row = 5;
+    app.key(Key::Enter);
+    type_text(&mut app, "bad");
+    app.key(Key::Enter);
+    assert!(screen(&app).contains("Wrong password, 2 tries left."));
+    app.key(Key::Esc);
+    let run = app.run.as_ref().unwrap();
+    match &run.work.calls[0] {
+        crate::tui::run::Call::CaImport(bundle) => assert!(bundle.0.is_empty()),
+        call => panic!("{call:?}"),
+    }
+    assert!(app.install.import_done.is_none());
 }
 
 #[test]

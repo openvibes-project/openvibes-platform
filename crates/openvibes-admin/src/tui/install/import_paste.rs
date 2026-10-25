@@ -20,6 +20,9 @@ use crate::{
     },
 };
 
+/// A locked key before its password: its kind is known only once opened.
+const LOCKED: &str = "A private key, locked with a password";
+
 impl Install {
     /// The box's certificate chain or key, checked; `None` while a locked
     /// key waits for its password.
@@ -38,7 +41,10 @@ impl Install {
             );
         }
         if self.unlocked.is_none() && platform_pki::is_locked(text) {
-            return self.error.clone().map(Err);
+            return Some(match &self.error {
+                Some(why) => Err(why.clone()),
+                None => Ok(vec![LOCKED.into()]),
+            });
         }
         Some(self.key_of(text).map(|(_, info, locked)| {
             let mut said = capitalised(&info.to_string());

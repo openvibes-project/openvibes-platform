@@ -55,6 +55,7 @@ impl<H: Host> App<H> {
                     run.states[asking.from] = Some(StepState::Failed(
                         "no password given: nothing more was run".into(),
                     ));
+                    run.work.wipe();
                 }
             }
             Typed::Cancelled => {}

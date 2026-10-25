@@ -265,9 +265,7 @@ impl<H: Host> App<H> {
     pub(super) fn import_ended(&mut self) {
         let Some(run) = &mut self.run else { return };
         // Sent or not, no copy of the key stays in the run.
-        if let Some(Call::CaImport(bundle)) = run.work.calls.first_mut() {
-            bundle.0.zeroize();
-        }
+        run.work.wipe();
         let install = &mut self.install;
         match &run.states[0] {
             Some(StepState::Done(out)) if out.starts_with("imported\t") => {

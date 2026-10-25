@@ -196,10 +196,12 @@ impl<H: Host> App<H> {
             Key::ClearLine => text.clear(),
             Key::Enter if !ended(text) => text.push('\n'),
             Key::Enter => {
-                let text = text.clone();
+                let mut text = text.clone();
                 if let Some(Ok(_)) = self.install.check(which, &text) {
-                    self.use_it(which, text);
+                    return self.use_it(which, text);
                 }
+                // It may be a key.
+                zeroize::Zeroize::zeroize(&mut text);
             }
             Key::Esc => {
                 self.install.close_box();
