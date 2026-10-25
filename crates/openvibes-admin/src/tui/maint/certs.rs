@@ -337,14 +337,7 @@ impl<H: Host> App<H> {
             above => Some(above),
         };
         let previous = previous_until(&self.root);
-        let rows = report(
-            &self.theme,
-            &certs,
-            ca,
-            above,
-            previous,
-            Utc::now(),
-        );
+        let rows = report(&self.theme, &certs, ca, above, previous, Utc::now());
         self.maint.certs = Certs {
             rows,
             ca,

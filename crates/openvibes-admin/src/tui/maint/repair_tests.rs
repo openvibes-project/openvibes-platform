@@ -274,6 +274,10 @@ fn a_long_problem_wraps_under_its_column_at_80_columns() {
     );
     // Under the detail's column, not the title's (the first line starts at ▲).
     let column = |line: &str, word: &str| line[..line.find(word).unwrap()].chars().count();
-    assert_eq!(column(lines[1], "restore"), column(lines[0], "/etc") + 4, "{text}");
+    assert_eq!(
+        column(lines[1], "restore"),
+        column(lines[0], "/etc") + 4,
+        "{text}"
+    );
     assert!(lines[2].contains("other steps in order"), "{text}");
 }

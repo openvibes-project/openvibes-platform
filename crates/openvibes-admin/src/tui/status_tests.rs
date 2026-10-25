@@ -352,8 +352,16 @@ fn a_failed_renewal_is_a_problem_and_home_says_so() {
     let mut app = app(false);
     app.services = services.to_vec();
     app.database.health = Vec::new();
-    let home: String = app.status_line().spans.iter().map(|s| s.content.as_ref()).collect();
-    assert!(home.contains("1 thing needs attention · see Status"), "{home}");
+    let home: String = app
+        .status_line()
+        .spans
+        .iter()
+        .map(|s| s.content.as_ref())
+        .collect();
+    assert!(
+        home.contains("1 thing needs attention · see Status"),
+        "{home}"
+    );
 }
 
 #[test]
@@ -364,6 +372,14 @@ fn home_counts_a_lost_chain() {
         problem: true,
         text: "/etc/openvibes/pki/chain.crt is missing: restore it".into(),
     }];
-    let home: String = app.status_line().spans.iter().map(|s| s.content.as_ref()).collect();
-    assert!(home.contains("1 thing needs attention · see Status"), "{home}");
+    let home: String = app
+        .status_line()
+        .spans
+        .iter()
+        .map(|s| s.content.as_ref())
+        .collect();
+    assert!(
+        home.contains("1 thing needs attention · see Status"),
+        "{home}"
+    );
 }

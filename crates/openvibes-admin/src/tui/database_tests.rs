@@ -386,6 +386,10 @@ fn a_lost_chain_is_a_problem_in_the_setup_checks_words() {
     );
     assert_eq!(chain_check(&ours(OURS), Some((ROOT.into(), true))), None);
     assert_eq!(chain_check(&ours(DIRECT), Some((ROOT.into(), false))), None);
-    assert_eq!(chain_check(&ours(OURS), None), None, "no root: nothing to say");
+    assert_eq!(
+        chain_check(&ours(OURS), None),
+        None,
+        "no root: nothing to say"
+    );
     assert_eq!(chain_check(&[], Some((ROOT.into(), false))), None);
 }

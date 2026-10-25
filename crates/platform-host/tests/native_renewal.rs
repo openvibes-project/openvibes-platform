@@ -12,7 +12,11 @@ struct Show(&'static str);
 
 impl Runner for Show {
     fn run(&self, _program: Program, args: &[&str]) -> std::io::Result<Output> {
-        assert_eq!(args.last(), Some(&"openvibes-certificates.service"), "{args:?}");
+        assert_eq!(
+            args.last(),
+            Some(&"openvibes-certificates.service"),
+            "{args:?}"
+        );
         Ok(Output {
             status: 0,
             stdout: self.0.into(),

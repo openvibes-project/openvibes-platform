@@ -196,7 +196,9 @@ pub fn chain_check(
     let Some((root, false)) = root else {
         return None;
     };
-    let (_, ours) = certificates.iter().find(|(path, _)| *path == INTERMEDIATE)?;
+    let (_, ours) = certificates
+        .iter()
+        .find(|(path, _)| *path == INTERMEDIATE)?;
     crate::setup::pki_import::lost(ours.as_ref().ok()?, &root).map(|text| check(true, text))
 }
 

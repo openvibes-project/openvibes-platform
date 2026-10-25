@@ -233,7 +233,10 @@ fn both_added_sends_the_bundle_on_stdin_at_once_and_next_moves_on() {
     let text = screen(&app);
     assert!(text.contains("✓ added · Lime Lab OpenVIBES CA"), "{text}");
     assert!(text.contains("✓ added · matches the certificate"), "{text}");
-    assert!(text.contains("▸ Next                       ports"), "{text}");
+    assert!(
+        text.contains("▸ Next                       ports"),
+        "{text}"
+    );
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Install(Stage::Step(3)));
     assert_eq!(calls(&app).len(), 1);
