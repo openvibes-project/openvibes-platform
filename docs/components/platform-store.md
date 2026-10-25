@@ -1127,7 +1127,8 @@ comes from visible items only.
   empties it), over the cases that are not closed: open, investigating,
   unassigned and ready to close. Ready uses close's own rule
   (`blocking_item`, shared with close): no item, visible or hidden, lacks an
-  outcome or is `resolved` with its evidence back; only that boolean per
+  outcome, is `resolved` with its evidence back, or is `accepted_risk`
+  with its date passed (not yet cleared); only that boolean per
   case is revealed.
 - Rows: number, title, status, severity, opener, assignee, the newest
   `note` event (first 120 characters and its time), the first five
@@ -1137,7 +1138,8 @@ comes from visible items only.
 - Sorts: updated (default, newest first), severity, number, opened; ties
   by case id in the same direction. Offset 0–100000, limit 1–100.
 
-Tests: `tests/case_list.rs` (including `case_list_counts_stay_inside_the_scope`),
+Tests: `tests/case_list/` (`rows.rs`, including
+`case_list_counts_stay_inside_the_scope`; `filters.rs`: filters, search, sorts),
 `tests/case_list_scope.rs` (hosts decide, ready to close, the host cap);
 `tests/case_list_timing.rs` (ignored; 10,000 hosts, 20,000 cases, 200,000
 items, 60,000 events): default list, 2026-10-25, median 458 ms at full
