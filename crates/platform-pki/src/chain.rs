@@ -122,6 +122,15 @@ fn can_sign(cert: &X509Certificate<'_>) -> bool {
     ca && usage
 }
 
+/// No extended key usage, or one that allows serverAuth (or any usage).
+fn for_servers(cert: &X509Certificate<'_>) -> bool {
+    match cert.extended_key_usage() {
+        Ok(Some(eku)) => eku.value.server_auth || eku.value.any,
+        Ok(None) => true,
+        Err(_) => false,
+    }
+}
+
 fn self_signed(cert: &X509Certificate<'_>) -> bool {
     cert.subject().as_raw() == cert.issuer().as_raw() && cert.verify_signature(None).is_ok()
 }
@@ -197,6 +206,15 @@ pub fn check_chain(certs_pem: &str, now: DateTime<Utc>) -> Result<Chain, ChainEr
             .and_then(|constraints| constraints.value.path_len_constraint);
         if limit.is_some_and(|limit| (below as u64) > u64::from(limit)) {
             return Err(ChainError::NoCaBelow(cn(certs[i].subject())));
+        }
+    }
+    // Refused at once, before the key: the self-check would refuse it too.
+    for &i in &path[..path.len() - 1] {
+        if !for_servers(&certs[i]) {
+            return Err(ChainError::NotForServers(
+                cn(certs[i].subject()),
+                ServerLimit::KeyUsage,
+            ));
         }
     }
     let at = |seconds| DateTime::from_timestamp(seconds, 0).ok_or(ChainError::InvalidPem);

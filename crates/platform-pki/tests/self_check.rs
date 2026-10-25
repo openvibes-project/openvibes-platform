@@ -2,7 +2,7 @@
 //! certificate (rustls-webpki, ServerAuth) up to the root.
 
 use chrono::{DateTime, TimeZone, Utc};
-use platform_pki::{ChainError, ServerLimit, check_chain, check_key};
+use platform_pki::{Chain, ChainError, ServerLimit, check_chain, check_key};
 use rcgen::{
     BasicConstraints, CertificateParams, DnType, GeneralSubtree, IsCa, Issuer, KeyPair,
     NameConstraints,
@@ -20,8 +20,25 @@ fn now() -> DateTime<Utc> {
 }
 
 #[test]
-fn a_ca_for_client_certificates_only_is_refused() {
-    let chain = check_chain(&format!("{CLIENT_ONLY}{ROOT}"), now()).unwrap();
+fn a_ca_for_client_certificates_only_is_refused_with_its_chain() {
+    let refused = Err(ChainError::NotForServers(
+        "Lime Lab Client Only CA".into(),
+        ServerLimit::KeyUsage,
+    ));
+    assert_eq!(check_chain(&format!("{CLIENT_ONLY}{ROOT}"), now()), refused);
+}
+
+#[test]
+fn the_self_check_refuses_it_too() {
+    // The chain as check_chain would have built it without its own check.
+    let chain = Chain {
+        ours: CLIENT_ONLY.into(),
+        middle: Vec::new(),
+        root: ROOT.into(),
+        name: "Lime Lab Client Only CA".into(),
+        path: vec!["Lime Lab Root CA".into()],
+        not_after: platform_pki::not_after(CLIENT_ONLY).unwrap(),
+    };
     assert_eq!(
         check_key(&chain, CLIENT_ONLY_KEY, &[], now()),
         Err(ChainError::NotForServers(
