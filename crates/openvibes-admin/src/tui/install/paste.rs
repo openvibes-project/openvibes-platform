@@ -6,13 +6,14 @@
 //! sends the lines as keys: Enter adds a new line until an `-----END`
 //! line is there; after that Enter is "Use it", once the check passed.
 
+use chrono::{DateTime, Utc};
 use platform_host::Host;
-use platform_pki::PkiError;
+use platform_pki::ChainError;
 use ratatui::{Frame, text::Line, widgets::Paragraph};
 
 use super::{Install, Which, import};
 use crate::{
-    setup::request::message,
+    setup::{import::import_message, request::message},
     tui::{
         app::{App, Key},
         ca_request::{self, MAX, Picked, pick},
@@ -49,30 +50,44 @@ impl Install {
                     })
                     .map_err(|e| message(&e)),
             },
-            // Before the signed certificate is added, the root is checked
-            // against itself (a self-signed CA signs itself); the helper
-            // checks it against the certificate once both are added.
-            Which::Root => {
-                let cert = self.cert.as_ref().map_or(text, |c| c.0.as_str());
-                platform_pki::check_root_signed(text, cert, now)
-                    .map(|name| {
-                        let mut said = vec![format!("{name} · a root CA (self-signed)")];
-                        if self.cert.is_some() {
-                            said.push("Signed the intermediate directly".into());
-                        }
-                        said
-                    })
-                    .map_err(|e| match e {
-                        PkiError::Several(n) => format!(
-                            "That is {n} certificates: paste only your root CA's certificate."
-                        ),
-                        e => message(&e),
-                    })
-            }
+            Which::Root => self.cas(text, now).map(|(said, _)| said),
         })
+    }
+
+    /// The CAs pasted as "Your CA's certificate": the lines that say so,
+    /// and the root's name. Before the signed certificate is added they
+    /// are checked on their own (a lone root as it is); the helper checks
+    /// them with it once both are added.
+    fn cas(&self, text: &str, now: DateTime<Utc>) -> Result<(Vec<String>, String), String> {
+        let refused = |e: &ChainError| import_message(e, "", None);
+        // The CAs above ours, the root last.
+        let path = match &self.cert {
+            Some((cert, _)) => {
+                platform_pki::check_chain(&format!("{}\n{text}", cert.trim()), now)
+                    .map_err(|e| refused(&e))?
+                    .path
+            }
+            None => match platform_pki::check_chain(text, now) {
+                Ok(chain) => std::iter::once(chain.name).chain(chain.path).collect(),
+                Err(ChainError::IsRoot(name)) => vec![name],
+                Err(e) => return Err(refused(&e)),
+            },
+        };
+        let root = path.last().cloned().unwrap_or_default();
+        let mut said = vec![format!("{root} · a root CA (self-signed)")];
+        // Two lines at most: the box leaves no room for a third at 80×24.
+        let chain = path.join(" › ");
+        match (self.cert.is_some(), path.len() > 1) {
+            (false, false) => {}
+            (false, true) => said.push(format!("Chain: {chain}")),
+            (true, false) => said.push("Signed the intermediate directly".into()),
+            (true, true) => said.push(format!("Signed through {chain}")),
+        }
+        Ok((said, root))
     }
 }
 
+const ROOT_NOTE: &str = "Your CA's certificate, then each CA above it up to the root.";
 const PASTE_HELP: &str = "Paste the whole block, BEGIN to END lines included.";
 const FILE_HELP: &str = "The file's text, checked below.";
 
@@ -102,7 +117,7 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, whic
     };
     let (title, help) = match (which, &install.paste_file) {
         (Which::Signed, None) => ("Paste the signed certificate".to_owned(), PASTE_HELP),
-        (Which::Root, None) => ("Paste your CA's certificate".to_owned(), PASTE_HELP),
+        (Which::Root, None) => ("Paste your CA's certificate".to_owned(), ROOT_NOTE),
         (Which::Cert, None) => ("Paste the certificate".to_owned(), import::PASTE_NOTE),
         (Which::Key, None) => ("Paste the private key".to_owned(), import::KEY_NOTE),
         (Which::Signed, Some(file)) => (format!("The signed certificate, from {file}"), FILE_HELP),
@@ -234,7 +249,7 @@ impl<H: Host> App<H> {
                 self.install.cert = Some((pem, signed.issuer));
             }
             Which::Root => {
-                let Ok(name) = platform_pki::check_root_signed(&pem, &pem, now) else {
+                let Ok((_, name)) = self.install.cas(&pem, now) else {
                     return;
                 };
                 self.install.root_pem = Some(pem);

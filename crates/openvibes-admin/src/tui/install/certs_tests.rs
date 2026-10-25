@@ -274,21 +274,16 @@ fn paste_wrong_request_and_wrong_root_say_why() {
     paste(&mut app, Which::Signed, &pki.cert);
     app.key(Key::Enter);
     paste(&mut app, Which::Root, &other.root);
+    // Another root of the same name did not sign it.
+    let missing = "Signed by OpenVIBES Root CA, missing here: paste it below this one.";
     let text = screen(&app);
-    assert!(
-        text.contains("Your CA's certificate must be the root that signed"),
-        "{text}"
-    );
+    assert!(text.contains(missing), "{text}");
     app.key(Key::Enter);
     assert!(app.install.root_added.is_none());
     app.key(Key::Esc);
     app.key(Key::Enter);
     app.key(Key::Paste(pki.cert.clone()));
-    assert!(
-        screen(&app).contains("This is not a root CA (self-signed)"),
-        "{}",
-        screen(&app)
-    );
+    assert!(screen(&app).contains(missing), "{}", screen(&app));
 }
 
 #[test]

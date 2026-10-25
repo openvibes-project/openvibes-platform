@@ -458,7 +458,7 @@ impl<H: Host> App<H> {
                     }
                     if let RequestState::Signed { issuer, .. } = &state {
                         install.signed = Some(issuer.clone());
-                        // Your CA's certificate signed it directly: its name.
+                        // Signed before (a restart): the CA that signed it.
                         install.root_added.get_or_insert_with(|| issuer.clone());
                         install.cert = None;
                         install.root_pem = None;

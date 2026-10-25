@@ -43,7 +43,7 @@ fn checked<H: Host>(app: &App<H>) -> Option<Result<(), String>> {
 }
 
 /// The page's note, rows, Enter and the line under them.
-type Layout = (
+pub(super) type Layout = (
     &'static str,
     Vec<Row>,
     Option<&'static str>,

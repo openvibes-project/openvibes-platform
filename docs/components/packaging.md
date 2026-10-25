@@ -536,8 +536,10 @@ ca-replace`, password-gated like the other Setup verbs):
 
 1. **New intermediate:** with your own CA, make the request and add the
    signed certificate and your CA's certificate as at install (`ca-request`,
-   `ca-accept`); your CA's certificate must be this host's root, since
-   agents trust only that one. With OpenVIBES' own CA, pick the root key
+   `ca-accept`): the CA that signed it, then each CA above it up to the
+   root. The TUI keeps this host's `root.crt` and `chain.crt` for that, or
+   they can be added again when another CA under the same root signs. The
+   root must be this host's, since agents trust only that one. With OpenVIBES' own CA, pick the root key
    kept at install (`--root-key PATH`): it must be the key of this host's
    root, and its copy lives only in `/run/openvibes-ca` (tmpfs) while the
    new intermediate is signed, removed whatever happens. With an
@@ -560,8 +562,8 @@ ca-replace`, password-gated like the other Setup verbs):
    only; both accept client certificates from either. The old one is kept
    in `/etc/openvibes/pki/previous.crt` and its end in
    `/etc/openvibes/pki/previous-until` (now + `client_certificate_days` + 1
-   day; both 0644 root, read by the TUI). An imported one's CAs above it
-   replace `/etc/openvibes/pki/chain.crt` in the same swap (removed for a
+   day; both 0644 root, read by the TUI). The CAs above the new one
+   (imported, or from your own CA through a sub-CA) replace `/etc/openvibes/pki/chain.crt` in the same swap (removed for a
    two-level PKI); the previous chain is kept as `chain.crt.old` only
    until the swap is final, to put it back on failure, since the server
    certificates are issued again at once.

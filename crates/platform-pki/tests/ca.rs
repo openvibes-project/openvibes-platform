@@ -165,7 +165,7 @@ fn signed_request() -> (KeyAndCert, String, String) {
 
 #[test]
 fn signed_request_matches_its_csr() {
-    let (root, csr, cert) = signed_request();
+    let (_, csr, cert) = signed_request();
     let signed = platform_pki::check_signed_request(&csr, &cert, Utc::now()).unwrap();
     assert_eq!(signed.subject, "OpenVIBES Intermediate CA");
     assert_eq!(signed.issuer, "OpenVIBES Root CA");
@@ -175,10 +175,6 @@ fn signed_request_matches_its_csr() {
             .unwrap()
             .format("%Y-%m-%d")
             .to_string()
-    );
-    assert_eq!(
-        platform_pki::check_root_signed(&root.cert_pem, &cert, Utc::now()).as_deref(),
-        Ok("OpenVIBES Root CA")
     );
 }
 
@@ -243,27 +239,6 @@ fn expired_certificate_is_refused() {
 }
 
 #[test]
-fn wrong_root_is_refused() {
-    let (root, _, cert) = signed_request();
-    let other = generate_root(Utc::now()).unwrap();
-    let now = Utc::now();
-    assert_eq!(
-        platform_pki::check_root_signed(&other.cert_pem, &cert, now).err(),
-        Some(PkiError::NotSignedBy)
-    );
-    // The intermediate itself is no root.
-    assert_eq!(
-        platform_pki::check_root_signed(&cert, &cert, now).err(),
-        Some(PkiError::NotRoot)
-    );
-    let later = now + chrono::Duration::days(11 * 365);
-    assert_eq!(
-        platform_pki::check_root_signed(&root.cert_pem, &cert, later).err(),
-        Some(PkiError::IssuerExpired)
-    );
-}
-
-#[test]
 fn two_pem_blocks_are_refused() {
     let (root, csr, cert) = signed_request();
     let both = format!("{cert}{}", root.cert_pem);
@@ -273,35 +248,8 @@ fn two_pem_blocks_are_refused() {
         Some(PkiError::Several(2))
     );
     assert_eq!(
-        platform_pki::check_root_signed(&both, &cert, now).err(),
-        Some(PkiError::Several(2))
-    );
-    assert_eq!(
         platform_pki::check_signed_request(&csr, "no certificate", now).err(),
         Some(PkiError::InvalidPem)
-    );
-}
-
-#[test]
-fn a_root_with_path_length_0_is_refused() {
-    use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
-    let now = Utc::now();
-    let key = KeyPair::generate().unwrap();
-    let mut params = CertificateParams::new(Vec::<String>::new()).unwrap();
-    params
-        .distinguished_name
-        .push(DnType::CommonName, "Tight Root");
-    params.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
-    params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
-    let root = KeyAndCert {
-        cert_pem: params.self_signed(&key).unwrap().pem(),
-        key_pem: key.serialize_pem(),
-    };
-    let (csr, _) = intermediate_request().unwrap();
-    let cert = sign_intermediate(&root, &csr, now).unwrap();
-    assert_eq!(
-        platform_pki::check_root_signed(&root.cert_pem, &cert, now).err(),
-        Some(PkiError::RootPathLen0)
     );
 }
 

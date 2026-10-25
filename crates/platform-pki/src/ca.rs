@@ -337,31 +337,6 @@ pub fn check_signed_request(
     })
 }
 
-/// Whether `root_pem` is one self-signed CA certificate, valid at `now`,
-/// that signed `cert_pem` and may sign a CA (no path length 0); the
-/// root's common name.
-pub fn check_root_signed(
-    root_pem: &str,
-    cert_pem: &str,
-    now: DateTime<Utc>,
-) -> Result<String, PkiError> {
-    single(root_pem)?;
-    let der = der_of(root_pem)?;
-    let root = parse(&der)?;
-    let constraints = root.basic_constraints().ok().flatten().map(|c| c.value);
-    let is_ca = constraints.is_some_and(|constraints| constraints.ca);
-    if !is_ca || root.subject() != root.issuer() || root.verify_signature(None).is_err() {
-        return Err(PkiError::NotRoot);
-    }
-    valid_at(&root, now)?;
-    verify_signed_by(cert_pem, root_pem)?;
-    // Path length 0 allows no CA below it: every agent's TLS would fail.
-    if constraints.and_then(|c| c.path_len_constraint) == Some(0) {
-        return Err(PkiError::RootPathLen0);
-    }
-    Ok(name_of(root.subject()))
-}
-
 /// SHA-256 of the first certificate's DER encoding.
 pub fn sha256_fingerprint(cert_pem: &str) -> Result<[u8; 32], PkiError> {
     let der = der_of(cert_pem)?;

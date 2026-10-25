@@ -47,7 +47,10 @@ fn a_picked_file_titles_the_box_for_the_file() {
     app.key(Key::Enter);
     let text = screen(&app);
     assert!(text.contains("Paste your CA's certificate"), "{text}");
-    assert!(text.contains("Paste the whole block"), "{text}");
+    assert!(
+        text.contains("Your CA's certificate, then each CA above it up to the root."),
+        "{text}"
+    );
 }
 
 #[test]

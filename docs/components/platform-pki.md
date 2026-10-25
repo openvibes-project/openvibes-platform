@@ -129,10 +129,6 @@ its `README` lists them.
   by mistake, such as the root, reads as for a different request), a CA
   with path length 0 (`NotCa`), valid at `now` (`IssuerExpired`); returns
   `Signed` (subject and issuer common names, `not_after` as `YYYY-MM-DD`).
-- `check_root_signed(root_cert, cert, now)`: one PEM block, a self-signed CA
-  (`NotRoot`), valid at `now`, that signed `cert` (`NotSignedBy`) and may
-  sign a CA: path length 0 is refused (`RootPathLen0`); returns the root's
-  common name.
 - `sha256_fingerprint(cert)`: SHA-256 of the DER encoding.
 - `is_ca(cert)`: whether the first certificate is a CA (basicConstraints
   CA:TRUE).
@@ -141,7 +137,7 @@ its `README` lists them.
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,
   `InvalidValidity`, `IssuerExpired`, `InvalidAgentId`, `NotIntermediate`,
-  `NotForRequest`, `Several(n)`, `NotRoot`, `RootPathLen0`, `KeyLocked`,
+  `NotForRequest`, `Several(n)`, `KeyLocked`,
   `WrongPassword`, `WeakKey(bits)`, `OldEncryption`, `NameMismatch`.
   Messages never contain key or certificate material.
 

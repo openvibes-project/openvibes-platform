@@ -19,6 +19,8 @@ pub(super) use run::draw;
 #[cfg(test)]
 mod certs_accept_tests;
 #[cfg(test)]
+mod certs_chain_tests;
+#[cfg(test)]
 mod certs_file_tests;
 #[cfg(test)]
 mod certs_tests;

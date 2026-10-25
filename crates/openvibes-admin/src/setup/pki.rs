@@ -218,13 +218,17 @@ fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Done(root_summary(ctx)?));
     }
     let request = |name: &str| format!("{REQUEST_DIR}/{name}");
-    let names = [
+    let mut names = vec![
         "intermediate.key",
         "intermediate.csr",
         "intermediate.crt",
         "root.crt",
     ];
     if names.iter().all(|name| ctx.exists(&request(name))) {
+        // The CAs between, when the root did not sign it directly.
+        if ctx.exists(&request("chain.crt")) {
+            names.push("chain.crt");
+        }
         stage_from(ctx, REQUEST_DIR, &names)?;
         import_and_install(ctx)?;
         remove_stage(ctx)?;

@@ -35,6 +35,9 @@ pub(super) fn swap<R: Runner>(
     let old = ctx.read(INTERMEDIATE)?;
     if chain.is_some() {
         import::back_up_chain(ctx)?;
+    } else {
+        // A copy left from before would make an undo put an old chain back.
+        import::remove(ctx, import::CHAIN_OLD)?;
     }
     let (bundle, key, chain_new) = staged();
     let mut restored = true;

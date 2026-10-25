@@ -14,9 +14,9 @@ mod token;
 use std::fmt;
 
 pub use ca::{
-    Issuer, KeyAndCert, Signed, check_intermediate, check_root_signed, check_signed_request,
-    first_certificate, generate_root, intermediate_request, is_ca, issuer_common_name, not_after,
-    not_before, sha256_fingerprint, sign_intermediate, subject_alt_names, verify_signed_by,
+    Issuer, KeyAndCert, Signed, check_intermediate, check_signed_request, first_certificate,
+    generate_root, intermediate_request, is_ca, issuer_common_name, not_after, not_before,
+    sha256_fingerprint, sign_intermediate, subject_alt_names, verify_signed_by,
 };
 pub use chain::{Chain, ChainError, certificates, check_chain, check_key, common_name};
 pub use client::{
@@ -57,10 +57,6 @@ pub enum PkiError {
     NotForRequest,
     /// Several PEM blocks where one certificate was expected.
     Several(usize),
-    /// Not a self-signed CA certificate.
-    NotRoot,
-    /// A root with path length 0: it cannot validly sign an intermediate.
-    RootPathLen0,
     /// The private key is encrypted and no password was given.
     KeyLocked,
     /// The password does not open the key or file.
@@ -91,8 +87,6 @@ impl fmt::Display for PkiError {
             Self::NotIntermediate => "not an intermediate CA certificate (path length 0)",
             Self::InvalidAgentId => "invalid agent id",
             Self::NotForRequest => "certificate was signed for another request",
-            Self::NotRoot => "not a self-signed CA certificate",
-            Self::RootPathLen0 => "the root CA has path length 0 and cannot sign an intermediate",
             Self::KeyLocked => "the private key is locked with a password",
             Self::WrongPassword => "wrong password",
             Self::OldEncryption => "the key's encryption is too old",

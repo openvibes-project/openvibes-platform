@@ -20,6 +20,7 @@ use platform_pki::Issuer;
 use super::{
     Ctx, begin, host_ctx,
     pki::{self, ADMIN_OWNER, INT, INTERMEDIATE, ROOT_CERT, ROOT_DIR, STAGE, certificates_apply},
+    pki_import::CHAIN,
     plan::{CaMode, Component},
     request::{REQUEST_DIR, message},
     setup_guard,
@@ -67,7 +68,9 @@ fn client_days<R: Runner>(ctx: &Ctx<R>) -> i64 {
         .unwrap_or(30)
 }
 
-/// The new intermediate and its key, staged in `INT` for openvibes-admin.
+/// The new intermediate and its key, staged in `INT` for openvibes-admin;
+/// with the CAs between it and the root as `chain.crt` when the request
+/// has them or this host has a `CHAIN` (empty then: it goes).
 fn careful<R: Runner>(ctx: &Ctx<R>, root: &str) -> Result<(), String> {
     let request = |name: &str| format!("{REQUEST_DIR}/{name}");
     let names = [
@@ -81,7 +84,10 @@ fn careful<R: Runner>(ctx: &Ctx<R>, root: &str) -> Result<(), String> {
             "There is no signed request: make the request and add both certificates first.";
         return Err(missing.into());
     }
-    if ctx.read(&request("root.crt"))?.trim() != root.trim() {
+    // As DER: the root is the chain's, not the CA that signed it.
+    let der = |pem: &str| platform_pki::certificates(pem).ok();
+    let theirs = der(&ctx.read(&request("root.crt"))?);
+    if theirs.is_none() || theirs != der(root) {
         return Err(
             "Your CA's certificate is not this host's root: agents trust only that one.".into(),
         );
@@ -91,6 +97,12 @@ fn careful<R: Runner>(ctx: &Ctx<R>, root: &str) -> Result<(), String> {
     for name in ["intermediate.key", "intermediate.crt"] {
         let mode = if name.ends_with(".key") { 0o600 } else { 0o644 };
         ctx.copy(&request(name), &format!("{INT}/{name}"), ADMIN_OWNER, mode)?;
+    }
+    let chain = request("chain.crt");
+    if ctx.exists(&chain) {
+        ctx.copy(&chain, &format!("{INT}/chain.crt"), ADMIN_OWNER, 0o644)?;
+    } else if ctx.exists(CHAIN) {
+        ctx.put(&format!("{INT}/chain.crt"), b"", ADMIN_OWNER, 0o644)?;
     }
     Ok(())
 }
@@ -152,12 +164,13 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
     let new = platform_pki::first_certificate(&ctx.read(&cert)?).map_err(|e| message(&e))?;
     let new_key = ctx.read(&key)?;
     Issuer::load(&new, &new_key).map_err(|e| message(&e))?;
-    let chain = match ctx.plan.ca {
-        CaMode::Import => Some(import::chain(ctx, &root, (&new, &new_key), &previous)?),
-        _ => {
-            platform_pki::check_intermediate(&new, &root, Utc::now()).map_err(|e| message(&e))?;
-            None
-        }
+    // A staged chain (Import always; your own CA through a sub-CA, or
+    // leaving one) moves with the new intermediate.
+    let chain = if ctx.exists(&format!("{INT}/chain.crt")) {
+        Some(import::chain(ctx, &root, (&new, &new_key), &previous)?)
+    } else {
+        platform_pki::check_intermediate(&new, &root, Utc::now()).map_err(|e| message(&e))?;
+        None
     };
     let expires = platform_pki::not_after(&new).map_err(|e| message(&e))?;
     finished(ctx, &mut done, "Making the new intermediate");

@@ -14,7 +14,7 @@ use std::{
 use platform_host::runner::Runner;
 use platform_pki::{PkiError, Signed};
 
-use super::Ctx;
+use super::{Ctx, import::import_message};
 
 /// The request folder; the CA step and Quick remove it.
 pub const REQUEST_DIR: &str = "/etc/openvibes/pki/request";
@@ -49,12 +49,6 @@ pub fn message(e: &PkiError) -> String {
         }
         PkiError::NotSignedBy => "Your CA's certificate must be the root that signed this \
                                   certificate directly: paste that root, not another CA."
-            .into(),
-        PkiError::NotRoot => "This is not a root CA (self-signed): OpenVIBES needs the root that \
-                              signed the request directly, with no CA in between."
-            .into(),
-        PkiError::RootPathLen0 => "Your CA's certificate does not allow it to sign another CA \
-                                   (path length 0): it cannot sign the intermediate."
             .into(),
         PkiError::Several(n) => {
             format!("That is {n} certificates: paste only the one signed for OpenVIBES.")
@@ -188,28 +182,38 @@ fn write_copy<R: Runner>(ctx: &Ctx<R>, abs: &str, csr: &str) -> Result<bool, Str
     Ok(true)
 }
 
-/// Checks the CA's certificate and root against the stored request, then
-/// writes both; nothing is written when a check fails.
-pub fn accept<R: Runner>(ctx: &Ctx<R>, cert_pem: &str, root_pem: &str) -> Result<Signed, String> {
+/// Checks the CA's certificate against the stored request, and the CAs
+/// pasted with it (the one that signed it, then each above it up to the
+/// root), then writes them: the root as `root.crt`, the CAs between as
+/// `chain.crt` when there are any. Nothing is written when a check fails.
+pub fn accept<R: Runner>(ctx: &Ctx<R>, cert_pem: &str, cas_pem: &str) -> Result<Signed, String> {
     let csr = ctx
         .read(&file("intermediate.csr"))
         .map_err(|_| "There is no request here: make one first.".to_owned())?;
     let now = chrono::Utc::now();
     let signed =
         platform_pki::check_signed_request(&csr, cert_pem, now).map_err(|e| message(&e))?;
-    platform_pki::check_root_signed(root_pem, cert_pem, now).map_err(|e| match e {
-        PkiError::Several(n) => {
-            format!("That is {n} certificates: paste only your root CA's certificate.")
-        }
-        e => message(&e),
-    })?;
-    for (name, pem) in [("intermediate.crt", cert_pem), ("root.crt", root_pem)] {
+    let chain = platform_pki::check_chain(&format!("{}\n{cas_pem}", cert_pem.trim()), now)
+        .map_err(|e| import_message(&e, &signed.subject, None))?;
+    let put = |name: &str, pem: &str| {
         ctx.put(
             &file(name),
             format!("{}\n", pem.trim()).as_bytes(),
             None,
             0o644,
-        )?;
+        )
+    };
+    put("intermediate.crt", cert_pem)?;
+    put("root.crt", &chain.root)?;
+    if chain.middle.is_empty() {
+        match fs::remove_file(ctx.path(&file("chain.crt"))) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{}: {error}", file("chain.crt")));
+            }
+            _ => {}
+        }
+    } else {
+        put("chain.crt", &chain.middle.concat())?;
     }
     Ok(signed)
 }
@@ -262,7 +266,7 @@ pub fn run_request(copy: Option<&Path>) -> ExitCode {
     })
 }
 
-/// `helper ca-accept --cert PEM --root-cert PEM`.
+/// `helper ca-accept --cert PEM --root-cert PEM` (the CAs above it).
 pub fn run_accept(cert_pem: &str, root_pem: &str) -> ExitCode {
     on_host(|ctx| {
         let signed = accept(ctx, cert_pem, root_pem)?;
@@ -278,3 +282,7 @@ pub fn run_accept(cert_pem: &str, root_pem: &str) -> ExitCode {
 #[cfg(test)]
 #[path = "request_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "request_chain_tests.rs"]
+mod chain_tests;

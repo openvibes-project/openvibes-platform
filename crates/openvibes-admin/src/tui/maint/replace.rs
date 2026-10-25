@@ -22,6 +22,7 @@ use super::{Page, Then, folder::Browse};
 use crate::{
     setup::{
         pki::ROOT_CERT,
+        pki_import::CHAIN,
         plan::plan_of,
         replace::{NOT_THE_KEY, PROGRESS},
     },
@@ -55,7 +56,10 @@ const STEPS: [&str; 4] = [
 #[derive(Debug, Default)]
 pub struct Replace {
     /// This host's root: its PEM and name, or why it cannot be read.
+    /// With your own CA, `CHAIN`'s CAs follow the root's PEM.
     root: Option<Result<(String, String), String>>,
+    /// Your own CA: its certificates added again, not the kept ones.
+    readded: bool,
     /// The root key file picked, and its check.
     key: Option<(PathBuf, Result<(), String>)>,
     pick: Option<Browse>,
@@ -227,53 +231,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         let note = "Needs the root key kept offline at install. Nothing changes until Replace.";
         (note, rows, enter, owned(said))
     } else {
-        let signed = match &install.signed {
-            Some(who) => vec![
-                Span::styled("✓ added", t.green()),
-                Span::styled(format!(" · signed by {who}"), t.dim()),
-            ],
-            None => vec![Span::styled("not added yet", t.yellow())],
-        };
-        let kept = match root {
-            Some(Ok(name)) => vec![
-                Span::styled("✓", t.green()),
-                Span::raw(format!(" {name} (kept)")),
-            ],
-            _ => vec![Span::styled("cannot be read", t.red())],
-        };
-        let ready = install.accepted();
-        let rows = vec![
-            Row::entry("Show the request", "to copy it to your CA"),
-            Row::Entry {
-                name: vec![Span::raw("Signed certificate")],
-                value: signed,
-            },
-            Row::Entry {
-                name: vec![Span::raw("Your CA's certificate")],
-                value: kept,
-            },
-            Row::entry(
-                "Replace",
-                if ready {
-                    "a new intermediate from your CA"
-                } else {
-                    "once the signed certificate is added"
-                },
-            ),
-        ];
-        let enter = match row {
-            0 => Some("Show the request"),
-            1 => Some("Add the signed certificate"),
-            3 if ready => Some("Replace"),
-            _ => None,
-        };
-        let said = match (&install.error, root) {
-            (Some(why), _) => Some(Err(why.as_str())),
-            (None, Some(Err(why))) => Some(Err(why.as_str())),
-            _ => None,
-        };
-        let note = "The same steps as at install. Nothing changes until Replace.";
-        (note, rows, enter, owned(said))
+        own::page(app)
     };
     // While the request is made or the certificates are kept.
     let busy = app
@@ -309,8 +267,8 @@ impl<H: Host> App<H> {
             }
             self.run = None;
         }
-        let pem = std::fs::read_to_string(self.root.join(ROOT_CERT.trim_start_matches('/')));
-        let root = pem
+        let read = |abs: &str| std::fs::read_to_string(self.root.join(abs.trim_start_matches('/')));
+        let root = read(ROOT_CERT)
             .map_err(|e| format!("{ROOT_CERT}: {e}"))
             .and_then(|pem| {
                 let name = platform_pki::issuer_common_name(&pem)
@@ -330,7 +288,13 @@ impl<H: Host> App<H> {
             return;
         }
         // Your own CA: the install's request, made again or reused, for
-        // this host's names; the root stays the one agents trust.
+        // this host's names; the root stays the one agents trust. The CAs
+        // between go to ca-accept with it.
+        if let (Some(Ok((pem, _))), Ok(chain)) = (&mut self.maint.replace.root, read(CHAIN))
+            && !chain.trim().is_empty()
+        {
+            *pem = format!("{pem}\n{}", chain.trim());
+        }
         let install = &mut self.install;
         install.request = None;
         install.signed = None;
@@ -378,12 +342,22 @@ impl<H: Host> App<H> {
             (false, 0 | 1) if !made => self.make_request(),
             (false, 0) => self.nav.go(Screen::Install(Stage::Request)),
             (false, 1) => {
-                // The kept root goes with the signed certificate (ca-accept).
-                if let Some(Ok((pem, name))) = &self.maint.replace.root {
+                // The kept CAs go with the signed certificate (ca-accept),
+                // unless they were added again.
+                if let Some(Ok((pem, name))) = &self.maint.replace.root
+                    && !self.maint.replace.readded
+                {
                     self.install.root_pem = Some(pem.clone());
                     self.install.root_added = Some(name.clone());
                 }
                 self.nav.go(Screen::Install(Stage::Add(Which::Signed)));
+            }
+            // A new intermediate may come from another CA under the root.
+            (false, 2) => {
+                self.maint.replace.readded = true;
+                self.install.root_pem = None;
+                self.install.root_added = None;
+                self.nav.go(Screen::Install(Stage::Add(Which::Root)));
             }
             (false, 3) if self.install.accepted() => self.ask_replace(),
             _ => {}
@@ -484,3 +458,6 @@ impl<H: Host> App<H> {
 
 #[path = "replace_import.rs"]
 mod import;
+
+#[path = "replace_own.rs"]
+mod own;
