@@ -85,9 +85,25 @@ fn work_ends_in_one_result_line() {
     assert!(app.pending.is_none(), "ingest reports active and ready");
     let (ok, text) = app.outcome.clone().unwrap();
     assert!(
-        ok && text.starts_with("ingest restarted and ready"),
+        ok && text.starts_with("ingest restarted and ready ("),
         "{text}"
     );
+}
+
+#[test]
+fn a_result_under_a_second_leaves_the_time_out() {
+    let mut app = app(false);
+    open_service(&mut app, Unit::Ingest);
+    app.key(Key::Enter);
+    app.key(Key::Char('y'));
+    // Polled at once, half a second after Yes.
+    let pending = app.pending.as_mut().unwrap();
+    pending.polled -= Duration::from_secs(1);
+    let at = pending.since + Duration::from_millis(500);
+    app.poll(at);
+    let (ok, text) = app.outcome.clone().unwrap();
+    assert!(ok, "{text}");
+    assert_eq!(text, "ingest restarted and ready");
 }
 
 #[test]

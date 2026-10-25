@@ -83,7 +83,7 @@ Yes/No question in the bar (`Restart ingest?` with what it means as detail;
 `←`/`→` or `y`/`n` choose, `Enter` confirms, `Esc` is No). Yes sends the
 action and the bar shows a spinner (`Restarting ingest…`) while the screen
 polls the unit about once a second. It ends in one result line, kept until
-the next key: `✓ ingest restarted and ready (N s)` when the unit is active
+the next key: `✓ ingest restarted and ready (N s)` (no time under a second, as every result line) when the unit is active
 (and not "not ready"; Stop: not active; Restart: also a new start time,
 since the restart is queued and the old process answers until then), or `✗ NAME did not start within 30 s:
 <its last journal line>` after `ACTION_TIMEOUT` (30 s); a refusal (not an

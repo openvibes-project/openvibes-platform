@@ -287,16 +287,11 @@ impl Run {
     /// How long it took, to end a result line: " (2 min 41 s)", " (12 s)";
     /// nothing under a second.
     pub fn took(&self) -> String {
-        let s = self
-            .ended
-            .unwrap_or_else(Instant::now)
-            .saturating_duration_since(self.started)
-            .as_secs();
-        match s {
-            0 => String::new(),
-            1..60 => format!(" ({s} s)"),
-            _ => format!(" ({} min {} s)", s / 60, s % 60),
-        }
+        took(
+            self.ended
+                .unwrap_or_else(Instant::now)
+                .saturating_duration_since(self.started),
+        )
     }
 
     /// Takes one result; true when the password was wrong.
@@ -376,6 +371,15 @@ pub struct Asking {
     pub prompt: PasswordPrompt,
     /// Asked again after a wrong password: the same run goes on.
     pub resume: bool,
+}
+
+/// `took` for any wait: " (2 min 41 s)", " (12 s)"; nothing under a second.
+pub(super) fn took(waited: std::time::Duration) -> String {
+    match waited.as_secs() {
+        0 => String::new(),
+        s @ 1..60 => format!(" ({s} s)"),
+        s => format!(" ({} min {} s)", s / 60, s % 60),
+    }
 }
 
 #[cfg(test)]
