@@ -63,21 +63,41 @@ fn stages_the_three_files_and_the_key() {
     }
 }
 
+/// Makes the write of `name` fail: its temp file's place is a folder.
+fn block(fake: &Fake, name: &str) {
+    let temp = format!("{IMPORT_DIR}/.{name}.setup");
+    std::fs::create_dir_all(fake.root.join(temp.trim_start_matches('/'))).unwrap();
+}
+
+/// The regular files staged.
+fn files(fake: &Fake) -> Vec<String> {
+    std::fs::read_dir(fake.root.join(IMPORT_DIR.trim_start_matches('/')))
+        .unwrap()
+        .map(|entry| entry.unwrap())
+        .filter(|entry| entry.file_type().unwrap().is_file())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect()
+}
+
 #[test]
-fn the_key_is_written_first() {
-    let fake = Fake::new("import-key-first");
+fn a_failed_write_leaves_nothing_staged() {
+    let fake = Fake::new("import-write-fails");
     let plan = plan(&[Ingest]);
-    // The certificate's place is taken, so its write fails.
-    std::fs::create_dir_all(
-        fake.root
-            .join(staged("intermediate.crt").trim_start_matches('/')),
-    )
-    .unwrap();
+    // The key is written first, then the certificate's write fails.
+    block(&fake, "intermediate.crt");
     assert!(import(&fake.ctx(&plan), &full(), now()).is_err());
-    assert!(
-        fake.text(&staged("intermediate.key"))
-            .contains("PRIVATE KEY")
-    );
+    assert_eq!(files(&fake), Vec::<String>::new());
+}
+
+#[test]
+fn a_failed_reimport_leaves_no_old_certificates_beside_a_new_key() {
+    let fake = Fake::new("import-reimport-fails");
+    let plan = plan(&[Ingest]);
+    import(&fake.ctx(&plan), &full(), now()).unwrap();
+    block(&fake, "root.crt");
+    let strict = format!("{STRICT}{ROOT}{STRICT_KEY}");
+    assert!(import(&fake.ctx(&plan), &strict, now()).is_err());
+    assert_eq!(files(&fake), Vec::<String>::new());
 }
 
 #[test]

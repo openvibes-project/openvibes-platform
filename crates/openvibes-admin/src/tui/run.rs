@@ -44,8 +44,21 @@ pub enum Call {
     /// `ca-replace [--root-key PATH]`: a new intermediate beside the old one.
     CaReplace(Option<String>),
     /// `ca-import`: a company intermediate, its chain and key, on stdin.
-    #[expect(dead_code, reason = "the Import screens (4b Task 4 on) send it")]
-    CaImport(zeroize::Zeroizing<String>),
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the Import screens (4b Task 4 on) send it")
+    )]
+    CaImport(Bundle),
+}
+
+/// `ca-import`'s certificates and key; Debug never shows them.
+#[derive(Clone, Eq, PartialEq)]
+pub struct Bundle(pub zeroize::Zeroizing<String>);
+
+impl std::fmt::Debug for Bundle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("..")
+    }
 }
 
 /// A stop at a main call in `from..to` runs `calls` next, same password.
@@ -129,7 +142,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::CaAccept(cert, root) => host.privileged(Privileged::CaAccept(cert, root), secret),
         Call::CaReplace(key) => host.privileged(Privileged::CaReplace(key.as_deref()), secret),
         Call::CaImport(bundle) => {
-            let bundle = Secret::new(String::clone(bundle));
+            let bundle = Secret::new(String::clone(&bundle.0));
             host.privileged(Privileged::CaImport(&bundle), secret)
         }
     }
@@ -357,4 +370,18 @@ pub struct Asking {
     pub prompt: PasswordPrompt,
     /// Asked again after a wrong password: the same run goes on.
     pub resume: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_bundle_is_never_printed() {
+        let bundle = super::Bundle(zeroize::Zeroizing::new(
+            "-----BEGIN PRIVATE KEY-----".into(),
+        ));
+        assert_eq!(
+            format!("{:?}", super::Call::CaImport(bundle)),
+            "CaImport(..)"
+        );
+    }
 }

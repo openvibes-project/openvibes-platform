@@ -83,6 +83,8 @@ fn split(bundle: &str) -> Result<(String, Zeroizing<String>), String> {
     let mut key: Option<Zeroizing<String>> = None;
     let mut lines = bundle.lines();
     while let Some(line) = lines.next() {
+        // Text outside PEM blocks is ignored on purpose: e.g. the password
+        // line sudo leaves unread under a NOPASSWD sudoers entry.
         let Some(label) = line
             .trim()
             .strip_prefix("-----BEGIN ")
@@ -126,7 +128,7 @@ fn split(bundle: &str) -> Result<(String, Zeroizing<String>), String> {
 /// Checks the bundle as the TUI did and stages it: the key first (0600),
 /// then our intermediate, the CAs between it and the root (`chain.crt`,
 /// only when there are any) and the root (0644). Nothing is written when
-/// a check fails. With a CA installed (Replace), the root must be the one
+/// a check fails, and nothing stays staged when a write fails. With a CA installed (Replace), the root must be the one
 /// agents already trust.
 pub fn import<R: Runner>(ctx: &Ctx<R>, bundle: &str, now: DateTime<Utc>) -> Result<Chain, String> {
     let (certs, key) = split(bundle)?;
@@ -158,28 +160,44 @@ pub fn import<R: Runner>(ctx: &Ctx<R>, bundle: &str, now: DateTime<Utc>) -> Resu
     for dir in [REQUEST_DIR, IMPORT_DIR] {
         fs::set_permissions(ctx.path(dir), Permissions::from_mode(0o700)).map_err(fail)?;
     }
-    ctx.put(&file("intermediate.key"), key.as_bytes(), None, 0o600)?;
-    ctx.put(
-        &file("intermediate.crt"),
-        chain.ours.as_bytes(),
-        None,
-        0o644,
-    )?;
-    if chain.middle.is_empty() {
-        match fs::remove_file(ctx.path(&file("chain.crt"))) {
-            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(fail(error)),
+    // An earlier import never stays beside this one, and a write that
+    // fails leaves nothing staged.
+    clear(ctx)?;
+    let middle = chain.middle.concat();
+    let files = [
+        ("intermediate.key", key.as_str(), 0o600),
+        ("intermediate.crt", chain.ours.as_str(), 0o644),
+        ("chain.crt", middle.as_str(), 0o644),
+        ("root.crt", chain.root.as_str(), 0o644),
+    ];
+    for (name, text, mode) in files {
+        if text.is_empty() {
+            continue;
+        }
+        if let Err(error) = ctx.put(&file(name), text.as_bytes(), None, mode) {
+            let _ = clear(ctx);
+            return Err(error);
+        }
+    }
+    Ok(chain)
+}
+
+/// Removes every staged file, the key first.
+fn clear<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+    for name in [
+        "intermediate.key",
+        "intermediate.crt",
+        "chain.crt",
+        "root.crt",
+    ] {
+        match fs::remove_file(ctx.path(&file(name))) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{}: {error}", file(name)));
+            }
             _ => {}
         }
-    } else {
-        ctx.put(
-            &file("chain.crt"),
-            chain.middle.concat().as_bytes(),
-            None,
-            0o644,
-        )?;
     }
-    ctx.put(&file("root.crt"), chain.root.as_bytes(), None, 0o644)?;
-    Ok(chain)
+    Ok(())
 }
 
 /// `imported<TAB>NAME<TAB>PATH<TAB>UNTIL`, the path joined with " › ".

@@ -857,8 +857,9 @@ installed (Replace) the root must equal the installed `root.crt`, else
 host. Ask for one under the same root." Only then it writes
 `/etc/openvibes/pki/request/import/` (root, 0700): `intermediate.key`
 (0600, first), `intermediate.crt` (ours alone), `chain.crt` (the CAs
-between ours and the root, only when there are any; an older one is
-removed) and `root.crt` (0644). Middle CAs stay out of `intermediate.crt`,
+between ours and the root, only when there are any) and `root.crt`
+(0644). An earlier import's files are removed first, and a write that
+fails removes what was written, so nothing partial stays staged. Middle CAs stay out of `intermediate.crt`,
 which distribution trusts for agent client certificates (ruling P2). It
 prints `imported<TAB>NAME<TAB>PATH<TAB>UNTIL` (the path's names joined
 with ` › `, the earliest end of validity as YYYY-MM-DD). Refusals are

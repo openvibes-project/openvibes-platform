@@ -109,7 +109,10 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   VERB…` with the password on stdin only (never in argv or the journal),
   followed by the verb's own input (`Privileged::stdin`: `ca-import`'s
   bundle, after sudo's one password line; as root the helper is run
-  directly with the bundle alone, or stdin closed when there is none),
+  directly with the bundle alone, or stdin closed when there is none;
+  after a wrong password, `sudo -S` may read the bundle's next lines as
+  further attempts, and those are always public certificate lines, since
+  the certificates come before the key),
   journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns
   the helper's stdout. sudo's refusals map to `WrongPassword` ("incorrect
   password") and `NotSudoer` (not in sudoers, or "is not allowed to
