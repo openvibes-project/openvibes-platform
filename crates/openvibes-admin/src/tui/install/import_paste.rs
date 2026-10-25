@@ -316,6 +316,7 @@ impl<H: Host> App<H> {
             self.nav.row = 1;
             return;
         }
+        let p12 = platform_pki::is_p12(&bytes);
         let text = String::from_utf8(bytes).map_err(|e| e.into_bytes().zeroize());
         let refused = match (which, text.as_deref()) {
             (Which::Cert, Ok(t)) if holds_private_key(t) => {
@@ -324,6 +325,9 @@ impl<H: Host> App<H> {
             (Which::Cert, Ok(t)) if t.contains("-----BEGIN CERTIFICATE-----") => None,
             (Which::Cert, _) => Some("That file holds no certificate: pick the certificate."),
             (_, Ok(t)) if holds_private_key(t) => None,
+            _ if p12 => {
+                Some(".p12 and .pfx files go in the Certificate row: they hold the key too.")
+            }
             _ => Some("That file holds no private key: pick the key."),
         };
         match (text, refused) {

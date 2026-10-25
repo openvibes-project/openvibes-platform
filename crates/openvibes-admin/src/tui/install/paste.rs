@@ -6,6 +6,8 @@
 //! sends the lines as keys: Enter adds a new line until an `-----END`
 //! line is there; after that Enter is "Use it", once the check passed.
 
+use std::hash::BuildHasher;
+
 use chrono::{DateTime, Utc};
 use platform_host::Host;
 use platform_pki::ChainError;
@@ -27,8 +29,36 @@ const TALL: usize = 4;
 
 impl Install {
     /// The check of `text` as `which`: the lines that say it is right, or
-    /// why it is not; `None` while the box is empty.
+    /// why it is not; `None` while the box is empty. Made again only when
+    /// the text or what it is checked against changes, not on every draw
+    /// (each check of a key copies it).
     pub(super) fn check(&self, which: Which, text: &str) -> Option<Result<Vec<String>, String>> {
+        let seen = self.seen(which, text);
+        if let Some((at, said)) = &*self.checked.borrow()
+            && *at == seen
+        {
+            return said.clone();
+        }
+        let said = self.check_now(which, text);
+        *self.checked.borrow_mut() = Some((seen, said.clone()));
+        said
+    }
+
+    /// What `check` depends on, hashed.
+    pub(super) fn seen(&self, which: Which, text: &str) -> u64 {
+        self.check_hasher.hash_one((
+            std::mem::discriminant(&which),
+            text,
+            self.unlocked.as_deref(),
+            &self.error,
+            self.imported.as_ref().map(|i| &i.chain.ours),
+            (&self.hostname, &self.sans),
+            self.cert.as_ref().map(|c| &c.0),
+            self.csr(),
+        ))
+    }
+
+    fn check_now(&self, which: Which, text: &str) -> Option<Result<Vec<String>, String>> {
         if text.trim().is_empty() {
             return None;
         }

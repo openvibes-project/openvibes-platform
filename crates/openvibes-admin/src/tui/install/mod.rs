@@ -138,6 +138,10 @@ pub struct Install {
     pub unlocked: Option<zeroize::Zeroizing<String>>,
     /// The helper's `imported` line once it kept the import: Next goes on.
     pub import_done: Option<String>,
+    /// The paste box's last check, and a hash of what it depended on.
+    pub checked: std::cell::RefCell<Option<(u64, Option<Result<Vec<String>, String>>)>>,
+    /// Keyed per run: no fixed digest of a key is kept.
+    pub check_hasher: std::hash::RandomState,
 }
 
 impl Install {
@@ -165,6 +169,8 @@ impl Install {
             locked: None,
             unlocked: None,
             import_done: None,
+            checked: std::cell::RefCell::new(None),
+            check_hasher: std::hash::RandomState::new(),
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             ingest_port: ports::INGEST_DEFAULT.to_string(),
             distribution_port: ports::DISTRIBUTION_DEFAULT.to_string(),

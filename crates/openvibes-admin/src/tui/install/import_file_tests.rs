@@ -142,3 +142,18 @@ fn a_binary_file_is_not_read_lossily() {
         _ => panic!("no .p12 kept"),
     }
 }
+
+#[test]
+fn a_pfx_in_the_key_row_says_where_it_goes() {
+    let dir = folder("import-pfx-key-row");
+    std::fs::write(format!("{dir}/openvibes.pfx"), PFX).unwrap();
+    let mut app = with_chain();
+    pick(&mut app, Which::Key, &dir.to_string(), "openvibes.pfx");
+    assert!(app.install.paste.is_none() && app.install.locked.is_none());
+    let text = screen(&app);
+    assert!(
+        flat(&text)
+            .contains(".p12 and .pfx files go in the Certificate row: they hold the key too."),
+        "{text}"
+    );
+}

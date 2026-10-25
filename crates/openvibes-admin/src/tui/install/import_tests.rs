@@ -333,3 +333,21 @@ fn choosing_openvibes_still_edits_the_root_key_row() {
     app.key(Key::Down);
     assert_eq!(app.nav.row, 4, "Next is the last of five rows");
 }
+
+#[test]
+fn the_key_is_checked_again_only_when_something_changes() {
+    let mut app = with_chain();
+    paste(&mut app, Which::Key, OURS_KEY);
+    let text = app.install.paste.clone().unwrap();
+    assert!(screen(&app).contains("An EC P-256 key"));
+    // Another draw takes the last check: a stand-in shows it is not redone.
+    let seen = app.install.seen(Which::Key, &text);
+    *app.install.checked.borrow_mut() = Some((seen, Some(Ok(vec!["kept".into()]))));
+    assert!(screen(&app).contains("kept"), "{}", screen(&app));
+    // Another text, or another chain, is checked again.
+    assert!(matches!(
+        app.install.check(Which::Key, OTHER_KEY),
+        Some(Err(_))
+    ));
+    assert_ne!(app.install.seen(Which::Cert, &text), seen);
+}
