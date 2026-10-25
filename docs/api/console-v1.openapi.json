@@ -14251,9 +14251,14 @@
         "type": "object",
         "description": "Who can see the case.",
         "required": [
-          "total"
+          "total",
+          "complete"
         ],
         "properties": {
+          "complete": {
+            "type": "boolean",
+            "description": "True exactly when the caller reads cases on every host, so `total`\nis everyone (\"N\"); otherwise it may leave out people who see the\ncase through hosts out of reach (\"at least N\"). It does not depend on\nthis case's hidden items."
+          },
           "names": {
             "type": [
               "array",
@@ -14267,13 +14272,16 @@
           "total": {
             "type": "integer",
             "format": "int64",
-            "description": "How many people can see it."
+            "description": "How many people can see it, as far as the caller may know."
           }
         }
       },
       "CasePageProblemsView": {
         "type": "object",
         "description": "A host's open problems; null where the viewer may not read that kind\non the host.",
+        "required": [
+          "compliance_stale"
+        ],
         "properties": {
           "alarms": {
             "type": [
@@ -14282,6 +14290,10 @@
             ],
             "format": "int64",
             "description": "Open alarms (`alarms.read`)."
+          },
+          "compliance_stale": {
+            "type": "boolean",
+            "description": "In compliance reach but no report in the last day: the failing\ncount is unknown, not 0 (as on the Hosts list)."
           },
           "critical_vulns": {
             "type": [
@@ -14297,7 +14309,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Open failing checks (`compliance.read`)."
+            "description": "Open failing checks (`compliance.read`); null too when\n`compliance_stale`."
           }
         }
       },

@@ -7,10 +7,10 @@
 import { EXCLUSIVE_KINDS } from "../../panels/cases/cases";
 import type { CaseStore } from "../cases";
 import type { DemoContext } from "../context";
-import { distribution, distributionName, inGroup, osFamily } from "../hostGroups";
+import { distribution, distributionName, inGroup, isActive, osFamily } from "../hostGroups";
 import { json, problem } from "../http";
 import { resolveCapabilities } from "../share";
-import { openFailing } from "./checkList";
+import { complianceStale, openFailing } from "./checkList";
 import { listedCritical } from "./hostList";
 
 const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -27,24 +27,30 @@ export function registerCaseSummaryRoute(ctx: DemoContext & { cases: CaseStore }
       .flatMap((agentId) => data.agents.filter((a) => a.id === agentId))
       // By name, nameless last, then by id (ORDER BY hostname, agent_id).
       .sort((a, b) => (a.hostname === b.hostname ? byteOrder(a.id, b.id) : a.hostname == null ? 1 : b.hostname == null ? -1 : byteOrder(a.hostname, b.hostname)));
+    const stale = (a: (typeof agents)[number]) => reaches("compliance.read", a.id) && complianceStale(a.last_seen_at, now);
     const hosts = agents.map((a) => {
       const dist = distribution(facts(a));
       return {
         agent_id: a.id, hostname: a.hostname ?? null,
         os: { id: a.os_id ?? null, version: a.os_version ?? null, distribution: dist && distributionName(dist), family: osFamily(facts(a)) },
         problems: {
-          alarms: reaches("alarms.read", a.id) ? data.alarms.filter((x) => x.agent_id === a.id && x.state === "open").length : null,
+          // Agent alarms only (al.source = 'agent'); the demo's alarms carry no source and are all the agent's.
+          alarms: reaches("alarms.read", a.id) ? data.alarms.filter((x) => x.agent_id === a.id && x.state === "open"
+            && (!("source" in x) || x.source === "agent")).length : null,
           critical_vulns: reaches("vulnerabilities.read", a.id) ? listedCritical(data, a.id) : null,
-          failing_checks: reaches("compliance.read", a.id) ? data.findings.filter((f) => f.agent_id === a.id && openFailing(ctx, f, now)).length : null,
+          // No report in the last day: unknown, not 0 (the Hosts list's rule).
+          failing_checks: reaches("compliance.read", a.id) && !stale(a) ? data.findings.filter((f) => f.agent_id === a.id && openFailing(ctx, f, now)).length : null,
+          compliance_stale: stale(a),
         },
       };
     });
-    // Who can see it (ruling 13): opener, assignee, and enabled people whose
-    // cases.read reaches every host or a group holding a visible item's host.
-    const groups = data.access.host_groups.filter((g) => agents.some((a) => inGroup(facts(a), g))).map((g) => g.asset_group_id);
-    const people = data.access.users.filter((u) => u.user_id === c.opened_by_user_id || u.user_id === c.assignee_user_id || (u.enabled
-      && resolveCapabilities(rolesOf(u.user_id)).some((cap) => cap.permission === "cases.read"
-        && (cap.scope.kind === "global" || cap.scope.asset_group_ids.some((g) => groups.includes(g))))))
+    // Who can see it (ruling 13): enabled people whose cases.read reaches every
+    // host or a group holding a visible item's host (members are active hosts
+    // only), or, for the opener and the assignee, anywhere.
+    const groups = data.access.host_groups.filter((g) => agents.some((a) => isActive(facts(a)) && inGroup(facts(a), g))).map((g) => g.asset_group_id);
+    const people = data.access.users.filter((u) => u.enabled && resolveCapabilities(rolesOf(u.user_id)).some((cap) => cap.permission === "cases.read"
+      && (u.user_id === c.opened_by_user_id || u.user_id === c.assignee_user_id
+        || cap.scope.kind === "global" || cap.scope.asset_group_ids.some((g) => groups.includes(g)))))
       .sort((a, b) => byteOrder(a.display_name.toLowerCase(), b.display_name.toLowerCase()) || byteOrder(a.username, b.username));
     const user = (u: { user_id: string; username: string; display_name: string }) => ({ user_id: u.user_id, username: u.username, display_name: u.display_name });
     // Changes stay inside what the viewer reads: cases.write and cases.read both reach the case.
@@ -72,7 +78,11 @@ export function registerCaseSummaryRoute(ctx: DemoContext & { cases: CaseStore }
         closed_at: c.closed_at, resolution: c.resolution, resolution_note: c.resolution_note,
       },
       hosts,
-      people: { names: permissions.includes("access.read") ? people.slice(0, MAX_PEOPLE).map(user) : null, total: people.length },
+      people: {
+        names: permissions.includes("access.read") ? people.slice(0, MAX_PEOPLE).map(user) : null, total: people.length,
+        // Everyone only when the viewer reads cases on every host; never from this case's hidden items.
+        complete: global("cases.read"),
+      },
       can: {
         edit: write, assign: write && permissions.includes("cases.assign"), close: write && !closed, reopen: write && closed,
         note: write, outcome: write && !closed,

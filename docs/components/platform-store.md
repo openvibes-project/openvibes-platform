@@ -1149,13 +1149,16 @@ Option<CasePageSummary>` (rulings 12–13): `HostScopes.hosts` is the
 `cases.read` scope and decides the case (`case_visible`; `None` when
 missing or unseen); the other three gate each host's problem counts (open
 agent alarms, `host_listed_critical`, `open_failing`, null where that
-kind's scope does not reach the host). It returns the case with visible
+kind's scope does not reach the host, and the failing count also when the
+host is `compliance_stale`: no report in the last day, the Hosts list's
+rule). It returns the case with visible
 counts (`case_counts`), `ready` (not closed, no `blocking_item` among all
 items), `open_for_seconds`, the visible items' hosts by name and who can
-see it (`case_people.rs`: opener, assignee, enabled live bindings holding
-`cases.read` on all hosts or Administrator, or on a group holding a
-host-bound item's host in the viewer's reach; at most 20 names and the
-total). `case_visible_to(client, scope, user_id, case_id)` answers whether a
+see it (`case_people.rs`: enabled live bindings that are Administrator or
+hold `cases.read` on all hosts, on a group holding a host-bound item's
+host in the viewer's reach, or at any scope for the opener and assignee;
+at most 20 names, the total, and `complete` = the viewer's scope is
+global). `case_visible_to(client, scope, user_id, case_id)` answers whether a
 scope sees the case (the page's `can` flags). Tests:
 `tests/case_summary.rs`.
 

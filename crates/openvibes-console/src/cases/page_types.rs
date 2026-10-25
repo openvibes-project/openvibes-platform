@@ -80,8 +80,12 @@ pub(crate) struct CasePageProblemsView {
     pub alarms: Option<i64>,
     /// Critical vulnerabilities (`vulnerabilities.read`).
     pub critical_vulns: Option<i64>,
-    /// Open failing checks (`compliance.read`).
+    /// Open failing checks (`compliance.read`); null too when
+    /// `compliance_stale`.
     pub failing_checks: Option<i64>,
+    /// In compliance reach but no report in the last day: the failing
+    /// count is unknown, not 0 (as on the Hosts list).
+    pub compliance_stale: bool,
 }
 
 /// A host of a visible item.
@@ -102,8 +106,13 @@ pub(crate) struct CasePageHostView {
 pub(crate) struct CasePagePeopleView {
     /// The first 20 by name, with `access.read` only; null otherwise.
     pub names: Option<Vec<CaseUserView>>,
-    /// How many people can see it.
+    /// How many people can see it, as far as the caller may know.
     pub total: i64,
+    /// True exactly when the caller reads cases on every host, so `total`
+    /// is everyone ("N"); otherwise it may leave out people who see the
+    /// case through hosts out of reach ("at least N"). It does not depend on
+    /// this case's hidden items.
+    pub complete: bool,
 }
 
 /// What the viewer may do here.
@@ -159,6 +168,7 @@ fn host_view(h: CaseHost) -> CasePageHostView {
             alarms: h.problems.alarms,
             critical_vulns: h.problems.critical_vulns,
             failing_checks: h.problems.failing_checks,
+            compliance_stale: h.problems.compliance_stale,
         },
     }
 }
@@ -201,6 +211,7 @@ impl CasePageSummaryView {
             people: CasePagePeopleView {
                 names: names.then(|| s.people.names.into_iter().map(user_view).collect()),
                 total: s.people.total,
+                complete: s.people.complete,
             },
             can,
         }

@@ -8,13 +8,14 @@ use chrono::Utc;
 use common::groups::{bind, group_role, person};
 use platform_store::{
     Client,
+    case_list::{CaseQuery, CaseSort, CaseStatus, case_list},
     case_summary::{CasePageSummary, case_summary, case_visible_to},
     console_read::AgentScope,
     host_list::HostScopes,
 };
 
-const ANN: &str = "00000000-0000-4000-8000-0000000000a1"; // creator
-const BOB: &str = "00000000-0000-4000-8000-0000000000b2"; // assignee
+const ANN: &str = "00000000-0000-4000-8000-0000000000a1"; // creator, cases.read on Db
+const BOB: &str = "00000000-0000-4000-8000-0000000000b2"; // assignee, no role
 const CAT: &str = "00000000-0000-4000-8000-0000000000c3"; // cases.read on Web
 const DAN: &str = "00000000-0000-4000-8000-0000000000d4"; // cases.read everywhere
 const EVE: &str = "00000000-0000-4000-8000-0000000000e5"; // cases.read on Db
@@ -81,6 +82,7 @@ async fn fixture(c: &Client) -> Fx {
     .await
     .unwrap();
     for (user, role) in [
+        (ANN, "db_cases"),
         (CAT, "web_cases"),
         (DAN, "everywhere"),
         (EVE, "db_cases"),
@@ -140,14 +142,15 @@ async fn case_summary_stays_inside_the_scope() {
     assert_eq!(hosts(&s), [A1]);
     assert_eq!(s.hosts[0].hostname.as_deref(), Some("web-01"));
     assert_eq!(s.hosts[0].os_id.as_deref(), Some("debian"));
-    // Eve reaches the case only through db-02, which Cat cannot see.
-    assert_eq!(names(&s), ["ann", "bob", "cat", "dan"]);
-    assert_eq!(s.people.total, 4);
+    // Eve reaches the case only through db-02, which Cat cannot see; Ann
+    // is its opener and reads cases somewhere; Bob reads none.
+    assert_eq!(names(&s), ["ann", "cat", "dan"]);
+    assert_eq!(s.people.total, 3);
 
     let s = get(&c, &every_kind(&GLOBAL), DAN).await.unwrap();
     assert_eq!((s.case.items, s.case.pending_items), (3, 2));
     assert_eq!(hosts(&s), [A2, A1], "by host name");
-    assert_eq!(names(&s), ["ann", "bob", "cat", "dan", "eve"]);
+    assert_eq!(names(&s), ["ann", "cat", "dan", "eve"]);
 
     // Outside the case's reach it reads as absent; its people still see it.
     let nowhere = AgentScope::AssetGroups(vec![]);
@@ -219,8 +222,8 @@ async fn people_are_at_most_twenty_with_the_total() {
     }
     let s = get(&c, &every_kind(&GLOBAL), DAN).await.unwrap();
     assert_eq!(s.people.names.len(), 20);
-    assert_eq!(s.people.total, 30, "ann, bob, cat, dan, eve and 25 more");
-    assert_eq!(&names(&s)[..5], ["ann", "bob", "cat", "dan", "eve"]);
+    assert_eq!(s.people.total, 29, "ann, cat, dan, eve and 25 more");
+    assert_eq!(&names(&s)[..5], ["ann", "cat", "dan", "eve", "zz00"]);
     db.drop().await;
 }
 
@@ -271,8 +274,188 @@ async fn a_hostless_case_is_seen_by_all_hosts_readers_only() {
         .await
         .unwrap();
     let s = get(&c, &every_kind(&GLOBAL), DAN).await.unwrap();
-    assert_eq!(names(&s), ["ann", "bob", "dan"]);
+    assert_eq!(names(&s), ["ann", "dan"]);
     assert!(s.hosts.is_empty());
     assert!(get(&c, &every_kind(&fx.web), CAT).await.is_none());
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_stale_host_has_no_failing_count() {
+    let (db, c) = common::migrated().await;
+    fixture(&c).await;
+    c.execute(
+        "UPDATE agents SET last_seen_at = now() - interval '2 days' WHERE agent_id = $1",
+        &[&A1],
+    )
+    .await
+    .unwrap();
+    let s = get(&c, &every_kind(&GLOBAL), DAN).await.unwrap();
+    let (db_host, web) = (&s.hosts[0].problems, &s.hosts[1].problems);
+    assert_eq!((web.failing_checks, web.compliance_stale), (None, true));
+    assert_eq!(web.alarms, Some(2), "the other kinds stay");
+    assert_eq!(
+        (db_host.failing_checks, db_host.compliance_stale),
+        (Some(0), false)
+    );
+    // Without compliance.read it is neither stale nor counted.
+    let no_compliance = HostScopes {
+        compliance: None,
+        ..every_kind(&GLOBAL)
+    };
+    let s = get(&c, &no_compliance, DAN).await.unwrap();
+    let web = &s.hosts[1].problems;
+    assert_eq!((web.failing_checks, web.compliance_stale), (None, false));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn people_are_complete_only_for_an_all_hosts_reader() {
+    let (db, c) = common::migrated().await;
+    let fx = fixture(&c).await;
+    assert!(
+        get(&c, &every_kind(&GLOBAL), DAN)
+            .await
+            .unwrap()
+            .people
+            .complete
+    );
+    // With a hidden item (db-02's) and without one: never complete when
+    // scoped, so the flag reveals nothing about this case.
+    assert!(
+        !get(&c, &every_kind(&fx.web), CAT)
+            .await
+            .unwrap()
+            .people
+            .complete
+    );
+    c.execute("DELETE FROM case_items WHERE agent_id = $1", &[&A2])
+        .await
+        .unwrap();
+    assert!(
+        !get(&c, &every_kind(&fx.web), CAT)
+            .await
+            .unwrap()
+            .people
+            .complete
+    );
+    assert!(
+        get(&c, &every_kind(&GLOBAL), DAN)
+            .await
+            .unwrap()
+            .people
+            .complete
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn the_opener_and_assignee_need_cases_read_and_an_enabled_account() {
+    let (db, c) = common::migrated().await;
+    fixture(&c).await;
+    bind(&c, BOB, "hosts_only").await;
+    let s = get(&c, &every_kind(&GLOBAL), DAN).await.unwrap();
+    assert!(!names(&s).contains(&"bob"), "hosts.read is not cases.read");
+    c.execute(
+        "UPDATE console_users SET enabled = false, disabled_at = now() WHERE user_id = $1::text::uuid",
+        &[&ANN],
+    )
+    .await
+    .unwrap();
+    let s = get(&c, &every_kind(&GLOBAL), DAN).await.unwrap();
+    assert_eq!(names(&s), ["cat", "dan", "eve"]);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn an_administrator_sees_every_case() {
+    let (db, c) = common::migrated().await;
+    let fx = fixture(&c).await;
+    const IVY: &str = "00000000-0000-4000-8000-0000000000a9";
+    person(&c, IVY, "ivy", true).await;
+    bind(&c, IVY, "admin").await;
+    let s = get(&c, &every_kind(&fx.web), CAT).await.unwrap();
+    assert_eq!(names(&s), ["ann", "cat", "dan", "ivy"]);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn an_imported_host_in_a_group_reaches_nobody_through_it() {
+    let (db, c) = common::migrated().await;
+    fixture(&c).await;
+    const A3: &str = "import.old-03";
+    const JOE: &str = "00000000-0000-4000-8000-0000000000aa";
+    c.batch_execute(&format!(
+        "INSERT INTO agents (agent_id, status, enrolled_at, hostname) VALUES ('{A3}', 'imported', now(), 'old-03');
+         INSERT INTO case_items (item_id, case_id, kind, ref, agent_id, added_by_user_id, added_at)
+         VALUES (gen_random_uuid(), '{CASE}', 'host', '{A3}', '{A3}', '{ANN}', now());"
+    ))
+    .await
+    .unwrap();
+    let imported = common::manual_group(&c, "Imported", &[A3]).await;
+    group_role(&c, "imp_cases", &imported).await;
+    c.execute(
+        "INSERT INTO console_role_permissions (role_id, permission_id) VALUES ('imp_cases', 'cases.read')",
+        &[],
+    )
+    .await
+    .unwrap();
+    person(&c, JOE, "joe", true).await;
+    bind(&c, JOE, "imp_cases").await;
+    let s = get(&c, &every_kind(&GLOBAL), DAN).await.unwrap();
+    assert!(
+        hosts(&s).contains(&A3),
+        "a global reader sees the imported host"
+    );
+    assert!(
+        !names(&s).contains(&"joe"),
+        "a scoped role never reaches an imported host"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn the_tiles_equal_the_cases_list_row() {
+    let (db, c) = common::migrated().await;
+    let fx = fixture(&c).await;
+    for round in 0..2 {
+        if round == 1 {
+            // Every item has its outcome: ready on both sides.
+            c.execute(
+                "UPDATE case_items SET outcome = 'false_positive', outcome_note = 'n' WHERE kind <> 'software'",
+                &[],
+            )
+            .await
+            .unwrap();
+        }
+        for (scope, user) in [(&fx.web, CAT), (&GLOBAL, DAN)] {
+            let q = CaseQuery {
+                q: None,
+                status: CaseStatus::All,
+                severity: None,
+                assignee: None,
+                contains: None,
+                host: None,
+                group: None,
+                updated: None,
+                sort: CaseSort::Number,
+                descending: false,
+                offset: 0,
+                limit: 50,
+            };
+            let page = case_list(&c, &q, scope, user, Utc::now()).await.unwrap();
+            let row = &page.rows[0];
+            let s = get(&c, &every_kind(scope), user).await.unwrap();
+            let k = row.kinds;
+            assert_eq!(
+                s.case.items,
+                k.alarms + k.findings + k.vulnerabilities + k.hosts + k.software
+            );
+            assert_eq!(s.case.pending_items, row.takes_outcome - row.with_outcome);
+            assert_eq!(i64::try_from(s.hosts.len()).unwrap(), row.host_count);
+            assert_eq!(i64::from(s.ready), page.summary.ready_to_close);
+            assert_eq!(s.ready, round == 1);
+        }
+    }
     db.drop().await;
 }

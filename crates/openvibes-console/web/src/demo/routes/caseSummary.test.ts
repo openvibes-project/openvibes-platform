@@ -15,8 +15,8 @@ type Summary = {
   header: { case_id: string; status: string };
   tiles: { items: number; need_outcome: number; hosts: number; open_for_seconds: number; ready: boolean };
   details: { title: string; resolution_note: string | null };
-  hosts: { agent_id: string; hostname: string | null; problems: Record<string, number | null> }[];
-  people: { names: { username: string }[] | null; total: number };
+  hosts: { agent_id: string; hostname: string | null; problems: { alarms: number | null; critical_vulns: number | null; failing_checks: number | null; compliance_stale: boolean } }[];
+  people: { names: { username: string }[] | null; total: number; complete: boolean };
   can: Record<string, boolean>;
 };
 type Row = { case_id: string; title: string; host_count: number; takes_outcome: number; with_outcome: number; kinds: Record<string, number> };
@@ -68,13 +68,54 @@ describe("demo case summary", () => {
     for (const row of seen) {
       const { body } = await summary(lee, row.case_id);
       expect(body.hosts.every((h) => inPilot(h.agent_id))).toBe(true);
-      for (const h of body.hosts) expect(Object.values(h.problems).every((n) => typeof n === "number")).toBe(true);
+      for (const h of body.hosts) {
+        expect([h.problems.alarms, h.problems.critical_vulns].every((n) => typeof n === "number")).toBe(true);
+        expect(h.problems.compliance_stale ? h.problems.failing_checks === null : typeof h.problems.failing_checks === "number").toBe(true);
+      }
       // Team lead holds access.read: names shown.
       expect(body.people.names).not.toBeNull();
     }
     const sam = server("analyst");
     const first = (await rows(sam))[0] as Row;
     expect((await summary(sam, first.case_id)).body.people.names).toBeNull();
+  });
+});
+
+describe("demo case people and stale hosts", () => {
+  it("is complete only for a reader of every host, with or without hidden items", async () => {
+    const admin = server();
+    const all = await rows(admin);
+    for (const row of all) expect((await summary(admin, row.case_id)).body.people.complete).toBe(true);
+    const lee = server("team_lead");
+    // A case of the lead's own, on a pilot host only: nothing hidden from them.
+    expect((await call(lee, "POST", "/api/v1/cases", { title: "Pilot only", items: [{ kind: "host", ref: "agent-00001" }] })).status).toBe(201);
+    const seen = await rows(lee);
+    const total = (title: string) => all.find((r) => r.title === title)?.kinds;
+    const count = (k: Record<string, number> | undefined) => Object.values(k ?? {}).reduce((a, b) => a + b, 0);
+    // The seed has cases the lead sees whole and one with an item hidden from them.
+    const hidden = seen.filter((r) => count(total(r.title)) > count(r.kinds));
+    expect(hidden.length).toBeGreaterThan(0);
+    expect(hidden.length).toBeLessThan(seen.length);
+    for (const row of seen) expect((await summary(lee, row.case_id)).body.people.complete).toBe(false);
+  });
+
+  it("names only people who hold cases.read", async () => {
+    const s = server();
+    const readers = new Set(s.data.access.users.filter((u) => u.user_id === "u-admin" || ["u-sam", "u-vic", "u-wen", "u-lee"].includes(u.user_id)).map((u) => u.username));
+    for (const row of await rows(s)) {
+      for (const n of (await summary(s, row.case_id)).body.people.names ?? []) expect(readers.has(n.username), n.username).toBe(true);
+    }
+  });
+
+  it("gives a host with no compliance report in a day no failing count", async () => {
+    const s = server();
+    const row = (await rows(s)).find((r) => r.host_count > 0) as Row;
+    const first = (await summary(s, row.case_id)).body.hosts[0];
+    const agent = s.data.agents.find((a) => a.id === first?.agent_id);
+    if (!agent) throw new Error("no host");
+    agent.last_seen_at = new Date(NOW - 2 * 86_400_000).toISOString();
+    const h = (await summary(s, row.case_id)).body.hosts.find((x) => x.agent_id === agent.id);
+    expect(h?.problems).toMatchObject({ failing_checks: null, compliance_stale: true });
   });
 });
 

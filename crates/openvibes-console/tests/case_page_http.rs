@@ -90,10 +90,11 @@ async fn the_page_has_header_tiles_details_hosts_people_and_can() {
     assert_eq!(b["hosts"][1]["os"]["id"], "debian");
     assert_eq!(
         b["hosts"][1]["problems"],
-        json!({"alarms": 2, "critical_vulns": 0, "failing_checks": 0})
+        json!({"alarms": 2, "critical_vulns": 0, "failing_checks": 0, "compliance_stale": false})
     );
     assert_eq!(b["people"]["names"][0]["username"], "alice");
     assert_eq!(b["people"]["total"], 1);
+    assert_eq!(b["people"]["complete"], true);
     assert_eq!(
         b["can"],
         json!({"edit": true, "assign": true, "close": true, "reopen": false, "note": true,
@@ -145,11 +146,15 @@ async fn case_summary_stays_inside_a_team_members_reach() {
     assert_eq!(b["hosts"][0]["agent_id"], W1);
     assert_eq!(
         b["hosts"][0]["problems"],
-        json!({"alarms": null, "critical_vulns": null, "failing_checks": null}),
+        json!({"alarms": null, "critical_vulns": null, "failing_checks": null, "compliance_stale": false}),
         "no alarms, vulnerabilities or compliance read"
     );
     assert_eq!(b["people"]["names"], Value::Null, "no access.read");
     assert_eq!(b["people"]["total"], 2, "alice and bea");
+    assert_eq!(
+        b["people"]["complete"], false,
+        "a scoped reader may not know everyone"
+    );
     assert_eq!(
         b["can"],
         json!({"edit": false, "assign": false, "close": false, "reopen": false, "note": false,

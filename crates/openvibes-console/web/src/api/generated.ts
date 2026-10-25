@@ -3573,11 +3573,18 @@ export interface components {
         };
         /** @description Who can see the case. */
         CasePagePeopleView: {
+            /**
+             * @description True exactly when the caller reads cases on every host, so `total`
+             *     is everyone ("N"); otherwise it may leave out people who see the
+             *     case through hosts out of reach ("at least N"). It does not depend on
+             *     this case's hidden items.
+             */
+            complete: boolean;
             /** @description The first 20 by name, with `access.read` only; null otherwise. */
             names?: components["schemas"]["CaseUserView"][] | null;
             /**
              * Format: int64
-             * @description How many people can see it.
+             * @description How many people can see it, as far as the caller may know.
              */
             total: number;
         };
@@ -3592,13 +3599,19 @@ export interface components {
              */
             alarms?: number | null;
             /**
+             * @description In compliance reach but no report in the last day: the failing
+             *     count is unknown, not 0 (as on the Hosts list).
+             */
+            compliance_stale: boolean;
+            /**
              * Format: int64
              * @description Critical vulnerabilities (`vulnerabilities.read`).
              */
             critical_vulns?: number | null;
             /**
              * Format: int64
-             * @description Open failing checks (`compliance.read`).
+             * @description Open failing checks (`compliance.read`); null too when
+             *     `compliance_stale`.
              */
             failing_checks?: number | null;
         };

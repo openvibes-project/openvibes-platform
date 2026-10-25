@@ -139,18 +139,22 @@ item) is:
 - `details`: title, severity, status, opener, created, updated, closed,
   the pre-5d `resolution` and the `resolution_note`;
 - `hosts`: each visible item's host by name, `{agent_id, hostname, os,
-  problems: {alarms, critical_vulns, failing_checks}}`; each count is
-  null unless the caller's `alarms.read`, `vulnerabilities.read` or
-  `compliance.read` reaches that host (open agent alarms,
-  `host_listed_critical` and `open_failing`, as the Hosts list counts
-  them);
-- `people`: who can see it, `{names, total}`: the opener, the assignee and
-  enabled people with a live binding to a role holding `cases.read` on all
-  hosts (or Administrator) or on a group holding a host of one of the
-  case's host-bound items in the caller's reach. A person who sees the
-  case only through a host the caller cannot see is neither named nor
-  counted. `names` (at most 20, by name) only with `access.read`, else
-  null;
+  problems: {alarms, critical_vulns, failing_checks, compliance_stale}}`;
+  each count is null unless the caller's `alarms.read`,
+  `vulnerabilities.read` or `compliance.read` reaches that host (open
+  agent alarms, `host_listed_critical` and `open_failing`, as the Hosts
+  list counts them). A host in compliance reach with no report in the
+  last day has `compliance_stale` true and a null failing count, since 0
+  would be wrong;
+- `people`: who can see it, `{names, total, complete}`: enabled people
+  with a live binding to Administrator or to a role holding `cases.read`
+  on all hosts, on a group holding a host of one of the case's host-bound
+  items in the caller's reach, or (the opener and the assignee) at any
+  scope. A person who sees the case only through a host the caller cannot
+  see is neither named nor counted, so `complete` is true exactly when
+  the caller reads cases on every host (the page shows "N", otherwise "at
+  least N"); it never depends on the case's hidden items. `names` (at most
+  20, by name) only with `access.read`, else null;
 - `can`: `edit` and `note` (`cases.write`, and the case visible in the
   scope `cases.write` and `cases.read` share), `assign` (that and
   `cases.assign`), `close` / `outcome` (that, not closed), `reopen` (that,

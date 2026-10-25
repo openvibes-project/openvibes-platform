@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use crate::{
     Client, StoreError,
     case_people::people,
-    check_list_sql::open_failing,
+    check_list_sql::{WINDOW, open_failing},
     console_cases::{
         CASE_COLUMNS, CASE_JOINS, CaseSummary, UserRef, blocking_item, case_counts, case_visible,
         is_uuid, item_in_scope, summary_from_row,
@@ -28,8 +28,12 @@ pub struct CaseHostProblems {
     /// Critical vulnerabilities as the Hosts list counts them
     /// (`vulnerabilities.read`).
     pub critical_vulns: Option<i64>,
-    /// Open failing checks (`compliance.read`, `check_list_sql::open_failing`).
+    /// Open failing checks (`compliance.read`, `check_list_sql::open_failing`);
+    /// also `None` when [`Self::compliance_stale`].
     pub failing_checks: Option<i64>,
+    /// In compliance reach but no report in the last day (as the Hosts list
+    /// and the host page say): the failing count is unknown, not 0.
+    pub compliance_stale: bool,
 }
 
 /// A host of a visible item.
@@ -57,8 +61,13 @@ pub struct CaseHost {
 pub struct CasePeople {
     /// By display name.
     pub names: Vec<UserRef>,
-    /// All of them.
+    /// All of them the viewer may know of.
     pub total: i64,
+    /// True exactly when the viewer's `cases.read` reaches every host, so
+    /// `total` is everyone; otherwise it may leave out people who see the
+    /// case only through hosts out of reach ("at least N"). It never depends
+    /// on this case's hidden items, which it would otherwise reveal.
+    pub complete: bool,
 }
 
 /// People a summary names.
@@ -159,6 +168,9 @@ async fn hosts(
         agent_visibility("a.agent_id", "$8", "$9"),
     );
     let (failing, in_scope) = (open_failing("$10"), item_in_scope("i"));
+    // The Hosts list's rule (host_list_sql::base): in compliance reach with
+    // no report in the last day, findings are not current and 0 would be wrong.
+    let stale = format!("({compliance} AND COALESCE(s.seen < $10::timestamptz - {WINDOW}, true))");
     let (cases, a, v, f) = (
         pair(Some(scopes.hosts)),
         pair(scopes.alarms),
@@ -174,10 +186,11 @@ async fn hosts(
                                                AND al.state = 'open' AND al.source = 'agent') END,
                     CASE WHEN {vulns} THEN COALESCE((SELECT v.critical FROM host_listed_critical v
                                                       WHERE v.agent_id = a.agent_id), 0)::bigint END,
-                    CASE WHEN {compliance} THEN (SELECT count(*) FROM current_findings f
+                    CASE WHEN {compliance} AND NOT {stale} THEN (SELECT count(*) FROM current_findings f
                         LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
-                        WHERE f.agent_id = a.agent_id AND {failing}) END
-                 FROM agents a
+                        WHERE f.agent_id = a.agent_id AND {failing}) END,
+                    {stale}
+                 FROM agents a CROSS JOIN LATERAL (SELECT agent_seen_at(a.agent_id, a.last_seen_at) AS seen) s
                  WHERE a.agent_id IN (SELECT i.agent_id FROM case_items i
                                       WHERE i.case_id = $3::text::uuid AND {in_scope})
                  ORDER BY a.hostname, a.agent_id"
@@ -200,6 +213,7 @@ async fn hosts(
                 alarms: r.get(6),
                 critical_vulns: r.get(7),
                 failing_checks: r.get(8),
+                compliance_stale: r.get(9),
             },
         })
         .collect())
