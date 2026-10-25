@@ -181,8 +181,8 @@ fn replace_imports_then_asks() {
         "✓ added · Lime Lab OpenVIBES CA",
         "✓ added · matches the certificate",
     );
-    assert_eq!(body(&app), replace_body(&added, 2, "", &keys("Replace")));
-    assert!(calls(&app).is_empty(), "nothing is sent before Replace");
+    assert_eq!(body(&app), replace_body(&added, 2, GREEN, &keys("Replace")));
+    assert!(calls(&app).is_empty(), "nothing is sent before Yes");
 
     app.host.answers.borrow_mut().extend([
         Ok(IMPORTED.into()),
@@ -194,18 +194,22 @@ fn replace_imports_then_asks() {
         )),
     ]);
     app.key(Key::Enter);
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    assert_eq!(calls(&app), ["ca-import"]);
-    // The helper has the key: no copy here.
-    assert!(app.install.imported.as_ref().unwrap().key.is_none());
-    let text = screen(&app);
-    assert!(text.contains(GREEN.trim_start()), "{text}");
-    assert!(text.contains("│ Replace it? agents keep working"), "{text}");
+    assert!(
+        screen(&app).contains("│ Replace it? agents keep working"),
+        "{}",
+        screen(&app)
+    );
+    assert!(calls(&app).is_empty(), "the question comes first");
     app.key(Key::Enter);
     type_text(&mut app, "pw");
     app.key(Key::Enter);
+    // One run, one password: the import, then the replacement.
     assert_eq!(calls(&app), ["ca-import", "ca-replace"]);
+    assert!(app.install.imported.as_ref().unwrap().key.is_none());
+    match &app.run.as_ref().unwrap().work.calls[0] {
+        crate::tui::run::Call::CaImport(bundle) => assert!(bundle.0.is_empty()),
+        call => panic!("{call:?}"),
+    }
     let text = body(&app);
     for want in [
         "    ✓ Trusting the old and the new one",
@@ -219,47 +223,87 @@ fn replace_imports_then_asks() {
 }
 
 #[test]
-fn no_then_replace_asks_without_importing_again() {
+fn no_stages_nothing() {
     let mut app = both_added();
-    app.host.answers.borrow_mut().push_back(Ok(IMPORTED.into()));
-    app.key(Key::Enter);
-    type_text(&mut app, "pw");
     app.key(Key::Enter);
     app.key(Key::Right);
     app.key(Key::Enter);
-    assert!(app.question.is_none());
+    assert!(app.question.is_none() && app.asking.is_none());
     let added = rows(
         "✓ added · Lime Lab OpenVIBES CA",
         "✓ added · matches the certificate",
     );
     assert_eq!(body(&app), replace_body(&added, 2, GREEN, &keys("Replace")));
-    app.key(Key::Enter);
-    assert!(app.question.is_some());
-    assert_eq!(calls(&app), ["ca-import"]);
+    assert!(calls(&app).is_empty(), "no ca-import");
+    app.key(Key::Esc);
+    assert!(app.install.imported.is_none());
+    assert!(calls(&app).is_empty());
 }
 
 #[test]
 fn replace_refuses_another_root() {
+    // This host's root is another: said at once, nothing to Replace.
+    let mut app = imported();
+    let other = platform_pki::generate_root(chrono::Utc::now()).unwrap();
+    put(&app, "/etc/openvibes/pki/root.crt", &other.cert_pem);
+    app.open_page(Page::Certificates);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    paste(&mut app, 0, Which::Cert, &format!("{OURS}{ISSUING}{ROOT}"));
+    app.key(Key::Enter);
+    paste(&mut app, 1, Which::Key, OURS_KEY);
+    app.key(Key::Enter);
+    let text = body(&app);
+    assert!(
+        text.contains(
+            "    ✗ Replace: under Lime Lab Root CA, not OpenVIBES Root CA, so agents would\n    \
+             stop trusting this host. Ask for one under the same root."
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("Enter  Replace"), "{text}");
+    app.key(Key::Enter);
+    assert!(app.question.is_none() && app.asking.is_none());
+    assert!(calls(&app).is_empty());
+}
+
+#[test]
+fn replace_refuses_the_intermediate_in_use() {
+    let mut app = replace_page();
+    paste(&mut app, 0, Which::Cert, &format!("{OLD}{ISSUING}{ROOT}"));
+    app.key(Key::Enter);
+    paste(&mut app, 1, Which::Key, OLD_KEY);
+    app.key(Key::Enter);
+    let text = body(&app);
+    assert!(
+        text.contains("    ✗ This is the intermediate already in use: ask your PKI for a new one."),
+        "{text}"
+    );
+    app.key(Key::Enter);
+    assert!(app.question.is_none());
+    assert!(calls(&app).is_empty());
+}
+
+#[test]
+fn a_helper_refusal_runs_no_ca_replace() {
     let mut app = both_added();
     let why = "openvibes-admin helper: Replace: under Other Root CA, not Lime Lab Root CA, so \
                agents would stop trusting this host. Ask for one under the same root.";
     let refused = Err(HostError::Failed(why.into()));
     app.host.answers.borrow_mut().push_back(refused);
     app.key(Key::Enter);
+    app.key(Key::Enter);
     type_text(&mut app, "pw");
     app.key(Key::Enter);
-    assert!(app.question.is_none());
+    assert_eq!(calls(&app), ["ca-import"]);
     let text = body(&app);
     assert!(
         text.contains(
-            "    ✗ Replace: under Other Root CA, not Lime Lab Root CA, so agents would stop\n    \
-             trusting this host. Ask for one under the same root."
+            "    ✗ Replace: under Other Root CA, not Lime Lab Root CA, so agents would stop"
         ),
         "{text}"
     );
-    assert_eq!(calls(&app), ["ca-import"]);
-    // Replace again asks the helper again: nothing was kept.
-    assert!(app.install.import_done.is_none());
+    assert!(app.install.imported.as_ref().unwrap().key.is_none());
 }
 
 #[test]

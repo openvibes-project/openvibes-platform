@@ -59,8 +59,10 @@ pub struct Replace {
     /// The root key file picked, and its check.
     key: Option<(PathBuf, Result<(), String>)>,
     pick: Option<Browse>,
-    /// Imported: the days agents take to move over.
+    /// Imported: the days agents take to move over, and the intermediate
+    /// in use (its bundle).
     days: i64,
+    in_use: Option<String>,
 }
 
 impl Replace {
@@ -95,21 +97,29 @@ fn line(t: &crate::tui::ui::theme::Theme, said: Result<&str, &str>) -> Vec<Line<
     lines
 }
 
+/// The line under the rows, owned (an import's is made from its chain).
+fn owned(said: Option<Result<&str, &str>>) -> Option<Result<String, String>> {
+    said.map(|r| r.map(str::to_owned).map_err(str::to_owned))
+}
+
 fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) {
     let t = &app.theme;
     let all = &STEPS[usize::from(!app.maint.certs.quick())..];
-    // One helper call does every step. Done: the lines it printed; until
-    // then, or when it failed, the progress file it writes as it goes
-    // (as the model download's, `parts_run::model_progress`).
-    let said = match &run.states[0] {
+    // One helper call does every step (an import's `ca-import` comes
+    // first). Done: the lines it printed; until then, or when it failed,
+    // the progress file it writes as it goes (as the model download's,
+    // `parts_run::model_progress`), once it started.
+    let last = run.states.len() - 1;
+    let said = match &run.states[last] {
         Some(StepState::Done(out)) => out.clone(),
+        _ if last > 0 && !matches!(run.states[0], Some(StepState::Done(_))) => String::new(),
         _ => std::fs::read_to_string(app.root.join(PROGRESS)).unwrap_or_default(),
     };
     let finished = all
         .iter()
         .take_while(|step| said.lines().any(|l| l == **step))
         .count();
-    let failed = run.states[0].as_ref().filter(|s| !s.finished());
+    let failed = run.states.iter().flatten().find(|s| !s.finished());
     let running = Some(finished).filter(|i| run.running() && *i < all.len());
     let titles: Vec<String> = all
         .iter()
@@ -215,7 +225,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             _ => None,
         };
         let note = "Needs the root key kept offline at install. Nothing changes until Replace.";
-        (note, rows, enter, said)
+        (note, rows, enter, owned(said))
     } else {
         let signed = match &install.signed {
             Some(who) => vec![
@@ -263,7 +273,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             _ => None,
         };
         let note = "The same steps as at install. Nothing changes until Replace.";
-        (note, rows, enter, said)
+        (note, rows, enter, owned(said))
     };
     // While the request is made or the certificates are kept.
     let busy = app
@@ -285,7 +295,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     if let Some(said) = said {
         // The list's last line is the blank one before it.
         lines.pop();
-        lines.extend(line(t, said));
+        lines.extend(line(t, said.as_deref().map_err(String::as_str)));
     }
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -420,6 +430,9 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn replace_yes(&mut self) {
+        if self.maint.certs.imported() {
+            return self.import_yes();
+        }
         let key = match &self.maint.replace.key {
             Some((path, Ok(()))) if self.maint.certs.quick() => Some(path.display().to_string()),
             _ => None,
@@ -432,11 +445,13 @@ impl<H: Host> App<H> {
     /// A run ended: your own CA's certificate kept goes to Replace; a
     /// replacement says when agents have moved over.
     pub(super) fn replace_ended(&mut self) {
-        if self.import_ended_here() {
-            return;
-        }
         let quick = self.maint.certs.quick();
         let Some(run) = self.run.as_mut() else { return };
+        if matches!(run.work.kind, Kind::Replace { .. }) {
+            // Sent or not, no copy of an imported key stays.
+            run.work.wipe();
+            self.install.forget_key();
+        }
         match &mut run.work.kind {
             Kind::Ca { .. }
                 if self.nav.screen == Screen::Maint(Page::Replace) && self.install.accepted() =>
@@ -444,7 +459,7 @@ impl<H: Host> App<H> {
                 self.nav.row = 3;
             }
             Kind::Replace { done } => {
-                let Some(StepState::Done(out)) = &run.states[0] else {
+                let Some(StepState::Done(out)) = run.states.last().and_then(Option::as_ref) else {
                     return;
                 };
                 // `done<TAB>NEW UNTIL<TAB>PREVIOUS UNTIL`; the old one is

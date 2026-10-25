@@ -70,7 +70,7 @@ impl Install {
     }
 
     /// The decrypted key and what the bar asks are forgotten.
-    pub(super) fn forget_key(&mut self) {
+    pub(in crate::tui) fn forget_key(&mut self) {
         if let Some(imported) = &mut self.imported {
             imported.key = None;
         }
@@ -114,6 +114,29 @@ impl Install {
             .both_added()
             .then(|| " · matches the certificate".to_owned());
         vec![added("Certificate", name), added("Private key", key)]
+    }
+
+    /// `ca-import` with the chain and the plain key on stdin, once both
+    /// are added.
+    pub(in crate::tui) fn import_call(&self) -> Option<Call> {
+        let Some(Imported {
+            chain,
+            key: Some((key, _)),
+            ..
+        }) = &self.imported
+        else {
+            return None;
+        };
+        // Ours, the CAs above it, the root, then the one key.
+        let mut bundle = Zeroizing::new(String::new());
+        let certs = std::iter::once(&chain.ours)
+            .chain(&chain.middle)
+            .chain([&chain.root]);
+        for pem in certs.chain([&**key]) {
+            bundle.push_str(pem.trim_end());
+            bundle.push('\n');
+        }
+        Some(Call::CaImport(Bundle(bundle)))
     }
 
     /// The help line on step 3's rows 3 to 5.
@@ -239,30 +262,10 @@ impl<H: Host> App<H> {
         if self.install.import_done.is_some() {
             return self.next_step(2);
         }
-        self.send_import();
-    }
-
-    /// The chain and the plain key go to `ca-import` on stdin.
-    pub(in crate::tui) fn send_import(&mut self) {
-        let Some(Imported {
-            chain,
-            key: Some((key, _)),
-            ..
-        }) = &self.install.imported
-        else {
+        let Some(call) = self.install.import_call() else {
             return;
         };
-        // Ours, the CAs above it, the root, then the one key.
-        let mut bundle = Zeroizing::new(String::new());
-        let certs = std::iter::once(&chain.ours)
-            .chain(&chain.middle)
-            .chain([&chain.root]);
-        for pem in certs.chain([&**key]) {
-            bundle.push_str(pem.trim_end());
-            bundle.push('\n');
-        }
         self.install.error = None;
-        let call = Call::CaImport(Bundle(bundle));
         self.begin(Work::new(Kind::Ca { accept: true }, vec![call]), 0);
     }
 

@@ -9,7 +9,7 @@ use platform_host::runner::Runner;
 
 use super::super::{
     Ctx,
-    import::{import_message, same_root},
+    import::{IN_USE, import_message, same_root},
     pki::INT,
     pki_import::{CHAIN, stage_import},
 };
@@ -22,14 +22,23 @@ pub(super) fn stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     same_root(ctx, &ctx.read(&format!("{INT}/root.crt"))?)
 }
 
+/// `CHAIN` as it was before a swap, kept until it is final; empty when
+/// there was none (a `CHAIN` in use is never empty).
+pub(super) const CHAIN_OLD: &str = "/etc/openvibes/pki/chain.crt.old";
+
 /// The CAs between the new intermediate and `root`, nearest first: the
-/// path and the key are checked again.
+/// path and the key are checked again, and the one in use (`previous`) is
+/// not new.
 pub(super) fn chain<R: Runner>(
     ctx: &Ctx<R>,
     root: &str,
-    new: &str,
-    key: &str,
+    (new, key): (&str, &str),
+    previous: &str,
 ) -> Result<String, String> {
+    let der = |pem: &str| platform_pki::certificates(pem).ok();
+    if der(new).is_some() && der(new) == der(previous) {
+        return Err(IN_USE.into());
+    }
     let middle = ctx.read(&format!("{INT}/chain.crt"))?;
     let now = Utc::now();
     let chain = platform_pki::check_chain(&format!("{new}{middle}{root}"), now)
@@ -37,6 +46,26 @@ pub(super) fn chain<R: Runner>(
     same_root(ctx, &chain.root)?;
     platform_pki::check_key(&chain, key, now).map_err(|e| import_message(&e, &chain.name, None))?;
     Ok(chain.middle.concat())
+}
+
+/// Copies `CHAIN` to `CHAIN_OLD` (empty without one); a `CHAIN` that
+/// cannot be read stops the swap before anything changes.
+pub(super) fn back_up_chain<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+    let old = match fs::read(ctx.path(CHAIN)) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        read => read.map_err(|error| format!("{CHAIN}: {error}"))?,
+    };
+    ctx.put(CHAIN_OLD, &old, None, 0o644)
+}
+
+/// Puts `CHAIN` back from `CHAIN_OLD`: removed when there was none.
+pub(super) fn restore_chain<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+    let old = fs::read(ctx.path(CHAIN_OLD)).map_err(|error| format!("{CHAIN_OLD}: {error}"))?;
+    if old.is_empty() {
+        remove(ctx, CHAIN)
+    } else {
+        ctx.put(CHAIN, &old, None, 0o644)
+    }
 }
 
 /// An empty `CHAIN` stood for "no CAs between": it goes.

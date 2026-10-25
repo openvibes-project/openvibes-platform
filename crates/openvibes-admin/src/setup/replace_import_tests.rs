@@ -2,7 +2,7 @@
 //! the same PKI, staged by `ca-import`, under the same root; `chain.crt`
 //! moves with the bundle and the key.
 
-use super::{PREVIOUS, PREVIOUS_UNTIL, replace, tests::certificates};
+use super::{FAIL_RENAME, PREVIOUS, PREVIOUS_UNTIL, replace, tests::certificates};
 use crate::setup::{
     fake::{Fake, plan},
     import::IMPORT_DIR,
@@ -27,6 +27,17 @@ const OLD_KEY: &str = fixture!("ours-rsa.key");
 /// Directly under the root: a two-level PKI, no `chain.crt`.
 const STRICT: &str = fixture!("strict.crt");
 const STRICT_KEY: &str = fixture!("strict.key");
+
+const CHAIN_OLD: &str = "/etc/openvibes/pki/chain.crt.old";
+/// No swap file is left: not the `.new` ones, not the chain's copy.
+const SWAP_FILES: [&str; 6] = [
+    PREVIOUS,
+    PREVIOUS_UNTIL,
+    "/etc/openvibes/pki/intermediate.crt.new",
+    "/var/lib/openvibes-ingest/intermediate.key.new",
+    "/etc/openvibes/pki/chain.crt.new",
+    CHAIN_OLD,
+];
 
 fn import_plan() -> Plan {
     Plan {
@@ -132,13 +143,8 @@ fn swap_moves_the_chain_and_rolls_back() {
     assert!(replace(&fake.ctx(&import_plan()), None).is_err());
     assert_eq!(fake.text(INTERMEDIATE), OLD);
     assert_eq!(fake.text(CHAIN), ISSUING);
-    for left in [
-        PREVIOUS.to_owned(),
-        PREVIOUS_UNTIL.to_owned(),
-        format!("{CHAIN}.new"),
-        format!("{INTERMEDIATE}.new"),
-    ] {
-        assert!(!exists(&fake, &left), "{left}");
+    for left in SWAP_FILES {
+        assert!(!exists(&fake, left), "{left}");
     }
 
     // Tried again with the way clear: no chain.crt any more.
@@ -148,7 +154,91 @@ fn swap_moves_the_chain_and_rolls_back() {
     assert_eq!(certificates(&fake.text(INTERMEDIATE)).len(), 2);
     assert_eq!(fake.text(INTERMEDIATE_KEY), STRICT_KEY);
     assert!(!exists(&fake, CHAIN));
-    assert!(!exists(&fake, &format!("{CHAIN}.new")));
+    for left in [CHAIN_OLD, "/etc/openvibes/pki/chain.crt.new"] {
+        assert!(!exists(&fake, left), "{left}");
+    }
+}
+
+/// The old pair, its chain `chain` (`None`: no chain.crt) and no swap file.
+fn unchanged(fake: &Fake, chain: Option<&str>) {
+    assert_eq!(fake.text(INTERMEDIATE), OLD);
+    assert_eq!(fake.text(INTERMEDIATE_KEY), OLD_KEY);
+    match chain {
+        Some(chain) => assert_eq!(fake.text(CHAIN), chain),
+        None => assert!(!exists(fake, CHAIN)),
+    }
+    for left in SWAP_FILES {
+        assert!(!exists(fake, left), "{left}");
+    }
+}
+
+#[test]
+fn a_failed_chain_rename_puts_the_old_pair_back() {
+    let fake = imported("replace-import-chain-fails", OURS, OURS_KEY, ISSUING);
+    let old_chain = format!("{ISSUING}{ISSUING}");
+    fake.file(CHAIN, &old_chain);
+    FAIL_RENAME.set(Some(CHAIN));
+    let error = replace(&fake.ctx(&import_plan()), None).unwrap_err();
+    FAIL_RENAME.set(None);
+    assert!(error.contains("refused by the test"), "{error}");
+    unchanged(&fake, Some(&old_chain));
+}
+
+#[test]
+fn a_rollback_removes_a_chain_that_was_not_there() {
+    let fake = imported("replace-import-no-old-chain", OURS, OURS_KEY, ISSUING);
+    fake.remove(CHAIN);
+    FAIL_RENAME.set(Some(INTERMEDIATE_KEY));
+    assert!(replace(&fake.ctx(&import_plan()), None).is_err());
+    FAIL_RENAME.set(None);
+    unchanged(&fake, None);
+}
+
+#[test]
+fn an_unreadable_chain_stops_the_swap_first() {
+    let fake = imported("replace-import-chain-unreadable", OURS, OURS_KEY, ISSUING);
+    fake.remove(CHAIN);
+    std::fs::create_dir(fake.root.join(&CHAIN[1..])).unwrap();
+    let error = replace(&fake.ctx(&import_plan()), None).unwrap_err();
+    assert!(error.starts_with(CHAIN), "{error}");
+    assert_eq!(fake.text(INTERMEDIATE), OLD);
+    assert!(!exists(&fake, PREVIOUS));
+}
+
+#[test]
+fn an_undo_puts_the_chain_back_from_its_copy() {
+    // Both faults: the old bundle went back, the old chain did not.
+    for (copy, chain) in [
+        (format!("{ISSUING}{ISSUING}"), Some(())),
+        (String::new(), None),
+    ] {
+        let fake = imported("replace-import-undo", OURS, OURS_KEY, ISSUING);
+        fake.file(PREVIOUS, OLD);
+        fake.file(
+            PREVIOUS_UNTIL,
+            &format!("{}\n", chrono::Utc::now().to_rfc3339()),
+        );
+        fake.file("/var/lib/openvibes-ingest/intermediate.key.new", OURS_KEY);
+        fake.file("/etc/openvibes/pki/chain.crt.new", ISSUING);
+        fake.file(CHAIN_OLD, &copy);
+        assert_eq!(
+            super::finish_interrupted(&fake.ctx(&import_plan())),
+            Ok(Some(
+                "removed an interrupted replacement that never took effect".into()
+            ))
+        );
+        unchanged(&fake, chain.map(|()| copy.as_str()));
+    }
+}
+
+#[test]
+fn replace_refuses_the_intermediate_in_use() {
+    let fake = imported("replace-import-in-use", OLD, OLD_KEY, ISSUING);
+    assert_eq!(
+        replace(&fake.ctx(&import_plan()), None).unwrap_err(),
+        "This is the intermediate already in use: ask your PKI for a new one."
+    );
+    unchanged(&fake, Some(ISSUING));
 }
 
 #[test]

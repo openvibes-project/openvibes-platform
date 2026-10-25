@@ -175,19 +175,27 @@ pub(super) fn same_root<R: Runner>(ctx: &Ctx<R>, root: &str) -> Result<(), Strin
     if der(&installed).is_some() && der(&installed) == der(root) {
         return Ok(());
     }
+    Err(another_root(root, &installed))
+}
+
+/// The refusal of a chain whose root is not the one installed.
+pub fn another_root(root: &str, installed: &str) -> String {
     let cn = |pem: &str| {
         platform_pki::issuer_common_name(pem)
             .ok()
             .flatten()
             .unwrap_or_else(|| "an unnamed CA".into())
     };
-    Err(format!(
+    format!(
         "Replace: under {}, not {}, so agents would stop trusting this host. Ask for one under \
          the same root.",
         cn(root),
-        cn(&installed)
-    ))
+        cn(installed)
+    )
 }
+
+/// Replace with the intermediate already in use.
+pub const IN_USE: &str = "This is the intermediate already in use: ask your PKI for a new one.";
 
 /// Removes every staged file, the key first.
 fn clear<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {

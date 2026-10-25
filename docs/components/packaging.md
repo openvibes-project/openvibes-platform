@@ -545,7 +545,10 @@ ca-replace`, password-gated like the other Setup verbs):
    install (`ca-import`): it must be under the same root, since agents
    trust only that one ("Replace: under NEW, not INSTALLED, so agents
    would stop trusting this host. Ask for one under the same root."), and
-   `ca-replace` checks the whole path up to this host's `root.crt` again.
+   not the one already in use. The TUI checks both before asking; only
+   Yes sends the next one to `ca-import` and runs `ca-replace`, in one run,
+   which checks the whole path up to this host's `root.crt` again. No
+   stages nothing.
    A refusal changes nothing. While an earlier replacement's old
    intermediate is still trusted, Replace refuses and says until when.
 2. **Trust both:** the new intermediate is recorded (`ca
@@ -559,7 +562,8 @@ ca-replace`, password-gated like the other Setup verbs):
    `/etc/openvibes/pki/previous-until` (now + `client_certificate_days` + 1
    day; both 0644 root, read by the TUI). An imported one's CAs above it
    replace `/etc/openvibes/pki/chain.crt` in the same swap (removed for a
-   two-level PKI); the previous chain is not kept, since the server
+   two-level PKI); the previous chain is kept as `chain.crt.old` only
+   until the swap is final, to put it back on failure, since the server
    certificates are issued again at once.
 3. **Issue:** the ingest, distribution and console certificates are issued
    again from the new intermediate and the services restart. If that

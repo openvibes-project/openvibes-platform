@@ -19,11 +19,7 @@ use platform_pki::Issuer;
 
 use super::{
     Ctx, begin, host_ctx,
-    pki::{
-        self, ADMIN_OWNER, INT, INTERMEDIATE, INTERMEDIATE_KEY, ROOT_CERT, ROOT_DIR, STAGE,
-        certificates_apply,
-    },
-    pki_import::CHAIN,
+    pki::{self, ADMIN_OWNER, INT, INTERMEDIATE, ROOT_CERT, ROOT_DIR, STAGE, certificates_apply},
     plan::{CaMode, Component},
     request::{REQUEST_DIR, message},
     setup_guard,
@@ -135,73 +131,6 @@ fn quick<R: Runner>(ctx: &Ctx<R>, root: &str, root_key: Option<&str>) -> Result<
     fs::remove_dir_all(ctx.path(ROOT_DIR)).map_err(|error| format!("{ROOT_DIR}: {error}"))
 }
 
-/// Puts the new key and the bundle (new + old) in place of the old pair;
-/// with `chain` (Import), also the CAs above the new one as `CHAIN`, empty
-/// for none.
-///
-/// `previous.*` go first: while they are there Replace refuses and they
-/// name the old one. The new files are then written whole beside their
-/// targets (`.new`), so only renames are left to change what is in use:
-/// the bundle first, then the chain, the key last. A failure at any point
-/// puts back what was renamed and removes the rest, so the old pair (and
-/// its chain) is in use again. A crash part way is ended by
-/// `finish_interrupted`. An empty `CHAIN` goes once the key is in place.
-fn swap<R: Runner>(
-    ctx: &Ctx<R>,
-    previous: &str,
-    until: &str,
-    (new, new_key): (&str, &str),
-    chain: Option<&str>,
-) -> Result<(), String> {
-    let old = ctx.read(INTERMEDIATE)?;
-    let old_chain = ctx.read(CHAIN).ok();
-    let (bundle, key, chain_new) = staged();
-    let mut restored = true;
-    let result = (|| {
-        ctx.put(PREVIOUS, previous.as_bytes(), None, 0o644)?;
-        ctx.put(PREVIOUS_UNTIL, format!("{until}\n").as_bytes(), None, 0o644)?;
-        let ingest = Some(("openvibes-ingest", "openvibes-ingest"));
-        ctx.put(&key, new_key.as_bytes(), ingest, 0o600)?;
-        ctx.put(&bundle, format!("{new}{previous}").as_bytes(), None, 0o644)?;
-        if let Some(chain) = chain {
-            ctx.put(&chain_new, chain.as_bytes(), None, 0o644)?;
-        }
-        rename(ctx, &bundle, INTERMEDIATE)?;
-        let rest = match chain {
-            Some(_) => rename(ctx, &chain_new, CHAIN),
-            None => Ok(()),
-        }
-        .and_then(|()| rename(ctx, &key, INTERMEDIATE_KEY));
-        rest.map_err(|error| {
-            // The bundle first: if it cannot go back, the chain stays the
-            // new one's too.
-            let back = ctx
-                .put(INTERMEDIATE, old.as_bytes(), None, 0o644)
-                .and_then(|()| match (chain, &old_chain) {
-                    (None, _) => Ok(()),
-                    (Some(_), Some(text)) => ctx.put(CHAIN, text.as_bytes(), None, 0o644),
-                    (Some(_), None) => import::remove(ctx, CHAIN),
-                });
-            match back {
-                Ok(()) => error,
-                Err(again) => {
-                    restored = false;
-                    format!("{error}; the old intermediate could not be put back: {again}")
-                }
-            }
-        })
-    })();
-    // When the old bundle is not back, all stay: `finish_interrupted`
-    // renames the key next time.
-    if result.is_err() && restored {
-        for path in [bundle.as_str(), &key, &chain_new, PREVIOUS, PREVIOUS_UNTIL] {
-            let _ = fs::remove_file(ctx.path(path));
-        }
-    }
-    result?;
-    import::drop_empty_chain(ctx)
-}
-
 /// The new intermediate staged and checked, then trusted beside the old
 /// one; the server certificates are reissued from it. Prints each finished
 /// stage; the new one's expiry and the old one's end, `YYYY-MM-DD<TAB>…`.
@@ -224,7 +153,7 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
     let new_key = ctx.read(&key)?;
     Issuer::load(&new, &new_key).map_err(|e| message(&e))?;
     let chain = match ctx.plan.ca {
-        CaMode::Import => Some(import::chain(ctx, &root, &new, &new_key)?),
+        CaMode::Import => Some(import::chain(ctx, &root, (&new, &new_key), &previous)?),
         _ => {
             platform_pki::check_intermediate(&new, &root, Utc::now()).map_err(|e| message(&e))?;
             None
@@ -265,7 +194,12 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
     pki::remove_stage(ctx)?;
     finished(ctx, &mut done, "Trusting the old and the new one");
 
-    certificates_apply(ctx).map_err(|error| {
+    let applied = certificates_apply(ctx);
+    // An empty `CHAIN` meant none; the swap is final, so best effort.
+    if chain.is_some() {
+        let _ = import::drop_empty_chain(ctx);
+    }
+    applied.map_err(|error| {
         format!(
             "The intermediate was replaced, but the server certificates were not reissued: run \
              Repair in Maintenance (they stay valid until then). {error}"
@@ -333,66 +267,6 @@ pub(crate) fn drop_previous<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, S
         }
     }
     Ok(Some("previous intermediate no longer trusted".into()))
-}
-
-/// Renames `from` over `to`, then syncs the folder so the rename itself
-/// survives a crash. Only the rename decides: once it is done the file is
-/// in place, and a failed sync must not make the caller undo half a swap.
-fn rename<R: Runner>(ctx: &Ctx<R>, from: &str, to: &str) -> Result<(), String> {
-    let target = ctx.path(to);
-    fs::rename(ctx.path(from), &target).map_err(|error| format!("{to}: {error}"))?;
-    if let Some(dir) = target.parent() {
-        let _ = fs::File::open(dir).and_then(|dir| dir.sync_all());
-    }
-    Ok(())
-}
-
-/// Where `swap` writes the new bundle, key and chain before renaming them.
-fn staged() -> (String, String, String) {
-    (
-        format!("{INTERMEDIATE}.new"),
-        format!("{INTERMEDIATE_KEY}.new"),
-        format!("{CHAIN}.new"),
-    )
-}
-
-/// Ends a Replace a crash cut short inside `swap` (callers hold the Setup
-/// lock): the bundle renamed but not the key is finished; a swap whose
-/// bundle still has the old one first is undone, so Replace does not
-/// refuse for a month. The line saying which, when it did.
-pub(crate) fn finish_interrupted<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {
-    let (bundle, key, chain) = staged();
-    let left = ctx.exists(&bundle) || ctx.exists(&key) || ctx.exists(&chain);
-    if !left && !ctx.exists(PREVIOUS) {
-        return Ok(None);
-    }
-    let first = platform_pki::first_certificate(&ctx.read(INTERMEDIATE)?)
-        .map_err(|error| format!("{INTERMEDIATE}: {error:?}"))?;
-    if ctx
-        .read(&key)
-        .is_ok_and(|pem| Issuer::load(&first, &pem).is_ok())
-    {
-        if ctx.exists(&chain) {
-            rename(ctx, &chain, CHAIN)?;
-        }
-        rename(ctx, &key, INTERMEDIATE_KEY)?;
-        import::drop_empty_chain(ctx)?;
-        return Ok(Some("finished an interrupted replacement".into()));
-    }
-    // previous.crt is the old first certificate: still first, nothing took.
-    let never = match ctx.read(PREVIOUS) {
-        Ok(previous) => previous == first,
-        Err(_) => left,
-    };
-    if !never {
-        return Ok(None);
-    }
-    for path in [bundle.as_str(), &key, &chain, PREVIOUS, PREVIOUS_UNTIL] {
-        import::remove(ctx, path)?;
-    }
-    Ok(Some(
-        "removed an interrupted replacement that never took effect".into(),
-    ))
 }
 
 /// Why another replacement waits (the TUI says it before asking).
@@ -463,6 +337,13 @@ pub fn ca_replace(root_key: Option<&Path>) -> ExitCode {
 
 #[path = "replace_import.rs"]
 mod import;
+
+#[path = "replace_swap.rs"]
+mod swap;
+#[cfg(test)]
+use swap::FAIL_RENAME;
+pub(crate) use swap::finish_interrupted;
+use swap::swap;
 
 #[cfg(test)]
 #[path = "replace_tests.rs"]
