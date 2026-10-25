@@ -251,3 +251,29 @@ fn a_final_check_that_says_nothing_or_fails_is_not_repaired() {
         );
     }
 }
+
+#[test]
+fn a_long_problem_wraps_under_its_column_at_80_columns() {
+    let lost = "certificates\tfailed\t/etc/openvibes/pki/chain.crt is missing: restore it from \
+                a backup (agents could not reach the root)\n";
+    let mut app = set_up(vec![Ok(lost.to_owned())]);
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    let at = text.find("▲ Server certificates").unwrap();
+    let lines: Vec<&str> = text[at..].lines().map(str::trim_end).take(3).collect();
+    assert!(
+        lines[0].ends_with("/etc/openvibes/pki/chain.crt is missing:"),
+        "{text}"
+    );
+    assert_eq!(
+        lines[1].trim_start(),
+        "restore it from a backup (agents could not…",
+        "{text}"
+    );
+    // Under the detail's column, not the title's (the first line starts at ▲).
+    let column = |line: &str, word: &str| line[..line.find(word).unwrap()].chars().count();
+    assert_eq!(column(lines[1], "restore"), column(lines[0], "/etc") + 4, "{text}");
+    assert!(lines[2].contains("other steps in order"), "{text}");
+}

@@ -18,6 +18,7 @@ use super::{Page, failure};
 use crate::tui::{
     app::{App, Key},
     run::{Call, Kind, Run, Work},
+    status::wrap,
     ui::{
         bar::{Bar, SPINNER},
         frame,
@@ -276,12 +277,19 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
                 } else {
                     state.detail()
                 };
-                lines.push(Line::from(vec![
-                    Span::raw("    "),
-                    Span::styled("▲ ", t.yellow()),
-                    Span::raw(format!("{:<22} ", step.title())),
-                    Span::styled(detail.to_owned(), t.dim()),
-                ]));
+                // Wrapped under its own column, as the ✗ view wraps.
+                for (i, part) in wrap(detail, 47, 2).into_iter().enumerate() {
+                    let (mark, title) = match i {
+                        0 => ("▲ ", step.title()),
+                        _ => ("  ", ""),
+                    };
+                    lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(mark, t.yellow()),
+                        Span::raw(format!("{title:<22} ")),
+                        Span::styled(part, t.dim()),
+                    ]));
+                }
             }
             let fine = steps.len() - n;
             let others = if n == 0 { "steps" } else { "other steps" };
