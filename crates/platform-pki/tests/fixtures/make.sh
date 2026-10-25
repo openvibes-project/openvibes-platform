@@ -101,6 +101,12 @@ echo "extendedKeyUsage = clientAuth" >> "$TMP/ext"
 ec client-only.key P-256
 sign client-only.crt client-only.key "Lime Lab Client Only CA" root.crt root.key
 
+# Extended key usage anyExtendedKeyUsage: it allows serverAuth.
+ca_ext ""
+echo "extendedKeyUsage = anyExtendedKeyUsage" >> "$TMP/ext"
+ec any-usage.key P-256
+sign any-usage.crt any-usage.key "Lime Lab Any Usage CA" root.crt root.key
+
 rsa weak.key 1024
 ec p521.key P-521
 rsa big.key 6144
@@ -148,6 +154,7 @@ strict.crt/.key          Lime Lab Strict CA, under the root, path length 0
 under-strict.crt/.key    Lime Lab Under Strict CA, a CA signed by strict
 twin-dc.crt/.key         Lime Lab Twin DC CA, under issuing, subject with two DC attributes
 client-only.crt/.key     Lime Lab Client Only CA, under the root, extended key usage clientAuth only
+any-usage.crt/.key       Lime Lab Any Usage CA, under the root, extended key usage anyExtendedKeyUsage
 leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
 weak.key                 RSA 1024
 p521.key                 EC P-521

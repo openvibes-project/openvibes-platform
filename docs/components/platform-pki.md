@@ -103,7 +103,11 @@ its `README` lists them.
   present (`NotCa(cn)`); a missing issuer, the root included, is
   `Missing(issuer cn)`. A CA with path length N may have at most N CAs
   below it, ours included (`NoCaBelow(cn)`); ours may carry any path
-  length. Every certificate on the path must have started by `now`
+  length. Ours and every CA between it and the root must have no
+  extended key usage or one naming serverAuth (`NotForServers(cn,
+  KeyUsage)`, the self-check's refusal, made here before any key);
+  anyExtendedKeyUsage alone is refused too, as agents (rustls-webpki)
+  refuse it. Every certificate on the path must have started by `now`
   (`NotYetValid(latest not_before)`) and stay valid 90 days more
   (`Expiring(earliest not_after)`). `Chain` holds ours, `middle`
   (nearest first), `root`, our common name, the names above ours (root

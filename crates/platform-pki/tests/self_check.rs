@@ -14,6 +14,8 @@ const OURS_EC: &str = include_str!("fixtures/ours-ec.crt");
 const OURS_EC_KEY: &str = include_str!("fixtures/ours-ec.pkcs8.pem");
 const CLIENT_ONLY: &str = include_str!("fixtures/client-only.crt");
 const CLIENT_ONLY_KEY: &str = include_str!("fixtures/client-only.key");
+const ANY_USAGE: &str = include_str!("fixtures/any-usage.crt");
+const ANY_USAGE_KEY: &str = include_str!("fixtures/any-usage.key");
 
 fn now() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2027, 6, 1, 0, 0, 0).unwrap()
@@ -26,6 +28,26 @@ fn a_ca_for_client_certificates_only_is_refused_with_its_chain() {
         ServerLimit::KeyUsage,
     ));
     assert_eq!(check_chain(&format!("{CLIENT_ONLY}{ROOT}"), now()), refused);
+}
+
+/// Agents (rustls-webpki) do not read anyExtendedKeyUsage as serverAuth:
+/// such a CA is refused at once, as the self-check refuses it.
+#[test]
+fn any_extended_key_usage_alone_is_refused_as_agents_refuse_it() {
+    let refused = ChainError::NotForServers("Lime Lab Any Usage CA".into(), ServerLimit::KeyUsage);
+    assert_eq!(
+        check_chain(&format!("{ANY_USAGE}{ROOT}"), now()),
+        Err(refused.clone())
+    );
+    let chain = Chain {
+        ours: ANY_USAGE.into(),
+        middle: Vec::new(),
+        root: ROOT.into(),
+        name: "Lime Lab Any Usage CA".into(),
+        path: vec!["Lime Lab Root CA".into()],
+        not_after: platform_pki::not_after(ANY_USAGE).unwrap(),
+    };
+    assert_eq!(check_key(&chain, ANY_USAGE_KEY, &[], now()), Err(refused));
 }
 
 #[test]

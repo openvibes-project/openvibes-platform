@@ -122,10 +122,11 @@ fn can_sign(cert: &X509Certificate<'_>) -> bool {
     ca && usage
 }
 
-/// No extended key usage, or one that allows serverAuth (or any usage).
+/// No extended key usage, or one naming serverAuth. Agents (rustls-webpki)
+/// do not take anyExtendedKeyUsage for it, so neither does this.
 fn for_servers(cert: &X509Certificate<'_>) -> bool {
     match cert.extended_key_usage() {
-        Ok(Some(eku)) => eku.value.server_auth || eku.value.any,
+        Ok(Some(eku)) => eku.value.server_auth,
         Ok(None) => true,
         Err(_) => false,
     }
