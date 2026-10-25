@@ -27,12 +27,16 @@ use crate::{
 const WIDE: usize = 68;
 const TALL: usize = 4;
 
+/// What the paste box's check says: the lines that say it is right, or
+/// why it is not; `None` while the box is empty.
+pub type Said = Option<Result<Vec<String>, String>>;
+
 impl Install {
     /// The check of `text` as `which`: the lines that say it is right, or
     /// why it is not; `None` while the box is empty. Made again only when
     /// the text or what it is checked against changes, not on every draw
     /// (each check of a key copies it).
-    pub(super) fn check(&self, which: Which, text: &str) -> Option<Result<Vec<String>, String>> {
+    pub(super) fn check(&self, which: Which, text: &str) -> Said {
         let seen = self.seen(which, text);
         if let Some((at, said)) = &*self.checked.borrow()
             && *at == seen
@@ -58,7 +62,7 @@ impl Install {
         ))
     }
 
-    fn check_now(&self, which: Which, text: &str) -> Option<Result<Vec<String>, String>> {
+    fn check_now(&self, which: Which, text: &str) -> Said {
         if text.trim().is_empty() {
             return None;
         }

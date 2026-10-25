@@ -139,7 +139,7 @@ pub struct Install {
     /// The helper's `imported` line once it kept the import: Next goes on.
     pub import_done: Option<String>,
     /// The paste box's last check, and a hash of what it depended on.
-    pub checked: std::cell::RefCell<Option<(u64, Option<Result<Vec<String>, String>>)>>,
+    pub checked: std::cell::RefCell<Option<(u64, paste::Said)>>,
     /// Keyed per run: no fixed digest of a key is kept.
     pub check_hasher: std::hash::RandomState,
 }
