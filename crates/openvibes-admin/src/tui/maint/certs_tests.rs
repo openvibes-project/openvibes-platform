@@ -1,13 +1,14 @@
 //! Maintenance › Certificates and Names, key by key (maint2b.py #18-23).
 
 use chrono::{Duration, Utc};
-use platform_pki::{Issuer, generate_root, intermediate_request, sign_intermediate};
+use platform_pki::{Issuer, KeyAndCert, generate_root, intermediate_request, sign_intermediate};
 
 use crate::{
     setup::plan::plan_of,
     tui::{
         app::{App, Key},
         maint::Page,
+        nav::Screen,
         script_host::{PLAN, SetupHost, app_taken, screen, type_text},
     },
 };
@@ -16,13 +17,18 @@ const INGEST: &str = "/etc/openvibes/tls/ingest.crt";
 const INTERMEDIATE: &str = "/etc/openvibes/pki/intermediate.crt";
 
 /// The plan of mockup #19: limebox.lan and one other name.
-fn plan_text() -> String {
+pub(super) fn plan_text() -> String {
     PLAN.replace("platform.example.com", "limebox.lan")
         .replace("sans = []", "sans = [\"192.168.1.10\"]")
 }
 
 /// Real certificates, the server one issued `age` days ago.
-fn pems(age: i64) -> Vec<(&'static str, String)> {
+pub(super) fn pems(age: i64) -> Vec<(&'static str, String)> {
+    pki(age).0
+}
+
+/// As `pems`, and the root that signed the intermediate.
+pub(super) fn pki(age: i64) -> (Vec<(&'static str, String)>, KeyAndCert) {
     let then = Utc::now() - Duration::days(age);
     let root = generate_root(then).unwrap();
     let (csr, key) = intermediate_request().unwrap();
@@ -30,17 +36,17 @@ fn pems(age: i64) -> Vec<(&'static str, String)> {
     let issuer = Issuer::load(&int, &key).unwrap();
     let names = ["limebox.lan".to_owned(), "192.168.1.10".to_owned()];
     let server = issuer.issue_server(&names, then).unwrap();
-    vec![(INGEST, server.cert_pem), (INTERMEDIATE, int)]
+    (vec![(INGEST, server.cert_pem), (INTERMEDIATE, int)], root)
 }
 
-fn app_with(pems: Vec<(&'static str, String)>) -> App<SetupHost> {
+pub(super) fn app_with(pems: Vec<(&'static str, String)>) -> App<SetupHost> {
     let mut app = app_taken(true, vec![], vec![]);
     app.host.plan = plan_text();
     app.host.pems = pems;
     app
 }
 
-/// Certificates, then Names (Enter on its only entry).
+/// Certificates, then Names (Enter on its first entry).
 fn names_page() -> App<SetupHost> {
     let mut app = app_with(pems(10));
     app.open_page(Page::Certificates);
@@ -64,37 +70,6 @@ fn setup_plan_call(app: &App<SetupHost>) -> String {
         .map(|c| c.0.clone())
         .find(|c| c.starts_with("setup-plan"))
         .expect("a setup-plan call")
-}
-
-#[test]
-fn the_report_shows_dates_names_and_signer() {
-    let mut app = app_with(pems(10));
-    app.open_page(Page::Certificates);
-    let end = (Utc::now() + Duration::days(80)).format("%Y-%m-%d");
-    let text = screen(&app);
-    for want in [
-        "Maintenance › Certificates",
-        &format!("valid until {end} · 80 days left"),
-        "limebox.lan, 192.168.1.10",
-        "signed by OpenVIBES Root CA · until",
-        "Root key",
-        "offline: needed only to replace the intermediate",
-        "add or remove a name agents use",
-        "Names agents and browsers may use to reach this host.",
-        "Enter  Names",
-    ] {
-        assert!(text.contains(want), "missing {want:?} in\n{text}");
-    }
-    // A certificate that ended says so.
-    let mut app = app_with(pems(100));
-    app.open_page(Page::Certificates);
-    let text = screen(&app);
-    assert!(text.contains("expired 20"), "{text}");
-    // A careful CA's root is not here: no Root key row.
-    let mut app = app_with(pems(10));
-    app.host.plan = plan_text().replace("quick", "careful");
-    app.open_page(Page::Certificates);
-    assert!(!screen(&app).contains("Root key"));
 }
 
 #[test]
@@ -394,9 +369,7 @@ fn back_from_names_reads_the_report_again() {
     // New certificates were issued meanwhile (here: an older one).
     app.host.pems = pems(100);
     app.key(Key::Esc);
-    assert_eq!(
-        app.nav.screen,
-        crate::tui::nav::Screen::Maint(Page::Certificates)
-    );
-    assert!(screen(&app).contains("expired 20"), "{}", screen(&app));
+    assert_eq!(app.nav.screen, Screen::Maint(Page::Certificates));
+    let text = screen(&app);
+    assert!(text.contains("renewal is failing · see Status"), "{text}");
 }

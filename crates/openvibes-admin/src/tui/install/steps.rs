@@ -117,7 +117,7 @@ pub(super) fn typed_or(text: &str, typing: bool, empty: &str) -> String {
 }
 
 /// `path` with the home folder as `~`.
-pub(super) fn tilde(path: &str, home: Option<&str>) -> String {
+pub(in crate::tui) fn tilde(path: &str, home: Option<&str>) -> String {
     match home.and_then(|h| path.strip_prefix(&format!("{h}/"))) {
         Some(rest) => format!("~/{rest}"),
         None => path.to_owned(),

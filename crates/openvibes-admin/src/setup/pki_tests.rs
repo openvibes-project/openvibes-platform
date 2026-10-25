@@ -186,9 +186,12 @@ fn careful_ca_waits_for_the_signed_certificate() {
 }
 
 /// A fake with the intermediate and an `issue-server` that writes the files.
-fn issuing(test: &str) -> Fake {
+pub(super) fn issuing(test: &str) -> Fake {
     let fake = Fake::new(test);
-    fake.file("/etc/openvibes/pki/intermediate.crt", "INTERMEDIATE\n");
+    fake.file(
+        "/etc/openvibes/pki/intermediate.crt",
+        &certificate(&["ca"], 400),
+    );
     fake.file(
         "/var/lib/openvibes-ingest/intermediate.key",
         "INTERMEDIATE KEY",
@@ -244,9 +247,10 @@ fn certificates_are_issued_for_every_name_and_installed() {
         ]
     );
     assert_eq!(fake.text("/etc/openvibes/tls/ingest.crt"), "ingest CERT\n");
+    // As issued: `ca issue-server` writes the leaf, then its issuer.
     assert_eq!(
         fake.text("/etc/openvibes/tls/console-chain.pem"),
-        "console CERT\nINTERMEDIATE\n"
+        "console CERT\n"
     );
     use std::os::unix::fs::PermissionsExt;
     let mode = |abs: &str| {
@@ -259,7 +263,7 @@ fn certificates_are_issued_for_every_name_and_installed() {
     assert_eq!(mode("/etc/openvibes/tls/ingest.key"), 0o600);
     assert_eq!(mode("/etc/openvibes/tls/distribution.key"), 0o600);
     assert_eq!(mode("/etc/openvibes/tls/console-key.pem"), 0o640);
-    assert_eq!(mode("/etc/openvibes/tls/console-chain.pem"), 0o640);
+    assert_eq!(mode("/etc/openvibes/tls/console-chain.pem"), 0o644);
     assert!(!fake.root.join("run/openvibes-ca").exists());
     assert_eq!(
         fake.text("/etc/openvibes/tls/setup-names"),
@@ -310,7 +314,7 @@ fn repair_never_makes_a_new_ca() {
 }
 
 /// A real certificate for NAMES, valid until NOW + DAYS.
-fn certificate(names: &[&str], days_left: i64) -> String {
+pub(super) fn certificate(names: &[&str], days_left: i64) -> String {
     let now = chrono::Utc::now();
     let root = platform_pki::generate_root(now - chrono::Duration::days(100)).unwrap();
     let issuer = platform_pki::Issuer::load(&root.cert_pem, &root.key_pem).unwrap();
@@ -320,7 +324,7 @@ fn certificate(names: &[&str], days_left: i64) -> String {
     issuer.issue_server(&names, issued).unwrap().cert_pem
 }
 
-fn installed_certificates(fake: &Fake, names: &[&str], days_left: i64) {
+pub(super) fn installed_certificates(fake: &Fake, names: &[&str], days_left: i64) {
     for (cert, key) in [
         ("ingest.crt", "ingest.key"),
         ("distribution.crt", "distribution.key"),
@@ -350,35 +354,6 @@ fn certificates_for_other_names_are_issued_again() {
         Step::Certificates,
     );
     assert_eq!(state, StepState::Todo);
-}
-
-#[test]
-fn a_certificate_about_to_expire_is_reported_not_replaced() {
-    let fake = Fake::new("certs-expiring");
-    installed_certificates(
-        &fake,
-        &["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"],
-        5,
-    );
-    let state = run_step(
-        &fake.ctx(&plan(&[Ingest, Distribution])),
-        Step::Certificates,
-    );
-    assert!(matches!(state, StepState::Failed(_)), "{state:?}");
-    assert!(state.detail().contains("renew"), "{state:?}");
-    assert!(!fake.called(&["/usr/sbin/runuser"]), "nothing re-issued");
-    installed_certificates(
-        &fake,
-        &["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"],
-        60,
-    );
-    assert!(matches!(
-        run_step(
-            &fake.ctx(&plan(&[Ingest, Distribution])),
-            Step::Certificates
-        ),
-        StepState::Done(_)
-    ));
 }
 
 #[test]

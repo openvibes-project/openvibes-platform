@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenVIBES server certificate renewal
+Documentation=https://github.com/openvibes-project/openvibes-platform
+ConditionPathExists=/etc/openvibes/setup.toml
+ConditionPathExists=/etc/openvibes/tls/setup-names
+After=network-online.target
+
+[Service]
+# Root: the step reissues with the intermediate key, writes /etc/openvibes/tls
+# and restarts the TLS services. No ProtectSystem: it writes /etc and /run.
+Type=oneshot
+User=root
+ExecStart=/usr/bin/openvibes-admin helper certificates-renew
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes

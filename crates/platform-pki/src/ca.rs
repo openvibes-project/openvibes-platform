@@ -128,6 +128,18 @@ pub fn sign_intermediate(
         .map_err(|_| PkiError::Generation)
 }
 
+/// The first `CERTIFICATE` block of a PEM bundle, as its own PEM. An issuer
+/// file may hold the new intermediate followed by the old one.
+pub fn first_certificate(pem: &str) -> Result<String, PkiError> {
+    const BEGIN: &str = "-----BEGIN CERTIFICATE-----";
+    const END: &str = "-----END CERTIFICATE-----";
+    let start = pem.find(BEGIN).ok_or(PkiError::InvalidPem)?;
+    let len = pem[start..].find(END).ok_or(PkiError::InvalidPem)? + END.len();
+    let block = &pem[start..start + len];
+    parse_x509_pem(block.as_bytes()).map_err(|_| PkiError::InvalidPem)?;
+    Ok(format!("{}\n", block.replace("\r\n", "\n")))
+}
+
 pub(crate) fn der_of(pem: &str) -> Result<Vec<u8>, PkiError> {
     let (_, pem) = parse_x509_pem(pem.as_bytes()).map_err(|_| PkiError::InvalidPem)?;
     Ok(pem.contents)
@@ -147,9 +159,10 @@ pub struct Issuer {
 }
 
 impl Issuer {
-    /// Loads an issuing CA. The key must match the certificate and the
+    /// Loads an issuing CA from the first certificate of `cert_pem`. The key must match the certificate and the
     /// certificate must be a CA.
     pub fn load(cert_pem: &str, key_pem: &str) -> Result<Self, PkiError> {
+        let cert_pem = &first_certificate(cert_pem)?;
         let der = der_of(cert_pem)?;
         let cert = parse(&der)?;
         let is_ca = cert
@@ -377,6 +390,13 @@ pub fn is_ca(cert_pem: &str) -> Result<bool, PkiError> {
     let cert = parse(&der)?;
     let constraints = cert.basic_constraints().map_err(|_| PkiError::InvalidPem)?;
     Ok(constraints.is_some_and(|extension| extension.value.ca))
+}
+
+/// Start of validity of the first certificate.
+pub fn not_before(cert_pem: &str) -> Result<DateTime<Utc>, PkiError> {
+    let der = der_of(cert_pem)?;
+    let seconds = parse(&der)?.validity().not_before.timestamp();
+    DateTime::from_timestamp(seconds, 0).ok_or(PkiError::InvalidPem)
 }
 
 /// End of validity of the first certificate.

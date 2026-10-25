@@ -45,7 +45,11 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 
 ## Interface
 
-- `Issuer::load(cert_pem, key_pem)`: refuses a non-CA certificate (`NotCa`)
+- `first_certificate(pem)`: the first `CERTIFICATE` block of a bundle as PEM
+  (`InvalidPem` if none).
+- `Issuer::load(cert_pem, key_pem)`: issues from the first certificate of a
+  bundle (the new intermediate may precede the old one), so `chain_pem` is
+  leaf plus that certificate only. Refuses a non-CA certificate (`NotCa`)
   and a key that does not belong to it (`KeyMismatch`).
 - `verify_signed_by(cert, issuer_cert)`: signature check (`NotSignedBy`).
 - `check_intermediate(cert, root_cert, now)`: a CA with path length 0 that
@@ -64,6 +68,8 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `sha256_fingerprint(cert)`: SHA-256 of the DER encoding.
 - `is_ca(cert)`: whether the first certificate is a CA (basicConstraints
   CA:TRUE).
+- `not_before(cert)`, `not_after(cert)`: when the first certificate's
+  validity starts and ends.
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,
   `InvalidValidity`, `IssuerExpired`, `InvalidAgentId`, `NotIntermediate`,

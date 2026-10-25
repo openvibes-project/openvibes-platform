@@ -69,7 +69,7 @@ impl Install {
     }
 
     /// The helper kept both certificates of your own CA.
-    pub(super) fn accepted(&self) -> bool {
+    pub(in crate::tui) fn accepted(&self) -> bool {
         matches!(
             self.request,
             Some(crate::setup::request::RequestState::Signed { .. })

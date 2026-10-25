@@ -2,7 +2,7 @@
 //! TUI (admin TUI spec §3): `logs`, `config-read`, `config-write` (through
 //! the RPM's sudoers drop-in), and Setup's `setup-plan`, `setup-status`,
 //! `setup-step`, `update-step`, `remove-step`, `admin-reset`, `shell-open`,
-//! `ca-request`, `ca-accept`, `unit-enable`,
+//! `ca-request`, `ca-accept`, `ca-replace`, `unit-enable`,
 //! `unit-disable` (only with the user's own
 //! sudo rights and password). A closed set of verbs, each its own function;
 //! arguments are checked against the allow-lists before anything else, and
@@ -109,6 +109,10 @@ pub enum HelperCommand {
     /// Gives the console's `admin` a new one-time password, unlocked and
     /// enabled; prints `done<TAB>PASSWORD` (Console sign-in, break-glass).
     AdminReset,
+    /// Renews the server certificates that expire within 30 days (run by
+    /// openvibes-certificates.timer as root); one log line, exit 0 unless
+    /// the renewal failed.
+    CertificatesRenew,
     /// Does nothing and prints `done<TAB>opened`: sudo checks the password
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
@@ -130,6 +134,14 @@ pub enum HelperCommand {
         /// The CA's own self-signed certificate (PEM).
         #[arg(long, allow_hyphen_values = true)]
         root_cert: String,
+    },
+    /// Replaces the intermediate CA, trusting the old one beside it until
+    /// agents have renewed; prints each stage, then
+    /// `done<TAB>EXPIRES<TAB>PREVIOUS_UNTIL`.
+    CaReplace {
+        /// OpenVIBES' own CA: the root key kept at install (absolute).
+        #[arg(long)]
+        root_key: Option<std::path::PathBuf>,
     },
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
@@ -157,10 +169,12 @@ enum Verb {
     RulesApply,
     UpgradeMigrate,
     AgentConfigUpgrade,
+    CertificatesRenew,
     AdminReset,
     ShellOpen,
     CaRequest(Option<std::path::PathBuf>),
     CaAccept(String, String),
+    CaReplace(Option<std::path::PathBuf>),
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, String> {
@@ -239,17 +253,14 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::RulesApply => Verb::RulesApply,
         HelperCommand::UpgradeMigrate => Verb::UpgradeMigrate,
         HelperCommand::AgentConfigUpgrade => Verb::AgentConfigUpgrade,
+        HelperCommand::CertificatesRenew => Verb::CertificatesRenew,
         HelperCommand::AdminReset => Verb::AdminReset,
         HelperCommand::ShellOpen => Verb::ShellOpen,
-        HelperCommand::CaRequest { copy } => {
-            if let Some(copy) = copy.as_ref().filter(|copy| !copy.is_absolute()) {
-                return Err(format!("{}: not an absolute path", copy.display()));
-            }
-            Verb::CaRequest(copy.clone())
-        }
+        HelperCommand::CaRequest { copy } => Verb::CaRequest(absolute(copy)?),
         HelperCommand::CaAccept { cert, root_cert } => {
             Verb::CaAccept(cert.clone(), root_cert.clone())
         }
+        HelperCommand::CaReplace { root_key } => Verb::CaReplace(absolute(root_key)?),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
             true,
@@ -259,6 +270,13 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
             false,
         ),
     })
+}
+
+fn absolute(path: &Option<std::path::PathBuf>) -> Result<Option<std::path::PathBuf>, String> {
+    if let Some(path) = path.as_ref().filter(|path| !path.is_absolute()) {
+        return Err(format!("{}: not an absolute path", path.display()));
+    }
+    Ok(path.clone())
 }
 
 /// The effective uid, from `/proc/self/status` (no `unsafe`).
@@ -349,11 +367,13 @@ pub fn run(command: &HelperCommand) -> ExitCode {
             }
         }
         Verb::RulesApply => crate::setup::rules_apply(),
+        Verb::CertificatesRenew => crate::setup::renew(),
         Verb::UpgradeMigrate => crate::setup::upgrade_migrate(),
         Verb::AgentConfigUpgrade => crate::setup::agent_config_upgrade(),
         Verb::AdminReset => crate::setup::admin_reset::run(),
         Verb::CaRequest(copy) => crate::setup::request::run_request(copy.as_deref()),
         Verb::CaAccept(cert, root) => crate::setup::request::run_accept(&cert, &root),
+        Verb::CaReplace(root_key) => crate::setup::ca_replace(root_key.as_deref()),
         Verb::ShellOpen => {
             println!("done\topened");
             ExitCode::SUCCESS
@@ -422,6 +442,7 @@ fn journal_units(unit: Unit) -> Vec<&'static str> {
             "openvibes-llm-proxy.service",
         ],
         Unit::Maintenance => vec![unit.name(), "openvibes-maintenance.service"],
+        Unit::Certificates => vec![unit.name(), "openvibes-certificates.service"],
         _ => vec![unit.name()],
     }
 }
@@ -459,6 +480,13 @@ mod journal_tests {
             [
                 "openvibes-maintenance.timer",
                 "openvibes-maintenance.service"
+            ]
+        );
+        assert_eq!(
+            super::journal_units(Unit::Certificates),
+            [
+                "openvibes-certificates.timer",
+                "openvibes-certificates.service"
             ]
         );
         assert_eq!(

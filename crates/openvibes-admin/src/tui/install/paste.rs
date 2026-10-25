@@ -6,8 +6,6 @@
 //! sends the lines as keys: Enter adds a new line until an `-----END`
 //! line is there; after that Enter is "Use it", once the check passed.
 
-use std::io::Read;
-
 use platform_host::Host;
 use platform_pki::PkiError;
 use ratatui::{Frame, text::Line, widgets::Paragraph};
@@ -17,13 +15,11 @@ use crate::{
     setup::request::message,
     tui::{
         app::{App, Key},
-        maint::folder::Browse,
-        ui::{bar::Bar, frame, list::Scroll, logo::Header},
+        ca_request::{self, MAX, Picked, pick},
+        ui::{bar::Bar, frame, logo::Header},
     },
 };
 
-/// The most a paste or a file gives the box: a certificate is ~1 KiB.
-pub(super) const MAX: usize = 64 * 1024;
 /// The box's inside: 68 columns, 4 lines.
 const WIDE: usize = 68;
 const TALL: usize = 4;
@@ -236,67 +232,48 @@ impl<H: Host> App<H> {
     /// The file browser's keys: Enter opens a folder or reads a file into
     /// the box (at most `MAX`); Esc goes back to the two ways.
     pub(super) fn pick_key(&mut self, key: Key) {
-        let Some(count) = self.install.pick.as_ref().map(|b| b.rows().len()) else {
-            return;
-        };
-        if self.move_row(&key, count) {
-            return;
-        }
-        let row = self.nav.row;
-        let target = self.install.pick.as_ref().and_then(|b| b.target(row));
-        match key {
-            Key::Esc => {
-                self.install.pick = None;
+        let path = match pick(
+            &mut self.install.pick,
+            &mut self.nav.row,
+            &self.nav.scroll,
+            key,
+        ) {
+            Picked::Nothing => return,
+            Picked::Closed => {
                 self.nav.row = 1;
+                return;
             }
-            Key::Enter => match target {
-                Some((path, true)) => {
-                    self.install.pick = Some(Browse::open_files(path));
-                    self.nav.row = 0;
-                    self.nav.scroll.set(Scroll::default());
+            Picked::File(path) => path,
+        };
+        let read = ca_request::read(&path);
+        let text = read.as_deref().unwrap_or_default();
+        let refused = if holds_private_key(text) {
+            Some("That file holds a private key: pick the certificate.")
+        } else if !text.contains("-----BEGIN CERTIFICATE-----") {
+            Some("That file holds no certificate: pick the certificate.")
+        } else {
+            None
+        };
+        match (read, refused) {
+            (Err(error), _) => {
+                if let Some(browse) = &mut self.install.pick {
+                    browse.error = Some(format!("{}: {error}", path.display()));
                 }
-                Some((path, false)) => {
-                    // What the last pick said is for that file only.
-                    if let Some(browse) = &mut self.install.pick {
-                        browse.refused = None;
-                        browse.error = None;
-                    }
-                    let mut bytes = Vec::new();
-                    let read = std::fs::File::open(&path)
-                        .and_then(|file| file.take(MAX as u64).read_to_end(&mut bytes));
-                    let text = String::from_utf8_lossy(&bytes);
-                    let refused = if holds_private_key(&text) {
-                        Some("That file holds a private key: pick the certificate.")
-                    } else if !text.contains("-----BEGIN CERTIFICATE-----") {
-                        Some("That file holds no certificate: pick the certificate.")
-                    } else {
-                        None
-                    };
-                    match (read, refused) {
-                        (Err(error), _) => {
-                            if let Some(browse) = &mut self.install.pick {
-                                browse.error = Some(format!("{}: {error}", path.display()));
-                            }
-                        }
-                        // A key, or anything but a certificate, never
-                        // reaches the box, nor stays here.
-                        (Ok(_), Some(why)) => {
-                            if let Some(browse) = &mut self.install.pick {
-                                browse.refused = Some(why.into());
-                            }
-                        }
-                        (Ok(_), None) => {
-                            self.install.paste = Some(text.into_owned());
-                            self.install.paste_file = path
-                                .file_name()
-                                .map(|name| name.to_string_lossy().into_owned());
-                            self.install.pick = None;
-                        }
-                    }
+            }
+            // A key, or anything but a certificate, never
+            // reaches the box, nor stays here.
+            (Ok(_), Some(why)) => {
+                if let Some(browse) = &mut self.install.pick {
+                    browse.refused = Some(why.into());
                 }
-                None => {}
-            },
-            _ => {}
+            }
+            (Ok(text), None) => {
+                self.install.paste = Some(text);
+                self.install.paste_file = path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned());
+                self.install.pick = None;
+            }
         }
     }
 }

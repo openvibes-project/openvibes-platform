@@ -336,6 +336,10 @@ pub enum Privileged<'a> {
     /// `ca-accept --cert PEM --root-cert PEM`: checks and keeps the CA's
     /// answer; journalled as `ca-accept /etc/openvibes/pki/request` (no PEM).
     CaAccept(&'a str, &'a str),
+    /// `ca-replace [--root-key PATH]`: a new intermediate, the old one
+    /// trusted beside it; journalled as `ca-replace
+    /// /etc/openvibes/pki/intermediate.crt` (no key path).
+    CaReplace(Option<&'a str>),
 }
 
 impl Privileged<'_> {
@@ -381,11 +385,18 @@ impl Privileged<'_> {
                 "--root-cert".into(),
                 (*root).into(),
             ],
+            Privileged::CaReplace(root_key) => {
+                let mut all = vec!["ca-replace".to_owned()];
+                if let Some(path) = root_key {
+                    all.extend(["--root-key".to_owned(), (*path).to_owned()]);
+                }
+                all
+            }
         }
     }
 
     /// What the journal records (no arguments of `setup-plan`, `update-step`,
-    /// `remove-step`, `ca-request`, `ca-accept`).
+    /// `remove-step`, `ca-request`, `ca-accept`, `ca-replace`).
     #[must_use]
     pub fn journal(&self) -> String {
         match self {
@@ -399,6 +410,7 @@ impl Privileged<'_> {
             // the copy path or the PEM.
             Privileged::CaRequest(_) => "ca-request /etc/openvibes/pki/request".into(),
             Privileged::CaAccept(..) => "ca-accept /etc/openvibes/pki/request".into(),
+            Privileged::CaReplace(_) => "ca-replace /etc/openvibes/pki/intermediate.crt".into(),
             other => other.args().join(" "),
         }
     }
@@ -425,5 +437,19 @@ mod tests {
             ["ca-accept", "--cert", "CERT PEM", "--root-cert", "ROOT PEM"]
         );
         assert_eq!(accept.journal(), "ca-accept /etc/openvibes/pki/request");
+    }
+
+    #[test]
+    fn ca_replace_keeps_the_key_path_out_of_the_journal() {
+        assert_eq!(Privileged::CaReplace(None).args(), ["ca-replace"]);
+        let quick = Privileged::CaReplace(Some("/media/usb/openvibes-root.key"));
+        assert_eq!(
+            quick.args(),
+            ["ca-replace", "--root-key", "/media/usb/openvibes-root.key"]
+        );
+        assert_eq!(
+            quick.journal(),
+            "ca-replace /etc/openvibes/pki/intermediate.crt"
+        );
     }
 }

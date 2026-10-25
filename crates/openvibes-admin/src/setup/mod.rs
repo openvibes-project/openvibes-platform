@@ -30,6 +30,8 @@ pub(crate) mod ports;
 #[cfg(test)]
 mod ports_tests;
 pub mod remove;
+mod renew;
+pub(crate) mod replace;
 pub(crate) mod request;
 mod run;
 #[cfg(test)]
@@ -45,6 +47,8 @@ use platform_host::{
     runner::{Runner, SystemRunner},
 };
 
+pub use renew::renew;
+pub use replace::ca_replace;
 pub use system::{Ctx, lock};
 
 pub(crate) use pki::fingerprint;
@@ -210,8 +214,8 @@ pub fn run_step<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         return apply(ctx, step);
     }
     match check(ctx, step) {
-        // A failed check (e.g. a certificate about to expire) is reported,
-        // not acted on.
+        // A failed check is reported, not acted on. (Certificates close to
+        // expiry are Todo: the renewal timer reissues them.)
         state @ (StepState::Done(_) | StepState::Skipped(_) | StepState::Failed(_)) => state,
         // Repair says what it changed: the journal line carries the detail.
         state => match apply(ctx, step) {
@@ -249,7 +253,7 @@ fn host_ctx(plan: &Plan, repair: bool) -> Ctx<'_, SystemRunner> {
 
 /// `helper setup-status`: `STEP<TAB>STATE<TAB>DETAIL` per step.
 pub fn status() -> ExitCode {
-    let plan = match load_plan() {
+    let plan = match load_plan(Path::new("/")) {
         Ok(plan) => plan,
         Err(error) => {
             eprintln!("openvibes-admin helper: {error}");
@@ -278,7 +282,7 @@ fn begin() -> Result<(std::fs::File, Plan), ExitCode> {
         ExitCode::FAILURE
     })?;
 
-    let plan = load_plan().map_err(|error| {
+    let plan = load_plan(Path::new("/")).map_err(|error| {
         eprintln!("openvibes-admin: {error}");
         ExitCode::FAILURE
     })?;
@@ -287,10 +291,10 @@ fn begin() -> Result<(std::fs::File, Plan), ExitCode> {
 
 /// The plan; one from before the port choices is saved with the ports its
 /// services use (#76), so the TUI, which reads setup.toml, shows them too.
-fn load_plan() -> Result<Plan, String> {
-    let (plan, filled) = Plan::load_filled(Path::new("/"))?;
+fn load_plan(root: &Path) -> Result<Plan, String> {
+    let (plan, filled) = Plan::load_filled(root)?;
     if filled {
-        plan.save(Path::new("/"))?;
+        plan.save(root)?;
     }
     Ok(plan)
 }

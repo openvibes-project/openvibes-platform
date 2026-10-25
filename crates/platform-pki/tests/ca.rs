@@ -2,8 +2,8 @@
 
 use chrono::Utc;
 use platform_pki::{
-    Issuer, KeyAndCert, PkiError, generate_root, intermediate_request, sign_intermediate,
-    verify_signed_by,
+    Issuer, KeyAndCert, PkiError, first_certificate, generate_root, intermediate_request,
+    sign_intermediate, verify_signed_by,
 };
 
 fn hierarchy() -> (KeyAndCert, Issuer) {
@@ -303,4 +303,14 @@ fn a_root_with_path_length_0_is_refused() {
         platform_pki::check_root_signed(&root.cert_pem, &cert, now).err(),
         Some(PkiError::RootPathLen0)
     );
+}
+
+#[test]
+fn first_certificate_of_one_is_itself() {
+    let now = Utc::now();
+    let root = generate_root(now).unwrap();
+    let (csr, _) = intermediate_request().unwrap();
+    let a1 = sign_intermediate(&root, &csr, now).unwrap();
+    assert_eq!(first_certificate(&a1).unwrap().trim_end(), a1.trim_end());
+    assert_eq!(first_certificate("nothing"), Err(PkiError::InvalidPem));
 }

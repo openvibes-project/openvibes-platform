@@ -10,10 +10,13 @@ pub mod backup;
 mod backup_tests;
 mod certs;
 #[cfg(test)]
+mod certs_page_tests;
+#[cfg(test)]
 mod certs_tests;
 mod database;
 pub mod folder;
 mod names;
+mod page;
 mod parts;
 #[cfg(test)]
 mod parts_finish_tests;
@@ -28,6 +31,9 @@ mod ports_tests;
 mod repair;
 #[cfg(test)]
 mod repair_tests;
+mod replace;
+#[cfg(test)]
+mod replace_tests;
 mod shell;
 #[cfg(test)]
 mod shell_tests;
@@ -42,6 +48,7 @@ mod update;
 #[cfg(test)]
 mod update_tests;
 
+pub use page::Page;
 pub(in crate::tui) use parts_run::with_progress;
 pub use update::half_done as update_half_done;
 
@@ -66,73 +73,6 @@ use super::{
         theme::Theme,
     },
 };
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Page {
-    Database,
-    SignIn,
-    Backup,
-    Update,
-    Repair,
-    Parts,
-    Ports,
-    Certificates,
-    Names,
-    Uninstall,
-    WhatsNew,
-    /// The folder browser, reached with Tab from a typed folder.
-    Folder,
-}
-
-impl Page {
-    pub fn title(self) -> &'static str {
-        match self {
-            Page::Database => "Database",
-            Page::SignIn => "Console sign-in",
-            Page::Backup => "Back up",
-            Page::Update => "Update OpenVIBES",
-            Page::Repair => "Repair",
-            Page::Parts => "Optional parts",
-            Page::Ports => "Ports and addresses",
-            Page::Certificates => "Certificates",
-            Page::Names => "Certificates › Names",
-            Page::Uninstall => "Uninstall",
-            Page::WhatsNew => "What's new",
-            Page::Folder => "Choose a folder",
-        }
-    }
-    /// What the keys do here, for Help.
-    pub fn help(self) -> &'static str {
-        match self {
-            Page::Database => "A report: the clean-up runs by itself every night.",
-            Page::SignIn => "Enter resets the admin password; the new one is shown once.",
-            Page::Backup => {
-                "Enter on Save in folder types or browses a folder; Back up now writes a new file there."
-            }
-            Page::Update => {
-                "Space ticks Back up first; Enter on Update now updates; What's new lists the packages."
-            }
-            Page::Repair => {
-                "It checks every step first; Fix N problems repairs, then checks again."
-            }
-            Page::Parts => {
-                "Space ticks the agent or the assistant; Apply installs or removes what changed."
-            }
-            Page::Ports => {
-                "Enter on a port types a new one; Apply moves it and opens the new port."
-            }
-            Page::Certificates => "A report: Enter on Names changes the names agents may use.",
-            Page::Names => {
-                "Enter on a name types it; Add a name adds one; Apply issues new certificates."
-            }
-            Page::Uninstall => {
-                "Space chooses Keep the data or Remove everything; Uninstall asks first."
-            }
-            Page::WhatsNew => "A list: every package's version and the release notes' address.",
-            Page::Folder => "Enter opens a folder; Use this folder picks the one shown.",
-        }
-    }
-}
 
 /// The Maintenance pages' own state.
 #[derive(Debug, Default)]
@@ -165,6 +105,8 @@ pub struct Maint {
     pub certs: certs::Certs,
     /// Names: the saved plan, the edits, the name being typed.
     pub names: names::Names,
+    /// Replace the intermediate: the root key file picked (Quick).
+    pub replace: replace::Replace,
     /// Console sign-in: the new password, shown once; dropped on leaving.
     pub signin: Option<signin::Shown>,
 }
@@ -172,7 +114,11 @@ pub struct Maint {
 impl Maint {
     /// A value is being typed on a page: its keys are the page's.
     pub fn editing(&self) -> bool {
-        self.folder.editing() || self.typing || self.ports.typing() || self.names.typing()
+        self.folder.editing()
+            || self.typing
+            || self.ports.typing()
+            || self.names.typing()
+            || self.replace.picking()
     }
 }
 
@@ -184,6 +130,7 @@ pub enum Then {
     Parts,
     Ports,
     Names,
+    Replace,
     SignIn,
     Shell,
 }
@@ -253,7 +200,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
         Entry::Page(Page::SignIn) => "reset the admin password".into(),
         Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
         Entry::Page(Page::Uninstall) => "remove OpenVIBES from this host".into(),
-        Entry::Page(Page::Names | Page::Folder | Page::WhatsNew) => String::new(),
+        Entry::Page(Page::Names | Page::Replace | Page::Folder | Page::WhatsNew) => String::new(),
     }
 }
 
@@ -367,6 +314,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
         Page::Ports => ports::draw(frame, head, app),
         Page::Certificates => certs::draw(frame, head, app),
         Page::Names => names::draw(frame, head, app),
+        Page::Replace => replace::draw(frame, head, app),
         Page::Uninstall => uninstall::draw(frame, head, app),
         Page::WhatsNew => update::draw_whats_new(frame, head, app),
         Page::Folder => folder::draw(frame, head, app),
@@ -420,6 +368,7 @@ impl<H: Host> App<H> {
             Page::Ports => self.open_ports(),
             Page::Certificates => self.open_certificates(),
             Page::Names => self.open_names(),
+            Page::Replace => self.open_replace(),
             Page::Uninstall => self.open_uninstall(),
             Page::WhatsNew | Page::Folder => {}
         }
@@ -437,6 +386,7 @@ impl<H: Host> App<H> {
             Page::Ports => self.ports_key(key),
             Page::Certificates => self.certificates_key(key),
             Page::Names => self.names_key(key),
+            Page::Replace => self.replace_key(key),
             Page::Uninstall => self.uninstall_key(key),
             Page::WhatsNew => {}
             Page::Folder => self.browse_key(key),
@@ -452,6 +402,7 @@ impl<H: Host> App<H> {
             Then::Parts => self.parts_yes(),
             Then::Ports => self.ports_yes(),
             Then::Names => self.names_yes(),
+            Then::Replace => self.replace_yes(),
             Then::SignIn => self.signin_yes(),
             Then::Shell => self.shell_yes(),
         }
@@ -470,6 +421,7 @@ impl<H: Host> App<H> {
             self.parts_ended();
             self.repair_ended();
             self.install_ended();
+            self.replace_ended();
         }
     }
 }

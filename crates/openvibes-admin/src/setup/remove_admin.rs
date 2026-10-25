@@ -177,11 +177,19 @@ pub fn remove_admin<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSt
 }
 
 /// The job is over. A finished whole-platform run also drops the lock file
-/// it holds (tmpfs, but nothing of ours stays); a skipped one is not the end.
+/// it holds and a failed Replace's progress file (tmpfs, but nothing of ours
+/// stays); a skipped one is not the end.
 pub fn finish<R: Runner>(ctx: &Ctx<R>, state: &StepState) {
     ctx.job_end();
     if matches!(state, StepState::Done(_)) {
         let _ = fs::remove_file(ctx.path("/run/openvibes-admin/setup.lock"));
+        // A failed Replace leaves its step list for the TUI, a download
+        // its progress.
+        for file in [crate::setup::replace::PROGRESS, crate::model_progress::FILE] {
+            let progress = ctx.path(file);
+            let _ = fs::remove_file(progress.with_extension("tmp"));
+            let _ = fs::remove_file(progress);
+        }
         let _ = fs::remove_dir(ctx.path("/run/openvibes-admin"));
     }
 }

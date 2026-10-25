@@ -18,14 +18,14 @@ use super::{
     request::REQUEST_DIR,
 };
 
-const STAGE: &str = "/run/openvibes-ca";
-const INT: &str = "/run/openvibes-ca/int";
-const ROOT_DIR: &str = "/run/openvibes-ca/root";
-const INTERMEDIATE: &str = "/etc/openvibes/pki/intermediate.crt";
+pub(super) const STAGE: &str = "/run/openvibes-ca";
+pub(super) const INT: &str = "/run/openvibes-ca/int";
+pub(super) const ROOT_DIR: &str = "/run/openvibes-ca/root";
+pub(crate) const INTERMEDIATE: &str = "/etc/openvibes/pki/intermediate.crt";
 /// The root certificate agents trust.
 pub const ROOT_CERT: &str = "/etc/openvibes/pki/root.crt";
-const INTERMEDIATE_KEY: &str = "/var/lib/openvibes-ingest/intermediate.key";
-const ADMIN_OWNER: Option<(&str, &str)> = Some(("openvibes-admin", "openvibes-admin"));
+pub(crate) const INTERMEDIATE_KEY: &str = "/var/lib/openvibes-ingest/intermediate.key";
+pub(super) const ADMIN_OWNER: Option<(&str, &str)> = Some(("openvibes-admin", "openvibes-admin"));
 
 /// `AB:CD:…`, the SHA-256 of a certificate.
 pub fn fingerprint(pem: &str) -> Result<String, String> {
@@ -78,7 +78,7 @@ pub fn ca_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 
 /// A fresh staging directory, 0700 openvibes-admin (a stale one from a
 /// failed run is removed: it is in tmpfs and only ever ours).
-fn fresh_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+pub(super) fn fresh_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     let path = ctx.path(STAGE);
     if path.exists() {
         fs::remove_dir_all(&path).map_err(|error| format!("{STAGE}: {error}"))?;
@@ -87,7 +87,7 @@ fn fresh_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
 }
 
 /// Creates `abs` (0700, openvibes-admin) for a command run as that user.
-fn stage_dir<R: Runner>(ctx: &Ctx<R>, abs: &str) -> Result<(), String> {
+pub(super) fn stage_dir<R: Runner>(ctx: &Ctx<R>, abs: &str) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     let path = ctx.path(abs);
     fs::create_dir_all(&path).map_err(|error| format!("{abs}: {error}"))?;
@@ -96,7 +96,7 @@ fn stage_dir<R: Runner>(ctx: &Ctx<R>, abs: &str) -> Result<(), String> {
     ctx.chown(abs, ADMIN_OWNER)
 }
 
-fn remove_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+pub(super) fn remove_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     fs::remove_dir_all(ctx.path(STAGE)).map_err(|error| format!("{STAGE}: {error}"))
 }
 
@@ -210,7 +210,7 @@ fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 
 /// Removes the request made before install, if any (R2), and the
 /// operator's copy of it.
-fn remove_request<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+pub(super) fn remove_request<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     super::request::remove_copy(ctx);
     match fs::remove_dir_all(ctx.path(REQUEST_DIR)) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
@@ -221,6 +221,11 @@ fn remove_request<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
 }
 
 fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    // A request beside an installed CA is `ca-replace`'s: installing it
+    // here would drop the intermediate enrolled agents hold (ruling 8).
+    if installed(ctx) {
+        return Ok(StepState::Done(root_summary(ctx)?));
+    }
     let request = |name: &str| format!("{REQUEST_DIR}/{name}");
     let names = [
         "intermediate.key",
@@ -273,8 +278,9 @@ struct Tls {
     stem: &'static str,
     cert: &'static str,
     key: &'static str,
-    /// Console: certificate then intermediate in one file, both 0640
-    /// root:openvibes-console; otherwise the key belongs to the service.
+    /// Console: certificate then intermediate in one file (0644) and the
+    /// key (0640), root:openvibes-console; otherwise the key belongs to
+    /// the service.
     console: bool,
     owner: &'static str,
 }
@@ -311,8 +317,14 @@ fn chosen<'a, R: Runner>(ctx: &'a Ctx<'a, R>) -> impl Iterator<Item = &'static T
 }
 
 const TLS_NAMES: &str = "/etc/openvibes/tls/setup-names";
-/// Certificates this close to expiry are renewed (and Health reports them).
+/// The renewal timer reissues a server certificate this close to expiry.
+pub(crate) const RENEW_AT_DAYS: i64 = 30;
+/// Health reports a server certificate this close to expiry: the timer
+/// should have renewed it by now.
 pub(crate) const RENEW_DAYS: i64 = 14;
+/// Health asks for a new intermediate this close to its expiry: nothing
+/// renews it by itself.
+pub(crate) const INTERMEDIATE_WARN_DAYS: i64 = 60;
 
 /// The plan's names, then the host's own addresses (board #71: the console
 /// opens by IP over a VPN). An address that changes (DHCP) makes the check
@@ -340,13 +352,32 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         let pem = ctx.read(tls.cert)?;
         let expires =
             platform_pki::not_after(&pem).map_err(|error| format!("{}: {error:?}", tls.cert))?;
-        if expires - chrono::Utc::now() < chrono::Duration::days(RENEW_DAYS) {
-            return Ok(StepState::Failed(format!(
-                "{} expires on {}: renew it (docs/components/packaging.md, \"Renewing the server certificate\")",
-                tls.cert,
-                expires.format("%Y-%m-%d")
-            )));
+        if expires - chrono::Utc::now() < chrono::Duration::days(RENEW_AT_DAYS) {
+            return Ok(StepState::Todo);
         }
+    }
+    // After a replaced intermediate, until they are issued again from it.
+    if let Some(issuer) = ctx
+        .read(INTERMEDIATE)
+        .ok()
+        .and_then(|bundle| platform_pki::first_certificate(&bundle).ok())
+    {
+        let signed = |tls: &Tls| {
+            ctx.read(tls.cert)
+                .is_ok_and(|pem| platform_pki::verify_signed_by(&pem, &issuer).is_ok())
+        };
+        if !chosen(ctx).all(signed) {
+            return Ok(StepState::Todo);
+        }
+    }
+    // The console's chain is public (browsers get it anyway) and the TUI,
+    // which is not root, reads its expiry: an older install wrote it 0640.
+    let world_readable = |path: &str| {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(ctx.path(path)).is_ok_and(|m| m.permissions().mode() & 0o777 == 0o644)
+    };
+    if chosen(ctx).any(|tls| tls.console && !world_readable(tls.cert)) {
+        return Ok(StepState::Todo);
     }
     Ok(StepState::Done(format!(
         "server certificates for {}",
@@ -355,6 +386,8 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
 }
 
 pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    // Repair's way out of a Replace a crash cut short (key and bundle apart).
+    let recovered = super::replace::finish_interrupted(ctx)?.map_or(String::new(), |l| l + "; ");
     let names = certificate_names(ctx);
     fresh_stage(ctx)?;
     ctx.copy(
@@ -390,9 +423,10 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         let crt = format!("{out}/{}.crt", names[0]);
         let key = format!("{out}/{}.key", names[0]);
         if tls.console {
-            let chain = format!("{}{}", ctx.read(&crt)?, ctx.read(INTERMEDIATE)?);
+            // Already the chain: the leaf, then its issuer (the bundle's
+            // first certificate only).
             let owner = Some(("root", tls.owner));
-            ctx.put(tls.cert, chain.as_bytes(), owner, 0o640)?;
+            ctx.copy(&crt, tls.cert, owner, 0o644)?;
             ctx.copy(&key, tls.key, owner, 0o640)?;
         } else {
             ctx.copy(&crt, tls.cert, None, 0o644)?;
@@ -417,7 +451,7 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         0o644,
     )?;
     Ok(StepState::Done(format!(
-        "server certificates for {} (valid 90 days)",
+        "{recovered}server certificates for {} (valid 90 days)",
         names.join(", ")
     )))
 }
@@ -425,3 +459,7 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
 #[cfg(test)]
 #[path = "pki_root_key_tests.rs"]
 mod root_key_tests;
+
+#[cfg(test)]
+#[path = "pki_renew_tests.rs"]
+mod renew_tests;

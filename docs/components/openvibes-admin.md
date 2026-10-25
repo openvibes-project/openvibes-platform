@@ -225,11 +225,13 @@ to the journal (`config-write SERVICE ok|failed`, never the content).
 
 **Update OpenVIBES** (Maintenance): the installed version and whether a newer one is available (from the package check made at start), then Back up first, Update now and What's new. Back up first is off on a first update; afterwards it is ticked or not as you chose last time (`--remember-choice`), and the help line says why. Ticked, it shows Save in folder (as in Back up; no folder until you choose one) and the backup goes there with a new name (`openvibes-<installed version>-<date>-<HHMM>.dump`: named for the version whose data it holds, which a restore needs). Update now is offered when any installed OpenVIBES package has a newer version (the version shown is the admin's, else the installed one). It asks "Update to X?" (X is the admin's new version; when only other packages are newer, "Install updates (agent 0.2.9)?", and the result reads "Updated: agent 0.2.9") and runs the six update steps on the worker (Back up, Stop services, Install packages, Update the database, Start services, Ready), each shown with ✓, the spinner or ·; a skipped backup shows as –. A stop at Stop services or Install packages starts the services again (`update-step start`, then `ready`, which starts the agent and clears the half-done mark) and says so, without claiming nothing changed (a dnf transaction may be part applied). Finishing a half-done update runs no such rescue: the services stay stopped and Try again goes on. A stop at the database step keeps them stopped and says why; Try again goes on. A failed step shows a red ✗, what failed, what to do and what was left as it was. Enter after a successful update starts the new version of the menu (`exec` of `/usr/bin/openvibes-admin`). What's new lists every package's version change and the release notes' address. A half-done update (the helper's mark `/run/openvibes-admin/job`, now 0644 so the TUI can read it) is a problem on Status ("Enter Finish it"), and the page then offers Finish the update without a backup, even when nothing newer exists. A half-done uninstall is a Status problem too ("An uninstall stopped half way"); Enter opens Uninstall to finish it.
 
-**Optional parts** (Maintenance): tick or untick the agent and the assistant, as in `setup.toml`; the Apply row says what it will do ("install the assistant", "remove the agent", joined with " and "). Apply with nothing changed does nothing. Adding asks "Install the assistant?" (Yes first); any removal asks "Remove the agent?" starting on No. One run, four kinds of row: Save the choice (`setup-plan` with the whole edited plan, `--model fetch` when the assistant is added), then for each removed part Stop / Remove / Remove its data (`remove-step … --components <part>`, which purges the part's data and account because the plan no longer holds it), then Install the part (the Repair steps Packages to Agent) and Download the model, and Ready (the remaining Repair steps and the status). Every Apply runs each Repair step once. While Download the model runs its row reads `1.2 of 2.7 GB` (`1.2 GB downloaded` when the total is unknown, `about 2.7 GB` without progress): the root helper's model step (`src/model_progress.rs`) writes `<done> <total>` to `/run/openvibes-admin/model-progress` (0644, replaced atomically, twice a second) from the size of the growing partial file in the models directory, and removes it when the step ends, fails or panics; the total is the pinned model's size constant `MODEL_BYTES` (2.74 GB, no network request). The TUI only reads it. The model download never stops the run: its row shows the step's own state as a dim note, not a red cross. Apply is refused up front, with no question, while other work runs ("Wait: other work is still running"), under a half-done update or uninstall (Repair's words), when the plan changed since the page opened ("The setup changed meanwhile: open the page again.") and for a plan from before the port choices ("Run Repair first: this plan is from an older version.", also shown when the page opens: its real ports are in root-only service files, and Repair saves them into the plan). After a failed run past Save the choice, the page offers only Try again (the saved plan is already the new choice). A part out of the plan whose removal did not finish, seen without sudo by one of its packages in the package list Update reads or by its data folder (`/var/lib/openvibes-agent`, `/var/lib/openvibes-llm`), shows unticked with "removal not finished"; Apply then says "finish removing the agent", asks "Remove the agent?" and runs only that part's Stop / Remove / Remove its data groups (no Save: the plan is already without it) and Ready. In the Maintenance menu, Optional parts and Ports and addresses say "cannot be read" when the plan cannot be read. Tests: `src/tui/maint/parts_tests.rs`, `parts_finish_tests.rs`, `apply_tests.rs`.
+**Optional parts** (Maintenance): tick or untick the agent and the assistant, as in `setup.toml`; the Apply row says what it will do ("install the assistant", "remove the agent", joined with " and "). Apply with nothing changed does nothing. Adding asks "Install the assistant?" (Yes first); any removal asks "Remove the agent?" starting on No. One run, four kinds of row: Save the choice (`setup-plan` with the whole edited plan, `--model fetch` when the assistant is added), then for each removed part Stop / Remove / Remove its data (`remove-step … --components <part>`, which purges the part's data and account because the plan no longer holds it), then Install the part (the Repair steps Packages to Agent) and Download the model, and Ready (the remaining Repair steps and the status). Every Apply runs each Repair step once. While Download the model runs its row reads `1.2 of 2.7 GB` (`1.2 GB downloaded` when the total is unknown, `about 2.7 GB` without progress): the root helper's model step (`src/model_progress.rs`) writes `<done> <total>` to `/run/openvibes-admin/model-progress` (0644, replaced atomically, twice a second) from the size of the growing partial file in the models directory, and removes it when the step ends, fails or panics (uninstall's last step removes one left by a killed run); the total is the pinned model's size constant `MODEL_BYTES` (2.74 GB, no network request). The TUI only reads it. The model download never stops the run: its row shows the step's own state as a dim note, not a red cross. Apply is refused up front, with no question, while other work runs ("Wait: other work is still running"), under a half-done update or uninstall (Repair's words), when the plan changed since the page opened ("The setup changed meanwhile: open the page again.") and for a plan from before the port choices ("Run Repair first: this plan is from an older version.", also shown when the page opens: its real ports are in root-only service files, and Repair saves them into the plan). After a failed run past Save the choice, the page offers only Try again (the saved plan is already the new choice). A part out of the plan whose removal did not finish, seen without sudo by one of its packages in the package list Update reads or by its data folder (`/var/lib/openvibes-agent`, `/var/lib/openvibes-llm`), shows unticked with "removal not finished"; Apply then says "finish removing the agent", asks "Remove the agent?" and runs only that part's Stop / Remove / Remove its data groups (no Save: the plan is already without it) and Ready. In the Maintenance menu, Optional parts and Ports and addresses say "cannot be read" when the plan cannot be read. Tests: `src/tui/maint/parts_tests.rs`, `parts_finish_tests.rs`, `apply_tests.rs`.
 
 **Ports and addresses** (Maintenance): lists the console's port with its web address (`:port` only when not 443), Agent connections (ingest), Rule distribution and Network devices (`514/udp`, information only). Enter on a port types a new one (digits, at most five), checked at once by `port_note`: free on this host (the row's saved port counts as free, the platform's own service holds it), used by another program (`Host::listeners`), already used by another row, or refused (zero, reserved, not a number, below 1024 for Agent connections and Rule distribution, whose units cannot bind low ports; `check_ports` refuses the same for the CLI and Setup), or a port another row is leaving only at Apply; an `Err` is red and Enter then does nothing, Esc keeps the old value. A changed row shows `* name` and `new · was old`; the Apply row appears only then and says whether agents need their install line again. Apply asks ("Move agents to <p>?", "Move distribution to <p>?", "Move the console to <p>?", "Move <n> ports?") and is refused up front as Optional parts' is (other work running, a half-done job, a changed or older plan). One run: Save the ports (`setup-plan` with the whole edited plan), Restart with the new port (Repair Packages to Console and Services), Open the new port (Firewall to Agent), Close the old port (Ready), Ready (model step and status). A failed run reopens on Try again. Tests: `src/tui/maint/ports_tests.rs`.
 
-**Certificates** (Maintenance, after Ports and addresses): a report read from the certificate files (`Host::certificates()`), not the plan: Web and agents (`valid until <date> · <n> days left` from `ingest.crt`, red `expired <date>` once past), Names (the certificate's SANs), Intermediate (`signed by <issuer CN> · until <date>`, via `platform_pki::issuer_common_name`) and, for a quick CA, Root key (`offline: needed only to replace the intermediate`). With no certificate it says `No certificates yet: run Repair.` The one entry, Names, opens the Names page; coming back from it (Esc or Enter, after a run or not) reads the files again. The Maintenance menu's line is `signed by <issuer CN> · until <date>`, the date being the Web and agents certificate's (`ingest.crt`), the issuer the intermediate's; `cannot be read` when either cannot, `no certificates yet` without `ingest.crt`.
+**Certificates** (Maintenance, after Ports and addresses; `src/tui/maint/certs.rs`, certs2.py, certs4a.py): a report read from the certificate files (`Host::certificates()`), not the plan. Web and agents comes from the earliest of `ingest.crt`, `distribution.crt` and `console-chain.pem`: green `renewed automatically` · `next <end − RENEW_AT_DAYS (30)>`, `· due today` once that date is today or past, and red `renewal is failing · see Status` with fewer than `RENEW_DAYS` (14) left (rule 34: no Renew button). Names (the SANs of `ingest.crt`), Intermediate (its first certificate: `signed by <issuer CN, bold> · until <date>` with your own CA, `signed by the OpenVIBES root · until <date>` for a quick CA), Previous intermediate (dim `trusted until <date>, as agents move over`, only while `/etc/openvibes/pki/previous.crt` exists; the date from `previous-until`, RFC 3339, both 0644) and, for a quick CA, Root key (`offline: needed only to replace the intermediate`). With no certificate it says `No certificates yet: run Repair.` Two entries: Names (opens the Names page; coming back, Esc or Enter, reads the files again) and Replace the intermediate (`a new request for your CA`, or `needs the offline root key file` for a quick CA). While the previous intermediate is trusted, Enter on Replace opens nothing and says in red `The previous intermediate is still trusted until <date>, while agents move over: replace it again after that.` (`setup::replace::still_trusted`, the helper's own refusal); any move or Enter takes it away. The Maintenance menu's line is `signed by <issuer CN> · until <date>`, the date being `ingest.crt`'s, the issuer the intermediate's; `cannot be read` when either cannot, `no certificates yet` without `ingest.crt`. Tests: `src/tui/maint/certs_page_tests.rs`.
+
+**Certificates › Replace** (`src/tui/maint/replace.rs`; certs2.py #3-4, certs4a.py #2-10): one `helper ca-replace [--root-key PATH]` run (`Kind::Replace`, `Call::CaReplace`). *Your own CA*: the note `The same steps as at install. Nothing changes until Replace.`, then Show the request, Signed certificate, Your CA's certificate (`✓ <CN> (kept)`: `/etc/openvibes/pki/root.crt`, read as the operator) and Replace. Opening it makes or reuses the request with `ca-request` (the password in the bar) into the install's own state (`App.install`, its host name set from the plan); Show the request and Signed certificate open the install's screens as they are (request, the two ways, paste box, file pick; their location reads ` · Install › Certificates › …`), and Use it runs `ca-accept` with the kept root as the root PEM. Replace is enabled once the signed certificate is kept (`Install::accepted`). *OpenVIBES made the CA*: the note `Needs the root key kept offline at install. Nothing changes until Replace.`, then Root key file and Replace. Enter opens the install's file browser (`Browse::files_at` the operator's home, `ca_request::pick`); the file picked is read at once (as the operator, at most 64 KiB, `ca_request::read`) and checked with `Issuer::load(root.crt, key)`, as the helper checks it again as root: green `✓ The key matches the OpenVIBES root on this host.` (and the cursor on Replace) or red `✗ Not the key of this host's root: pick the root key kept at install.` (`setup::replace::NOT_THE_KEY`); a path under the home shows as `~/…`. Enter on Replace asks `Replace it?` · `agents keep working` (on Yes; short enough for the Yes / No buttons at 80 columns, ruling 10), then the sudo password in the bar (`Enter Replace`), then the step list: Making the new intermediate (quick only), Trusting the old and the new one, Issuing the server certificates, Restarting the services. While it runs, the helper also writes each finished stage line to `/run/openvibes-admin/ca-replace-progress` (0644, replaced whole through `model_progress::replace_file`, emptied when a run starts, removed when it succeeds; a failed run's file stays until the next run, a reboot or uninstall, whose last step removes it with the model download's); the TUI reads it on each draw, as the model download's, and shows `⠹ Step N of M: <step>` with the running row bold (Issuing adds `ingest, distribution, console`) and the later ones dim. Once done, the rows are ticked from the lines it printed. One result line: `Replaced · agents move over in <client days> days · put the key offline again (<time>)` for a quick CA, without the key clause for your own CA; the days are `previous-until` (from the `done<TAB>NEW<TAB>PREVIOUS` line) less today, less the one day the helper adds. A failure ticks the stages the progress file lists, marks the next ✗, leaves the rest dim and shows the helper's sentence in red. Enter (or Esc) goes back to Certificates, on Names, which shows the previous intermediate. Esc before Replace changes nothing (with your own CA only `ca-request` has run). Shared with the install: `src/tui/ca_request.rs` (the helper's sentence, the file browser's keys, the capped read). Tests: `src/tui/maint/replace_tests.rs`.
 
 **Certificates › Names**: Host name, one Other name row per SAN of the plan, Add a name (at most 16 other names, `plan::MAX_SANS`) and, once something changed, Apply. Enter types a value, checked at once by the plan's own rules (`plan::check_name` for the host name, `plan::check_san` for other names: a lowercase DNS name or an IP address; letters are lowercased as typed, and `PlanArgs::plan` lowercases the host name and every SAN, so Setup and the CLI store them lowercase too); a red note keeps Enter from doing anything, Esc cancels. Enter on an emptied Other name removes it; the Host name cannot be emptied. Apply asks "Issue new certificates?" ("for these names") and is refused up front as Optional parts' is (other work running, a half-done job, a changed or older plan). One run: Save the names (`setup-plan` with the whole edited plan), New certificates (Repair Packages to Certificates), Restart services (Console to Agent), Ready. The result line reads the new `ingest.crt` again for `valid until <date>`. The Certificates step itself runs `systemctl try-restart openvibes-ingest openvibes-distribution openvibes-console` after issuing (the services read their certificate at start; none reloads it, and a stopped service is left stopped). Tests: `src/tui/maint/certs_tests.rs`.
 
@@ -248,8 +250,14 @@ A repaired step reads "repaired: ..." in the list, and the journal line of each 
 **Health**: one line per check, problems first, each marked `problem` or
 `ok`, with the problem count in the title: each installed unit (a problem
 unless active and, where it has an endpoint, ready); the ingest and
-distribution server certificates and the intermediate (a problem under 14
-days to expiry, when Setup's repair renews them; also a problem when a
+distribution server certificates, the console's chain (read by its leaf) and
+the intermediate. A server certificate is a problem only under 14 days to
+expiry, when the daily renewal timer has failed ("automatic renewal is
+failing, see Status › certificate renewal › Logs"); a certificate with more
+days left is no problem, however near its renewal. The intermediate (judged
+by its first certificate) is a problem under 60 days: "replace the
+intermediate in Maintenance › Certificates". An expired one always is. Also a
+problem when a
 server certificate misses an address this host now has, e.g. after DHCP:
 "run Repair in Maintenance"; a CA certificate, which names no host, is not
 checked for addresses);
@@ -623,8 +631,10 @@ written once to `--root-key-out`, never over an existing file (a dangling
 link counts) and only into an existing folder, both checked before
 `ca init-root`, otherwise deleted; a CA installed whose key could not be
 written stays to do while the key is staged, and the retry only writes
-it; careful: installs from the request folder below when it holds
-the key, request, certificate and root, then removes the folder, otherwise
+it; careful: done once the CA is installed (a request beside an installed
+CA is `ca-replace`'s and is left for it, ruling 8), else installs from the
+request folder below when it holds the key, request, certificate and root,
+then removes the folder, otherwise
 waits for the signed intermediate in `/run/openvibes-ca/int`; quick also
 removes a leftover request folder), `certificates`
 (hostname, `--san`, `localhost`, `127.0.0.1`, then the host's global IPv4
@@ -684,8 +694,13 @@ refused while one works):
   away from are closed in firewalld. Then every step is checked, and only
   failed ones fixed. It
   never makes a new CA: with the CA files gone it stops and says how to
-  recover. Certificates issued for other names are issued again; one
-  expiring within 14 days is reported, not replaced.
+  recover. Certificates issued for other names, or expiring within 30 days,
+  are issued again (the daily `openvibes-certificates.timer` runs that one
+  step as `helper certificates-renew`; it skips while another Setup run holds
+  the lock, and exits non-zero only when the renewal failed or `setup.toml`
+  is there but cannot be read (the unit runs only once it exists); after a
+  successful renewal only, it drops a replaced intermediate once ingest
+  issues from the new one, see `helper ca-replace` under CA commands).
 - `setup --update [--backup PATH] [--update-repo-dir DIR]`: check
   PostgreSQL first (#292; the Backup and Update-the-database steps both do:
   a removed `postgresql-server` or a stopped service is installed and
@@ -791,7 +806,9 @@ journal line is only `admin-reset admin ok`, never the password;
 prints `done<TAB>opened`: sudo's password check and the journal line are
 the point, before Maintenance › Shell opens the operator's shell),
 `helper ca-request [--copy PATH]` and `helper ca-accept --cert PEM
---root-cert PEM` ("Your own CA" before install, `src/setup/request.rs`).
+--root-cert PEM` ("Your own CA" before install, `src/setup/request.rs`;
+also before `helper ca-replace [--root-key PATH]`, which replaces the
+intermediate: see CA commands).
 `ca-request` makes the intermediate's key and request in
 `/etc/openvibes/pki/request/` (root, 0700, set again on every call;
 `intermediate.key` 0600, `intermediate.csr`), or reuses them so a request
@@ -851,6 +868,59 @@ leaves the offline machine. `import-intermediate` refuses a key that does
 not match the certificate, a certificate the given root did not sign, one
 that is not an intermediate (the root itself, a leaf, or a CA without path
 length 0), or one outside its validity, and records nothing then. Offline commands work without any config file.
+
+**Replacing the intermediate** (`helper ca-replace [--root-key PATH]`,
+`src/setup/replace.rs`; the runbook is packaging.md "Replacing the
+intermediate CA"): under the Setup lock, like `setup-step`. While
+`previous.crt` exists it refuses first, changing nothing ("The previous
+intermediate is still trusted until YYYY-MM-DD, while agents move over:
+replace it again after that."). The new
+intermediate comes from the request folder with your own CA (after
+`ca-request` and `ca-accept`; its `root.crt` must equal
+`/etc/openvibes/pki/root.crt`, else "Your CA's certificate is not this
+host's root: agents trust only that one.") or, with OpenVIBES' own CA,
+from the root key at `--root-key` (absolute; checked against the root
+first, else "Not the key of this host's root: pick the root key kept at
+install."), copied 0600 into `/run/openvibes-ca/root` for `ca
+intermediate-request` and `ca sign-intermediate`, and removed with the
+whole stage on every exit. Every check (the key, `check_intermediate`
+against the root, `ca import-intermediate`) passes before anything on disk
+changes. Then `previous.crt` (the old first certificate) and
+`previous-until` (RFC 3339, now + `client_certificate_days` from
+`ingest.toml`, default 30, + 1 day) are written 0644 root, then the new key and the bundle (new + old) are
+written beside their targets as `intermediate.key.new` and
+`intermediate.crt.new` and renamed over them, the bundle first and the
+key last (a failure puts the old bundle back and removes the `.new` and
+`previous.*` files: the old pair is in use again; when the old bundle
+cannot be put back, everything stays for the recovery below; each rename
+syncs its folder, best effort: only the rename's own result counts), the request folder goes, and the certificates step reissues and restarts the
+services. If that reissue fails, the error starts "The intermediate was
+replaced, but the server certificates were not reissued: run Repair in
+Maintenance (they stay valid until then)."; the certificates check is
+Todo while a server certificate is not signed by the bundle's first
+certificate, so Repair reissues them. Stdout has one line per finished stage (`Making the new
+intermediate`, `Trusting the old and the new one`, `Issuing the server
+certificates`, `Restarting the services`), then
+`done<TAB>EXPIRES<TAB>PREVIOUS_UNTIL` (both `YYYY-MM-DD`); a failure is one
+line on stderr prefixed `openvibes-admin helper: `, exit 1. A crash part
+way through the swap is ended by `replace::finish_interrupted`, run under
+the Setup lock at the start of `ca-replace` (before the refusal), of
+`certificates-renew` and of the certificates step's apply (so Repair, whose
+check is Todo then, runs it): an `intermediate.key.new` that loads against
+the bundle's first certificate is renamed into place ("finished an
+interrupted replacement"); otherwise, when `previous.crt` is still the
+bundle's first certificate (or, without it, `.new` files are left), the
+`.new` files and `previous.*` are removed ("removed an interrupted
+replacement that never took effect"). Its line is printed by `ca-replace`,
+heads the renewal's log and prefixes the step's detail. It is not in
+`ca_check`: `setup-status` runs the checks without the lock, mid-swap. The renewal
+timer's `replace::drop_previous` ends it, after a successful renewal
+only: once `previous-until` has passed, `ingest.crt` is signed by the
+bundle's first certificate (a running ingest issues from the intermediate
+it read at start, so only its restart on a reissued certificate moves it
+over) and that certificate's start + `client_certificate_days` + 1 day
+has passed, it keeps the first certificate, restarts ingest and
+distribution, and removes `previous.*`. Tests: `src/setup/replace_tests.rs`.
 
 ## Test
 

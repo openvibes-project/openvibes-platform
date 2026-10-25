@@ -3,6 +3,7 @@
 //! `platform_host::Host`.
 
 pub mod app;
+mod ca_request;
 mod config_view;
 mod configuration;
 mod database;
@@ -11,6 +12,7 @@ mod database_tests;
 pub mod form;
 mod home;
 mod install;
+mod kind;
 mod maint;
 mod nav;
 #[cfg(test)]

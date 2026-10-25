@@ -49,7 +49,13 @@ fn every_choice_shows_in_full_at_80_by_24() {
 
 #[test]
 fn help_on_every_maintenance_page_is_not_cut_at_the_edge() {
-    for page in [Page::Backup, Page::Update, Page::Uninstall, Page::Repair] {
+    for page in [
+        Page::Backup,
+        Page::Update,
+        Page::Uninstall,
+        Page::Repair,
+        Page::Certificates,
+    ] {
         let mut app = set_up(vec![]);
         app.open_page(page);
         if page == Page::Repair {
@@ -61,6 +67,11 @@ fn help_on_every_maintenance_page_is_not_cut_at_the_edge() {
         let last = page.help().split_whitespace().last().unwrap();
         assert!(flat.contains(last), "{page:?} help is cut:\n{text}");
     }
+    assert!(
+        Page::Certificates
+            .help()
+            .contains("Replace the intermediate")
+    );
 }
 
 #[test]

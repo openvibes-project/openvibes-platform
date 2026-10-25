@@ -99,7 +99,9 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   the journal line are what it is for), `ca-request [--copy PATH]` and
   `ca-accept --cert PEM --root-cert PEM` (journalled and audit-noted
   as `ca-request /etc/openvibes/pki/request` and `ca-accept
-  /etc/openvibes/pki/request`, without the copy path or PEM).
+  /etc/openvibes/pki/request`, without the copy path or PEM), and
+  `ca-replace [--root-key PATH]` (journalled and audit-noted as
+  `ca-replace /etc/openvibes/pki/intermediate.crt`, without the key path).
   `Host::privileged` runs `sudo -S -k -p '' /usr/bin/openvibes-admin helper
   VERB…` with the password on stdin only (never in argv or the journal),
   journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns

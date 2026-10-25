@@ -90,10 +90,12 @@ impl Database {
 }
 
 /// The public certificates Health checks (spec §5): the ingest and
-/// distribution server certificates and the intermediate, all 0644.
-pub const CERTIFICATES: [&str; 3] = [
+/// distribution server certificates, the console's chain (leaf first) and
+/// the intermediate, all 0644.
+pub const CERTIFICATES: [&str; 4] = [
     "/etc/openvibes/tls/ingest.crt",
     "/etc/openvibes/tls/distribution.crt",
+    "/etc/openvibes/tls/console-chain.pem",
     "/etc/openvibes/pki/intermediate.crt",
 ];
 

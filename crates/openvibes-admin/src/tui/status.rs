@@ -43,9 +43,9 @@ pub enum Item {
 }
 
 /// Idle by design while stopped: the model server starts on use, the
-/// maintenance timer's service between runs.
+/// maintenance and certificate timers' services between runs.
 fn idles(unit: Unit) -> bool {
-    matches!(unit, Unit::Llm | Unit::Maintenance)
+    matches!(unit, Unit::Llm | Unit::Maintenance | Unit::Certificates)
 }
 
 /// Unit problems, then health problems, then the installed services, then
