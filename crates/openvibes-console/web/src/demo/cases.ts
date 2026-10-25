@@ -77,8 +77,9 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
   const exclusive = (item: StoredItem) => EXCLUSIVE_KINDS.has(item.kind);
   // An alarm, finding or vulnerability that no longer exists has no evidence left.
   const gone = (item: StoredItem) => factsOf(item)?.gone ?? true;
-  /** Stands in the way of closing: no outcome, or resolved while the evidence is back (visibility.rs blocking_item). */
-  const blocking = (i: StoredItem) => exclusive(i) && (i.outcome === null || (i.outcome === "resolved" && !gone(i)));
+  /** Stands in the way of closing: no outcome, resolved while the evidence is back, or risk accepted until a passed date (visibility.rs blocking_item). */
+  const blocking = (i: StoredItem) => exclusive(i) && (i.outcome === null || (i.outcome === "resolved" && !gone(i))
+    || (i.outcome === "accepted_risk" && i.outcome_until != null && Date.parse(i.outcome_until) <= Date.now()));
   const itemView = (item: StoredItem): CaseItem => {
     const facts = factsOf(item);
     return {

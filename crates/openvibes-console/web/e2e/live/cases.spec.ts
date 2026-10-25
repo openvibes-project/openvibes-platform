@@ -7,6 +7,7 @@
 // run's tag, so a retry (CI's retries: 1) or a second run on the same server
 // only meets its own; the seeded alarms are taken out of open cases first and
 // last, as an alarm sits in one open case at a time.
+// Not safe with --workers>1 and --repeat-each: the repeats share the seeded alarms and collide.
 import { type Page, expect, test } from "@playwright/test";
 
 import templates from "../../src/api/templates.json" with { type: "json" };

@@ -303,6 +303,54 @@ async fn an_expired_acceptance_on_an_open_case_needs_a_decision_again() {
 }
 
 #[tokio::test]
+async fn close_refuses_an_acceptance_that_ran_out_before_it_was_cleared() {
+    let mut fx = setup().await;
+    let alarm = fx.web_alarm.clone();
+    let case = open_case(
+        &mut fx.console,
+        &global(),
+        ALICE,
+        "Ran out",
+        &[("alarm", &alarm)],
+    )
+    .await;
+    outcome(
+        &mut fx,
+        &global(),
+        ALICE,
+        &case,
+        item_id(&case, "alarm"),
+        Some(OutcomeChange {
+            outcome: "accepted_risk",
+            note: Some("for now"),
+            outcome_until: Some(Utc::now() + Duration::days(1)),
+        }),
+    )
+    .await
+    .unwrap();
+    // The date passes, and no read has run reopen_due since.
+    fx.admin
+        .execute(
+            "UPDATE case_items SET outcome_until = now() - interval '1 minute'
+             WHERE case_id = $1::text::uuid",
+            &[&case.summary.case_id],
+        )
+        .await
+        .unwrap();
+    let loaded = fetch(&fx, &global(), ALICE, &case).await.unwrap();
+    let refused = update(
+        &mut fx,
+        &global(),
+        ALICE,
+        &loaded,
+        &closing(&loaded, "Done"),
+    )
+    .await;
+    assert_eq!(refused.unwrap_err(), Refusal::ItemsUnresolved(1));
+    fx.db.drop().await;
+}
+
+#[tokio::test]
 async fn cases_that_cannot_reopen_do_not_fill_the_batch() {
     let mut fx = setup().await;
     // 100 closed cases, closed last, each with an expired acceptance on an

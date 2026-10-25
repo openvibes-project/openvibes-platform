@@ -33,7 +33,7 @@ type Facet = "status" | "severity" | "assignee" | "contains" | "updated" | "grou
 type Row = ListedCase & { kinds: Record<string, number>; groups: Set<string>; hosts: string[] };
 
 export function registerCaseListRoute(ctx: DemoContext & { cases: CaseStore }) {
-  const { data, route, me, facts, visible, capabilities, cases } = ctx;
+  const { data, route, me, facts, reaches: reachesHost, capabilities, cases } = ctx;
   route("GET", "/api/v1/case-list", "cases.read", (_, query) => {
     for (const key of query.keys()) if (!PARAMS.includes(key)) {
       return problem(400, "invalid_query", "Case query parameters are invalid", { field_errors: [{ field: "query", code: "invalid", message: "The query parameter is invalid" }] });
@@ -101,9 +101,10 @@ export function registerCaseListRoute(ctx: DemoContext & { cases: CaseStore }) {
     const people = new Map<string, number>();
     for (const r of rows) if (r.c.assignee_user_id !== null) people.set(r.c.assignee_user_id, 0);
     for (const r of assigneeRows) if (r.c.assignee_user_id !== null) people.set(r.c.assignee_user_id, (people.get(r.c.assignee_user_id) ?? 0) + 1);
-    const scope = capabilities.find((c) => c.permission === "hosts.read")?.scope;
+    // The reach is cases.read's, as the store's `$1/$2`.
+    const scope = capabilities.find((c) => c.permission === "cases.read")?.scope;
     const reaches = (g: string) => scope?.kind === "global" || (scope?.kind === "asset_groups" && scope.asset_group_ids.includes(g));
-    const seenGroups = new Set(data.agents.filter((a) => visible(a.id)).flatMap((a) => groupsOf(a.id)));
+    const seenGroups = new Set(data.agents.filter((a) => reachesHost("cases.read", a.id)).flatMap((a) => groupsOf(a.id)));
 
     const matching = except();
     const dir = get("dir") === "asc" ? 1 : -1;

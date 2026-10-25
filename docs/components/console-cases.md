@@ -229,6 +229,12 @@ its `accepted_risk` items lose the outcome. On a case that is not closed,
 an acceptance that runs out clears the same lazy way (`item_outcome`
 with reason `accepted_risk_expired`, audit `case.item.outcome` by
 `system`) and the status stays, so the case is no longer ready to close.
+Until that clearing runs, an `accepted_risk` item whose date has passed
+already counts as having no outcome (`blocking_item`): close refuses it
+(409 `items_unresolved`) and the case is not ready to close. The timeline
+reads such a clear as "The platform cleared the outcome of …: the risk
+acceptance ran out, so it needs an outcome again" ("the evidence
+returned" for a `resolved` item on reopen).
 The checks skip closed cases one of whose items another open case holds,
 so those never fill the 100-case batch. Migration 64 dated the existing
 `accepted_risk` items: the case's `accepted_until` when it was closed as
@@ -355,10 +361,15 @@ Roles step 5d (schema 64):
   so Close case… no longer asks how the case ended. Cases closed before
   the upgrade keep showing their case-level resolution and note.
 - **Two new outcomes**, Confirmed malicious and Expected activity. Risk
-  accepted needs a re-open date per item, at most 365 days ahead; when it
+  accepted needs a re-open date per item, at most 365 days ahead (the
+  page's date picker offers up to 364 days, whose end is always inside
+  that); when it
   passes, that item's outcome clears and a closed case reopens. Existing
   Risk accepted items were dated by the upgrade: the case's own date when
   it was closed as accepted risk, otherwise 90 days after the upgrade.
+  That includes Risk accepted items on cases closed as mitigated or false
+  positive: those closed cases reopen about 90 days after the upgrade,
+  when the dates pass, and the items need an outcome again.
 - **Hosts decide who sees a case.** People whose reach is some host groups
   no longer see a case whose only items are software (it has no host);
   they still see one they opened or are assigned. A case with no host-bound
@@ -367,6 +378,13 @@ Roles step 5d (schema 64):
   that `cases.write` and `cases.read` share, and bulk actions on the lists
   use the reach every needed permission shares: bulk suppress reaches only
   hosts where the person holds both `alarms.triage` and `alarms.suppress`.
+  The reach is matched by host group, not by host: someone whose roles
+  reach the same hosts through different groups (say `cases.read` on one
+  group, `cases.write` on another holding the same hosts) may now be
+  refused where they were not before. It fails closed; give both
+  permissions on the same groups.
 - **The case side panel became a page**, `/cases/{id}`, and New case is
   `/cases/new`. Old links (`?open=case:ID`, alarms, Add to case, the
-  palette, the badges) redirect to the page with no dead history entry.
+  palette, the badges) lead to the page; an old `?open=case:ID` address
+  is replaced in place, so Back skips it (e2e
+  `old_case_links_open_the_page`).

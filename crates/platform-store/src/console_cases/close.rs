@@ -70,7 +70,8 @@ pub(super) fn closing_valid(change: &CaseChange<'_>) -> Result<(), (&'static str
 }
 
 /// Alarm, finding and vulnerability items that still stand in the way of
-/// closing: without an outcome, or resolved while the evidence is back.
+/// closing: without an outcome, resolved while the evidence is back, or
+/// accepted risk whose date has passed ([`blocking_item`]).
 /// Returns (visible, hidden) counts.
 pub(super) async fn blocking_items(
     tx: &impl GenericClient,

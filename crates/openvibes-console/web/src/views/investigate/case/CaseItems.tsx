@@ -5,12 +5,12 @@
 // evidence is gone, a note for every outcome but Fixed, a re-open date for
 // Risk accepted); a changed choice opens a full-width sub-row with the note,
 // the date and Save. + Add item, as the old case panel had it.
-import { type FormEvent, Fragment, useEffect, useRef, useState } from "react";
+import { type FormEvent, Fragment, useCallback, useRef, useState } from "react";
 
 import { invalidate, request } from "../../../api/client";
 import type { CaseDetail, CaseItem } from "../../../api/types";
 import {
-  CASE_KINDS, type CaseKind, caseErrorText, isStale, itemPanel, kindLabel, localDay, needsOutcome, outcomeBody, outcomeChoices, outcomeLabel,
+  acceptRange, CASE_KINDS, type CaseKind, caseErrorText, isStale, itemPanel, kindLabel, localDay, needsOutcome, outcomeBody, outcomeChoices, outcomeLabel,
   outcomeNeedsNote, refHint, refLabel,
 } from "../../../panels/cases/cases";
 import { ObjectLink, SeverityBadge } from "../../../ui/bits";
@@ -22,8 +22,6 @@ import { Select } from "../../../ui/Select";
 import { toast } from "../../../ui/toast";
 import { attempt, caseApi } from "./CaseCards";
 
-const DAY = 86_400_000;
-
 /** The table's columns; Kind, Severity and Host hide below their widths (px of the card), as the lists' columns do. */
 export const ITEM_COLUMNS = [
   { key: "kind", label: "Kind", width: "120px", hideBelow: 560 },
@@ -33,15 +31,17 @@ export const ITEM_COLUMNS = [
   { key: "outcome", label: "Outcome", width: "190px" },
 ] as const;
 
-/** The card's width, for `hideBelow` (as DataTable measures its own). */
+/** The card's width, for `hideBelow` (as DataTable measures its own). A
+ * callback ref, as the table first mounts when a case gets its first item. */
 function useWidth() {
-  const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(1200);
-  useEffect(() => {
-    if (!ref.current) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 1200));
-    observer.observe(ref.current);
-    return () => observer.disconnect();
+  const observer = useRef<ResizeObserver>(null);
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    observer.current?.disconnect();
+    observer.current = null;
+    if (!node) return;
+    observer.current = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 1200));
+    observer.current.observe(node);
   }, []);
   return [ref, width] as const;
 }
@@ -74,7 +74,7 @@ function ItemRow({ c, item, editable, shown, span }: { c: CaseDetail; item: Case
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   // Risk accepted: a future day, at most 365 days ahead (ruling 1).
-  const [[tomorrow, latest]] = useState(() => [localDay(new Date(Date.now() + DAY)), localDay(new Date(Date.now() + 365 * DAY))]);
+  const [[tomorrow, latest]] = useState(() => acceptRange(Date.now()));
   const takes = editable && needsOutcome(item);
   const changed = draft.outcome !== saved.outcome || (draft.outcome !== "" && draft.note.trim() !== saved.note)
     || (draft.outcome === "accepted_risk" && draft.until !== saved.until);

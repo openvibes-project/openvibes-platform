@@ -104,8 +104,9 @@ test("each outcome can be set in the Items table, a note is required except for 
   await more.getByRole("button", { name: "Save outcome" }).click();
   await expect(more.getByRole("textbox", { name: /^Note for/ })).toHaveJSProperty("validity.valid", false);
   await more.getByRole("textbox", { name: /^Note for/ }).fill("The owner signs off until the rebuild.");
-  const day = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
-  await more.getByLabel(/^Re-open date for/).fill(day);
+  // The picker's last day (a year ahead) is one the API takes.
+  const date = more.getByLabel(/^Re-open date for/);
+  await date.fill((await date.getAttribute("max")) ?? "");
   await more.getByRole("button", { name: "Save outcome" }).click();
   await expect(page.locator(".toast").filter({ hasText: "Outcome saved" })).toBeVisible();
   await expect(first).toContainText("Risk accepted");
@@ -195,6 +196,21 @@ test("Edit changes the title and severity, Assign the assignee, and Add item and
   await items.getByRole("group", { name: /^Remove / }).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(page.locator(".toast").filter({ hasText: "Item removed" })).toBeVisible();
   await expect(items.locator("tr.case-row")).toHaveCount(2);
+});
+
+test("at phone width, the first item added to an empty case shows the narrow columns", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/cases/new");
+  await page.getByLabel("Title").fill("An empty case");
+  await page.getByRole("button", { name: "Open case" }).click();
+  await expect(page).toHaveURL(CASE);
+  const items = card(page, /^Items/);
+  await items.getByRole("button", { name: "Add item" }).click();
+  await page.getByLabel("Id").fill("agent-00001");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(items.locator("tr.case-row")).toHaveCount(1);
+  await expect(items.getByRole("columnheader", { name: "Item", exact: true })).toBeVisible();
+  for (const narrow of ["Kind", "Severity", "Host"]) await expect(items.getByRole("columnheader", { name: narrow, exact: true })).toHaveCount(0);
 });
 
 for (const scheme of ["light", "dark"] as const) {

@@ -72,9 +72,11 @@ export function refLabel(kind: string, ref: string): string {
 
 export const needsOutcome = (item: Pick<CaseItem, "kind">) => EXCLUSIVE_KINDS.has(item.kind);
 
-/** Items that stop the case from closing: no outcome yet, or "resolved" while the evidence is back. */
-export function blockingItems(items: readonly CaseItem[]): CaseItem[] {
-  return items.filter((item) => needsOutcome(item) && (item.outcome == null || (item.outcome === "resolved" && !item.evidence_gone)));
+/** Items that stop the case from closing: no outcome yet, "resolved" while the evidence is back,
+ * or risk accepted until a date that has passed (visibility.rs blocking_item). */
+export function blockingItems(items: readonly CaseItem[], now = Date.now()): CaseItem[] {
+  return items.filter((item) => needsOutcome(item) && (item.outcome == null || (item.outcome === "resolved" && !item.evidence_gone)
+    || (item.outcome === "accepted_risk" && item.outcome_until != null && Date.parse(item.outcome_until) <= now)));
 }
 
 type OutcomeChoice = { value: string; label: string; disabled: boolean; hint: string | undefined };
@@ -142,7 +144,11 @@ export function eventText(event: CaseEvent, titleOf: (itemId: string) => string 
     case "severity": return `changed the severity from ${text(d.from) ?? "?"} to ${text(d.to) ?? "?"}`;
     case "item_added": return `added ${item()}`;
     case "item_removed": return `removed ${item()}`;
-    case "item_outcome": return text(d.to) ? `marked ${item()} as ${(outcomeLabel[text(d.to) ?? ""] ?? "").toLowerCase()}` : `cleared the outcome of ${item()}`;
+    case "item_outcome": {
+      if (text(d.to)) return `marked ${item()} as ${(outcomeLabel[text(d.to) ?? ""] ?? "").toLowerCase()}`;
+      const why = { accepted_risk_expired: "the risk acceptance ran out", evidence_returned: "the evidence returned" }[text(d.reason) ?? ""];
+      return `cleared the outcome of ${item()}${why ? `: ${why}, so it needs an outcome again` : ""}`;
+    }
     case "resolved": {
       // Cases closed before step 5d name a resolution; new closes do not.
       const resolution = resolutionLabel[text(d.resolution) ?? ""];
@@ -167,6 +173,14 @@ export function caseErrorText(error: unknown): string {
 
 /** True when a refusal means the data on screen is out of date. */
 export const isStale = (error: unknown) => error instanceof ApiError && (error.status === 412 || error.status === 404 || error.code === "items_unresolved" || error.code === "evidence_present");
+
+/** Risk accepted's date input range at `now`: tomorrow to the last day the
+ * API takes (outcomes.rs: at most MAX_ACCEPT_DAYS ahead, sent as the end of the day). */
+// The last day is 364 days ahead: day 365 ends after now + 365 days.
+export function acceptRange(now: number): [string, string] {
+  const day = 86_400_000;
+  return [localDay(new Date(now + day)), localDay(new Date(now + 364 * day))];
+}
 
 /** A local date as `YYYY-MM-DD`, the value of a date input. */
 export function localDay(value: Date): string {

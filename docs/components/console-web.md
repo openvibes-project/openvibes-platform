@@ -452,7 +452,8 @@ triage on alarms and findings stays as it is.
     vulnerabilities take an **Outcome** (Fixed only while the evidence is
     gone, "evidence still there" otherwise); a changed choice opens a
     full-width sub-row with the note (required for all but Fixed), the
-    re-open date for Risk accepted (tomorrow to 365 days ahead) and Save.
+    re-open date for Risk accepted (tomorrow to 364 days ahead, so the
+    end of the last day stays within the API's 365 days) and Save.
     ✕ (**Remove**, confirmed in a sub-row) and **Add item** (kind and
     pasted id) with `can.outcome` (a case not closed). The close dialog's
     live hint says "Add a closing note." until there is one. Then

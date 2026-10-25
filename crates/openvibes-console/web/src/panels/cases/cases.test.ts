@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../../api/client";
 import type { CaseEvent, CaseItem } from "../../api/types";
-import { afterAgent, caseBadges, statusBadge, localDay, blockingItems, caseErrorText, closeProblems, endOfLocalDay, eventText, findingRef, itemPanel, outcomeBody, outcomeChoices, refLabel, updateBody, vulnerabilityRef } from "./cases";
+import { outcomeError } from "../../demo/caseRules";
+import { acceptRange, afterAgent, caseBadges, statusBadge, localDay, blockingItems, caseErrorText, closeProblems, endOfLocalDay, eventText, findingRef, itemPanel, outcomeBody, outcomeChoices, refLabel, updateBody, vulnerabilityRef } from "./cases";
 
 const item = (over: Partial<CaseItem>): CaseItem => ({
   item_id: "i", kind: "alarm", ref: "1", active: true, added_at: "2026-01-01T00:00:00Z", added_by: { user_id: "u", username: "sam", display_name: "Sam" },
@@ -83,6 +84,10 @@ describe("timeline and errors", () => {
     expect(eventText(event("item_outcome", { item_id: "i1", item_kind: "finding", item_ref: "a//R", to: "false_positive" }), titles)).toBe("marked compliance finding nginx → sh as false positive");
     expect(eventText(event("item_added", { item_id: "gone", item_kind: "compliance_finding", item_ref: "a/base/R-1" }), titles)).toBe("added compliance finding R-1 on a");
     expect(eventText(event("item_outcome", { item_id: "i1", item_kind: "alarm", item_ref: "9", to: null }), titles)).toBe("cleared the outcome of alarm nginx → sh");
+    expect(eventText(event("item_outcome", { item_id: "i1", item_kind: "alarm", item_ref: "9", from: "accepted_risk", to: null, reason: "accepted_risk_expired" }), titles))
+      .toBe("cleared the outcome of alarm nginx → sh: the risk acceptance ran out, so it needs an outcome again");
+    expect(eventText(event("item_outcome", { item_id: "i1", item_kind: "alarm", item_ref: "9", from: "resolved", to: null, reason: "evidence_returned" }), titles))
+      .toBe("cleared the outcome of alarm nginx → sh: the evidence returned, so it needs an outcome again");
     expect(eventText(event("resolved", {}))).toBe("closed the case");
     expect(eventText(event("resolved", { resolution: "false_positive", accepted_until: null }))).toBe("closed the case as false positive");
     expect(eventText(event("resolved", { resolution: "accepted_risk", accepted_until: "2031-01-15T12:00:00Z" }))).toMatch(/^closed the case as accepted risk until .*2031/);
@@ -99,6 +104,26 @@ describe("timeline and errors", () => {
       .toBe("The id does not have the shape of this kind of item");
     expect(caseErrorText(new ApiError(409, "case_closed", "The case is closed; reopen it first"))).toBe("The case is closed; reopen it first");
     expect(caseErrorText(new Error("boom"))).toBe("Something went wrong; try again");
+  });
+});
+
+describe("Risk accepted's date range", () => {
+  it("offers as its last day one the API takes, at any time of day", () => {
+    for (const [h, m, sec] of [[0, 0, 1], [9, 30, 0], [23, 59, 58]]) {
+      const now = new Date(2026, 9, 25, h, m, sec).getTime();
+      const [first, last] = acceptRange(now);
+      expect(outcomeError("accepted_risk", "ok", Date.parse(endOfLocalDay(last) ?? ""), now), `${h}:${m}`).toBeNull();
+      expect(outcomeError("accepted_risk", "ok", Date.parse(endOfLocalDay(first) ?? ""), now)).toBeNull();
+    }
+  });
+});
+
+describe("blocking items", () => {
+  it("counts an acceptance that ran out but is not cleared yet (visibility.rs blocking_item)", () => {
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    expect(blockingItems([item({ outcome: "accepted_risk", outcome_until: past })])).toHaveLength(1);
+    expect(blockingItems([item({ outcome: "accepted_risk", outcome_until: future })])).toHaveLength(0);
   });
 });
 

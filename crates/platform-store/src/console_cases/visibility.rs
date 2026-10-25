@@ -53,12 +53,15 @@ pub(crate) fn case_visible_with(case: &str, has_item_in_scope: &str) -> String {
 }
 
 /// An alarm, finding or vulnerability item (alias `i`) that stands in the
-/// way of closing: without an outcome, or resolved while its evidence is
-/// back. Shared by close and the Cases list's "ready to close".
+/// way of closing: without an outcome, resolved while its evidence is
+/// back, or accepted risk whose date has passed (before `reopen_due` has
+/// cleared it). Shared by close, the case page's and the Cases list's
+/// "ready to close".
 pub(crate) fn blocking_item() -> String {
     format!(
         "(i.kind IN ('alarm', 'compliance_finding', 'vulnerability')
-          AND (i.outcome IS NULL OR (i.outcome = 'resolved' AND NOT ({}))))",
+          AND (i.outcome IS NULL OR (i.outcome = 'resolved' AND NOT ({}))
+               OR (i.outcome = 'accepted_risk' AND i.outcome_until <= now())))",
         item_gone()
     )
 }
