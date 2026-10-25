@@ -98,6 +98,8 @@ pub enum CaMode {
     Quick,
     /// Root stays offline; the intermediate request is signed elsewhere.
     Careful,
+    /// A finished intermediate and its key from your PKI (`helper ca-import`).
+    Import,
 }
 
 /// Whether Setup downloads the assistant's model.
@@ -316,7 +318,8 @@ pub struct PlanArgs {
     /// More DNS names or IP addresses for the server certificates.
     #[arg(long)]
     pub san: Vec<String>,
-    /// quick: root created here; careful: root kept offline.
+    /// quick: root created here; careful: root kept offline; import: an
+    /// intermediate from your PKI.
     #[arg(long, value_enum, default_value = "quick")]
     pub ca: CaMode,
     /// Where the quick CA's root key is written once (e.g. a USB stick);
@@ -394,10 +397,8 @@ impl PlanArgs {
         if self.allow_unsigned_local && self.repo_dir.is_none() {
             return Err("--allow-unsigned-local needs --repo-dir".into());
         }
-        if self.root_key_out.is_some() && self.ca == CaMode::Careful {
-            return Err(
-                "--root-key-out is for the quick CA (a careful CA's root stays offline)".into(),
-            );
+        if self.root_key_out.is_some() && self.ca != CaMode::Quick {
+            return Err("--root-key-out is for the quick CA (any other root stays offline)".into());
         }
         let mut components = self.components.clone();
         components.sort();

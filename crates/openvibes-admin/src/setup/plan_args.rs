@@ -22,6 +22,7 @@ impl Plan {
         let ca = match self.ca {
             CaMode::Quick => "quick",
             CaMode::Careful => "careful",
+            CaMode::Import => "import",
         };
         args.extend(["--ca".into(), ca.into()]);
         let mut path = |flag: &str, value: &Option<std::path::PathBuf>| {
@@ -109,5 +110,40 @@ mod tests {
         };
         assert!(!plan.args().contains(&"--root-key-out".to_owned()));
         assert_eq!(back(&plan), plan);
+    }
+
+    #[test]
+    fn an_import_plan_survives_the_round_trip() {
+        let plan = Plan {
+            ca: CaMode::Import,
+            root_key_out: None,
+            ..full()
+        };
+        assert!(plan.args().contains(&"import".to_owned()));
+        assert_eq!(back(&plan), plan);
+    }
+
+    #[test]
+    fn an_imported_ca_takes_no_root_key_file() {
+        let argv = [
+            "setup-plan",
+            "--components",
+            "ingest",
+            "--hostname",
+            "h.lan",
+            "--ca",
+            "import",
+            "--root-key-out",
+            "/media/usb/root.key",
+        ];
+        let error = Cli::try_parse_from(argv)
+            .unwrap()
+            .plan
+            .plan(None)
+            .unwrap_err();
+        assert!(
+            error.contains("--root-key-out is for the quick CA"),
+            "{error}"
+        );
     }
 }

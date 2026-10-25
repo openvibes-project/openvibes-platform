@@ -148,7 +148,7 @@ impl Install {
         self.hostname = plan.hostname;
         self.sans = plan.sans.join(", ");
         self.ca = match plan.ca {
-            CaMode::Careful => Ca::Own,
+            CaMode::Careful | CaMode::Import => Ca::Own,
             CaMode::Quick => Ca::OpenVibes,
         };
         self.root_key_out = super::fields::default_root_key(self.home.as_deref());

@@ -554,13 +554,14 @@ neither `admin.toml` nor the database, so they are not audited;
 ## Setup command (admin TUI spec §6)
 
 `openvibes-admin setup --quick --components LIST --hostname NAME [--san
-ADDR]... [--ca quick|careful] [--root-key-out PATH]
+ADDR]... [--ca quick|careful|import] [--root-key-out PATH]
 [--admin-password-file PATH] [--repo-dir DIR] [--allow-unsigned-local]
 [--console-port PORT] [--ingest-port PORT] [--distribution-port PORT]
 [--model fetch|skip]` runs as root, writes `/etc/openvibes/setup.toml` (0644) from the checked
 arguments, then runs every Setup step in order and prints one line per step
 (`TITLE: STATE DETAIL`). Exit 0 when every step is done or skipped, 3 when a
-step waits (careful CA: sign the request offline, then run it again), 1 on a
+step waits (careful CA: sign the request offline, then run it again;
+imported CA: add it in Install › Certificates), 1 on a
 failure, 2 on bad arguments (checked before the root check).
 `--model` (with the assistant; default `fetch`) decides whether the
 "Assistant model" step downloads the pinned model; `skip` leaves the
@@ -636,13 +637,23 @@ CA is `ca-replace`'s and is left for it, ruling 8), else installs from the
 request folder below when it holds the key, request, certificate and root,
 then removes the folder, otherwise
 waits for the signed intermediate in `/run/openvibes-ca/int`; quick also
-removes a leftover request folder), `certificates`
+removes a leftover request folder; import: done once the CA is installed
+(Repair never imports over it), else installs from what `helper ca-import`
+staged in `/etc/openvibes/pki/request/import/` once it holds the key, our
+intermediate and the root, then removes the request folder, otherwise
+waits: "add the certificate and its key from your PKI: Install ›
+Certificates". The CAs between ours and the root go in
+`/etc/openvibes/pki/chain.crt` (0644), never in `intermediate.crt`; an
+install without any removes a stale one. `--root-key-out` is for quick
+only), `certificates`
 (hostname, `--san`, `localhost`, `127.0.0.1`, then the host's global IPv4
 and IPv6 addresses from `ip -o addr show scope global` (not rotating IPv6
 privacy or deprecated ones), container and VM bridges
 (docker, podman, lxd, incus, calico, flannel, vxlan…) left out, VPN
 interfaces kept, so the console opens by IP; a changed address makes the step Todo
-and Repair reissues), `console` (`public_origin`
+and Repair reissues; every certificate ends with `chain.crt`'s CAs when it
+exists (`ca issue-server --chain`), and the step is to do until each does,
+so a new or changed chain reissues), `console` (`public_origin`
 `https://HOST` or `https://HOST:PORT`, `development_listen` on the chosen
 port with direct TLS, `platform_domain` in `/etc/openvibes/fetch.toml`
 when openvibes-fetch is installed, and the `admin` account; a generated
@@ -880,8 +891,8 @@ its certificate.
 | `ca init-root --out DIR` | offline machine | `root.crt`, `root.key` | no (no database there) |
 | `ca intermediate-request --out DIR` | ingest host | `intermediate.key`, `intermediate.csr` | no |
 | `ca sign-intermediate --root DIR --csr FILE --out FILE` | offline machine | intermediate certificate | no |
-| `ca import-intermediate --cert F --key F --root-cert F` | ingest host | records root + intermediate in `ca_certificates` | yes, target = intermediate SHA-256 |
-| `ca issue-server NAME [--san X]... --issuer-cert F --issuer-key F --out DIR` | ingest host | `NAME.crt` (leaf + intermediate), `NAME.key` | yes, target = NAME |
+| `ca import-intermediate --cert F --key F --root-cert F [--chain F]` | ingest host | records root + intermediate in `ca_certificates` (the CAs in `--chain` have no role and are not recorded) | yes, target = intermediate SHA-256 |
+| `ca issue-server NAME [--san X]... --issuer-cert F --issuer-key F --out DIR [--chain F]` | ingest host | `NAME.crt` (leaf + intermediate, then `--chain`'s CAs), `NAME.key` | yes, target = NAME |
 
 Operator flow: `init-root` offline, then `intermediate-request` on the ingest
 host, carry only the **CSR** to the offline machine, `sign-intermediate`
@@ -890,7 +901,12 @@ The intermediate key never leaves the ingest host and the root key never
 leaves the offline machine. `import-intermediate` refuses a key that does
 not match the certificate, a certificate the given root did not sign, one
 that is not an intermediate (the root itself, a leaf, or a CA without path
-length 0), or one outside its validity, and records nothing then. Offline commands work without any config file.
+length 0), or one outside its validity, and records nothing then. With
+`--chain` (the CAs between the intermediate and the root, nearest first;
+an empty file for none), as the Setup step passes it for an imported CA,
+it checks the whole path instead (platform-pki `check_chain`: any path
+length the CAs above allow, CAs in between, every one valid for 90 days
+more) and refuses a path that does not end in `--root-cert`. Offline commands work without any config file.
 
 **Replacing the intermediate** (`helper ca-replace [--root-key PATH]`,
 `src/setup/replace.rs`; the runbook is packaging.md "Replacing the

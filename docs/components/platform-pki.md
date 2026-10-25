@@ -14,7 +14,7 @@ and ingest do the file and database work.
 
 An intermediate imported from a company PKI takes the place of the one
 above; its root and any CAs between come from the company. Those middle CAs
-are stored apart (`chain.crt`), never as trust anchors: they ride along in
+are stored apart (`/etc/openvibes/pki/chain.crt`), never as trust anchors: they ride along in
 server certificates (`Issuer::with_chain`) so clients can reach the root,
 while agent client certificates still chain to our intermediate only.
 

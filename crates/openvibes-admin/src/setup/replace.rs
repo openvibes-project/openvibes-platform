@@ -191,6 +191,9 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
     match ctx.plan.ca {
         CaMode::Careful => careful(ctx, &root)?,
         CaMode::Quick => quick(ctx, &root, root_key)?,
+        CaMode::Import => {
+            return Err("Replacing an imported intermediate is not available yet.".into());
+        }
     }
     let (cert, key) = (
         format!("{INT}/intermediate.crt"),

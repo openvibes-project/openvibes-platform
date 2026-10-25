@@ -339,7 +339,8 @@ fi
 %postun -n openvibes-admin
 %systemd_postun openvibes-maintenance.timer openvibes-certificates.timer
 # Removed from a host never installed (no setup.toml): an abandoned "Your
-# own CA" request goes too, its key included, and the folders it made when
+# own CA" request or staged import (request/import) goes too, its key
+# included, and the folders it made when
 # left empty (never fails). So does the operator's copy of the request
 # that ca-request recorded, only while it is still that request: a regular
 # file (a link is never followed, a FIFO never read) with the same bytes.

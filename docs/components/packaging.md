@@ -38,7 +38,7 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/usr/lib/systemd/system/openvibes-ingest.service` | 0644 root | ingest |
 | `/usr/lib/sysusers.d/openvibes-ingest.conf` | user `openvibes-ingest` | ingest |
 | `/etc/openvibes/ingest.toml` | 0640 root:openvibes-ingest, `%config(noreplace)` | ingest |
-| `/etc/openvibes/{tls,pki}/` | 0755 root | ingest |
+| `/etc/openvibes/{tls,pki}/` | 0755 root; Setup writes `pki/intermediate.crt`, `pki/root.crt` and, for a CA from your PKI with CAs between ours and the root, `pki/chain.crt` (all 0644 root); `pki/request/` (0700 root) holds a request or a staged import until the CA step installs it | ingest |
 | `/var/lib/openvibes-ingest/` | 0700 openvibes-ingest (intermediate key) | ingest |
 | `/usr/bin/openvibes-distribution` | 0755 root | distribution |
 | `/usr/lib/systemd/system/openvibes-distribution.service` | 0644 root | distribution |
@@ -280,6 +280,14 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    status` shows each Fedora release your agents report once it is checked.
 
 Agents trust `root.crt` (their `platform_ca_file`).
+
+With an intermediate from your PKI that sits below other CAs, give
+`import-intermediate` those CAs too (`--chain chain.crt`, nearest first),
+install that file as `/etc/openvibes/pki/chain.crt` (0644), and pass
+`--chain` to every `issue-server`, so each server certificate carries the
+path up to the root. Never append those CAs to `intermediate.crt`:
+distribution trusts all of it for agent client certificates. Remove
+everything deletes `chain.crt` with the rest of `/etc/openvibes`.
 
 ## Console RPM setup
 

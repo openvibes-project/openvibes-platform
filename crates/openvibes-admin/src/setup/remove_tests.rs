@@ -171,6 +171,9 @@ fn purge_drops_the_database_roles_files_and_accounts() {
     fake.file("/etc/openvibes/pki/request/intermediate.csr", "CSR");
     fake.file("/etc/openvibes/pki/request/copy", "/home/alice/r.csr");
     fake.file("/home/alice/r.csr", "CSR");
+    // An imported PKI's chain, and an import staged but not installed.
+    fake.file("/etc/openvibes/pki/chain.crt", "CHAIN");
+    fake.file("/etc/openvibes/pki/request/import/intermediate.key", "KEY");
     fake.answer(
         &[&PG[..], &["/usr/bin/psql"]].concat(),
         0,
@@ -208,6 +211,7 @@ fn purge_drops_the_database_roles_files_and_accounts() {
         "var/lib/openvibes-ingest",
         "etc/openvibes-agent",
         "home/alice/r.csr",
+        "etc/openvibes/pki",
     ] {
         assert!(!fake.root.join(gone).exists(), "{gone}");
     }
