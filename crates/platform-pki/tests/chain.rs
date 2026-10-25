@@ -3,8 +3,8 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use platform_pki::{
-    ChainError, Issuer, KeyInfo, KeyKind, PkiError, check_chain, check_key, generate_root,
-    intermediate_request, sign_intermediate, verify_signed_by,
+    ChainError, Issuer, KeyInfo, KeyKind, PkiError, check_chain, check_key, common_name,
+    generate_root, intermediate_request, sign_intermediate, verify_signed_by,
 };
 
 const ROOT: &str = include_str!("fixtures/root.crt");
@@ -221,4 +221,13 @@ fn openvibes_made_cas_still_pass() {
     assert!(chain.middle.is_empty());
     assert_eq!(chain.path, ["OpenVIBES Root CA"]);
     check_key(&chain, &key, now).unwrap();
+}
+
+#[test]
+fn common_name_names_the_first_certificate() {
+    assert_eq!(
+        common_name(&format!("{OURS_EC}{ROOT}")).unwrap(),
+        "Lime Lab OpenVIBES CA"
+    );
+    assert_eq!(common_name(""), Err(PkiError::InvalidPem));
 }

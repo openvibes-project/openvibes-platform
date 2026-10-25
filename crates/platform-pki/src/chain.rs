@@ -72,6 +72,14 @@ pub fn certificates(pem: &str) -> Result<Vec<Vec<u8>>, PkiError> {
     Ok(ders)
 }
 
+/// The common name of the first certificate in `pem` ("an unnamed CA"
+/// without one): the TUI names ours while the chain above it is not whole.
+pub fn common_name(pem: &str) -> Result<String, PkiError> {
+    let ders = certificates(pem)?;
+    let der = ders.first().ok_or(PkiError::InvalidPem)?;
+    Ok(cn(parse(der)?.subject()))
+}
+
 fn cn(name: &X509Name<'_>) -> String {
     name.iter_common_name()
         .next()

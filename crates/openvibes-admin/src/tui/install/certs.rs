@@ -1,6 +1,7 @@
 //! Step 3, Certificates (ca.py, ca2.py, full_advanced.py): your own CA
-//! (the default) or OpenVIBES makes one. With your own CA, Next makes the
-//! request before anything is installed (`ca-request`); the request is
+//! (the default), Import from your PKI (`import.rs`) or OpenVIBES makes
+//! one. With your own CA, Next makes the request before anything is
+//! installed (`ca-request`); the request is
 //! shown to copy, and the two certificates are added (`paste.rs`). Once
 //! both are, the helper checks and keeps them (`ca-accept`): only then
 //! does Next go on, as the careful CA step installs from them.
@@ -32,10 +33,13 @@ use crate::{
     },
 };
 
-const HELP: [&str; 2] = [
+const HELP: [&str; 3] = [
     "For networks with their own PKI. Your root key never comes near this host.",
+    super::import::HELP,
     "For networks without a CA of their own.",
 ];
+/// The three choices, in their rows' order.
+const CHOICES: [Ca; 3] = [Ca::Own, Ca::Import, Ca::OpenVibes];
 const MADE: &str = "OpenVIBES made a request; your CA signs it as an intermediate.";
 
 impl Install {
@@ -59,9 +63,14 @@ impl Install {
         self.root_added = None;
     }
 
-    /// The choice rows: the root key file only for OpenVIBES makes one.
+    /// The choice rows: the three choices, then the root key file for
+    /// OpenVIBES makes one or the certificate and key for Import, then Next.
     fn choice_rows(&self) -> usize {
-        if self.ca == Ca::OpenVibes { 4 } else { 3 }
+        match self.ca {
+            Ca::Own => 4,
+            Ca::Import => 6,
+            Ca::OpenVibes => 5,
+        }
     }
 }
 
@@ -155,41 +164,56 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             "your CA signs an intermediate for OpenVIBES",
         ),
         radio(
+            install.ca == Ca::Import,
+            "Import from your PKI",
+            "a finished intermediate and its key",
+        ),
+        radio(
             install.ca == Ca::OpenVibes,
             "OpenVIBES makes one",
             "a new root CA; its key goes offline after",
         ),
     ];
     let typing = install.editing.is_some();
-    if install.ca == Ca::OpenVibes {
-        rows.push(Row::entry(
+    match install.ca {
+        Ca::OpenVibes => rows.push(Row::entry(
             "Root key file",
             &typed(&install.root_key_out, typing),
-        ));
+        )),
+        Ca::Import => rows.extend(install.import_rows(t)),
+        Ca::Own => {}
     }
-    rows.push(Row::entry("Next", "ports"));
+    let import = install.ca == Ca::Import;
+    let ports = if import && !install.both_added() {
+        "once both are added"
+    } else {
+        "ports"
+    };
+    rows.push(Row::entry("Next", ports));
     let next = install.choice_rows() - 1;
     let flagged = (install.ca == Ca::OpenVibes)
         .then(|| fields::check_root_key(install.root_key_out.trim()).err())
         .flatten()
         .map(|why| format!("✗ Root key file: {why}"));
     let help = match row {
-        0 | 1 => HELP[row],
-        r if r == next => "Go on to the ports.",
-        _ => "The CA's root key: written once here, move it offline.",
+        0..=2 => HELP[row].to_owned(),
+        r if import => install.import_help(r),
+        r if r == next => "Go on to the ports.".to_owned(),
+        _ => "The CA's root key: written once here, move it offline.".to_owned(),
     };
     let red = flagged.as_ref().or(error.as_ref());
     let bar = match row {
-        0 | 1 if !typing => Bar::keys(&[("Space", "Choose")]),
+        0..=2 if !typing => Bar::keys(&[("Space", "Choose")]),
+        r if import => install.import_bar(r),
         r => name_bar(typing, r, next, "Next"),
     };
     let step = Step {
         at: 2,
         rows,
-        help: red.map_or(help, String::as_str),
+        help: red.map_or(help.as_str(), String::as_str),
         red: red.is_some(),
         bar: busy.unwrap_or(bar),
-        width: 24,
+        width: 26,
     };
     draw_step(frame, head, app, step);
 }
@@ -246,11 +270,12 @@ pub(super) fn draw_add<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, 
     if app.install.paste.is_some() {
         return super::paste::draw(frame, head, app, which);
     }
-    let t = &app.theme;
     let title = match which {
         Which::Signed => "Add the signed certificate",
         Which::Root => "Add your CA's certificate",
+        Which::Cert | Which::Key => return super::import::draw_how(frame, head, app, which),
     };
+    let t = &app.theme;
     let enter = if app.nav.row == 0 {
         "Paste it"
     } else {
@@ -305,28 +330,39 @@ impl<H: Host> App<H> {
             return;
         }
         match (&key, row) {
-            (Key::Esc, _) => self.step_back(2),
-            (Key::Char(' ') | Key::Enter, 0 | 1) => {
-                self.install.ca = if row == 0 { Ca::Own } else { Ca::OpenVibes };
+            (Key::Esc, _) => {
+                self.install.forget_key();
+                self.step_back(2)
+            }
+            (Key::Char(' ') | Key::Enter, 0..=2) => {
+                self.install.ca = CHOICES[row];
                 self.install.error = None;
-                // Your own CA's certificates never go with OpenVIBES's own CA.
-                if self.install.ca == Ca::OpenVibes {
+                // Your own CA's certificates go with your own CA only, and
+                // an import's key with Import only.
+                if self.install.ca != Ca::Own {
                     self.install.request = None;
                     self.install.signed = None;
                     self.install.forget_added();
                 }
+                if self.install.ca != Ca::Import {
+                    self.install.forget_import();
+                }
                 if let Key::Enter = key {
-                    self.nav.row = self.install.choice_rows() - 1;
+                    self.nav.row = match self.install.ca {
+                        Ca::Import => 3,
+                        _ => self.install.choice_rows() - 1,
+                    };
                 }
             }
-            (Key::Enter, 2) if count == 4 => self.edit(2),
+            (Key::Enter, 3) if self.install.ca == Ca::OpenVibes => self.edit(2),
+            (Key::Enter, 3..) if self.install.ca == Ca::Import => self.import_row_key(row),
             (Key::Enter, r) if r == count - 1 => match self.install.ca {
                 Ca::OpenVibes
                     if fields::check_root_key(self.install.root_key_out.trim()).is_ok() =>
                 {
                     self.next_step(2)
                 }
-                Ca::OpenVibes => {}
+                Ca::OpenVibes | Ca::Import => {}
                 Ca::Own => self.make_request(),
             },
             _ => {}
@@ -367,6 +403,13 @@ impl<H: Host> App<H> {
 
     /// Add a certificate: Paste it, or From a file on this host.
     pub(super) fn add_key(&mut self, which: Which, key: Key) {
+        let import = matches!(which, Which::Cert | Which::Key);
+        if self.install.secret.is_some() {
+            return self.secret_key(key);
+        }
+        if self.install.pick.is_some() && import {
+            return self.import_pick(which, key);
+        }
         if self.install.pick.is_some() {
             return self.pick_key(key);
         }
@@ -378,6 +421,10 @@ impl<H: Host> App<H> {
         }
         match (key, self.nav.row) {
             (Key::Esc, _) => {
+                // A refused .p12 is said here only.
+                if import {
+                    self.install.error = None;
+                }
                 self.nav.pop();
             }
             (Key::Enter, 0) => {
@@ -399,6 +446,9 @@ impl<H: Host> App<H> {
         let Kind::Ca { accept } = run.work.kind else {
             return;
         };
+        if let Some(Call::CaImport(_)) = run.work.calls.first() {
+            return self.import_ended();
+        }
         let install = &mut self.install;
         match &run.states[0] {
             Some(StepState::Done(out)) => match read_state(out) {

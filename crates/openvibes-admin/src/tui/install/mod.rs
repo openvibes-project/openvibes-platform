@@ -1,12 +1,14 @@
 //! The Install screens (sub-project 3; install.py, full_advanced.py): the
 //! choices in `Install`, the plan they write, and the work that runs it.
 //! Installing and Finished are in `run.rs` and `finished.rs`; the five
-//! steps in `steps.rs`, `certs.rs` and `paste.rs`. The install runs on the
-//! worker like every other long job.
+//! steps in `steps.rs`, `certs.rs`, `paste.rs` and `import.rs`. The install
+//! runs on the worker like every other long job.
 
 mod certs;
 pub(super) mod fields;
 pub(crate) mod finished;
+mod import;
+mod import_paste;
 mod paste;
 mod quick;
 mod review;
@@ -21,6 +23,10 @@ mod certs_file_tests;
 #[cfg(test)]
 mod certs_tests;
 #[cfg(test)]
+mod import_file_tests;
+#[cfg(test)]
+mod import_tests;
+#[cfg(test)]
 mod quick_tests;
 #[cfg(test)]
 mod run_tests;
@@ -29,8 +35,11 @@ mod steps_tests;
 
 use platform_host::Step;
 
+pub use import::{Imported, Locked};
+
 use super::{
     maint::folder::Browse,
+    password::PasswordPrompt,
     run::{Call, Kind, Work},
 };
 use crate::setup::{plan::Component, ports, request::RequestState};
@@ -40,15 +49,20 @@ use crate::setup::{plan::Component, ports, request::RequestState};
 pub enum Ca {
     /// Your own CA signs the intermediate (`--ca careful`).
     Own,
+    /// A finished intermediate and its key from your PKI (`--ca import`).
+    Import,
     /// OpenVIBES makes its own root (`--ca quick`).
     OpenVibes,
 }
 
-/// The two certificates "Your own CA" adds.
+/// The two certificates "Your own CA" adds, and the certificate and key
+/// Import from your PKI adds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Which {
     Signed,
     Root,
+    Cert,
+    Key,
 }
 
 /// Where the operator is in the install.
@@ -111,6 +125,17 @@ pub struct Install {
     pub error: Option<String>,
     /// What the line under Ports says of the port being typed.
     pub port_check: Option<Result<String, String>>,
+    /// Import from your PKI: the chain and key added, until the helper
+    /// keeps them.
+    pub imported: Option<Imported>,
+    /// The password typed in the bar for `locked` (not sudo's).
+    pub secret: Option<PasswordPrompt>,
+    /// What "Its password" opens: a .p12 file's bytes, or a locked key.
+    pub locked: Option<Locked>,
+    /// The PKCS#8 key the box's locked key opened to, until Use it or Esc.
+    pub unlocked: Option<zeroize::Zeroizing<String>>,
+    /// The helper's `imported` line once it kept the import: Next goes on.
+    pub import_done: Option<String>,
 }
 
 impl Install {
@@ -133,6 +158,11 @@ impl Install {
             pick: None,
             error: None,
             port_check: None,
+            imported: None,
+            secret: None,
+            locked: None,
+            unlocked: None,
+            import_done: None,
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             ingest_port: ports::INGEST_DEFAULT.to_string(),
             distribution_port: ports::DISTRIBUTION_DEFAULT.to_string(),
@@ -175,10 +205,10 @@ impl Install {
         {
             args.extend(["--san".into(), san.into()]);
         }
-        let ca = if self.ca == Ca::Own {
-            "careful"
-        } else {
-            "quick"
+        let ca = match self.ca {
+            Ca::Own => "careful",
+            Ca::Import => "import",
+            Ca::OpenVibes => "quick",
         };
         args.extend(["--ca".into(), ca.into()]);
         if self.ca == Ca::OpenVibes && !self.root_key_out.trim().is_empty() {
@@ -240,6 +270,8 @@ pub(super) fn location(stage: Stage) -> String {
         Stage::Request => format!("{certs} Request"),
         Stage::Add(Which::Signed) => format!("{certs} Signed certificate"),
         Stage::Add(Which::Root) => format!("{certs} Your CA's certificate"),
+        Stage::Add(Which::Cert) => format!("{certs} Certificate"),
+        Stage::Add(Which::Key) => format!("{certs} Private key"),
         Stage::Welcome | Stage::Running | Stage::Finished => " · Install".into(),
     }
 }

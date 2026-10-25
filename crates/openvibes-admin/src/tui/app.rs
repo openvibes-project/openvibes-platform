@@ -368,6 +368,7 @@ impl<H: Host> App<H> {
         self.asking.is_some()
             || self.prompt.is_some()
             || self.install.editing.is_some()
+            || self.install.secret.is_some()
             || self.maint.editing()
             || (self.nav.screen == Screen::Legacy && self.config.editing.is_some())
     }
@@ -379,6 +380,7 @@ impl<H: Host> App<H> {
             Screen::Install(super::install::Stage::Add(_))
         ) && self.install.paste.is_some()
             && self.asking.is_none()
+            && self.install.secret.is_none()
     }
 
     /// Takes the health checks and the update notice once they have been

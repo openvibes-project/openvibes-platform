@@ -130,7 +130,7 @@ impl Install {
         match (step, row) {
             (1, 0) => Some(&mut self.hostname),
             (1, 1) => Some(&mut self.sans),
-            (2, 2) if self.ca == Ca::OpenVibes => Some(&mut self.root_key_out),
+            (2, 3) if self.ca == Ca::OpenVibes => Some(&mut self.root_key_out),
             (3, 0) => Some(&mut self.console_port),
             (3, 1) => Some(&mut self.ingest_port),
             (3, 2) => Some(&mut self.distribution_port),
@@ -148,7 +148,8 @@ impl Install {
         self.hostname = plan.hostname;
         self.sans = plan.sans.join(", ");
         self.ca = match plan.ca {
-            CaMode::Careful | CaMode::Import => Ca::Own,
+            CaMode::Careful => Ca::Own,
+            CaMode::Import => Ca::Import,
             CaMode::Quick => Ca::OpenVibes,
         };
         self.root_key_out = super::fields::default_root_key(self.home.as_deref());

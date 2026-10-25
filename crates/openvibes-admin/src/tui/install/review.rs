@@ -62,6 +62,10 @@ impl Install {
                 Some("✗ Certificates: add both certificates first.".into())
             }
             Ca::Own => None,
+            Ca::Import if self.import_done.is_none() => {
+                Some("✗ Certificates: add the certificate and its key first.".into())
+            }
+            Ca::Import => None,
             Ca::OpenVibes => fields::check_root_key(self.root_key_out.trim())
                 .err()
                 .map(|why| format!("✗ Root key file: {why}")),
@@ -160,6 +164,16 @@ pub(super) fn draw_review<H: Host>(frame: &mut Frame, head: &Header, app: &App<H
             Span::styled("your own CA · ", t.dim()),
             Span::styled("not added yet", t.yellow()),
         ],
+        (Ca::Import, _) => {
+            let name = (install.import_done.as_deref()).and_then(|done| done.split('\t').nth(1));
+            vec![
+                Span::styled("from your PKI · ", t.dim()),
+                match name {
+                    Some(name) => Span::styled(format!("✓ {name}"), t.green()),
+                    None => Span::styled("not added yet", t.yellow()),
+                },
+            ]
+        }
         (Ca::OpenVibes, _) => vec![Span::styled(
             format!(
                 "OpenVIBES makes one · {}",

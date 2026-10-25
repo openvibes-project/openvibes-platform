@@ -55,7 +55,7 @@ fn esc_to_the_choice_forgets_the_certificates_added() {
     assert!(app.install.root_added.is_none());
     // Next asks the helper again: the request, nothing added.
     answer(&app, Ok(format!("request\n{}", pki.csr)));
-    app.nav.row = 2;
+    app.nav.row = 3;
     app.key(Key::Enter);
     type_text(&mut app, "pw");
     app.key(Key::Enter);

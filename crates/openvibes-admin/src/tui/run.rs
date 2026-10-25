@@ -44,10 +44,6 @@ pub enum Call {
     /// `ca-replace [--root-key PATH]`: a new intermediate beside the old one.
     CaReplace(Option<String>),
     /// `ca-import`: a company intermediate, its chain and key, on stdin.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the Import screens (4b Task 4 on) send it")
-    )]
     CaImport(Bundle),
 }
 

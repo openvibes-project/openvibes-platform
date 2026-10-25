@@ -10,7 +10,7 @@ use platform_host::Host;
 use platform_pki::PkiError;
 use ratatui::{Frame, text::Line, widgets::Paragraph};
 
-use super::{Install, Which};
+use super::{Install, Which, import};
 use crate::{
     setup::request::message,
     tui::{
@@ -33,6 +33,7 @@ impl Install {
         }
         let now = chrono::Utc::now();
         Some(match which {
+            Which::Cert | Which::Key => return self.import_check(which, text),
             Which::Signed => match self.csr() {
                 None => Err("There is no request here: make one first.".into()),
                 Some(csr) => platform_pki::check_signed_request(csr, text, now)
@@ -77,7 +78,7 @@ const FILE_HELP: &str = "The file's text, checked below.";
 
 /// A PEM private key block is in `text` (`BEGIN PRIVATE KEY`, `BEGIN EC
 /// PRIVATE KEY`…).
-fn holds_private_key(text: &str) -> bool {
+pub(super) fn holds_private_key(text: &str) -> bool {
     text.lines().any(|l| {
         let l = l.trim();
         l.starts_with("-----BEGIN ") && l.ends_with("PRIVATE KEY-----")
@@ -85,7 +86,7 @@ fn holds_private_key(text: &str) -> bool {
 }
 
 /// An `-----END` line is there: Enter is "Use it" from now on.
-fn ended(text: &str) -> bool {
+pub(super) fn ended(text: &str) -> bool {
     text.lines().any(|l| l.trim_start().starts_with("-----END"))
 }
 
@@ -102,9 +103,14 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, whic
     let (title, help) = match (which, &install.paste_file) {
         (Which::Signed, None) => ("Paste the signed certificate".to_owned(), PASTE_HELP),
         (Which::Root, None) => ("Paste your CA's certificate".to_owned(), PASTE_HELP),
+        (Which::Cert, None) => ("Paste the certificate".to_owned(), import::PASTE_NOTE),
+        (Which::Key, None) => ("Paste the private key".to_owned(), import::KEY_NOTE),
         (Which::Signed, Some(file)) => (format!("The signed certificate, from {file}"), FILE_HELP),
         (Which::Root, Some(file)) => (format!("Your CA's certificate, from {file}"), FILE_HELP),
+        (Which::Cert, Some(file)) => (format!("The certificate, from {file}"), FILE_HELP),
+        (Which::Key, Some(file)) => (format!("The private key, from {file}"), FILE_HELP),
     };
+    let bar = install.secret_bar().unwrap_or(bar);
     let area = frame::draw(frame, t, head, Some(&title), &app.bar(bar));
     let mut lines = vec![
         Line::raw(""),
@@ -147,17 +153,21 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, whic
         t.dim(),
     ));
     lines.push(Line::raw(""));
+    let ok = |s: String| {
+        Line::from(vec![
+            ratatui::text::Span::styled("    ✓", t.green()),
+            ratatui::text::Span::raw(format!(" {s}")),
+        ])
+    };
     match check {
-        Some(Ok(said)) => lines.extend(said.into_iter().map(|s| {
-            Line::from(vec![
-                ratatui::text::Span::styled("    ✓", t.green()),
-                ratatui::text::Span::raw(format!(" {s}")),
-            ])
-        })),
+        Some(Ok(said)) => lines.extend(said.into_iter().map(ok)),
         Some(Err(why)) => lines.extend(
-            crate::tui::status::wrap(&format!("✗ {why}"), 72, 2)
-                .into_iter()
-                .map(|l| Line::styled(format!("    {l}"), t.red())),
+            // A chain with a gap: ours is fine, the line says what is missing.
+            (install.import_partial(which, text).map(ok).into_iter()).chain(
+                crate::tui::status::wrap(&format!("✗ {why}"), 72, 2)
+                    .into_iter()
+                    .map(|l| Line::styled(format!("    {l}"), t.red())),
+            ),
         ),
         None => {}
     }
@@ -192,19 +202,26 @@ impl<H: Host> App<H> {
                 }
             }
             Key::Esc => {
-                self.install.paste = None;
-                self.install.paste_file = None;
+                self.install.close_box();
                 self.nav.row = 0;
             }
             _ => {}
         }
+        if which == Which::Key {
+            self.ask_if_locked();
+        }
     }
 
     /// The certificate is added; with both, the helper keeps them.
-    fn use_it(&mut self, which: Which, text: String) {
+    fn use_it(&mut self, which: Which, mut text: String) {
+        if let Which::Cert | Which::Key = which {
+            self.import_use(which, &text);
+            return zeroize::Zeroize::zeroize(&mut text);
+        }
         let pem = text.trim().to_owned();
         let now = chrono::Utc::now();
         match which {
+            Which::Cert | Which::Key => return,
             Which::Signed => {
                 let Some(csr) = self.install.csr() else {
                     return;
