@@ -15,7 +15,7 @@ use platform_host::{
 
 use super::{
     Ctx,
-    pki_import::{CHAIN, ends_in_chain, import_and_install},
+    pki_import::{CHAIN, chain_lost, ends_in_chain, import_and_install},
     plan::{CaMode, Component},
     request::REQUEST_DIR,
 };
@@ -332,6 +332,9 @@ pub(crate) fn certificate_names<R: Runner>(ctx: &Ctx<R>) -> Vec<String> {
 }
 
 pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    if let Some(lost) = chain_lost(ctx) {
+        return Ok(lost);
+    }
     let names = certificate_names(ctx);
     let wanted = format!("{}\n", names.join("\n"));
     let present = chosen(ctx).all(|tls| ctx.exists(tls.cert) && ctx.exists(tls.key));
@@ -382,6 +385,9 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
 pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     // Repair's way out of a Replace a crash cut short (key and bundle apart).
     let recovered = super::replace::finish_interrupted(ctx)?.map_or(String::new(), |l| l + "; ");
+    if let Some(lost) = chain_lost(ctx) {
+        return Ok(lost);
+    }
     let names = certificate_names(ctx);
     fresh_stage(ctx)?;
     ctx.copy(

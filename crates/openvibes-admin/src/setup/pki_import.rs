@@ -106,6 +106,21 @@ pub(super) fn import_and_install<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> 
     )
 }
 
+/// Our intermediate is under a sub-CA but `CHAIN` is gone: certificates
+/// issued now would not reach the root on agents, so none are.
+pub(super) fn chain_lost<R: Runner>(ctx: &Ctx<R>) -> Option<StepState> {
+    if ctx.exists(CHAIN) {
+        return None;
+    }
+    let ours = platform_pki::first_certificate(&ctx.read(INTERMEDIATE).ok()?).ok()?;
+    let root = ctx.read(ROOT_CERT).ok()?;
+    platform_pki::verify_signed_by(&ours, &root).is_err().then(|| {
+        StepState::Failed(format!(
+            "{CHAIN} is missing: restore it from a backup (agents could not reach the root)"
+        ))
+    })
+}
+
 /// Whether a server certificate (leaf, our intermediate, then the rest)
 /// ends with exactly `CHAIN`'s CAs, compared as DER (a `chain.crt` written
 /// by hand may carry openssl's attribute lines or CRLF); always true

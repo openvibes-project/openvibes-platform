@@ -214,3 +214,23 @@ fn a_chain_written_by_hand_still_matches() {
     let state = check(&fake.ctx(&plan), Step::Certificates);
     assert!(matches!(state, StepState::Done(_)), "{state:?}");
 }
+
+#[test]
+fn a_lost_chain_is_never_issued_without() {
+    let fake = Fake::new("import-chain-lost");
+    let names = ["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"];
+    installed_certificates(&fake, &names, 10);
+    fake.file(INTERMEDIATE, OURS);
+    fake.file(ROOT_CERT, ROOT);
+    fake.file(INTERMEDIATE_KEY, OURS_KEY);
+    let plan = import_plan();
+    let lost = StepState::Failed(
+        "/etc/openvibes/pki/chain.crt is missing: restore it from a backup (agents could not \
+         reach the root)"
+            .into(),
+    );
+    assert_eq!(check(&fake.ctx(&plan), Step::Certificates), lost);
+    let applied = super::super::pki::certificates_apply(&fake.ctx(&plan)).unwrap();
+    assert_eq!(applied, lost);
+    assert!(!fake.called(&with(&ADMIN, &["ca", "issue-server"])));
+}
