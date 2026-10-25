@@ -315,7 +315,11 @@ With `eval "$(scripts/test-db.sh)"`:
 ```sh
 cargo test -p platform-store --test console_cases        # tests/console_cases/: rules, scope, exclusivity, close, outcomes, reopen, evidence, audit, limits, migration 64
 cargo test -p openvibes-console --lib cases              # cursors, validation messages
-cargo test -p openvibes-console --test cases_http        # routes, auth, CSRF, bearer, scope, versions
+cargo test -p openvibes-console --test cases_http        # access: session, permissions, bearer, CSRF, cases.assign, a change's reach
+cargo test -p openvibes-console --test cases_http_lifecycle # open, read, change, note and close with versions and audit; the closing note
+cargo test -p openvibes-console --test cases_http_items  # exclusive items, removal, assignees
+cargo test -p openvibes-console --test cases_http_reopen # Fixed needs the evidence gone; lazy reopening
+cargo test -p openvibes-console --test cases_http_list   # a scoped user's view and adds; validation, paging, filters
 cargo test -p openvibes-console --test case_list_http    # the Cases list page: validation, rows, counts, reach, saved views
 cargo test -p platform-store --test case_summary         # the case page: scope, problems per kind, people, tiles
 cargo test -p openvibes-console --test case_page_http    # the case page route: shape, reach, names, can flags
@@ -327,4 +331,42 @@ The web list: `npx vitest run src/views/investigate/Cases.test.tsx
 src/demo/routes/caseList.test.ts` and, in a browser, the demo e2e
 `e2e/demo/case-list.spec.ts` (filters across a reload, a saved view, a
 hidden column, the ready-to-close summary, old addresses, axe) and
-`e2e/demo/cases.spec.ts`.
+`e2e/demo/cases.spec.ts`; a case's page in `e2e/demo/case-page.spec.ts`.
+
+Live e2e (`scripts/test-console-e2e.sh`): `e2e/live/cases.spec.ts`, a team
+lead reaching only `case-P-*` (seeded with one alarm each per browser P,
+plus `caseout-P-1` outside the reach) lists only the cases with an item on
+their hosts and their own (the others answer 404), the list's counts agree
+with its rows and leave out the hidden item and host, and on a case's page
+they set an outcome, close the case with a note and reopen it. Every case
+carries the run's tag, and the seeded alarms are taken out of open cases
+first and last, so a retry or a second run on the same server passes.
+
+When the list or page SQL changes (`case_list*.rs`, `case_summary.rs`,
+`case_people.rs`), also run the ignored timing test:
+`cargo test -p platform-store --test case_list_timing -- --ignored --nocapture`
+(the Cases list at the ruling 16 scale, full and scoped, both under 2 s).
+
+## Upgrading
+
+Roles step 5d (schema 64):
+
+- **Closing asks only for a closing note.** The items carry the outcomes,
+  so Close case… no longer asks how the case ended. Cases closed before
+  the upgrade keep showing their case-level resolution and note.
+- **Two new outcomes**, Confirmed malicious and Expected activity. Risk
+  accepted needs a re-open date per item, at most 365 days ahead; when it
+  passes, that item's outcome clears and a closed case reopens. Existing
+  Risk accepted items were dated by the upgrade: the case's own date when
+  it was closed as accepted risk, otherwise 90 days after the upgrade.
+- **Hosts decide who sees a case.** People whose reach is some host groups
+  no longer see a case whose only items are software (it has no host);
+  they still see one they opened or are assigned. A case with no host-bound
+  item is seen by people who read cases on every host.
+- **Changes stay within what you can read.** A case change uses the reach
+  that `cases.write` and `cases.read` share, and bulk actions on the lists
+  use the reach every needed permission shares: bulk suppress reaches only
+  hosts where the person holds both `alarms.triage` and `alarms.suppress`.
+- **The case side panel became a page**, `/cases/{id}`, and New case is
+  `/cases/new`. Old links (`?open=case:ID`, alarms, Add to case, the
+  palette, the badges) redirect to the page with no dead history entry.

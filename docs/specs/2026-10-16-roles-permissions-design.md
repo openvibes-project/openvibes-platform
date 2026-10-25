@@ -994,7 +994,7 @@ These fill gaps in the Cases list and a case's page.
    - Closing needs `closing_note` (1–4000 characters), stored in `resolution_note`. `resolution` stays null for new closes, and old rows keep theirs.
    - When an item's `outcome_until` passes, the case reopens (lazily, as today) and that item's outcome clears. Today's case-level `accepted_until` reopen still works for old rows.
    - Reopen stays on ⋯.
-4. **Visibility (spec §6).** A case is visible to its creator, its assignee, and anyone who can see one of its items' hosts. A case with no items is also visible to holders of `cases.read` on all hosts. Today's SQL lacks that last part, so this plan adds it.
+4. **Visibility (spec §6).** A case is visible to its creator, its assignee, and anyone who can see one of its items' hosts. A case with no items is also visible to holders of `cases.read` on all hosts (step 5d added this; the SQL before it left that part out).
 5. **A new list route, `GET /v1/case-list`.** `GET /v1/cases` stays for its current users: Add to case, the palette and the badges.
 6. **Filter values** (one value per filter; all filters combine):
    - **Status:** active (the default: not closed), open, investigating, closed, all.

@@ -841,6 +841,14 @@ for the pages not yet moved; its saved views stay in the browser.
   open, by the list's failing definition), while the list counts checks;
   their title and label say "N failing findings". See
   [console-compliance.md](console-compliance.md#upgrading).
+- **Roles step 5d (Cases):** the case panel became the case's page
+  `/cases/{id}` (New case is `/cases/new`); old links (`?open=case:ID`)
+  redirect to it. Closing asks only for a closing note, as the items carry
+  the outcomes; two new outcomes (Confirmed malicious, Expected activity);
+  Risk accepted dates are per item, and old ones were backfilled. A case
+  with no host-bound item is seen only by its opener, its assignee and
+  people who read cases on every host. See
+  [console-cases.md](console-cases.md#upgrading).
 
 ## Configuration
 
@@ -900,7 +908,8 @@ retired `/assistant`, bulk triage, one host's accepted risk with an
 assignee and date (refused for an unknown assignee, shown again on
 reselect), a dashboard shared with a role and seen
 read-only, the two-team journey (`teams.spec.ts`), the Hosts journey
-(`hosts.spec.ts`, see console-hosts.md), and axe in both themes.
+(`hosts.spec.ts`, see console-hosts.md), the Cases journey (`cases.spec.ts`,
+see console-cases.md), and axe in both themes.
 The live tests also check the service accounts empty state on a fresh server
 and the People and Audit filtered empty states at narrow widths in light and
 dark themes. Audit distinguishes an empty date range from filters that hide existing events.
