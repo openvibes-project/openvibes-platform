@@ -23,7 +23,11 @@ clap = { version = "4.6.7", features = ["derive"] }
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
 x509-parser = { version = "0.18", features = ["verify"] }
 p12-keystore = "0.4.1"
-pkcs5 = { version = "0.8.1", features = ["pbes2"] }
+pkcs5 = { version = "0.8.1", features = ["pbes2", "sha1-insecure", "3des"] }
+aes = "0.9.3"
+cbc = { version = "0.2.1", features = ["alloc"] }
+des = "0.9.0"
+md-5 = "0.11.0"
 der = { version = "0.8.2", features = ["alloc", "derive", "oid"] }
 time = "0.3"
 ring = "0.17"

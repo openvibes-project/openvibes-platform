@@ -4,8 +4,10 @@
 use std::fmt;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
+use cbc::cipher::{BlockCipherDecrypt, BlockModeDecrypt, KeyInit, KeyIvInit, block_padding::Pkcs7};
 use der::asn1::{AnyRef, BitStringRef, ObjectIdentifier, OctetStringRef, UintRef};
 use der::{Any, Decode, Encode, Reader, Sequence, SliceReader};
+use md5::{Digest, Md5};
 use p12_keystore::Pkcs12Archive;
 use pkcs5::EncryptionScheme;
 use rcgen::KeyPair;
@@ -22,7 +24,7 @@ const ED25519: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.101.112");
 /// The kind of an accepted private key.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KeyKind {
-    /// RSA, 2048 to 8192 bits.
+    /// RSA, 2048 to 4096 bits.
     Rsa,
     /// ECDSA on P-256.
     P256,
@@ -94,10 +96,27 @@ struct EcPrivateKey<'a> {
     public_key: Option<BitStringRef<'a>>,
 }
 
+/// One PEM block: its label, its `DEK-Info` header (OpenSSL's traditional
+/// encryption) and its DER.
+struct Block {
+    label: String,
+    dek_info: Option<String>,
+    der: Zeroizing<Vec<u8>>,
+}
+
 /// Converts the first key in `key_pem` (PEM `PRIVATE KEY`, `RSA PRIVATE
-/// KEY`, `EC PRIVATE KEY` or `ENCRYPTED PRIVATE KEY`) to PKCS#8 PEM.
+/// KEY`, `EC PRIVATE KEY` or `ENCRYPTED PRIVATE KEY`) to PKCS#8 PEM. The
+/// traditional forms may carry OpenSSL's `Proc-Type: 4,ENCRYPTED` headers.
 pub fn pkcs8_pem(key_pem: &str, password: Option<&str>) -> Result<Zeroizing<String>, PkiError> {
-    let (label, der) = first_key_block(key_pem)?;
+    let Block {
+        label,
+        dek_info,
+        der,
+    } = first_key_block(key_pem)?;
+    let der = match dek_info {
+        Some(dek_info) => traditional(&dek_info, &der, password.ok_or(PkiError::KeyLocked)?)?,
+        None => der,
+    };
     let pkcs8 = match label.as_str() {
         "PRIVATE KEY" => der,
         "RSA PRIVATE KEY" => wrap(RSA, Any::null(), &der)?,
@@ -108,20 +127,22 @@ pub fn pkcs8_pem(key_pem: &str, password: Option<&str>) -> Result<Zeroizing<Stri
     checked_pem(&pkcs8)
 }
 
-/// Whether the first key in `key_pem` is an `ENCRYPTED PRIVATE KEY`.
+/// Whether the first key in `key_pem` is an `ENCRYPTED PRIVATE KEY` or
+/// carries OpenSSL's traditional encryption headers.
 pub fn is_locked(key_pem: &str) -> bool {
-    first_key_block(key_pem).is_ok_and(|(label, _)| label == "ENCRYPTED PRIVATE KEY")
+    first_key_block(key_pem)
+        .is_ok_and(|block| block.label == "ENCRYPTED PRIVATE KEY" || block.dek_info.is_some())
 }
 
 /// Names the key in a PKCS#8 PEM and refuses the ones OpenVIBES cannot sign
-/// with: RSA below 2048 bits is weak; P-521, DSA and RSA above 8192 bits
-/// are unsupported.
+/// with: RSA below 2048 bits is weak; P-521, DSA and RSA above 4096 bits
+/// (ring's limit) are unsupported.
 pub fn key_info(pkcs8_pem: &str) -> Result<KeyInfo, PkiError> {
-    let (label, der) = first_key_block(pkcs8_pem)?;
-    if label != "PRIVATE KEY" {
+    let block = first_key_block(pkcs8_pem)?;
+    if block.label != "PRIVATE KEY" || block.dek_info.is_some() {
         return Err(PkiError::InvalidPem);
     }
-    classify(&der)
+    classify(&block.der)
 }
 
 /// Whether `bytes` look like a `.p12`/`.pfx` file: DER, not PEM text.
@@ -150,14 +171,40 @@ pub fn read_p12(bytes: &[u8], password: &str) -> Result<P12, PkiError> {
     Ok(P12 { certs_pem, key_pem })
 }
 
-/// The label and DER of the first PEM block, skipping `EC PARAMETERS`
-/// (which `openssl ecparam -genkey` writes before the key).
-fn first_key_block(text: &str) -> Result<(String, Zeroizing<Vec<u8>>), PkiError> {
-    x509_parser::pem::Pem::iter_from_buffer(text.as_bytes())
-        .find(|block| block.as_ref().map_or(true, |b| b.label != "EC PARAMETERS"))
-        .and_then(Result::ok)
-        .map(|block| (block.label, Zeroizing::new(block.contents)))
-        .ok_or(PkiError::InvalidPem)
+/// The first PEM block, skipping `EC PARAMETERS` (which `openssl ecparam
+/// -genkey` writes before the key). Header lines (`Name: value`) are kept
+/// out of the base64; only `DEK-Info` is used.
+fn first_key_block(text: &str) -> Result<Block, PkiError> {
+    let mut lines = text.lines().map(str::trim);
+    loop {
+        let label = lines
+            .find_map(|line| line.strip_prefix("-----BEGIN ")?.strip_suffix("-----"))
+            .ok_or(PkiError::InvalidPem)?;
+        let mut dek_info = None;
+        let mut body = Zeroizing::new(String::new());
+        loop {
+            let line = lines.next().ok_or(PkiError::InvalidPem)?;
+            if line.starts_with("-----END ") {
+                break;
+            }
+            match line.split_once(':') {
+                Some(("DEK-Info", value)) => dek_info = Some(value.trim().to_owned()),
+                Some(_) => {}
+                None => body.push_str(line),
+            }
+        }
+        if label == "EC PARAMETERS" {
+            continue;
+        }
+        let der = STANDARD
+            .decode(body.as_bytes())
+            .map_err(|_| PkiError::InvalidPem)?;
+        return Ok(Block {
+            label: label.to_owned(),
+            dek_info,
+            der: Zeroizing::new(der),
+        });
+    }
 }
 
 /// Checks a PKCS#8 key and returns it as PEM, as rcgen writes it.
@@ -182,7 +229,7 @@ fn classify(pkcs8: &[u8]) -> Result<KeyInfo, PkiError> {
     };
     match bits {
         ..2048 if kind == KeyKind::Rsa => Err(PkiError::WeakKey(bits)),
-        8193.. => Err(PkiError::UnsupportedKey),
+        4097.. => Err(PkiError::UnsupportedKey),
         _ => Ok(KeyInfo { kind, bits }),
     }
 }
@@ -245,8 +292,9 @@ fn from_sec1(der: &[u8]) -> Result<Zeroizing<Vec<u8>>, PkiError> {
     wrap(EC, curve, &inner)
 }
 
-/// Decrypts an `EncryptedPrivateKeyInfo`. Anything that does not come out as
-/// PKCS#8 is a wrong password.
+/// Decrypts an `EncryptedPrivateKeyInfo` (PBES2, with SHA-1 or SHA-2 and
+/// AES or 3DES). PBES1 is too old. Anything that does not come out as PKCS#8
+/// is a wrong password.
 fn decrypt(der: &[u8], password: &str) -> Result<Zeroizing<Vec<u8>>, PkiError> {
     let mut reader = SliceReader::new(der).map_err(|_| PkiError::InvalidPem)?;
     let (scheme, data) = reader
@@ -261,10 +309,80 @@ fn decrypt(der: &[u8], password: &str) -> Result<Zeroizing<Vec<u8>>, PkiError> {
         .map(Zeroizing::new)
         .map_err(|error| match error {
             pkcs5::Error::DecryptFailed => PkiError::WrongPassword,
+            pkcs5::Error::NoPbes1CryptSupport | pkcs5::Error::UnsupportedAlgorithm { .. } => {
+                PkiError::OldEncryption
+            }
             _ => PkiError::InvalidPem,
         })?;
     parse_pkcs8(&plain).map_err(|_| PkiError::WrongPassword)?;
     Ok(plain)
+}
+
+/// Decrypts OpenSSL's traditional encryption (`DEK-Info: <cipher>,<iv hex>`):
+/// the key is EVP_BytesToKey with MD5, one round, salted with the first 8
+/// bytes of the IV. Other ciphers are too old.
+fn traditional(
+    dek_info: &str,
+    data: &[u8],
+    password: &str,
+) -> Result<Zeroizing<Vec<u8>>, PkiError> {
+    let (cipher, iv) = dek_info.split_once(',').ok_or(PkiError::InvalidPem)?;
+    let key_len = match cipher {
+        "AES-128-CBC" => 16,
+        "AES-192-CBC" | "DES-EDE3-CBC" => 24,
+        "AES-256-CBC" => 32,
+        _ => return Err(PkiError::OldEncryption),
+    };
+    let iv = hex(iv.trim()).ok_or(PkiError::InvalidPem)?;
+    let salt = iv.get(..8).ok_or(PkiError::InvalidPem)?;
+    let mut key = Zeroizing::new(Vec::new());
+    let mut round = Zeroizing::new(Vec::new());
+    while key.len() < key_len {
+        *round = Md5::new()
+            .chain_update(&*round)
+            .chain_update(password)
+            .chain_update(salt)
+            .finalize()
+            .to_vec();
+        key.extend_from_slice(&round);
+    }
+    key.truncate(key_len);
+    let plain = match cipher {
+        "AES-128-CBC" => cbc_decrypt::<aes::Aes128>(&key, &iv, data),
+        "AES-192-CBC" => cbc_decrypt::<aes::Aes192>(&key, &iv, data),
+        "AES-256-CBC" => cbc_decrypt::<aes::Aes256>(&key, &iv, data),
+        _ => cbc_decrypt::<des::TdesEde3>(&key, &iv, data),
+    }?;
+    // Garbage that happens to unpad is a wrong password too.
+    let whole_sequence = SliceReader::new(&plain).and_then(|mut reader| {
+        reader.sequence(|r| r.drain(r.remaining_len()))?;
+        reader.finish()
+    });
+    whole_sequence.map_err(|_| PkiError::WrongPassword)?;
+    Ok(plain)
+}
+
+fn cbc_decrypt<C: BlockCipherDecrypt + KeyInit>(
+    key: &[u8],
+    iv: &[u8],
+    data: &[u8],
+) -> Result<Zeroizing<Vec<u8>>, PkiError> {
+    cbc::Decryptor::<C>::new_from_slices(key, iv)
+        .map_err(|_| PkiError::InvalidPem)?
+        .decrypt_padded_vec::<Pkcs7>(data)
+        .map(Zeroizing::new)
+        .map_err(|_| PkiError::WrongPassword)
+}
+
+fn hex(text: &str) -> Option<Vec<u8>> {
+    let digits = text.as_bytes();
+    if !digits.len().is_multiple_of(2) {
+        return None;
+    }
+    digits
+        .chunks(2)
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok())
+        .collect()
 }
 
 fn pem(label: &str, der: &[u8]) -> String {

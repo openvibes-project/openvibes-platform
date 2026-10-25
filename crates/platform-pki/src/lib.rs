@@ -65,6 +65,9 @@ pub enum PkiError {
     WrongPassword,
     /// An RSA key below 2048 bits; the payload is its size.
     WeakKey(u32),
+    /// The key is locked with an encryption OpenVIBES no longer opens
+    /// (PBES1, or a traditional `DEK-Info` cipher other than AES or 3DES).
+    OldEncryption,
 }
 
 impl fmt::Display for PkiError {
@@ -87,6 +90,7 @@ impl fmt::Display for PkiError {
             Self::RootPathLen0 => "the root CA has path length 0 and cannot sign an intermediate",
             Self::KeyLocked => "the private key is locked with a password",
             Self::WrongPassword => "wrong password",
+            Self::OldEncryption => "the key's encryption is too old",
             Self::WeakKey(bits) => return write!(f, "an RSA key of {bits} bits is too weak"),
             Self::Several(n) => {
                 return write!(f, "{n} PEM blocks where one certificate was expected");

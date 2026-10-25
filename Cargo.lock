@@ -2379,8 +2379,10 @@ dependencies = [
  "aes-gcm",
  "cbc",
  "der",
+ "des",
  "pbkdf2",
  "scrypt",
+ "sha1",
  "sha2 0.11.0",
  "spki",
 ]
@@ -2463,9 +2465,13 @@ dependencies = [
 name = "platform-pki"
 version = "0.2.9"
 dependencies = [
+ "aes",
  "base64 0.23.1",
+ "cbc",
  "chrono",
  "der",
+ "des",
+ "md-5",
  "p12-keystore",
  "pkcs5",
  "rcgen",

@@ -60,6 +60,19 @@ openssl pkey -in ours-ec.pkcs8.pem -traditional -out ours-ec.sec1.pem
 openssl pkcs8 -topk8 -in ours-ec.pkcs8.pem -v2 aes-256-cbc -passout "pass:$PASS" \
   -out ours-ec.enc.pem
 
+# Older encryptions of the same keys: traditional PEM (Proc-Type/DEK-Info),
+# PBES2 with SHA-1 or 3DES, and PBES1 (refused as too old).
+openssl pkey -in ours-ec.pkcs8.pem -traditional -aes256 -passout "pass:$PASS" \
+  -out ours-ec.trad-aes.pem
+openssl pkey -in ours-rsa.key -traditional -des3 -passout "pass:$PASS" \
+  -out ours-rsa.trad-3des.pem
+openssl pkcs8 -topk8 -in ours-ec.pkcs8.pem -v2 aes-256-cbc -v2prf hmacWithSHA1 \
+  -passout "pass:$PASS" -out ours-ec.enc-sha1.pem
+openssl pkcs8 -topk8 -in ours-ec.pkcs8.pem -v2 des3 -passout "pass:$PASS" \
+  -out ours-ec.enc-3des.pem
+openssl pkcs8 -topk8 -in ours-ec.pkcs8.pem -v1 PBE-MD5-DES -provider legacy \
+  -provider default -passout "pass:$PASS" -out ours-ec.pbes1.pem
+
 ec short.key P-256
 sign short.crt short.key "Lime Lab Short CA" issuing.crt issuing.key "$FROM" 20261201000000Z
 
@@ -72,6 +85,7 @@ sign under-strict.crt under-strict.key "Lime Lab Under Strict CA" strict.crt str
 
 rsa weak.key 1024
 ec p521.key P-521
+rsa big.key 6144
 
 # A leaf for "not a CA", and an unrelated self-signed one for legacy.pfx.
 {
@@ -95,7 +109,7 @@ openssl pkcs12 -export -legacy -inkey ours-ec.pkcs8.pem -in ours-ec.crt \
 cat > README <<README
 Test fixtures for platform-pki, made by make.sh with $(openssl version).
 Every certificate is valid 2026-01-01 to 2046-01-01, except short.crt.
-Password of ours-ec.enc.pem, modern.pfx and legacy.pfx: correct horse
+Password of every encrypted key, modern.pfx and legacy.pfx: correct horse
 
 root.crt/.key            Lime Lab Root CA, RSA 4096, self-signed, path length 2
 issuing.crt/.key         Lime Lab Issuing CA, EC P-384, under the root, path length 1
@@ -105,12 +119,18 @@ ours-ec.crt              Lime Lab OpenVIBES CA, EC P-256, under issuing, no path
 ours-ec.pkcs8.pem        its key as PRIVATE KEY (PKCS#8)
 ours-ec.sec1.pem         the same key as EC PRIVATE KEY (SEC1)
 ours-ec.enc.pem          the same key as ENCRYPTED PRIVATE KEY (PBES2, AES-256-CBC)
+ours-ec.enc-sha1.pem     the same, PBES2 with the hmacWithSHA1 PRF
+ours-ec.enc-3des.pem     the same, PBES2 with DES-EDE3-CBC
+ours-ec.pbes1.pem        the same, PBES1 pbeWithMD5AndDES-CBC (too old)
+ours-ec.trad-aes.pem     the same key as traditional encrypted EC PRIVATE KEY (AES-256-CBC)
+ours-rsa.trad-3des.pem   ours-rsa.key as traditional encrypted RSA PRIVATE KEY (DES-EDE3-CBC)
 short.crt/.key           Lime Lab Short CA, under issuing, valid until 2026-12-01
 strict.crt/.key          Lime Lab Strict CA, under the root, path length 0
 under-strict.crt/.key    Lime Lab Under Strict CA, a CA signed by strict
 leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
 weak.key                 RSA 1024
 p521.key                 EC P-521
+big.key                  RSA 6144 (over ring's 4096-bit limit)
 modern.pfx               ours-ec key, ours-ec.crt, issuing, root (AES-256-CBC)
 legacy.pfx               as modern.pfx plus a self-signed Lime Lab Web (-legacy: 3DES/RC2)
 README

@@ -41,6 +41,31 @@ fn a_wrong_password_is_said() {
 }
 
 #[test]
+fn older_encryptions_open_too() {
+    let ec = pkcs8_pem(EC_PKCS8, None).unwrap();
+    let rsa = pkcs8_pem(RSA_KEY, None).unwrap();
+    for (locked, plain) in [
+        (include_str!("fixtures/ours-ec.trad-aes.pem"), &ec),
+        (include_str!("fixtures/ours-rsa.trad-3des.pem"), &rsa),
+        (include_str!("fixtures/ours-ec.enc-sha1.pem"), &ec),
+        (include_str!("fixtures/ours-ec.enc-3des.pem"), &ec),
+    ] {
+        assert!(is_locked(locked));
+        assert_eq!(*pkcs8_pem(locked, Some(PASS)).unwrap(), **plain);
+        assert_eq!(pkcs8_pem(locked, None), Err(PkiError::KeyLocked));
+        assert_eq!(
+            pkcs8_pem(locked, Some("wrong")),
+            Err(PkiError::WrongPassword)
+        );
+    }
+    let pbes1 = include_str!("fixtures/ours-ec.pbes1.pem");
+    assert_eq!(pkcs8_pem(pbes1, Some(PASS)), Err(PkiError::OldEncryption));
+    let des = "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\n\
+               DEK-Info: DES-CBC,0011223344556677\n\nAAAA\n-----END RSA PRIVATE KEY-----\n";
+    assert_eq!(pkcs8_pem(des, Some(PASS)), Err(PkiError::OldEncryption));
+}
+
+#[test]
 fn key_info_names_the_key() {
     let rsa = pkcs8_pem(RSA_KEY, None).unwrap();
     assert_eq!(
@@ -63,6 +88,10 @@ fn weak_and_unknown_keys_are_refused() {
     let p521 = include_str!("fixtures/p521.key");
     assert_eq!(key_info(p521), Err(PkiError::UnsupportedKey));
     assert_eq!(pkcs8_pem(p521, None), Err(PkiError::UnsupportedKey));
+    // ring signs with RSA up to 4096 bits only.
+    let big = include_str!("fixtures/big.key");
+    assert_eq!(key_info(big), Err(PkiError::UnsupportedKey));
+    assert_eq!(pkcs8_pem(big, None), Err(PkiError::UnsupportedKey));
     assert_eq!(
         pkcs8_pem(
             "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
