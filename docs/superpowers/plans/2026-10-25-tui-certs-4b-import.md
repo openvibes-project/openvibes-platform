@@ -135,6 +135,8 @@
   - `pub fn import_message(e: &ChainError, file: Option<&str>) -> String` (in `import.rs`), exact strings:
     - `NotCa(n)` → "{n} is not a CA, so it cannot sign agent certificates."
     - `Missing(n)` → "Signed by {n}, missing here: paste it below this one."
+    - `IsRoot(n)` → "{n} is a root CA: paste the intermediate made for OpenVIBES first, then the CAs above it." (Task 2 ruling)
+    - `NotYetValid(d)` → "Valid from {d:%Y-%m-%d}: not valid yet." (Task 2 ruling)
     - `NoCaBelow(n)` → "{n} allows no CA below it: ask for one more level."
     - `Expiring(d)` → "Valid until {d:%Y-%m-%d}: under the 90 days a server certificate lasts."
     - `Pki(WeakKey(b))` → "A {b}-bit RSA key is too weak: 2048 bits or more."
