@@ -2,8 +2,6 @@
 //! polkit rule (start, stop, restart of the allow-listed units) and the root
 //! helper (`openvibes-admin helper logs`) the RPM installs (admin TUI §3).
 
-use zeroize::Zeroizing;
-
 use crate::{
     CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged, SETUP_FILE,
     Secret, Service, ServiceAction, ServiceStatus, Unit,
@@ -233,26 +231,24 @@ impl<R: Runner> Host for Native<R> {
 
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
         let args = verb.args();
-        let out = if effective_root() {
-            // Already root (started with sudo, #92): run the helper directly,
-            // with no password, keeping SUDO_USER, so Setup still names the
-            // person who started it (operators group, root key owner).
-            let mut argv = vec!["helper"];
-            argv.extend(args.iter().map(String::as_str));
-            self.runner
-                .run(Admin, &argv)
-                .map_err(|error| HostError::Io(format!("{}: {error}", Admin.path())))?
+        let root = effective_root();
+        // Already root (started with sudo, #92): run the helper directly,
+        // with no password, keeping SUDO_USER, so Setup still names the
+        // person who started it (operators group, root key owner).
+        // Otherwise -S: password from stdin; -k: never a cached credential;
+        // -p '': no prompt text mixed into the output.
+        let (program, mut argv) = if root {
+            (Admin, vec![])
         } else {
-            // -S: password from stdin; -k: never a cached credential; -p '':
-            // no prompt text mixed into the output.
-            let mut argv = vec!["-S", "-k", "-p", "", ADMIN, "helper"];
-            argv.extend(args.iter().map(String::as_str));
-            let mut input = Zeroizing::new(password.expose().as_bytes().to_vec());
-            input.push(b'\n');
-            self.runner
-                .run_with_input(Sudo, &argv, &input)
-                .map_err(|error| HostError::Io(format!("{}: {error}", Sudo.path())))?
+            (Sudo, vec!["-S", "-k", "-p", "", ADMIN])
         };
+        argv.push("helper");
+        argv.extend(args.iter().map(String::as_str));
+        let out = match verb.stdin((!root).then_some(password)) {
+            Some(input) => self.runner.run_with_input(program, &argv, &input),
+            None => self.runner.run(program, &argv),
+        }
+        .map_err(|error| HostError::Io(format!("{}: {error}", program.path())))?;
         // A step that ran but failed exits 0 with its state first.
         let outcome = match (out.status, out.stdout.split('\t').next()) {
             (0, Some(state @ ("failed" | "waiting" | "todo"))) => state,

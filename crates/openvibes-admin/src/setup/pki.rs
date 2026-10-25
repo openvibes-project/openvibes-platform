@@ -54,7 +54,7 @@ fn careful_help() -> String {
 }
 
 /// The CA files are where the services read them.
-fn installed<R: Runner>(ctx: &Ctx<R>) -> bool {
+pub(super) fn installed<R: Runner>(ctx: &Ctx<R>) -> bool {
     ctx.exists(INTERMEDIATE) && ctx.exists(ROOT_CERT) && ctx.exists(INTERMEDIATE_KEY)
 }
 

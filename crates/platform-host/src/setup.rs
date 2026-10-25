@@ -340,6 +340,9 @@ pub enum Privileged<'a> {
     /// trusted beside it; journalled as `ca-replace
     /// /etc/openvibes/pki/intermediate.crt` (no key path).
     CaReplace(Option<&'a str>),
+    /// `ca-import`: a company intermediate, its chain and key, on stdin
+    /// (never argv); journalled as `ca-import /etc/openvibes/pki/request`.
+    CaImport(&'a Secret),
 }
 
 impl Privileged<'_> {
@@ -392,11 +395,32 @@ impl Privileged<'_> {
                 }
                 all
             }
+            Privileged::CaImport(_) => vec!["ca-import".into()],
         }
     }
 
+    /// The helper's stdin: sudo's password line (none as root), then the
+    /// verb's own input; `None` when there is nothing to send.
+    #[must_use]
+    pub fn stdin(&self, password: Option<&Secret>) -> Option<Zeroizing<Vec<u8>>> {
+        let input = match self {
+            Privileged::CaImport(bundle) => bundle.expose(),
+            _ => "",
+        };
+        if password.is_none() && input.is_empty() {
+            return None;
+        }
+        let mut bytes = Zeroizing::new(Vec::new());
+        if let Some(password) = password {
+            bytes.extend_from_slice(password.expose().as_bytes());
+            bytes.push(b'\n');
+        }
+        bytes.extend_from_slice(input.as_bytes());
+        Some(bytes)
+    }
+
     /// What the journal records (no arguments of `setup-plan`, `update-step`,
-    /// `remove-step`, `ca-request`, `ca-accept`, `ca-replace`).
+    /// `remove-step`, `ca-request`, `ca-accept`, `ca-replace`, `ca-import`).
     #[must_use]
     pub fn journal(&self) -> String {
         match self {
@@ -411,6 +435,7 @@ impl Privileged<'_> {
             Privileged::CaRequest(_) => "ca-request /etc/openvibes/pki/request".into(),
             Privileged::CaAccept(..) => "ca-accept /etc/openvibes/pki/request".into(),
             Privileged::CaReplace(_) => "ca-replace /etc/openvibes/pki/intermediate.crt".into(),
+            Privileged::CaImport(_) => "ca-import /etc/openvibes/pki/request".into(),
             other => other.args().join(" "),
         }
     }
@@ -418,7 +443,25 @@ impl Privileged<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::Privileged;
+    use super::{Privileged, Secret};
+
+    #[test]
+    fn ca_import_keeps_the_pem_out_of_argv_and_journal() {
+        let bundle = Secret::new("-----BEGIN PRIVATE KEY-----\nK\n".into());
+        let import = Privileged::CaImport(&bundle);
+        assert_eq!(import.args(), ["ca-import"]);
+        assert_eq!(import.journal(), "ca-import /etc/openvibes/pki/request");
+        assert!(!format!("{import:?}").contains("BEGIN"));
+        let password = Secret::new("pw".into());
+        let sudo = import.stdin(Some(&password)).unwrap();
+        assert_eq!(*sudo, b"pw\n-----BEGIN PRIVATE KEY-----\nK\n");
+        assert_eq!(*import.stdin(None).unwrap(), bundle.expose().as_bytes());
+        assert_eq!(
+            *Privileged::SetupStatus.stdin(Some(&password)).unwrap(),
+            b"pw\n"
+        );
+        assert!(Privileged::SetupStatus.stdin(None).is_none());
+    }
 
     #[test]
     fn ca_verbs_keep_the_pem_out_of_the_journal() {

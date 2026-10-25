@@ -99,11 +99,17 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   the journal line are what it is for), `ca-request [--copy PATH]` and
   `ca-accept --cert PEM --root-cert PEM` (journalled and audit-noted
   as `ca-request /etc/openvibes/pki/request` and `ca-accept
-  /etc/openvibes/pki/request`, without the copy path or PEM), and
+  /etc/openvibes/pki/request`, without the copy path or PEM),
   `ca-replace [--root-key PATH]` (journalled and audit-noted as
-  `ca-replace /etc/openvibes/pki/intermediate.crt`, without the key path).
+  `ca-replace /etc/openvibes/pki/intermediate.crt`, without the key path),
+  and `ca-import` (`Privileged::CaImport(&Secret)`: the certificates and
+  key go on stdin, never in argv; journalled and audit-noted as
+  `ca-import /etc/openvibes/pki/request`).
   `Host::privileged` runs `sudo -S -k -p '' /usr/bin/openvibes-admin helper
   VERB…` with the password on stdin only (never in argv or the journal),
+  followed by the verb's own input (`Privileged::stdin`: `ca-import`'s
+  bundle, after sudo's one password line; as root the helper is run
+  directly with the bundle alone, or stdin closed when there is none),
   journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns
   the helper's stdout. sudo's refusals map to `WrongPassword` ("incorrect
   password") and `NotSudoer` (not in sudoers, or "is not allowed to

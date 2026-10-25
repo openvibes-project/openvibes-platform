@@ -2,9 +2,9 @@
 //! TUI (admin TUI spec §3): `logs`, `config-read`, `config-write` (through
 //! the RPM's sudoers drop-in), and Setup's `setup-plan`, `setup-status`,
 //! `setup-step`, `update-step`, `remove-step`, `admin-reset`, `shell-open`,
-//! `ca-request`, `ca-accept`, `ca-replace`, `unit-enable`,
-//! `unit-disable` (only with the user's own
-//! sudo rights and password). A closed set of verbs, each its own function;
+//! `ca-request`, `ca-accept`, `ca-replace`, `ca-import` (helper_ca.rs),
+//! `unit-enable`, `unit-disable` (only with the user's own sudo rights and
+//! password). A closed set of verbs, each its own function;
 //! arguments are checked against the allow-lists before anything else, and
 //! nothing runs unless the effective uid is 0. Operators reach it through
 //! the RPM's sudoers drop-in. No shell, no paths, no free unit names.
@@ -116,33 +116,8 @@ pub enum HelperCommand {
     /// Does nothing and prints `done<TAB>opened`: sudo checks the password
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
-    /// Makes the CA request before install, or reuses it; prints `request`
-    /// or `signed<TAB>ISSUER`, the copy's line, then the request.
-    CaRequest {
-        /// Also write the request here (absolute), or beside it as `-2`,
-        /// `-3`… when another file is there; prints `copy<TAB>PATH`.
-        #[arg(long)]
-        copy: Option<std::path::PathBuf>,
-    },
-    /// Checks the CA's certificate and root against the request and keeps
-    /// them; prints `signed<TAB>ISSUER`, then the request.
-    CaAccept {
-        /// The certificate the CA signed for the request (PEM, which starts
-        /// with dashes).
-        #[arg(long, allow_hyphen_values = true)]
-        cert: String,
-        /// The CA's own self-signed certificate (PEM).
-        #[arg(long, allow_hyphen_values = true)]
-        root_cert: String,
-    },
-    /// Replaces the intermediate CA, trusting the old one beside it until
-    /// agents have renewed; prints each stage, then
-    /// `done<TAB>EXPIRES<TAB>PREVIOUS_UNTIL`.
-    CaReplace {
-        /// OpenVIBES' own CA: the root key kept at install (absolute).
-        #[arg(long)]
-        root_key: Option<std::path::PathBuf>,
-    },
+    #[command(flatten)]
+    Ca(crate::helper_ca::CaCommand),
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
     /// Stops starting an OpenVIBES unit at boot.
@@ -172,9 +147,7 @@ enum Verb {
     CertificatesRenew,
     AdminReset,
     ShellOpen,
-    CaRequest(Option<std::path::PathBuf>),
-    CaAccept(String, String),
-    CaReplace(Option<std::path::PathBuf>),
+    Ca(crate::helper_ca::CaVerb),
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, String> {
@@ -256,11 +229,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::CertificatesRenew => Verb::CertificatesRenew,
         HelperCommand::AdminReset => Verb::AdminReset,
         HelperCommand::ShellOpen => Verb::ShellOpen,
-        HelperCommand::CaRequest { copy } => Verb::CaRequest(absolute(copy)?),
-        HelperCommand::CaAccept { cert, root_cert } => {
-            Verb::CaAccept(cert.clone(), root_cert.clone())
-        }
-        HelperCommand::CaReplace { root_key } => Verb::CaReplace(absolute(root_key)?),
+        HelperCommand::Ca(command) => Verb::Ca(crate::helper_ca::verb(command)?),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
             true,
@@ -270,13 +239,6 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
             false,
         ),
     })
-}
-
-fn absolute(path: &Option<std::path::PathBuf>) -> Result<Option<std::path::PathBuf>, String> {
-    if let Some(path) = path.as_ref().filter(|path| !path.is_absolute()) {
-        return Err(format!("{}: not an absolute path", path.display()));
-    }
-    Ok(path.clone())
 }
 
 /// The effective uid, from `/proc/self/status` (no `unsafe`).
@@ -371,9 +333,7 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::UpgradeMigrate => crate::setup::upgrade_migrate(),
         Verb::AgentConfigUpgrade => crate::setup::agent_config_upgrade(),
         Verb::AdminReset => crate::setup::admin_reset::run(),
-        Verb::CaRequest(copy) => crate::setup::request::run_request(copy.as_deref()),
-        Verb::CaAccept(cert, root) => crate::setup::request::run_accept(&cert, &root),
-        Verb::CaReplace(root_key) => crate::setup::ca_replace(root_key.as_deref()),
+        Verb::Ca(verb) => crate::helper_ca::run(verb),
         Verb::ShellOpen => {
             println!("done\topened");
             ExitCode::SUCCESS

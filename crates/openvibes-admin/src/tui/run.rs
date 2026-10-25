@@ -43,6 +43,9 @@ pub enum Call {
     CaAccept(String, String),
     /// `ca-replace [--root-key PATH]`: a new intermediate beside the old one.
     CaReplace(Option<String>),
+    /// `ca-import`: a company intermediate, its chain and key, on stdin.
+    #[expect(dead_code, reason = "the Import screens (4b Task 4 on) send it")]
+    CaImport(zeroize::Zeroizing<String>),
 }
 
 /// A stop at a main call in `from..to` runs `calls` next, same password.
@@ -125,6 +128,10 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::CaRequest(copy) => host.privileged(Privileged::CaRequest(copy.as_deref()), secret),
         Call::CaAccept(cert, root) => host.privileged(Privileged::CaAccept(cert, root), secret),
         Call::CaReplace(key) => host.privileged(Privileged::CaReplace(key.as_deref()), secret),
+        Call::CaImport(bundle) => {
+            let bundle = Secret::new(String::clone(bundle));
+            host.privileged(Privileged::CaImport(&bundle), secret)
+        }
     }
 }
 

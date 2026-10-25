@@ -843,6 +843,28 @@ from it, Remove everything deletes it with `/etc/openvibes`, and removing
 the `openvibes-admin` package on a host without `setup.toml` deletes it
 (and `/etc/openvibes/pki`, `/etc/openvibes` when left empty). Arguments
 are checked before the root check.
+`helper ca-import` (Import from your PKI, `src/setup/import.rs`; the CA
+verbs' arguments and dispatch are in `src/helper_ca.rs`) takes no
+arguments: it reads at most 1 MiB from stdin ("The certificate and key are
+too large (over 1 MiB)."), the certificates PEM (ours first, then each CA
+above it up to the root) and then one `PRIVATE KEY` block (PKCS#8; the TUI
+decrypts and converts the key first). Any other block, a second key, a
+certificate after the key or no key is refused with a sentence naming the
+label, never the block. Under the Setup lock it checks everything again
+(platform-pki `check_chain`, `pkcs8_pem`, `check_key`); with a CA already
+installed (Replace) the root must equal the installed `root.crt`, else
+"Replace: under NEW, not INSTALLED, so agents would stop trusting this
+host. Ask for one under the same root." Only then it writes
+`/etc/openvibes/pki/request/import/` (root, 0700): `intermediate.key`
+(0600, first), `intermediate.crt` (ours alone), `chain.crt` (the CAs
+between ours and the root, only when there are any; an older one is
+removed) and `root.crt` (0644). Middle CAs stay out of `intermediate.crt`,
+which distribution trusts for agent client certificates (ruling P2). It
+prints `imported<TAB>NAME<TAB>PATH<TAB>UNTIL` (the path's names joined
+with ` › `, the earliest end of validity as YYYY-MM-DD). Refusals are
+`setup::import::import_message`'s sentences (e.g. "Signed by X, missing
+here: paste it below this one.", "Not the key of X: paste the key it was
+made with."). The journal line is `ca-import /etc/openvibes/pki/request`.
 
 ## CA commands
 
