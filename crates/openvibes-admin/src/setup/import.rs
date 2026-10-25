@@ -1,7 +1,7 @@
 //! `helper ca-import` (sub-project 4b, Import from your PKI): a company
 //! intermediate, the CAs above it and its key, sent on stdin by the TUI,
-//! checked again here and staged in `IMPORT_DIR` (root, 0700) until the CA
-//! step installs from it. The key never reaches argv, the journal or an
+//! checked again here and staged in `IMPORT_DIR` (tmpfs, root, 0700) until
+//! the CA step installs from it. The key never reaches argv, the journal or an
 //! error message.
 
 use std::{
@@ -17,10 +17,11 @@ use platform_host::runner::Runner;
 use platform_pki::{Chain, ChainError, PkiError, ServerLimit};
 use zeroize::Zeroizing;
 
-use super::{Ctx, request::REQUEST_DIR};
+use super::Ctx;
 
-/// Where an import waits for the CA step.
-pub const IMPORT_DIR: &str = "/etc/openvibes/pki/request/import";
+/// Where an import waits for the CA step: tmpfs, so a company key never
+/// lands in /etc or its backups; a reboot forgets it.
+pub const IMPORT_DIR: &str = "/run/openvibes-import";
 
 /// The largest bundle read from stdin.
 pub const MAX: usize = 1024 * 1024;
@@ -166,10 +167,8 @@ pub fn import<R: Runner>(ctx: &Ctx<R>, bundle: &str, now: DateTime<Utc>) -> Resu
     }
     let fail = |error: std::io::Error| format!("{IMPORT_DIR}: {error}");
     fs::create_dir_all(ctx.path(IMPORT_DIR)).map_err(fail)?;
-    // Also folders left from before: only root ever reads the key.
-    for dir in [REQUEST_DIR, IMPORT_DIR] {
-        fs::set_permissions(ctx.path(dir), Permissions::from_mode(0o700)).map_err(fail)?;
-    }
+    // Also a folder left from before: only root ever reads the key.
+    fs::set_permissions(ctx.path(IMPORT_DIR), Permissions::from_mode(0o700)).map_err(fail)?;
     // An earlier import never stays beside this one, and a write that
     // fails leaves nothing staged.
     clear(ctx)?;

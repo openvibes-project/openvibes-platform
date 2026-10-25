@@ -114,11 +114,13 @@ pub(super) fn chain_lost<R: Runner>(ctx: &Ctx<R>) -> Option<StepState> {
     }
     let ours = platform_pki::first_certificate(&ctx.read(INTERMEDIATE).ok()?).ok()?;
     let root = ctx.read(ROOT_CERT).ok()?;
-    platform_pki::verify_signed_by(&ours, &root).is_err().then(|| {
-        StepState::Failed(format!(
-            "{CHAIN} is missing: restore it from a backup (agents could not reach the root)"
-        ))
-    })
+    platform_pki::verify_signed_by(&ours, &root)
+        .is_err()
+        .then(|| {
+            StepState::Failed(format!(
+                "{CHAIN} is missing: restore it from a backup (agents could not reach the root)"
+            ))
+        })
 }
 
 /// Whether a server certificate (leaf, our intermediate, then the rest)

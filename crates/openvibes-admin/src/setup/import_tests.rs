@@ -60,6 +60,9 @@ fn stages_the_three_files_and_the_key() {
     );
     assert_eq!(mode(&fake, IMPORT_DIR), 0o700);
     assert_eq!(mode(&fake, &staged("intermediate.key")), 0o600);
+    // In tmpfs: a company key never lands in /etc or its backups.
+    assert_eq!(IMPORT_DIR, "/run/openvibes-import");
+    assert!(!fake.root.join("etc/openvibes/pki/request").exists());
     for name in ["intermediate.crt", "chain.crt", "root.crt"] {
         assert_eq!(mode(&fake, &staged(name)), 0o644, "{name}");
     }
