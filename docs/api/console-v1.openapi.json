@@ -13888,6 +13888,7 @@
           "kinds",
           "with_outcome",
           "takes_outcome",
+          "ready",
           "updated_at"
         ],
         "properties": {
@@ -13941,6 +13942,10 @@
           "opened_by": {
             "$ref": "#/components/schemas/CaseUserView",
             "description": "Who opened it."
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "Not closed, and close would take it now (close's own rule: hidden\nitems count too; only this boolean is revealed)."
           },
           "severity": {
             "type": "string",

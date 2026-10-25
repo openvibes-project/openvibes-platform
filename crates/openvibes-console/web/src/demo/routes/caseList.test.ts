@@ -11,7 +11,7 @@ import { createDemoServer } from "../server";
 type Row = {
   case_id: string; number: number; title: string; status: string; severity: string; assignee: { user_id: string } | null;
   latest_note: { text: string } | null; hosts: { agent_id: string }[]; host_count: number; with_outcome: number; takes_outcome: number;
-  kinds: Record<string, number>; updated_at: string;
+  kinds: Record<string, number>; ready: boolean; updated_at: string;
 };
 type Count = { value: string; count: number };
 type Body = {
@@ -53,7 +53,7 @@ describe("demo Cases list", () => {
     expect(n(body.counts.status, "all")).toBe(body.total + (n(body.counts.status, "closed") ?? 0));
     expect(body.summary.open + body.summary.investigating).toBe(body.total);
     const ssh = titled(body, /SSH open/);
-    expect(ssh).toMatchObject({ takes_outcome: 2, with_outcome: 0, host_count: 1, kinds: { alarms: 1, findings: 1, hosts: 1 } });
+    expect(ssh).toMatchObject({ takes_outcome: 2, with_outcome: 0, host_count: 1, kinds: { alarms: 1, findings: 1, hosts: 1 }, ready: false });
     expect(ssh?.latest_note?.text.length).toBeLessThanOrEqual(120);
     const all = (await get("status=all&limit=100")).body;
     expect(all.items.filter((r) => r.status === "closed").length).toBeGreaterThanOrEqual(2);
@@ -62,7 +62,7 @@ describe("demo Cases list", () => {
   it("seeds an empty case, a software-only case and a quiet one, which are ready, hostless and quiet", async () => {
     const { body } = await get("limit=100");
     const empty = titled(body, /Windows baseline/);
-    expect(empty).toMatchObject({ takes_outcome: 0, host_count: 0, hosts: [] });
+    expect(empty).toMatchObject({ takes_outcome: 0, host_count: 0, hosts: [], ready: true });
     const software = titled(body, /old openssl/);
     expect(software).toMatchObject({ host_count: 0, kinds: { software: 1 } });
     const quiet = (await get("updated=quiet&limit=100")).body;
@@ -94,7 +94,7 @@ describe("demo Cases list", () => {
     expect(lead.total).toBeLessThan(admin.total);
     expect(titled(lead, /Windows baseline/)).toBeUndefined();
     const mixed = titled(lead, /pilot and one more/);
-    expect(mixed).toMatchObject({ takes_outcome: 1, with_outcome: 1, host_count: 1 });
+    expect(mixed).toMatchObject({ takes_outcome: 1, with_outcome: 1, host_count: 1, ready: false });
     expect(titled(admin, /pilot and one more/)).toMatchObject({ takes_outcome: 2, host_count: 2 });
     const mine = (await get("assignee=me&limit=100", "team_lead")).body;
     expect(mine.items.map((r) => r.title)).toEqual([expect.stringMatching(/pilot and one more/)]);

@@ -1,12 +1,11 @@
 // Cases, the parts that need no React: the item kinds and where each opens,
-// the list's query and filters, the rules that decide when a case can close,
+// the rules that decide when a case can close,
 // the request bodies and how the timeline and the API's refusals read.
 import { ApiError } from "../../api/client";
-import type { CaseEvent, CaseItem, CaseSummary } from "../../api/types";
+import type { CaseEvent, CaseItem } from "../../api/types";
 import type { PanelRef } from "../../app/location";
 import { date, plural } from "../../ui/format";
 import type { IconName } from "../../ui/Icon";
-import { matches } from "../../ui/table";
 
 export const CASE_KINDS = ["alarm", "compliance_finding", "vulnerability", "host", "software"] as const;
 export type CaseKind = (typeof CASE_KINDS)[number];
@@ -69,25 +68,6 @@ export function refLabel(kind: string, ref: string): string {
     case "software": return splitRef(ref)[1] || ref;
     default: return ref;
   }
-}
-
-/** The API path for the list's filters; the text filter stays local. */
-export function caseQuery(params: URLSearchParams): string {
-  const query = new URLSearchParams();
-  const status = params.get("status");
-  if (status && ["open", "investigating", "closed", "all"].includes(status)) query.set("status", status);
-  const severity = params.get("severity");
-  if (severity && (severities as readonly string[]).includes(severity)) query.set("severity", severity);
-  const assignee = params.get("assignee");
-  if (assignee === "me" || assignee === "none") query.set("assignee", assignee);
-  const text = query.toString();
-  return text === "" ? "/api/v1/cases" : `/api/v1/cases?${text}`;
-}
-
-/** The loaded cases that match the text filter (title, `C-104`, assignee). */
-export function selectCases(loaded: readonly CaseSummary[], params: URLSearchParams): CaseSummary[] {
-  const q = params.get("q") ?? "";
-  return loaded.filter((c) => matches([c.title, caseNumber(c.number), c.assignee?.username, c.assignee?.display_name ?? "unassigned"], q));
 }
 
 export const needsOutcome = (item: Pick<CaseItem, "kind">) => EXCLUSIVE_KINDS.has(item.kind);

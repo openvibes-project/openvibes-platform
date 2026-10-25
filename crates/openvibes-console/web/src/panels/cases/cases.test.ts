@@ -1,16 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../../api/client";
-import type { CaseEvent, CaseItem, CaseSummary } from "../../api/types";
-import { afterAgent, caseBadges, statusBadge, localDay, blockingItems, caseErrorText, caseQuery, closeProblems, endOfLocalDay, eventText, findingRef, itemPanel, outcomeBody, outcomeChoices, refLabel, selectCases, updateBody, vulnerabilityRef } from "./cases";
+import type { CaseEvent, CaseItem } from "../../api/types";
+import { afterAgent, caseBadges, statusBadge, localDay, blockingItems, caseErrorText, closeProblems, endOfLocalDay, eventText, findingRef, itemPanel, outcomeBody, outcomeChoices, refLabel, updateBody, vulnerabilityRef } from "./cases";
 
 const item = (over: Partial<CaseItem>): CaseItem => ({
   item_id: "i", kind: "alarm", ref: "1", active: true, added_at: "2026-01-01T00:00:00Z", added_by: { user_id: "u", username: "sam", display_name: "Sam" },
   evidence_gone: false, ...over,
-});
-const summary = (over: Partial<CaseSummary>): CaseSummary => ({
-  case_id: "c", number: 104, title: "SSH on web-02", status: "open", severity: "high", opened_by: { user_id: "u", username: "sam", display_name: "Sam" },
-  created_at: "", updated_at: "", version: 1, item_count: 1, pending_item_count: 1, ...over,
 });
 const event = (kind: string, detail: Record<string, unknown>, body: string | null = null) => ({ event_id: 1, at: "", kind, body, detail } as unknown as CaseEvent);
 
@@ -32,25 +28,6 @@ describe("itemPanel", () => {
     expect(refLabel("vulnerability", "agent-1/FEDORA-1")).toBe("FEDORA-1 on agent-1");
     expect(refLabel("software", "rpm/openssh")).toBe("openssh");
     expect(refLabel("host", "agent-1")).toBe("agent-1");
-  });
-});
-
-describe("list filters", () => {
-  it("sends status, severity and assignee to the API and ignores anything else", () => {
-    expect(caseQuery(new URLSearchParams())).toBe("/api/v1/cases");
-    expect(caseQuery(new URLSearchParams("status=all&severity=high&assignee=me&q=ssh"))).toBe("/api/v1/cases?status=all&severity=high&assignee=me");
-    expect(caseQuery(new URLSearchParams("status=gone&severity=urgent&assignee=someone"))).toBe("/api/v1/cases");
-    expect(caseQuery(new URLSearchParams("assignee=none"))).toBe("/api/v1/cases?assignee=none");
-  });
-
-  it("filters the loaded cases by title, number and assignee text", () => {
-    const rows = [summary({}), summary({ case_id: "d", number: 105, title: "Patch openssh", assignee: { user_id: "u", username: "ola", display_name: "Ola Operator" } })];
-    const pick = (q: string) => selectCases(rows, new URLSearchParams({ q })).map((c) => c.number);
-    expect(pick("")).toEqual([104, 105]);
-    expect(pick("c-104")).toEqual([104]);
-    expect(pick("openssh")).toEqual([105]);
-    expect(pick("ola")).toEqual([105]);
-    expect(pick("unassigned")).toEqual([104]);
   });
 });
 

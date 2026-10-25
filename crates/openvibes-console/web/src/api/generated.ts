@@ -3442,6 +3442,11 @@ export interface components {
             number: number;
             /** @description Who opened it. */
             opened_by: components["schemas"]["CaseUserView"];
+            /**
+             * @description Not closed, and close would take it now (close's own rule: hidden
+             *     items count too; only this boolean is revealed).
+             */
+            ready: boolean;
             /** @description `critical`, `high`, `medium` or `low`. */
             severity: string;
             /** @description `open`, `investigating` or `closed`. */

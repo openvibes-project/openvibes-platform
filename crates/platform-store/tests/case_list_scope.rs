@@ -156,15 +156,17 @@ async fn ready_to_close_follows_close() {
         (1, 1)
     );
     assert_eq!(
-        page.summary.ready_to_close, 0,
+        (page.summary.ready_to_close, page.rows[0].ready),
+        (0, false),
         "resolved, but the alarm is still open"
     );
     c.execute("UPDATE alarms SET state = 'mitigated'", &[])
         .await
         .unwrap();
+    let page = list(&c, &web, CAT).await;
     assert_eq!(
-        list(&c, &web, CAT).await.summary.ready_to_close,
-        1,
+        (page.summary.ready_to_close, page.rows[0].ready),
+        (1, true),
         "evidence gone"
     );
     db.drop().await;

@@ -182,6 +182,9 @@ pub struct CaseListRow {
     pub with_outcome: i64,
     /// Visible items that take an outcome (alarms, findings, vulnerabilities).
     pub takes_outcome: i64,
+    /// Not closed, and close would take it: no item, visible or hidden,
+    /// still blocks (close's own rule).
+    pub ready: bool,
     /// Last change.
     pub updated_at: DateTime<Utc>,
 }
@@ -354,6 +357,7 @@ fn case_row(row: &Row) -> Option<CaseListRow> {
         with_outcome: row.get(21),
         updated_at: row.get(22),
         host_count: row.get::<_, Option<i64>>(23).unwrap_or(0),
+        ready: row.get::<_, Option<bool>>(24).unwrap_or(false),
     })
 }
 

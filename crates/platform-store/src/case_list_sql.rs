@@ -222,7 +222,7 @@ SELECT CASE WHEN p.ord IS NOT DISTINCT FROM (SELECT min(ord) FROM page) THEN m.m
        p.opened_by_user_id::text, ou.username, ou.display_name,
        p.assignee_user_id::text, au.username, au.display_name, n.body, n.at, h.hosts,
        p.alarms, p.findings, p.vulnerabilities, p.host_items, p.software, p.takes, p.done, p.updated_at,
-       h.host_count
+       h.host_count, p.ready
 FROM meta m LEFT JOIN page p ON true
 LEFT JOIN console_users ou ON ou.user_id = p.opened_by_user_id
 LEFT JOIN console_users au ON au.user_id = p.assignee_user_id

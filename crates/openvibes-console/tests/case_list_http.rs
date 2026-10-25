@@ -178,6 +178,7 @@ async fn the_list_has_rows_counts_and_a_summary() {
         (&r["with_outcome"], &r["takes_outcome"]),
         (&json!(0), &json!(1))
     );
+    assert_eq!(r["ready"], false);
     assert!(r["updated_at"].is_string());
     let empty = &body["items"][0];
     assert_eq!(empty["assignee"], Value::Null);

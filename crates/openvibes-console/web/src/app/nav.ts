@@ -10,12 +10,13 @@ let snapshot: AppLocation = read();
 let snapshotKey = window.location.pathname + window.location.search;
 settle();
 
-/** An old /findings, /agents, Vulnerabilities or Compliance address, or an old host, alarm, advisory or finding panel: show the URL
+/** An old /findings, /agents, Vulnerabilities, Compliance or Cases address, or an old host, alarm, advisory or finding panel: show the URL
  * of the page it now opens, in place, so history keeps no dead entry (plan ruling 1). */
 function settle() {
   const oldVulns = /\/vulnerabilities$/.test(window.location.pathname) && /[?&](exploited|reboot|nofix|lowconf|sort)=/.test(window.location.search);
   const oldChecks = /\/compliance$/.test(window.location.pathname) && /[?&](window|since|set|sort)=/.test(window.location.search);
-  if (!oldVulns && !oldChecks && !/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=(agent|alarm|advisory|finding)(%3A|:)/i.test(window.location.search)) return;
+  const oldCases = /\/cases$/.test(window.location.pathname) && /[?&](assignee=none|sort=)/.test(window.location.search);
+  if (!oldVulns && !oldChecks && !oldCases && !/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=(agent|alarm|advisory|finding)(%3A|:)/i.test(window.location.search)) return;
   snapshotKey = formatLocation(snapshot, base);
   window.history.replaceState(null, "", snapshotKey);
 }

@@ -389,14 +389,34 @@ A case gathers hosts, alarms, findings, vulnerabilities on a host and
 software, with notes and a timeline. It does not replace those views, and
 triage on alarms and findings stays as it is.
 
-- **Cases** (`/cases`, `g c`, `cases.read`): C-number, title, severity,
-  status (a closed case also says how it ended), assignee, items with the
-  count that still need an outcome, and last change. Chips: Open,
-  Investigating, Closed, Include closed (the default list shows open and
-  investigating), the four severities, Assigned to me and Unassigned. The
-  chips and severity go to the API; the text filter (title, `C-104`,
-  assignee) applies to what is loaded. **New case** (with `cases.write`)
-  opens a form in the inspector. A row opens the case.
+- **Cases** (`/cases`, `g c`, `cases.read`; screen 31,
+  `views/investigate/Cases.tsx`): one row per case over
+  `GET /api/v1/case-list`, paged by offset, in the shared list pattern
+  (`FilterBar`, `SummaryLine`, Columns, saved views, page `cases`).
+  Columns: Case (`C-104`), Title (a real link to `/cases/{id}`, "Opened by
+  X" and the latest note, which a screen reader hears as "Latest note,
+  …"), Severity, Status, Assignee, Hosts (up to five, each a link to the
+  host's page, then "+N more hosts"), Items (an icon and count per kind,
+  "n/m with an outcome" with a bar whose `aria-valuetext` says the same,
+  and "Ready to close" when the row's `ready` is set) and Updated. Case and
+  Title never hide. Filters: Status (Open, Investigating, Closed, All
+  statuses; none chosen is "not closed"), Severity, Assignee (Me,
+  Unassigned, people), Contains (Alarms, Vulnerabilities, Compliance
+  findings), Host (a chip only while set, as on Compliance), Group and
+  Updated (Today, This week, Quiet for 7 days or more). Search covers the
+  title, `C-104`, the number and who opened it (no longer the assignee:
+  that is the Assignee filter). Sorts: Case, Severity and Updated (the
+  default, newest first). The summary line is "N open · N investigating ·
+  N unassigned · N ready to close", plus "closed cases hidden" while
+  Status is unset. Old addresses keep their meaning (`casesQuery` in
+  `app/location.ts`, in place): `assignee=none` is `unassigned`, `sort=number`
+  is the Case column, other old sorts go with their direction; views saved
+  in this browser (`openvibes.v2.views./cases`) are imported once.
+  **New case** (with `cases.write`) is a link to `/cases/new`. Until the
+  case page (screen 32, step 5d task 7) lands, `/cases/{id}` and
+  `/cases/new` show the case panel's content and the new-case form as a
+  page with a link back to Cases; a new case then opens at `/cases/{id}`
+  (in place of the form).
 - **Case panel** (`case`, id is the case's UUID, `case:new` is the form):
   - the header shows number, title, status, severity, assignee and how many
     items are unresolved;

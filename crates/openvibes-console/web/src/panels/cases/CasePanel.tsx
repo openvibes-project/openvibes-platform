@@ -6,6 +6,7 @@ import { type FormEvent, useState } from "react";
 
 import { invalidate, request, useResource } from "../../api/client";
 import type { CaseDetail, CaseItem, CaseUser } from "../../api/types";
+import { casePath as casePage } from "../../app/location";
 import { nav } from "../../app/nav";
 import { useSession } from "../../app/session";
 import { useProvideTitle } from "../../app/titles";
@@ -73,7 +74,7 @@ export function NewCasePanel() {
     setBusy(true);
     setError(undefined);
     request<CaseDetail>("POST", "/api/v1/cases", { title: title.trim(), ...(severity ? { severity } : {}), assignee_user_id: assignee || null })
-      .then((created) => { invalidate("/api/v1/case"); toast(`Opened ${caseNumber(created.number)}`); nav.open({ kind: "case", id: created.case_id }, true); },
+      .then((created) => { invalidate("/api/v1/case"); toast(`Opened ${caseNumber(created.number)}`); nav.replace(casePage(created.case_id)); },
         (e: unknown) => setError(caseErrorText(e)))
       .finally(() => setBusy(false));
   };

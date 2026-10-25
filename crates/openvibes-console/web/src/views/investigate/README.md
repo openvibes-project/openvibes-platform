@@ -14,6 +14,6 @@ The lists you investigate from. A row opens its panel from `panels/` in the insp
 | `vulnerability/` | A vulnerability's page (screen 26); see its README. |
 | `Software.tsx` | Packages across the fleet. |
 | `Ports.tsx` | Open ports and running services across the fleet. |
-| `Cases.tsx` | Cases: the list of investigations. |
+| `Cases.tsx` | The Cases list (screen 31): one row per case over `/api/v1/case-list`, server filters with counts (Host as a chip), saved views, columns, summary line (ready to close) and paging. A row opens `/cases/{id}`; New case is `/cases/new`; both show the case panel's content as a page until screen 32 (step 5d task 7). |
 
 More: [docs/components/console-web.md](../../../../../../docs/components/console-web.md)

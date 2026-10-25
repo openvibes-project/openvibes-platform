@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { alarmPath, checkPath, complianceQuery, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
+import { alarmPath, casePath, casesQuery, checkPath, complianceQuery, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
 
 // An old panel link opens the object's page, with no panel left.
 const opensPage = (view: string, search: string, want: string) => {
@@ -136,6 +136,21 @@ describe("location", () => {
     expect(complianceQuery("rule_set=site&area=SSH&sort=check&dir=desc")).toBe("rule_set=site&area=SSH&sort=check&dir=desc");
     // The old /findings address reads as /compliance and maps too.
     expect(formatLocation(parseLocation("/findings", "?set=baseline&window=all", "/"), "/")).toBe("/compliance?rule_set=baseline");
+  });
+
+  it("maps an old Cases query and leaves today's alone (roles 5d)", () => {
+    // The old Unassigned chip was assignee=none; status, severity, me and q keep their meaning.
+    expect(casesQuery("status=all&severity=high&assignee=none&q=ssh")).toBe("status=all&severity=high&assignee=unassigned&q=ssh");
+    expect(casesQuery("assignee=me&status=closed")).toBe("assignee=me&status=closed");
+    // The old list sorted in the browser by any column; today's sorts by case, severity and updated only.
+    expect(casesQuery("sort=title&dir=asc")).toBe("");
+    expect(casesQuery("sort=number&dir=asc")).toBe("sort=case&dir=asc");
+    expect(casesQuery("sort=updated&dir=asc&contains=alarms")).toBe("sort=updated&dir=asc&contains=alarms");
+    expect(formatLocation(parseLocation("/cases", "?assignee=none", "/"), "/")).toBe("/cases?assignee=unassigned");
+  });
+
+  it("names a case's page", () => {
+    expect(casePath("c-1/x")).toBe("/cases/c-1%2Fx");
   });
 
   it("names a check's page by its rule set and rule", () => {

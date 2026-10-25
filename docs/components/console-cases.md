@@ -113,7 +113,9 @@ summary, generated_at}`: each row has `case_id`, `number`, `title`,
 the newest note's first 120 characters), `hosts` (the first five visible
 hosts, `{agent_id, hostname}`), `host_count`, `kinds` (visible items per
 kind), `with_outcome` / `takes_outcome` (visible alarms, findings and
-vulnerabilities) and `updated_at`; `counts` has every value of `status`,
+vulnerabilities), `ready` (not closed, and close would take it now: close's
+own rule, hidden items included; only this boolean is revealed) and
+`updated_at`; `counts` has every value of `status`,
 `severity`, `contains`, `updated`, `group` and `assignee` with the other
 filters applied; `summary` is `{open, investigating, unassigned,
 ready_to_close}` over the cases that are not closed under every filter but
@@ -319,3 +321,9 @@ cargo test -p openvibes-console --test case_page_http    # the case page route: 
 cargo test -p openvibes-console --test case_outcomes_http # the five outcomes, outcome_until, closing_note
 cargo test -p openvibes-console --test auth_http database_builtin_permissions_match_the_rust_role_table
 ```
+
+The web list: `npx vitest run src/views/investigate/Cases.test.tsx
+src/demo/routes/caseList.test.ts` and, in a browser, the demo e2e
+`e2e/demo/case-list.spec.ts` (filters across a reload, a saved view, a
+hidden column, the ready-to-close summary, old addresses, axe) and
+`e2e/demo/cases.spec.ts`.

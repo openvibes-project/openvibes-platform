@@ -76,6 +76,9 @@ pub(crate) struct CaseListRowView {
     pub with_outcome: i64,
     /// Visible alarms, findings and vulnerabilities (the items that take one).
     pub takes_outcome: i64,
+    /// Not closed, and close would take it now (close's own rule: hidden
+    /// items count too; only this boolean is revealed).
+    pub ready: bool,
     /// Last change (RFC 3339).
     pub updated_at: String,
 }
@@ -156,6 +159,7 @@ impl From<CaseListRow> for CaseListRowView {
             },
             with_outcome: r.with_outcome,
             takes_outcome: r.takes_outcome,
+            ready: r.ready,
             updated_at: time(r.updated_at),
         }
     }

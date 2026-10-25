@@ -1132,7 +1132,8 @@ comes from visible items only.
 - Rows: number, title, status, severity, opener, assignee, the newest
   `note` event (first 120 characters and its time), the first five
   distinct visible hosts by name and `host_count` (all of them), visible items per kind, `with_outcome`/`takes_outcome`
-  (alarms, findings and vulnerabilities only), `updated_at`.
+  (alarms, findings and vulnerabilities only), `ready` (close's own rule,
+  hidden items included, as the summary's "ready to close"), `updated_at`.
 - Sorts: updated (default, newest first), severity, number, opened; ties
   by case id in the same direction. Offset 0–100000, limit 1–100.
 
