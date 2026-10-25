@@ -6,11 +6,12 @@ use std::fs;
 
 use chrono::Utc;
 use platform_host::runner::Runner;
+use platform_pki::Chain;
 
 use super::super::{
     Ctx,
     import::{IN_USE, import_message, same_root},
-    pki::INT,
+    pki::{INT, certificate_names},
     pki_import::{CHAIN, stage_import},
 };
 
@@ -40,12 +41,21 @@ pub(super) fn chain<R: Runner>(
         return Err(IN_USE.into());
     }
     let middle = ctx.read(&format!("{INT}/chain.crt"))?;
+    Ok(checked(ctx, &format!("{new}{middle}{root}"), key)?
+        .middle
+        .concat())
+}
+
+/// The new intermediate's path (ours, the CAs between, the root) and its
+/// key, checked as an import's, with this host's names: agents must accept
+/// the server certificates it signs.
+pub(super) fn checked<R: Runner>(ctx: &Ctx<R>, path: &str, key: &str) -> Result<Chain, String> {
     let now = Utc::now();
-    let chain = platform_pki::check_chain(&format!("{new}{middle}{root}"), now)
-        .map_err(|e| import_message(&e, "", None))?;
+    let chain = platform_pki::check_chain(path, now).map_err(|e| import_message(&e, "", None))?;
     same_root(ctx, &chain.root)?;
-    platform_pki::check_key(&chain, key, now).map_err(|e| import_message(&e, &chain.name, None))?;
-    Ok(chain.middle.concat())
+    platform_pki::check_key(&chain, key, &certificate_names(ctx), now)
+        .map_err(|e| import_message(&e, &chain.name, None))?;
+    Ok(chain)
 }
 
 /// Copies `CHAIN` to `CHAIN_OLD` (empty without one); a `CHAIN` that

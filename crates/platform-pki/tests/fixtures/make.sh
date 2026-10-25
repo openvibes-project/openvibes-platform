@@ -59,6 +59,8 @@ sign ours-ec.crt ours-ec.pkcs8.pem "Lime Lab OpenVIBES CA" issuing.crt issuing.k
 openssl pkey -in ours-ec.pkcs8.pem -traditional -out ours-ec.sec1.pem
 openssl pkcs8 -topk8 -in ours-ec.pkcs8.pem -v2 aes-256-cbc -passout "pass:$PASS" \
   -out ours-ec.enc.pem
+# A file holding the certificate, then its locked key.
+cat ours-ec.crt ours-ec.enc.pem > ours-ec.combined.pem
 
 # Older encryptions of the same keys: traditional PEM (Proc-Type/DEK-Info),
 # PBES2 with SHA-1 or 3DES, and PBES1 (refused as too old).
@@ -92,6 +94,13 @@ openssl req -new -key twin-dc.key -subj "/DC=lab/DC=lime/O=Lime Lab/CN=Lime Lab 
 openssl x509 -req -in "$TMP/csr" -CA issuing.crt -CAkey issuing.key -set_serial "$SERIAL" \
   -not_before "$FROM" -not_after "$UNTIL" -sha256 -extfile "$TMP/ext" -out twin-dc.crt
 
+# Extended key usage clientAuth only: agents refuse the server
+# certificates it signs.
+ca_ext ""
+echo "extendedKeyUsage = clientAuth" >> "$TMP/ext"
+ec client-only.key P-256
+sign client-only.crt client-only.key "Lime Lab Client Only CA" root.crt root.key
+
 rsa weak.key 1024
 ec p521.key P-521
 rsa big.key 6144
@@ -113,7 +122,7 @@ openssl pkcs12 -export -inkey ours-ec.pkcs8.pem -in ours-ec.crt -certfile "$TMP/
   -keypbe AES-256-CBC -certpbe AES-256-CBC -passout "pass:$PASS" -out modern.pfx
 cat "$TMP/chain.pem" "$TMP/web.crt" > "$TMP/legacy-extra.pem"
 openssl pkcs12 -export -legacy -inkey ours-ec.pkcs8.pem -in ours-ec.crt \
-  -certfile "$TMP/legacy-extra.pem" -passout "pass:$PASS" -out legacy.pfx
+  -name "Lime Lab OpenVIBES CA" -certfile "$TMP/legacy-extra.pem" -passout "pass:$PASS" -out legacy.pfx
 
 cat > README <<README
 Test fixtures for platform-pki, made by make.sh with $(openssl version).
@@ -128,6 +137,7 @@ ours-ec.crt              Lime Lab OpenVIBES CA, EC P-256, under issuing, no path
 ours-ec.pkcs8.pem        its key as PRIVATE KEY (PKCS#8)
 ours-ec.sec1.pem         the same key as EC PRIVATE KEY (SEC1)
 ours-ec.enc.pem          the same key as ENCRYPTED PRIVATE KEY (PBES2, AES-256-CBC)
+ours-ec.combined.pem     ours-ec.crt, then ours-ec.enc.pem, in one file
 ours-ec.enc-sha1.pem     the same, PBES2 with the hmacWithSHA1 PRF
 ours-ec.enc-3des.pem     the same, PBES2 with DES-EDE3-CBC
 ours-ec.pbes1.pem        the same, PBES1 pbeWithMD5AndDES-CBC (too old)
@@ -137,10 +147,11 @@ short.crt/.key           Lime Lab Short CA, under issuing, valid until 2026-12-0
 strict.crt/.key          Lime Lab Strict CA, under the root, path length 0
 under-strict.crt/.key    Lime Lab Under Strict CA, a CA signed by strict
 twin-dc.crt/.key         Lime Lab Twin DC CA, under issuing, subject with two DC attributes
+client-only.crt/.key     Lime Lab Client Only CA, under the root, extended key usage clientAuth only
 leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
 weak.key                 RSA 1024
 p521.key                 EC P-521
 big.key                  RSA 6144 (over ring's 4096-bit limit)
 modern.pfx               ours-ec key, ours-ec.crt, issuing, root (AES-256-CBC)
-legacy.pfx               as modern.pfx plus a self-signed Lime Lab Web (-legacy: 3DES/RC2)
+legacy.pfx               as modern.pfx plus a self-signed Lime Lab Web (-legacy: 3DES/RC2), friendly name Lime Lab OpenVIBES CA
 README

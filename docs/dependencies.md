@@ -41,7 +41,7 @@ counts and the date.
 
 The programs are `openvibes-ingest`, `-admin`, `-distribution`, `-signer`,
 `-fetch`, `-vulns`, `-netlog`, `-console` and `openvibes-llm-check`. They
-compile in the 47 crates below and **301 indirect crates** (348 in all), plus
+compile in the 49 crates below and **299 indirect crates** (348 in all), plus
 10 crates used only by build scripts (proc-macro and `build.rs` helpers, not
 in the programs).
 
@@ -74,6 +74,8 @@ in the programs).
 | ring | 0.17.14 | Apache-2.0 AND ISC | Cryptography under rustls and rcgen |
 | rpassword | 7.5.4 | Apache-2.0 | Reading passwords at the terminal |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT | TLS for the console and agent connections |
+| rustls-pki-types | 1.15.1 | MIT OR Apache-2.0 | Certificate types for the import self-check |
+| rustls-webpki | 0.103.16 | ISC | Import self-check: verifying as agents do (also under rustls) |
 | ruzstd | 0.9.1 | MIT | zstd in Fedora repository metadata |
 | serde | 1.0.229 | MIT OR Apache-2.0 | Reading and writing data formats |
 | serde_json | 1.0.151 | MIT OR Apache-2.0 | JSON |

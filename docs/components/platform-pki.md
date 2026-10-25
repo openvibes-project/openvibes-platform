@@ -57,8 +57,9 @@ plain PKCS#8 PEM (`Zeroizing`), and has loaded in rcgen once.
 - Accepted keys: EC P-256, EC P-384, RSA 2048 to 4096 bits, Ed25519. RSA
   below 2048 bits is `WeakKey(bits)`; P-521, DSA and RSA above 4096 bits
   (ring's limit for signing) are `UnsupportedKey`.
-- `pkcs8_pem(key_pem, password)`: the first PEM block (an `EC PARAMETERS`
-  block is skipped), labelled `PRIVATE KEY`, `RSA PRIVATE KEY` (PKCS#1),
+- `pkcs8_pem(key_pem, password)`: the first PEM block (`EC PARAMETERS`
+  and `CERTIFICATE` blocks are skipped, so a file holding the certificate
+  and then its key works), labelled `PRIVATE KEY`, `RSA PRIVATE KEY` (PKCS#1),
   `EC PRIVATE KEY` (SEC1, must name its curve) or `ENCRYPTED PRIVATE KEY`
   (PBES2 with an SHA-1 or SHA-2 PRF, AES-CBC or DES-EDE3-CBC). The PKCS#1
   and SEC1 forms may carry OpenSSL's traditional encryption
@@ -66,7 +67,7 @@ plain PKCS#8 PEM (`Zeroizing`), and has loaded in rcgen once.
   DES-EDE3-CBC; key from EVP_BytesToKey with MD5). No password for a locked
   key is `KeyLocked`; one that does not open it is `WrongPassword`. Older
   encryptions (PBES1, other `DEK-Info` ciphers) are `OldEncryption`.
-- `is_locked(key_pem)`: the first block is `ENCRYPTED PRIVATE KEY` or has a
+- `is_locked(key_pem)`: the first key block is `ENCRYPTED PRIVATE KEY` or has a
   `DEK-Info` header.
 - `key_info(pkcs8_pem) -> KeyInfo`: kind and bits; `Display` gives
   "an RSA key (3072 bits)", "an EC P-256 key", "an EC P-384 key",
@@ -74,7 +75,8 @@ plain PKCS#8 PEM (`Zeroizing`), and has loaded in rcgen once.
 - `is_p12(bytes)`: DER (starts with a SEQUENCE), not PEM text.
 - `read_p12(bytes, password) -> P12`: `.p12`/`.pfx` with PBES2 (AES) or
   legacy 3DES/RC2 (p12-keystore). The first private key as PKCS#8, and every
-  certificate in the file as PEM, the key's own one first. A failed MAC is
+  certificate in the file as PEM, the key's own one first (the one with
+  the key's public key, whatever the file's order or key ids). A failed MAC is
   `WrongPassword`. `P12`'s `Debug` redacts the key. p12-keystore keeps its
   own copy of the decrypted key, not wiped, until its archive drops at the
   end of `read_p12`; our copies are wiped (`Zeroizing`).
@@ -91,8 +93,10 @@ its `README` lists them.
   unnamed CA" without one). The Import screen names ours with it while the
   chain above is not whole.
 - `check_chain(certs_pem, now) -> Chain`: the first certificate is ours
-  and must not be self-signed (`IsRoot(cn)`); the path is built from the
-  rest, in any order, CRLF or not, up to a self-signed root. Each link
+  and must not be self-signed (`IsRoot(cn)`), except that a bundle pasted
+  root first takes as ours the one CA in it that is not self-signed and
+  signed no other certificate in it (none, or several, is still
+  `IsRoot`); the path is built from the rest, in any order, CRLF or not, up to a self-signed root. Each link
   needs both the signature and the issuer name (DER, byte for byte, as
   agents chain by name). Certificates not on the path are ignored. Every
   certificate on the path must be a CA with keyCertSign when key usage is
@@ -105,11 +109,23 @@ its `README` lists them.
   (nearest first), `root`, our common name, the names above ours (root
   last) and the earliest `not_after`. Names without a common name read
   "an unnamed CA".
-- `check_key(&chain, pkcs8_pem, now) -> KeyInfo`: `key_info`, then
+- `check_key(&chain, pkcs8_pem, names, now) -> KeyInfo`: `key_info`, then
   `Issuer::load` (`Pki(KeyMismatch)`), then a throwaway server certificate
-  whose issuer bytes must equal our subject bytes (`Pki(NameMismatch)`):
-  rcgen rebuilds the issuer name, and keeps one attribute per type, so a
-  name with two `DC`s, say, would not chain.
+  for `names` (`openvibes.invalid` when there are none) whose issuer bytes
+  must equal our subject bytes (`Pki(NameMismatch)`): rcgen rebuilds the
+  issuer name, and keeps one attribute per type, so a name with two `DC`s,
+  say, would not chain. Last, the self-check: that certificate is verified
+  as agents verify a server certificate (rustls-webpki, ServerAuth, the
+  ring provider's algorithms), through the middle CAs to the root.
+  A refusal is `NotForServers(cn, ServerLimit)`: `KeyUsage` (an extended
+  key usage without serverAuth), `NameConstraints` (constraints that leave
+  out the names), `OldSignature` (e.g. SHA-1), `UnknownExtension` (a
+  critical extension webpki cannot read) or `Other`. To name the CA at
+  fault, each CA on the path is the trust anchor in turn, ours first: the
+  first refusal is about the CA just moved below the anchor (or the anchor
+  itself, for name constraints). Without names, name constraints are not
+  checked (they would refuse the stand-in, not the host), so callers that
+  know the host's names pass them.
 - `Issuer::with_chain(middle_pem)`: the CAs to append to server
   certificates (each must parse, `InvalidPem`); blank text means none.
 - `first_certificate(pem)`: the first `CERTIFICATE` block of a bundle as PEM

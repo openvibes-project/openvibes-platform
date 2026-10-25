@@ -2,6 +2,8 @@
 //! intermediate up to a self-signed root, built by signature.
 
 use chrono::{DateTime, Duration, Utc};
+use rustls_pki_types::{CertificateDer, SignatureVerificationAlgorithm, UnixTime};
+use webpki::ring as algs;
 use x509_parser::{certificate::X509Certificate, pem::Pem, x509::X509Name};
 
 use crate::ca::{SERVER_DAYS, parse};
@@ -43,8 +45,26 @@ pub enum ChainError {
     /// A certificate on the path is not valid now or for 90 days more; the
     /// earliest end of validity.
     Expiring(DateTime<Utc>),
+    /// Agents would refuse the server certificates issued under this CA,
+    /// and why.
+    NotForServers(String, ServerLimit),
     /// The key, or issuing with it.
     Pki(PkiError),
+}
+
+/// Why agents would refuse a server certificate under a CA on the path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ServerLimit {
+    /// Its extended key usage leaves out serverAuth.
+    KeyUsage,
+    /// Its name constraints leave out the host's names.
+    NameConstraints,
+    /// A signature algorithm agents no longer accept (e.g. SHA-1).
+    OldSignature,
+    /// A critical extension agents cannot read.
+    UnknownExtension,
+    /// Another check agents make.
+    Other,
 }
 
 impl From<PkiError> for ChainError {
@@ -106,8 +126,31 @@ fn self_signed(cert: &X509Certificate<'_>) -> bool {
     cert.subject().as_raw() == cert.issuer().as_raw() && cert.verify_signature(None).is_ok()
 }
 
-/// Checks a pasted or imported bundle: the first certificate is ours, the
-/// rest (in any order) must hold every CA up to a self-signed root.
+/// Agents chain by name, so the names must match as well as the signature.
+fn signed_by(cert: &X509Certificate<'_>, issuer: &X509Certificate<'_>) -> bool {
+    cert.issuer().as_raw() == issuer.subject().as_raw()
+        && cert.verify_signature(Some(issuer.public_key())).is_ok()
+}
+
+/// Ours in a bundle pasted root first: the one CA that is not self-signed
+/// and signed no other certificate in it.
+fn lowest_ca(certs: &[X509Certificate<'_>]) -> Option<usize> {
+    let lowest: Vec<usize> = (0..certs.len())
+        .filter(|&i| {
+            can_sign(&certs[i])
+                && !self_signed(&certs[i])
+                && !(0..certs.len()).any(|j| j != i && signed_by(&certs[j], &certs[i]))
+        })
+        .collect();
+    match lowest[..] {
+        [i] => Some(i),
+        _ => None,
+    }
+}
+
+/// Checks a pasted or imported bundle: the first certificate is ours (or,
+/// when the root comes first, the CA lowest in the bundle), the rest (in
+/// any order) must hold every CA up to a self-signed root.
 /// Certificates not on the path are ignored. Every CA on the path must
 /// allow the CAs below it (ours included), and be valid at `now` and for
 /// 90 days more.
@@ -120,8 +163,13 @@ pub fn check_chain(certs_pem: &str, now: DateTime<Utc>) -> Result<Chain, ChainEr
         .iter()
         .map(|der| parse(der))
         .collect::<Result<Vec<_>, _>>()?;
+    let ours = if self_signed(&certs[0]) {
+        lowest_ca(&certs).unwrap_or(0)
+    } else {
+        0
+    };
     // Indexes into `certs`, ours first, root last.
-    let mut path = vec![0];
+    let mut path = vec![ours];
     loop {
         let current = &certs[path[path.len() - 1]];
         if !can_sign(current) {
@@ -133,14 +181,8 @@ pub fn check_chain(certs_pem: &str, now: DateTime<Utc>) -> Result<Chain, ChainEr
             }
             break;
         }
-        let issuer = (1..certs.len()).find(|&i| {
-            // Agents chain by name, so the names must match as well.
-            !path.contains(&i)
-                && current.issuer().as_raw() == certs[i].subject().as_raw()
-                && current
-                    .verify_signature(Some(certs[i].public_key()))
-                    .is_ok()
-        });
+        let issuer =
+            (0..certs.len()).find(|&i| !path.contains(&i) && signed_by(current, &certs[i]));
         match issuer {
             Some(i) => path.push(i),
             None => return Err(ChainError::Missing(cn(current.issuer()))),
@@ -174,30 +216,111 @@ pub fn check_chain(certs_pem: &str, now: DateTime<Utc>) -> Result<Chain, ChainEr
     let pem_of = |i: usize| pem("CERTIFICATE", &ders[i]);
     let root = path[path.len() - 1];
     Ok(Chain {
-        ours: pem_of(0),
+        ours: pem_of(ours),
         middle: path[1..path.len() - 1].iter().map(|&i| pem_of(i)).collect(),
         root: pem_of(root),
-        name: cn(certs[0].subject()),
+        name: cn(certs[ours].subject()),
         path: path[1..].iter().map(|&i| cn(certs[i].subject())).collect(),
         not_after,
     })
 }
 
 /// Checks the key for a checked chain: an accepted kind, our intermediate's
-/// own key, and a name OpenVIBES reproduces exactly as the issuer of what it
-/// signs (`NameMismatch`), so its certificates chain.
+/// own key, a name OpenVIBES reproduces exactly as the issuer of what it
+/// signs (`NameMismatch`), so its certificates chain, and a throwaway server
+/// certificate for `names` that agents would accept (`NotForServers`).
+/// Without names, `openvibes.invalid` stands in and name constraints are
+/// not checked (they would refuse the stand-in, not the host).
 pub fn check_key(
     chain: &Chain,
     pkcs8_pem: &str,
+    names: &[String],
     now: DateTime<Utc>,
 ) -> Result<KeyInfo, ChainError> {
     let info = key_info(pkcs8_pem)?;
     let issuer = Issuer::load(&chain.ours, pkcs8_pem)?;
-    let leaf = issuer.issue_server(&["openvibes.invalid".into()], now)?;
+    let leaf = match names {
+        [] => issuer.issue_server(&["openvibes.invalid".into()], now)?,
+        names => issuer.issue_server(names, now)?,
+    };
     let leaf_der = &certificates(&leaf.cert_pem)?[0];
     let ours_der = &certificates(&chain.ours)?[0];
     if parse(leaf_der)?.issuer().as_raw() != parse(ours_der)?.subject().as_raw() {
         return Err(ChainError::Pki(PkiError::NameMismatch));
     }
+    agents_accept(chain, leaf_der, !names.is_empty(), now)?;
     Ok(info)
+}
+
+/// The algorithms agents verify with (rustls' ring provider).
+static ALGS: &[&dyn SignatureVerificationAlgorithm] = &[
+    algs::ECDSA_P256_SHA256,
+    algs::ECDSA_P256_SHA384,
+    algs::ECDSA_P384_SHA256,
+    algs::ECDSA_P384_SHA384,
+    algs::ED25519,
+    algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+    algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+    algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+    algs::RSA_PKCS1_2048_8192_SHA256,
+    algs::RSA_PKCS1_2048_8192_SHA384,
+    algs::RSA_PKCS1_2048_8192_SHA512,
+];
+
+/// Verifies `leaf` as agents verify a server certificate (rustls-webpki,
+/// ServerAuth). Each CA is the trust anchor in turn, ours first, so the
+/// first refusal is about the CA just moved below the anchor, or about the
+/// anchor itself for its name constraints. webpki checks those last, so
+/// without `names` such a refusal passes and the next anchor is tried.
+fn agents_accept(
+    chain: &Chain,
+    leaf: &[u8],
+    names: bool,
+    now: DateTime<Utc>,
+) -> Result<(), ChainError> {
+    let pems = std::iter::once(&chain.ours)
+        .chain(&chain.middle)
+        .chain(std::iter::once(&chain.root));
+    let ders = pems
+        .map(|pem| {
+            let der = certificates(pem)?.into_iter().next();
+            der.map(CertificateDer::from).ok_or(PkiError::InvalidPem)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let cas: Vec<&String> = std::iter::once(&chain.name).chain(&chain.path).collect();
+    let leaf = CertificateDer::from(leaf);
+    let leaf = webpki::EndEntityCert::try_from(&leaf).map_err(|_| PkiError::InvalidPem)?;
+    let seconds = u64::try_from(now.timestamp()).map_err(|_| PkiError::InvalidValidity)?;
+    let time = UnixTime::since_unix_epoch(std::time::Duration::from_secs(seconds));
+    let refused =
+        |at: usize, error: &webpki::Error| ChainError::NotForServers(cas[at].clone(), limit(error));
+    for k in 0..ders.len() {
+        let anchor = webpki::anchor_from_trusted_cert(&ders[k]).map_err(|e| refused(k, &e))?;
+        let usage = webpki::KeyUsage::server_auth();
+        if let Err(error) =
+            leaf.verify_for_usage(ALGS, &[anchor], &ders[..k], time, usage, None, None)
+        {
+            let at = match limit(&error) {
+                ServerLimit::NameConstraints if !names => continue,
+                ServerLimit::NameConstraints => k,
+                _ => k.saturating_sub(1),
+            };
+            return Err(refused(at, &error));
+        }
+    }
+    Ok(())
+}
+
+fn limit(error: &webpki::Error) -> ServerLimit {
+    use webpki::Error as E;
+    match error {
+        E::RequiredEkuNotFoundContext(_) | E::EmptyEkuExtension => ServerLimit::KeyUsage,
+        E::NameConstraintViolation
+        | E::MalformedNameConstraint
+        | E::InvalidNetworkMaskConstraint => ServerLimit::NameConstraints,
+        E::UnsupportedSignatureAlgorithmContext(_)
+        | E::UnsupportedSignatureAlgorithmForPublicKeyContext(_) => ServerLimit::OldSignature,
+        E::UnsupportedCriticalExtension => ServerLimit::UnknownExtension,
+        _ => ServerLimit::Other,
+    }
 }

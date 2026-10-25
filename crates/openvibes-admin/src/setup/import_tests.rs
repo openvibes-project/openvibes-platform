@@ -3,7 +3,7 @@
 use std::os::unix::fs::PermissionsExt;
 
 use chrono::{DateTime, TimeZone, Utc};
-use platform_pki::{ChainError, PkiError};
+use platform_pki::{ChainError, PkiError, ServerLimit};
 
 use super::{IMPORT_DIR, MAX, import, import_message, imported, read_bundle};
 use crate::setup::{
@@ -19,6 +19,8 @@ const OURS_KEY: &str = include_str!("../../../platform-pki/tests/fixtures/ours-e
 const RSA_KEY: &str = include_str!("../../../platform-pki/tests/fixtures/ours-rsa.key");
 const STRICT: &str = include_str!("../../../platform-pki/tests/fixtures/strict.crt");
 const STRICT_KEY: &str = include_str!("../../../platform-pki/tests/fixtures/strict.key");
+const CLIENT_ONLY: &str = include_str!("../../../platform-pki/tests/fixtures/client-only.crt");
+const CLIENT_ONLY_KEY: &str = include_str!("../../../platform-pki/tests/fixtures/client-only.key");
 
 fn now() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2027, 6, 1, 0, 0, 0).unwrap()
@@ -259,8 +261,53 @@ fn every_refusal_has_its_sentence() {
         pki(PkiError::OldEncryption),
         "This key's encryption is too old to open here: ask for it with AES."
     );
+    let servers = |limit| message(ChainError::NotForServers("Issuing".into(), limit));
+    for (limit, reason) in [
+        (ServerLimit::KeyUsage, "its extended key usage"),
+        (ServerLimit::NameConstraints, "its name constraints"),
+        (ServerLimit::OldSignature, "an old signature algorithm"),
+        (
+            ServerLimit::UnknownExtension,
+            "an extension OpenVIBES cannot read",
+        ),
+        (ServerLimit::Other, "a check agents make"),
+    ] {
+        assert_eq!(
+            servers(limit),
+            format!(
+                "Issuing may not sign server certificates ({reason}): ask for one without that \
+                 limit."
+            )
+        );
+    }
     assert_eq!(
         pki(PkiError::NotCa),
         "The certificate was refused: certificate is not a CA."
+    );
+}
+
+#[test]
+fn a_ca_agents_refuse_for_servers_is_refused() {
+    let fake = Fake::new("import-not-for-servers");
+    let plan = plan(&[Ingest]);
+    let bundle = format!("{CLIENT_ONLY}{ROOT}{CLIENT_ONLY_KEY}");
+    assert_eq!(
+        import(&fake.ctx(&plan), &bundle, now()).unwrap_err(),
+        "Lime Lab Client Only CA may not sign server certificates (its extended key usage): \
+         ask for one without that limit."
+    );
+    assert!(!fake.root.join(IMPORT_DIR.trim_start_matches('/')).exists());
+}
+
+#[test]
+fn a_key_that_is_not_pkcs8_is_said_as_a_key() {
+    let fake = Fake::new("import-not-pkcs8");
+    let plan = plan(&[Ingest]);
+    let bundle = format!(
+        "{OURS}{ISSUING}{ROOT}-----BEGIN PRIVATE KEY-----\nAA\n-----END PRIVATE KEY-----\n"
+    );
+    assert_eq!(
+        import(&fake.ctx(&plan), &bundle, now()).unwrap_err(),
+        "This is not a private key in PEM form (-----BEGIN PRIVATE KEY-----)."
     );
 }

@@ -10,6 +10,7 @@ ours-ec.crt              Lime Lab OpenVIBES CA, EC P-256, under issuing, no path
 ours-ec.pkcs8.pem        its key as PRIVATE KEY (PKCS#8)
 ours-ec.sec1.pem         the same key as EC PRIVATE KEY (SEC1)
 ours-ec.enc.pem          the same key as ENCRYPTED PRIVATE KEY (PBES2, AES-256-CBC)
+ours-ec.combined.pem     ours-ec.crt, then ours-ec.enc.pem, in one file
 ours-ec.enc-sha1.pem     the same, PBES2 with the hmacWithSHA1 PRF
 ours-ec.enc-3des.pem     the same, PBES2 with DES-EDE3-CBC
 ours-ec.pbes1.pem        the same, PBES1 pbeWithMD5AndDES-CBC (too old)
@@ -19,9 +20,10 @@ short.crt/.key           Lime Lab Short CA, under issuing, valid until 2026-12-0
 strict.crt/.key          Lime Lab Strict CA, under the root, path length 0
 under-strict.crt/.key    Lime Lab Under Strict CA, a CA signed by strict
 twin-dc.crt/.key         Lime Lab Twin DC CA, under issuing, subject with two DC attributes
+client-only.crt/.key     Lime Lab Client Only CA, under the root, extended key usage clientAuth only
 leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
 weak.key                 RSA 1024
 p521.key                 EC P-521
 big.key                  RSA 6144 (over ring's 4096-bit limit)
 modern.pfx               ours-ec key, ours-ec.crt, issuing, root (AES-256-CBC)
-legacy.pfx               as modern.pfx plus a self-signed Lime Lab Web (-legacy: 3DES/RC2)
+legacy.pfx               as modern.pfx plus a self-signed Lime Lab Web (-legacy: 3DES/RC2), friendly name Lime Lab OpenVIBES CA

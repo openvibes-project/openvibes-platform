@@ -9,6 +9,10 @@ const EC_ENC: &str = include_str!("fixtures/ours-ec.enc.pem");
 const RSA_KEY: &str = include_str!("fixtures/ours-rsa.key");
 const RSA_PKCS1: &str = include_str!("fixtures/ours-rsa.pkcs1.pem");
 const RSA_CRT: &str = include_str!("fixtures/ours-rsa.crt");
+const EC_COMBINED: &str = include_str!("fixtures/ours-ec.combined.pem");
+const EC_CRT: &str = include_str!("fixtures/ours-ec.crt");
+const ISSUING: &str = include_str!("fixtures/issuing.crt");
+const LEAF: &str = include_str!("fixtures/leaf-not-ca.crt");
 const MODERN: &[u8] = include_bytes!("fixtures/modern.pfx");
 const LEGACY: &[u8] = include_bytes!("fixtures/legacy.pfx");
 
@@ -30,6 +34,16 @@ fn a_locked_key_needs_its_password() {
     assert!(is_locked(EC_ENC));
     assert!(!is_locked(EC_SEC1));
     assert!(!is_locked(EC_PKCS8));
+}
+
+#[test]
+fn a_key_after_its_certificate_is_found() {
+    assert!(is_locked(EC_COMBINED));
+    assert_eq!(pkcs8_pem(EC_COMBINED, None), Err(PkiError::KeyLocked));
+    assert_eq!(
+        *pkcs8_pem(EC_COMBINED, Some(PASS)).unwrap(),
+        *pkcs8_pem(EC_PKCS8, None).unwrap()
+    );
 }
 
 #[test]
@@ -148,6 +162,28 @@ fn is_p12_tells_der_from_pem() {
 fn an_imported_rsa_key_loads_as_issuer() {
     let key = pkcs8_pem(RSA_PKCS1, None).unwrap();
     Issuer::load(RSA_CRT, &key).unwrap();
+}
+
+/// The DER of a PEM's only block.
+fn der(pem: &str) -> Vec<u8> {
+    x509_parser::pem::parse_x509_pem(pem.as_bytes())
+        .unwrap()
+        .1
+        .contents
+}
+
+#[test]
+fn a_pfx_names_ours_by_its_key() {
+    use p12_keystore::{Certificate, KeyStore, KeyStoreEntry, PrivateKey, PrivateKeyChain};
+    // The key id sits on the first certificate, here not the key's own.
+    let certs = [LEAF, EC_CRT, ISSUING].map(|pem| Certificate::from_der(&der(pem)).unwrap());
+    let key = PrivateKey::from_der(&der(EC_PKCS8)).unwrap();
+    let mut store = KeyStore::new();
+    let chain = PrivateKeyChain::new(vec![1, 2, 3], key, certs);
+    store.add_entry("ours", KeyStoreEntry::PrivateKeyChain(chain));
+    let pfx = store.writer(PASS).write().unwrap();
+    let p12 = read_p12(&pfx, PASS).unwrap();
+    assert_eq!(names(&p12.certs_pem)[0], "Lime Lab OpenVIBES CA");
 }
 
 /// Common names of every certificate in a PEM bundle, in order.

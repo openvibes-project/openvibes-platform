@@ -12,7 +12,7 @@ use super::{
     paste::{ended, holds_private_key},
 };
 use crate::{
-    setup::import::import_message,
+    setup::import::{import_message, key_message},
     tui::{
         app::{App, Key},
         ca_request::{Picked, pick, read_bytes},
@@ -85,9 +85,26 @@ impl Install {
             ),
         };
         let name = &imported.chain.name;
-        let info = platform_pki::check_key(&imported.chain, &pkcs8, chrono::Utc::now())
+        let names = self.cert_names();
+        let info = platform_pki::check_key(&imported.chain, &pkcs8, &names, chrono::Utc::now())
             .map_err(|e| import_message(&e, name, None))?;
         Ok((pkcs8, info, locked))
+    }
+
+    /// The names the server certificates will carry, as `Plan::names`
+    /// makes them; none while they are not valid names.
+    fn cert_names(&self) -> Vec<String> {
+        if super::fields::check_names(&self.hostname, &self.sans).is_err() {
+            return Vec::new();
+        }
+        let mut names = vec![self.hostname.trim().to_ascii_lowercase()];
+        let sans = self.sans.split(',').map(|s| s.trim().to_ascii_lowercase());
+        for name in sans.chain(["localhost".into(), "127.0.0.1".into()]) {
+            if !name.is_empty() && !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        names
     }
 }
 
@@ -105,17 +122,6 @@ fn chain_lines(chain: &Chain) -> Vec<String> {
         ours_line(&chain.name, &until),
         format!("Chain: {} (root, also added)", chain.path.join(" › ")),
     ]
-}
-
-/// A key that did not convert; `import_message`'s PEM line is about
-/// certificates.
-fn key_message(e: PkiError) -> String {
-    match e {
-        PkiError::InvalidPem => {
-            "This is not a private key in PEM form (-----BEGIN PRIVATE KEY-----).".into()
-        }
-        e => import_message(&ChainError::Pki(e), "", None),
-    }
 }
 
 fn capitalised(text: &str) -> String {
@@ -137,7 +143,9 @@ impl<H: Host> App<H> {
             // A key added before stays only if it is the new one's.
             let key = (install.imported.take())
                 .and_then(|i| i.key)
-                .filter(|(key, _)| platform_pki::check_key(&chain, key, now).is_ok());
+                .filter(|(key, _)| {
+                    platform_pki::check_key(&chain, key, &install.cert_names(), now).is_ok()
+                });
             install.imported = Some(Imported {
                 chain,
                 key,
@@ -259,7 +267,8 @@ impl<H: Host> App<H> {
                 return;
             }
         };
-        match platform_pki::check_key(&chain, &p12.key_pem, now) {
+        let names = self.install.cert_names();
+        match platform_pki::check_key(&chain, &p12.key_pem, &names, now) {
             Ok(info) => {
                 self.install.imported = Some(Imported {
                     chain,

@@ -180,3 +180,23 @@ fn own_ca_replace_under_the_root_directly_drops_the_chain() {
         "a stale chain would end every server certificate"
     );
 }
+
+#[test]
+fn accept_refuses_a_ca_agents_refuse_for_servers() {
+    let fake = Fake::new("request-chain-not-for-servers");
+    let plan = careful();
+    request(&fake.ctx(&plan)).unwrap();
+    let signer = KeyAndCert {
+        cert_pem: fixture!("client-only.crt").into(),
+        key_pem: fixture!("client-only.key").into(),
+    };
+    let csr = fake.text(&format!("{REQUEST_DIR}/intermediate.csr"));
+    let cert = platform_pki::sign_intermediate(&signer, &csr, Utc::now()).unwrap();
+    let cas = format!("{}{ROOT}", fixture!("client-only.crt"));
+    assert_eq!(
+        accept(&fake.ctx(&plan), &cert, &cas).unwrap_err(),
+        "Lime Lab Client Only CA may not sign server certificates (its extended key usage): \
+         ask for one without that limit."
+    );
+    assert!(!exists(&fake, &format!("{REQUEST_DIR}/intermediate.crt")));
+}

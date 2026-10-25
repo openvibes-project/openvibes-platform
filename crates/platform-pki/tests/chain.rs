@@ -52,6 +52,19 @@ fn order_and_crlf_do_not_matter() {
 }
 
 #[test]
+fn the_root_may_come_first() {
+    assert_eq!(
+        check_chain(&format!("{ROOT}{ISSUING}{OURS_EC}"), now()),
+        check_chain(&format!("{OURS_EC}{ISSUING}{ROOT}"), now())
+    );
+    // A lone root, or one with only CAs it signed, is still a root.
+    assert_eq!(
+        check_chain(&format!("{ROOT}{ISSUING}{STRICT}"), now()),
+        Err(ChainError::IsRoot("Lime Lab Root CA".into()))
+    );
+}
+
+#[test]
 fn extra_certificates_are_ignored() {
     let chain = check_chain(&format!("{OURS_EC}{LEAF}{ROOT}{STRICT}{ISSUING}"), now()).unwrap();
     assert_eq!(chain.middle, [ISSUING]);
@@ -85,7 +98,7 @@ fn a_leaf_is_not_a_ca() {
 #[test]
 fn a_root_is_not_ours() {
     assert_eq!(
-        check_chain(&format!("{ROOT}{ISSUING}"), now()),
+        check_chain(ROOT, now()),
         Err(ChainError::IsRoot("Lime Lab Root CA".into()))
     );
 }
@@ -134,11 +147,11 @@ fn the_key_must_match() {
     let chain = check_chain(&format!("{OURS_EC}{ISSUING}{ROOT}"), now()).unwrap();
     let rsa = platform_pki::pkcs8_pem(RSA_KEY, None).unwrap();
     assert_eq!(
-        check_key(&chain, &rsa, now()),
+        check_key(&chain, &rsa, &[], now()),
         Err(ChainError::Pki(PkiError::KeyMismatch))
     );
     assert_eq!(
-        check_key(&chain, OURS_EC_KEY, now()),
+        check_key(&chain, OURS_EC_KEY, &[], now()),
         Ok(KeyInfo {
             kind: KeyKind::P256,
             bits: 256
@@ -151,7 +164,7 @@ fn an_rsa_key_is_accepted() {
     let chain = check_chain(&format!("{OURS_RSA}{ISSUING}{ROOT}"), now()).unwrap();
     let key = platform_pki::pkcs8_pem(RSA_KEY, None).unwrap();
     assert_eq!(
-        check_key(&chain, &key, now()),
+        check_key(&chain, &key, &[], now()),
         Ok(KeyInfo {
             kind: KeyKind::Rsa,
             bits: 3072
@@ -163,7 +176,7 @@ fn an_rsa_key_is_accepted() {
 fn a_name_rcgen_cannot_reproduce_is_refused() {
     let chain = check_chain(&format!("{TWIN_DC}{ISSUING}{ROOT}"), now()).unwrap();
     assert_eq!(
-        check_key(&chain, TWIN_DC_KEY, now()),
+        check_key(&chain, TWIN_DC_KEY, &[], now()),
         Err(ChainError::Pki(PkiError::NameMismatch))
     );
 }
@@ -220,7 +233,7 @@ fn openvibes_made_cas_still_pass() {
     let chain = check_chain(&format!("{cert}{}", root.cert_pem), now).unwrap();
     assert!(chain.middle.is_empty());
     assert_eq!(chain.path, ["OpenVIBES Root CA"]);
-    check_key(&chain, &key, now).unwrap();
+    check_key(&chain, &key, &[], now).unwrap();
 }
 
 #[test]

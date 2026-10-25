@@ -14,7 +14,7 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use platform_host::runner::Runner;
-use platform_pki::{Chain, ChainError, PkiError};
+use platform_pki::{Chain, ChainError, PkiError, ServerLimit};
 use zeroize::Zeroizing;
 
 use super::{Ctx, request::REQUEST_DIR};
@@ -50,6 +50,18 @@ pub fn import_message(e: &ChainError, name: &str, file: Option<&str>) -> String 
             "Valid until {}: under the 90 days a server certificate lasts.",
             d.format("%F")
         ),
+        ChainError::NotForServers(n, limit) => {
+            let reason = match limit {
+                ServerLimit::KeyUsage => "its extended key usage",
+                ServerLimit::NameConstraints => "its name constraints",
+                ServerLimit::OldSignature => "an old signature algorithm",
+                ServerLimit::UnknownExtension => "an extension OpenVIBES cannot read",
+                ServerLimit::Other => "a check agents make",
+            };
+            format!(
+                "{n} may not sign server certificates ({reason}): ask for one without that limit."
+            )
+        }
         ChainError::Pki(PkiError::WeakKey(b)) => {
             format!("A {b}-bit RSA key is too weak: 2048 bits or more.")
         }
@@ -73,6 +85,17 @@ pub fn import_message(e: &ChainError, name: &str, file: Option<&str>) -> String 
             "This key's encryption is too old to open here: ask for it with AES.".into()
         }
         ChainError::Pki(other) => format!("The certificate was refused: {other}."),
+    }
+}
+
+/// A key that did not convert; `import_message`'s PEM line is about
+/// certificates.
+pub fn key_message(e: PkiError) -> String {
+    match e {
+        PkiError::InvalidPem => {
+            "This is not a private key in PEM form (-----BEGIN PRIVATE KEY-----).".into()
+        }
+        e => import_message(&ChainError::Pki(e), "", None),
     }
 }
 
@@ -133,10 +156,11 @@ fn split(bundle: &str) -> Result<(String, Zeroizing<String>), String> {
 pub fn import<R: Runner>(ctx: &Ctx<R>, bundle: &str, now: DateTime<Utc>) -> Result<Chain, String> {
     let (certs, key) = split(bundle)?;
     let chain = platform_pki::check_chain(&certs, now).map_err(|e| import_message(&e, "", None))?;
-    let message = |e: ChainError| import_message(&e, &chain.name, None);
     // PKCS#8 only (the TUI decrypts and converts); this checks it again.
-    let key = platform_pki::pkcs8_pem(&key, None).map_err(|e| message(e.into()))?;
-    platform_pki::check_key(&chain, &key, now).map_err(message)?;
+    let key = platform_pki::pkcs8_pem(&key, None).map_err(key_message)?;
+    // No names here: Replace checks them again with this host's.
+    platform_pki::check_key(&chain, &key, &[], now)
+        .map_err(|e| import_message(&e, &chain.name, None))?;
     if super::pki::installed(ctx) {
         same_root(ctx, &chain.root)?;
     }

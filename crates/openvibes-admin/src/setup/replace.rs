@@ -170,6 +170,9 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
         Some(import::chain(ctx, &root, (&new, &new_key), &previous)?)
     } else {
         platform_pki::check_intermediate(&new, &root, Utc::now()).map_err(|e| message(&e))?;
+        if ctx.plan.ca == CaMode::Careful {
+            import::checked(ctx, &format!("{new}{root}"), &new_key)?;
+        }
         None
     };
     let expires = platform_pki::not_after(&new).map_err(|e| message(&e))?;

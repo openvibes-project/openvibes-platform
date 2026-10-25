@@ -184,8 +184,9 @@ fn write_copy<R: Runner>(ctx: &Ctx<R>, abs: &str, csr: &str) -> Result<bool, Str
 
 /// Checks the CA's certificate against the stored request, and the CAs
 /// pasted with it (the one that signed it, then each above it up to the
-/// root), then writes them: the root as `root.crt`, the CAs between as
-/// `chain.crt` when there are any. Nothing is written when a check fails.
+/// root), with the self-check of `check_key`, then writes them: the root
+/// as `root.crt`, the CAs between as `chain.crt` when there are any.
+/// Nothing is written when a check fails.
 pub fn accept<R: Runner>(ctx: &Ctx<R>, cert_pem: &str, cas_pem: &str) -> Result<Signed, String> {
     let csr = ctx
         .read(&file("intermediate.csr"))
@@ -194,6 +195,10 @@ pub fn accept<R: Runner>(ctx: &Ctx<R>, cert_pem: &str, cas_pem: &str) -> Result<
     let signed =
         platform_pki::check_signed_request(&csr, cert_pem, now).map_err(|e| message(&e))?;
     let chain = platform_pki::check_chain(&format!("{}\n{cas_pem}", cert_pem.trim()), now)
+        .map_err(|e| import_message(&e, &signed.subject, None))?;
+    // Agents must accept what it signs; no names yet (Replace has them).
+    let key = zeroize::Zeroizing::new(ctx.read(&file("intermediate.key"))?);
+    platform_pki::check_key(&chain, &key, &[], now)
         .map_err(|e| import_message(&e, &signed.subject, None))?;
     let put = |name: &str, pem: &str| {
         ctx.put(

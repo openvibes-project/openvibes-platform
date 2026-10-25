@@ -10,7 +10,7 @@ use der::{Any, Decode, Encode, Reader, Sequence, SliceReader};
 use md5::{Digest, Md5};
 use p12_keystore::Pkcs12Archive;
 use pkcs5::EncryptionScheme;
-use rcgen::KeyPair;
+use rcgen::{KeyPair, PublicKeyData};
 use zeroize::Zeroizing;
 
 use crate::PkiError;
@@ -151,7 +151,8 @@ pub fn is_p12(bytes: &[u8]) -> bool {
 }
 
 /// Opens a `.p12`/`.pfx` file (PBES2 with AES, or legacy 3DES/RC2) and
-/// returns its first private key and every certificate in it.
+/// returns its first private key and every certificate in it, the one for
+/// that key first (found by its public key, not the file's key ids).
 pub fn read_p12(bytes: &[u8], password: &str) -> Result<P12, PkiError> {
     let archive = Pkcs12Archive::from_pkcs12(bytes, password).map_err(|error| match error {
         p12_keystore::error::Error::MacError(_) | p12_keystore::error::Error::UnpadError => {
@@ -161,9 +162,13 @@ pub fn read_p12(bytes: &[u8], password: &str) -> Result<P12, PkiError> {
     })?;
     let key = archive.keys.first().ok_or(PkiError::InvalidPem)?;
     let key_pem = checked_pem(key.key.as_der())?;
-    let key_id = key.local_key_id.as_ref().map(|id| id.0.as_slice());
+    let spki = KeyPair::try_from(key.key.as_der())
+        .map_err(|_| PkiError::InvalidPem)?
+        .subject_public_key_info();
     let mut certs: Vec<_> = archive.certs.iter().collect();
-    certs.sort_by_key(|bag| key_id.is_none() || bag.local_key_id.as_deref() != key_id);
+    certs.sort_by_key(|bag| {
+        crate::ca::parse(bag.cert.as_der()).map_or(true, |cert| cert.public_key().raw != spki)
+    });
     let certs_pem = certs
         .iter()
         .map(|bag| pem("CERTIFICATE", bag.cert.as_der()))
@@ -172,7 +177,8 @@ pub fn read_p12(bytes: &[u8], password: &str) -> Result<P12, PkiError> {
 }
 
 /// The first PEM block, skipping `EC PARAMETERS` (which `openssl ecparam
-/// -genkey` writes before the key). Header lines (`Name: value`) are kept
+/// -genkey` writes before the key) and certificates (a file may hold the
+/// certificate, then its key). Header lines (`Name: value`) are kept
 /// out of the base64; only `DEK-Info` is used.
 fn first_key_block(text: &str) -> Result<Block, PkiError> {
     let mut lines = text.lines().map(str::trim);
@@ -193,7 +199,7 @@ fn first_key_block(text: &str) -> Result<Block, PkiError> {
                 None => body.push_str(line),
             }
         }
-        if label == "EC PARAMETERS" {
+        if label == "EC PARAMETERS" || label == "CERTIFICATE" {
             continue;
         }
         let der = STANDARD
@@ -335,15 +341,18 @@ fn traditional(
     };
     let iv = hex(iv.trim()).ok_or(PkiError::InvalidPem)?;
     let salt = iv.get(..8).ok_or(PkiError::InvalidPem)?;
-    let mut key = Zeroizing::new(Vec::new());
-    let mut round = Zeroizing::new(Vec::new());
+    // Sized up front and refilled in place: no copy is left unwiped.
+    let mut key = Zeroizing::new(Vec::with_capacity(key_len + 16));
+    let mut round = Zeroizing::new(Vec::with_capacity(16));
     while key.len() < key_len {
-        *round = Md5::new()
+        let mut digest = Zeroizing::new([0u8; 16]);
+        Md5::new()
             .chain_update(&*round)
             .chain_update(password)
             .chain_update(salt)
-            .finalize()
-            .to_vec();
+            .finalize_into((&mut *digest).into());
+        round.clear();
+        round.extend_from_slice(&*digest);
         key.extend_from_slice(&round);
     }
     key.truncate(key_len);
