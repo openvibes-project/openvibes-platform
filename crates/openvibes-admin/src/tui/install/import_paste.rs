@@ -228,13 +228,14 @@ impl<H: Host> App<H> {
                         }
                     }
                     Err(e) => {
-                        let file = path.display().to_string();
+                        let file = install.shown(&path);
                         install.secret = None;
                         install.error = Some(import_message(&ChainError::Pki(e), "", Some(&file)));
                     }
                     Ok(p12) => {
                         install.secret = None;
-                        self.import_p12(p12, path.display().to_string());
+                        let file = install.shown(&path);
+                        self.import_p12(p12, file);
                     }
                 }
             }

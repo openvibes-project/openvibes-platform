@@ -87,6 +87,19 @@ impl Install {
         self.import_done = None;
     }
 
+    /// A file as the screens name it: `~/…` under the operator's home.
+    pub(super) fn shown(&self, path: &std::path::Path) -> String {
+        super::steps::tilde(&path.display().to_string(), self.home.as_deref())
+    }
+
+    /// The help line after a .p12 filled both rows (Replace's too).
+    pub(in crate::tui) fn from_hint(&self) -> Option<String> {
+        let file = self.imported.as_ref()?.from.as_ref()?;
+        Some(format!(
+            "From {file}. Delete that file now: its key is kept here."
+        ))
+    }
+
     /// Closes the paste box; its text is wiped, as it may be a key.
     pub(super) fn close_box(&mut self) {
         if let Some(mut text) = self.paste.take() {
@@ -142,10 +155,10 @@ impl Install {
 
     /// The help line on step 3's rows 3 to 5.
     pub(super) fn import_help(&self, row: usize) -> String {
+        if let Some(hint) = self.from_hint() {
+            return hint;
+        }
         match &self.imported {
-            Some(Imported {
-                from: Some(file), ..
-            }) => format!("From {file}. Delete that file now: its key is kept here."),
             None if row == KEY => KEY_FIRST.into(),
             _ if row == NEXT => "Go on to the ports.".into(),
             _ => HELP.into(),
@@ -219,14 +232,18 @@ pub(super) fn draw_how<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, 
     let failed = install.secret.as_ref().is_some_and(|s| s.failures > 0);
     match (&install.locked, &install.error) {
         (Some(Locked::P12(path, _)), _) if failed => lines.extend(
-            crate::tui::status::wrap(&format!("✗ Wrong password for {}.", path.display()), 72, 2)
-                .into_iter()
-                .map(|l| Line::styled(format!("    {l}"), t.red())),
+            crate::tui::status::wrap(
+                &format!("✗ Wrong password for {}.", install.shown(path)),
+                72,
+                2,
+            )
+            .into_iter()
+            .map(|l| Line::styled(format!("    {l}"), t.red())),
         ),
         (Some(Locked::P12(path, _)), _) => {
             let said = format!(
                 "{} · a .p12 file: it is locked with a password",
-                path.display()
+                install.shown(path)
             );
             let said = crate::tui::status::wrap(&said, 70, 2);
             lines.extend(said.into_iter().enumerate().map(|(i, l)| {

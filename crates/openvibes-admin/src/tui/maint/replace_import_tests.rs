@@ -393,3 +393,52 @@ fn leaving_replace_forgets_the_key() {
     assert_eq!(app.nav.screen, Screen::Maint(Page::Certificates));
     assert!(app.install.imported.is_none());
 }
+
+#[test]
+fn a_pfx_reads_as_at_install_under_replace() {
+    let mut app = replace_page();
+    let home = app.root.join("home/lab");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("ours.pfx"), fixture_bytes()).unwrap();
+    app.install.home = Some(home.display().to_string());
+    app.key(Key::Enter);
+    let text = screen(&app);
+    assert!(
+        text.contains(" · Maintenance › Certificates › Replace › Certificate "),
+        "{text}"
+    );
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    app.nav.row = (app.install.pick.as_ref().unwrap().rows().iter())
+        .position(|(n, _)| n == "ours.pfx")
+        .unwrap();
+    app.key(Key::Enter);
+    let text = screen(&app);
+    assert!(
+        text.contains("✓ ~/ours.pfx · a .p12 file: it is locked with a password"),
+        "{text}"
+    );
+    type_text(&mut app, "correct horse");
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::Replace));
+    let text = screen(&app);
+    assert!(
+        text.contains("✓ Under the same root: agents keep working."),
+        "{text}"
+    );
+    assert!(
+        text.contains("From ~/ours.pfx. Delete that file now: its key is kept here."),
+        "{text}"
+    );
+    app.nav.row = 1;
+    app.key(Key::Enter);
+    assert!(
+        screen(&app).contains(" · Maintenance › Certificates › Replace › Private key "),
+        "{}",
+        screen(&app)
+    );
+}
+
+fn fixture_bytes() -> &'static [u8] {
+    include_bytes!("../../../../platform-pki/tests/fixtures/modern.pfx")
+}

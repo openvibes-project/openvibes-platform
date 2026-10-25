@@ -46,7 +46,8 @@ fn a_pfx_asks_its_password_then_fills_both_rows() {
     for line in [
         "Add the certificate",
         "a .pem, or a .p12 / .pfx with the key in it",
-        &format!("✓ {path} · a .p12 file: it is locked with a password"),
+        // Under the operator's home: `~/…`, as everywhere.
+        "✓ ~/openvibes.pfx · a .p12 file: it is locked with a password",
         "Its password:",
         "Enter Open it",
     ] {
@@ -69,7 +70,7 @@ fn a_pfx_asks_its_password_then_fills_both_rows() {
     for line in [
         "✓ added · Lime Lab OpenVIBES CA",
         "✓ added · matches the certificate",
-        &format!("From {path}. Delete that file now: its key is kept here."),
+        "From ~/openvibes.pfx. Delete that file now: its key is kept here.",
         "Enter Next",
     ] {
         assert!(flat(&text).contains(line), "{line}\n{text}");
@@ -88,7 +89,7 @@ fn a_wrong_pfx_password_says_so() {
     let text = screen(&app);
     assert!(text.contains("Wrong password."), "{text}");
     assert!(
-        flat(&text).contains(&format!("✗ Wrong password for {path}.")),
+        flat(&text).contains("✗ Wrong password for ~/openvibes.pfx."),
         "{text}"
     );
     assert!(text.contains("Its password:"), "asked again\n{text}");

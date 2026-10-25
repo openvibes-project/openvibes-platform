@@ -255,6 +255,13 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         lines.pop();
         lines.extend(line(t, said.as_deref().map_err(String::as_str)));
     }
+    if let Some(hint) = install.from_hint().filter(|_| app.maint.certs.imported()) {
+        lines.extend(
+            wrap(&hint, 76, 2)
+                .into_iter()
+                .map(|l| Line::styled(format!("    {l}"), t.dim())),
+        );
+    }
     frame.render_widget(Paragraph::new(lines), area);
 }
 
