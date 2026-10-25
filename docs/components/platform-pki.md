@@ -84,6 +84,9 @@ its `README` lists them.
 
 ## Interface
 
+- `certificates(pem) -> Vec<Vec<u8>>`: the DER of every `CERTIFICATE`
+  block, in order (text outside blocks ignored, CRLF accepted); none for
+  blank text. Setup compares server certificates with `chain.crt` this way.
 - `check_chain(certs_pem, now) -> Chain`: the first certificate is ours
   and must not be self-signed (`IsRoot(cn)`); the path is built from the
   rest, in any order, CRLF or not, up to a self-signed root. Each link

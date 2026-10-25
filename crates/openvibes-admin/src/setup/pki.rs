@@ -101,6 +101,23 @@ pub(super) fn stage_dir<R: Runner>(ctx: &Ctx<R>, abs: &str) -> Result<(), String
     ctx.chown(abs, ADMIN_OWNER)
 }
 
+/// Copies `names` from the root-only `dir` into a fresh `INT` for
+/// openvibes-admin, which cannot read that folder: keys 0600, the rest 0644.
+pub(super) fn stage_from<R: Runner>(ctx: &Ctx<R>, dir: &str, names: &[&str]) -> Result<(), String> {
+    fresh_stage(ctx)?;
+    stage_dir(ctx, INT)?;
+    for name in names {
+        let mode = if name.ends_with(".key") { 0o600 } else { 0o644 };
+        ctx.copy(
+            &format!("{dir}/{name}"),
+            &format!("{INT}/{name}"),
+            ADMIN_OWNER,
+            mode,
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn remove_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     fs::remove_dir_all(ctx.path(STAGE)).map_err(|error| format!("{STAGE}: {error}"))
 }
@@ -208,13 +225,7 @@ fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         "root.crt",
     ];
     if names.iter().all(|name| ctx.exists(&request(name))) {
-        // Staged for openvibes-admin, which cannot read the root-only folder.
-        fresh_stage(ctx)?;
-        stage_dir(ctx, INT)?;
-        for name in names {
-            let mode = if name.ends_with(".key") { 0o600 } else { 0o644 };
-            ctx.copy(&request(name), &format!("{INT}/{name}"), ADMIN_OWNER, mode)?;
-        }
+        stage_from(ctx, REQUEST_DIR, &names)?;
         import_and_install(ctx)?;
         remove_stage(ctx)?;
         remove_request(ctx)?;

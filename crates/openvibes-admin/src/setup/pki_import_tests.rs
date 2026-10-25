@@ -193,3 +193,24 @@ fn the_plan_says_import() {
     let text = toml::to_string(&import_plan()).unwrap();
     assert!(text.contains("ca = \"import\""), "{text}");
 }
+
+#[test]
+fn a_chain_written_by_hand_still_matches() {
+    let fake = Fake::new("import-chain-by-hand");
+    let names = ["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"];
+    installed_certificates(&fake, &names, 60);
+    for cert in ["ingest.crt", "distribution.crt"] {
+        let chained = format!("{}{ISSUING}", certificate(&names, 60));
+        fake.file(&format!("/etc/openvibes/tls/{cert}"), &chained);
+    }
+    // As `openssl pkcs12 -nokeys` writes it: attributes around the block,
+    // and CRLF line ends.
+    let by_hand = format!(
+        "Bag Attributes\r\nsubject=CN=Lime Lab Issuing CA\r\nissuer=CN=Lime Lab Root CA\r\n{}",
+        ISSUING.replace('\n', "\r\n")
+    );
+    fake.file(CHAIN, &by_hand);
+    let plan = plan(&[Ingest, Distribution]);
+    let state = check(&fake.ctx(&plan), Step::Certificates);
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+}

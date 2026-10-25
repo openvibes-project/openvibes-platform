@@ -55,7 +55,7 @@ impl From<PkiError> for ChainError {
 
 /// The DER of every `CERTIFICATE` block in `pem`, each parsed once; none
 /// for blank text.
-pub(crate) fn certificates(pem: &str) -> Result<Vec<Vec<u8>>, PkiError> {
+pub fn certificates(pem: &str) -> Result<Vec<Vec<u8>>, PkiError> {
     let ders = Pem::iter_from_buffer(pem.replace("\r\n", "\n").as_bytes())
         .map(|block| {
             let block = block.map_err(|_| PkiError::InvalidPem)?;

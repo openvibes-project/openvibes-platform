@@ -12,8 +12,8 @@ use super::{
     Ctx,
     import::IMPORT_DIR,
     pki::{
-        ADMIN_OWNER, INT, INTERMEDIATE, INTERMEDIATE_KEY, ROOT_CERT, fresh_stage, installed,
-        remove_request, remove_stage, root_summary, stage_dir,
+        ADMIN_OWNER, INT, INTERMEDIATE, INTERMEDIATE_KEY, ROOT_CERT, installed, remove_request,
+        remove_stage, root_summary, stage_from,
     },
 };
 
@@ -34,13 +34,7 @@ pub(super) fn import<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !names.iter().all(|name| ctx.exists(&staged(name))) {
         return Ok(StepState::Waiting(HELP.into()));
     }
-    // Staged for openvibes-admin, which cannot read the root-only folder.
-    fresh_stage(ctx)?;
-    stage_dir(ctx, INT)?;
-    for name in names {
-        let mode = if name.ends_with(".key") { 0o600 } else { 0o644 };
-        ctx.copy(&staged(name), &format!("{INT}/{name}"), ADMIN_OWNER, mode)?;
-    }
+    stage_from(ctx, IMPORT_DIR, &names)?;
     // Empty for a two-level PKI: `--chain` still checks the path.
     let chain = staged("chain.crt");
     let middle = if ctx.exists(&chain) {
@@ -104,21 +98,21 @@ pub(super) fn import_and_install<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> 
     )
 }
 
-/// The certificate blocks of `pem`, whitespace dropped.
-fn blocks(pem: &str) -> Vec<String> {
-    pem.split("-----END CERTIFICATE-----")
-        .map(|block| block.split_whitespace().collect::<String>())
-        .filter(|block| !block.is_empty())
-        .collect()
-}
-
 /// Whether a server certificate (leaf, our intermediate, then the rest)
-/// ends with exactly `CHAIN`'s CAs; always true without a `CHAIN`.
+/// ends with exactly `CHAIN`'s CAs, compared as DER (a `chain.crt` written
+/// by hand may carry openssl's attribute lines or CRLF); always true
+/// without a `CHAIN`.
 pub(super) fn ends_in_chain<R: Runner>(ctx: &Ctx<R>, cert_pem: &str) -> bool {
     let Ok(chain) = ctx.read(CHAIN) else {
         return true;
     };
-    blocks(cert_pem).get(2..) == Some(&blocks(&chain)[..])
+    match (
+        platform_pki::certificates(cert_pem),
+        platform_pki::certificates(&chain),
+    ) {
+        (Ok(cert), Ok(chain)) => cert.get(2..) == Some(&chain[..]),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
