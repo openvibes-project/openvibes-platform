@@ -7,6 +7,7 @@
 
 mod ca;
 mod client;
+mod keys;
 mod token;
 
 use std::fmt;
@@ -19,6 +20,7 @@ pub use ca::{
 pub use client::{
     CheckedCsr, IssuedClient, check_csr, leaf_identity, leaf_validity, spki_sha256_of_cert,
 };
+pub use keys::{KeyInfo, KeyKind, P12, is_locked, is_p12, key_info, pkcs8_pem, read_p12};
 pub use token::{enrollment_token_sha256, is_agent_id};
 
 /// Fixed failure categories; no key or certificate material is included.
@@ -57,6 +59,12 @@ pub enum PkiError {
     NotRoot,
     /// A root with path length 0: it cannot validly sign an intermediate.
     RootPathLen0,
+    /// The private key is encrypted and no password was given.
+    KeyLocked,
+    /// The password does not open the key or file.
+    WrongPassword,
+    /// An RSA key below 2048 bits; the payload is its size.
+    WeakKey(u32),
 }
 
 impl fmt::Display for PkiError {
@@ -77,6 +85,9 @@ impl fmt::Display for PkiError {
             Self::NotForRequest => "certificate was signed for another request",
             Self::NotRoot => "not a self-signed CA certificate",
             Self::RootPathLen0 => "the root CA has path length 0 and cannot sign an intermediate",
+            Self::KeyLocked => "the private key is locked with a password",
+            Self::WrongPassword => "wrong password",
+            Self::WeakKey(bits) => return write!(f, "an RSA key of {bits} bits is too weak"),
             Self::Several(n) => {
                 return write!(f, "{n} PEM blocks where one certificate was expected");
             }

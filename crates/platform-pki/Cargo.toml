@@ -8,10 +8,14 @@ license.workspace = true
 [dependencies]
 base64.workspace = true
 chrono.workspace = true
+der.workspace = true
+p12-keystore.workspace = true
+pkcs5.workspace = true
 rcgen.workspace = true
 ring.workspace = true
 time.workspace = true
 x509-parser.workspace = true
+zeroize = "=1.9.0"
 
 [lints]
 workspace = true

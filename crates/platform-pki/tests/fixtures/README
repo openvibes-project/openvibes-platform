@@ -1,0 +1,20 @@
+Test fixtures for platform-pki, made by make.sh with OpenSSL 3.6.3 9 Jun 2026 (Library: OpenSSL 3.6.3 9 Jun 2026).
+Every certificate is valid 2026-01-01 to 2046-01-01, except short.crt.
+Password of ours-ec.enc.pem, modern.pfx and legacy.pfx: correct horse
+
+root.crt/.key            Lime Lab Root CA, RSA 4096, self-signed, path length 2
+issuing.crt/.key         Lime Lab Issuing CA, EC P-384, under the root, path length 1
+ours-rsa.crt/.key        Lime Lab OpenVIBES CA, RSA 3072, under issuing, no path length
+ours-rsa.pkcs1.pem       the same key as RSA PRIVATE KEY (PKCS#1)
+ours-ec.crt              Lime Lab OpenVIBES CA, EC P-256, under issuing, no path length
+ours-ec.pkcs8.pem        its key as PRIVATE KEY (PKCS#8)
+ours-ec.sec1.pem         the same key as EC PRIVATE KEY (SEC1)
+ours-ec.enc.pem          the same key as ENCRYPTED PRIVATE KEY (PBES2, AES-256-CBC)
+short.crt/.key           Lime Lab Short CA, under issuing, valid until 2026-12-01
+strict.crt/.key          Lime Lab Strict CA, under the root, path length 0
+under-strict.crt/.key    Lime Lab Under Strict CA, a CA signed by strict
+leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
+weak.key                 RSA 1024
+p521.key                 EC P-521
+modern.pfx               ours-ec key, ours-ec.crt, issuing, root (AES-256-CBC)
+legacy.pfx               as modern.pfx plus a self-signed Lime Lab Web (-legacy: 3DES/RC2)

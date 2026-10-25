@@ -43,6 +43,32 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `is_agent_id(id)`: `agent.` + a lowercase hyphenated UUID, matching the
   database CHECK. `issue_client` refuses anything else (`InvalidAgentId`).
 
+## Company keys and `.p12` files
+
+For importing an intermediate from a company PKI. Every key comes out as
+plain PKCS#8 PEM (`Zeroizing`), and has loaded in rcgen once.
+
+- Accepted keys: EC P-256, EC P-384, RSA 2048 to 8192 bits, Ed25519. RSA
+  below 2048 bits is `WeakKey(bits)`; P-521, DSA and RSA above 8192 bits
+  are `UnsupportedKey`.
+- `pkcs8_pem(key_pem, password)`: the first PEM block (an `EC PARAMETERS`
+  block is skipped), labelled `PRIVATE KEY`, `RSA PRIVATE KEY` (PKCS#1),
+  `EC PRIVATE KEY` (SEC1, must name its curve) or `ENCRYPTED PRIVATE KEY`
+  (PBES2). No password for a locked key is `KeyLocked`; one that does not
+  open it is `WrongPassword`.
+- `is_locked(key_pem)`: the first block is `ENCRYPTED PRIVATE KEY`.
+- `key_info(pkcs8_pem) -> KeyInfo`: kind and bits; `Display` gives
+  "an RSA key (3072 bits)", "an EC P-256 key", "an EC P-384 key",
+  "an Ed25519 key".
+- `is_p12(bytes)`: DER (starts with a SEQUENCE), not PEM text.
+- `read_p12(bytes, password) -> P12`: `.p12`/`.pfx` with PBES2 (AES) or
+  legacy 3DES/RC2 (p12-keystore). The first private key as PKCS#8, and every
+  certificate in the file as PEM, the key's own one first. A failed MAC is
+  `WrongPassword`. `P12`'s `Debug` redacts the key.
+
+Fixtures are in `tests/fixtures`, made by `make.sh` (openssl 3.4 or newer);
+its `README` lists them.
+
 ## Interface
 
 - `first_certificate(pem)`: the first `CERTIFICATE` block of a bundle as PEM
@@ -73,7 +99,8 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,
   `InvalidValidity`, `IssuerExpired`, `InvalidAgentId`, `NotIntermediate`,
-  `NotForRequest`, `Several(n)`, `NotRoot`, `RootPathLen0`.
+  `NotForRequest`, `Several(n)`, `NotRoot`, `RootPathLen0`, `KeyLocked`,
+  `WrongPassword`, `WeakKey(bits)`.
   Messages never contain key or certificate material.
 
 ## Test

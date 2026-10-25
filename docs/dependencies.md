@@ -41,8 +41,8 @@ counts and the date.
 
 The programs are `openvibes-ingest`, `-admin`, `-distribution`, `-signer`,
 `-fetch`, `-vulns`, `-netlog`, `-console` and `openvibes-llm-check`. They
-compile in the 40 crates below and **280 indirect crates** (320 in all), plus
-9 crates used only by build scripts (proc-macro and `build.rs` helpers, not
+compile in the 43 crates below and **305 indirect crates** (348 in all), plus
+10 crates used only by build scripts (proc-macro and `build.rs` helpers, not
 in the programs).
 
 | Crate | Version | Licence | Used for |
@@ -52,6 +52,7 @@ in the programs).
 | base64 | 0.23.1 | MIT OR Apache-2.0 | Encoding keys and signatures |
 | chrono | 0.4.45 | MIT OR Apache-2.0 | Dates and times everywhere |
 | clap | 4.6.7 | MIT OR Apache-2.0 | Command lines of every program |
+| der | 0.8.2 | Apache-2.0 OR MIT | Wrapping company keys as PKCS#8 |
 | deadpool-postgres | 0.14.2 | MIT OR Apache-2.0 | PostgreSQL connection pool |
 | ed25519-dalek | 3.0.0 | BSD-3-Clause | Signing and checking rule bundles |
 | flate2 | 1.1.10 | MIT OR Apache-2.0 | gzip (agent uploads, vulnerability feeds) |
@@ -61,6 +62,8 @@ in the programs).
 | libc | 0.2.189 | MIT OR Apache-2.0 | Admin TUI: terminal and process calls |
 | openvibes-core | 0.2.7 | Apache-2.0 | Our wire types, from openvibes-agent (git, pinned commit) |
 | openvibes-rules | 0.2.7 | Apache-2.0 | Our rule engine, from openvibes-agent (git, pinned commit) |
+| p12-keystore | 0.4.1 | MIT OR Apache-2.0 | Opening `.p12`/`.pfx` files |
+| pkcs5 | 0.8.1 | Apache-2.0 OR MIT | Unlocking password-protected keys |
 | quick-xml | 0.42.0 | MIT | Reading Fedora `updateinfo.xml` |
 | ratatui | 0.30.2 | MIT | Admin TUI screens |
 | rcgen | 0.14.10 | MIT OR Apache-2.0 | Making the platform's CA and certificates |
