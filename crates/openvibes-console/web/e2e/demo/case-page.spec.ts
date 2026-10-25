@@ -60,7 +60,7 @@ test("old_case_links_open_the_page: addresses, alarms, Add to case, vulnerabilit
   await expect(page.locator(".inspector")).toHaveCount(0);
   // A vulnerability's Cases card.
   const other = await openCase(page, 102);
-  await card(page, /^Items/).locator(".case-item").filter({ hasText: "Vulnerability" }).first().locator(".case-item__title a").click();
+  await card(page, /^Items/).locator("tr.case-row").filter({ hasText: "Vulnerability" }).first().locator(".cell-two a").first().click();
   // An advisory over several CVEs is the list, filtered to it; a CVE is its page.
   await page.locator("tbody tr").first().getByRole("link").first().click();
   await expect(page).toHaveURL(/\/vulnerabilities\/CVE-[^/]+$/);
@@ -87,52 +87,63 @@ test("the header, tiles and cards say what the case is, who works on it and what
   await expect(card(page, /^Details/)).toContainText("Severity");
 });
 
-test("each outcome can be set, a note is required except for Fixed, and Fixed waits for the evidence", async ({ page }) => {
+test("each outcome can be set in the Items table, a note is required except for Fixed, and Fixed waits for the evidence", async ({ page }) => {
   await openCase(page, 104);
-  const items = card(page, /^Items/).locator(".case-item");
+  const table = card(page, /^Items/);
+  const items = table.locator("tr.case-row");
   await expect(items).toHaveCount(2);
+  for (const header of ["Kind", "Item", "Severity", "Host", "Outcome"]) await expect(table.getByRole("columnheader", { name: header, exact: true })).toBeVisible();
   const first = items.first();
   await first.getByRole("combobox", { name: /^Outcome for/ }).click();
   await expect(page.getByRole("option", { name: /^Fixed/ })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByRole("option", { name: /^Fixed/ })).toContainText("evidence still there");
   for (const label of ["Confirmed malicious", "Expected activity", "False positive", "Risk accepted"]) await expect(page.getByRole("option", { name: label })).toBeVisible();
   await page.getByRole("option", { name: "Risk accepted" }).click();
-  // The note and the date are required; the browser refuses the form without them.
-  await first.getByRole("button", { name: "Save outcome" }).click();
-  await expect(first.getByRole("textbox", { name: /^Note for/ })).toHaveJSProperty("validity.valid", false);
-  await first.getByRole("textbox", { name: /^Note for/ }).fill("The owner signs off until the rebuild.");
+  // The sub-row: the note and the date are required; the browser refuses the form without them.
+  const more = table.locator("tr.case-row__more");
+  await more.getByRole("button", { name: "Save outcome" }).click();
+  await expect(more.getByRole("textbox", { name: /^Note for/ })).toHaveJSProperty("validity.valid", false);
+  await more.getByRole("textbox", { name: /^Note for/ }).fill("The owner signs off until the rebuild.");
   const day = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
-  await first.getByLabel(/^Re-open date for/).fill(day);
-  await first.getByRole("button", { name: "Save outcome" }).click();
+  await more.getByLabel(/^Re-open date for/).fill(day);
+  await more.getByRole("button", { name: "Save outcome" }).click();
   await expect(page.locator(".toast").filter({ hasText: "Outcome saved" })).toBeVisible();
   await expect(first).toContainText("Risk accepted");
+  await expect(more).toHaveCount(0);
   // Each of the others on the second item, the last one kept.
   const second = items.nth(1);
   for (const label of ["Confirmed malicious", "Expected activity", "False positive"]) {
     await second.getByRole("combobox", { name: /^Outcome for/ }).click();
     await page.getByRole("option", { name: label }).click();
-    await second.getByRole("textbox", { name: /^Note for/ }).fill(`Why: ${label}`);
-    await second.getByRole("button", { name: "Save outcome" }).click();
-    await expect(second.locator(".case-item__meta")).toContainText(label);
+    await more.getByRole("textbox", { name: /^Note for/ }).fill(`Why: ${label}`);
+    await more.getByRole("button", { name: "Save outcome" }).click();
+    await expect(second.locator(".cell-two")).toContainText(label);
   }
   await expect(page.locator(".detail-tiles")).toContainText("Ready to close");
 });
 
-test("closing is blocked until every item has an outcome, then takes a closing note; Reopen is on ⋯", async ({ page }) => {
+test("closing is blocked until every item has an outcome, then takes a closing note; status and Reopen are on ⋯", async ({ page }) => {
   await openCase(page, 104);
+  // One-click status.
+  await actions(page).getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Start investigating" }).click();
+  await expect(page.locator(".person-page__head")).toContainText("Investigating");
   await actions(page).getByRole("button", { name: "Close case…" }).click();
   let dialog = page.getByRole("dialog", { name: "Close C-104" });
+  await expect(dialog.getByRole("list", { name: "What is missing" })).toContainText("Add a closing note.");
   await expect(dialog).toContainText("2 items still need an outcome");
   await dialog.getByLabel("Closing note").fill("Both are the health check.");
+  await expect(dialog).not.toContainText("Add a closing note.");
   await expect(dialog.getByRole("button", { name: "Close case" })).toBeDisabled();
   await dialog.getByRole("button", { name: "Cancel" }).click();
-  const items = card(page, /^Items/).locator(".case-item");
+  const table = card(page, /^Items/);
+  const items = table.locator("tr.case-row");
   for (let n = 0; n < 2; n += 1) {
-    const item = items.nth(n);
-    await item.getByRole("combobox", { name: /^Outcome for/ }).click();
+    await items.nth(n).getByRole("combobox", { name: /^Outcome for/ }).click();
     await page.getByRole("option", { name: "Expected activity" }).click();
-    await item.getByRole("textbox", { name: /^Note for/ }).fill("Our health check script.");
-    await item.getByRole("button", { name: "Save outcome" }).click();
-    await expect(item.getByRole("button", { name: "Save outcome" })).toBeDisabled();
+    await table.getByRole("textbox", { name: /^Note for/ }).fill("Our health check script.");
+    await table.getByRole("button", { name: "Save outcome" }).click();
+    await expect(table.locator("tr.case-row__more")).toHaveCount(0);
   }
   await actions(page).getByRole("button", { name: "Close case…" }).click();
   dialog = page.getByRole("dialog", { name: "Close C-104" });
@@ -179,17 +190,21 @@ test("Edit changes the title and severity, Assign the assignee, and Add item and
   await page.getByLabel("Id").fill("agent-00001");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.locator(".toast").filter({ hasText: "Item added" })).toBeVisible();
-  await expect(items.locator(".case-item")).toHaveCount(3);
-  await items.locator(".case-item").last().getByRole("button", { name: "Remove" }).click();
-  await page.getByRole("button", { name: "Confirm" }).click();
-  await expect(items.locator(".case-item")).toHaveCount(2);
+  await expect(items.locator("tr.case-row")).toHaveCount(3);
+  await items.locator("tr.case-row").last().getByRole("button", { name: /^Remove / }).click();
+  await items.getByRole("group", { name: /^Remove / }).getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(page.locator(".toast").filter({ hasText: "Item removed" })).toBeVisible();
+  await expect(items.locator("tr.case-row")).toHaveCount(2);
 });
 
 for (const scheme of ["light", "dark"] as const) {
   test(`the page passes axe (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await openCase(page, 104);
-    await expect(card(page, /^Items/).locator(".case-item").first()).toBeVisible();
+    await expect(card(page, /^Items/).locator("tr.case-row").first()).toBeVisible();
+    await card(page, /^Items/).locator("tr.case-row").first().getByRole("combobox", { name: /^Outcome for/ }).click();
+    await page.getByRole("option", { name: "Risk accepted" }).click();
+    await expect(card(page, /^Items/).locator("tr.case-row__more")).toBeVisible();
     await expectNoAxeViolations(page);
     await actions(page).getByRole("button", { name: "Close case…" }).click();
     await expect(page.getByRole("dialog", { name: "Close C-104" })).toBeVisible();

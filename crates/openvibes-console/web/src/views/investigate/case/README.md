@@ -4,9 +4,9 @@ A case's page (approved screen 32; roles spec §10.3, step 5d rulings 11-15), at
 
 | File | What it does |
 |---|---|
-| `CasePage.tsx` | The page: header (Edit, Assign ▾, Close case… with its closing-note dialog and what still blocks it, ⋯ Export, Copy link and Reopen), four tiles (items, need an outcome, hosts, open for); Export's CSV rows. |
+| `CasePage.tsx` | The page: header (Edit, Assign ▾, Close case… with its closing-note dialog and what still blocks it, ⋯ Start investigating / Back to open, Export, Copy link and Reopen), four tiles (items, need an outcome, hosts, open for); Export's CSV rows. |
 | `CaseCards.tsx` | Details, Hosts in this case (open problems linking to the filtered lists), Who can see it, and Notes and timeline (the note box at the top, newest first). |
-| `CaseItems.tsx` | Items: each opens its own page, with its Outcome (Fixed once the evidence is gone, a note for the others, a date for Risk accepted), Remove and Add item. |
+| `CaseItems.tsx` | Items, as screen 32's table (Kind, Item, Severity, Host, Outcome, ✕; Kind, Severity and Host hide on narrow cards): a changed Outcome opens a sub-row with the note, the date and Save (Fixed once the evidence is gone, a note for the others, a date for Risk accepted); ✕ confirms Remove in a sub-row; Add item. |
 | `NewCasePage.tsx` | The new-case form, and the assignee hooks Assign reuses. |
 
 More: [docs/components/console-cases.md](../../../../../../../docs/components/console-cases.md), [docs/components/console-web.md](../../../../../../../docs/components/console-web.md)

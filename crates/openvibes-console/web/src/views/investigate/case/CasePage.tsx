@@ -12,7 +12,7 @@ import type { CaseDetail, CasePageSummary } from "../../../api/types";
 import { viewLink } from "../../../app/nav";
 import { useProvideTitle } from "../../../app/titles";
 import { CaseStatusBadge } from "../../../panels/cases/CaseBadge";
-import { blockingItems, caseNumber, eventText, kindLabel, type CaseKind, outcomeLabel, refLabel, updateBody } from "../../../panels/cases/cases";
+import { blockingItems, caseNumber, closeProblems, eventText, kindLabel, type CaseKind, outcomeLabel, refLabel, updateBody } from "../../../panels/cases/cases";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../../../ui/bits";
 import { downloadCsv } from "../../../ui/csv";
 import { DetailPage } from "../../../ui/detail/DetailPage";
@@ -53,11 +53,14 @@ export function openFor(seconds: number): string {
   return "under a minute";
 }
 
+/** The visible items that still block closing: without an outcome, or Fixed with the evidence back. */
+export const visibleBlocking = (page: Page, detail: CaseDetail) => Math.max(page.tiles.need_outcome, blockingItems(detail.items).length);
+
 /** What still blocks closing, in words (ruling 2): the visible items without an outcome (or Fixed with the evidence back),
  * else, when close's own rule still refuses, an item the viewer can't see; never named. */
 export function closeBlocker(page: Page, detail: CaseDetail): string | null {
   if (page.header.status === "closed") return null;
-  const visible = Math.max(page.tiles.need_outcome, blockingItems(detail.items).length);
+  const visible = visibleBlocking(page, detail);
   if (visible > 0) return `${plural(visible, "item")} still ${visible === 1 ? "needs" : "need"} an outcome`;
   return page.tiles.ready ? null : "An item you can't see still needs an outcome";
 }
@@ -77,6 +80,7 @@ export function exportRows(detail: CaseDetail): unknown[][] {
 export function CaseView({ page, detail }: { page: Page; detail: CaseDetail }) {
   const { header, tiles, details } = page;
   const blocker = closeBlocker(page, detail);
+  const visible = visibleBlocking(page, detail);
   const need = header.status === "closed" ? "Closed" : tiles.ready ? "Ready to close" : blocker ?? "";
   return (
     <DetailPage
@@ -93,8 +97,8 @@ export function CaseView({ page, detail }: { page: Page; detail: CaseDetail }) {
       actions={<CaseActions page={page} detail={detail} />}
       tiles={[
         <Tile key="items" label="Items" value={tiles.items} to="#items" />,
-        <div key="need" className="card detail-tile" role="group" aria-label={`Need an outcome: ${tiles.need_outcome}, ${need}`}>
-          <span className={`detail-tile__value num${tiles.ready ? " ok-text" : tiles.need_outcome > 0 ? " warn-text" : ""}`} aria-hidden="true">{tiles.need_outcome.toLocaleString()}</span>
+        <div key="need" className="card detail-tile" role="group" aria-label={`Need an outcome: ${visible}, ${need}`}>
+          <span className={`detail-tile__value num${tiles.ready ? " ok-text" : visible > 0 ? " warn-text" : ""}`} aria-hidden="true">{visible.toLocaleString()}</span>
           <span className="detail-tile__label subtle" aria-hidden="true">Need an outcome</span>
           {need && <span className="detail-tile__note subtle" aria-hidden="true">{need}</span>}
         </div>,
@@ -128,19 +132,29 @@ function useSend(detail: CaseDetail) {
   return { busy, send };
 }
 
-/** Edit, Assign ▾, Close case… and ⋯ with Export, Copy link and Reopen, each with its `can` flag. */
-function CaseActions({ page, detail }: { page: Page; detail: CaseDetail }) {
+/** ⋯: one-click status (with `can.edit`), Export (`can.export`), Copy link, Reopen (`can.reopen`). */
+export function moreItems(page: Page) {
   const { can, header } = page;
-  const [open, setOpen] = useState<"edit" | "close" | null>(null);
-  const { send } = useSend(detail);
-  const more = [
+  return [
+    ...(can.edit && header.status === "open" ? [{ value: "investigating", label: "Start investigating" }] : []),
+    ...(can.edit && header.status === "investigating" ? [{ value: "open", label: "Back to open" }] : []),
     ...(can.export ? [{ value: "export", label: "Export", description: "Its items and timeline, as CSV" }] : []),
     { value: "copy", label: "Copy link" },
     ...(can.reopen ? [{ value: "reopen", label: "Reopen" }] : []),
   ];
+}
+
+/** Edit, Assign ▾, Close case… and ⋯, each with its `can` flag. */
+function CaseActions({ page, detail }: { page: Page; detail: CaseDetail }) {
+  const { can, header } = page;
+  const [open, setOpen] = useState<"edit" | "close" | null>(null);
+  const { send } = useSend(detail);
+  const more = moreItems(page);
   const pick = (value: string) => {
     if (value === "copy") void copyLink();
     else if (value === "reopen") void send({}, "open", "Case reopened");
+    else if (value === "investigating") void send({}, "investigating", "Investigating");
+    else if (value === "open") void send({}, "open", "Back to open");
     else downloadCsv(`openvibes-${caseNumber(header.number)}.csv`, exportRows(detail));
   };
   return (
@@ -212,7 +226,11 @@ function CloseDialog({ page, detail, onClose }: { page: Page; detail: CaseDetail
         <DialogHead title={`Close ${name}`} onClose={onClose} />
         <p>Sum up how it ended. Each item keeps its outcome, and is freed for other cases.</p>
         <label className="field">Closing note<textarea className="textarea" rows={3} maxLength={4000} value={note} onChange={(event) => setNote(event.target.value)} placeholder="A short summary (required)" /></label>
-        {blocker && <p className="row" role="status"><Icon name="alert" size={16} /><span><strong>{blocker}.</strong> Set one on each item first.</span></p>}
+        <ul className="list list--plain" aria-live="polite" aria-label="What is missing">
+          {[...closeProblems({ note }, []), ...(blocker ? [`${blocker}. Set one on each item first.`] : [])].map((problem) => (
+            <li key={problem} className="row"><Icon name="alert" size={16} className="warn-text" /><span>{problem}</span></li>
+          ))}
+        </ul>
         {blocking.length > 0 && (
           <ul className="list list--plain" aria-label="Items without an outcome">
             {blocking.map((item) => <li key={item.item_id} className="list__row list__row--static truncate">{item.title ?? refLabel(item.kind, item.ref)}</li>)}

@@ -20,8 +20,8 @@ test("the list opens a case on its page, whose items open their own pages", asyn
   await rows.filter({ hasText: "C-103" }).locator("td").nth(1).click();
   await expect(page).toHaveURL(/\/cases\/[0-9a-f-]+$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("C-103");
-  const items = page.getByRole("list", { name: "Items" });
-  await expect(items.locator("li")).toHaveCount(3);
+  const items = page.getByRole("table", { name: "Items" });
+  await expect(items.locator("tr.case-row")).toHaveCount(3);
   // The item opens the alarm's page (screen 30), and no panel opens.
   await items.getByRole("link", { name: "A database server started a shell" }).click();
   await expect(page).toHaveURL(/\/alarms\/\d+$/);
@@ -72,7 +72,7 @@ test("Add to case from an alarm opens a case, and then points at it", async ({ p
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await menu.getByRole("link", { name: /C-111/ }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText("C-111");
-  await expect(page.getByRole("list", { name: "Items" })).toContainText("A shell downloaded a program and ran it");
+  await expect(page.getByRole("table", { name: "Items" })).toContainText("A shell downloaded a program and ran it");
   // A second case cannot take the same alarm; the refusal names the first.
   await page.getByRole("link", { name: "Cases", exact: true }).first().click();
   await page.getByRole("link", { name: "New case" }).click();

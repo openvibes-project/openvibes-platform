@@ -11,7 +11,7 @@ vi.hoisted(() => {
 import type { CaseDetail, CaseItem, CasePageSummary } from "../../../api/types";
 import { withSession } from "../../../test-session";
 import { peopleCount, problemLinks } from "./CaseCards";
-import { CaseView, closeBlocker, exportRows, openFor } from "./CasePage";
+import { CaseView, closeBlocker, exportRows, moreItems, openFor } from "./CasePage";
 
 const sam = { user_id: "u-sam", username: "sam", display_name: "Sam Analyst" };
 const ALL = { edit: true, assign: true, close: true, reopen: false, note: true, outcome: true, ask: false, export: true };
@@ -67,6 +67,12 @@ describe("case page", () => {
     expect(text(render())).toContain("1 h");
   });
 
+  it("counts a visible Fixed item whose evidence is back in the tile's value, tone and words alike", () => {
+    const html = render(page({ tiles: { ...page().tiles, need_outcome: 0, ready: false } }), detail([item({ outcome: "resolved" })]));
+    expect(html).toContain('aria-label="Need an outcome: 1, 1 item still needs an outcome"');
+    expect(html).toMatch(/detail-tile__value num warn-text" aria-hidden="true">1</);
+  });
+
   it("says what blocks closing, never naming a hidden item", () => {
     expect(closeBlocker(page(), detail())).toBe("2 items still need an outcome");
     expect(closeBlocker(page({ tiles: { ...page().tiles, need_outcome: 1 } }), detail([item()]))).toBe("1 item still needs an outcome");
@@ -107,6 +113,22 @@ describe("case page", () => {
     const closed = render(page({ can: { ...ALL, outcome: false } }));
     expect(closed).not.toContain("Outcome for");
     expect(closed).not.toContain("Add item");
+  });
+
+  it("leaves out the note box without can.note, and outcomes, Add item and Remove without can.outcome", () => {
+    const html = render(page({ can: { ...ALL, note: false, outcome: false } }));
+    for (const gone of ['aria-label="Note"', "Add note", "Outcome for", "Add item", "Remove "]) expect(html).not.toContain(gone);
+    expect(html).toContain("Timeline, newest first");
+    expect(html).toContain("A web server started a shell");
+  });
+
+  it("offers in ⋯ one-click status with can.edit, Export with can.export, Copy link, and Reopen with can.reopen", () => {
+    const values = (p: CasePageSummary) => moreItems(p).map((i) => i.label);
+    expect(values(page())).toEqual(["Back to open", "Export", "Copy link"]);
+    expect(values(page({ header: { ...page().header, status: "open" } }))).toEqual(["Start investigating", "Export", "Copy link"]);
+    expect(values(page({ can: { ...ALL, edit: false, export: false } }))).toEqual(["Copy link"]);
+    expect(values(page({ header: { ...page().header, status: "closed" }, can: { ...ALL, reopen: true } }))).toEqual(["Export", "Copy link", "Reopen"]);
+    expect(values(page({ header: { ...page().header, status: "closed" }, can: { ...ALL, reopen: false } }))).not.toContain("Reopen");
   });
 
   it("shows how an old closed case ended, and its closing note", () => {

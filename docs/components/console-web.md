@@ -431,8 +431,9 @@ triage on alarms and findings stays as it is.
     for the closing note, blocked with "N items still need an outcome"
     (the visible ones, listed) or "An item you can't see still needs an
     outcome" (ready is false with none visible; never named). Changes
-    send the version (`If-Match`). **⋯**: Export (`can.export`, a CSV of
-    the items and the timeline), Copy link, and Reopen (`can.reopen`).
+    send the version (`If-Match`). **⋯**: Start investigating or Back to
+    open (`can.edit`, one click), Export (`can.export`, a CSV of the items
+    and the timeline), Copy link, and Reopen (`can.reopen`).
     No Ask about this: the assistant takes no case reference (ruling 14).
   - **Tiles**: Items (to the Items card), Need an outcome (counting down to
     "Ready to close"), Hosts (to the Hosts card), Open for.
@@ -444,12 +445,17 @@ triage on alarms and findings stays as it is.
     when stale); Who can see it ("N people", or "at least N" when the
     count is partial; the first 20 names with `access.read`, "and N
     more").
-  - **Right**: Items: each opens its own page (alarm, check, vulnerability,
-    host; software its panel), with its kind, host, severity and outcome.
-    Alarms, findings and vulnerabilities take an **Outcome** (Fixed only
-    while the evidence is gone; a note for every other; Risk accepted needs
-    a re-open date, tomorrow to 365 days ahead). **Remove** and **Add item**
-    (kind and pasted id) with `can.outcome` (a case not closed). Then
+  - **Right**: Items, as screen 32's table: Kind, Item (it opens its own
+    page: alarm, check, vulnerability, host; software its panel; a line
+    with its outcome and note), Severity, Host, Outcome and ✕. Kind,
+    Severity and Host hide on a narrow card. Alarms, findings and
+    vulnerabilities take an **Outcome** (Fixed only while the evidence is
+    gone, "evidence still there" otherwise); a changed choice opens a
+    full-width sub-row with the note (required for all but Fixed), the
+    re-open date for Risk accepted (tomorrow to 365 days ahead) and Save.
+    ✕ (**Remove**, confirmed in a sub-row) and **Add item** (kind and
+    pasted id) with `can.outcome` (a case not closed). The close dialog's
+    live hint says "Add a closing note." until there is one. Then
     **Notes and timeline**: the note box at the top (`can.note`), every
     entry newest first.
   - **Old links**: the `case` panel is gone. `nav.open({kind: "case", id})`,
