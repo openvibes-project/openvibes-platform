@@ -1142,6 +1142,23 @@ Tests: `tests/case_list.rs` (including `case_list_counts_stay_inside_the_scope`)
 items, 60,000 events): default list, 2026-10-25, median 458 ms at full
 reach and 272 ms scoped to two of ten groups, no index needed.
 
+### A case's page (`case_summary::case_summary`, step 5d)
+
+`case_summary(client, case_id, &HostScopes, user_id, now) ->
+Option<CasePageSummary>` (rulings 12–13): `HostScopes.hosts` is the
+`cases.read` scope and decides the case (`case_visible`; `None` when
+missing or unseen); the other three gate each host's problem counts (open
+agent alarms, `host_listed_critical`, `open_failing`, null where that
+kind's scope does not reach the host). It returns the case with visible
+counts (`case_counts`), `ready` (not closed, no `blocking_item` among all
+items), `open_for_seconds`, the visible items' hosts by name and who can
+see it (`case_people.rs`: opener, assignee, enabled live bindings holding
+`cases.read` on all hosts or Administrator, or on a group holding a
+host-bound item's host in the viewer's reach; at most 20 names and the
+total). `case_visible_to(client, scope, user_id, case_id)` answers whether a
+scope sees the case (the page's `can` flags). Tests:
+`tests/case_summary.rs`.
+
 ## The rule signer's access (`signer::…`, schema 32, board #107)
 
 Migration 32 creates the `openvibes-signer` role with column grants for a

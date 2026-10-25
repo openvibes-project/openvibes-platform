@@ -3619,6 +3619,78 @@
         }
       }
     },
+    "/api/v1/cases/{case_id}/summary": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "A case's page above the fold.",
+        "operationId": "case_summary_page",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "description": "Case UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The case as the caller may see it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CasePageSummaryView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and callers without cases.read are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "case_not_found: missing or not visible",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/compliance-list": {
       "get": {
         "tags": [
@@ -13973,6 +14045,337 @@
               "null"
             ],
             "description": "Pass as `cursor` for the next page; absent on the last page."
+          }
+        }
+      },
+      "CasePageActionsView": {
+        "type": "object",
+        "description": "What the viewer may do here.",
+        "required": [
+          "edit",
+          "assign",
+          "close",
+          "reopen",
+          "note",
+          "outcome",
+          "ask",
+          "export"
+        ],
+        "properties": {
+          "ask": {
+            "type": "boolean",
+            "description": "Ask the assistant about it: always false, as the assistant takes no\ncase reference yet."
+          },
+          "assign": {
+            "type": "boolean",
+            "description": "Change the assignee (also `cases.assign`)."
+          },
+          "close": {
+            "type": "boolean",
+            "description": "Close it (`cases.write`, not closed)."
+          },
+          "edit": {
+            "type": "boolean",
+            "description": "Change title and severity (`cases.write` on the case)."
+          },
+          "export": {
+            "type": "boolean",
+            "description": "Export it (`cases.read`)."
+          },
+          "note": {
+            "type": "boolean",
+            "description": "Add a note (`cases.write`)."
+          },
+          "outcome": {
+            "type": "boolean",
+            "description": "Set item outcomes (`cases.write`, not closed)."
+          },
+          "reopen": {
+            "type": "boolean",
+            "description": "Reopen it (`cases.write`, closed)."
+          }
+        }
+      },
+      "CasePageDetailsView": {
+        "type": "object",
+        "description": "The details card.",
+        "required": [
+          "title",
+          "severity",
+          "status",
+          "opened_by",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "closed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339, once closed."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "opened_by": {
+            "$ref": "#/components/schemas/CaseUserView",
+            "description": "Who opened it."
+          },
+          "resolution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How a case closed before step 5d ended; new closes set none."
+          },
+          "resolution_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The closing note."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity."
+          },
+          "status": {
+            "type": "string",
+            "description": "Status."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          }
+        }
+      },
+      "CasePageHeaderView": {
+        "type": "object",
+        "description": "The header facts.",
+        "required": [
+          "case_id",
+          "number",
+          "title",
+          "status",
+          "severity",
+          "opened_by",
+          "created_at",
+          "version"
+        ],
+        "properties": {
+          "assignee": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CaseUserView",
+                "description": "Who works on it."
+              }
+            ]
+          },
+          "case_id": {
+            "type": "string",
+            "description": "Stable UUID."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "number": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Shown as `C-<number>`."
+          },
+          "opened_by": {
+            "$ref": "#/components/schemas/CaseUserView",
+            "description": "Who opened it."
+          },
+          "severity": {
+            "type": "string",
+            "description": "`critical`, `high`, `medium` or `low`."
+          },
+          "status": {
+            "type": "string",
+            "description": "`open`, `investigating` or `closed`."
+          },
+          "title": {
+            "type": "string",
+            "description": "1 to 120 characters."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Version for `If-Match`.",
+            "minimum": 0
+          }
+        }
+      },
+      "CasePageHostView": {
+        "type": "object",
+        "description": "A host of a visible item.",
+        "required": [
+          "agent_id",
+          "os",
+          "problems"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host name."
+          },
+          "os": {
+            "$ref": "#/components/schemas/HostOsView",
+            "description": "Operating system."
+          },
+          "problems": {
+            "$ref": "#/components/schemas/CasePageProblemsView",
+            "description": "Its open problems."
+          }
+        }
+      },
+      "CasePagePeopleView": {
+        "type": "object",
+        "description": "Who can see the case.",
+        "required": [
+          "total"
+        ],
+        "properties": {
+          "names": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CaseUserView"
+            },
+            "description": "The first 20 by name, with `access.read` only; null otherwise."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many people can see it."
+          }
+        }
+      },
+      "CasePageProblemsView": {
+        "type": "object",
+        "description": "A host's open problems; null where the viewer may not read that kind\non the host.",
+        "properties": {
+          "alarms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Open alarms (`alarms.read`)."
+          },
+          "critical_vulns": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Critical vulnerabilities (`vulnerabilities.read`)."
+          },
+          "failing_checks": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Open failing checks (`compliance.read`)."
+          }
+        }
+      },
+      "CasePageSummaryView": {
+        "type": "object",
+        "description": "Everything above the fold on a case's page.",
+        "required": [
+          "header",
+          "tiles",
+          "details",
+          "hosts",
+          "people",
+          "can"
+        ],
+        "properties": {
+          "can": {
+            "$ref": "#/components/schemas/CasePageActionsView",
+            "description": "Actions."
+          },
+          "details": {
+            "$ref": "#/components/schemas/CasePageDetailsView",
+            "description": "Details card."
+          },
+          "header": {
+            "$ref": "#/components/schemas/CasePageHeaderView",
+            "description": "Header facts."
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CasePageHostView"
+            },
+            "description": "Hosts of visible items, by name."
+          },
+          "people": {
+            "$ref": "#/components/schemas/CasePagePeopleView",
+            "description": "Who can see it."
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/CasePageTilesView",
+            "description": "Tiles."
+          }
+        }
+      },
+      "CasePageTilesView": {
+        "type": "object",
+        "description": "The tiles. Counts are of the items the viewer sees.",
+        "required": [
+          "items",
+          "need_outcome",
+          "hosts",
+          "open_for_seconds",
+          "ready"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Distinct hosts of visible items."
+          },
+          "items": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible items."
+          },
+          "need_outcome": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible alarms, findings and vulnerabilities without an outcome."
+          },
+          "open_for_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Created to now, or to when it closed."
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "Not closed, and close's own rule passes over every item, hidden ones\nincluded (\"Ready to close\")."
           }
         }
       },

@@ -63,16 +63,16 @@ pub(crate) fn blocking_item() -> String {
     )
 }
 
-pub(super) const CASE_COLUMNS: &str = "c.case_id::text, c.number, c.title, c.status, c.resolution,
+pub(crate) const CASE_COLUMNS: &str = "c.case_id::text, c.number, c.title, c.status, c.resolution,
     c.accepted_until, c.severity, c.assignee_user_id::text, au.username, au.display_name,
     c.opened_by_user_id::text, ou.username, ou.display_name, c.created_at, c.updated_at,
     c.closed_at, c.version::bigint, c.resolution_note";
 
-pub(super) const CASE_JOINS: &str = "JOIN console_users ou ON ou.user_id = c.opened_by_user_id
+pub(crate) const CASE_JOINS: &str = "JOIN console_users ou ON ou.user_id = c.opened_by_user_id
     LEFT JOIN console_users au ON au.user_id = c.assignee_user_id";
 
 /// Counts of the case's items the caller can see (columns 18 and 19).
-pub(super) fn case_counts() -> String {
+pub(crate) fn case_counts() -> String {
     let visible = item_visible("ci");
     format!(
         "(SELECT count(*) FROM case_items ci WHERE ci.case_id = c.case_id AND {visible}),
@@ -147,7 +147,7 @@ pub(super) fn user_ref(id: String, username: String, display_name: String) -> Us
     }
 }
 
-pub(super) fn summary_from_row(row: &Row) -> CaseSummary {
+pub(crate) fn summary_from_row(row: &Row) -> CaseSummary {
     CaseSummary {
         case_id: row.get(0),
         number: row.get(1),

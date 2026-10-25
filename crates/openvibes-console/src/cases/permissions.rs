@@ -80,7 +80,7 @@ pub(super) async fn may_assign(
 /// The scope two scopes share.
 // ponytail: by group id, so two groups that hold the same host narrow to
 // fewer hosts than they share (the safe side); compare by host if it bites.
-fn both(left: AgentScope, right: AgentScope) -> AgentScope {
+pub(super) fn both(left: AgentScope, right: AgentScope) -> AgentScope {
     match (left, right) {
         (AgentScope::Global, scope) | (scope, AgentScope::Global) => scope,
         (AgentScope::AssetGroups(left), AgentScope::AssetGroups(right)) => {

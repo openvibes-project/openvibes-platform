@@ -34,6 +34,9 @@ pub mod ca;
 /// The Cases list: rows, per-value counts, summary and paging in scope.
 pub mod case_list;
 mod case_list_sql;
+mod case_people;
+/// A case's page: tiles, hosts with their problems, who can see it.
+pub mod case_summary;
 /// A compliance check's area and collector, from its rule ID.
 pub mod check_area;
 /// The Compliance list: one row per check, filters, per-value counts,

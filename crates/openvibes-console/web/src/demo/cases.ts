@@ -28,7 +28,7 @@ export type CaseWorld = {
   /** Whether that scope is every host (a case with no host-bound item is then visible too). */
   global: boolean;
   hostname: (agentId: string) => string | null;
-  /** The object as the viewer sees it now, or undefined when it does not exist for them. */
+  /** The object as it is now, whoever looks (the store checks the viewer's reach), or undefined when it does not exist. */
   facts: (kind: CaseKind, ref: string) => ItemFacts | undefined;
   audit: (action: string, target: string) => void;
 };

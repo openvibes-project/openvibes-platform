@@ -704,6 +704,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{case_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A case's page above the fold. */
+        get: operations["case_summary_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/compliance-list": {
         parameters: {
             query?: never;
@@ -3473,6 +3490,160 @@ export interface components {
             items: components["schemas"]["CaseSummaryView"][];
             /** @description Pass as `cursor` for the next page; absent on the last page. */
             next_cursor?: string | null;
+        };
+        /** @description What the viewer may do here. */
+        CasePageActionsView: {
+            /**
+             * @description Ask the assistant about it: always false, as the assistant takes no
+             *     case reference yet.
+             */
+            ask: boolean;
+            /** @description Change the assignee (also `cases.assign`). */
+            assign: boolean;
+            /** @description Close it (`cases.write`, not closed). */
+            close: boolean;
+            /** @description Change title and severity (`cases.write` on the case). */
+            edit: boolean;
+            /** @description Export it (`cases.read`). */
+            export: boolean;
+            /** @description Add a note (`cases.write`). */
+            note: boolean;
+            /** @description Set item outcomes (`cases.write`, not closed). */
+            outcome: boolean;
+            /** @description Reopen it (`cases.write`, closed). */
+            reopen: boolean;
+        };
+        /** @description The details card. */
+        CasePageDetailsView: {
+            /** @description RFC 3339, once closed. */
+            closed_at?: string | null;
+            /** @description RFC 3339. */
+            created_at: string;
+            /** @description Who opened it. */
+            opened_by: components["schemas"]["CaseUserView"];
+            /** @description How a case closed before step 5d ended; new closes set none. */
+            resolution?: string | null;
+            /** @description The closing note. */
+            resolution_note?: string | null;
+            /** @description Severity. */
+            severity: string;
+            /** @description Status. */
+            status: string;
+            /** @description Title. */
+            title: string;
+            /** @description RFC 3339. */
+            updated_at: string;
+        };
+        /** @description The header facts. */
+        CasePageHeaderView: {
+            assignee?: null | components["schemas"]["CaseUserView"];
+            /** @description Stable UUID. */
+            case_id: string;
+            /** @description RFC 3339. */
+            created_at: string;
+            /**
+             * Format: int64
+             * @description Shown as `C-<number>`.
+             */
+            number: number;
+            /** @description Who opened it. */
+            opened_by: components["schemas"]["CaseUserView"];
+            /** @description `critical`, `high`, `medium` or `low`. */
+            severity: string;
+            /** @description `open`, `investigating` or `closed`. */
+            status: string;
+            /** @description 1 to 120 characters. */
+            title: string;
+            /**
+             * Format: int64
+             * @description Version for `If-Match`.
+             */
+            version: number;
+        };
+        /** @description A host of a visible item. */
+        CasePageHostView: {
+            /** @description Agent id. */
+            agent_id: string;
+            /** @description Host name. */
+            hostname?: string | null;
+            /** @description Operating system. */
+            os: components["schemas"]["HostOsView"];
+            /** @description Its open problems. */
+            problems: components["schemas"]["CasePageProblemsView"];
+        };
+        /** @description Who can see the case. */
+        CasePagePeopleView: {
+            /** @description The first 20 by name, with `access.read` only; null otherwise. */
+            names?: components["schemas"]["CaseUserView"][] | null;
+            /**
+             * Format: int64
+             * @description How many people can see it.
+             */
+            total: number;
+        };
+        /**
+         * @description A host's open problems; null where the viewer may not read that kind
+         *     on the host.
+         */
+        CasePageProblemsView: {
+            /**
+             * Format: int64
+             * @description Open alarms (`alarms.read`).
+             */
+            alarms?: number | null;
+            /**
+             * Format: int64
+             * @description Critical vulnerabilities (`vulnerabilities.read`).
+             */
+            critical_vulns?: number | null;
+            /**
+             * Format: int64
+             * @description Open failing checks (`compliance.read`).
+             */
+            failing_checks?: number | null;
+        };
+        /** @description Everything above the fold on a case's page. */
+        CasePageSummaryView: {
+            /** @description Actions. */
+            can: components["schemas"]["CasePageActionsView"];
+            /** @description Details card. */
+            details: components["schemas"]["CasePageDetailsView"];
+            /** @description Header facts. */
+            header: components["schemas"]["CasePageHeaderView"];
+            /** @description Hosts of visible items, by name. */
+            hosts: components["schemas"]["CasePageHostView"][];
+            /** @description Who can see it. */
+            people: components["schemas"]["CasePagePeopleView"];
+            /** @description Tiles. */
+            tiles: components["schemas"]["CasePageTilesView"];
+        };
+        /** @description The tiles. Counts are of the items the viewer sees. */
+        CasePageTilesView: {
+            /**
+             * Format: int64
+             * @description Distinct hosts of visible items.
+             */
+            hosts: number;
+            /**
+             * Format: int64
+             * @description Visible items.
+             */
+            items: number;
+            /**
+             * Format: int64
+             * @description Visible alarms, findings and vulnerabilities without an outcome.
+             */
+            need_outcome: number;
+            /**
+             * Format: int64
+             * @description Created to now, or to when it closed.
+             */
+            open_for_seconds: number;
+            /**
+             * @description Not closed, and close's own rule passes over every item, hidden ones
+             *     included ("Ready to close").
+             */
+            ready: boolean;
         };
         /**
          * @description "N open · N investigating · N unassigned · N ready to close", over the
@@ -9789,6 +9960,65 @@ export interface operations {
                 };
             };
             /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    case_summary_page: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Case UUID */
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The case as the caller may see it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CasePageSummaryView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and callers without cases.read are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description case_not_found: missing or not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

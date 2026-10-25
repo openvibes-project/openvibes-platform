@@ -164,6 +164,7 @@ use utoipa::OpenApi;
         crate::cases::lookups::list_assignees,
         crate::cases::lookups::active_items,
         crate::cases::list::get_case,
+        crate::cases::page::case_summary_page,
         crate::cases::list::update_case,
         crate::cases::items::add_note,
         crate::cases::items::add_item,

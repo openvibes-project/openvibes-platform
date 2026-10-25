@@ -12,6 +12,7 @@ The demo API's routes, one file per area of /api/v1. Each registers its routes o
 | `assistant.ts` | The assistant's answers. |
 | `cases.ts` | Cases and their items, notes and timeline. |
 | `caseList.ts` | The Cases list (`GET /api/v1/case-list`): one row per case the persona sees, filters, counts with the others applied, the summary line, sort and paging. |
+| `caseSummary.ts` | A case's page (`GET /api/v1/cases/{id}/summary`): tiles, hosts with their problems per readable kind, who can see it, the can flags. |
 | `dashboards.ts` | Dashboards and each user's home dashboard. |
 | `findings.ts` | Compliance findings: groups by rule, host matches, history and triage. |
 | `groups.ts` | Host groups: list, page, hosts, preview, create, edit and delete, with the server's refusals. |

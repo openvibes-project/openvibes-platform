@@ -44,6 +44,7 @@ setting or changing the assignee also `cases.assign`.
 |---|---|---|
 | `GET /api/v1/cases` | `cases.read` | `CasePage` `{items, next_cursor}`. Filters `status` (`open`, `investigating`, `closed`, `all`; default open and investigating), `severity`, `assignee` (a user id, `me`, `none`), `q` (title text or `C-104`), `cursor`, `limit` 1–100 (50). Newest change first. Kept for Add to case, the palette and the badges |
 | `GET /api/v1/case-list` | `cases.read` | `CaseListView`: the Cases list page (see below) |
+| `GET /api/v1/cases/{id}/summary` | `cases.read` | `CasePageSummaryView`: a case's page above the fold (see below) |
 | `POST /api/v1/cases` | `cases.write` (`cases.assign` with an assignee) | `201 CaseDetailView` + `ETag`. Body `{title, severity?, assignee_user_id?, items?: [{kind, ref}]}`, at most 50 items |
 | `GET /api/v1/cases/{id}` | `cases.read` | `CaseDetailView` + `ETag` (the version) |
 | `PUT /api/v1/cases/{id}` | `cases.write` (`cases.assign` to change the assignee), `If-Match` | `CaseDetailView` + new `ETag` |
@@ -119,6 +120,42 @@ ready_to_close}` over the cases that are not closed under every filter but
 status, ready by close's own rule (hidden items included). The page
 `cases` keeps saved views and hidden columns (`severity`, `status`,
 `assignee`, `hosts`, `items`, `updated`; case and title never hide).
+
+### A case's page (`GET /api/v1/cases/{id}/summary`)
+
+Step 5d rulings 12–14 (store `case_summary.rs` and `case_people.rs`, route
+`cases/page.rs`). Session only; the lazy reopen checks run first; a missing,
+malformed or invisible case is 404 `case_not_found`. The answer
+(`CasePageSummaryView`; the name `CaseSummaryView` was already the list
+item) is:
+
+- `header`: `case_id`, `number`, `title`, `status`, `severity`,
+  `opened_by`, `created_at`, `assignee`, `version`;
+- `tiles`: `items` (visible), `need_outcome` (visible alarms, findings and
+  vulnerabilities without an outcome), `hosts` (distinct visible hosts),
+  `open_for_seconds` (created to now, or to `closed_at`) and `ready` (not
+  closed and close's own rule, `blocking_item`, passes over every item,
+  hidden ones included: the same as the list's "ready to close");
+- `details`: title, severity, status, opener, created, updated, closed,
+  the pre-5d `resolution` and the `resolution_note`;
+- `hosts`: each visible item's host by name, `{agent_id, hostname, os,
+  problems: {alarms, critical_vulns, failing_checks}}`; each count is
+  null unless the caller's `alarms.read`, `vulnerabilities.read` or
+  `compliance.read` reaches that host (open agent alarms,
+  `host_listed_critical` and `open_failing`, as the Hosts list counts
+  them);
+- `people`: who can see it, `{names, total}`: the opener, the assignee and
+  enabled people with a live binding to a role holding `cases.read` on all
+  hosts (or Administrator) or on a group holding a host of one of the
+  case's host-bound items in the caller's reach. A person who sees the
+  case only through a host the caller cannot see is neither named nor
+  counted. `names` (at most 20, by name) only with `access.read`, else
+  null;
+- `can`: `edit` and `note` (`cases.write`, and the case visible in the
+  scope `cases.write` and `cases.read` share), `assign` (that and
+  `cases.assign`), `close` / `outcome` (that, not closed), `reopen` (that,
+  closed), `ask` (always false: the assistant takes no case reference) and
+  `export` (`cases.read`).
 
 ### Changing a case
 
@@ -273,6 +310,8 @@ cargo test -p platform-store --test console_cases        # tests/console_cases/:
 cargo test -p openvibes-console --lib cases              # cursors, validation messages
 cargo test -p openvibes-console --test cases_http        # routes, auth, CSRF, bearer, scope, versions
 cargo test -p openvibes-console --test case_list_http    # the Cases list page: validation, rows, counts, reach, saved views
+cargo test -p platform-store --test case_summary         # the case page: scope, problems per kind, people, tiles
+cargo test -p openvibes-console --test case_page_http    # the case page route: shape, reach, names, can flags
 cargo test -p openvibes-console --test case_outcomes_http # the five outcomes, outcome_until, closing_note
 cargo test -p openvibes-console --test auth_http database_builtin_permissions_match_the_rust_role_table
 ```

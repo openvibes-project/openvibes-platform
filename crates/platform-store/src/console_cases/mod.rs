@@ -337,11 +337,14 @@ pub use list::{
 };
 pub use outcomes::set_outcome;
 pub use reopen::{reopen_due, reopen_evidence_returned, reopen_expired};
-pub(crate) use visibility::{blocking_item, case_visible_with, item_in_scope, item_visible};
+pub(crate) use visibility::{
+    CASE_COLUMNS, CASE_JOINS, blocking_item, case_counts, case_visible, case_visible_with,
+    item_in_scope, item_visible, summary_from_row,
+};
 
 /// True for a canonical UUID (8-4-4-4-12 hex, any case). Other ids are simply
 /// not found, before any query, so a cast can never fail.
-fn is_uuid(id: &str) -> bool {
+pub(crate) fn is_uuid(id: &str) -> bool {
     id.len() == 36
         && id.char_indices().all(|(index, c)| match index {
             8 | 13 | 18 | 23 => c == '-',

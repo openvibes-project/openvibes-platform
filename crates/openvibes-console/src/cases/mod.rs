@@ -16,6 +16,8 @@ pub(crate) mod list;
 pub(crate) mod list_page;
 pub(crate) mod list_page_types;
 pub(crate) mod lookups;
+pub(crate) mod page;
+pub(crate) mod page_types;
 mod permissions;
 mod request;
 mod responses;
@@ -42,6 +44,7 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
             "/v1/cases/{case_id}",
             get(list::get_case).put(list::update_case),
         )
+        .route("/v1/cases/{case_id}/summary", get(page::case_summary_page))
         .route("/v1/cases/{case_id}/notes", post(items::add_note))
         .route("/v1/cases/{case_id}/items", post(items::add_item))
         .route(
