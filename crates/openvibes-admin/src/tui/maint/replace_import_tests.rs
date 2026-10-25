@@ -29,6 +29,8 @@ const OURS_KEY: &str = fixture!("ours-ec.pkcs8.pem");
 /// The intermediate in use, and its own key.
 const OLD: &str = fixture!("ours-rsa.crt");
 const OLD_KEY: &str = fixture!("ours-rsa.key");
+/// Right under the root.
+const DIRECT: &str = fixture!("client-only.crt");
 
 const IMPORTED: &str =
     "imported\tLime Lab OpenVIBES CA\tLime Lab Issuing CA › Lime Lab Root CA\t2046-01-01\n";
@@ -149,6 +151,8 @@ fn the_page_says_from_your_pki() {
     assert!(!bold(x("Lime Lab Issuing CA")));
 
     // A two-level PKI: just the root.
+    let mut app = imported();
+    app.host.pems[1].1 = DIRECT.into();
     std::fs::remove_file(app.root.join("etc/openvibes/pki/chain.crt")).unwrap();
     app.open_page(Page::Certificates);
     let text = body(&app);
@@ -156,6 +160,54 @@ fn the_page_says_from_your_pki() {
         text.contains("    Signed by                  Lime Lab Root CA\n"),
         "{text}"
     );
+}
+
+/// The Signed by row's text, and whether it is red.
+fn signed_by_row(app: &App<SetupHost>) -> Option<(String, bool)> {
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    terminal.draw(|frame| render(frame, app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let text = screen(app);
+    let y = text.lines().position(|l| l.contains("Signed by"))?;
+    let line = text.lines().nth(y).unwrap();
+    let value = line["    Signed by".len()..].trim().to_owned();
+    let x = line[..line.find(&value).unwrap()].chars().count() as u16;
+    let red = buffer[(x, y as u16)].fg == ratatui::style::Color::Red;
+    Some((value, red))
+}
+
+#[test]
+fn a_lost_chain_is_said_not_the_root() {
+    let mut app = imported();
+    std::fs::remove_file(app.root.join("etc/openvibes/pki/chain.crt")).unwrap();
+    app.open_page(Page::Certificates);
+    assert_eq!(
+        signed_by_row(&app),
+        Some(("chain.crt is missing".into(), true))
+    );
+    // Your own CA, under a sub-CA, too.
+    app.host.plan = plan_text().replace("quick", "careful");
+    app.open_page(Page::Certificates);
+    assert_eq!(
+        signed_by_row(&app),
+        Some(("chain.crt is missing".into(), true))
+    );
+}
+
+#[test]
+fn your_own_ca_under_a_sub_ca_shows_the_path() {
+    let mut app = imported();
+    app.host.plan = plan_text().replace("quick", "careful");
+    app.open_page(Page::Certificates);
+    assert_eq!(
+        signed_by_row(&app),
+        Some(("Lime Lab Issuing CA › Lime Lab Root CA".into(), false))
+    );
+    // Right under the root: the Intermediate row names it already.
+    app.host.pems[1].1 = DIRECT.into();
+    std::fs::remove_file(app.root.join("etc/openvibes/pki/chain.crt")).unwrap();
+    app.open_page(Page::Certificates);
+    assert_eq!(signed_by_row(&app), None);
 }
 
 #[test]

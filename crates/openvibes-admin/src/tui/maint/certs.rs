@@ -19,7 +19,7 @@ use super::{Page, info};
 use crate::{
     setup::{
         pki::{RENEW_AT_DAYS, RENEW_DAYS, ROOT_CERT},
-        pki_import::CHAIN,
+        pki_import::{CHAIN, lost},
         plan::{CaMode, plan_of},
         replace::{PREVIOUS, PREVIOUS_UNTIL, still_trusted},
     },
@@ -153,15 +153,24 @@ fn renewal(
     ]
 }
 
-/// The common names above an imported intermediate, root last: `CHAIN`'s
-/// CAs (none for a two-level PKI), then the root (both 0644).
-fn signed_by(root: &Path) -> Result<Vec<String>, String> {
+/// Said for Signed by when `ours` is under a sub-CA and `CHAIN` is gone.
+const LOST: &str = "chain.crt is missing";
+
+/// The common names above our intermediate, root last: `CHAIN`'s CAs
+/// (none for a two-level PKI), then the root (both 0644); `LOST` when
+/// `CHAIN` is gone and the root did not sign `ours` itself.
+fn signed_by(root: &Path, ours: Option<&str>) -> Result<Vec<String>, String> {
     let read = |abs: &str| std::fs::read_to_string(root.join(abs.trim_start_matches('/')));
+    let root = read(ROOT_CERT).map_err(|e| format!("{ROOT_CERT}: {e}"))?;
     let chain = match read(CHAIN) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            if ours.is_some_and(|ours| lost(ours, &root).is_some()) {
+                return Err(LOST.into());
+            }
+            String::new()
+        }
         text => text.map_err(|e| format!("{CHAIN}: {e}"))?,
     };
-    let root = read(ROOT_CERT).map_err(|e| format!("{ROOT_CERT}: {e}"))?;
     let pems = format!("{chain}\n{root}");
     pems.split_inclusive("-----END CERTIFICATE-----")
         .filter(|pem| pem.contains("-----BEGIN CERTIFICATE-----"))
@@ -316,11 +325,21 @@ impl<H: Host> App<H> {
             .ok()
             .and_then(|text| plan_of(&text).ok())
             .map(|plan| plan.ca);
-        let above = (ca == Some(CaMode::Import)).then(|| signed_by(&self.root));
+        let certs = self.host.certificates();
+        let ours = pem_of(&certs, INTERMEDIATE).and_then(|pem| pem.as_ref().ok());
+        let chained = self.root.join(CHAIN.trim_start_matches('/')).exists();
+        // Always for an import; otherwise with CAs between ours and the
+        // root, or when they are lost: right under it, the Intermediate
+        // row names the root already.
+        let above = match signed_by(&self.root, ours.map(String::as_str)) {
+            Err(why) if why == LOST => Some(Err(why)),
+            _ if ca != Some(CaMode::Import) && !chained => None,
+            above => Some(above),
+        };
         let previous = previous_until(&self.root);
         let rows = report(
             &self.theme,
-            &self.host.certificates(),
+            &certs,
             ca,
             above,
             previous,
