@@ -459,3 +459,29 @@ fn replace_own_ca_may_add_the_cas_again() {
         )
     );
 }
+
+#[test]
+fn replace_own_ca_adding_the_cas_after_acceptance_sends_them() {
+    let (mut app, cert) = own_ca_chain();
+    let (csr, _) = intermediate_request().unwrap();
+    app.host
+        .answers
+        .borrow_mut()
+        .push_back(Ok(format!("signed\tLime Lab Issuing CA\n{csr}")));
+    add_signed(&mut app, &cert);
+    app.nav.row = 2;
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    app.key(Key::Paste(format!("{ISSUING}{FIXTURE_ROOT}")));
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    assert_eq!(
+        calls(&app)[2],
+        format!(
+            "ca-accept --cert {} --root-cert {ISSUING}{}",
+            cert.trim(),
+            FIXTURE_ROOT.trim()
+        )
+    );
+}

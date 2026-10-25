@@ -460,8 +460,8 @@ impl<H: Host> App<H> {
                         install.signed = Some(issuer.clone());
                         // Signed before (a restart): the CA that signed it.
                         install.root_added.get_or_insert_with(|| issuer.clone());
-                        install.cert = None;
-                        install.root_pem = None;
+                        // Both PEMs stay (public): one added again sends
+                        // both to ca-accept again.
                     } else if accept {
                         install.error = Some("The helper did not keep the certificates.".into());
                         install.forget_added();
