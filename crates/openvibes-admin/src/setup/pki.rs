@@ -314,6 +314,11 @@ fn issued<'a, R: Runner>(ctx: &'a Ctx<'a, R>) -> impl Iterator<Item = &'static T
     chosen(ctx).filter(|tls| !(tls.console && pki_console::own(ctx)))
 }
 
+/// The console, when chosen and on your own certificate.
+fn yours<R: Runner>(ctx: &Ctx<R>) -> Option<&'static Tls> {
+    chosen(ctx).find(|tls| tls.console && pki_console::own(ctx))
+}
+
 const TLS_NAMES: &str = "/etc/openvibes/tls/setup-names";
 /// The renewal timer reissues a server certificate this close to expiry.
 pub(crate) const RENEW_AT_DAYS: i64 = 30;
@@ -347,10 +352,6 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
     let wanted = format!("{}\n", names.join("\n"));
     let present = chosen(ctx).all(|tls| ctx.exists(tls.cert) && ctx.exists(tls.key));
     if !present || ctx.read(TLS_NAMES).ok().as_deref() != Some(wanted.as_str()) {
-        return Ok(StepState::Todo);
-    }
-    let own = |tls: &Tls| tls.console && pki_console::own(ctx);
-    if chosen(ctx).any(|tls| own(tls) && !pki_console::installed(ctx, tls.cert, tls.key)) {
         return Ok(StepState::Todo);
     }
     for tls in issued(ctx) {
@@ -388,6 +389,10 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
     if chosen(ctx).any(|tls| tls.console && !world_readable(tls.cert)) {
         return Ok(StepState::Todo);
     }
+    // Last, so the agents' renewal is never held up by yours.
+    if let Some(state) = yours(ctx).and_then(|tls| pki_console::check(ctx, tls.cert, tls.key)) {
+        return Ok(state);
+    }
     Ok(StepState::Done(format!(
         "server certificates for {}",
         names.join(", ")
@@ -401,26 +406,25 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         return Ok(lost);
     }
     let names = certificate_names(ctx);
-    fresh_stage(ctx)?;
-    ctx.copy(
-        INTERMEDIATE,
-        &format!("{STAGE}/issuer.crt"),
-        ADMIN_OWNER,
-        0o644,
-    )?;
-    ctx.copy(
-        INTERMEDIATE_KEY,
-        &format!("{STAGE}/issuer.key"),
-        ADMIN_OWNER,
-        0o600,
-    )?;
-    let mut yours = "";
-    for tls in chosen(ctx) {
-        if tls.console && pki_console::own(ctx) {
-            pki_console::install(ctx, tls.cert, tls.key, Some(("root", tls.owner)))?;
-            yours = "; the console keeps your own certificate";
-            continue;
+    // Checked first: a pair of yours that cannot be used still lets the
+    // agents' certificates be renewed, then fails the step.
+    let console = yours(ctx);
+    let broken = console.and(pki_console::checked(ctx).err());
+    let mut units: Vec<String> = issued(ctx)
+        .map(|tls| format!("openvibes-{}", tls.stem))
+        .collect();
+    let any = !units.is_empty();
+    if any {
+        fresh_stage(ctx)?;
+        let issuer = [
+            (INTERMEDIATE, "crt", 0o644),
+            (INTERMEDIATE_KEY, "key", 0o600),
+        ];
+        for (from, ext, mode) in issuer {
+            ctx.copy(from, &format!("{STAGE}/issuer.{ext}"), ADMIN_OWNER, mode)?;
         }
+    }
+    for tls in issued(ctx) {
         let out = format!("{STAGE}/{}", tls.stem);
         stage_dir(ctx, &out)?;
         let mut args = vec!["ca", "issue-server", names[0].as_str()];
@@ -454,27 +458,32 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
             ctx.copy(&key, tls.key, Some((tls.owner, tls.owner)), 0o600)?;
         }
     }
-    remove_stage(ctx)?;
+    if any {
+        remove_stage(ctx)?;
+    }
+    if let (Some(tls), None) = (console, &broken) {
+        units.extend(pki_console::install(ctx, tls.cert, tls.key, tls.owner)?);
+    }
     // The services read their certificate at start (none reloads it).
     // try-restart leaves a stopped service alone, so a first install is
     // not started early. Before the names are written: a failed restart
     // leaves the check Todo, so the next Repair tries again.
-    let units: Vec<String> = chosen(ctx)
-        .map(|tls| format!("openvibes-{}", tls.stem))
-        .collect();
-    let mut args = vec!["try-restart"];
-    args.extend(units.iter().map(String::as_str));
-    ctx.ok(Systemctl, &args)?;
+    if !units.is_empty() {
+        let mut args = vec!["try-restart"];
+        args.extend(units.iter().map(String::as_str));
+        ctx.ok(Systemctl, &args)?;
+    }
+    if let Some(error) = broken {
+        return Err(error);
+    }
     ctx.put(
         TLS_NAMES,
         format!("{}\n", names.join("\n")).as_bytes(),
         None,
         0o644,
     )?;
-    Ok(StepState::Done(format!(
-        "{recovered}server certificates for {} (valid 90 days){yours}",
-        names.join(", ")
-    )))
+    let done = pki_console::done(&names, any, console.is_some());
+    Ok(StepState::Done(format!("{recovered}{done}")))
 }
 
 #[cfg(test)]

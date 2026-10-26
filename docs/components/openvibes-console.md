@@ -643,7 +643,9 @@ certificate chain and key, and are checked before serving; handshakes are TLS
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority or, with direct TLS, any name
 the server certificate covers (its DNS and IP subjectAltNames at the listen
-port; the bare name too on 443), so the console opens by IP over a VPN or as
+port; the bare name too on 443; a wildcard `*.x.y` covers one label more,
+`a.x.y` but not `x.y` or `a.b.x.y`, `http::middleware::host_served`, also
+for the plain-http redirect), so the console opens by IP over a VPN or as
 `localhost` through a tunnel. Any other `Host` gets a 421 page linking to
 `public_origin`, in the sign-in page's look and plain words (#81); its
 stylesheet and wordmarks (`/misdirected/page.css`, `wordmark-light.svg`,

@@ -142,11 +142,12 @@ fn replace_keeps_your_own_console_certificate() {
     let new = intermediate(&root);
     careful_request(&fake, &new.0, &new.1, &root.cert_pem);
     let yours = include_str!("../../../platform-pki/tests/fixtures/server.crt");
+    let key = include_str!("../../../platform-pki/tests/fixtures/server.key");
     for (file, text) in [
         (OWN_CERT, yours),
-        (OWN_KEY, "OWN KEY"),
+        (OWN_KEY, key),
         ("/etc/openvibes/tls/console-chain.pem", yours),
-        ("/etc/openvibes/tls/console-key.pem", "OWN KEY"),
+        ("/etc/openvibes/tls/console-key.pem", key),
     ] {
         fake.file(file, text);
     }
@@ -166,7 +167,7 @@ fn replace_keeps_your_own_console_certificate() {
         ["/run/openvibes-ca/ingest", "/run/openvibes-ca/distribution"]
     );
     assert_eq!(fake.text("/etc/openvibes/tls/console-chain.pem"), yours);
-    assert_eq!(fake.text("/etc/openvibes/tls/console-key.pem"), "OWN KEY");
+    assert_eq!(fake.text("/etc/openvibes/tls/console-key.pem"), key);
 }
 
 #[test]

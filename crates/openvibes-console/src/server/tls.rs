@@ -112,7 +112,7 @@ fn plain_http_answer(request: &[u8], to: &PlainHttp) -> Vec<u8> {
             name.eq_ignore_ascii_case("host")
                 .then(|| value.trim().to_ascii_lowercase())
         })
-        .filter(|host| to.hosts.contains(host))
+        .filter(|host| crate::http::middleware::host_served(&to.hosts, host))
         .map(|host| format!("https://{host}"));
     match served.or_else(|| (!to.origin.is_empty()).then(|| to.origin.clone())) {
         Some(origin) => format!(
@@ -330,6 +330,28 @@ mod certificate_hosts_tests {
                 .unwrap()
                 .contains("Location: https://127.0.0.1:8443/")
         );
+    }
+
+    #[test]
+    fn a_wildcard_name_is_served_one_label_deep() {
+        let hosts = certificate_hosts(pem(&["*.limebox.se"]).as_bytes(), 443);
+        assert_eq!(hosts, ["*.limebox.se:443", "*.limebox.se"]);
+        let to = super::PlainHttp {
+            hosts,
+            origin: "https://console.limebox.se".into(),
+        };
+        for (host, location) in [
+            ("a.limebox.se", "https://a.limebox.se/"),
+            ("limebox.se", "https://console.limebox.se/"),
+            ("a.b.limebox.se", "https://console.limebox.se/"),
+        ] {
+            let request = format!("GET / HTTP/1.1\r\nHost: {host}\r\n\r\n");
+            let answer = answer(request.as_bytes(), &to);
+            assert!(
+                answer.contains(&format!("Location: {location}\r\n")),
+                "{answer}"
+            );
+        }
     }
 
     #[test]

@@ -680,13 +680,21 @@ certificates without the middle CAs would not reach the root on agents;
 with your own console certificate kept as `/etc/openvibes/tls/console-own.crt`
 and `console-own.key` (either file present, `setup::pki_console::own`), the
 console's is copied from them, never issued: `console-chain.pem` 0644 and
-`console-key.pem` 0640 root:openvibes-console, as an issued pair, then the
-same `try-restart`; the check wants that pair to be yours (the certificate
-compared as DER, the key byte for byte) and never asks it to be fresh, from
-the intermediate or to end in `chain.crt`, so renewal and Replace the
-intermediate reissue only the agents' certificates; half a pair fails with
-"… is missing: use your own certificate again in Maintenance › Certificates,
-or go back to the platform's"; Remove everything removes both files with
+`console-key.pem` 0640 root:openvibes-console, as an issued pair, and the
+console is restarted only when they changed; a console-only plan stages no
+intermediate and says "the console keeps your own certificate"; the check
+wants that pair to be yours (the certificate compared as DER, the key byte
+for byte) and never asks it to be fresh, from the intermediate or to end in
+`chain.crt`, so renewal and Replace the intermediate reissue only the
+agents' certificates; the pair is checked before anything is issued (the
+key against the certificate, `platform_pki::check_server_key`): half a pair
+("… is missing: use your own certificate again in Maintenance ›
+Certificates, or go back to the platform's") or a key that is not the
+certificate's ("The console's own certificate and key do not match: …")
+leaves the console's pair alone, still issues, installs and restarts the
+agents' certificates, then fails the step without writing `setup-names`;
+the check says the same sentence once the agents' certificates are done;
+Remove everything removes both files with
 `/etc/openvibes/tls`, Keep the data keeps them),
 `console` (`public_origin`
 `https://HOST` or `https://HOST:PORT`, `development_listen` on the chosen
