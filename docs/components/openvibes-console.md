@@ -654,7 +654,9 @@ stylesheet and wordmarks (`/misdirected/page.css`, `wordmark-light.svg`,
 `wordmark-dark.svg`: fixed files, no data) load under any `Host`, since the
 console's CSP allows no inline style and every other path is refused there. Plain http on the TLS port gets a `301` to `https://` on the
 same `Host` when that is a served name (a bare name gets the console's
-port back when it is not 443), else to `public_origin` (never to a
+port back when it is not 443; that is the listen port, so behind a
+port-forward to another port the redirect names the listen port), else to
+`public_origin` (never to a
 name the console does not serve), instead of TLS bytes. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
 

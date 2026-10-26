@@ -369,6 +369,8 @@ mod import;
 mod swap;
 #[cfg(test)]
 use swap::FAIL_RENAME;
+#[cfg(test)]
+pub(crate) use swap::staged_paths;
 use swap::swap;
 pub(crate) use swap::{finish_interrupted, interrupted};
 

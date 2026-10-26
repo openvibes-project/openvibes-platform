@@ -73,7 +73,8 @@ see Service); on a health problem or a check it does nothing. A refresh
 keeps the highlight on the same item. The name column is as wide as the
 longest installed unit's name ("certificate renewal"), so the states line
 up. Home's summary line counts the problems (health is collected at start,
-on a thread, and again whenever Home is shown), is red (■) when one is red
+on a thread, and again on the way back to Home once they are 10 s old or a
+run ended since: they run on the UI thread, so not on every Esc), is red (■) when one is red
 or a unit is stopped and amber (▲) otherwise, says "No services
 installed" when none are, and shows a failed unit refresh in red; Status and
 Service show it in the bar. Tests: `src/tui/status_tests.rs`,
@@ -281,7 +282,8 @@ our intermediate is not signed directly by `root.crt` and `chain.crt` is
 missing, the setup check's sentence is a problem too ("/etc/openvibes/pki/chain.crt
 is missing: restore it from a backup (agents could not reach the root)",
 `setup::pki_import::lost`, the files from `Host::root_and_chain`; not while
-a Replace cut short by a crash left `chain.crt.new`, which Repair finishes). Also a
+a Replace cut short by a crash left its staged `.new` files, which Repair
+finishes or undoes). Also a
 problem when a
 server certificate misses an address this host now has, e.g. after DHCP:
 "run Repair in Maintenance"; a CA certificate, which names no host, is not
@@ -691,8 +693,9 @@ directly by `root.crt` and `chain.crt` is missing, both the check and the
 apply are Failed, "/etc/openvibes/pki/chain.crt is missing: restore it
 from a backup (agents could not reach the root)", and nothing is issued:
 certificates without the middle CAs would not reach the root on agents
-(not while a Replace cut short by a crash left its staged files: the apply's
-`finish_interrupted` ends it first);
+(while a Replace cut short by a crash left its staged `.new` files the check
+is Todo, so Repair runs the apply, whose `finish_interrupted` finishes or
+undoes it first; a chain still lost after that is said);
 with your own console certificate kept as `/etc/openvibes/tls/console-own.crt`
 and `console-own.key` (either file present, `setup::pki_console::own`), the
 console's is copied from them, never issued: `console-chain.pem` 0644 and

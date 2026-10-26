@@ -1,7 +1,7 @@
 //! Home's summary and result lines, and Status's columns. Split from
 //! `nav_tests.rs` and `status_tests.rs` (size).
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use platform_host::{ServiceStatus, Unit};
 use ratatui::{Terminal, backend::TestBackend, style::Color};
@@ -76,6 +76,7 @@ fn home_reads_fresh_checks_when_shown_again() {
         ..Check::default()
     });
     assert_ne!(summary(&app).0, fresh);
+    app.health_at = Instant::now().checked_sub(Duration::from_secs(11));
     app.key(Key::Down);
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Maintenance);
@@ -131,4 +132,42 @@ fn status_columns_line_up_with_certificate_renewal() {
         column("certificate renewal"),
         "{text}"
     );
+}
+
+/// Esc to Home reads the checks again only when they are 10 s old or a run
+/// ended since: each read is sudo, systemctl and psql on this thread.
+#[test]
+fn home_reads_the_checks_again_only_when_old_or_after_a_run() {
+    let mut app = app(false);
+    let reads = |app: &App<FakeHost>| app.host.disk_calls.get();
+    let help_and_back = |app: &mut App<FakeHost>| {
+        app.key(Key::Char('?'));
+        app.key(Key::Esc);
+        assert_eq!(app.nav.screen, Screen::Home);
+    };
+    let before = reads(&app);
+    help_and_back(&mut app);
+    assert_eq!(reads(&app), before, "fresh checks are kept");
+    app.health_at = Instant::now().checked_sub(Duration::from_secs(11));
+    help_and_back(&mut app);
+    assert_eq!(reads(&app), before + 1, "10 s old: read again");
+    let mut run = Run::new(Work::new(Kind::Check, vec![]), Instant::now());
+    run.ended = Some(Instant::now());
+    app.run = Some(run);
+    help_and_back(&mut app);
+    assert_eq!(reads(&app), before + 2, "a run ended since: read again");
+    help_and_back(&mut app);
+    assert_eq!(reads(&app), before + 2);
+}
+
+/// A refresh that fails on the way back stays on Home.
+#[test]
+fn a_failed_refresh_on_the_way_home_is_shown() {
+    let mut app = app(false);
+    app.health_at = None;
+    *app.host.services_error.borrow_mut() = Some("systemctl is gone".into());
+    app.key(Key::Char('?'));
+    app.key(Key::Esc);
+    let text = screen(&app, 80, 24);
+    assert!(text.contains("systemctl is gone"), "{text}");
 }

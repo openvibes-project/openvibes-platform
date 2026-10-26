@@ -164,8 +164,6 @@ impl<H: Host> App<H> {
         if !self.nav.pop() {
             self.nav = Nav::new(Screen::Home);
         }
-        if self.nav.screen == Screen::Home {
-            self.load_health();
-        }
+        self.home_health();
     }
 }

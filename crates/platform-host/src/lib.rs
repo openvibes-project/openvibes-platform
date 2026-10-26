@@ -111,6 +111,13 @@ pub const OWN_CONSOLE_CERT: &str = "/etc/openvibes/tls/console-own.crt";
 /// (an imported or company-signed one under a sub-CA); both 0644.
 pub const ROOT_CERT: &str = "/etc/openvibes/pki/root.crt";
 pub const CHAIN: &str = "/etc/openvibes/pki/chain.crt";
+/// What a Replace cut short by a crash leaves beside the files in use: the
+/// bundle, the key and the chain, as `.new` (the admin's `interrupted`).
+pub const REPLACE_STAGED: [&str; 3] = [
+    "/etc/openvibes/pki/intermediate.crt.new",
+    "/var/lib/openvibes-ingest/intermediate.key.new",
+    "/etc/openvibes/pki/chain.crt.new",
+];
 
 /// The rule signer's `status.json` (operators may read it).
 pub const SIGNER_STATUS: &str = "/var/lib/openvibes-signer/status.json";
@@ -318,4 +325,31 @@ pub fn host_addresses(listing: &str) -> Vec<String> {
         }
     }
     addresses
+}
+
+/// Whether `chain` exists, or a Replace cut short by a crash left one of
+/// `staged` (Repair finishes or undoes that; the chain is not lost).
+pub(crate) fn chain_in_place(chain: &str, staged: &[&str]) -> bool {
+    std::iter::once(&chain)
+        .chain(staged)
+        .any(|path| std::path::Path::new(path).exists())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_replace_cut_short_counts_as_the_chain_in_place() {
+        let dir = std::env::temp_dir().join(format!("ov-chain-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths =
+            ["chain.crt", "a.new", "b.new", "c.new"].map(|n| dir.join(n).display().to_string());
+        let [chain, staged @ ..] = paths.each_ref().map(String::as_str);
+        assert!(!super::chain_in_place(chain, &staged));
+        for path in paths.iter() {
+            std::fs::write(path, "").unwrap();
+            assert!(super::chain_in_place(chain, &staged));
+            std::fs::remove_file(path).unwrap();
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

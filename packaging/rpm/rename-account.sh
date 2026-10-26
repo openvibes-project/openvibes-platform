@@ -24,6 +24,8 @@ if ! has=$(runuser -u postgres -- psql -AtqX -c \
     # postgres user): PostgreSQL is not on this host yet or the host is not
     # set up, and the config points here, so there is no database and no
     # role to rename. A database on another server still gets the statement.
+    # Also silent, rarely: a postgres user, the local socket, no setup.toml
+    # and PostgreSQL only stopped; the next upgrade's %post renames the role.
     if { ! getent passwd postgres >/dev/null || [[ ! -f $setup ]]; } &&
         { [[ -z $config || ! -f $config ]] || grep -q 'host=/' "$config"; }; then
         exit 0

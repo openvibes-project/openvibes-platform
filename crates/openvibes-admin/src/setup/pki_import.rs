@@ -107,10 +107,9 @@ pub(super) fn import_and_install<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> 
 }
 
 /// Our intermediate is under a sub-CA but `CHAIN` is gone: certificates
-/// issued now would not reach the root on agents, so none are. Not while
-/// a Replace a crash cut short is left: `finish_interrupted` ends it.
+/// issued now would not reach the root on agents, so none are.
 pub(super) fn chain_lost<R: Runner>(ctx: &Ctx<R>) -> Option<StepState> {
-    if ctx.exists(CHAIN) || super::replace::interrupted(ctx) {
+    if ctx.exists(CHAIN) {
         return None;
     }
     lost(&ctx.read(INTERMEDIATE).ok()?, &ctx.read(ROOT_CERT).ok()?).map(StepState::Failed)

@@ -127,6 +127,12 @@ fn staged() -> (String, String, String) {
     )
 }
 
+#[cfg(test)]
+pub(crate) fn staged_paths() -> [String; 3] {
+    let (bundle, key, chain) = staged();
+    [bundle, key, chain]
+}
+
 /// A crash cut a Replace short inside `swap`: its staged files are left.
 /// The files in use are judged once `finish_interrupted` has ended it.
 pub(crate) fn interrupted<R: Runner>(ctx: &Ctx<R>) -> bool {
