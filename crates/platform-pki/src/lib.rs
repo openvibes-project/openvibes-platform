@@ -9,6 +9,7 @@ mod ca;
 mod chain;
 mod client;
 mod keys;
+mod server;
 mod token;
 
 use std::fmt;
@@ -25,6 +26,7 @@ pub use client::{
     CheckedCsr, IssuedClient, check_csr, leaf_identity, leaf_validity, spki_sha256_of_cert,
 };
 pub use keys::{KeyInfo, KeyKind, P12, is_locked, is_p12, key_info, pkcs8_pem, read_p12};
+pub use server::{ServerCert, ServerCertError, check_server_cert, check_server_key, covers};
 pub use token::{enrollment_token_sha256, is_agent_id};
 
 /// Fixed failure categories; no key or certificate material is included.

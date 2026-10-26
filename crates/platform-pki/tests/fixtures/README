@@ -23,6 +23,10 @@ twin-dc.crt/.key         Lime Lab Twin DC CA, under issuing, subject with two DC
 client-only.crt/.key     Lime Lab Client Only CA, under the root, extended key usage clientAuth only
 any-usage.crt/.key       Lime Lab Any Usage CA, under the root, extended key usage anyExtendedKeyUsage
 leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
+server.crt/.key          limebox.se, EC P-256, under issuing, serverAuth, SAN DNS *.limebox.se and IP 10.0.0.5
+server-expired.crt       the same key, valid until 2026-06-01
+server-future.crt        the same key, valid from 2040-01-01
+server-client-only.crt   the same key, extended key usage clientAuth only
 weak.key                 RSA 1024
 p521.key                 EC P-521
 big.key                  RSA 6144 (over ring's 4096-bit limit)

@@ -41,6 +41,30 @@ self_sign() {
     -not_before "$FROM" -not_after "$UNTIL" -sha256 -extfile "$TMP/ext" -out "$1"
 }
 
+# server_step: certificates for the console's own certificate. Run alone with
+# `make.sh server`, so the keys above stay the same.
+server_step() {
+  ec server.key P-256
+  server_ext() {
+    {
+      echo "basicConstraints = critical, CA:FALSE"
+      echo "keyUsage = critical, digitalSignature"
+      echo "extendedKeyUsage = $1"
+      echo "subjectAltName = DNS:*.limebox.se, IP:10.0.0.5"
+    } > "$TMP/ext"
+  }
+  server_ext serverAuth
+  sign server.crt server.key "limebox.se" issuing.crt issuing.key
+  sign server-expired.crt server.key "limebox.se" issuing.crt issuing.key "$FROM" 20260601000000Z
+  sign server-future.crt server.key "limebox.se" issuing.crt issuing.key 20400101000000Z 20450101000000Z
+  server_ext clientAuth
+  sign server-client-only.crt server.key "limebox.se" issuing.crt issuing.key
+}
+if [ "${1:-}" = server ]; then
+  server_step
+  exit
+fi
+
 rsa root.key 4096
 ca_ext 2
 self_sign root.crt root.key "Lime Lab Root CA"
@@ -130,6 +154,8 @@ cat "$TMP/chain.pem" "$TMP/web.crt" > "$TMP/legacy-extra.pem"
 openssl pkcs12 -export -legacy -inkey ours-ec.pkcs8.pem -in ours-ec.crt \
   -name "Lime Lab OpenVIBES CA" -certfile "$TMP/legacy-extra.pem" -passout "pass:$PASS" -out legacy.pfx
 
+server_step
+
 cat > README <<README
 Test fixtures for platform-pki, made by make.sh with $(openssl version).
 Every certificate is valid 2026-01-01 to 2046-01-01, except short.crt.
@@ -156,6 +182,10 @@ twin-dc.crt/.key         Lime Lab Twin DC CA, under issuing, subject with two DC
 client-only.crt/.key     Lime Lab Client Only CA, under the root, extended key usage clientAuth only
 any-usage.crt/.key       Lime Lab Any Usage CA, under the root, extended key usage anyExtendedKeyUsage
 leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
+server.crt/.key          limebox.se, EC P-256, under issuing, serverAuth, SAN DNS *.limebox.se and IP 10.0.0.5
+server-expired.crt       the same key, valid until 2026-06-01
+server-future.crt        the same key, valid from 2040-01-01
+server-client-only.crt   the same key, extended key usage clientAuth only
 weak.key                 RSA 1024
 p521.key                 EC P-521
 big.key                  RSA 6144 (over ring's 4096-bit limit)
