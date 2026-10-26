@@ -99,6 +99,9 @@ pub fn check_server_cert(
     if now > not_after {
         return Err(ServerCertError::Expired(not_after));
     }
+    if sans(&cert).is_none() {
+        return Err(ServerCertError::InvalidPem);
+    }
     let wanted: Vec<String> = names
         .iter()
         .filter(|name| covered(&cert, name))
@@ -143,17 +146,18 @@ fn time_of(seconds: i64) -> Result<DateTime<Utc>, PkiError> {
     DateTime::from_timestamp(seconds, 0).ok_or(PkiError::InvalidPem)
 }
 
-/// DNS names and IP addresses of the subject alternative name extension.
-fn sans(cert: &X509Certificate<'_>) -> Vec<(bool, String)> {
+/// DNS names and IP addresses of the subject alternative name extension;
+/// `None` when an IP address is neither 4 nor 16 bytes.
+fn sans(cert: &X509Certificate<'_>) -> Option<Vec<(bool, String)>> {
     let Ok(Some(ext)) = cert.subject_alternative_name() else {
-        return Vec::new();
+        return Some(Vec::new());
     };
     ext.value
         .general_names
         .iter()
         .filter_map(|name| match name {
-            GeneralName::DNSName(dns) => Some((false, (*dns).to_owned())),
-            GeneralName::IPAddress(bytes) => Some((true, ip(bytes)?.to_string())),
+            GeneralName::DNSName(dns) => Some(Some((false, (*dns).to_owned()))),
+            GeneralName::IPAddress(bytes) => Some(ip(bytes).map(|ip| (true, ip.to_string()))),
             _ => None,
         })
         .collect()
@@ -173,7 +177,7 @@ fn common(cert: &X509Certificate<'_>) -> Option<String> {
 }
 
 fn display_name(cert: &X509Certificate<'_>) -> String {
-    let sans = sans(cert);
+    let sans = sans(cert).unwrap_or_default();
     sans.iter()
         .find(|(is_ip, _)| !is_ip)
         .or_else(|| sans.first())
@@ -184,10 +188,12 @@ fn display_name(cert: &X509Certificate<'_>) -> String {
 
 /// The SANs only, as browsers match them: a certificate with none covers
 /// nothing (its common name is not a name). A `*.x.y` name covers `a.x.y`
-/// only; an IP name matches the same address however it is written.
+/// only, and `*.com` nothing (a light check, no public-suffix list); an IP
+/// name matches the same address however it is written.
 fn covered(cert: &X509Certificate<'_>, name: &str) -> bool {
     let wanted_ip = name.parse::<IpAddr>().ok();
     sans(cert)
+        .unwrap_or_default()
         .iter()
         .any(|(is_ip, have)| match (is_ip, wanted_ip) {
             (true, Some(wanted)) => have.parse::<IpAddr>().ok() == Some(wanted),
@@ -199,6 +205,7 @@ fn covered(cert: &X509Certificate<'_>, name: &str) -> bool {
 fn dns_covers(have: &str, name: &str) -> bool {
     let (have, name) = (have.to_ascii_lowercase(), name.to_ascii_lowercase());
     match have.strip_prefix("*.") {
+        Some(rest) if !rest.contains('.') => false,
         Some(rest) => name
             .split_once('.')
             .is_some_and(|(label, tail)| !label.is_empty() && tail == rest),

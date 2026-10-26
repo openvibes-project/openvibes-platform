@@ -128,3 +128,39 @@ fn the_chain_is_kept_in_order() {
     let cert = check_server_cert(&given, &names(&["a.limebox.se"]), now()).unwrap();
     assert_eq!(cert.chain_pem, given);
 }
+
+/// A self-signed certificate with these DNS names (rcgen's defaults: no
+/// extended key usage, valid long before and after `now`).
+fn with_names(sans: &[&str]) -> String {
+    let names = sans
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect::<Vec<_>>();
+    rcgen::generate_simple_self_signed(names)
+        .unwrap()
+        .cert
+        .pem()
+}
+
+#[test]
+fn a_wildcard_over_a_public_suffix_covers_nothing() {
+    let cert = with_names(&["*.com", "*.lan"]);
+    assert!(!covers(&cert, "example.com"));
+    assert!(!covers(&cert, "console.lan"));
+    let result = check_server_cert(&cert, &names(&["console.lan"]), now());
+    assert_eq!(result.unwrap_err(), ServerCertError::CoversNone);
+}
+
+#[test]
+fn a_malformed_ip_name_is_refused() {
+    // "abcde" as a DNS name ([2], 0x82), retagged as a five-byte IP address
+    // ([7], 0x87): the same length, so the DER still parses.
+    let pem = with_names(&["console.lan", "abcde"]);
+    let mut der = platform_pki::certificates(&pem).unwrap().remove(0);
+    let at = der.windows(7).position(|w| w == b"\x82\x05abcde").unwrap();
+    der[at] = 0x87;
+    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &der);
+    let pem = format!("-----BEGIN CERTIFICATE-----\n{b64}\n-----END CERTIFICATE-----\n");
+    let result = check_server_cert(&pem, &names(&["console.lan"]), now());
+    assert_eq!(result.unwrap_err(), ServerCertError::InvalidPem);
+}
