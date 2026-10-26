@@ -127,13 +127,26 @@ fn staged() -> (String, String, String) {
     )
 }
 
+#[cfg(test)]
+pub(crate) fn staged_paths() -> [String; 3] {
+    let (bundle, key, chain) = staged();
+    [bundle, key, chain]
+}
+
+/// A crash cut a Replace short inside `swap`: its staged files are left.
+/// The files in use are judged once `finish_interrupted` has ended it.
+pub(crate) fn interrupted<R: Runner>(ctx: &Ctx<R>) -> bool {
+    let (bundle, key, chain) = staged();
+    [bundle, key, chain].iter().any(|path| ctx.exists(path))
+}
+
 /// Ends a Replace a crash cut short inside `swap` (callers hold the Setup
 /// lock): the bundle renamed but not the key is finished; a swap whose
 /// bundle still has the old one first is undone, so Replace does not
 /// refuse for a month. The line saying which, when it did.
 pub(crate) fn finish_interrupted<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {
     let (bundle, key, chain) = staged();
-    let left = ctx.exists(&bundle) || ctx.exists(&key) || ctx.exists(&chain);
+    let left = interrupted(ctx);
     if !left && !ctx.exists(PREVIOUS) {
         return Ok(None);
     }

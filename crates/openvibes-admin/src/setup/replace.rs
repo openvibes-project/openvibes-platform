@@ -369,8 +369,10 @@ mod import;
 mod swap;
 #[cfg(test)]
 use swap::FAIL_RENAME;
-pub(crate) use swap::finish_interrupted;
+#[cfg(test)]
+pub(crate) use swap::staged_paths;
 use swap::swap;
+pub(crate) use swap::{finish_interrupted, interrupted};
 
 #[cfg(test)]
 #[path = "replace_tests.rs"]

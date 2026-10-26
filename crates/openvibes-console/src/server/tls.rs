@@ -65,6 +65,9 @@ pub(super) fn load_tls_acceptor(
 pub(super) struct PlainHttp {
     hosts: Vec<String>,
     origin: String,
+    /// The console's port, put back on a bare `Host` (a browser leaves out
+    /// only 443).
+    port: u16,
 }
 
 /// A TLS handshake, or for plain http on this port a redirect to https
@@ -101,9 +104,10 @@ pub(super) async fn handshake(
     tls.accept(stream).await
 }
 
-/// `301` to `https://` + the request's `Host` when this console serves it,
-/// else to the canonical origin, never to a name it does not serve; a
-/// plain `400` note when there is neither.
+/// `301` to `https://` + the request's `Host` when this console serves it
+/// (with the console's port when the `Host` has none), else to the
+/// canonical origin, never to a name it does not serve; a plain `400` note
+/// when there is neither.
 fn plain_http_answer(request: &[u8], to: &PlainHttp) -> Vec<u8> {
     let served = String::from_utf8_lossy(request)
         .lines()
@@ -113,7 +117,14 @@ fn plain_http_answer(request: &[u8], to: &PlainHttp) -> Vec<u8> {
                 .then(|| value.trim().to_ascii_lowercase())
         })
         .filter(|host| crate::http::middleware::host_served(&to.hosts, host))
-        .map(|host| format!("https://{host}"));
+        .map(|host| {
+            let bare = !host.contains(':') || host.ends_with(']');
+            if bare && to.port != 443 {
+                format!("https://{host}:{}", to.port)
+            } else {
+                format!("https://{host}")
+            }
+        });
     match served.or_else(|| (!to.origin.is_empty()).then(|| to.origin.clone())) {
         Some(origin) => format!(
             "HTTP/1.1 301 Moved Permanently\r\nLocation: {origin}/\r\n\
@@ -177,7 +188,11 @@ pub(super) fn plain_http(config: &ConsoleConfig, mut hosts: Vec<String>) -> Plai
     for host in &mut hosts {
         host.make_ascii_lowercase();
     }
-    PlainHttp { hosts, origin }
+    PlainHttp {
+        hosts,
+        origin,
+        port: config.development_listen.port(),
+    }
 }
 
 #[cfg(test)]
@@ -262,6 +277,7 @@ mod certificate_hosts_tests {
         super::PlainHttp {
             hosts: vec!["metabox-lnx:8443".into(), "127.0.0.1:8443".into()],
             origin: "https://metabox-lnx:8443".into(),
+            port: 8443,
         }
     }
 
@@ -367,6 +383,7 @@ mod certificate_hosts_tests {
         let to = super::PlainHttp {
             hosts,
             origin: "https://console.limebox.se".into(),
+            port: 443,
         };
         for (host, location) in [
             ("a.limebox.se", "https://a.limebox.se/"),
@@ -375,6 +392,27 @@ mod certificate_hosts_tests {
             ("evil/limebox.se", "https://console.limebox.se/"),
             ("u@evil.limebox.se", "https://console.limebox.se/"),
             ("ev\ril.limebox.se", "https://console.limebox.se/"),
+        ] {
+            let request = format!("GET / HTTP/1.1\r\nHost: {host}\r\n\r\n");
+            let answer = answer(request.as_bytes(), &to);
+            assert!(
+                answer.contains(&format!("Location: {location}\r\n")),
+                "{answer}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bare_host_keeps_the_console_port() {
+        let to = super::PlainHttp {
+            hosts: certificate_hosts(pem(&["metabox-lnx", "::1"]).as_bytes(), 8443),
+            origin: "https://metabox-lnx:8443".into(),
+            port: 8443,
+        };
+        for (host, location) in [
+            ("metabox-lnx", "https://metabox-lnx:8443/"),
+            ("[::1]", "https://[::1]:8443/"),
+            ("metabox-lnx:8443", "https://metabox-lnx:8443/"),
         ] {
             let request = format!("GET / HTTP/1.1\r\nHost: {host}\r\n\r\n");
             let answer = answer(request.as_bytes(), &to);

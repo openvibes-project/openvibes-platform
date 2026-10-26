@@ -120,7 +120,8 @@ its `README` lists them.
   issuer name, and keeps one attribute per type, so a name with two `DC`s,
   say, would not chain. Last, the self-check: that certificate is verified
   as agents verify a server certificate (rustls-webpki, ServerAuth, the
-  ring provider's algorithms), through the middle CAs to the root.
+  ring provider's algorithms, the RSA PKCS#1 ones without NULL parameters
+  included), through the middle CAs to the root.
   A refusal is `NotForServers(cn, ServerLimit)`: `KeyUsage` (an extended
   key usage without serverAuth), `NameConstraints` (constraints that leave
   out the names), `OldSignature` (e.g. SHA-1), `UnknownExtension` (a
@@ -170,12 +171,15 @@ platform's. The check is pure: PEM in, a verdict out.
   is ours. It must not be a CA (`IsCa`), must have no extended key usage or
   one naming serverAuth (`NotForServers`), must be valid at `now`
   (`Expired(end)`, `NotYetValid(start)`; no minimum lifetime), and must cover
-  at least one of `names` (`CoversNone`). The blocks after it only have to be
+  at least one of `names` (`CoversNone`); an IP name that is neither 4 nor
+  16 bytes is `InvalidPem`, not dropped. The blocks after it only have to be
   certificates; they are kept in the order given (the browser decides trust).
   `ServerCert` holds `name` (first DNS name, else first IP, else the common
   name), `covers` (which of `names`), `chain_pem` and `not_after`.
 - `covers(cert, name)`: names compare without regard to case. A DNS name
-  `*.x.y` covers `a.x.y` only, not `x.y` and not `a.b.x.y`. An IP name covers
+  `*.x.y` covers `a.x.y` only, not `x.y` and not `a.b.x.y`; a wildcard on
+  a single label (`*.com`, `*.lan`) covers nothing (a light check, no
+  public-suffix list). An IP name covers
   the same address however it is written. Only the SANs count, as in
   browsers: a certificate with none covers nothing (`CoversNone`), whatever
   its common name.

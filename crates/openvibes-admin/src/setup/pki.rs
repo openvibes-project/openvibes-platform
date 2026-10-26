@@ -345,6 +345,10 @@ pub(crate) fn certificate_names<R: Runner>(ctx: &Ctx<R>) -> Vec<String> {
 }
 
 pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    // A Replace cut short: the apply ends it, then says a chain still lost.
+    if super::replace::interrupted(ctx) {
+        return Ok(StepState::Todo);
+    }
     if let Some(lost) = chain_lost(ctx) {
         return Ok(lost);
     }

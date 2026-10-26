@@ -3,10 +3,11 @@
 # point the kept config at the renamed PostgreSQL role, then rename the role
 # as postgres. The OS user and group are renamed by the spec's %rename_pre;
 # nothing here runs unless that rename happened. Idempotent; never fails the
-# RPM transaction, and says what to do when it cannot finish.
+# RPM transaction, and says what to do when it cannot finish. Arguments:
+# post NAME CONFIG [SETUP_TOML] (the last only for the test).
 set -u
 [[ ${1:-} == post ]] || exit 0
-name=${2:-} config=${3:-}
+name=${2:-} config=${3:-} setup=${4:-/etc/openvibes/setup.toml}
 case $name in admin | ingest | distribution | vulns) ;; *) exit 0 ;; esac
 old=openvibes_$name new=openvibes-$name
 if getent passwd "$old" >/dev/null || ! getent passwd "$new" >/dev/null; then
@@ -19,10 +20,13 @@ fi
 sql="ALTER ROLE ${old} RENAME TO \"${new}\";"
 if ! has=$(runuser -u postgres -- psql -AtqX -c \
     "SELECT rolname FROM pg_roles WHERE rolname IN ('$old','$new') ORDER BY 1" 2>/dev/null); then
-    # A fresh install: PostgreSQL is not on this host yet (Setup installs it)
-    # and the config points here, so there is no database and no role to
-    # rename. A database on another server still gets the statement.
-    if ! getent passwd postgres >/dev/null &&
+    # A fresh install, or one after Remove everything (which leaves the
+    # postgres user): PostgreSQL is not on this host yet or the host is not
+    # set up, and the config points here, so there is no database and no
+    # role to rename. A database on another server still gets the statement.
+    # Also silent, rarely: a postgres user, the local socket, no setup.toml
+    # and PostgreSQL only stopped; the next upgrade's %post renames the role.
+    if { ! getent passwd postgres >/dev/null || [[ ! -f $setup ]]; } &&
         { [[ -z $config || ! -f $config ]] || grep -q 'host=/' "$config"; }; then
         exit 0
     fi

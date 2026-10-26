@@ -262,16 +262,18 @@ fn a_long_problem_wraps_under_its_column_at_80_columns() {
     app.key(Key::Enter);
     let text = screen(&app);
     let at = text.find("▲ Server certificates").unwrap();
-    let lines: Vec<&str> = text[at..].lines().map(str::trim_end).take(3).collect();
+    let lines: Vec<&str> = text[at..].lines().map(str::trim_end).take(4).collect();
     assert!(
         lines[0].ends_with("/etc/openvibes/pki/chain.crt is missing:"),
         "{text}"
     );
+    // The whole sentence: the rows below are free, so it is not cut.
     assert_eq!(
         lines[1].trim_start(),
-        "restore it from a backup (agents could not…",
+        "restore it from a backup (agents could not",
         "{text}"
     );
+    assert_eq!(lines[2].trim_start(), "reach the root)", "{text}");
     // Under the detail's column, not the title's (the first line starts at ▲).
     let column = |line: &str, word: &str| line[..line.find(word).unwrap()].chars().count();
     assert_eq!(
@@ -279,7 +281,7 @@ fn a_long_problem_wraps_under_its_column_at_80_columns() {
         column(lines[0], "/etc") + 4,
         "{text}"
     );
-    assert!(lines[2].contains("other steps in order"), "{text}");
+    assert!(lines[3].contains("other steps in order"), "{text}");
 }
 
 /// More problems than 80×24 holds: one line each, then how many more; the

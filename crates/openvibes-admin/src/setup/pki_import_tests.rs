@@ -20,6 +20,9 @@ const ROOT: &str = include_str!("../../../platform-pki/tests/fixtures/root.crt")
 const ISSUING: &str = include_str!("../../../platform-pki/tests/fixtures/issuing.crt");
 const OURS: &str = include_str!("../../../platform-pki/tests/fixtures/ours-ec.crt");
 const OURS_KEY: &str = include_str!("../../../platform-pki/tests/fixtures/ours-ec.pkcs8.pem");
+/// Directly under the root: a two-level PKI, no `chain.crt`.
+const STRICT: &str = include_str!("../../../platform-pki/tests/fixtures/strict.crt");
+const STRICT_KEY: &str = include_str!("../../../platform-pki/tests/fixtures/strict.key");
 
 const HELP: &str = "add the certificate and its key from your PKI: Install › Certificates";
 
@@ -233,4 +236,54 @@ fn a_lost_chain_is_never_issued_without() {
     let applied = super::super::pki::certificates_apply(&fake.ctx(&plan)).unwrap();
     assert_eq!(applied, lost);
     assert!(!fake.called(&with(&ADMIN, &["ca", "issue-server"])));
+}
+
+#[test]
+fn a_replace_cut_short_before_its_chain_is_to_do_then_finished() {
+    // Crashed after the bundle was renamed, before the chain was: the old
+    // one sat directly under the root (no chain), the new one is under
+    // issuing. Check says to do; apply's `finish_interrupted` ends it.
+    let fake = Fake::new("import-chain-staged");
+    let names = ["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"];
+    installed_certificates(&fake, &names, 10);
+    fake.file(ROOT_CERT, ROOT);
+    fake.file(INTERMEDIATE, &format!("{OURS}{STRICT}"));
+    fake.file(INTERMEDIATE_KEY, STRICT_KEY);
+    fake.file("/etc/openvibes/pki/previous.crt", STRICT);
+    fake.file(&format!("{INTERMEDIATE_KEY}.new"), OURS_KEY);
+    fake.file(&format!("{CHAIN}.new"), ISSUING);
+    let plan = import_plan();
+    assert_eq!(check(&fake.ctx(&plan), Step::Certificates), StepState::Todo);
+    // The fake answers no `ca issue-server`: only the chain matters here.
+    let applied = super::super::pki::certificates_apply(&fake.ctx(&plan));
+    assert!(
+        !format!("{applied:?}").contains("is missing"),
+        "{applied:?}"
+    );
+    assert_eq!(fake.text(CHAIN), ISSUING);
+    assert_eq!(fake.text(INTERMEDIATE_KEY), OURS_KEY);
+    assert!(!exists(&fake, &format!("{CHAIN}.new")));
+}
+
+#[test]
+fn a_replace_left_half_done_is_to_do() {
+    // Otherwise in order: Check says to do, so Repair runs the apply.
+    let fake = Fake::new("import-check-staged");
+    let names = ["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"];
+    installed_certificates(&fake, &names, 60);
+    let plan = plan(&[Ingest, Distribution]);
+    assert!(matches!(
+        check(&fake.ctx(&plan), Step::Certificates),
+        StepState::Done(_)
+    ));
+    fake.file(&format!("{INTERMEDIATE_KEY}.new"), OURS_KEY);
+    assert_eq!(check(&fake.ctx(&plan), Step::Certificates), StepState::Todo);
+}
+
+#[test]
+fn the_staged_files_are_the_ones_status_looks_for() {
+    assert_eq!(
+        crate::setup::replace::staged_paths(),
+        platform_host::REPLACE_STAGED
+    );
 }

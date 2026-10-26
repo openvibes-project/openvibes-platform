@@ -55,7 +55,9 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   - certificates: reads `CERTIFICATES` (`/etc/openvibes/tls/ingest.crt`,
     `distribution.crt`, `/etc/openvibes/pki/intermediate.crt`, all 0644);
     missing files are left out; `root_and_chain()` reads `ROOT_CERT` and
-    says whether `CHAIN` exists (Health's lost-chain check; none by default);
+    says whether `CHAIN` exists, or one of `REPLACE_STAGED` (the `.new`
+    files a Replace cut short by a crash left; Repair ends that), for
+    Health's lost-chain check (none by default);
   - disk: `df --output=file,size,pcent,avail -h` on `/var/lib/pgsql` and each
     existing `/var/lib/openvibes-*`.
   - listeners: `ss -ltnpH sport = :PORT`, as the user (so processes of

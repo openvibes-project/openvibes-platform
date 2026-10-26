@@ -4,10 +4,11 @@
 //! `setup-step`, `update-step`, `remove-step`, `admin-reset`, `shell-open`,
 //! `ca-request`, `ca-accept`, `ca-replace`, `ca-import`, `console-cert-set`,
 //! `console-cert-reset` (helper_ca.rs), `unit-enable`, `unit-disable` (only
-//! with the user's own sudo rights and password). A closed set of verbs, each its own function;
-//! arguments are checked against the allow-lists before anything else, and
-//! nothing runs unless the effective uid is 0. Operators reach it through
-//! the RPM's sudoers drop-in. No shell, no paths, no free unit names.
+//! with the user's own sudo rights and password). A closed set of verbs,
+//! each its own function; arguments are checked against the allow-lists
+//! before anything else, and nothing runs unless the effective uid is 0.
+//! Operators reach it through the RPM's sudoers drop-in. No shell, no
+//! paths, no free unit names.
 
 use std::{io::Read, path::Path, process::ExitCode};
 

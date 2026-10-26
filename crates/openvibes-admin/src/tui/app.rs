@@ -84,6 +84,9 @@ pub struct App<H: Host> {
     /// The health checks, collected on another thread (`run`): the probes
     /// take a while. Without it, `new` collects them itself (tests).
     pub health: Option<Receiver<Vec<Check>>>,
+    /// When the health checks were collected; Home reads them again once
+    /// they are older than `HEALTH_FOR` or a run ended since.
+    pub(super) health_at: Option<Instant>,
     /// The full log's page length at its last draw; it caps how far up
     /// the log scrolls.
     pub log_room: Cell<usize>,
@@ -129,6 +132,7 @@ impl<H: Host> App<H> {
     pub fn new(host: H) -> Self {
         let mut app = Self::lazy(host);
         app.database.health = super::database::health_checks(&app.host);
+        app.health_at = Some(Instant::now());
         app
     }
 
@@ -171,6 +175,7 @@ impl<H: Host> App<H> {
             reopen: false,
             updates: None,
             health: None,
+            health_at: None,
             log_room: Cell::new(0),
             held: None,
             question: None,
@@ -347,6 +352,7 @@ impl<H: Host> App<H> {
                 self.nav.pop();
                 // A note from another screen is not news here.
                 self.message = None;
+                self.home_health();
                 self.find_held_status_item();
                 if matches!(self.nav.screen, Screen::Service(_)) {
                     self.load_logs();
@@ -400,6 +406,7 @@ impl<H: Host> App<H> {
             match rx.try_recv() {
                 Ok(checks) => {
                     self.database.health = checks;
+                    self.health_at = Some(Instant::now());
                     self.health = None;
                 }
                 Err(TryRecvError::Empty) => {}

@@ -172,6 +172,9 @@ fn built(
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     app.root = std::env::temp_dir().join(format!("ov-tui-script-{}-{n}", std::process::id()));
+    // The location line, whatever this machine is called (a long name
+    // cuts it).
+    app.hostname = "platform.lab".into();
     app
 }
 

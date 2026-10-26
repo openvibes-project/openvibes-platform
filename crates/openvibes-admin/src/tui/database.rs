@@ -2,7 +2,10 @@
 //! the admin CLI as `openvibes-admin` through the host, so they keep its
 //! peer login, schema checks and audit log.
 
-use std::path::Path;
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 
 use chrono::{DateTime, Utc};
 use platform_host::{Database, DiskUse, Host, HostError, ServiceStatus};
@@ -10,6 +13,7 @@ use platform_host::{Database, DiskUse, Host, HostError, ServiceStatus};
 use super::{
     app::App,
     console_cert_check::{console_cert_check, console_names},
+    nav::Screen,
 };
 use crate::setup::pki::{INTERMEDIATE_WARN_DAYS, RENEW_DAYS};
 
@@ -377,8 +381,25 @@ impl<H: Host> App<H> {
     pub(super) fn load_health(&mut self) {
         self.refresh();
         self.database.health = health_checks(&self.host);
+        self.health_at = Some(Instant::now());
+    }
+
+    /// Back on Home: the checks again when they are `HEALTH_FOR` old or a
+    /// run ended since, so its summary is not Status's last one; not on
+    /// every Esc, since they run on this thread (sudo, systemctl, psql).
+    pub(super) fn home_health(&mut self) {
+        let ended = self.run.as_ref().and_then(|run| run.ended);
+        let stale = self
+            .health_at
+            .is_none_or(|at| at.elapsed() >= HEALTH_FOR || ended.is_some_and(|ended| ended > at));
+        if self.nav.screen == Screen::Home && stale {
+            self.load_health();
+        }
     }
 }
+
+/// How long Home trusts the health checks it has.
+const HEALTH_FOR: Duration = Duration::from_secs(10);
 
 /// Every health check (certificates, disk, feeds, signer, audit, tuning),
 /// problems first. The unit lines are built by Status, not here. Slow on a

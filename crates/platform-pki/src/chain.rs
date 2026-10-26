@@ -284,6 +284,9 @@ static ALGS: &[&dyn SignatureVerificationAlgorithm] = &[
     algs::RSA_PKCS1_2048_8192_SHA256,
     algs::RSA_PKCS1_2048_8192_SHA384,
     algs::RSA_PKCS1_2048_8192_SHA512,
+    algs::RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
+    algs::RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
+    algs::RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
 ];
 
 /// Verifies `leaf` as agents verify a server certificate (rustls-webpki,
@@ -341,5 +344,26 @@ fn limit(error: &webpki::Error) -> ServerLimit {
         | E::UnsupportedSignatureAlgorithmForPublicKeyContext(_) => ServerLimit::OldSignature,
         E::UnsupportedCriticalExtension => ServerLimit::UnknownExtension,
         _ => ServerLimit::Other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ALGS, algs};
+
+    /// RSA signatures written without the NULL parameters, which agents
+    /// (rustls' ring provider) accept too.
+    #[test]
+    fn the_self_check_accepts_what_agents_accept() {
+        for want in [
+            algs::RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
+            algs::RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
+            algs::RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
+        ] {
+            assert!(ALGS.iter().any(|a| {
+                a.signature_alg_id() == want.signature_alg_id()
+                    && a.public_key_alg_id() == want.public_key_alg_id()
+            }));
+        }
     }
 }

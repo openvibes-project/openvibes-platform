@@ -12,6 +12,8 @@ mod database;
 mod database_tests;
 pub mod form;
 mod home;
+#[cfg(test)]
+mod home_tests;
 mod install;
 mod kind;
 mod maint;

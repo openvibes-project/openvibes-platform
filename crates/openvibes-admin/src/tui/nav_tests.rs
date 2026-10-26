@@ -338,7 +338,7 @@ fn every_screen_has_exactly_one_empty_line_under_its_title() {
     let mut app = app(false);
     one_gap_after(
         &screen(&app, 80, 24),
-        |l| l.starts_with("    ●") || l.starts_with("    ▲"),
+        |l| ["    ●", "    ▲", "    ■"].iter().any(|m| l.starts_with(m)),
         "Home",
     );
     app.key(Key::Char('?'));

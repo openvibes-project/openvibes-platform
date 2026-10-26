@@ -331,7 +331,10 @@ impl<R: Runner> Host for Native<R> {
 
     fn root_and_chain(&self) -> Option<(String, bool)> {
         let root = std::fs::read_to_string(crate::ROOT_CERT).ok()?;
-        Some((root, std::path::Path::new(crate::CHAIN).exists()))
+        Some((
+            root,
+            crate::chain_in_place(crate::CHAIN, &crate::REPLACE_STAGED),
+        ))
     }
 
     fn own_console_cert(&self) -> Option<String> {
