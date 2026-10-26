@@ -133,8 +133,10 @@ revoke the token under Enrollment if one leaks.
 ## 4. See it in the console
 
 Open `https://HOSTNAME` and sign in as `admin`. The browser warns about the
-certificate: it is issued by your platform's own CA (import `root.crt`
-from `/etc/openvibes/pki/` into the browser to stop the warning).
+certificate: it is issued by your platform's own CA. To stop the warning,
+give the console a certificate your browsers already trust: in
+`sudo openvibes-admin`, Maintenance › Certificates › Console certificate
+(paste or pick it and its key, or a .p12). Agents keep the platform's.
 
 - **Hosts:** both hosts; each host's Details say whether its threat alarms
   are on (eBPF or audit), and if not, why and the command that fixes it.

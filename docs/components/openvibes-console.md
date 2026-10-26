@@ -669,6 +669,18 @@ login throttling only after authenticating the immediate proxy peer; absent or
 malformed final values leave the per-account throttle in effect.
 HSTS is set for both direct TLS and reverse-proxy responses.
 
+**Behind a reverse proxy** (approved.md 57: the proxy is the admin's own
+business; Setup installs the console with direct TLS and has no proxy
+mode). Forward to `https://HOST:CONSOLE_PORT` (the console port from
+Maintenance › Ports and addresses) and keep the `Host` header as the
+browser sent it. Put the name the proxy serves under Maintenance ›
+Certificates › Names, so the console takes requests for it (any other
+`Host` gets the 421 page) and its certificate covers it; or give the console
+your own certificate for that name (Maintenance › Certificates › Console
+certificate). Turn response buffering off for `/api/v1/agents/events`
+(server-sent events: a buffering proxy holds live agent presence back). The
+console sends HSTS itself; the proxy need not add it.
+
 ### Development seed (C1)
 
 Run the API with `cargo run -p openvibes-console --example seeded_server
