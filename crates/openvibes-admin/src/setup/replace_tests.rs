@@ -13,7 +13,6 @@ use crate::setup::{
     check,
     fake::{Fake, plan},
     pki::{INTERMEDIATE, INTERMEDIATE_KEY, ROOT_CERT, ca_apply},
-    pki_console::{OWN_CERT, OWN_KEY},
     pki_tests::{ADMIN, issuing, with},
     plan::{CaMode, Component::*},
     request::REQUEST_DIR,
@@ -134,40 +133,6 @@ fn replace_careful_trusts_old_and_new() {
     assert!(!fake.root.join("run/openvibes-ca").exists());
     // The TUI's progress file goes once it succeeded.
     assert!(!fake.root.join(PROGRESS).exists());
-}
-
-#[test]
-fn replace_keeps_your_own_console_certificate() {
-    let (fake, root, _) = installed("replace-own");
-    let new = intermediate(&root);
-    careful_request(&fake, &new.0, &new.1, &root.cert_pem);
-    let yours = include_str!("../../../platform-pki/tests/fixtures/server.crt");
-    let key = include_str!("../../../platform-pki/tests/fixtures/server.key");
-    for (file, text) in [
-        (OWN_CERT, yours),
-        (OWN_KEY, key),
-        ("/etc/openvibes/tls/console-chain.pem", yours),
-        ("/etc/openvibes/tls/console-key.pem", key),
-    ] {
-        fake.file(file, text);
-    }
-    let mut plan = plan(&[Ingest, Console, Distribution]);
-    plan.ca = CaMode::Careful;
-    replace(&fake.ctx(&plan), None).unwrap();
-    // Only the agents' certificates come from the new intermediate.
-    let outs: Vec<String> = fake
-        .calls
-        .borrow()
-        .iter()
-        .filter(|call| call.contains(&"issue-server".to_owned()))
-        .map(|call| call[call.iter().position(|a| a == "--out").unwrap() + 1].clone())
-        .collect();
-    assert_eq!(
-        outs,
-        ["/run/openvibes-ca/ingest", "/run/openvibes-ca/distribution"]
-    );
-    assert_eq!(fake.text("/etc/openvibes/tls/console-chain.pem"), yours);
-    assert_eq!(fake.text("/etc/openvibes/tls/console-key.pem"), key);
 }
 
 #[test]

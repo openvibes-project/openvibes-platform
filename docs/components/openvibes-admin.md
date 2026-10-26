@@ -956,13 +956,10 @@ pair already there is first copied to `console-own.key.old` and
 `console-own.crt.old`; a failed write puts it back (with none there, neither
 file stays), so there is never half old and half new (the certificates step
 fails on half a pair), and success removes the copies. Copies a crash left
-are put back at the start of `console-cert-set` and `console-cert-reset`. A copy that cannot be made stops the run with the pair untouched.
-Ceiling: a crash in the short window between the writes and the removal of
-the copies, or a second failure while putting back, can leave a stale or
-mixed pair; nothing more is built for it, because the certificates step
-refuses a half or mismatched pair with a sentence (use your own certificate
-again, or go back to the platform's). Then it runs the certificates step, which installs the
-pair as the console's and restarts it, and prints
+are put back at the start of `console-cert-set` and `console-cert-reset`. A
+copy that cannot be made stops the run with the pair untouched. Then it runs
+the certificates step, which installs the pair as the console's and restarts
+it, and prints
 `set<TAB>NAME<TAB>UNTIL` (YYYY-MM-DD). If the step fails the pair stays (it
 was the admin's choice) and the verb exits 1 with "The certificate is kept,
 but installing it failed: DETAIL". `console-cert-reset` removes the key and
@@ -975,6 +972,12 @@ lines are `console-cert-set /etc/openvibes/tls/console-own.crt` and
 `console-cert-reset /etc/openvibes/tls/console-own.crt`. The TUI sends them
 as `Call::ConsoleCertSet(Bundle)` (wiped when the run ends) and
 `Call::ConsoleCertReset`, from Maintenance › Certificates › Console.
+
+Ceiling of `console-cert-set`: a crash in the short window between the
+writes and the removal of the copies, or a second failure while putting
+back, can leave a stale or mixed pair. Nothing more is built for it, because
+the certificates step refuses a half or mismatched pair with a sentence (use
+your own certificate again, or go back to the platform's).
 
 ## CA commands
 
@@ -1053,7 +1056,11 @@ cannot be put back, everything stays for the recovery below; each rename
 syncs its folder, best effort: only the rename's own result counts), the request folder goes, and the certificates step reissues and restarts the
 services. If that reissue fails, the error starts "The intermediate was
 replaced, but the server certificates were not reissued: run Repair in
-Maintenance (they stay valid until then)."; the certificates check is
+Maintenance (they stay valid until then)."; when only the console's own
+pair could not be installed (the agents' certificates were reissued), it
+starts "The intermediate was replaced and the agents' certificates reissued,
+but the console's own certificate was not installed: " and ends with the
+step's sentence; the certificates check is
 Todo while a server certificate is not signed by the bundle's first
 certificate, so Repair reissues them. Stdout has one line per finished stage (`Making the new
 intermediate`, `Trusting the old and the new one`, `Issuing the server
