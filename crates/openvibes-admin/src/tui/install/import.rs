@@ -298,6 +298,8 @@ pub(super) fn draw_how<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, 
 impl<H: Host> App<H> {
     /// Enter on step 3's rows 3 to 5.
     pub(super) fn import_row_key(&mut self, row: usize) {
+        // The rows check an intermediate here, never the console's own.
+        self.install.server = None;
         match row {
             CERT => self.nav.go(Screen::Install(Stage::Add(Which::Cert))),
             KEY if self.install.imported.is_some() => {

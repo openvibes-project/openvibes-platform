@@ -287,6 +287,8 @@ impl<H: Host> App<H> {
             root: Some(root),
             ..Replace::default()
         };
+        // The rows check an intermediate here, never the console's own.
+        self.install.server = None;
         if self.maint.certs.imported() {
             return self.open_import();
         }

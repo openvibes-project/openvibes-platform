@@ -349,6 +349,26 @@ fn once_yours_is_in_the_page_offers_new_or_back() {
     assert!(screen(&app).contains("not added yet"));
     app.key(Key::Esc);
     assert_eq!(app.nav.screen, Screen::Maint(Page::Console));
+
+    // A new one used: back here, the page names it, not the old one.
+    app.key(Key::Enter);
+    paste(&mut app, 0, Which::Cert, &format!("{SERVER}{ISSUING}"));
+    app.key(Key::Enter);
+    paste(&mut app, 1, Which::Key, SERVER_KEY);
+    app.key(Key::Enter);
+    // What the helper keeps (a stand-in that ends on another day).
+    app.host.own = Some(fixture!("server-expired.crt").into());
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app.key(Key::Esc);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::Console));
+    let text = body(&app);
+    assert!(
+        text.contains("Yours: *.limebox.se, until 2026-06-01."),
+        "{text}"
+    );
 }
 
 #[test]

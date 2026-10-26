@@ -466,3 +466,14 @@ fn with_every_row_the_console_certificate_is_still_reached() {
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Maint(Page::ConsoleUse));
 }
+
+#[test]
+fn replace_checks_an_intermediate_even_after_the_console_page() {
+    let mut app = imported();
+    // Left without Esc (the console page's names still set).
+    app.install.server = Some(vec!["limebox.lan".into()]);
+    app.open_page(Page::Certificates);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    assert!(app.install.server.is_none());
+}
