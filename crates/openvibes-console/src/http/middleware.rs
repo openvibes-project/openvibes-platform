@@ -129,6 +129,31 @@ pub(super) async fn loopback_host_only(
     }
 }
 
+/// `[a-z0-9-]+`, not starting or ending with `-`: the redirect echoes it.
+fn dns_label(label: &str) -> bool {
+    !label.is_empty()
+        && !label.starts_with('-')
+        && !label.ends_with('-')
+        && label
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// Whether `host` (lowercase) is one of `hosts`: exactly, or under a
+/// certificate's wildcard `*.x.y`, which covers one label more (`a.x.y`,
+/// not `x.y` or `a.b.x.y`), at the same port as written. Only a `*.` prefix
+/// is a wildcard (`*foo.x.y` or a bare `*` covers nothing).
+pub(crate) fn host_served(hosts: &[String], host: &str) -> bool {
+    hosts.iter().any(|served| {
+        served == host
+            || served.strip_prefix("*.").is_some_and(|rest| {
+                (host.strip_suffix(rest))
+                    .and_then(|h| h.strip_suffix('.'))
+                    .is_some_and(dns_label)
+            })
+    })
+}
+
 pub(super) async fn authenticated_host_only(
     State(state): State<AuthHttpState>,
     request: axum::extract::Request,
@@ -142,7 +167,7 @@ pub(super) async fn authenticated_host_only(
     }
     let allowed = request.headers().get(header::HOST).is_none_or(|host| {
         host.to_str()
-            .is_ok_and(|host| state.allowed_hosts.contains(&host.to_ascii_lowercase()))
+            .is_ok_and(|host| host_served(&state.allowed_hosts, &host.to_ascii_lowercase()))
     });
     if allowed {
         next.run(request).await
@@ -262,6 +287,37 @@ async fn public_security_headers(mut response: Response) -> Response {
         HeaderValue::from_static("camera=(), geolocation=(), microphone=(), payment=(), usb=()"),
     );
     response
+}
+
+#[cfg(test)]
+mod host_served_tests {
+    use super::host_served;
+
+    #[test]
+    fn a_wildcard_covers_one_label_at_its_port() {
+        let hosts = ["*.x.y:443".to_owned(), "*.x.y".to_owned(), "x.z".to_owned()];
+        for host in ["a.x.y", "a.x.y:443", "x.z"] {
+            assert!(host_served(&hosts, host), "{host}");
+        }
+        for host in [
+            "x.y",
+            ".x.y",
+            "a.b.x.y",
+            "a.b.x.y:443",
+            "a.x.y:8443",
+            "a.x.z",
+            "evil-x.y",
+            // The plain-http redirect echoes the host: a label is a DNS label.
+            "evil/x.y",
+            "u@evil.x.y",
+            "evil#.x.y",
+            "ev\ril.x.y",
+            "-a.x.y",
+            "a-.x.y",
+        ] {
+            assert!(!host_served(&hosts, host), "{host}");
+        }
+    }
 }
 
 #[cfg(test)]

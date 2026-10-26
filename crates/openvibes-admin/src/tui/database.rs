@@ -7,7 +7,10 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 use platform_host::{Database, DiskUse, Host, HostError, ServiceStatus};
 
-use super::app::App;
+use super::{
+    app::App,
+    console_cert_check::{console_cert_check, console_names},
+};
 use crate::setup::pki::{INTERMEDIATE_WARN_DAYS, RENEW_DAYS};
 
 /// Disk use from which Health reports a problem.
@@ -28,14 +31,22 @@ pub struct DatabaseScreen {
 }
 
 /// One Health line.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Check {
     pub problem: bool,
+    /// A problem drawn red: it has already happened (a certificate ended).
+    pub red: bool,
     pub text: String,
+    /// Shown dim under the list when this line is highlighted.
+    pub help: Option<String>,
 }
 
-fn check(problem: bool, text: String) -> Check {
-    Check { problem, text }
+pub(super) fn check(problem: bool, text: String) -> Check {
+    Check {
+        problem,
+        text,
+        ..Check::default()
+    }
 }
 
 /// Health's lines from what the host reported, problems first.
@@ -103,7 +114,10 @@ pub fn checks(
                 let days = (expires - now).num_days();
                 let date = expires.format("%Y-%m-%d");
                 if expires <= now {
-                    check(true, format!("{path}: expired on {date}"))
+                    Check {
+                        red: true,
+                        ..check(true, format!("{path}: expired on {date}"))
+                    }
                 } else {
                     // Server certificates renew themselves: only a failing
                     // renewal is a problem. Nothing renews the intermediate.
@@ -370,7 +384,13 @@ impl<H: Host> App<H> {
 /// problems first. The unit lines are built by Status, not here. Slow on a
 /// real host: `run` calls it on another thread.
 pub fn health_checks<H: Host>(host: &H) -> Vec<Check> {
-    let certificates = host.certificates();
+    let mut certificates = host.certificates();
+    // Your own console certificate is judged by its own check, not by the
+    // platform's renewal and address rules.
+    let own = host.own_console_cert();
+    if own.is_some() {
+        certificates.retain(|(path, _)| !path.ends_with("/console-chain.pem"));
+    }
     let mut health = checks(
         &[],
         &certificates,
@@ -380,6 +400,9 @@ pub fn health_checks<H: Host>(host: &H) -> Vec<Check> {
         Utc::now(),
     );
     health.extend(uncovered(&certificates, &host.addresses()));
+    if let Some(own) = own {
+        health.extend(console_cert_check(&own, &console_names(host), Utc::now()));
+    }
     health.extend(chain_check(&certificates, host.root_and_chain()));
     if let Some(files) = host.signer() {
         health.extend(signer_checks(&files));

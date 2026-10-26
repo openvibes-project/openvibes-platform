@@ -643,7 +643,11 @@ certificate chain and key, and are checked before serving; handshakes are TLS
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority or, with direct TLS, any name
 the server certificate covers (its DNS and IP subjectAltNames at the listen
-port; the bare name too on 443), so the console opens by IP over a VPN or as
+port, and the bare name at any port, as a reverse proxy sends it; names
+lowercase; only a `*.` prefix is a wildcard, and `*.x.y` covers one label more,
+`a.x.y` but not `x.y` or `a.b.x.y`, the label `[a-z0-9-]+` not starting or
+ending with `-` (`http::middleware::host_served`), also
+for the plain-http redirect), so the console opens by IP over a VPN or as
 `localhost` through a tunnel. Any other `Host` gets a 421 page linking to
 `public_origin`, in the sign-in page's look and plain words (#81); its
 stylesheet and wordmarks (`/misdirected/page.css`, `wordmark-light.svg`,
@@ -665,6 +669,21 @@ to `X-Forwarded-For`. The console uses the final address for source-address
 login throttling only after authenticating the immediate proxy peer; absent or
 malformed final values leave the per-account throttle in effect.
 HSTS is set for both direct TLS and reverse-proxy responses.
+
+**Behind a reverse proxy** (approved.md 57: the proxy is the admin's own
+business; Setup installs the console with direct TLS and has no proxy
+mode). Forward to `https://HOST:CONSOLE_PORT` (the console port from
+Maintenance › Ports and addresses) and keep the `Host` header as the
+browser sent it. This works at any console port: the console takes a
+certificate name without the port as well. Put the name the proxy serves
+under Maintenance › Certificates › Names, so the console takes requests for
+it (any other `Host` gets the 421 page) and its certificate covers it; or
+give the console your own certificate for that name (Maintenance ›
+Certificates › Console certificate). Without your own, the proxy connects
+to the console's platform-issued certificate: make it trust
+`/etc/openvibes/pki/root.crt`, or turn its upstream verification off. Turn response buffering off for `/api/v1/agents/events`
+(server-sent events: a buffering proxy holds live agent presence back). The
+console sends HSTS itself; the proxy need not add it.
 
 ### Development seed (C1)
 

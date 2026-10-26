@@ -36,6 +36,10 @@ pub enum Item {
     Problem {
         text: String,
         fix: Option<Fix>,
+        /// Drawn red instead of amber.
+        red: bool,
+        /// Shown under the list instead of the text.
+        help: Option<String>,
     },
     Service(Unit),
     /// A health check that is fine.
@@ -59,22 +63,30 @@ pub fn items(services: &[ServiceStatus], checks: &[Check]) -> Vec<Item> {
             out.push(Item::Problem {
                 text: "certificate renewal failed: see Status › certificate renewal › Logs".into(),
                 fix: None,
+                red: false,
+                help: None,
             });
         } else if !idles(s.unit) && matches!(s.active.as_str(), "failed" | "inactive") {
             out.push(Item::Problem {
                 text: format!("{} is stopped", s.unit.label()),
                 fix: Some(Fix::Start(s.unit)),
+                red: false,
+                help: None,
             });
         } else if !s.enabled {
             out.push(Item::Problem {
                 text: format!("{} does not start at boot", s.unit.label()),
                 fix: Some(Fix::Enable(s.unit)),
+                red: false,
+                help: None,
             });
         }
     }
     out.extend(checks.iter().filter(|c| c.problem).map(|c| Item::Problem {
         text: c.text.clone(),
         fix: None,
+        red: c.red,
+        help: c.help.clone(),
     }));
     out.extend(installed().map(|s| Item::Service(s.unit)));
     out.extend(
@@ -133,8 +145,8 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         heading(&mut rows, "Needs attention", String::new());
     }
     for item in &items {
-        if let Item::Problem { text, fix } = item {
-            let (mark, style) = if matches!(fix, Some(Fix::Start(_))) {
+        if let Item::Problem { text, fix, red, .. } = item {
+            let (mark, style) = if *red || matches!(fix, Some(Fix::Start(_))) {
                 ("■ ", t.red())
             } else {
                 ("▲ ", t.yellow())
@@ -206,7 +218,14 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     );
     // Under the list: the highlighted problem or check in full, wrapped
     // over up to HELP_LINES lines.
-    if let Some(Item::Problem { text, .. } | Item::Check(text)) = items.get(app.nav.row) {
+    let under = match items.get(app.nav.row) {
+        Some(Item::Problem {
+            help: Some(help), ..
+        }) => Some(help),
+        Some(Item::Problem { text, .. } | Item::Check(text)) => Some(text),
+        _ => None,
+    };
+    if let Some(text) = under {
         lines.extend(
             wrap(text, 72, usize::from(HELP_LINES))
                 .into_iter()

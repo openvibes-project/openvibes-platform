@@ -55,7 +55,8 @@ impl Install {
             text,
             self.unlocked.as_deref(),
             &self.error,
-            self.imported.as_ref().map(|i| &i.chain.ours),
+            self.imported.as_ref().map(|i| i.cert.pem()),
+            &self.server,
             (&self.hostname, &self.sans),
             self.cert.as_ref().map(|c| &c.0),
             self.csr(),
@@ -152,6 +153,9 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, whic
     let (title, help) = match (which, &install.paste_file) {
         (Which::Signed, None) => ("Paste the signed certificate".to_owned(), PASTE_HELP),
         (Which::Root, None) => ("Paste your CA's certificate".to_owned(), ROOT_NOTE),
+        (Which::Cert, None) if install.server.is_some() => {
+            ("Paste the certificate".to_owned(), import::SERVER_NOTE)
+        }
         (Which::Cert, None) => ("Paste the certificate".to_owned(), import::PASTE_NOTE),
         (Which::Key, None) => ("Paste the private key".to_owned(), import::KEY_NOTE),
         (Which::Signed, Some(file)) => (format!("The signed certificate, from {file}"), FILE_HELP),

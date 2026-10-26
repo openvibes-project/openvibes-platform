@@ -20,6 +20,7 @@ use platform_pki::Issuer;
 use super::{
     Ctx, begin, host_ctx,
     pki::{self, ADMIN_OWNER, INT, INTERMEDIATE, ROOT_CERT, ROOT_DIR, STAGE, certificates_apply},
+    pki_console,
     pki_import::CHAIN,
     plan::{CaMode, Component},
     request::{REQUEST_DIR, message},
@@ -216,6 +217,16 @@ fn run<R: Runner>(ctx: &Ctx<R>, root_key: Option<&str>) -> Result<String, String
         let _ = import::drop_empty_chain(ctx);
     }
     applied.map_err(|error| {
+        // The step renews the agents' certificates before it refuses a pair
+        // of your own that cannot be used.
+        let own = pki_console::own(ctx)
+            && pki_console::checked(ctx).is_err_and(|why| error.ends_with(&why));
+        if own {
+            return format!(
+                "The intermediate was replaced and the agents' certificates reissued, but the \
+                 console's own certificate was not installed: {error}"
+            );
+        }
         format!(
             "The intermediate was replaced, but the server certificates were not reissued: run \
              Repair in Maintenance (they stay valid until then). {error}"
@@ -364,6 +375,10 @@ use swap::swap;
 #[cfg(test)]
 #[path = "replace_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "replace_own_tests.rs"]
+mod own_tests;
 
 #[cfg(test)]
 #[path = "replace_interrupted_tests.rs"]

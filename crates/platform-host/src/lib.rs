@@ -103,6 +103,10 @@ pub const CERTIFICATES: [&str; 4] = [
     "/etc/openvibes/pki/intermediate.crt",
 ];
 
+/// The admin's own certificate for the console (4c), 0644; its presence
+/// is what makes the console's certificate "own".
+pub const OWN_CONSOLE_CERT: &str = "/etc/openvibes/tls/console-own.crt";
+
 /// The root agents trust, and the CAs between it and our intermediate
 /// (an imported or company-signed one under a sub-CA); both 0644.
 pub const ROOT_CERT: &str = "/etc/openvibes/pki/root.crt";
@@ -207,6 +211,11 @@ pub trait Host {
     /// [`ROOT_CERT`] as text and whether [`CHAIN`] exists; `None` without
     /// a readable root.
     fn root_and_chain(&self) -> Option<(String, bool)> {
+        None
+    }
+    /// [`OWN_CONSOLE_CERT`] as text; `None` when the console uses the
+    /// platform's own.
+    fn own_console_cert(&self) -> Option<String> {
         None
     }
     /// This host's own global IPv4 addresses ([`host_addresses`]).

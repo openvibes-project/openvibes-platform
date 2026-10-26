@@ -10,7 +10,7 @@ use crate::tui::{
     install::{Stage, Which},
     maint::{
         Page,
-        certs_page_tests::{day, framed, keys, menu, put},
+        certs_page_tests::{PLATFORM, day, framed, keys, menu, put},
         certs_tests::{app_with, pems, plan_text},
     },
     nav::{Screen, render},
@@ -112,9 +112,10 @@ fn the_page_says_from_your_pki() {
     app.key(Key::Down);
     let mut lines: Vec<String> = [
         (
-            "Web and agents",
+            "Agents",
             format!("renewed automatically · next {}", day(50)),
         ),
+        ("Console", PLATFORM.into()),
         ("Names", "limebox.lan, 192.168.1.10".into()),
         ("Intermediate", "from your PKI · until 2046-01-01".into()),
         ("Signed by", "Lime Lab Issuing CA › Lime Lab Root CA".into()),
@@ -130,6 +131,7 @@ fn the_page_says_from_your_pki() {
                 "Replace the intermediate",
                 "import the next one from your PKI".into(),
             ),
+            ("Console certificate", "use your own".into()),
         ],
         1,
     ));
@@ -442,4 +444,36 @@ fn a_pfx_reads_as_at_install_under_replace() {
 
 fn fixture_bytes() -> &'static [u8] {
     include_bytes!("../../../../platform-pki/tests/fixtures/modern.pfx")
+}
+
+#[test]
+fn with_every_row_the_console_certificate_is_still_reached() {
+    // An import's Signed by and a previous intermediate: the list scrolls.
+    let mut app = imported();
+    put(&app, "/etc/openvibes/pki/previous.crt", OLD);
+    let until = chrono::Utc::now() + chrono::Duration::days(31);
+    put(
+        &app,
+        "/etc/openvibes/pki/previous-until",
+        &until.to_rfc3339(),
+    );
+    app.open_page(Page::Certificates);
+    app.key(Key::Down);
+    app.key(Key::Down);
+    let text = screen(&app);
+    assert!(text.contains("  ▸ Console certificate"), "{text}");
+    assert!(text.contains("⭡ 1 more"), "{text}");
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::ConsoleUse));
+}
+
+#[test]
+fn replace_checks_an_intermediate_even_after_the_console_page() {
+    let mut app = imported();
+    // Left without Esc (the console page's names still set).
+    app.install.server = Some(vec!["limebox.lan".into()]);
+    app.open_page(Page::Certificates);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    assert!(app.install.server.is_none());
 }

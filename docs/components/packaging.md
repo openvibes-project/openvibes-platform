@@ -526,6 +526,12 @@ another Setup run in progress says so and tries again the next day; one
 that cannot read `/etc/openvibes/setup.toml` fails and says why. The
 console's `console-chain.pem` is 0644 (the package's `%post` fixes an older
 0640 one): the TUI reads its expiry without root.
+With your own console certificate (Maintenance › Certificates) it is kept
+as `/etc/openvibes/tls/console-own.crt` (0644) and `console-own.key` (0600
+root); the step copies them to `console-chain.pem` and `console-key.pem`
+and the timer never renews it: you do, before it ends. The agents'
+certificates are renewed as before. Remove everything deletes both files
+with the rest of `/etc/openvibes/tls`.
 
 ## Replacing the intermediate CA
 

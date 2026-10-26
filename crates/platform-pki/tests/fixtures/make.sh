@@ -41,6 +41,47 @@ self_sign() {
     -not_before "$FROM" -not_after "$UNTIL" -sha256 -extfile "$TMP/ext" -out "$1"
 }
 
+# server_step: certificates for the console's own certificate. Run alone with
+# `make.sh server`, so the keys above stay the same.
+server_step() {
+  ec server.key P-256
+  server_ext() {
+    {
+      echo "basicConstraints = critical, CA:FALSE"
+      echo "keyUsage = critical, digitalSignature"
+      echo "extendedKeyUsage = $1"
+      echo "subjectAltName = DNS:*.limebox.se, IP:10.0.0.5"
+    } > "$TMP/ext"
+  }
+  server_ext serverAuth
+  sign server.crt server.key "limebox.se" issuing.crt issuing.key
+  openssl pkcs12 -export -inkey server.key -in server.crt -certfile issuing.crt \
+    -keypbe AES-256-CBC -certpbe AES-256-CBC -passout "pass:$PASS" -out server.pfx
+  sign server-expired.crt server.key "limebox.se" issuing.crt issuing.key "$FROM" 20260601000000Z
+  sign server-future.crt server.key "limebox.se" issuing.crt issuing.key 20400101000000Z 20450101000000Z
+  server_ext clientAuth
+  sign server-client-only.crt server.key "limebox.se" issuing.crt issuing.key
+}
+if [ "${1:-}" = server ]; then
+  server_step
+  exit
+fi
+
+# cn_only_step: a server certificate with a common name and no SAN, which
+# covers none of the console's names. Run alone with `make.sh cn-only`.
+cn_only_step() {
+  {
+    echo "basicConstraints = critical, CA:FALSE"
+    echo "keyUsage = critical, digitalSignature"
+    echo "extendedKeyUsage = serverAuth"
+  } > "$TMP/ext"
+  sign server-cn-only.crt server.key "openvibes.limebox.se" issuing.crt issuing.key
+}
+if [ "${1:-}" = cn-only ]; then
+  cn_only_step
+  exit
+fi
+
 rsa root.key 4096
 ca_ext 2
 self_sign root.crt root.key "Lime Lab Root CA"
@@ -130,10 +171,13 @@ cat "$TMP/chain.pem" "$TMP/web.crt" > "$TMP/legacy-extra.pem"
 openssl pkcs12 -export -legacy -inkey ours-ec.pkcs8.pem -in ours-ec.crt \
   -name "Lime Lab OpenVIBES CA" -certfile "$TMP/legacy-extra.pem" -passout "pass:$PASS" -out legacy.pfx
 
+server_step
+cn_only_step
+
 cat > README <<README
 Test fixtures for platform-pki, made by make.sh with $(openssl version).
 Every certificate is valid 2026-01-01 to 2046-01-01, except short.crt.
-Password of every encrypted key, modern.pfx and legacy.pfx: correct horse
+Password of every encrypted key and .pfx: correct horse
 
 root.crt/.key            Lime Lab Root CA, RSA 4096, self-signed, path length 2
 issuing.crt/.key         Lime Lab Issuing CA, EC P-384, under the root, path length 1
@@ -156,6 +200,12 @@ twin-dc.crt/.key         Lime Lab Twin DC CA, under issuing, subject with two DC
 client-only.crt/.key     Lime Lab Client Only CA, under the root, extended key usage clientAuth only
 any-usage.crt/.key       Lime Lab Any Usage CA, under the root, extended key usage anyExtendedKeyUsage
 leaf-not-ca.crt          Lime Lab Web, CA:FALSE, under issuing
+server.crt/.key          limebox.se, EC P-256, under issuing, serverAuth, SAN DNS *.limebox.se and IP 10.0.0.5
+server-expired.crt       the same key, valid until 2026-06-01
+server-future.crt        the same key, valid from 2040-01-01
+server-client-only.crt   the same key, extended key usage clientAuth only
+server.pfx               server.key, server.crt, issuing (AES-256-CBC)
+server-cn-only.crt       server.key, CN openvibes.limebox.se, serverAuth, no SAN
 weak.key                 RSA 1024
 p521.key                 EC P-521
 big.key                  RSA 6144 (over ring's 4096-bit limit)

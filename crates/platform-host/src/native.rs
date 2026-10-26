@@ -334,6 +334,10 @@ impl<R: Runner> Host for Native<R> {
         Some((root, std::path::Path::new(crate::CHAIN).exists()))
     }
 
+    fn own_console_cert(&self) -> Option<String> {
+        std::fs::read_to_string(crate::OWN_CONSOLE_CERT).ok()
+    }
+
     fn signer(&self) -> Option<crate::SignerFiles> {
         let trust = std::fs::read_to_string(crate::SITE_TRUST).ok();
         let status = match std::fs::read_to_string(crate::SIGNER_STATUS) {

@@ -177,6 +177,7 @@ fn help_and_back_keep_the_scrolled_window() {
         app.database.health.push(Check {
             problem: true,
             text: format!("extra problem {i}"),
+            ..Default::default()
         });
     }
     for _ in 0..15 {
@@ -216,6 +217,7 @@ fn health_arrives_from_the_background_without_blocking() {
     send.send(vec![Check {
         problem: true,
         text: "disk 92% used".into(),
+        ..Default::default()
     }])
     .unwrap();
     app.tick(std::time::Instant::now());

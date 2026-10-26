@@ -1,6 +1,6 @@
-//! Maintenance › Certificates as certs2.py and certs4a.py show it:
-//! automatic renewal, the intermediate, the previous one while agents move
-//! over. Split from `certs_tests.rs` (size).
+//! Maintenance › Certificates as certs2.py, certs4a.py and certs4c.py show
+//! it: automatic renewal, the console's, the intermediate, the previous one
+//! while agents move over. Split from `certs_tests.rs` (size).
 
 use chrono::{Duration, Utc};
 
@@ -61,7 +61,7 @@ pub(super) fn menu(rows: &[(&str, String)], row: usize) -> Vec<String> {
     lines
 }
 
-/// The page of certs2.py: `rows` (name, value), then the two actions.
+/// The page of certs4c.py #1: `rows` (name, value), then the three actions.
 pub(super) fn page_body(rows: &[(&str, String)], quick: bool, row: usize) -> String {
     let mut lines: Vec<String> = rows
         .iter()
@@ -77,10 +77,11 @@ pub(super) fn page_body(rows: &[(&str, String)], quick: bool, row: usize) -> Str
         &[
             ("Names", "add or remove a name agents use".into()),
             ("Replace the intermediate", replace.into()),
+            ("Console certificate", "use your own".into()),
         ],
         row,
     ));
-    let enter = ["Names", "Replace the intermediate"][row];
+    let enter = ["Names", "Replace the intermediate", "Console certificate"][row];
     framed("Certificates", lines, &keys(enter))
 }
 
@@ -94,9 +95,10 @@ fn certificates_page_own_ca_matches_certs2() {
     app.key(Key::Down);
     let rows = [
         (
-            "Web and agents",
+            "Agents",
             format!("renewed automatically · next {}", day(50)),
         ),
+        ("Console", PLATFORM.into()),
         ("Names", "limebox.lan, 192.168.1.10".into()),
         (
             "Intermediate",
@@ -106,13 +108,18 @@ fn certificates_page_own_ca_matches_certs2() {
     assert_eq!(body(&app), page_body(&rows, false, 1));
 }
 
-/// The rows of certs2.py `OURS` for these certificates.
+/// The Console row while the console uses the platform's certificate.
+pub(super) const PLATFORM: &str = "from the platform · renewed with the agents";
+
+/// The rows of certs4c.py `OURS` for these certificates (certs2.py's
+/// Root key row is not there: the action says the key is needed).
 pub(super) fn ours(pems: &[(&str, String)], previous: Option<&str>) -> Vec<(&'static str, String)> {
     let mut rows = vec![
         (
-            "Web and agents",
+            "Agents",
             format!("renewed automatically · next {}", day(50)),
         ),
+        ("Console", PLATFORM.into()),
         ("Names", "limebox.lan, 192.168.1.10".into()),
         (
             "Intermediate",
@@ -125,10 +132,6 @@ pub(super) fn ours(pems: &[(&str, String)], previous: Option<&str>) -> Vec<(&'st
             format!("trusted until {until}, as agents move over"),
         ));
     }
-    rows.push((
-        "Root key",
-        "offline: needed only to replace the intermediate".into(),
-    ));
     rows
 }
 
@@ -187,14 +190,9 @@ fn renewal_due_today_and_failing_texts() {
     // 20 days left: past the renewal date, more than 14 left.
     let mut app = app_with(pems(70));
     app.open_page(Page::Certificates);
-    assert!(screen(&app).contains("Web and agents             renewed automatically · due today"));
+    assert!(screen(&app).contains("Agents                     renewed automatically · due today"));
     // 10 days left: the timer has not managed it.
     let mut app = app_with(pems(80));
     app.open_page(Page::Certificates);
-    assert!(screen(&app).contains("Web and agents             renewal is failing · see Status"));
-    // A careful CA's root is not here: no Root key row.
-    let mut app = app_with(pems(10));
-    app.host.plan = plan_text().replace("quick", "careful");
-    app.open_page(Page::Certificates);
-    assert!(!screen(&app).contains("Root key"));
+    assert!(screen(&app).contains("Agents                     renewal is failing · see Status"));
 }

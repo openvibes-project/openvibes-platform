@@ -343,6 +343,11 @@ pub enum Privileged<'a> {
     /// `ca-import`: a company intermediate, its chain and key, on stdin
     /// (never argv); journalled as `ca-import /run/openvibes-import`.
     CaImport(&'a Secret),
+    /// `console-cert-set`: the console's own certificate and key, on stdin
+    /// (never argv); journalled as `console-cert-set <OWN_CERT>`.
+    ConsoleCertSet(&'a Secret),
+    /// `console-cert-reset`: back to the platform's own console certificate.
+    ConsoleCertReset,
 }
 
 impl Privileged<'_> {
@@ -396,6 +401,8 @@ impl Privileged<'_> {
                 all
             }
             Privileged::CaImport(_) => vec!["ca-import".into()],
+            Privileged::ConsoleCertSet(_) => vec!["console-cert-set".into()],
+            Privileged::ConsoleCertReset => vec!["console-cert-reset".into()],
         }
     }
 
@@ -404,7 +411,7 @@ impl Privileged<'_> {
     #[must_use]
     pub fn stdin(&self, password: Option<&Secret>) -> Option<Zeroizing<Vec<u8>>> {
         let input = match self {
-            Privileged::CaImport(bundle) => bundle.expose(),
+            Privileged::CaImport(bundle) | Privileged::ConsoleCertSet(bundle) => bundle.expose(),
             _ => "",
         };
         if password.is_none() && input.is_empty() {
@@ -420,7 +427,7 @@ impl Privileged<'_> {
     }
 
     /// What the journal records (no arguments of `setup-plan`, `update-step`,
-    /// `remove-step`, `ca-request`, `ca-accept`, `ca-replace`, `ca-import`).
+    /// `remove-step`, `ca-request`, `ca-accept`, `ca-replace`, `ca-import`, `console-cert-set`).
     #[must_use]
     pub fn journal(&self) -> String {
         match self {
@@ -436,63 +443,17 @@ impl Privileged<'_> {
             Privileged::CaAccept(..) => "ca-accept /etc/openvibes/pki/request".into(),
             Privileged::CaReplace(_) => "ca-replace /etc/openvibes/pki/intermediate.crt".into(),
             Privileged::CaImport(_) => "ca-import /run/openvibes-import".into(),
+            Privileged::ConsoleCertSet(_) => {
+                "console-cert-set /etc/openvibes/tls/console-own.crt".into()
+            }
+            Privileged::ConsoleCertReset => {
+                "console-cert-reset /etc/openvibes/tls/console-own.crt".into()
+            }
             other => other.args().join(" "),
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{Privileged, Secret};
-
-    #[test]
-    fn ca_import_keeps_the_pem_out_of_argv_and_journal() {
-        let bundle = Secret::new("-----BEGIN PRIVATE KEY-----\nK\n".into());
-        let import = Privileged::CaImport(&bundle);
-        assert_eq!(import.args(), ["ca-import"]);
-        assert_eq!(import.journal(), "ca-import /run/openvibes-import");
-        assert!(!format!("{import:?}").contains("BEGIN"));
-        let password = Secret::new("pw".into());
-        let sudo = import.stdin(Some(&password)).unwrap();
-        assert_eq!(*sudo, b"pw\n-----BEGIN PRIVATE KEY-----\nK\n");
-        assert_eq!(*import.stdin(None).unwrap(), bundle.expose().as_bytes());
-        assert_eq!(
-            *Privileged::SetupStatus.stdin(Some(&password)).unwrap(),
-            b"pw\n"
-        );
-        assert!(Privileged::SetupStatus.stdin(None).is_none());
-    }
-
-    #[test]
-    fn ca_verbs_keep_the_pem_out_of_the_journal() {
-        assert_eq!(Privileged::CaRequest(None).args(), ["ca-request"]);
-        assert_eq!(
-            Privileged::CaRequest(Some("/home/alice/openvibes-request.csr")).args(),
-            ["ca-request", "--copy", "/home/alice/openvibes-request.csr"]
-        );
-        assert_eq!(
-            Privileged::CaRequest(Some("/x")).journal(),
-            "ca-request /etc/openvibes/pki/request"
-        );
-        let accept = Privileged::CaAccept("CERT PEM", "ROOT PEM");
-        assert_eq!(
-            accept.args(),
-            ["ca-accept", "--cert", "CERT PEM", "--root-cert", "ROOT PEM"]
-        );
-        assert_eq!(accept.journal(), "ca-accept /etc/openvibes/pki/request");
-    }
-
-    #[test]
-    fn ca_replace_keeps_the_key_path_out_of_the_journal() {
-        assert_eq!(Privileged::CaReplace(None).args(), ["ca-replace"]);
-        let quick = Privileged::CaReplace(Some("/media/usb/openvibes-root.key"));
-        assert_eq!(
-            quick.args(),
-            ["ca-replace", "--root-key", "/media/usb/openvibes-root.key"]
-        );
-        assert_eq!(
-            quick.journal(),
-            "ca-replace /etc/openvibes/pki/intermediate.crt"
-        );
-    }
-}
+#[path = "setup_tests.rs"]
+mod tests;

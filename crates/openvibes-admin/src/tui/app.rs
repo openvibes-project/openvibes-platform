@@ -341,6 +341,9 @@ impl<H: Host> App<H> {
                 if self.nav.screen == Screen::Maint(super::maint::Page::Replace) {
                     self.replace_left();
                 }
+                if self.nav.screen == Screen::Maint(super::maint::Page::ConsoleUse) {
+                    self.console_left();
+                }
                 self.nav.pop();
                 // A note from another screen is not news here.
                 self.message = None;
@@ -348,8 +351,12 @@ impl<H: Host> App<H> {
                 if matches!(self.nav.screen, Screen::Service(_)) {
                     self.load_logs();
                 }
-                // Back from Names, run or not: the report may be new.
-                if self.nav.screen == Screen::Maint(super::maint::Page::Certificates) {
+                // Back from Names, run or not, or from a new console
+                // certificate: the report may be new.
+                if matches!(
+                    self.nav.screen,
+                    Screen::Maint(super::maint::Page::Certificates | super::maint::Page::Console)
+                ) {
                     self.read_certs();
                 }
             }

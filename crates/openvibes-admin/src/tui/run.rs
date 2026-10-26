@@ -45,9 +45,13 @@ pub enum Call {
     CaReplace(Option<String>),
     /// `ca-import`: a company intermediate, its chain and key, on stdin.
     CaImport(Bundle),
+    /// `console-cert-set`: the console's own certificate and key, on stdin.
+    ConsoleCertSet(Bundle),
+    /// `console-cert-reset`: back to the platform's certificate.
+    ConsoleCertReset,
 }
 
-/// `ca-import`'s certificates and key; Debug never shows them.
+/// `ca-import`'s or `console-cert-set`'s certificates and key; Debug never shows them.
 #[derive(Clone, Eq, PartialEq)]
 pub struct Bundle(pub zeroize::Zeroizing<String>);
 
@@ -75,10 +79,10 @@ pub struct Work {
 }
 
 impl Work {
-    /// Wipes the key any `ca-import` call carries: the run is over.
+    /// Wipes the key any `ca-import` or `console-cert-set` call carries: the run is over.
     pub fn wipe(&mut self) {
         for call in &mut self.calls {
-            if let Call::CaImport(bundle) = call {
+            if let Call::CaImport(bundle) | Call::ConsoleCertSet(bundle) = call {
                 zeroize::Zeroize::zeroize(&mut *bundle.0);
             }
         }
@@ -150,6 +154,11 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
             let bundle = Secret::new(String::clone(&bundle.0));
             host.privileged(Privileged::CaImport(&bundle), secret)
         }
+        Call::ConsoleCertSet(bundle) => {
+            let bundle = Secret::new(String::clone(&bundle.0));
+            host.privileged(Privileged::ConsoleCertSet(&bundle), secret)
+        }
+        Call::ConsoleCertReset => host.privileged(Privileged::ConsoleCertReset, secret),
     }
 }
 
@@ -390,8 +399,16 @@ mod tests {
             "-----BEGIN PRIVATE KEY-----".into(),
         ));
         assert_eq!(
-            format!("{:?}", super::Call::CaImport(bundle)),
+            format!("{:?}", super::Call::CaImport(bundle.clone())),
             "CaImport(..)"
+        );
+        assert_eq!(
+            format!("{:?}", super::Call::ConsoleCertSet(bundle)),
+            "ConsoleCertSet(..)"
+        );
+        assert_eq!(
+            format!("{:?}", super::Call::ConsoleCertReset),
+            "ConsoleCertReset"
         );
     }
 }

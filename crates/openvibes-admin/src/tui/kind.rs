@@ -52,6 +52,12 @@ pub enum Kind {
         /// The result line, without how long it took.
         done: String,
     },
+    /// The console's own certificate used (`set`), or the platform's again.
+    ConsoleCert {
+        set: bool,
+        /// The result line, without how long it took.
+        done: String,
+    },
 }
 
 impl Kind {
@@ -79,6 +85,10 @@ impl Kind {
             Kind::Ports { what, .. } => what.clone(),
             Kind::Names { what, .. } => what.clone(),
             Kind::Replace { .. } => "Replacing the intermediate".into(),
+            Kind::ConsoleCert { set: true, .. } => "Using your certificate".into(),
+            Kind::ConsoleCert { set: false, .. } => {
+                "Going back to the platform's certificate".into()
+            }
         }
     }
     pub fn done(&self) -> String {
@@ -100,7 +110,7 @@ impl Kind {
             Kind::Parts { done, .. } => done.clone(),
             Kind::Ports { done, .. } => done.clone(),
             Kind::Names { done, .. } => done.clone(),
-            Kind::Replace { done } => done.clone(),
+            Kind::Replace { done } | Kind::ConsoleCert { done, .. } => done.clone(),
         }
     }
     pub fn stopped(&self) -> String {
@@ -120,6 +130,7 @@ impl Kind {
             Kind::Ports { .. } => "The move stopped".into(),
             Kind::Names { .. } => "The change stopped".into(),
             Kind::Replace { .. } => "The replacement stopped".into(),
+            Kind::ConsoleCert { .. } => "The console's certificate did not change".into(),
         }
     }
     /// The password bar's label (the bar adds the colon): the shell asks
@@ -146,6 +157,8 @@ impl Kind {
             Kind::Ca { accept: true } => "Add",
             Kind::Parts { .. } | Kind::Ports { .. } | Kind::Names { .. } => "Apply",
             Kind::Replace { .. } => "Replace",
+            Kind::ConsoleCert { set: true, .. } => "Use it",
+            Kind::ConsoleCert { set: false, .. } => "Go back",
         }
     }
 }

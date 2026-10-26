@@ -108,11 +108,16 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   `ca-replace /etc/openvibes/pki/intermediate.crt`, without the key path),
   and `ca-import` (`Privileged::CaImport(&Secret)`: the certificates and
   key go on stdin, never in argv; journalled and audit-noted as
-  `ca-import /run/openvibes-import`).
+  `ca-import /run/openvibes-import`),
+  `console-cert-set` (`Privileged::ConsoleCertSet(&Secret)`: the console's
+  own certificate and key on stdin, as `ca-import`; journalled as
+  `console-cert-set /etc/openvibes/tls/console-own.crt`) and
+  `console-cert-reset` (`Privileged::ConsoleCertReset`, journalled as
+  `console-cert-reset /etc/openvibes/tls/console-own.crt`).
   `Host::privileged` runs `sudo -S -k -p '' /usr/bin/openvibes-admin helper
   VERB…` with the password on stdin only (never in argv or the journal),
-  followed by the verb's own input (`Privileged::stdin`: `ca-import`'s
-  bundle, after sudo's one password line; as root the helper is run
+  followed by the verb's own input (`Privileged::stdin`: `ca-import`'s and
+  `console-cert-set`'s bundle, after sudo's one password line; as root the helper is run
   directly with the bundle alone, or stdin closed when there is none;
   after a wrong password, `sudo -S` may read the bundle's next lines as
   further attempts, and those are always public certificate lines, since

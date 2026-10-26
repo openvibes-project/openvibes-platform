@@ -174,6 +174,9 @@ back a step:
      renew it; Status warns before it expires) · ( ) **Automatic via ACME**
      (Let's Encrypt, or an internal ACME server: step-ca, Vault, EJBCA;
      server URL, account e-mail, HTTP-01 or DNS-01).
+     *Replaced by approved.md 57 (4c): Install asks only the agent
+     question; your own certificate is added later in Maintenance ›
+     Certificates › Console certificate; no ACME.*
    - With *Your CA signs our request*, the request is made **in this
      step, before Install**: Show the request (plain text to copy, also
      saved as a file), Signed certificate, Your CA's certificate (each:
@@ -201,7 +204,7 @@ key file to move offline), next steps — `Enter Continue to Home`.
 | **Repair** | Checks first and lists the results (report); Fix N problems / Check again. |
 | **Optional parts** | Agent on this host, Assistant as checkboxes; Apply with the standard question. |
 | **Ports and addresses** | Every listening port; edit in place, checked as typed; Apply says the consequence ("Agents on other hosts need their install line again"). |
-| **Certificates** | Both parts and how each is issued (renewal is automatic, shown with the next date); Names; change how agent certificates are issued (incl. replacing the intermediate: the install flow); change the web address certificate (renew your own, ACME details). |
+| **Certificates** | Both parts and how each is issued (renewal is automatic, shown with the next date); Names; change how agent certificates are issued (incl. replacing the intermediate: the install flow); change the web address certificate (renew your own, ACME details). *approved.md 57 (4c) replaces this: Console certificate uses your own, a new one, or the platform's again; no ACME.* |
 | **Database** | Report only: schema, size, data kept (set in the console), automatic nightly clean-up with last run and what it removed. |
 | **Console sign-in** | Reset the admin password (new one shown once, change at next sign-in); Single sign-on on/off (set up in the console); the local admin stays a break-glass account. |
 | **Back up** | What a backup holds; Save in folder (you choose; remembered); Back up now; progress; result with size and "copy it off this host". |

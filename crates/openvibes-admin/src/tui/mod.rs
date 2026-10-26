@@ -6,6 +6,7 @@ pub mod app;
 mod ca_request;
 mod config_view;
 mod configuration;
+mod console_cert_check;
 mod database;
 #[cfg(test)]
 mod database_tests;

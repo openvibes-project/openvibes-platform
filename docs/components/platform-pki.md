@@ -161,6 +161,28 @@ its `README` lists them.
   `WrongPassword`, `WeakKey(bits)`, `OldEncryption`, `NameMismatch`.
   Messages never contain key or certificate material.
 
+## The console's own certificate (`server.rs`)
+
+The admin can put their own certificate on the console; agents keep the
+platform's. The check is pure: PEM in, a verdict out.
+
+- `check_server_cert(certs_pem, names, now) -> ServerCert`: the first block
+  is ours. It must not be a CA (`IsCa`), must have no extended key usage or
+  one naming serverAuth (`NotForServers`), must be valid at `now`
+  (`Expired(end)`, `NotYetValid(start)`; no minimum lifetime), and must cover
+  at least one of `names` (`CoversNone`). The blocks after it only have to be
+  certificates; they are kept in the order given (the browser decides trust).
+  `ServerCert` holds `name` (first DNS name, else first IP, else the common
+  name), `covers` (which of `names`), `chain_pem` and `not_after`.
+- `covers(cert, name)`: names compare without regard to case. A DNS name
+  `*.x.y` covers `a.x.y` only, not `x.y` and not `a.b.x.y`. An IP name covers
+  the same address however it is written. Only the SANs count, as in
+  browsers: a certificate with none covers nothing (`CoversNone`), whatever
+  its common name.
+- `check_server_key(&cert, pkcs8_pem) -> KeyInfo`: kinds and sizes as
+  `key_info`, and the key must belong to the first certificate
+  (`Pki(KeyMismatch)`).
+
 ## Test
 
 `cargo test --locked -p platform-pki`
