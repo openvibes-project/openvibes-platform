@@ -644,7 +644,8 @@ never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority or, with direct TLS, any name
 the server certificate covers (its DNS and IP subjectAltNames at the listen
 port; the bare name too on 443; a wildcard `*.x.y` covers one label more,
-`a.x.y` but not `x.y` or `a.b.x.y`, `http::middleware::host_served`, also
+`a.x.y` but not `x.y` or `a.b.x.y`, the label `[a-z0-9-]+` not starting or
+ending with `-` (`http::middleware::host_served`), also
 for the plain-http redirect), so the console opens by IP over a VPN or as
 `localhost` through a tunnel. Any other `Host` gets a 421 page linking to
 `public_origin`, in the sign-in page's look and plain words (#81); its

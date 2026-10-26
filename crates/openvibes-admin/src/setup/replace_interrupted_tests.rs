@@ -115,3 +115,25 @@ fn a_folder_sync_that_fails_after_the_rename_is_no_failure() {
     assert_eq!(fake.text(INTERMEDIATE_KEY), new.1);
     assert_eq!(fake.text(PREVIOUS), old.0);
 }
+
+/// Finishing it still says so when your own console pair then fails.
+#[test]
+fn the_finished_replacement_is_said_before_your_pairs_failure() {
+    let (fake, root, old) = installed("interrupted-own");
+    let new = intermediate(&root);
+    fake.file(PREVIOUS, &old.0);
+    fake.file(PREVIOUS_UNTIL, &format!("{}\n", Utc::now().to_rfc3339()));
+    fake.file(INTERMEDIATE, &format!("{}{}", new.0, old.0));
+    fake.file(KEY_NEW, &new.1);
+    fake.file(crate::setup::pki_console::OWN_CERT, "half a pair");
+    let state = crate::setup::run_step(
+        &fake.ctx(&plan(&[Ingest, Console])),
+        platform_host::Step::Certificates,
+    );
+    assert!(
+        matches!(&state, platform_host::StepState::Failed(e)
+            if e.starts_with("finished an interrupted replacement; ")
+                && e.contains("console-own.key is missing")),
+        "{state:?}"
+    );
+}

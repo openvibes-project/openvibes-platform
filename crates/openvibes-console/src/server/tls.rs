@@ -344,6 +344,9 @@ mod certificate_hosts_tests {
             ("a.limebox.se", "https://a.limebox.se/"),
             ("limebox.se", "https://console.limebox.se/"),
             ("a.b.limebox.se", "https://console.limebox.se/"),
+            ("evil/limebox.se", "https://console.limebox.se/"),
+            ("u@evil.limebox.se", "https://console.limebox.se/"),
+            ("ev\ril.limebox.se", "https://console.limebox.se/"),
         ] {
             let request = format!("GET / HTTP/1.1\r\nHost: {host}\r\n\r\n");
             let answer = answer(request.as_bytes(), &to);

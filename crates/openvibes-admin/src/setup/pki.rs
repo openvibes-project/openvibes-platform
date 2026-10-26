@@ -474,7 +474,7 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         ctx.ok(Systemctl, &args)?;
     }
     if let Some(error) = broken {
-        return Err(error);
+        return Err(format!("{recovered}{error}"));
     }
     ctx.put(
         TLS_NAMES,

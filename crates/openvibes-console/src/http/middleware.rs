@@ -129,16 +129,25 @@ pub(super) async fn loopback_host_only(
     }
 }
 
+/// `[a-z0-9-]+`, not starting or ending with `-`: the redirect echoes it.
+fn dns_label(label: &str) -> bool {
+    !label.is_empty()
+        && !label.starts_with('-')
+        && !label.ends_with('-')
+        && label
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
 /// Whether `host` (lowercase) is one of `hosts`: exactly, or under a
 /// certificate's wildcard `*.x.y`, which covers one label more (`a.x.y`,
 /// not `x.y` or `a.b.x.y`), at the same port as written.
 pub(crate) fn host_served(hosts: &[String], host: &str) -> bool {
     hosts.iter().any(|served| {
         served == host
-            || served.strip_prefix('*').is_some_and(|suffix| {
-                host.strip_suffix(suffix)
-                    .is_some_and(|label| !label.is_empty() && !label.contains(['.', ':', '[']))
-            })
+            || served
+                .strip_prefix('*')
+                .is_some_and(|suffix| host.strip_suffix(suffix).is_some_and(dns_label))
     })
 }
 
@@ -295,6 +304,13 @@ mod host_served_tests {
             "a.x.y:8443",
             "a.x.z",
             "evil-x.y",
+            // The plain-http redirect echoes the host: a label is a DNS label.
+            "evil/x.y",
+            "u@evil.x.y",
+            "evil#.x.y",
+            "ev\ril.x.y",
+            "-a.x.y",
+            "a-.x.y",
         ] {
             assert!(!host_served(&hosts, host), "{host}");
         }
