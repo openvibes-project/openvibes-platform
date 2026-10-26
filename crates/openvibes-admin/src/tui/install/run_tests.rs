@@ -303,6 +303,7 @@ fn finished_enter_goes_home() {
     app.database.health = vec![crate::tui::database::Check {
         problem: true,
         text: "stale".into(),
+        ..Default::default()
     }];
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Home);

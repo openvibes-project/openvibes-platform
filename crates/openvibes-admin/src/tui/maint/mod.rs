@@ -439,5 +439,7 @@ pub fn half_done_problem(kind: Option<&str>) -> Option<super::status::Item> {
     Some(super::status::Item::Problem {
         text: text.into(),
         fix: Some(super::status::Fix::Finish(page)),
+        red: false,
+        help: None,
     })
 }

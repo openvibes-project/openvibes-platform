@@ -270,7 +270,7 @@ expiry, when the daily renewal timer has failed ("automatic renewal is
 failing, see Status › certificate renewal › Logs"); a certificate with more
 days left is no problem, however near its renewal. The intermediate (judged
 by its first certificate) is a problem under 60 days: "replace the
-intermediate in Maintenance › Certificates". An expired one always is. When
+intermediate in Maintenance › Certificates". An expired one always is, drawn red (`Check::red`, as the expired server certificates). When
 our intermediate is not signed directly by `root.crt` and `chain.crt` is
 missing, the setup check's sentence is a problem too ("/etc/openvibes/pki/chain.crt
 is missing: restore it from a backup (agents could not reach the root)",
@@ -279,6 +279,13 @@ problem when a
 server certificate misses an address this host now has, e.g. after DHCP:
 "run Repair in Maintenance"; a CA certificate, which names no host, is not
 checked for addresses);
+with the admin's own console certificate (`console-own.crt`, `Host::own_console_cert`)
+the console's chain is left to `tui/console_cert_check.rs` instead: an amber problem
+at 30 days or less ("Console certificate: yours ends DATE, in N days", "in 1 day"
+or "today"; the dim line under the list says "Use a new one in Maintenance ›
+Certificates."), a red one once ended ("yours ended on DATE"), or when it covers
+none of the console's names (the plan's names and this host's addresses,
+`platform_pki::covers`; judged only when the plan can be read); never the renewal sentence;
 feed errors from `feeds
 status` (an unreachable database is a problem here); disk use of
 `/var/lib/pgsql` and each `/var/lib/openvibes-*` (a problem from 90 %);

@@ -22,17 +22,25 @@ pub fn console_cert_check(pem: &str, names: &[String], now: DateTime<Utc>) -> Op
     };
     let date = expires.format("%Y-%m-%d");
     if expires <= now {
-        return Some(check(
-            true,
-            format!("Console certificate: yours ended on {date}"),
-        ));
+        return Some(Check {
+            red: true,
+            ..check(true, format!("Console certificate: yours ended on {date}"))
+        });
     }
     let days = (expires - now).num_days();
     if days <= WARN_DAYS {
-        return Some(check(
-            true,
-            format!("Console certificate: yours ends {date}, in {days} days. {HELP}"),
-        ));
+        let left = match days {
+            0 => "today".to_owned(),
+            1 => "in 1 day".to_owned(),
+            n => format!("in {n} days"),
+        };
+        return Some(Check {
+            help: Some(HELP.into()),
+            ..check(
+                true,
+                format!("Console certificate: yours ends {date}, {left}"),
+            )
+        });
     }
     let covered = names.iter().any(|name| platform_pki::covers(pem, name));
     (!names.is_empty() && !covered).then(|| {
@@ -65,24 +73,26 @@ mod tests {
         assert_eq!(at(31, &names()), None);
         let line = at(30, &names()).unwrap();
         assert!(line.problem);
+        assert!(!line.red);
         assert!(
             line.text.starts_with("Console certificate: yours ends 20")
-                && line
-                    .text
-                    .contains(", in 30 days. Use a new one in Maintenance › Certificates."),
+                && line.text.ends_with(", in 30 days"),
             "{}",
             line.text
+        );
+        assert_eq!(
+            line.help.as_deref(),
+            Some("Use a new one in Maintenance › Certificates.")
         );
     }
 
     #[test]
     fn yours_is_red_once_ended() {
         let line = at(-1, &names()).unwrap();
+        assert!(line.problem && line.red);
         assert!(
-            line.problem
-                && line
-                    .text
-                    .starts_with("Console certificate: yours ended on 20")
+            line.text
+                .starts_with("Console certificate: yours ended on 20")
         );
     }
 
@@ -91,6 +101,26 @@ mod tests {
         for days in [-1, 10, 30] {
             assert!(!at(days, &names()).unwrap().text.contains("renewal"));
         }
+    }
+
+    #[test]
+    fn one_day_and_less_than_a_day_read_naturally() {
+        let end = platform_pki::not_after(OWN).unwrap();
+        let text = |left: Duration| console_cert_check(OWN, &names(), end - left).unwrap().text;
+        assert!(text(Duration::days(1)).ends_with(", in 1 day"));
+        assert!(text(Duration::hours(12)).ends_with(", today"));
+    }
+
+    #[test]
+    fn an_unreadable_plan_never_says_covers_none() {
+        use crate::tui::{database::health_checks, script_host::app_with_plan};
+        let mut app = app_with_plan("", vec![]);
+        app.host.own = Some(OWN.into());
+        let health = health_checks(&app.host);
+        assert!(
+            health.iter().all(|c| !c.text.contains("covers none")),
+            "{health:?}"
+        );
     }
 
     #[test]

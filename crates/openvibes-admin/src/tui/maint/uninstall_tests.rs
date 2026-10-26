@@ -288,7 +288,7 @@ fn a_half_done_uninstall_is_a_status_problem_that_opens_the_page() {
     app.files_changed();
     assert!(matches!(
         &app.status_items()[0],
-        Item::Problem { text, fix: Some(Fix::Finish(Page::Uninstall)) }
+        Item::Problem { text, fix: Some(Fix::Finish(Page::Uninstall)), .. }
             if text.contains("uninstall stopped half way")
     ));
     app.nav.go(Screen::Status);

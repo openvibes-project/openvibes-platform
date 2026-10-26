@@ -28,14 +28,22 @@ pub struct DatabaseScreen {
 }
 
 /// One Health line.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Check {
     pub problem: bool,
+    /// A problem drawn red: it has already happened (a certificate ended).
+    pub red: bool,
     pub text: String,
+    /// Shown dim under the list when this line is highlighted.
+    pub help: Option<String>,
 }
 
 pub(super) fn check(problem: bool, text: String) -> Check {
-    Check { problem, text }
+    Check {
+        problem,
+        text,
+        ..Check::default()
+    }
 }
 
 /// Health's lines from what the host reported, problems first.
@@ -103,7 +111,10 @@ pub fn checks(
                 let days = (expires - now).num_days();
                 let date = expires.format("%Y-%m-%d");
                 if expires <= now {
-                    check(true, format!("{path}: expired on {date}"))
+                    Check {
+                        red: true,
+                        ..check(true, format!("{path}: expired on {date}"))
+                    }
                 } else {
                     // Server certificates renew themselves: only a failing
                     // renewal is a problem. Nothing renews the intermediate.
@@ -387,13 +398,16 @@ pub fn health_checks<H: Host>(host: &H) -> Vec<Check> {
     );
     health.extend(uncovered(&certificates, &host.addresses()));
     if let Some(own) = own {
+        // Names come from the plan; without it, none are judged.
         let mut names = host
             .setup_plan()
             .ok()
             .and_then(|text| crate::setup::plan::plan_of(&text).ok())
             .map(|plan| plan.names())
             .unwrap_or_default();
-        names.extend(host.addresses());
+        if !names.is_empty() {
+            names.extend(host.addresses());
+        }
         health.extend(console_cert_check(&own, &names, Utc::now()));
     }
     health.extend(chain_check(&certificates, host.root_and_chain()));

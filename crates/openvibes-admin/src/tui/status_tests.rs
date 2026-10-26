@@ -16,7 +16,7 @@ fn a_stopped_service_is_a_problem_first_and_llm_idling_is_not() {
     let app = app(false);
     let items = app.status_items();
     assert!(
-        matches!(&items[0], Item::Problem { text, fix: Some(Fix::Start(Unit::Vulns)) } if text.contains("vulns is stopped")),
+        matches!(&items[0], Item::Problem { text, fix: Some(Fix::Start(Unit::Vulns)), .. } if text.contains("vulns is stopped")),
         "{:?}",
         items[0]
     );
@@ -90,11 +90,9 @@ fn health_problems_are_listed_before_services() {
             .all(|i| matches!(i, Item::Problem { .. }))
     );
     // Fake host: the unreadable certificate is a health problem without a fix.
-    assert!(
-        items[..first_service]
-            .iter()
-            .any(|i| matches!(i, Item::Problem { text, fix: None } if text.contains("ingest.crt")))
-    );
+    assert!(items[..first_service].iter().any(
+        |i| matches!(i, Item::Problem { text, fix: None, .. } if text.contains("ingest.crt"))
+    ));
     assert!(
         !items
             .iter()
@@ -119,9 +117,12 @@ fn items_without_services_still_list_health_problems() {
     let checks = vec![super::database::Check {
         problem: true,
         text: "disk 92% used".into(),
+        ..Default::default()
     }];
     let items = items(&[], &checks);
-    assert!(matches!(&items[0], Item::Problem { text, fix: None } if text.contains("disk 92%")));
+    assert!(
+        matches!(&items[0], Item::Problem { text, fix: None, .. } if text.contains("disk 92%"))
+    );
 }
 
 fn marked(text: &str) -> usize {
@@ -145,6 +146,7 @@ fn status_scrolls_one_row_and_keeps_its_window_going_back_up() {
         app.database.health.push(super::database::Check {
             problem: true,
             text: format!("extra problem {i}"),
+            ..Default::default()
         });
     }
     let total = app.status_items().len();
@@ -254,6 +256,7 @@ fn a_problem_longer_than_its_row_is_read_in_full_wrapped_under_the_list() {
         super::database::Check {
             problem: true,
             text: long.clone(),
+            ..Default::default()
         },
     );
     app.nav.row = app
@@ -283,6 +286,7 @@ fn text_past_three_lines_ends_in_an_ellipsis() {
         super::database::Check {
             problem: true,
             text: long.clone(),
+            ..Default::default()
         },
     );
     app.nav.row = 1;
@@ -346,7 +350,7 @@ fn a_failed_renewal_is_a_problem_and_home_says_so() {
     ];
     let items = items(&services, &[]);
     assert!(
-        matches!(&items[0], Item::Problem { text, fix: None }
+        matches!(&items[0], Item::Problem { text, fix: None, .. }
             if text == "certificate renewal failed: see Status › certificate renewal › Logs"),
         "{items:?}"
     );
@@ -372,6 +376,7 @@ fn home_counts_a_lost_chain() {
     app.database.health = vec![super::database::Check {
         problem: true,
         text: "/etc/openvibes/pki/chain.crt is missing: restore it".into(),
+        ..Default::default()
     }];
     let home: String = app
         .status_line()
@@ -414,4 +419,61 @@ fn a_failed_renewal_keeps_the_timers_actions() {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
     }
     assert!(!text.contains("Start "), "{text}");
+}
+
+/// The colour of the first cell of the row holding `text`.
+fn mark_colour(app: &App<FakeHost>, text: &str) -> ratatui::style::Color {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    terminal.draw(|frame| super::render(frame, app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let rows: Vec<String> = (0..24)
+        .map(|y| (0..80).map(|x| buffer[(x, y)].symbol()).collect())
+        .collect();
+    let y = rows.iter().position(|r| r.contains(text)).expect(text) as u16;
+    let x = rows[usize::from(y)].find(text).unwrap();
+    let x = rows[usize::from(y)][..x].chars().count() as u16 - 2;
+    buffer[(x, y)].fg
+}
+
+#[test]
+fn an_ended_certificate_is_red_and_a_warning_amber() {
+    use super::database::Check;
+    use ratatui::style::Color;
+    let mut app = app(false);
+    app.key(Key::Enter);
+    app.database.health = vec![
+        Check {
+            problem: true,
+            red: true,
+            text: "ended one".into(),
+            help: None,
+        },
+        Check {
+            problem: true,
+            text: "warning one".into(),
+            ..Check::default()
+        },
+    ];
+    assert_eq!(mark_colour(&app, "ended one"), Color::Red);
+    assert_eq!(mark_colour(&app, "warning one"), Color::Yellow);
+}
+
+#[test]
+fn the_help_line_shows_under_the_list() {
+    use super::database::Check;
+    let mut app = app(false);
+    app.key(Key::Enter);
+    app.database.health = vec![Check {
+        problem: true,
+        text: "row text".into(),
+        help: Some("the help sentence".into()),
+        ..Check::default()
+    }];
+    app.nav.row = app
+        .status_items()
+        .iter()
+        .position(|i| matches!(i, Item::Problem { text, .. } if text == "row text"))
+        .unwrap();
+    assert!(screen(&app, 80, 24).contains("    the help sentence"));
 }
