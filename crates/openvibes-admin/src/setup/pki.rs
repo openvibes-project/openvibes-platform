@@ -14,7 +14,7 @@ use platform_host::{
 };
 
 use super::{
-    Ctx,
+    Ctx, pki_console,
     pki_import::{CHAIN, chain_lost, ends_in_chain, import_and_install},
     plan::{CaMode, Component},
     request::REQUEST_DIR,
@@ -309,6 +309,11 @@ fn chosen<'a, R: Runner>(ctx: &'a Ctx<'a, R>) -> impl Iterator<Item = &'static T
     TLS.iter().filter(|tls| ctx.plan.has(tls.component))
 }
 
+/// The chosen ones Setup issues: all but a console on your own certificate.
+fn issued<'a, R: Runner>(ctx: &'a Ctx<'a, R>) -> impl Iterator<Item = &'static Tls> + 'a {
+    chosen(ctx).filter(|tls| !(tls.console && pki_console::own(ctx)))
+}
+
 const TLS_NAMES: &str = "/etc/openvibes/tls/setup-names";
 /// The renewal timer reissues a server certificate this close to expiry.
 pub(crate) const RENEW_AT_DAYS: i64 = 30;
@@ -344,7 +349,11 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
     if !present || ctx.read(TLS_NAMES).ok().as_deref() != Some(wanted.as_str()) {
         return Ok(StepState::Todo);
     }
-    for tls in chosen(ctx) {
+    let own = |tls: &Tls| tls.console && pki_console::own(ctx);
+    if chosen(ctx).any(|tls| own(tls) && !pki_console::installed(ctx, tls.cert, tls.key)) {
+        return Ok(StepState::Todo);
+    }
+    for tls in issued(ctx) {
         let pem = ctx.read(tls.cert)?;
         let expires =
             platform_pki::not_after(&pem).map_err(|error| format!("{}: {error:?}", tls.cert))?;
@@ -362,12 +371,12 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
             ctx.read(tls.cert)
                 .is_ok_and(|pem| platform_pki::verify_signed_by(&pem, &issuer).is_ok())
         };
-        if !chosen(ctx).all(signed) {
+        if !issued(ctx).all(signed) {
             return Ok(StepState::Todo);
         }
     }
     // After `CHAIN` was installed or changed (Import).
-    if !chosen(ctx).all(|tls| ctx.read(tls.cert).is_ok_and(|pem| ends_in_chain(ctx, &pem))) {
+    if !issued(ctx).all(|tls| ctx.read(tls.cert).is_ok_and(|pem| ends_in_chain(ctx, &pem))) {
         return Ok(StepState::Todo);
     }
     // The console's chain is public (browsers get it anyway) and the TUI,
@@ -405,7 +414,13 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         ADMIN_OWNER,
         0o600,
     )?;
+    let mut yours = "";
     for tls in chosen(ctx) {
+        if tls.console && pki_console::own(ctx) {
+            pki_console::install(ctx, tls.cert, tls.key, Some(("root", tls.owner)))?;
+            yours = "; the console keeps your own certificate";
+            continue;
+        }
         let out = format!("{STAGE}/{}", tls.stem);
         stage_dir(ctx, &out)?;
         let mut args = vec!["ca", "issue-server", names[0].as_str()];
@@ -457,7 +472,7 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
         0o644,
     )?;
     Ok(StepState::Done(format!(
-        "{recovered}server certificates for {} (valid 90 days)",
+        "{recovered}server certificates for {} (valid 90 days){yours}",
         names.join(", ")
     )))
 }

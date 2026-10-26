@@ -299,6 +299,41 @@ fn purge_leaves_the_admin_package_config_for_rpm() {
     );
 }
 
+/// Your own console certificate and its key: kept with the data, gone with
+/// Remove everything.
+#[test]
+fn remove_everything_takes_both_own_files() {
+    use crate::setup::pki_console::{OWN_CERT, OWN_KEY};
+    let fake = Fake::new("purge-own");
+    fake.file(OWN_CERT, "CERT");
+    fake.file(OWN_KEY, "KEY");
+    fake.answer(&[&PG[..], &["/usr/bin/psql"]].concat(), 0, "");
+    fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
+    fake.answer(&["/usr/sbin/userdel"], 0, "");
+    fake.answer(&["/usr/sbin/groupdel"], 0, "");
+    let plan = plan(&[Ingest, Console]);
+    let kept = run(
+        &fake.ctx(&plan),
+        RemoveStep::Purge,
+        &args(&[Ingest, Console], None),
+    );
+    assert_eq!(kept, StepState::Skipped("data kept".into()));
+    assert_eq!(fake.text(OWN_CERT), "CERT");
+    assert_eq!(fake.text(OWN_KEY), "KEY");
+    let state = run(
+        &fake.ctx(&plan),
+        RemoveStep::Purge,
+        &args(&[Ingest, Console], Some("platform.example.com")),
+    );
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    for file in [OWN_CERT, OWN_KEY] {
+        assert!(
+            !fake.root.join(&file[1..]).exists(),
+            "{file} is left behind"
+        );
+    }
+}
+
 #[test]
 fn a_wrong_confirmation_stops_every_step() {
     let fake = Fake::new("remove-wrong-name");

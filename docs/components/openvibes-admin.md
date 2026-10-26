@@ -676,7 +676,18 @@ so a new or changed chain reissues; when our intermediate is not signed
 directly by `root.crt` and `chain.crt` is missing, both the check and the
 apply are Failed, "/etc/openvibes/pki/chain.crt is missing: restore it
 from a backup (agents could not reach the root)", and nothing is issued:
-certificates without the middle CAs would not reach the root on agents),
+certificates without the middle CAs would not reach the root on agents;
+with your own console certificate kept as `/etc/openvibes/tls/console-own.crt`
+and `console-own.key` (either file present, `setup::pki_console::own`), the
+console's is copied from them, never issued: `console-chain.pem` 0644 and
+`console-key.pem` 0640 root:openvibes-console, as an issued pair, then the
+same `try-restart`; the check wants that pair to be yours (the certificate
+compared as DER, the key byte for byte) and never asks it to be fresh, from
+the intermediate or to end in `chain.crt`, so renewal and Replace the
+intermediate reissue only the agents' certificates; half a pair fails with
+"… is missing: use your own certificate again in Maintenance › Certificates,
+or go back to the platform's"; Remove everything removes both files with
+`/etc/openvibes/tls`, Keep the data keeps them),
 `console` (`public_origin`
 `https://HOST` or `https://HOST:PORT`, `development_listen` on the chosen
 port with direct TLS, `platform_domain` in `/etc/openvibes/fetch.toml`
