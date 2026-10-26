@@ -141,13 +141,16 @@ fn dns_label(label: &str) -> bool {
 
 /// Whether `host` (lowercase) is one of `hosts`: exactly, or under a
 /// certificate's wildcard `*.x.y`, which covers one label more (`a.x.y`,
-/// not `x.y` or `a.b.x.y`), at the same port as written.
+/// not `x.y` or `a.b.x.y`), at the same port as written. Only a `*.` prefix
+/// is a wildcard (`*foo.x.y` or a bare `*` covers nothing).
 pub(crate) fn host_served(hosts: &[String], host: &str) -> bool {
     hosts.iter().any(|served| {
         served == host
-            || served
-                .strip_prefix('*')
-                .is_some_and(|suffix| host.strip_suffix(suffix).is_some_and(dns_label))
+            || served.strip_prefix("*.").is_some_and(|rest| {
+                (host.strip_suffix(rest))
+                    .and_then(|h| h.strip_suffix('.'))
+                    .is_some_and(dns_label)
+            })
     })
 }
 

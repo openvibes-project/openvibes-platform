@@ -128,10 +128,11 @@ fn plain_http_answer(request: &[u8], to: &PlainHttp) -> Vec<u8> {
 }
 
 /// `name:port` for every name the console's certificate covers (board #71):
-/// the DNS names and IP addresses of its subjectAltName, IPv6 in brackets,
-/// and the bare name too on 443, where browsers leave the port out. The
-/// console serves these besides `public_origin`, so it opens by IP (over a
-/// VPN) or as localhost (through a tunnel).
+/// the DNS names and IP addresses of its subjectAltName, lowercase, IPv6 in
+/// brackets, and the bare name too at any port (browsers leave 443 out, and
+/// a reverse proxy keeps the browser's Host). The console serves these
+/// besides `public_origin`, so it opens by IP (over a VPN), as localhost
+/// (through a tunnel) or through a proxy.
 pub(crate) fn certificate_hosts(pem: &[u8], port: u16) -> Vec<String> {
     use x509_parser::extensions::GeneralName;
     let Some(Ok(der)) = CertificateDer::pem_slice_iter(pem).next() else {
@@ -146,7 +147,7 @@ pub(crate) fn certificate_hosts(pem: &[u8], port: u16) -> Vec<String> {
     let mut hosts = Vec::new();
     for name in &names.value.general_names {
         let host = match name {
-            GeneralName::DNSName(dns) => (*dns).to_owned(),
+            GeneralName::DNSName(dns) => dns.to_ascii_lowercase(),
             GeneralName::IPAddress(bytes) => match <[u8; 4]>::try_from(*bytes) {
                 Ok(v4) => std::net::Ipv4Addr::from(v4).to_string(),
                 Err(_) => match <[u8; 16]>::try_from(*bytes) {
@@ -157,9 +158,7 @@ pub(crate) fn certificate_hosts(pem: &[u8], port: u16) -> Vec<String> {
             _ => continue,
         };
         hosts.push(format!("{host}:{port}"));
-        if port == 443 {
-            hosts.push(host);
-        }
+        hosts.push(host);
     }
     hosts
 }
@@ -218,10 +217,39 @@ mod certificate_hosts_tests {
                 "{want} missing in {hosts:?}"
             );
         }
-        assert!(
-            !hosts.iter().any(|h| h == "metabox-lnx"),
-            "no bare name off 443"
-        );
+        // A reverse proxy keeps the browser's Host, without the port.
+        for want in ["metabox-lnx", "192.168.1.10", "[::1]"] {
+            assert!(
+                hosts.iter().any(|h| h == want),
+                "{want} missing in {hosts:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn behind_a_proxy_the_bare_name_is_served_at_any_port() {
+        use crate::http::middleware::host_served;
+        let hosts = certificate_hosts(pem(&["console.lan"]).as_bytes(), 8443);
+        assert!(host_served(&hosts, "console.lan"));
+        assert!(host_served(&hosts, "console.lan:8443"));
+        assert!(!host_served(&hosts, "other.lan"));
+        assert!(!host_served(&hosts, "console.lan:9443"));
+    }
+
+    #[test]
+    fn uppercase_names_are_served_lowercase() {
+        let hosts = certificate_hosts(pem(&["MetaBox-LNX"]).as_bytes(), 8443);
+        assert_eq!(hosts, ["metabox-lnx:8443", "metabox-lnx"]);
+    }
+
+    #[test]
+    fn only_a_star_dot_prefix_is_a_wildcard() {
+        use crate::http::middleware::host_served;
+        assert!(host_served(&["*.x.y".into()], "a.x.y"));
+        assert!(!host_served(&["*foo.x.y".into()], "afoo.x.y"));
+        assert!(!host_served(&["*foo.x.y".into()], "a.foo.x.y"));
+        assert!(!host_served(&["*".into()], "localhost"));
+        assert!(!host_served(&["*:8443".into()], "localhost:8443"));
     }
 
     #[test]
