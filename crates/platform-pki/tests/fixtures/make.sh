@@ -67,6 +67,21 @@ if [ "${1:-}" = server ]; then
   exit
 fi
 
+# cn_only_step: a server certificate with a common name and no SAN, which
+# covers none of the console's names. Run alone with `make.sh cn-only`.
+cn_only_step() {
+  {
+    echo "basicConstraints = critical, CA:FALSE"
+    echo "keyUsage = critical, digitalSignature"
+    echo "extendedKeyUsage = serverAuth"
+  } > "$TMP/ext"
+  sign server-cn-only.crt server.key "openvibes.limebox.se" issuing.crt issuing.key
+}
+if [ "${1:-}" = cn-only ]; then
+  cn_only_step
+  exit
+fi
+
 rsa root.key 4096
 ca_ext 2
 self_sign root.crt root.key "Lime Lab Root CA"
@@ -157,6 +172,7 @@ openssl pkcs12 -export -legacy -inkey ours-ec.pkcs8.pem -in ours-ec.crt \
   -name "Lime Lab OpenVIBES CA" -certfile "$TMP/legacy-extra.pem" -passout "pass:$PASS" -out legacy.pfx
 
 server_step
+cn_only_step
 
 cat > README <<README
 Test fixtures for platform-pki, made by make.sh with $(openssl version).
@@ -189,6 +205,7 @@ server-expired.crt       the same key, valid until 2026-06-01
 server-future.crt        the same key, valid from 2040-01-01
 server-client-only.crt   the same key, extended key usage clientAuth only
 server.pfx               server.key, server.crt, issuing (AES-256-CBC)
+server-cn-only.crt       server.key, CN openvibes.limebox.se, serverAuth, no SAN
 weak.key                 RSA 1024
 p521.key                 EC P-521
 big.key                  RSA 6144 (over ring's 4096-bit limit)

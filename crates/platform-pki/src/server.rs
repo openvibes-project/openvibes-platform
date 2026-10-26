@@ -182,17 +182,12 @@ fn display_name(cert: &X509Certificate<'_>) -> String {
         .unwrap_or_default()
 }
 
-/// SANs when present, else the common name. A `*.x.y` name covers `a.x.y`
+/// The SANs only, as browsers match them: a certificate with none covers
+/// nothing (its common name is not a name). A `*.x.y` name covers `a.x.y`
 /// only; an IP name matches the same address however it is written.
 fn covered(cert: &X509Certificate<'_>, name: &str) -> bool {
-    let sans = sans(cert);
-    let candidates = if sans.is_empty() {
-        common(cert).map(|cn| (false, cn)).into_iter().collect()
-    } else {
-        sans
-    };
     let wanted_ip = name.parse::<IpAddr>().ok();
-    candidates
+    sans(cert)
         .iter()
         .any(|(is_ip, have)| match (is_ip, wanted_ip) {
             (true, Some(wanted)) => have.parse::<IpAddr>().ok() == Some(wanted),

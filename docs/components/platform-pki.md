@@ -176,8 +176,9 @@ platform's. The check is pure: PEM in, a verdict out.
   name), `covers` (which of `names`), `chain_pem` and `not_after`.
 - `covers(cert, name)`: names compare without regard to case. A DNS name
   `*.x.y` covers `a.x.y` only, not `x.y` and not `a.b.x.y`. An IP name covers
-  the same address however it is written. The common name counts only when
-  there are no SANs.
+  the same address however it is written. Only the SANs count, as in
+  browsers: a certificate with none covers nothing (`CoversNone`), whatever
+  its common name.
 - `check_server_key(&cert, pkcs8_pem) -> KeyInfo`: kinds and sizes as
   `key_info`, and the key must belong to the first certificate
   (`Pki(KeyMismatch)`).

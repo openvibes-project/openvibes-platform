@@ -28,6 +28,7 @@ server-expired.crt       the same key, valid until 2026-06-01
 server-future.crt        the same key, valid from 2040-01-01
 server-client-only.crt   the same key, extended key usage clientAuth only
 server.pfx               server.key, server.crt, issuing (AES-256-CBC)
+server-cn-only.crt       server.key, CN openvibes.limebox.se, serverAuth, no SAN
 weak.key                 RSA 1024
 p521.key                 EC P-521
 big.key                  RSA 6144 (over ring's 4096-bit limit)

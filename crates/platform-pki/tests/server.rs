@@ -10,6 +10,7 @@ const SERVER_KEY: &str = include_str!("fixtures/server.key");
 const EXPIRED: &str = include_str!("fixtures/server-expired.crt");
 const FUTURE: &str = include_str!("fixtures/server-future.crt");
 const CLIENT_ONLY: &str = include_str!("fixtures/server-client-only.crt");
+const CN_ONLY: &str = include_str!("fixtures/server-cn-only.crt");
 const OTHER_KEY: &str = include_str!("fixtures/ours-ec.pkcs8.pem");
 
 fn now() -> DateTime<Utc> {
@@ -83,6 +84,14 @@ fn expired_and_not_yet_valid_are_refused() {
 #[test]
 fn covering_no_name_is_refused() {
     let result = check_server_cert(SERVER, &names(&["limebox.se", "10.0.0.6"]), now());
+    assert_eq!(result.unwrap_err(), ServerCertError::CoversNone);
+}
+
+#[test]
+fn a_common_name_alone_covers_nothing() {
+    let name = names(&["openvibes.limebox.se"]);
+    assert!(!covers(CN_ONLY, "openvibes.limebox.se"));
+    let result = check_server_cert(CN_ONLY, &name, now());
     assert_eq!(result.unwrap_err(), ServerCertError::CoversNone);
 }
 

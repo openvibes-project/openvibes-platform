@@ -53,14 +53,12 @@ pub(super) fn partial(text: &str, names: &[String]) -> Option<String> {
 
 /// What `check_server_cert` calls the first certificate in `pem` (its
 /// first DNS name, else its first address, else its common name), whatever
-/// its dates and names: it is checked for its own names on its last day.
+/// its dates: it is checked for its own names on its last day.
 pub fn name_of(pem: &str) -> Option<String> {
     let names = platform_pki::subject_alt_names(pem).ok()?;
-    let names = if names.is_empty() {
-        vec![platform_pki::common_name(pem).ok()?]
-    } else {
-        names
-    };
+    if names.is_empty() {
+        return platform_pki::common_name(pem).ok();
+    }
     let last = platform_pki::not_after(pem).ok()?;
     platform_pki::check_server_cert(pem, &names, last)
         .ok()
