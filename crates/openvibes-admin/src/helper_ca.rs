@@ -1,5 +1,6 @@
 //! The CA verbs of `openvibes-admin helper`: `ca-request`, `ca-accept`,
-//! `ca-replace`, `ca-import`, `console-cert-set` and `console-cert-reset`, checked as the other verbs are (helper.rs).
+//! `ca-replace`, `ca-import`, `console-cert-set` and `console-cert-reset`,
+//! checked as the other verbs are (helper.rs).
 
 use std::{path::PathBuf, process::ExitCode};
 
