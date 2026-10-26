@@ -13,6 +13,7 @@ pub(crate) mod base;
 #[cfg(test)]
 mod command_tests;
 mod console;
+pub(crate) mod console_cert;
 #[cfg(test)]
 mod fake;
 mod fetch_domain;

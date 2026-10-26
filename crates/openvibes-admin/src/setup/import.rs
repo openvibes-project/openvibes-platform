@@ -102,7 +102,7 @@ pub fn key_message(e: PkiError) -> String {
 
 /// Splits the bundle into its certificates (in order) and its one key,
 /// which comes last. Sentences name labels only, never block contents.
-fn split(bundle: &str) -> Result<(String, Zeroizing<String>), String> {
+pub(super) fn split(bundle: &str) -> Result<(String, Zeroizing<String>), String> {
     let mut certs = String::new();
     let mut key: Option<Zeroizing<String>> = None;
     let mut lines = bundle.lines();

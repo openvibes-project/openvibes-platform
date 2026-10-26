@@ -934,6 +934,31 @@ made with."). The journal line is `ca-import /run/openvibes-import`. The
 CA step and Replace remove the folder with the request; Remove everything
 and the package's removal (`%postun`) remove it too.
 
+`helper console-cert-set` and `helper console-cert-reset` (the console's own
+certificate, 4c; `src/setup/console_cert.rs`, dispatched in `src/helper_ca.rs`).
+`console-cert-set` reads at most 1 MiB from stdin like `ca-import` (the
+certificates, the leaf first, then one `PRIVATE KEY`; `import::split` and
+`read_bundle` are reused) and, under the Setup lock (and `setup_guard`),
+checks everything again: `check_server_cert` against `certificate_names`
+(the plan's names and this host's addresses), `pkcs8_pem`, `check_server_key`.
+Only then it writes the key `/etc/openvibes/tls/console-own.key` (0600 root,
+first) and the certificates `console-own.crt` (0644), each atomically; a
+failed write removes both, so no half a pair stays (the certificates step
+fails on half a pair). Then it runs the certificates step, which installs the
+pair as the console's and restarts it, and prints
+`set<TAB>NAME<TAB>UNTIL` (YYYY-MM-DD). If the step fails the pair stays (it
+was the admin's choice) and the verb exits 1 with "The certificate is kept,
+but installing it failed: DETAIL". `console-cert-reset` removes the key and
+the certificates and runs the step, which issues the platform's console
+certificate again, and prints `reset`; with no own pair it does nothing and
+prints `reset`. Refusals are `setup::console_cert::console_cert_message`'s
+sentences (e.g. "Covers none of this console's names: add one under Names
+first."); the key never reaches argv, the journal or a message. The journal
+lines are `console-cert-set /etc/openvibes/tls/console-own.crt` and
+`console-cert-reset /etc/openvibes/tls/console-own.crt`. The TUI sends them
+as `Call::ConsoleCertSet(Bundle)` (wiped when the run ends) and
+`Call::ConsoleCertReset`, not used by a screen yet.
+
 ## CA commands
 
 The built-in CA (architecture spec, section 5). Keys are written `0600`,

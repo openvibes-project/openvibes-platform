@@ -1,5 +1,5 @@
 //! The CA verbs of `openvibes-admin helper`: `ca-request`, `ca-accept`,
-//! `ca-replace` and `ca-import`, checked as the other verbs are (helper.rs).
+//! `ca-replace`, `ca-import`, `console-cert-set` and `console-cert-reset`, checked as the other verbs are (helper.rs).
 
 use std::{path::PathBuf, process::ExitCode};
 
@@ -43,6 +43,14 @@ pub enum CaCommand {
     /// `imported<TAB>NAME<TAB>PATH<TAB>UNTIL`.
     #[command(name = "ca-import")]
     Import,
+    /// Checks the console's own certificate (the certificates, the leaf
+    /// first, then one PRIVATE KEY; at most 1 MiB) read from standard
+    /// input, keeps it and installs it; prints `set<TAB>NAME<TAB>UNTIL`.
+    #[command(name = "console-cert-set")]
+    ConsoleCertSet,
+    /// Goes back to the platform's own console certificate; prints `reset`.
+    #[command(name = "console-cert-reset")]
+    ConsoleCertReset,
 }
 
 /// A CA verb whose arguments passed the checks.
@@ -51,6 +59,8 @@ pub enum CaVerb {
     Accept(String, String),
     Replace(Option<PathBuf>),
     Import,
+    ConsoleCertSet,
+    ConsoleCertReset,
 }
 
 pub fn verb(command: &CaCommand) -> Result<CaVerb, String> {
@@ -59,6 +69,8 @@ pub fn verb(command: &CaCommand) -> Result<CaVerb, String> {
         CaCommand::Accept { cert, root_cert } => CaVerb::Accept(cert.clone(), root_cert.clone()),
         CaCommand::Replace { root_key } => CaVerb::Replace(absolute(root_key)?),
         CaCommand::Import => CaVerb::Import,
+        CaCommand::ConsoleCertSet => CaVerb::ConsoleCertSet,
+        CaCommand::ConsoleCertReset => CaVerb::ConsoleCertReset,
     })
 }
 
@@ -75,12 +87,19 @@ pub fn run(verb: CaVerb) -> ExitCode {
         CaVerb::Request(copy) => crate::setup::request::run_request(copy.as_deref()),
         CaVerb::Accept(cert, root) => crate::setup::request::run_accept(&cert, &root),
         CaVerb::Replace(root_key) => crate::setup::ca_replace(root_key.as_deref()),
-        CaVerb::Import => match crate::setup::import::read_bundle(&mut std::io::stdin()) {
-            Ok(bundle) => crate::setup::import::run_import(&bundle),
-            Err(error) => {
-                eprintln!("openvibes-admin helper: {error}");
-                ExitCode::FAILURE
-            }
-        },
+        CaVerb::Import => with_bundle(crate::setup::import::run_import),
+        CaVerb::ConsoleCertSet => with_bundle(crate::setup::console_cert::run_set),
+        CaVerb::ConsoleCertReset => crate::setup::console_cert::run_reset(),
+    }
+}
+
+/// Reads the bundle from stdin (at most 1 MiB), then runs the verb on it.
+fn with_bundle(run: fn(&str) -> ExitCode) -> ExitCode {
+    match crate::setup::import::read_bundle(&mut std::io::stdin()) {
+        Ok(bundle) => run(&bundle),
+        Err(error) => {
+            eprintln!("openvibes-admin helper: {error}");
+            ExitCode::FAILURE
+        }
     }
 }

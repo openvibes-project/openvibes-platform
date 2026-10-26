@@ -2,7 +2,8 @@
 //! TUI (admin TUI spec §3): `logs`, `config-read`, `config-write` (through
 //! the RPM's sudoers drop-in), and Setup's `setup-plan`, `setup-status`,
 //! `setup-step`, `update-step`, `remove-step`, `admin-reset`, `shell-open`,
-//! `ca-request`, `ca-accept`, `ca-replace`, `ca-import` (helper_ca.rs),
+//! `ca-request`, `ca-accept`, `ca-replace`, `ca-import`, `console-cert-set`, `console-cert-reset`
+//! (helper_ca.rs),
 //! `unit-enable`, `unit-disable` (only with the user's own sudo rights and
 //! password). A closed set of verbs, each its own function;
 //! arguments are checked against the allow-lists before anything else, and
