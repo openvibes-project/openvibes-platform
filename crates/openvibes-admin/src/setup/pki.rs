@@ -1,6 +1,7 @@
-//! Steps 6–7: the CA (quick or careful) and the server certificates, staged
-//! in `/run/openvibes-ca` (tmpfs, so key copies never reach disk) and
-//! installed where the services read them (packaging.md "First install").
+//! Steps 6–7: the CA (quick, careful or imported) and the server
+//! certificates, staged in `/run/openvibes-ca` (tmpfs, so key copies never
+//! reach disk) and installed where the services read them (packaging.md
+//! "First install").
 
 use std::fs;
 
@@ -14,6 +15,7 @@ use platform_host::{
 
 use super::{
     Ctx,
+    pki_import::{CHAIN, chain_lost, ends_in_chain, import_and_install},
     plan::{CaMode, Component},
     request::REQUEST_DIR,
 };
@@ -23,7 +25,7 @@ pub(super) const INT: &str = "/run/openvibes-ca/int";
 pub(super) const ROOT_DIR: &str = "/run/openvibes-ca/root";
 pub(crate) const INTERMEDIATE: &str = "/etc/openvibes/pki/intermediate.crt";
 /// The root certificate agents trust.
-pub const ROOT_CERT: &str = "/etc/openvibes/pki/root.crt";
+pub const ROOT_CERT: &str = platform_host::ROOT_CERT;
 pub(crate) const INTERMEDIATE_KEY: &str = "/var/lib/openvibes-ingest/intermediate.key";
 pub(super) const ADMIN_OWNER: Option<(&str, &str)> = Some(("openvibes-admin", "openvibes-admin"));
 
@@ -38,7 +40,7 @@ pub fn fingerprint(pem: &str) -> Result<String, String> {
         .join(":"))
 }
 
-fn root_summary<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
+pub(super) fn root_summary<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
     Ok(format!(
         "root certificate {ROOT_CERT}, SHA-256 {}",
         fingerprint(&ctx.read(ROOT_CERT)?)?
@@ -54,7 +56,7 @@ fn careful_help() -> String {
 }
 
 /// The CA files are where the services read them.
-fn installed<R: Runner>(ctx: &Ctx<R>) -> bool {
+pub(super) fn installed<R: Runner>(ctx: &Ctx<R>) -> bool {
     ctx.exists(INTERMEDIATE) && ctx.exists(ROOT_CERT) && ctx.exists(INTERMEDIATE_KEY)
 }
 
@@ -67,6 +69,9 @@ fn key_staged<R: Runner>(ctx: &Ctx<R>) -> bool {
 pub fn ca_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if installed(ctx) && !key_staged(ctx) {
         return Ok(StepState::Done(root_summary(ctx)?));
+    }
+    if ctx.plan.ca == CaMode::Import {
+        return Ok(StepState::Waiting(super::pki_import::HELP.into()));
     }
     let signed =
         ctx.exists(&format!("{INT}/intermediate.crt")) && ctx.exists(&format!("{INT}/root.crt"));
@@ -96,39 +101,25 @@ pub(super) fn stage_dir<R: Runner>(ctx: &Ctx<R>, abs: &str) -> Result<(), String
     ctx.chown(abs, ADMIN_OWNER)
 }
 
-pub(super) fn remove_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
-    fs::remove_dir_all(ctx.path(STAGE)).map_err(|error| format!("{STAGE}: {error}"))
+/// Copies `names` from the root-only `dir` into a fresh `INT` for
+/// openvibes-admin, which cannot read that folder: keys 0600, the rest 0644.
+pub(super) fn stage_from<R: Runner>(ctx: &Ctx<R>, dir: &str, names: &[&str]) -> Result<(), String> {
+    fresh_stage(ctx)?;
+    stage_dir(ctx, INT)?;
+    for name in names {
+        let mode = if name.ends_with(".key") { 0o600 } else { 0o644 };
+        ctx.copy(
+            &format!("{dir}/{name}"),
+            &format!("{INT}/{name}"),
+            ADMIN_OWNER,
+            mode,
+        )?;
+    }
+    Ok(())
 }
 
-/// Imports the signed intermediate and installs the CA files; the staging
-/// directory is left for the caller to remove.
-fn import_and_install<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
-    for file in ["intermediate.crt", "root.crt"] {
-        ctx.chown(&format!("{INT}/{file}"), ADMIN_OWNER)?;
-    }
-    ctx.as_admin(&[
-        "ca",
-        "import-intermediate",
-        "--cert",
-        &format!("{INT}/intermediate.crt"),
-        "--key",
-        &format!("{INT}/intermediate.key"),
-        "--root-cert",
-        &format!("{INT}/root.crt"),
-    ])?;
-    ctx.copy(
-        &format!("{INT}/intermediate.crt"),
-        INTERMEDIATE,
-        None,
-        0o644,
-    )?;
-    ctx.copy(&format!("{INT}/root.crt"), ROOT_CERT, None, 0o644)?;
-    ctx.copy(
-        &format!("{INT}/intermediate.key"),
-        INTERMEDIATE_KEY,
-        Some(("openvibes-ingest", "openvibes-ingest")),
-        0o600,
-    )
+pub(super) fn remove_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+    fs::remove_dir_all(ctx.path(STAGE)).map_err(|error| format!("{STAGE}: {error}"))
 }
 
 /// Writes the root key once to `root_key_out` (never over an existing
@@ -208,16 +199,19 @@ fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     Ok(StepState::Done(format!("{kept}; {}", root_summary(ctx)?)))
 }
 
-/// Removes the request made before install, if any (R2), and the
-/// operator's copy of it.
+/// Removes the request made before install, if any (R2), the operator's
+/// copy of it, and an import's staging.
 pub(super) fn remove_request<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     super::request::remove_copy(ctx);
-    match fs::remove_dir_all(ctx.path(REQUEST_DIR)) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            Err(format!("{REQUEST_DIR}: {error}"))
+    for dir in [REQUEST_DIR, super::import::IMPORT_DIR] {
+        match fs::remove_dir_all(ctx.path(dir)) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{dir}: {error}"));
+            }
+            _ => {}
         }
-        _ => Ok(()),
     }
+    Ok(())
 }
 
 fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -227,20 +221,18 @@ fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Done(root_summary(ctx)?));
     }
     let request = |name: &str| format!("{REQUEST_DIR}/{name}");
-    let names = [
+    let mut names = vec![
         "intermediate.key",
         "intermediate.csr",
         "intermediate.crt",
         "root.crt",
     ];
     if names.iter().all(|name| ctx.exists(&request(name))) {
-        // Staged for openvibes-admin, which cannot read the root-only folder.
-        fresh_stage(ctx)?;
-        stage_dir(ctx, INT)?;
-        for name in names {
-            let mode = if name.ends_with(".key") { 0o600 } else { 0o644 };
-            ctx.copy(&request(name), &format!("{INT}/{name}"), ADMIN_OWNER, mode)?;
+        // The CAs between, when the root did not sign it directly.
+        if ctx.exists(&request("chain.crt")) {
+            names.push("chain.crt");
         }
+        stage_from(ctx, REQUEST_DIR, &names)?;
         import_and_install(ctx)?;
         remove_stage(ctx)?;
         remove_request(ctx)?;
@@ -269,6 +261,7 @@ pub fn ca_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     match ctx.plan.ca {
         CaMode::Quick => quick(ctx),
         CaMode::Careful => careful(ctx),
+        CaMode::Import => super::pki_import::import(ctx),
     }
 }
 
@@ -342,6 +335,9 @@ pub(crate) fn certificate_names<R: Runner>(ctx: &Ctx<R>) -> Vec<String> {
 }
 
 pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    if let Some(lost) = chain_lost(ctx) {
+        return Ok(lost);
+    }
     let names = certificate_names(ctx);
     let wanted = format!("{}\n", names.join("\n"));
     let present = chosen(ctx).all(|tls| ctx.exists(tls.cert) && ctx.exists(tls.key));
@@ -370,6 +366,10 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
             return Ok(StepState::Todo);
         }
     }
+    // After `CHAIN` was installed or changed (Import).
+    if !chosen(ctx).all(|tls| ctx.read(tls.cert).is_ok_and(|pem| ends_in_chain(ctx, &pem))) {
+        return Ok(StepState::Todo);
+    }
     // The console's chain is public (browsers get it anyway) and the TUI,
     // which is not root, reads its expiry: an older install wrote it 0640.
     let world_readable = |path: &str| {
@@ -388,6 +388,9 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
 pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     // Repair's way out of a Replace a crash cut short (key and bundle apart).
     let recovered = super::replace::finish_interrupted(ctx)?.map_or(String::new(), |l| l + "; ");
+    if let Some(lost) = chain_lost(ctx) {
+        return Ok(lost);
+    }
     let names = certificate_names(ctx);
     fresh_stage(ctx)?;
     ctx.copy(
@@ -419,12 +422,15 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
             "--out",
             &out,
         ]);
+        if ctx.exists(CHAIN) {
+            args.extend(["--chain", CHAIN]);
+        }
         ctx.as_admin(&args)?;
         let crt = format!("{out}/{}.crt", names[0]);
         let key = format!("{out}/{}.key", names[0]);
         if tls.console {
             // Already the chain: the leaf, then its issuer (the bundle's
-            // first certificate only).
+            // first certificate only), then `CHAIN`'s CAs.
             let owner = Some(("root", tls.owner));
             ctx.copy(&crt, tls.cert, owner, 0o644)?;
             ctx.copy(&key, tls.key, owner, 0o640)?;

@@ -140,7 +140,7 @@ impl Runner for SystemRunner {
             .stderr(std::process::Stdio::piped())
             .spawn()?;
         // ponytail: stdin is written before output is read; fine because the
-        // helper reads all of stdin (at most 64 KiB) before writing anything.
+        // helper reads all of stdin (at most 1 MiB) before writing anything.
         let written = child
             .stdin
             .take()

@@ -9,6 +9,7 @@ pub mod runner;
 pub mod service;
 pub mod setup;
 pub mod shell;
+mod stderr;
 pub mod unit;
 
 pub use service::{CONFIG_DIR, Service};
@@ -53,6 +54,9 @@ pub struct ServiceStatus {
     pub ready: Option<bool>,
     /// When it became active.
     pub since: Option<String>,
+    /// A timer's last run failed (the certificate timer's service); the
+    /// timer itself goes on.
+    pub last_run_failed: bool,
 }
 
 /// An installed OpenVIBES package and the newer version the repository has.
@@ -98,6 +102,11 @@ pub const CERTIFICATES: [&str; 4] = [
     "/etc/openvibes/tls/console-chain.pem",
     "/etc/openvibes/pki/intermediate.crt",
 ];
+
+/// The root agents trust, and the CAs between it and our intermediate
+/// (an imported or company-signed one under a sub-CA); both 0644.
+pub const ROOT_CERT: &str = "/etc/openvibes/pki/root.crt";
+pub const CHAIN: &str = "/etc/openvibes/pki/chain.crt";
 
 /// The rule signer's `status.json` (operators may read it).
 pub const SIGNER_STATUS: &str = "/var/lib/openvibes-signer/status.json";
@@ -194,6 +203,11 @@ pub trait Host {
     /// Each of [`CERTIFICATES`] that exists, as PEM text.
     fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
         Vec::new()
+    }
+    /// [`ROOT_CERT`] as text and whether [`CHAIN`] exists; `None` without
+    /// a readable root.
+    fn root_and_chain(&self) -> Option<(String, bool)> {
+        None
     }
     /// This host's own global IPv4 addresses ([`host_addresses`]).
     fn addresses(&self) -> Vec<String> {

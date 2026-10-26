@@ -10,7 +10,13 @@ and ingest do the file and database work.
 |---|---|---|---|
 | Root (`OpenVIBES Root CA`) | 10 years (3652 days) | CA, path length 1, keyCertSign + cRLSign | `generate_root(now)`, offline |
 | Intermediate (`OpenVIBES Intermediate CA`) | 2 years (730 days) | CA, path length 0 | key + CSR from `intermediate_request()` on the ingest host; signed offline by `sign_intermediate(&root, csr, now)` (capped at the root's expiry), which refuses a root key that is not the root certificate's (`KeyMismatch`) |
-| Server | 90 days | server auth, SANs from the given names | `Issuer::issue_server(names, now)`; `cert_pem` is leaf + intermediate |
+| Server | 90 days | server auth, SANs from the given names | `Issuer::issue_server(names, now)`; `cert_pem` is leaf + intermediate, then the CAs from `with_chain` |
+
+An intermediate imported from a company PKI takes the place of the one
+above; its root and any CAs between come from the company. Those middle CAs
+are stored apart (`/etc/openvibes/pki/chain.crt`), never as trust anchors: they ride along in
+server certificates (`Issuer::with_chain`) so clients can reach the root,
+while agent client certificates still chain to our intermediate only.
 
 All keys are ECDSA P-256. Serials are 16 bytes whose first two bits are
 `01` (126 random bits), so the DER encoding is always exactly those 16
@@ -43,13 +49,95 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `is_agent_id(id)`: `agent.` + a lowercase hyphenated UUID, matching the
   database CHECK. `issue_client` refuses anything else (`InvalidAgentId`).
 
+## Company keys and `.p12` files
+
+For importing an intermediate from a company PKI. Every key comes out as
+plain PKCS#8 PEM (`Zeroizing`), and has loaded in rcgen once.
+
+- Accepted keys: EC P-256, EC P-384, RSA 2048 to 4096 bits, Ed25519. RSA
+  below 2048 bits is `WeakKey(bits)`; P-521, DSA and RSA above 4096 bits
+  (ring's limit for signing) are `UnsupportedKey`.
+- `pkcs8_pem(key_pem, password)`: the first PEM block (`EC PARAMETERS`
+  and `CERTIFICATE` blocks are skipped, so a file holding the certificate
+  and then its key works), labelled `PRIVATE KEY`, `RSA PRIVATE KEY` (PKCS#1),
+  `EC PRIVATE KEY` (SEC1, must name its curve) or `ENCRYPTED PRIVATE KEY`
+  (PBES2 with an SHA-1 or SHA-2 PRF, AES-CBC or DES-EDE3-CBC). The PKCS#1
+  and SEC1 forms may carry OpenSSL's traditional encryption
+  (`Proc-Type: 4,ENCRYPTED`, `DEK-Info:` AES-128/192/256-CBC or
+  DES-EDE3-CBC; key from EVP_BytesToKey with MD5). No password for a locked
+  key is `KeyLocked`; one that does not open it is `WrongPassword`. Older
+  encryptions (PBES1, other `DEK-Info` ciphers) are `OldEncryption`.
+- `is_locked(key_pem)`: the first key block is `ENCRYPTED PRIVATE KEY` or has a
+  `DEK-Info` header.
+- `key_info(pkcs8_pem) -> KeyInfo`: kind and bits; `Display` gives
+  "an RSA key (3072 bits)", "an EC P-256 key", "an EC P-384 key",
+  "an Ed25519 key".
+- `is_p12(bytes)`: DER (starts with a SEQUENCE), not PEM text.
+- `read_p12(bytes, password) -> P12`: `.p12`/`.pfx` with PBES2 (AES) or
+  legacy 3DES/RC2 (p12-keystore). The first private key as PKCS#8, and every
+  certificate in the file as PEM, the key's own one first (the one with
+  the key's public key, whatever the file's order or key ids). A failed MAC is
+  `WrongPassword`. `P12`'s `Debug` redacts the key. p12-keystore keeps its
+  own copy of the decrypted key, not wiped, until its archive drops at the
+  end of `read_p12`; our copies are wiped (`Zeroizing`).
+
+Fixtures are in `tests/fixtures`, made by `make.sh` (openssl 3.4 or newer);
+its `README` lists them.
+
 ## Interface
 
+- `certificates(pem) -> Vec<Vec<u8>>`: the DER of every `CERTIFICATE`
+  block, in order (text outside blocks ignored, CRLF accepted); none for
+  blank text. Setup compares server certificates with `chain.crt` this way.
+- `common_name(pem) -> String`: the first certificate's common name ("an
+  unnamed CA" without one). The Import screen names ours with it while the
+  chain above is not whole.
+- `check_chain(certs_pem, now) -> Chain`: the first certificate is ours
+  and must not be self-signed (`IsRoot(cn)`), except that a bundle pasted
+  root first takes as ours the one CA in it that is not self-signed and
+  signed no other certificate in it (none, or several, is still
+  `IsRoot`); the path is built from the rest, in any order, CRLF or not, up to a self-signed root. Each link
+  needs both the signature and the issuer name (DER, byte for byte, as
+  agents chain by name). Certificates not on the path are ignored. Every
+  certificate on the path must be a CA with keyCertSign when key usage is
+  present (`NotCa(cn)`); a missing issuer, the root included, is
+  `Missing(issuer cn)`. A CA with path length N may have at most N CAs
+  below it, ours included (`NoCaBelow(cn)`); ours may carry any path
+  length. Ours and every CA between it and the root must have no
+  extended key usage or one naming serverAuth (`NotForServers(cn,
+  KeyUsage)`, the self-check's refusal, made here before any key);
+  anyExtendedKeyUsage alone is refused too, as agents (rustls-webpki)
+  refuse it. Every certificate on the path must have started by `now`
+  (`NotYetValid(latest not_before)`) and stay valid 90 days more
+  (`Expiring(earliest not_after)`). `Chain` holds ours, `middle`
+  (nearest first), `root`, our common name, the names above ours (root
+  last) and the earliest `not_after`. Names without a common name read
+  "an unnamed CA".
+- `check_key(&chain, pkcs8_pem, names, now) -> KeyInfo`: `key_info`, then
+  `Issuer::load` (`Pki(KeyMismatch)`), then a throwaway server certificate
+  for `names` (`openvibes.invalid` when there are none) whose issuer bytes
+  must equal our subject bytes (`Pki(NameMismatch)`): rcgen rebuilds the
+  issuer name, and keeps one attribute per type, so a name with two `DC`s,
+  say, would not chain. Last, the self-check: that certificate is verified
+  as agents verify a server certificate (rustls-webpki, ServerAuth, the
+  ring provider's algorithms), through the middle CAs to the root.
+  A refusal is `NotForServers(cn, ServerLimit)`: `KeyUsage` (an extended
+  key usage without serverAuth), `NameConstraints` (constraints that leave
+  out the names), `OldSignature` (e.g. SHA-1), `UnknownExtension` (a
+  critical extension webpki cannot read) or `Other`. To name the CA at
+  fault, each CA on the path is the trust anchor in turn, ours first: the
+  first refusal is about the CA just moved below the anchor (or the anchor
+  itself, for name constraints). Without names, name constraints are not
+  checked (they would refuse the stand-in, not the host), so callers that
+  know the host's names pass them.
+- `Issuer::with_chain(middle_pem)`: the CAs to append to server
+  certificates (each must parse, `InvalidPem`); blank text means none.
 - `first_certificate(pem)`: the first `CERTIFICATE` block of a bundle as PEM
   (`InvalidPem` if none).
 - `Issuer::load(cert_pem, key_pem)`: issues from the first certificate of a
-  bundle (the new intermediate may precede the old one), so `chain_pem` is
-  leaf plus that certificate only. Refuses a non-CA certificate (`NotCa`)
+  bundle (the new intermediate may precede the old one), so a server
+  certificate's `cert_pem` is the leaf, that certificate, then only the
+  CAs given to `with_chain`. Refuses a non-CA certificate (`NotCa`)
   and a key that does not belong to it (`KeyMismatch`).
 - `verify_signed_by(cert, issuer_cert)`: signature check (`NotSignedBy`).
 - `check_intermediate(cert, root_cert, now)`: a CA with path length 0 that
@@ -61,10 +149,6 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
   by mistake, such as the root, reads as for a different request), a CA
   with path length 0 (`NotCa`), valid at `now` (`IssuerExpired`); returns
   `Signed` (subject and issuer common names, `not_after` as `YYYY-MM-DD`).
-- `check_root_signed(root_cert, cert, now)`: one PEM block, a self-signed CA
-  (`NotRoot`), valid at `now`, that signed `cert` (`NotSignedBy`) and may
-  sign a CA: path length 0 is refused (`RootPathLen0`); returns the root's
-  common name.
 - `sha256_fingerprint(cert)`: SHA-256 of the DER encoding.
 - `is_ca(cert)`: whether the first certificate is a CA (basicConstraints
   CA:TRUE).
@@ -73,7 +157,8 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,
   `InvalidValidity`, `IssuerExpired`, `InvalidAgentId`, `NotIntermediate`,
-  `NotForRequest`, `Several(n)`, `NotRoot`, `RootPathLen0`.
+  `NotForRequest`, `Several(n)`, `KeyLocked`,
+  `WrongPassword`, `WeakKey(bits)`, `OldEncryption`, `NameMismatch`.
   Messages never contain key or certificate material.
 
 ## Test

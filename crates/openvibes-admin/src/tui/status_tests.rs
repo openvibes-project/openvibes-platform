@@ -328,3 +328,90 @@ fn the_highlight_stays_on_its_item_when_the_list_changes_under_it() {
         Item::Service(Unit::Ingest)
     ));
 }
+
+#[test]
+fn a_failed_renewal_is_a_problem_and_home_says_so() {
+    let status = |unit, last_run_failed| platform_host::ServiceStatus {
+        unit,
+        installed: true,
+        enabled: true,
+        active: "active".into(),
+        ready: None,
+        since: None,
+        last_run_failed,
+    };
+    let services = [
+        status(Unit::Ingest, false),
+        status(Unit::Certificates, true),
+    ];
+    let items = items(&services, &[]);
+    assert!(
+        matches!(&items[0], Item::Problem { text, fix: None }
+            if text == "certificate renewal failed: see Status › certificate renewal › Logs"),
+        "{items:?}"
+    );
+    let mut app = app(false);
+    app.services = services.to_vec();
+    app.database.health = Vec::new();
+    let home: String = app
+        .status_line()
+        .spans
+        .iter()
+        .map(|s| s.content.as_ref())
+        .collect();
+    assert!(
+        home.contains("1 thing needs attention · see Status"),
+        "{home}"
+    );
+}
+
+#[test]
+fn home_counts_a_lost_chain() {
+    let mut app = app(false);
+    app.services.retain(|s| s.active == "active");
+    app.database.health = vec![super::database::Check {
+        problem: true,
+        text: "/etc/openvibes/pki/chain.crt is missing: restore it".into(),
+    }];
+    let home: String = app
+        .status_line()
+        .spans
+        .iter()
+        .map(|s| s.content.as_ref())
+        .collect();
+    assert!(
+        home.contains("1 thing needs attention · see Status"),
+        "{home}"
+    );
+}
+
+/// The timer runs on: its page offers Restart and Stop, and says why
+/// Status sent you there.
+#[test]
+fn a_failed_renewal_keeps_the_timers_actions() {
+    let mut app = app(false);
+    app.services = vec![platform_host::ServiceStatus {
+        unit: Unit::Certificates,
+        installed: true,
+        enabled: true,
+        active: "active".into(),
+        ready: None,
+        since: None,
+        last_run_failed: true,
+    }];
+    app.database.health = Vec::new();
+    assert!(
+        matches!(&app.status_items()[0], Item::Problem { text, .. } if text.starts_with("certificate renewal failed"))
+    );
+    app.nav.go(Screen::Service(Unit::Certificates));
+    let text = screen(&app, 80, 24);
+    for want in [
+        "running",
+        "The last renewal failed: see Full log.",
+        "Restart",
+        "Stop",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+    assert!(!text.contains("Start "), "{text}");
+}

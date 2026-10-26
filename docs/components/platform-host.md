@@ -27,7 +27,10 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   (spec §10). `listeners(port)` (Setup's console port row): the
   `ss -ltnpH` lines for that TCP port, by default none.
 - `native::Native<R: Runner>`: the systemd implementation.
-  - services: one `systemctl show --property=… UNITS…`; readiness by
+  - services: one `systemctl show --property=… UNITS…`, plus
+    `openvibes-certificates.service`: when its last run failed, the
+    certificate timer's `last_run_failed` is set (its own state stays as
+    systemd reports it); readiness by
     `curl --silent --fail --max-time 1` on the default loopback endpoints
     (ingest 18480, distribution 18481, vulns 18483, console 18482 `/ready`,
     llm 18430 `/health`), only for active units;
@@ -51,7 +54,8 @@ themselves and other deployments (pods, Kubernetes) can plug in later
     migrate and maintenance are journalled, the CLI writes their audit row;
   - certificates: reads `CERTIFICATES` (`/etc/openvibes/tls/ingest.crt`,
     `distribution.crt`, `/etc/openvibes/pki/intermediate.crt`, all 0644);
-    missing files are left out;
+    missing files are left out; `root_and_chain()` reads `ROOT_CERT` and
+    says whether `CHAIN` exists (Health's lost-chain check; none by default);
   - disk: `df --output=file,size,pcent,avail -h` on `/var/lib/pgsql` and each
     existing `/var/lib/openvibes-*`.
   - listeners: `ss -ltnpH sport = :PORT`, as the user (so processes of
@@ -99,11 +103,20 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   the journal line are what it is for), `ca-request [--copy PATH]` and
   `ca-accept --cert PEM --root-cert PEM` (journalled and audit-noted
   as `ca-request /etc/openvibes/pki/request` and `ca-accept
-  /etc/openvibes/pki/request`, without the copy path or PEM), and
+  /etc/openvibes/pki/request`, without the copy path or PEM),
   `ca-replace [--root-key PATH]` (journalled and audit-noted as
-  `ca-replace /etc/openvibes/pki/intermediate.crt`, without the key path).
+  `ca-replace /etc/openvibes/pki/intermediate.crt`, without the key path),
+  and `ca-import` (`Privileged::CaImport(&Secret)`: the certificates and
+  key go on stdin, never in argv; journalled and audit-noted as
+  `ca-import /run/openvibes-import`).
   `Host::privileged` runs `sudo -S -k -p '' /usr/bin/openvibes-admin helper
   VERB…` with the password on stdin only (never in argv or the journal),
+  followed by the verb's own input (`Privileged::stdin`: `ca-import`'s
+  bundle, after sudo's one password line; as root the helper is run
+  directly with the bundle alone, or stdin closed when there is none;
+  after a wrong password, `sudo -S` may read the bundle's next lines as
+  further attempts, and those are always public certificate lines, since
+  the certificates come before the key),
   journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns
   the helper's stdout. sudo's refusals map to `WrongPassword` ("incorrect
   password") and `NotSudoer` (not in sudoers, or "is not allowed to

@@ -2,8 +2,6 @@
 //! polkit rule (start, stop, restart of the allow-listed units) and the root
 //! helper (`openvibes-admin helper logs`) the RPM installs (admin TUI §3).
 
-use zeroize::Zeroizing;
-
 use crate::{
     CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged, SETUP_FILE,
     Secret, Service, ServiceAction, ServiceStatus, Unit,
@@ -12,49 +10,19 @@ use crate::{
         Program::{Admin, Curl, Df, Dnf, Getent, Ip, Logger, Rpm, Ss, Sudo, Systemctl},
         Runner,
     },
+    stderr::{printable, without_lecture},
 };
 
 const ADMIN: &str = "/usr/bin/openvibes-admin";
 const PROPERTIES: &str = "--property=Id,LoadState,ActiveState,UnitFileState,ActiveEnterTimestamp";
+/// The certificate timer's service: its last run failing is said on the
+/// timer (`last_run_failed`), which keeps going either way.
+const RENEWAL: &str = "openvibes-certificates.service";
 
 /// The systemd backend.
 pub struct Native<R: Runner> {
     /// Runs every command.
     pub runner: R,
-}
-
-/// Error text for a screen: trimmed, control characters escaped.
-fn printable(text: &str) -> String {
-    text.trim()
-        .chars()
-        .map(|c| {
-            if c.is_control() && c != '\n' {
-                c.escape_default().to_string()
-            } else {
-                c.to_string()
-            }
-        })
-        .collect()
-}
-
-/// `stderr` without sudo's first-use lecture, which comes before whatever
-/// went wrong and so stood in for it (board #75): from its first line
-/// through "#3)", and the "password … will not be visible" note after it.
-fn without_lecture(stderr: &str) -> String {
-    let Some(start) = stderr.find("We trust you have received the usual lecture") else {
-        return stderr.to_owned();
-    };
-    let rest = &stderr[start..];
-    let end = rest
-        .find("#3)")
-        .and_then(|at| rest[at..].find('\n').map(|nl| at + nl + 1))
-        .unwrap_or(rest.len());
-    let mut after = &rest[end..];
-    let note = "For security reasons, the password you type will not be visible.";
-    if let Some(stripped) = after.trim_start().strip_prefix(note) {
-        after = stripped;
-    }
-    format!("{}{}", &stderr[..start], after).trim().to_owned()
 }
 
 /// The invoking user for the journal: `$USER` as a hint, the real uid as
@@ -150,11 +118,12 @@ impl<R: Runner> Host for Native<R> {
     fn services(&self) -> Result<Vec<ServiceStatus>, HostError> {
         let mut args = vec!["show", PROPERTIES];
         args.extend(Unit::ALL.map(Unit::name));
+        args.push(RENEWAL);
         let out = self.run(Systemctl, &args)?;
         if out.status != 0 {
             return Err(HostError::Failed(printable(&out.stderr)));
         }
-        let mut services = Vec::new();
+        let mut services: Vec<ServiceStatus> = Vec::new();
         for block in out.stdout.split("\n\n") {
             let field = |name: &str| {
                 block
@@ -163,6 +132,12 @@ impl<R: Runner> Host for Native<R> {
                     .unwrap_or("")
             };
             let Some(unit) = Unit::parse(field("Id")) else {
+                if field("Id") == RENEWAL && field("ActiveState") == "failed" {
+                    let timer = services.iter_mut().find(|s| s.unit == Unit::Certificates);
+                    if let Some(timer) = timer {
+                        timer.last_run_failed = true;
+                    }
+                }
                 continue;
             };
             let active = field("ActiveState").to_owned();
@@ -174,6 +149,7 @@ impl<R: Runner> Host for Native<R> {
                 enabled: field("UnitFileState") == "enabled",
                 ready: if running { self.ready(unit) } else { None },
                 since: (running && !since.is_empty()).then(|| since.to_owned()),
+                last_run_failed: false,
                 active,
             });
         }
@@ -233,26 +209,24 @@ impl<R: Runner> Host for Native<R> {
 
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
         let args = verb.args();
-        let out = if effective_root() {
-            // Already root (started with sudo, #92): run the helper directly,
-            // with no password, keeping SUDO_USER, so Setup still names the
-            // person who started it (operators group, root key owner).
-            let mut argv = vec!["helper"];
-            argv.extend(args.iter().map(String::as_str));
-            self.runner
-                .run(Admin, &argv)
-                .map_err(|error| HostError::Io(format!("{}: {error}", Admin.path())))?
+        let root = effective_root();
+        // Already root (started with sudo, #92): run the helper directly,
+        // with no password, keeping SUDO_USER, so Setup still names the
+        // person who started it (operators group, root key owner).
+        // Otherwise -S: password from stdin; -k: never a cached credential;
+        // -p '': no prompt text mixed into the output.
+        let (program, mut argv) = if root {
+            (Admin, vec![])
         } else {
-            // -S: password from stdin; -k: never a cached credential; -p '':
-            // no prompt text mixed into the output.
-            let mut argv = vec!["-S", "-k", "-p", "", ADMIN, "helper"];
-            argv.extend(args.iter().map(String::as_str));
-            let mut input = Zeroizing::new(password.expose().as_bytes().to_vec());
-            input.push(b'\n');
-            self.runner
-                .run_with_input(Sudo, &argv, &input)
-                .map_err(|error| HostError::Io(format!("{}: {error}", Sudo.path())))?
+            (Sudo, vec!["-S", "-k", "-p", "", ADMIN])
         };
+        argv.push("helper");
+        argv.extend(args.iter().map(String::as_str));
+        let out = match verb.stdin((!root).then_some(password)) {
+            Some(input) => self.runner.run_with_input(program, &argv, &input),
+            None => self.runner.run(program, &argv),
+        }
+        .map_err(|error| HostError::Io(format!("{}: {error}", program.path())))?;
         // A step that ran but failed exits 0 with its state first.
         let outcome = match (out.status, out.stdout.split('\t').next()) {
             (0, Some(state @ ("failed" | "waiting" | "todo"))) => state,
@@ -353,6 +327,11 @@ impl<R: Runner> Host for Native<R> {
                 Err(error) => Some((path, Err(HostError::Failed(format!("{path}: {error}"))))),
             })
             .collect()
+    }
+
+    fn root_and_chain(&self) -> Option<(String, bool)> {
+        let root = std::fs::read_to_string(crate::ROOT_CERT).ok()?;
+        Some((root, std::path::Path::new(crate::CHAIN).exists()))
     }
 
     fn signer(&self) -> Option<crate::SignerFiles> {

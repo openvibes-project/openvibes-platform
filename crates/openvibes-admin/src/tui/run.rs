@@ -43,6 +43,18 @@ pub enum Call {
     CaAccept(String, String),
     /// `ca-replace [--root-key PATH]`: a new intermediate beside the old one.
     CaReplace(Option<String>),
+    /// `ca-import`: a company intermediate, its chain and key, on stdin.
+    CaImport(Bundle),
+}
+
+/// `ca-import`'s certificates and key; Debug never shows them.
+#[derive(Clone, Eq, PartialEq)]
+pub struct Bundle(pub zeroize::Zeroizing<String>);
+
+impl std::fmt::Debug for Bundle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("..")
+    }
 }
 
 /// A stop at a main call in `from..to` runs `calls` next, same password.
@@ -63,6 +75,15 @@ pub struct Work {
 }
 
 impl Work {
+    /// Wipes the key any `ca-import` call carries: the run is over.
+    pub fn wipe(&mut self) {
+        for call in &mut self.calls {
+            if let Call::CaImport(bundle) = call {
+                zeroize::Zeroize::zeroize(&mut *bundle.0);
+            }
+        }
+    }
+
     /// Every call is its own row (the caller titles them).
     pub fn new(kind: Kind, calls: Vec<Call>) -> Work {
         let labels = (0..calls.len())
@@ -125,6 +146,10 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::CaRequest(copy) => host.privileged(Privileged::CaRequest(copy.as_deref()), secret),
         Call::CaAccept(cert, root) => host.privileged(Privileged::CaAccept(cert, root), secret),
         Call::CaReplace(key) => host.privileged(Privileged::CaReplace(key.as_deref()), secret),
+        Call::CaImport(bundle) => {
+            let bundle = Secret::new(String::clone(&bundle.0));
+            host.privileged(Privileged::CaImport(&bundle), secret)
+        }
     }
 }
 
@@ -259,18 +284,14 @@ impl Run {
         self.states.get(self.work.calls.len() + j)?.as_ref()
     }
 
-    /// How long it took: "2 min 41 s", "12 s".
+    /// How long it took, to end a result line: " (2 min 41 s)", " (12 s)";
+    /// nothing under a second.
     pub fn took(&self) -> String {
-        let s = self
-            .ended
-            .unwrap_or_else(Instant::now)
-            .saturating_duration_since(self.started)
-            .as_secs();
-        if s >= 60 {
-            format!("{} min {} s", s / 60, s % 60)
-        } else {
-            format!("{s} s")
-        }
+        took(
+            self.ended
+                .unwrap_or_else(Instant::now)
+                .saturating_duration_since(self.started),
+        )
     }
 
     /// Takes one result; true when the password was wrong.
@@ -350,4 +371,27 @@ pub struct Asking {
     pub prompt: PasswordPrompt,
     /// Asked again after a wrong password: the same run goes on.
     pub resume: bool,
+}
+
+/// `took` for any wait: " (2 min 41 s)", " (12 s)"; nothing under a second.
+pub(super) fn took(waited: std::time::Duration) -> String {
+    match waited.as_secs() {
+        0 => String::new(),
+        s @ 1..60 => format!(" ({s} s)"),
+        s => format!(" ({} min {} s)", s / 60, s % 60),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_bundle_is_never_printed() {
+        let bundle = super::Bundle(zeroize::Zeroizing::new(
+            "-----BEGIN PRIVATE KEY-----".into(),
+        ));
+        assert_eq!(
+            format!("{:?}", super::Call::CaImport(bundle)),
+            "CaImport(..)"
+        );
+    }
 }

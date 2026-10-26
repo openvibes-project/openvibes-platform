@@ -71,10 +71,10 @@ impl<H: Host> App<H> {
             self.outcome = Some((
                 true,
                 format!(
-                    "{} {} ({} s)",
+                    "{} {}{}",
                     unit.label(),
                     done_text(action),
-                    waited.as_secs()
+                    super::run::took(waited)
                 ),
             ));
             self.load_logs();

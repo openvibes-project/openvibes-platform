@@ -48,6 +48,7 @@ fn status(unit: Unit, installed: bool, active: &str, ready: Option<bool>) -> Ser
         active: active.into(),
         ready,
         since: None,
+        last_run_failed: false,
     }
 }
 

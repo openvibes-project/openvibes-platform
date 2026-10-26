@@ -62,7 +62,11 @@ full, wrapped over up to 3 dim lines (cut with `…` only after the third). A pr
 installed unit that is failed or inactive (`■ NAME is stopped`; not the
 model server or the maintenance timer, which idle by design), a unit not
 enabled at boot (`▲ NAME does not start at boot`; there is no boot switch),
-or a health check (certificates, disk, feeds, signer, audit, tuning). `Enter`
+a certificate renewal whose last run failed (`openvibes-certificates.service`
+failed, `ServiceStatus::last_run_failed`; its timer keeps its own state and
+actions, and its Service page adds "▲ The last renewal failed: see Full log.":
+"certificate renewal failed: see Status › certificate renewal › Logs"),
+or a health check (certificates, a lost `chain.crt`, disk, feeds, signer, audit, tuning). `Enter`
 on a service opens it; on a stopped or not-enabled unit it starts or enables
 it (a Yes/No question in the bar, or the sudo password typed in the bar;
 see Service); on a health problem or a check it does nothing. A refresh
@@ -79,7 +83,7 @@ Yes/No question in the bar (`Restart ingest?` with what it means as detail;
 `←`/`→` or `y`/`n` choose, `Enter` confirms, `Esc` is No). Yes sends the
 action and the bar shows a spinner (`Restarting ingest…`) while the screen
 polls the unit about once a second. It ends in one result line, kept until
-the next key: `✓ ingest restarted and ready (N s)` when the unit is active
+the next key: `✓ ingest restarted and ready (N s)` (no time under a second, as every result line) when the unit is active
 (and not "not ready"; Stop: not active; Restart: also a new start time,
 since the restart is queued and the old process answers until then), or `✗ NAME did not start within 30 s:
 <its last journal line>` after `ACTION_TIMEOUT` (30 s); a refusal (not an
@@ -114,12 +118,22 @@ addresses, and certificates once the host is set up.
   it, #115), 5 Review (every choice on one screen; Enter on a line goes
   back to its step; Install asks for the password once, and when sudo asks
   none its row reads "install now" and its help leaves the password out).
-- *Certificates* (step 3): your own CA (the default) or OpenVIBES makes one
-  (then the root key file is asked). With your own CA, Next first makes the
+- *Certificates* (step 3): your own CA (the default), Import from your PKI,
+  or OpenVIBES makes one (then the root key file is asked). Import takes a
+  finished intermediate and its key: the Certificate row takes the chain
+  (ours first, then each CA above it, ending with the root) by paste or a
+  file, or a .p12 / .pfx whose password is asked in the bar ("Its
+  password", not sudo's), which fills both rows; the Private key row takes
+  a PEM key, and a locked one asks its password in the bar too. Each is
+  checked at once in the TUI, which decrypts the key; Next sends the chain
+  and the plain PKCS#8 key to `helper ca-import` on stdin (never argv)
+  under the sudo password, and the decrypted key is forgotten once the
+  helper has it, or when Import or the step is left. With your own CA, Next first makes the
   request, before anything is installed: `helper ca-request` writes
   `/etc/openvibes/pki/request/` (the request and what is needed to sign
   it) and the screen shows the request to copy. The two certificates (the
-  signed one and your CA's) are then added by paste box (a bracketed paste
+  signed one, and your CA's: the CA that signed it, then each CA above it
+  up to the root) are then added by paste box (a bracketed paste
   arrives whole; without it, lines are typed and Enter adds a line until an
   `-----END` line) or "From a file on this host" (a file browser). Each is
   checked at once in the TUI; once both are in, `helper ca-accept` checks
@@ -229,15 +243,15 @@ to the journal (`config-write SERVICE ok|failed`, never the content).
 
 **Ports and addresses** (Maintenance): lists the console's port with its web address (`:port` only when not 443), Agent connections (ingest), Rule distribution and Network devices (`514/udp`, information only). Enter on a port types a new one (digits, at most five), checked at once by `port_note`: free on this host (the row's saved port counts as free, the platform's own service holds it), used by another program (`Host::listeners`), already used by another row, or refused (zero, reserved, not a number, below 1024 for Agent connections and Rule distribution, whose units cannot bind low ports; `check_ports` refuses the same for the CLI and Setup), or a port another row is leaving only at Apply; an `Err` is red and Enter then does nothing, Esc keeps the old value. A changed row shows `* name` and `new · was old`; the Apply row appears only then and says whether agents need their install line again. Apply asks ("Move agents to <p>?", "Move distribution to <p>?", "Move the console to <p>?", "Move <n> ports?") and is refused up front as Optional parts' is (other work running, a half-done job, a changed or older plan). One run: Save the ports (`setup-plan` with the whole edited plan), Restart with the new port (Repair Packages to Console and Services), Open the new port (Firewall to Agent), Close the old port (Ready), Ready (model step and status). A failed run reopens on Try again. Tests: `src/tui/maint/ports_tests.rs`.
 
-**Certificates** (Maintenance, after Ports and addresses; `src/tui/maint/certs.rs`, certs2.py, certs4a.py): a report read from the certificate files (`Host::certificates()`), not the plan. Web and agents comes from the earliest of `ingest.crt`, `distribution.crt` and `console-chain.pem`: green `renewed automatically` · `next <end − RENEW_AT_DAYS (30)>`, `· due today` once that date is today or past, and red `renewal is failing · see Status` with fewer than `RENEW_DAYS` (14) left (rule 34: no Renew button). Names (the SANs of `ingest.crt`), Intermediate (its first certificate: `signed by <issuer CN, bold> · until <date>` with your own CA, `signed by the OpenVIBES root · until <date>` for a quick CA), Previous intermediate (dim `trusted until <date>, as agents move over`, only while `/etc/openvibes/pki/previous.crt` exists; the date from `previous-until`, RFC 3339, both 0644) and, for a quick CA, Root key (`offline: needed only to replace the intermediate`). With no certificate it says `No certificates yet: run Repair.` Two entries: Names (opens the Names page; coming back, Esc or Enter, reads the files again) and Replace the intermediate (`a new request for your CA`, or `needs the offline root key file` for a quick CA). While the previous intermediate is trusted, Enter on Replace opens nothing and says in red `The previous intermediate is still trusted until <date>, while agents move over: replace it again after that.` (`setup::replace::still_trusted`, the helper's own refusal); any move or Enter takes it away. The Maintenance menu's line is `signed by <issuer CN> · until <date>`, the date being `ingest.crt`'s, the issuer the intermediate's; `cannot be read` when either cannot, `no certificates yet` without `ingest.crt`. Tests: `src/tui/maint/certs_page_tests.rs`.
+**Certificates** (Maintenance, after Ports and addresses; `src/tui/maint/certs.rs`, certs2.py, certs4a.py, certs4b.py #10): a report read from the certificate files (`Host::certificates()`), not the plan; how the CA was made (`CaMode`) is the plan's. Web and agents comes from the earliest of `ingest.crt`, `distribution.crt` and `console-chain.pem`: green `renewed automatically` · `next <end − RENEW_AT_DAYS (30)>`, `· due today` once that date is today or past, and red `renewal is failing · see Status` with fewer than `RENEW_DAYS` (14) left (rule 34: no Renew button). Names (the SANs of `ingest.crt`), Intermediate (its first certificate: `signed by <issuer CN, bold> · until <date>` with your own CA, `signed by the OpenVIBES root · until <date>` for a quick CA, `from your PKI · until <date>` for an imported one, then Signed by: the CNs of `chain.crt`'s CAs and of `root.crt`, joined ` › `, the root bold; for an import always (just the root for a two-level PKI), in every other mode whenever `chain.crt` exists; red `chain.crt is missing` instead, in any mode, when it is gone and the root did not sign ours itself, `setup::pki_import::lost`), Previous intermediate (dim `trusted until <date>, as agents move over`, only while `/etc/openvibes/pki/previous.crt` exists; the date from `previous-until`, RFC 3339, both 0644) and, for a quick CA, Root key (`offline: needed only to replace the intermediate`). With no certificate it says `No certificates yet: run Repair.` Two entries: Names (opens the Names page; coming back, Esc or Enter, reads the files again) and Replace the intermediate (`a new request for your CA`, `needs the offline root key file` for a quick CA, or `import the next one from your PKI`). While the previous intermediate is trusted, Enter on Replace opens nothing and says in red `The previous intermediate is still trusted until <date>, while agents move over: replace it again after that.` (`setup::replace::still_trusted`, the helper's own refusal); any move or Enter takes it away. The Maintenance menu's line is `signed by <issuer CN> · until <date>`, the date being `ingest.crt`'s, the issuer the intermediate's; `cannot be read` when either cannot, `no certificates yet` without `ingest.crt`. Agents pin the root (`root.crt`, the install line's fingerprint): with your own CA or one imported from your PKI that is the company root, so any certificate the company PKI issues for this host's names also passes on agents. This is a design choice (decisions.md), not a gap: whoever runs that PKI is trusted as this host is. Before any intermediate from a company PKI is used (import, `ca-accept`, every Replace but the OpenVIBES-made one), the self-check verifies a throwaway server certificate as agents do (platform-pki `check_key`): one agents would refuse is refused there ("X may not sign server certificates (its extended key usage): ask for one without that limit."). Tests: `src/tui/maint/certs_page_tests.rs`.
 
-**Certificates › Replace** (`src/tui/maint/replace.rs`; certs2.py #3-4, certs4a.py #2-10): one `helper ca-replace [--root-key PATH]` run (`Kind::Replace`, `Call::CaReplace`). *Your own CA*: the note `The same steps as at install. Nothing changes until Replace.`, then Show the request, Signed certificate, Your CA's certificate (`✓ <CN> (kept)`: `/etc/openvibes/pki/root.crt`, read as the operator) and Replace. Opening it makes or reuses the request with `ca-request` (the password in the bar) into the install's own state (`App.install`, its host name set from the plan); Show the request and Signed certificate open the install's screens as they are (request, the two ways, paste box, file pick; their location reads ` · Install › Certificates › …`), and Use it runs `ca-accept` with the kept root as the root PEM. Replace is enabled once the signed certificate is kept (`Install::accepted`). *OpenVIBES made the CA*: the note `Needs the root key kept offline at install. Nothing changes until Replace.`, then Root key file and Replace. Enter opens the install's file browser (`Browse::files_at` the operator's home, `ca_request::pick`); the file picked is read at once (as the operator, at most 64 KiB, `ca_request::read`) and checked with `Issuer::load(root.crt, key)`, as the helper checks it again as root: green `✓ The key matches the OpenVIBES root on this host.` (and the cursor on Replace) or red `✗ Not the key of this host's root: pick the root key kept at install.` (`setup::replace::NOT_THE_KEY`); a path under the home shows as `~/…`. Enter on Replace asks `Replace it?` · `agents keep working` (on Yes; short enough for the Yes / No buttons at 80 columns, ruling 10), then the sudo password in the bar (`Enter Replace`), then the step list: Making the new intermediate (quick only), Trusting the old and the new one, Issuing the server certificates, Restarting the services. While it runs, the helper also writes each finished stage line to `/run/openvibes-admin/ca-replace-progress` (0644, replaced whole through `model_progress::replace_file`, emptied when a run starts, removed when it succeeds; a failed run's file stays until the next run, a reboot or uninstall, whose last step removes it with the model download's); the TUI reads it on each draw, as the model download's, and shows `⠹ Step N of M: <step>` with the running row bold (Issuing adds `ingest, distribution, console`) and the later ones dim. Once done, the rows are ticked from the lines it printed. One result line: `Replaced · agents move over in <client days> days · put the key offline again (<time>)` for a quick CA, without the key clause for your own CA; the days are `previous-until` (from the `done<TAB>NEW<TAB>PREVIOUS` line) less today, less the one day the helper adds. A failure ticks the stages the progress file lists, marks the next ✗, leaves the rest dim and shows the helper's sentence in red. Enter (or Esc) goes back to Certificates, on Names, which shows the previous intermediate. Esc before Replace changes nothing (with your own CA only `ca-request` has run). Shared with the install: `src/tui/ca_request.rs` (the helper's sentence, the file browser's keys, the capped read). Tests: `src/tui/maint/replace_tests.rs`.
+**Certificates › Replace** (`src/tui/maint/replace.rs`, `replace_import.rs`, `replace_own.rs`; certs2.py #3-4, certs4a.py #2-10, certs4b.py #11): one run (`Kind::Replace`) of `helper ca-replace [--root-key PATH]` (`Call::CaReplace`), or, for an import, `ca-import` then `ca-replace`. *Imported from your PKI*: the note `The same screens as at install. Nothing changes until Replace.`, then Certificate, Private key (the install's Import rows, screens, paste, file, .p12 and password bar as they are; `Install::import_rows`; their location reads ` · Maintenance › Certificates › Replace › Certificate` or `› Private key`, and after a .p12 the page says "From <file>. Delete that file now: its key is kept here." under its line, `Install::p12_hint`) and Replace (`agents move over in <client_certificate_days> days`, read with `config-read ingest`, 30 when it cannot be). Both added, the chain is checked here: its root must be this host's `root.crt` (as DER), else the red `Replace: under …` line (`setup::import::another_root`), and ours must not be the intermediate in use (the bundle's first certificate), else red `This is the intermediate already in use: ask your PKI for a new one.` (`setup::import::IN_USE`); otherwise green `✓ Under the same root: agents keep working.` and Enter on Replace asks the question below. Only Yes sends anything: one run (`Kind::Replace`) of `ca-import` (`Install::import_call`, the bundle on stdin) then `ca-replace`, under one password; the helper checks everything again, and a refusal by `ca-import` stops the run with its sentence in red, no `ca-replace`. No and Esc stage nothing. The run's bundle is wiped and the key forgotten once it ends; Esc forgets the import. *Your own CA*: the note `The same steps as at install. Nothing changes until Replace.`, then Show the request, Signed certificate, Your CA's certificate (`✓ <CN> (kept)`: `/etc/openvibes/pki/root.crt` then `chain.crt`'s CAs when there is one, read as the operator; Enter adds them again, as at install, since a new intermediate may come from another CA under the same root: the row then reads as the install's) and Replace. Opening it makes or reuses the request with `ca-request` (the password in the bar) into the install's own state (`App.install`, its host name set from the plan); Show the request and Signed certificate open the install's screens as they are (request, the two ways, paste box, file pick; their location reads ` · Maintenance › Certificates › Replace › …`, as for any install screen opened from Replace), and Use it runs `ca-accept` with the kept CAs (or those added again) as the CAs' PEM; a different root is refused by `ca-replace` ("Your CA's certificate is not this host's root: agents trust only that one."). Replace is enabled once the signed certificate is kept (`Install::accepted`). *OpenVIBES made the CA*: the note `Needs the root key kept offline at install. Nothing changes until Replace.`, then Root key file and Replace. Enter opens the install's file browser (`Browse::files_at` the operator's home, `ca_request::pick`); the file picked is read at once (as the operator, at most 64 KiB, `ca_request::read`) and checked with `Issuer::load(root.crt, key)`, as the helper checks it again as root: green `✓ The key matches the OpenVIBES root on this host.` (and the cursor on Replace) or red `✗ Not the key of this host's root: pick the root key kept at install.` (`setup::replace::NOT_THE_KEY`); a path under the home shows as `~/…`. Enter on Replace asks `Replace it?` · `agents keep working` (on Yes; short enough for the Yes / No buttons at 80 columns, ruling 10), then the sudo password in the bar (`Enter Replace`), then the step list: Making the new intermediate (quick only; your own CA and an imported one show the last three), Trusting the old and the new one, Issuing the server certificates, Restarting the services. While it runs, the helper also writes each finished stage line to `/run/openvibes-admin/ca-replace-progress` (0644, replaced whole through `model_progress::replace_file`, emptied when a run starts, removed when it succeeds; a failed run's file stays until the next run, a reboot or uninstall, whose last step removes it with the model download's); the TUI reads it on each draw, as the model download's, and shows `⠹ Step N of M: <step>` with the running row bold (Issuing adds `ingest, distribution, console`) and the later ones dim. Once done, the rows are ticked from the lines it printed. One result line: `Replaced · agents move over in <client days> days · put the key offline again (<time>)` for a quick CA (the time, as on every Maintenance result line, is left out under a second: `Run::took`), without the key clause for your own CA; the days are `previous-until` (from the `done<TAB>NEW<TAB>PREVIOUS` line) less today, less the one day the helper adds. A failure ticks the stages the progress file lists, marks the next ✗, leaves the rest dim and shows the helper's sentence in red. Enter (or Esc) goes back to Certificates, on Names, which shows the previous intermediate. Esc before Replace changes nothing (with your own CA only `ca-request` has run). Shared with the install: `src/tui/ca_request.rs` (the helper's sentence, the file browser's keys, the capped read). Tests: `src/tui/maint/replace_tests.rs`, `replace_import_tests.rs`.
 
 **Certificates › Names**: Host name, one Other name row per SAN of the plan, Add a name (at most 16 other names, `plan::MAX_SANS`) and, once something changed, Apply. Enter types a value, checked at once by the plan's own rules (`plan::check_name` for the host name, `plan::check_san` for other names: a lowercase DNS name or an IP address; letters are lowercased as typed, and `PlanArgs::plan` lowercases the host name and every SAN, so Setup and the CLI store them lowercase too); a red note keeps Enter from doing anything, Esc cancels. Enter on an emptied Other name removes it; the Host name cannot be emptied. Apply asks "Issue new certificates?" ("for these names") and is refused up front as Optional parts' is (other work running, a half-done job, a changed or older plan). One run: Save the names (`setup-plan` with the whole edited plan), New certificates (Repair Packages to Certificates), Restart services (Console to Agent), Ready. The result line reads the new `ingest.crt` again for `valid until <date>`. The Certificates step itself runs `systemctl try-restart openvibes-ingest openvibes-distribution openvibes-console` after issuing (the services read their certificate at start; none reloads it, and a stopped service is left stopped). Tests: `src/tui/maint/certs_tests.rs`.
 
-**Install, in detail** (`src/tui/install/`): `Install` holds the choices (agent, assistant, names, `Ca::Own` or `Ca::OpenVibes`, root key file, three ports) and writes the `setup-plan` arguments (`--ca careful|quick`; `--root-key-out` only with OpenVIBES' own root; `--model fetch` with the assistant). The install runs on the worker (`Kind::Install`, the password asked once in the bar; root is not asked) as `setup-plan` then `setup-step STEP` (no `--repair`), in rows: Packages (holds the plan), PostgreSQL, Database, Certificate authority, Certificates, Console, Services, Firewall, Baseline rules, Agent on this host (only when ticked), Ready, Assistant (only when ticked, last; its failure never stops the run; while it runs its row reads `Assistant  1.2 of 2.7 GB`, from the progress file Optional parts reads, through the same `maint::with_progress`). Installing shows `Step N of M: TITLE`; a stop shows ✗ with the reason, Enter is Try again (resumes at that step) and Esc goes back where the install began (`Install.origin`: Quick install, or Review, `Stage::Step(4)`) while there is no CA, to Home once there is. Finished (`install/finished.rs`) shows the console address (with the port when not 443), `admin`, the generated password once, then the root key file or "signed by X", and Enter goes Home, reading the health checks again first so Home's count matches Status. A host without `setup.toml` opens on **Welcome** (`install/welcome.rs`: Choose what to install, Quick install, Quit; `q` quits). **Quick install** (`install/quick.rs`; location ` · Install › Quick install`) asks only Host name, Other names, Root key file (edited in place: Enter types, Enter keeps, Esc cancels), "Agent on this host" (ticked; Space) and Install; it installs the core components, OpenVIBES' own CA (`--ca quick --root-key-out`), the default ports and no assistant. A default port another program holds gets the free one `fields::propose_ports` finds, and the Install row's help line says so ("443 is in use by nginx: the console uses 8443"). `install/fields.rs` holds the shared checks: `check_names` (host name and other names, as the plan checks them), `check_root_key` (absolute, new: a dangling link counts as there; in an existing folder that is a folder; the CA step checks the same before `ca init-root`) and `Install::problem`, whose first flagged field is said in red under the list; Install does nothing while one is flagged. **Choose what to install** (`install/steps.rs`, `review.rs`, `certs.rs`, `paste.rs`; advanced.py, ca.py, ca2.py, full_advanced.py) is five steps under a steps line (`✓ done · ● current · ○ to come`; location ` · Install › Optional|Names|Certificates|Ports|Review`). Enter on Next moves on, Esc goes back a step. *Optional*: Agent on this host (ticked) and Assistant (2.7 GB download; its help line gives the model's licence link, broken after a `/`), Space ticks; the core is always installed. *Names*: host name and other names edited in place (empty Other names read `none`, as on Quick install, until typed); a bad one is said in red and Next refuses. *Certificates*: "(•) Your own CA" (default, `--ca careful`) or "( ) OpenVIBES makes one" (`--ca quick`, which adds a Root key file row checked by `fields::check_root_key`); Space chooses. With your own CA, Next runs `helper ca-request --copy ~/openvibes-intermediate.csr` (the helper takes its own copy there again, or writes `-2`, `-3`… beside another file, and says which in its `copy<TAB>PATH` line) through the worker (`Kind::Ca`, password in the bar), and the step shows Show the request, Signed certificate, Your CA's certificate and Next ("once both are added", disabled). Show the request (` › Certificates › Request`) shows the PEM to copy with the terminal and where the copy was saved (⭡⭣ scroll, the END line kept in view). Each certificate is added by "Paste it" or "From a file on this host" (the folder browser of `maint/folder.rs` in files mode, `Browse::open_files`; a file is read up to 64 KiB into the paste box, then titled for the file, e.g. "Your CA's certificate, from root.crt"; a file holding a `PRIVATE KEY` PEM block is refused in the browser, "That file holds a private key: pick the certificate.", as is one holding no `-----BEGIN CERTIFICATE-----` block, "That file holds no certificate: pick the certificate."; a refused file's text is never kept or shown, and each pick or folder clears the last refusal). The paste box checks in-process at once (`platform_pki::check_signed_request` against the request, `check_root_signed`; the sentences are `setup::request::message`'s, e.g. "That is 2 certificates: paste only the one signed for OpenVIBES."); Enter is "Use it" only once an `-----END` line is there and the check passed, and before that adds a new line (terminals without bracketed paste send the lines as keys). Both added, `helper ca-accept` checks and keeps them; on success `Install.signed` is the issuer (Finished then says "signed by X") and Next goes on. Install with your own CA is refused until then: the careful CA step would otherwise make a new request that does not match what the CA signed. With a request already signed (`signed<TAB>ISSUER` from `ca-request`, e.g. after a restart), both rows show "✓ added". A refused `ca-accept`, or Esc back to the choice, forgets both certificates added, so both rows can be added again. Helper failures show only their sentence (the `openvibes-admin helper: ` prefix is dropped). *Ports*: Console, Agent connections, Rule distribution (Enter types, checked as typed with `maint::ports::port_note`; Enter keeps only a usable port), Network devices (514/udp, said, not edited); a moved default reads "443 is in use by nginx · 8443 proposed" in yellow until Enter keeps it or a digit types another. *Review*: Optional, Names, Certificates ("your own CA · ✓ signed by X" or "OpenVIBES makes one · PATH"), Ports and Install; Enter on a line goes to its step, Enter on Install asks the password once in the bar and runs the install; what still blocks it is said in red. The TUI turns bracketed paste on at start and off on every path that gives the terminal back (quit, the shell, the new version, a panic); a paste arrives whole as `Key::Paste`, which only the paste box takes: a field being typed or a password in the bar takes its characters without line ends, and anywhere else it is dropped (a stray paste never presses Enter or `q`). Tests: `src/tui/install/run_tests.rs`, `quick_tests.rs`, `steps_tests.rs`, `certs_tests.rs`, `certs_accept_tests.rs`.
+**Install, in detail** (`src/tui/install/`): `Install` holds the choices (agent, assistant, names, `Ca::Own`, `Ca::Import` or `Ca::OpenVibes`, root key file, three ports) and writes the `setup-plan` arguments (`--ca careful|import|quick`; `--root-key-out` only with OpenVIBES' own root; `--model fetch` with the assistant). The install runs on the worker (`Kind::Install`, the password asked once in the bar; root is not asked) as `setup-plan` then `setup-step STEP` (no `--repair`), in rows: Packages (holds the plan), PostgreSQL, Database, Certificate authority, Certificates, Console, Services, Firewall, Baseline rules, Agent on this host (only when ticked), Ready, Assistant (only when ticked, last; its failure never stops the run; while it runs its row reads `Assistant  1.2 of 2.7 GB`, from the progress file Optional parts reads, through the same `maint::with_progress`). Installing shows `Step N of M: TITLE`; a stop shows ✗ with the reason, Enter is Try again (resumes at that step) and Esc goes back where the install began (`Install.origin`: Quick install, or Review, `Stage::Step(4)`) while there is no CA, to Home once there is. Finished (`install/finished.rs`) shows the console address (with the port when not 443), `admin`, the generated password once, then the root key file, or the root certificate's path (or "signed by X") with its SHA-256 whole under it (`Root CA SHA-256`, 16 bytes a line, since it is compared by hand), and Enter goes Home, reading the health checks again first so Home's count matches Status. A host without `setup.toml` opens on **Welcome** (`install/welcome.rs`: Choose what to install, Quick install, Quit; `q` quits). **Quick install** (`install/quick.rs`; location ` · Install › Quick install`) asks only Host name, Other names, Root key file (edited in place: Enter types, Enter keeps, Esc cancels), "Agent on this host" (ticked; Space) and Install; it installs the core components, OpenVIBES' own CA (`--ca quick --root-key-out`), the default ports and no assistant. A default port another program holds gets the free one `fields::propose_ports` finds, and the Install row's help line says so ("443 is in use by nginx: the console uses 8443"). `install/fields.rs` holds the shared checks: `check_names` (host name and other names, as the plan checks them), `check_root_key` (absolute, new: a dangling link counts as there; in an existing folder that is a folder; the CA step checks the same before `ca init-root`) and `Install::problem`, whose first flagged field is said in red under the list; Install does nothing while one is flagged. **Choose what to install** (`install/steps.rs`, `review.rs`, `certs.rs`, `paste.rs`, `import.rs`, `import_paste.rs`; advanced.py, ca.py, ca2.py, full_advanced.py, certs4b.py) is five steps under a steps line (`✓ done · ● current · ○ to come`; location ` · Install › Optional|Names|Certificates|Ports|Review`). Enter on Next moves on, Esc goes back a step. *Optional*: Agent on this host (ticked) and Assistant (2.7 GB download; its help line gives the model's licence link, broken after a `/`), Space ticks; the core is always installed. *Names*: host name and other names edited in place (empty Other names read `none`, as on Quick install, until typed); a bad one is said in red and Next refuses. *Certificates*: "(•) Your own CA" (default, `--ca careful`), "( ) Import from your PKI" (`--ca import`) or "( ) OpenVIBES makes one" (`--ca quick`, which adds a Root key file row checked by `fields::check_root_key`); Space chooses. *Import from your PKI* adds the rows Certificate and Private key (yellow "not added yet", or "✓ added · <our CN>" and "✓ added · matches the certificate") and Next ("once both are added"); Private key opens once the certificate is added ("Add the certificate first: the key is checked against it."). Add the certificate (` › Certificates › Certificate`): "Paste it" ("Our intermediate first, then each CA above it, ending with the root."; a bundle pasted root first works too: ours is then the one CA in it that signed none of the others) or "From a file on this host" (read as bytes, at most 1 MiB, `ca_request::read_bytes`; a .p12 / .pfx, `platform_pki::is_p12`, is kept as its bytes and its password asked in the bar, `Bar::Typing` "Its password" · "Open it"; any other file must be UTF-8 text holding a certificate and no key). The box checks with `platform_pki::check_chain`: green "<CN> · may sign certificates · valid until <ours' end>" and "Chain: <path joined ›> (root, also added)", or one red line from `setup::import::import_message` (a gap keeps our green line above it: "Signed by X, missing here: paste it below this one."); Use it needs a whole chain. Add the private key (` › Certificates › Private key`): "Paste it" ("It stays on this host, readable by root only.") or a file holding a PEM key; a file holding the certificate and then its key is used as the key; a .p12 / .pfx picked there is refused (".p12 and .pfx files go in the Certificate row: they hold the key too."). `pkcs8_pem` converts it and `check_key` checks it against the certificate added and the names typed (host name, other names, `localhost`, `127.0.0.1`, as `Plan::names`; none while they are not valid, and then name constraints are left to Replace): green "An EC P-256 key" (", locked with a password" when it was), or red ("Not the key of <CN>: paste the key it was made with.", "<CN> may not sign server certificates (its name constraints): ask for one without that limit."). The paste box's check is made again only when the text or what it is checked against changes (`Install.checked`, a hash keyed per run), not on every draw: each key check copies the key. A locked key (`is_locked`) asks "Its password" · "Unlock" in the bar; a wrong password says "Wrong password." there and asks again (a .p12's also says "✗ Wrong password for <file>." under the two ways); Esc forgets the typed password, the file's bytes and the box's text. An opened .p12 fills both rows from its chain and key (`read_p12`), and the help line says "From <file>. Delete that file now: its key is kept here." (a .p12's path under the operator's home reads `~/…` in every line, `Install::shown`) A certificate added again keeps the key only if it is the new one's. Once both rows are added (as with your own CA's `ca-accept`), `helper ca-import` runs at once (`Call::CaImport`, `Kind::Ca { accept: true }`, the sudo password in the bar): the chain (ours, the CAs above, the root) then one plain `PRIVATE KEY` block on stdin; its `imported<TAB>NAME<TAB>PATH<TAB>UNTIL` line sets `Install.import_done`, the cursor goes to Next ("ports") and Next goes to Ports; a refusal shows its sentence in red and keeps both rows, and Next (or the password cancelled) sends them again. The decrypted key (`Imported.key`, `Install.unlocked`, both `Zeroizing`) is forgotten when the helper has it (and the run's copy of the bundle is wiped), when another choice is made (which forgets the whole import), and on Esc back from the step (the certificate stays); the paste box's text is wiped when it closes. With your own CA, Next runs `helper ca-request --copy ~/openvibes-intermediate.csr` (the helper takes its own copy there again, or writes `-2`, `-3`… beside another file, and says which in its `copy<TAB>PATH` line) through the worker (`Kind::Ca`, password in the bar), and the step shows Show the request, Signed certificate, Your CA's certificate and Next ("once both are added", disabled). Show the request (` › Certificates › Request`) shows the PEM to copy with the terminal and where the copy was saved (⭡⭣ scroll, the END line kept in view). Each certificate is added by "Paste it" or "From a file on this host" (the folder browser of `maint/folder.rs` in files mode, `Browse::open_files`; a file is read up to 64 KiB into the paste box, then titled for the file, e.g. "Your CA's certificate, from root.crt"; a file holding a `PRIVATE KEY` PEM block is refused in the browser, "That file holds a private key: pick the certificate.", as is one holding no `-----BEGIN CERTIFICATE-----` block, "That file holds no certificate: pick the certificate."; a refused file's text is never kept or shown, and each pick or folder clears the last refusal). The paste box checks in-process at once: the signed certificate with `platform_pki::check_signed_request` against the request (the sentences are `setup::request::message`'s, e.g. "That is 2 certificates: paste only the one signed for OpenVIBES."); your CA's certificate ("Your CA's certificate, then each CA above it up to the root.") with `check_chain`, after the signed certificate once it is added, else on its own (a lone root as it is): green "<root> · a root CA (self-signed)", then "Chain: <path joined ›>" with CAs between, or, with the signed certificate added, "Signed the intermediate directly" or "Signed through <path joined ›>" (two lines at most: there is no room for a third at 80×24), or one red line from `setup::import::import_message` (e.g. "Signed by X, missing here: paste it below this one."); Enter is "Use it" only once an `-----END` line is there and the check passed, and before that adds a new line (terminals without bracketed paste send the lines as keys). Both added, `helper ca-accept` checks and keeps them; on success `Install.signed` is the issuer (Finished then says "signed by X") and Next goes on. Install with your own CA is refused until then: the careful CA step would otherwise make a new request that does not match what the CA signed. With a request already signed (`signed<TAB>ISSUER` from `ca-request`, e.g. after a restart), both rows show "✓ added". Both stay kept after `ca-accept` (they are public), so one added again sends both to `ca-accept` again. A refused `ca-accept`, or Esc back to the choice, forgets both certificates added, so both rows can be added again. Helper failures show only their sentence (the `openvibes-admin helper: ` prefix is dropped). *Ports*: Console, Agent connections, Rule distribution (Enter types, checked as typed with `maint::ports::port_note`; Enter keeps only a usable port), Network devices (514/udp, said, not edited); a moved default reads "443 is in use by nginx · 8443 proposed" in yellow until Enter keeps it or a digit types another. *Review*: Optional, Names, Certificates ("your own CA · ✓ signed by X", "from your PKI · ✓ <CN>" or "OpenVIBES makes one · PATH"; Import is refused with "✗ Certificates: add the certificate and its key first." until the helper kept it), Ports and Install; Enter on a line goes to its step, Enter on Install asks the password once in the bar and runs the install; what still blocks it is said in red. The TUI turns bracketed paste on at start and off on every path that gives the terminal back (quit, the shell, the new version, a panic); a paste arrives whole as `Key::Paste`, which only the paste box takes: a field being typed or a password in the bar takes its characters without line ends, and anywhere else it is dropped (a stray paste never presses Enter or `q`). Tests: `src/tui/install/run_tests.rs`, `quick_tests.rs`, `steps_tests.rs`, `certs_tests.rs`, `certs_accept_tests.rs`, `certs_chain_tests.rs`, `import_tests.rs`, `import_file_tests.rs`.
 
-**Repair** (Maintenance): it asks for the password and checks every step first (`helper setup-status`), then lists the steps that need attention with why. The ones that pass fold into one line ("✓ 11 other steps in order"), since 14 do not fit 80×24. Fix N problems runs every step with `--repair` (never a new CA) on the worker, then checks again; the bar says what is left. A step that stops is marked ✗ with its error, and Try again goes on from it. Check again re-reads. A half-done update blocks repair runs (`job_guard`), so Repair says so and offers no Fix until the update is finished in Update OpenVIBES, and a half-done uninstall the same way in Uninstall (each has its "Finish the …" entry there). Tests: `src/tui/maint/repair_tests.rs`.
+**Repair** (Maintenance): it asks for the password and checks every step first (`helper setup-status`), then lists the steps that need attention with why (wrapped under its column over up to 2 lines, `…` after the second, as the ✗ view wraps; when they do not all fit above the actions, one line each, and past that as many as fit and `⭣ N more`: the Fix entry names every step). The ones that pass fold into one line ("✓ 11 other steps in order"), since 14 do not fit 80×24. Fix N problems runs every step with `--repair` (never a new CA) on the worker, then checks again; the bar says what is left. A step that stops is marked ✗ with its error, and Try again goes on from it. Check again re-reads. A half-done update blocks repair runs (`job_guard`), so Repair says so and offers no Fix until the update is finished in Update OpenVIBES, and a half-done uninstall the same way in Uninstall (each has its "Finish the …" entry there). Tests: `src/tui/maint/repair_tests.rs`.
 
 A repaired step reads "repaired: ..." in the list, and the journal line of each setup, update and remove step carries its detail (first 300 characters), e.g. `setup-step firewall --repair ok: repaired: open: 18423/tcp` (#292).
 
@@ -256,7 +270,11 @@ expiry, when the daily renewal timer has failed ("automatic renewal is
 failing, see Status › certificate renewal › Logs"); a certificate with more
 days left is no problem, however near its renewal. The intermediate (judged
 by its first certificate) is a problem under 60 days: "replace the
-intermediate in Maintenance › Certificates". An expired one always is. Also a
+intermediate in Maintenance › Certificates". An expired one always is. When
+our intermediate is not signed directly by `root.crt` and `chain.crt` is
+missing, the setup check's sentence is a problem too ("/etc/openvibes/pki/chain.crt
+is missing: restore it from a backup (agents could not reach the root)",
+`setup::pki_import::lost`, the files from `Host::root_and_chain`). Also a
 problem when a
 server certificate misses an address this host now has, e.g. after DHCP:
 "run Repair in Maintenance"; a CA certificate, which names no host, is not
@@ -554,13 +572,14 @@ neither `admin.toml` nor the database, so they are not audited;
 ## Setup command (admin TUI spec §6)
 
 `openvibes-admin setup --quick --components LIST --hostname NAME [--san
-ADDR]... [--ca quick|careful] [--root-key-out PATH]
+ADDR]... [--ca quick|careful|import] [--root-key-out PATH]
 [--admin-password-file PATH] [--repo-dir DIR] [--allow-unsigned-local]
 [--console-port PORT] [--ingest-port PORT] [--distribution-port PORT]
 [--model fetch|skip]` runs as root, writes `/etc/openvibes/setup.toml` (0644) from the checked
 arguments, then runs every Setup step in order and prints one line per step
 (`TITLE: STATE DETAIL`). Exit 0 when every step is done or skipped, 3 when a
-step waits (careful CA: sign the request offline, then run it again), 1 on a
+step waits (careful CA: sign the request offline, then run it again;
+imported CA: add it in Install › Certificates), 1 on a
 failure, 2 on bad arguments (checked before the root check).
 `--model` (with the assistant; default `fetch`) decides whether the
 "Assistant model" step downloads the pinned model; `skip` leaves the
@@ -633,16 +652,32 @@ link counts) and only into an existing folder, both checked before
 written stays to do while the key is staged, and the retry only writes
 it; careful: done once the CA is installed (a request beside an installed
 CA is `ca-replace`'s and is left for it, ruling 8), else installs from the
-request folder below when it holds the key, request, certificate and root,
-then removes the folder, otherwise
+request folder below when it holds the key, request, certificate and root
+(with its `chain.crt` staged too when there is one, and then
+`ca import-intermediate --chain`), then removes the folder, otherwise
 waits for the signed intermediate in `/run/openvibes-ca/int`; quick also
-removes a leftover request folder), `certificates`
+removes a leftover request folder; import: done once the CA is installed
+(Repair never imports over it), else installs from what `helper ca-import`
+staged in `/run/openvibes-import/` (tmpfs) once it holds the key, our
+intermediate and the root, then removes it and the request folder, otherwise
+waits: "add the certificate and its key from your PKI: Install ›
+Certificates". The CAs between ours and the root go in
+`/etc/openvibes/pki/chain.crt` (0644), never in `intermediate.crt`; an
+install without any removes a stale one. `--root-key-out` is for quick
+only), `certificates`
 (hostname, `--san`, `localhost`, `127.0.0.1`, then the host's global IPv4
 and IPv6 addresses from `ip -o addr show scope global` (not rotating IPv6
 privacy or deprecated ones), container and VM bridges
 (docker, podman, lxd, incus, calico, flannel, vxlan…) left out, VPN
 interfaces kept, so the console opens by IP; a changed address makes the step Todo
-and Repair reissues), `console` (`public_origin`
+and Repair reissues; every certificate ends with `chain.crt`'s CAs when it
+exists (`ca issue-server --chain`), and the step is to do until each does,
+so a new or changed chain reissues; when our intermediate is not signed
+directly by `root.crt` and `chain.crt` is missing, both the check and the
+apply are Failed, "/etc/openvibes/pki/chain.crt is missing: restore it
+from a backup (agents could not reach the root)", and nothing is issued:
+certificates without the middle CAs would not reach the root on agents),
+`console` (`public_origin`
 `https://HOST` or `https://HOST:PORT`, `development_listen` on the chosen
 port with direct TLS, `platform_domain` in `/etc/openvibes/fetch.toml`
 when openvibes-fetch is installed, and the `admin` account; a generated
@@ -806,7 +841,8 @@ journal line is only `admin-reset admin ok`, never the password;
 prints `done<TAB>opened`: sudo's password check and the journal line are
 the point, before Maintenance › Shell opens the operator's shell),
 `helper ca-request [--copy PATH]` and `helper ca-accept --cert PEM
---root-cert PEM` ("Your own CA" before install, `src/setup/request.rs`;
+--root-cert PEM` (the CAs: the one that signed it, then each above it up
+to the root; "Your own CA" before install, `src/setup/request.rs`;
 also before `helper ca-replace [--root-key PATH]`, which replaces the
 intermediate: see CA commands).
 `ca-request` makes the intermediate's key and request in
@@ -825,24 +861,59 @@ once with `O_NOFOLLOW | O_NONBLOCK` and check and read that handle.
 `dnf remove openvibes-admin` on a host never installed does the same in
 `%postun`. All only while it is still the request: a regular file, never
 a link or a FIFO, with the same bytes (`cmp -s` under `timeout 5` in the
-scriptlet, hence `Requires(postun): diffutils`). `ca-accept` checks the certificate against the stored request and
-the root against the certificate (platform-pki `check_signed_request`,
-`check_root_signed`) and only then writes `intermediate.crt` and
-`root.crt` there. Both print line 1 `request` or `signed<TAB>ISSUER`,
+scriptlet, hence `Requires(postun): diffutils`). `ca-accept` checks the certificate against the stored request
+(platform-pki `check_signed_request`: a CA with path length 0) and the
+path from it up to a self-signed root through the CAs given (`check_chain`,
+in any order, each CA allowing the ones below it and valid for 90 days
+more), then the self-check (`check_key` with the request's own key, no
+names yet: Replace checks them), and only then writes `intermediate.crt`,
+`root.crt` (the path's
+root) and, when there are CAs between, `chain.crt` (nearest first; a stale
+one is removed otherwise) there. Both print line 1 `request` or `signed<TAB>ISSUER`,
 then, for `ca-request --copy`, `copy<TAB>PATH` (the file used), then the
 request. A refused certificate exits 1 with one plain sentence (e.g. "This
 certificate was signed for a different request: sign the request shown
 here.", "That is 2 certificates: paste only the one signed for
-OpenVIBES.", "Your CA's certificate must be the root that signed this
-certificate directly: paste that root, not another CA.", "Your CA's
-certificate does not allow it to sign another CA (path length 0): it
-cannot sign the intermediate."). The journal line is `ca-request` or
+OpenVIBES."; the path's refusals are `setup::import::import_message`'s,
+e.g. "Signed by Lime Lab Issuing CA, missing here: paste it below this
+one.", "Lime Lab Strict CA allows no CA below it: ask for one more
+level."). The journal line is `ca-request` or
 `ca-accept` with the request folder as target, never the copy path or the
 PEM. The folder survives reboots; the CA step removes it after installing
 from it, Remove everything deletes it with `/etc/openvibes`, and removing
 the `openvibes-admin` package on a host without `setup.toml` deletes it
 (and `/etc/openvibes/pki`, `/etc/openvibes` when left empty). Arguments
 are checked before the root check.
+`helper ca-import` (Import from your PKI, `src/setup/import.rs`; the CA
+verbs' arguments and dispatch are in `src/helper_ca.rs`) takes no
+arguments: it reads at most 1 MiB from stdin ("The certificate and key are
+too large (over 1 MiB)."), the certificates PEM (ours first, then each CA
+above it up to the root) and then one `PRIVATE KEY` block (PKCS#8; the TUI
+decrypts and converts the key first). Any other block, a second key, a
+certificate after the key or no key is refused with a sentence naming the
+label, never the block. Under the Setup lock it checks everything again
+(platform-pki `check_chain`, `pkcs8_pem`, `check_key` with the
+self-check, no names: Replace checks them; a key block that is not PKCS#8
+says "This is not a private key in PEM form (-----BEGIN PRIVATE KEY-----).");
+with a CA already
+installed (Replace) the root must equal the installed `root.crt`, else
+"Replace: under NEW, not INSTALLED, so agents would stop trusting this
+host. Ask for one under the same root." Only then it writes
+`/run/openvibes-import/` (tmpfs, root, 0700, made here; a company key
+never lands in /etc or its backups, and a reboot forgets it):
+`intermediate.key`
+(0600, first), `intermediate.crt` (ours alone), `chain.crt` (the CAs
+between ours and the root, only when there are any) and `root.crt`
+(0644). An earlier import's files are removed first, and a write that
+fails removes what was written, so nothing partial stays staged. Middle CAs stay out of `intermediate.crt`,
+which distribution trusts for agent client certificates (ruling P2). It
+prints `imported<TAB>NAME<TAB>PATH<TAB>UNTIL` (the path's names joined
+with ` › `, the earliest end of validity as YYYY-MM-DD). Refusals are
+`setup::import::import_message`'s sentences (e.g. "Signed by X, missing
+here: paste it below this one.", "Not the key of X: paste the key it was
+made with."). The journal line is `ca-import /run/openvibes-import`. The
+CA step and Replace remove the folder with the request; Remove everything
+and the package's removal (`%postun`) remove it too.
 
 ## CA commands
 
@@ -857,8 +928,8 @@ its certificate.
 | `ca init-root --out DIR` | offline machine | `root.crt`, `root.key` | no (no database there) |
 | `ca intermediate-request --out DIR` | ingest host | `intermediate.key`, `intermediate.csr` | no |
 | `ca sign-intermediate --root DIR --csr FILE --out FILE` | offline machine | intermediate certificate | no |
-| `ca import-intermediate --cert F --key F --root-cert F` | ingest host | records root + intermediate in `ca_certificates` | yes, target = intermediate SHA-256 |
-| `ca issue-server NAME [--san X]... --issuer-cert F --issuer-key F --out DIR` | ingest host | `NAME.crt` (leaf + intermediate), `NAME.key` | yes, target = NAME |
+| `ca import-intermediate --cert F --key F --root-cert F [--chain F]` | ingest host | records root + intermediate in `ca_certificates` (the CAs in `--chain` have no role and are not recorded) | yes, target = intermediate SHA-256 |
+| `ca issue-server NAME [--san X]... --issuer-cert F --issuer-key F --out DIR [--chain F]` | ingest host | `NAME.crt` (leaf + intermediate, then `--chain`'s CAs), `NAME.key` | yes, target = NAME |
 
 Operator flow: `init-root` offline, then `intermediate-request` on the ingest
 host, carry only the **CSR** to the offline machine, `sign-intermediate`
@@ -867,7 +938,12 @@ The intermediate key never leaves the ingest host and the root key never
 leaves the offline machine. `import-intermediate` refuses a key that does
 not match the certificate, a certificate the given root did not sign, one
 that is not an intermediate (the root itself, a leaf, or a CA without path
-length 0), or one outside its validity, and records nothing then. Offline commands work without any config file.
+length 0), or one outside its validity, and records nothing then. With
+`--chain` (the CAs between the intermediate and the root, nearest first;
+an empty file for none), as the Setup step passes it for an imported CA,
+it checks the whole path instead (platform-pki `check_chain`: any path
+length the CAs above allow, CAs in between, every one valid for 90 days
+more) and refuses a path that does not end in `--root-cert`. Offline commands work without any config file.
 
 **Replacing the intermediate** (`helper ca-replace [--root-key PATH]`,
 `src/setup/replace.rs`; the runbook is packaging.md "Replacing the
@@ -877,20 +953,40 @@ intermediate is still trusted until YYYY-MM-DD, while agents move over:
 replace it again after that."). The new
 intermediate comes from the request folder with your own CA (after
 `ca-request` and `ca-accept`; its `root.crt` must equal
-`/etc/openvibes/pki/root.crt`, else "Your CA's certificate is not this
-host's root: agents trust only that one.") or, with OpenVIBES' own CA,
+`/etc/openvibes/pki/root.crt` as DER, else "Your CA's certificate is not
+this host's root: agents trust only that one."; its `chain.crt` is staged
+with it, or an empty one when it has none but this host has a `chain.crt`,
+and the path is then checked as an import's: `check_chain`, `check_key`
+with this host's names (`certificate_names`), `--chain`; without one the
+path to the root gets the same self-check) or, with OpenVIBES' own CA,
 from the root key at `--root-key` (absolute; checked against the root
 first, else "Not the key of this host's root: pick the root key kept at
 install."), copied 0600 into `/run/openvibes-ca/root` for `ca
 intermediate-request` and `ca sign-intermediate`, and removed with the
-whole stage on every exit. Every check (the key, `check_intermediate`
+whole stage on every exit; or, imported from your PKI, from what
+`ca-import` staged in `/run/openvibes-import` (`src/setup/replace_import.rs`; else
+"There is nothing imported: add the certificate and its key first."): its
+`root.crt` must equal this host's as DER, else "Replace: under NEW, not
+INSTALLED, so agents would stop trusting this host. Ask for one under the
+same root.", and `check_chain` and `check_key` (with this host's names)
+run again on ours, its `chain.crt` and this host's root; `ca import-intermediate` then gets
+`--chain`; the intermediate already in use is refused (`IN_USE`). Every check (the key, `check_intermediate`
 against the root, `ca import-intermediate`) passes before anything on disk
 changes. Then `previous.crt` (the old first certificate) and
 `previous-until` (RFC 3339, now + `client_certificate_days` from
 `ingest.toml`, default 30, + 1 day) are written 0644 root, then the new key and the bundle (new + old) are
 written beside their targets as `intermediate.key.new` and
 `intermediate.crt.new` and renamed over them, the bundle first and the
-key last (a failure puts the old bundle back and removes the `.new` and
+key last (`src/setup/replace_swap.rs`); with a staged chain (imported, or
+your own CA through a sub-CA or leaving one), the CAs above the new
+one go the same way as `chain.crt.new` over `/etc/openvibes/pki/chain.crt`,
+between the two, empty for a two-level PKI and then removed, best effort,
+after the reissue. First the old `chain.crt` is copied to `chain.crt.old`
+(empty when there was none; a `chain.crt` that cannot be read stops the
+swap before anything changes), removed once the swap is final; without a staged chain, a copy left from
+before is removed first, so an undo never puts an old chain back (a failure
+puts the old bundle and, from that copy, the old `chain.crt` back, or
+removes it, and removes the `.new`, copy and
 `previous.*` files: the old pair is in use again; when the old bundle
 cannot be put back, everything stays for the recovery below; each rename
 syncs its folder, best effort: only the rename's own result counts), the request folder goes, and the certificates step reissues and restarts the
@@ -907,10 +1003,12 @@ way through the swap is ended by `replace::finish_interrupted`, run under
 the Setup lock at the start of `ca-replace` (before the refusal), of
 `certificates-renew` and of the certificates step's apply (so Repair, whose
 check is Todo then, runs it): an `intermediate.key.new` that loads against
-the bundle's first certificate is renamed into place ("finished an
+the bundle's first certificate is renamed into place, a `chain.crt.new`
+before it, and the copy and an empty `chain.crt` removed after ("finished an
 interrupted replacement"); otherwise, when `previous.crt` is still the
 bundle's first certificate (or, without it, `.new` files are left), the
-`.new` files and `previous.*` are removed ("removed an interrupted
+`.new` files and `previous.*` are removed, `chain.crt` put back from
+`chain.crt.old` when there is one ("removed an interrupted
 replacement that never took effect"). Its line is printed by `ca-replace`,
 heads the renewal's log and prefixes the step's detail. It is not in
 `ca_check`: `setup-status` runs the checks without the lock, mid-swap. The renewal

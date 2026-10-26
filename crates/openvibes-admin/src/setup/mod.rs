@@ -17,9 +17,11 @@ mod console;
 mod fake;
 mod fetch_domain;
 mod fleet;
+pub(crate) mod import;
 mod pg_health;
 pub use fleet::AGENT_AUDIT_RULE;
 pub(crate) mod pki;
+pub(crate) mod pki_import;
 #[cfg(test)]
 mod pki_tests;
 pub mod plan;

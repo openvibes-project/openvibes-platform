@@ -187,6 +187,21 @@ pub fn checks(
     checks
 }
 
+/// Health's line when our intermediate is under a sub-CA and `CHAIN` is
+/// gone (the setup check's); `root` is [`Host::root_and_chain`]'s.
+pub fn chain_check(
+    certificates: &[(&str, Result<String, HostError>)],
+    root: Option<(String, bool)>,
+) -> Option<Check> {
+    let Some((root, false)) = root else {
+        return None;
+    };
+    let (_, ours) = certificates
+        .iter()
+        .find(|(path, _)| *path == INTERMEDIATE)?;
+    crate::setup::pki_import::lost(ours.as_ref().ok()?, &root).map(|text| check(true, text))
+}
+
 /// Health's line about the assistant's tuning (`tune.json`), when a bundled
 /// model is installed.
 pub fn tune_check(model_installed: bool, tune_json: Option<String>) -> Option<Check> {
@@ -365,6 +380,7 @@ pub fn health_checks<H: Host>(host: &H) -> Vec<Check> {
         Utc::now(),
     );
     health.extend(uncovered(&certificates, &host.addresses()));
+    health.extend(chain_check(&certificates, host.root_and_chain()));
     if let Some(files) = host.signer() {
         health.extend(signer_checks(&files));
     }

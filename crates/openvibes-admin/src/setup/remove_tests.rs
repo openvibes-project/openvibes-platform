@@ -58,6 +58,11 @@ fn removing_a_component_stops_it_closes_its_port_and_removes_its_packages() {
     );
     fake.answer(&["/usr/bin/firewall-cmd", "--reload"], 0, "success\n");
     fake.answer(&["/usr/bin/dnf", "remove"], 0, "");
+    let pki =
+        ["intermediate.crt", "root.crt", "chain.crt"].map(|f| format!("/etc/openvibes/pki/{f}"));
+    for file in &pki {
+        fake.file(file, file);
+    }
     let plan = plan(&[Ingest, Distribution]);
     let ctx = fake.ctx(&plan);
     let args = args(&[Distribution], None);
@@ -83,6 +88,9 @@ fn removing_a_component_stops_it_closes_its_port_and_removes_its_packages() {
         ["/usr/bin/dnf", "remove", "-y", "openvibes-distribution"]
     );
     assert!(!fake.called(&PG), "keep data: the database is not touched");
+    for file in &pki {
+        assert_eq!(fake.text(file), *file, "keep data: {file} is kept");
+    }
 }
 
 #[test]
@@ -171,6 +179,11 @@ fn purge_drops_the_database_roles_files_and_accounts() {
     fake.file("/etc/openvibes/pki/request/intermediate.csr", "CSR");
     fake.file("/etc/openvibes/pki/request/copy", "/home/alice/r.csr");
     fake.file("/home/alice/r.csr", "CSR");
+    // An imported PKI's chain, and an import staged but not installed.
+    fake.file("/etc/openvibes/pki/chain.crt", "CHAIN");
+    fake.file("/run/openvibes-import/intermediate.key", "KEY");
+    // Staged by an older version, under the request folder.
+    fake.file("/etc/openvibes/pki/request/import/intermediate.key", "KEY");
     fake.answer(
         &[&PG[..], &["/usr/bin/psql"]].concat(),
         0,
@@ -208,6 +221,8 @@ fn purge_drops_the_database_roles_files_and_accounts() {
         "var/lib/openvibes-ingest",
         "etc/openvibes-agent",
         "home/alice/r.csr",
+        "etc/openvibes/pki",
+        "run/openvibes-import",
     ] {
         assert!(!fake.root.join(gone).exists(), "{gone}");
     }

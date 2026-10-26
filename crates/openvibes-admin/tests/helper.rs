@@ -230,3 +230,13 @@ fn ca_accept_takes_pem_arguments_that_start_with_dashes() {
     assert_eq!(out.status.code(), Some(1), "{out:?}");
     assert!(String::from_utf8_lossy(&out.stderr).contains("helper must run as root"));
 }
+
+#[test]
+fn ca_import_takes_no_arguments() {
+    // The key comes on standard input, never on the command line.
+    let out = helper(&["ca-import", "--key", "PEM"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    let out = helper(&["ca-import"]);
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("helper must run as root"));
+}

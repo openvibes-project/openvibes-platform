@@ -41,32 +41,41 @@ counts and the date.
 
 The programs are `openvibes-ingest`, `-admin`, `-distribution`, `-signer`,
 `-fetch`, `-vulns`, `-netlog`, `-console` and `openvibes-llm-check`. They
-compile in the 40 crates below and **280 indirect crates** (320 in all), plus
-9 crates used only by build scripts (proc-macro and `build.rs` helpers, not
+compile in the 49 crates below and **299 indirect crates** (348 in all), plus
+10 crates used only by build scripts (proc-macro and `build.rs` helpers, not
 in the programs).
 
 | Crate | Version | Licence | Used for |
 |---|---|---|---|
+| aes | 0.9.3 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (AES) |
 | argon2 | 0.6.0 | MIT OR Apache-2.0 | Console password hashes |
 | axum | 0.8.9 | MIT | Console web server and API |
 | base64 | 0.23.1 | MIT OR Apache-2.0 | Encoding keys and signatures |
+| cbc | 0.2.1 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (CBC mode) |
 | chrono | 0.4.45 | MIT OR Apache-2.0 | Dates and times everywhere |
 | clap | 4.6.7 | MIT OR Apache-2.0 | Command lines of every program |
+| der | 0.8.2 | Apache-2.0 OR MIT | Wrapping company keys as PKCS#8 |
 | deadpool-postgres | 0.14.2 | MIT OR Apache-2.0 | PostgreSQL connection pool |
+| des | 0.9.0 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (3DES) |
 | ed25519-dalek | 3.0.0 | BSD-3-Clause | Signing and checking rule bundles |
 | flate2 | 1.1.10 | MIT OR Apache-2.0 | gzip (agent uploads, vulnerability feeds) |
 | futures-util | 0.3.34 | MIT OR Apache-2.0 | Console streaming responses |
 | hyper | 1.11.1 | MIT | Agent connections (HTTP over mTLS) |
 | hyper-util | 0.1.20 | MIT | Agent connections (server glue) |
 | libc | 0.2.189 | MIT OR Apache-2.0 | Admin TUI: terminal and process calls |
+| md-5 | 0.11.0 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (key derivation) |
 | openvibes-core | 0.2.7 | Apache-2.0 | Our wire types, from openvibes-agent (git, pinned commit) |
 | openvibes-rules | 0.2.7 | Apache-2.0 | Our rule engine, from openvibes-agent (git, pinned commit) |
+| p12-keystore | 0.4.1 | MIT OR Apache-2.0 | Opening `.p12`/`.pfx` files |
+| pkcs5 | 0.8.1 | Apache-2.0 OR MIT | Unlocking password-protected keys |
 | quick-xml | 0.42.0 | MIT | Reading Fedora `updateinfo.xml` |
 | ratatui | 0.30.2 | MIT | Admin TUI screens |
 | rcgen | 0.14.10 | MIT OR Apache-2.0 | Making the platform's CA and certificates |
 | ring | 0.17.14 | Apache-2.0 AND ISC | Cryptography under rustls and rcgen |
 | rpassword | 7.5.4 | Apache-2.0 | Reading passwords at the terminal |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT | TLS for the console and agent connections |
+| rustls-pki-types | 1.15.1 | MIT OR Apache-2.0 | Certificate types for the import self-check |
+| rustls-webpki | 0.103.16 | ISC | Import self-check: verifying as agents do (also under rustls) |
 | ruzstd | 0.9.1 | MIT | zstd in Fedora repository metadata |
 | serde | 1.0.229 | MIT OR Apache-2.0 | Reading and writing data formats |
 | serde_json | 1.0.151 | MIT OR Apache-2.0 | JSON |

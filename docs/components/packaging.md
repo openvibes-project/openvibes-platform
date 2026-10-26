@@ -38,7 +38,7 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/usr/lib/systemd/system/openvibes-ingest.service` | 0644 root | ingest |
 | `/usr/lib/sysusers.d/openvibes-ingest.conf` | user `openvibes-ingest` | ingest |
 | `/etc/openvibes/ingest.toml` | 0640 root:openvibes-ingest, `%config(noreplace)` | ingest |
-| `/etc/openvibes/{tls,pki}/` | 0755 root | ingest |
+| `/etc/openvibes/{tls,pki}/` | 0755 root; Setup writes `pki/intermediate.crt`, `pki/root.crt` and, for a CA from your PKI with CAs between ours and the root, `pki/chain.crt` (all 0644 root); `pki/request/` (0700 root) holds a request or a staged import until the CA step installs it | ingest |
 | `/var/lib/openvibes-ingest/` | 0700 openvibes-ingest (intermediate key) | ingest |
 | `/usr/bin/openvibes-distribution` | 0755 root | distribution |
 | `/usr/lib/systemd/system/openvibes-distribution.service` | 0644 root | distribution |
@@ -280,6 +280,14 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    status` shows each Fedora release your agents report once it is checked.
 
 Agents trust `root.crt` (their `platform_ca_file`).
+
+With an intermediate from your PKI that sits below other CAs, give
+`import-intermediate` those CAs too (`--chain chain.crt`, nearest first),
+install that file as `/etc/openvibes/pki/chain.crt` (0644), and pass
+`--chain` to every `issue-server`, so each server certificate carries the
+path up to the root. Never append those CAs to `intermediate.crt`:
+distribution trusts all of it for agent client certificates. Remove
+everything deletes `chain.crt` with the rest of `/etc/openvibes`.
 
 ## Console RPM setup
 
@@ -528,13 +536,23 @@ ca-replace`, password-gated like the other Setup verbs):
 
 1. **New intermediate:** with your own CA, make the request and add the
    signed certificate and your CA's certificate as at install (`ca-request`,
-   `ca-accept`); your CA's certificate must be this host's root, since
-   agents trust only that one. With OpenVIBES' own CA, pick the root key
+   `ca-accept`): the CA that signed it, then each CA above it up to the
+   root. The TUI keeps this host's `root.crt` and `chain.crt` for that, or
+   they can be added again when another CA under the same root signs. The
+   root must be this host's, since agents trust only that one. With OpenVIBES' own CA, pick the root key
    kept at install (`--root-key PATH`): it must be the key of this host's
    root, and its copy lives only in `/run/openvibes-ca` (tmpfs) while the
-   new intermediate is signed, removed whatever happens. A refusal changes
-   nothing. While an earlier replacement's old intermediate is still
-   trusted, Replace refuses and says until when.
+   new intermediate is signed, removed whatever happens. With an
+   intermediate imported from your PKI, add the next one and its key as at
+   install (`ca-import`): it must be under the same root, since agents
+   trust only that one ("Replace: under NEW, not INSTALLED, so agents
+   would stop trusting this host. Ask for one under the same root."), and
+   not the one already in use. The TUI checks both before asking; only
+   Yes sends the next one to `ca-import` and runs `ca-replace`, in one run,
+   which checks the whole path up to this host's `root.crt` again. No
+   stages nothing.
+   A refusal changes nothing. While an earlier replacement's old
+   intermediate is still trusted, Replace refuses and says until when.
 2. **Trust both:** the new intermediate is recorded (`ca
    import-intermediate`), its key becomes
    `/var/lib/openvibes-ingest/intermediate.key`, and
@@ -544,7 +562,11 @@ ca-replace`, password-gated like the other Setup verbs):
    only; both accept client certificates from either. The old one is kept
    in `/etc/openvibes/pki/previous.crt` and its end in
    `/etc/openvibes/pki/previous-until` (now + `client_certificate_days` + 1
-   day; both 0644 root, read by the TUI).
+   day; both 0644 root, read by the TUI). The CAs above the new one
+   (imported, or from your own CA through a sub-CA) replace `/etc/openvibes/pki/chain.crt` in the same swap (removed for a
+   two-level PKI); the previous chain is kept as `chain.crt.old` only
+   until the swap is final, to put it back on failure, since the server
+   certificates are issued again at once.
 3. **Issue:** the ingest, distribution and console certificates are issued
    again from the new intermediate and the services restart. If that
    fails, run Repair in Maintenance: the old certificates stay valid until
@@ -565,7 +587,7 @@ ca-replace`, password-gated like the other Setup verbs):
 
 A replacement cut short by a crash or power loss mends itself: the next
 Replace, daily renewal or Repair finishes one whose new bundle is in place
-without its key ("finished an interrupted replacement"), and undoes one
+without its key or chain ("finished an interrupted replacement"), and undoes one
 that never changed the bundle ("removed an interrupted replacement that
 never took effect"), so Replace does not refuse for a month.
 

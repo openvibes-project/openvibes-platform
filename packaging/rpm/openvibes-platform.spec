@@ -338,13 +338,18 @@ fi
 %systemd_preun openvibes-maintenance.timer openvibes-certificates.timer
 %postun -n openvibes-admin
 %systemd_postun openvibes-maintenance.timer openvibes-certificates.timer
-# Removed from a host never installed (no setup.toml): an abandoned "Your
-# own CA" request goes too, its key included, and the folders it made when
-# left empty (never fails). So does the operator's copy of the request
+# Removed: an import staged but not installed goes, its key included (tmpfs,
+# never needed without this tool). From a host never installed (no
+# setup.toml) an abandoned "Your own CA" request goes too (an older
+# version's staged import under it as well), its key included, and the
+# folders it made when left empty (never fails). So does the operator's copy of the request
 # that ca-request recorded, only while it is still that request: a regular
 # file (a link is never followed, a FIFO never read) with the same bytes.
 # cmp runs under a timeout, so a FIFO swapped in after the checks can never
 # hang dnf remove.
+if [ $1 -eq 0 ]; then
+    rm -rf /run/openvibes-import
+fi
 if [ $1 -eq 0 ] && [ ! -e %{_sysconfdir}/openvibes/setup.toml ]; then
     request=%{_sysconfdir}/openvibes/pki/request
     copy=$(cat "$request/copy" 2>/dev/null) || :

@@ -78,7 +78,19 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Maintenance => " · Maintenance".into(),
         Screen::Maint(page) => format!(" · Maintenance › {}", page.title()),
         Screen::Help(_) => " · Help".into(),
-        Screen::Install(stage) => super::install::location(*stage),
+        Screen::Install(stage) => {
+            let at = super::install::location(*stage);
+            // Replace opens the install's screens as they are.
+            let replace = Screen::Maint(super::maint::Page::Replace);
+            if app.nav.back.iter().any(|(screen, ..)| *screen == replace) {
+                at.replace(
+                    " · Install › Certificates ›",
+                    " · Maintenance › Certificates › Replace ›",
+                )
+            } else {
+                at
+            }
+        }
         Screen::Legacy => match app.tab {
             Tab::Configuration => " · Maintenance › Settings files".into(),
         },

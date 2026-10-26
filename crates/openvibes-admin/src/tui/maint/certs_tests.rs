@@ -192,7 +192,7 @@ fn adding_a_name_then_apply_passes_every_san() {
     let end = (Utc::now() + Duration::days(80)).format("%Y-%m-%d");
     assert!(
         text.contains(&format!(
-            "New certificates with 3 names · valid until {end} ("
+            "New certificates with 3 names · valid until {end}"
         )),
         "{text}"
     );

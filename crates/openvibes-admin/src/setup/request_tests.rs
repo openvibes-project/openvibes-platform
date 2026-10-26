@@ -153,18 +153,14 @@ fn accept_refuses_other_request_and_writes_nothing() {
     );
     let (cert, _) = signed(&fake);
     let wrong = platform_pki::generate_root(chrono::Utc::now()).unwrap();
-    let error = accept(&fake.ctx(&plan), &cert, &wrong.cert_pem).unwrap_err();
+    // Another root of the same name did not sign it: still missing.
+    let missing = "Signed by OpenVIBES Root CA, missing here: paste it below this one.";
     assert_eq!(
-        error,
-        "Your CA's certificate must be the root that signed this certificate directly: \
-         paste that root, not another CA."
+        accept(&fake.ctx(&plan), &cert, &wrong.cert_pem).unwrap_err(),
+        missing
     );
     // The certificate itself as the root: not self-signed.
-    assert_eq!(
-        accept(&fake.ctx(&plan), &cert, &cert).unwrap_err(),
-        "This is not a root CA (self-signed): OpenVIBES needs the root that signed the \
-         request directly, with no CA in between."
-    );
+    assert_eq!(accept(&fake.ctx(&plan), &cert, &cert).unwrap_err(), missing);
     let both = format!("{cert}{}", root.cert_pem);
     assert_eq!(
         accept(&fake.ctx(&plan), &both, &root.cert_pem).unwrap_err(),
@@ -314,14 +310,5 @@ fn output_names_the_state_the_copy_then_the_request() {
     assert_eq!(
         output(&signed, Some("/home/a/r-2.csr")),
         format!("signed\tExample Root\ncopy\t/home/a/r-2.csr\n{csr}")
-    );
-}
-
-#[test]
-fn a_root_with_path_length_0_has_its_own_sentence() {
-    assert_eq!(
-        super::message(&platform_pki::PkiError::RootPathLen0),
-        "Your CA's certificate does not allow it to sign another CA (path length 0): it \
-         cannot sign the intermediate."
     );
 }

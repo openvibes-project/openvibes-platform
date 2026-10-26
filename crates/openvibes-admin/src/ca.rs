@@ -45,9 +45,14 @@ pub enum CaCommand {
         /// Intermediate private key.
         #[arg(long)]
         key: PathBuf,
-        /// Root certificate that signed it.
+        /// The root certificate at the top of its path.
         #[arg(long)]
         root_cert: PathBuf,
+        /// The CAs between it and the root (may be empty): checks the
+        /// whole path, any path length. Without it the root must have
+        /// signed it directly, with path length 0.
+        #[arg(long)]
+        chain: Option<PathBuf>,
     },
     /// Issue a 90-day TLS server certificate from the intermediate.
     IssueServer {
@@ -65,6 +70,9 @@ pub enum CaCommand {
         /// Directory for NAME.crt and NAME.key.
         #[arg(long)]
         out: PathBuf,
+        /// The CAs between the issuer and the root, appended to NAME.crt.
+        #[arg(long)]
+        chain: Option<PathBuf>,
     },
 }
 
@@ -162,6 +170,18 @@ fn safe_name(name: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-')
 }
 
+/// A company path (Import from your PKI): `cert`, then `chain`, up to
+/// `root`, as `helper ca-import` checked it.
+fn check_path(cert: &str, chain: &str, root: &str) -> Result<(), String> {
+    let path = platform_pki::check_chain(&format!("{cert}\n{chain}\n{root}"), Utc::now())
+        .map_err(|e| crate::setup::import::import_message(&e, "", None))?;
+    let fingerprint = |pem: &str| platform_pki::sha256_fingerprint(pem).map_err(pki);
+    if fingerprint(&path.root)? != fingerprint(root)? {
+        return Err("the chain does not lead up to the given root certificate".into());
+    }
+    Ok(())
+}
+
 /// Runs a host command; returns the output and the audit target.
 pub async fn run_host(
     command: &CaCommand,
@@ -172,12 +192,18 @@ pub async fn run_host(
             cert,
             key,
             root_cert,
+            chain,
         } => {
             let loaded = (|| {
                 let cert = read_pem(cert)?;
                 let root = read_pem(root_cert)?;
                 Issuer::load(&cert, &read_pem(key)?).map_err(pki)?;
-                platform_pki::check_intermediate(&cert, &root, Utc::now()).map_err(pki)?;
+                match chain {
+                    Some(chain) => check_path(&cert, &read_pem(chain)?, &root)?,
+                    None => {
+                        platform_pki::check_intermediate(&cert, &root, Utc::now()).map_err(pki)?;
+                    }
+                }
                 platform_pki::verify_signed_by(&root, &root).map_err(pki)?;
                 let fingerprint = platform_pki::sha256_fingerprint(&cert).map_err(pki)?;
                 Ok::<_, String>((cert, root, fingerprint))
@@ -206,14 +232,18 @@ pub async fn run_host(
             issuer_cert,
             issuer_key,
             out,
+            chain,
         } => {
             let target = Some(name.clone());
             if !safe_name(name) {
                 return (Err("NAME must be a DNS name".into()), target);
             }
             let issued = (|| {
-                let issuer =
+                let mut issuer =
                     Issuer::load(&read_pem(issuer_cert)?, &read_pem(issuer_key)?).map_err(pki)?;
+                if let Some(chain) = chain {
+                    issuer = issuer.with_chain(&read_pem(chain)?).map_err(pki)?;
+                }
                 let mut names = vec![name.clone()];
                 names.extend(san.iter().cloned());
                 let server = issuer.issue_server(&names, Utc::now()).map_err(pki)?;

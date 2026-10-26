@@ -210,3 +210,103 @@ async fn the_root_cannot_be_imported_as_the_intermediate() {
     );
     fixture.drop().await;
 }
+
+fn pki_fixture(name: &str) -> String {
+    format!(
+        "{}/../platform-pki/tests/fixtures/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    )
+}
+
+#[tokio::test]
+async fn a_company_chain_imports_with_its_chain_and_ends_every_server_certificate() {
+    let dir = scratch_dir("company-chain");
+    let (ours, key, issuing, root) = (
+        pki_fixture("ours-ec.crt"),
+        pki_fixture("ours-ec.pkcs8.pem"),
+        pki_fixture("issuing.crt"),
+        pki_fixture("root.crt"),
+    );
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let import = |extra: &[&str]| {
+        let mut args = vec!["ca", "import-intermediate", "--cert", &ours, "--key", &key];
+        args.extend(extra);
+        fixture.run(&args)
+    };
+    // Without --chain, the root must have signed it directly.
+    assert!(!import(&["--root-cert", &root]).status.success());
+    // A root that does not head the path.
+    let other = dir.join("other");
+    stdout(&offline(&["ca", "init-root", "--out", s(&other)]));
+    let wrong = import(&[
+        "--root-cert",
+        s(&other.join("root.crt")),
+        "--chain",
+        &issuing,
+    ]);
+    assert!(!wrong.status.success());
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM ca_certificates").await,
+        0
+    );
+    stdout(&import(&["--root-cert", &root, "--chain", &issuing]));
+    // The middle CA has no role: only the root and ours are recorded.
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM ca_certificates").await,
+        2
+    );
+    stdout(&fixture.run(&[
+        "ca",
+        "issue-server",
+        "ingest.example",
+        "--issuer-cert",
+        &ours,
+        "--issuer-key",
+        &key,
+        "--out",
+        s(&dir.join("tls")),
+        "--chain",
+        &issuing,
+    ]));
+    let chain = std::fs::read_to_string(dir.join("tls/ingest.example.crt")).unwrap();
+    assert_eq!(chain.matches("BEGIN CERTIFICATE").count(), 3);
+    let last = chain.rsplit("-----BEGIN").next().unwrap();
+    let issuing_pem = std::fs::read_to_string(&issuing).unwrap();
+    assert_eq!(
+        last.split_whitespace().collect::<String>(),
+        issuing_pem
+            .rsplit("-----BEGIN")
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .collect::<String>()
+    );
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn an_openvibes_ca_passes_with_an_empty_chain() {
+    let dir = scratch_dir("empty-chain");
+    offline_chain(&dir);
+    std::fs::write(dir.join("chain.crt"), "").unwrap();
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    stdout(&fixture.run(&[
+        "ca",
+        "import-intermediate",
+        "--cert",
+        s(&dir.join("host/intermediate.crt")),
+        "--key",
+        s(&dir.join("host/intermediate.key")),
+        "--root-cert",
+        s(&dir.join("root/root.crt")),
+        "--chain",
+        s(&dir.join("chain.crt")),
+    ]));
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM ca_certificates").await,
+        2
+    );
+    fixture.drop().await;
+}

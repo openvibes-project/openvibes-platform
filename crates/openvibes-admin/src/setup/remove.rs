@@ -68,8 +68,10 @@ pub(crate) fn removed_by_everything(path: &Path) -> Option<&'static str> {
 }
 
 /// Data directories Remove everything deletes (fixed; never from input).
-const DATA: [&str; 10] = [
+const DATA: [&str; 11] = [
     "/etc/openvibes",
+    // An import staged but not installed (its key included).
+    "/run/openvibes-import",
     "/etc/openvibes-agent",
     "/var/lib/openvibes-admin",
     "/var/lib/openvibes-ingest",

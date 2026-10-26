@@ -369,7 +369,7 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
     if run.ok() {
         lines.push(Line::styled(
             format!(
-                "    ✓ {} · everything is ready ({})",
+                "    ✓ {} · everything is ready{}",
                 run.work.kind.done(),
                 run.took()
             ),

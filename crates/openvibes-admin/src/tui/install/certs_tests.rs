@@ -42,7 +42,7 @@ pub(super) fn requested(pki: &Pki) -> App<SetupHost> {
     let mut app = steps(2);
     let copy = "copy\t/home/u/openvibes-intermediate-2.csr";
     answer(&app, Ok(format!("request\n{copy}\n{}", pki.csr)));
-    down(&mut app, 2);
+    down(&mut app, 3);
     app.key(Key::Enter);
     type_text(&mut app, "pw");
     app.key(Key::Enter);
@@ -75,7 +75,7 @@ fn certs_own_ca_is_default_space_chooses() {
         assert!(text.contains(row), "{row}\n{text}");
     }
     assert!(!text.contains("Root key file"), "{text}");
-    app.key(Key::Down);
+    down(&mut app, 2);
     app.key(Key::Char(' '));
     assert_eq!(app.install.ca, Ca::OpenVibes);
     let text = screen(&app);
@@ -84,6 +84,7 @@ fn certs_own_ca_is_default_space_chooses() {
         text.contains("For networks without a CA of their own."),
         "{text}"
     );
+    app.key(Key::Up);
     app.key(Key::Up);
     app.key(Key::Char(' '));
     assert_eq!(app.install.ca, Ca::Own);
@@ -100,7 +101,7 @@ fn certs_openvibes_shows_root_key_file_row() {
         text.contains("✗ Root key file: The path must start with /."),
         "{text}"
     );
-    down(&mut app, 3);
+    down(&mut app, 4);
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Install(Stage::Step(2)));
     app.key(Key::Up);
@@ -158,7 +159,7 @@ fn a_refused_request_shows_only_its_sentence() {
                 .into(),
         )),
     );
-    down(&mut app, 2);
+    down(&mut app, 3);
     app.key(Key::Enter);
     type_text(&mut app, "pw");
     app.key(Key::Enter);
@@ -273,21 +274,16 @@ fn paste_wrong_request_and_wrong_root_say_why() {
     paste(&mut app, Which::Signed, &pki.cert);
     app.key(Key::Enter);
     paste(&mut app, Which::Root, &other.root);
+    // Another root of the same name did not sign it.
+    let missing = "Signed by OpenVIBES Root CA, missing here: paste it below this one.";
     let text = screen(&app);
-    assert!(
-        text.contains("Your CA's certificate must be the root that signed"),
-        "{text}"
-    );
+    assert!(text.contains(missing), "{text}");
     app.key(Key::Enter);
     assert!(app.install.root_added.is_none());
     app.key(Key::Esc);
     app.key(Key::Enter);
     app.key(Key::Paste(pki.cert.clone()));
-    assert!(
-        screen(&app).contains("This is not a root CA (self-signed)"),
-        "{}",
-        screen(&app)
-    );
+    assert!(screen(&app).contains(missing), "{}", screen(&app));
 }
 
 #[test]
@@ -320,7 +316,7 @@ fn file_pick_lists_files_and_reads_one() {
     let mut app = at(super::super::script_host::fresh_app(), 2);
     answer(&app, Ok(format!("request\n{}", pki.csr)));
     app.install.home = Some(dir.to_string());
-    down(&mut app, 2);
+    down(&mut app, 3);
     app.key(Key::Enter);
     type_text(&mut app, "pw");
     app.key(Key::Enter);
@@ -421,7 +417,7 @@ fn restart_with_signed_request_shows_added() {
         app.key(Key::Enter);
         assert_eq!(app.nav.screen, Screen::Install(Stage::Step(step)));
     }
-    down(&mut app, 2);
+    down(&mut app, 3);
     app.key(Key::Enter);
     type_text(&mut app, "pw");
     app.key(Key::Enter);
@@ -451,7 +447,7 @@ fn switching_to_openvibes_ca_forgets_the_signed_certificates() {
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     app.key(Key::Esc);
-    app.key(Key::Down);
+    down(&mut app, 2);
     app.key(Key::Char(' '));
     assert_eq!(app.install.ca, Ca::OpenVibes);
     assert!(app.install.signed.is_none() && app.install.cert.is_none());

@@ -3,7 +3,8 @@
 //! (`helper ca-replace`). With your own CA the install's request, paste
 //! and file screens add the signed certificate, the root kept; when
 //! OpenVIBES made the CA, the root key file kept offline at install is
-//! picked and checked here first, as the helper checks it again. Replace
+//! picked and checked here first, as the helper checks it again; an
+//! imported one comes through the install's Import rows (`import`). Replace
 //! asks, then the password, then the step list and one result line.
 
 use std::path::PathBuf;
@@ -21,6 +22,7 @@ use super::{Page, Then, folder::Browse};
 use crate::{
     setup::{
         pki::ROOT_CERT,
+        pki_import::CHAIN,
         plan::plan_of,
         replace::{NOT_THE_KEY, PROGRESS},
     },
@@ -54,10 +56,17 @@ const STEPS: [&str; 4] = [
 #[derive(Debug, Default)]
 pub struct Replace {
     /// This host's root: its PEM and name, or why it cannot be read.
+    /// With your own CA, `CHAIN`'s CAs follow the root's PEM.
     root: Option<Result<(String, String), String>>,
+    /// Your own CA: its certificates added again, not the kept ones.
+    readded: bool,
     /// The root key file picked, and its check.
     key: Option<(PathBuf, Result<(), String>)>,
     pick: Option<Browse>,
+    /// Imported: the days agents take to move over, and the intermediate
+    /// in use (its bundle).
+    days: i64,
+    in_use: Option<String>,
 }
 
 impl Replace {
@@ -92,21 +101,29 @@ fn line(t: &crate::tui::ui::theme::Theme, said: Result<&str, &str>) -> Vec<Line<
     lines
 }
 
+/// The line under the rows, owned (an import's is made from its chain).
+fn owned(said: Option<Result<&str, &str>>) -> Option<Result<String, String>> {
+    said.map(|r| r.map(str::to_owned).map_err(str::to_owned))
+}
+
 fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) {
     let t = &app.theme;
-    let all = &STEPS[usize::from(!app.maint.certs.quick)..];
-    // One helper call does every step. Done: the lines it printed; until
-    // then, or when it failed, the progress file it writes as it goes
-    // (as the model download's, `parts_run::model_progress`).
-    let said = match &run.states[0] {
+    let all = &STEPS[usize::from(!app.maint.certs.quick())..];
+    // One helper call does every step (an import's `ca-import` comes
+    // first). Done: the lines it printed; until then, or when it failed,
+    // the progress file it writes as it goes (as the model download's,
+    // `parts_run::model_progress`), once it started.
+    let last = run.states.len() - 1;
+    let said = match &run.states[last] {
         Some(StepState::Done(out)) => out.clone(),
+        _ if last > 0 && !matches!(run.states[0], Some(StepState::Done(_))) => String::new(),
         _ => std::fs::read_to_string(app.root.join(PROGRESS)).unwrap_or_default(),
     };
     let finished = all
         .iter()
         .take_while(|step| said.lines().any(|l| l == **step))
         .count();
-    let failed = run.states[0].as_ref().filter(|s| !s.finished());
+    let failed = run.states.iter().flatten().find(|s| !s.finished());
     let running = Some(finished).filter(|i| run.running() && *i < all.len());
     let titles: Vec<String> = all
         .iter()
@@ -149,7 +166,7 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
         Some(state) => lines.extend(line(t, Err(&ca_request::sentence(state.detail())))),
         None => lines.extend(line(
             t,
-            Ok(&format!("{} ({})", run.work.kind.done(), run.took())),
+            Ok(&format!("{}{}", run.work.kind.done(), run.took())),
         )),
     }
     frame.render_widget(Paragraph::new(lines), area);
@@ -165,14 +182,16 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     }
     let t = &app.theme;
     let row = app.nav.row;
-    let quick = app.maint.certs.quick;
+    let quick = app.maint.certs.quick();
     let install = &app.install;
     let home = install.home.as_deref();
     let root = replace
         .root
         .as_ref()
         .map(|r| r.as_ref().map(|(_, name)| name));
-    let (note, rows, enter, said) = if quick {
+    let (note, rows, enter, said) = if app.maint.certs.imported() {
+        import::page(app)
+    } else if quick {
         let file = match &replace.key {
             None => vec![Span::styled("not added yet", t.yellow())],
             Some((path, checked)) => vec![
@@ -210,55 +229,9 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             _ => None,
         };
         let note = "Needs the root key kept offline at install. Nothing changes until Replace.";
-        (note, rows, enter, said)
+        (note, rows, enter, owned(said))
     } else {
-        let signed = match &install.signed {
-            Some(who) => vec![
-                Span::styled("✓ added", t.green()),
-                Span::styled(format!(" · signed by {who}"), t.dim()),
-            ],
-            None => vec![Span::styled("not added yet", t.yellow())],
-        };
-        let kept = match root {
-            Some(Ok(name)) => vec![
-                Span::styled("✓", t.green()),
-                Span::raw(format!(" {name} (kept)")),
-            ],
-            _ => vec![Span::styled("cannot be read", t.red())],
-        };
-        let ready = install.accepted();
-        let rows = vec![
-            Row::entry("Show the request", "to copy it to your CA"),
-            Row::Entry {
-                name: vec![Span::raw("Signed certificate")],
-                value: signed,
-            },
-            Row::Entry {
-                name: vec![Span::raw("Your CA's certificate")],
-                value: kept,
-            },
-            Row::entry(
-                "Replace",
-                if ready {
-                    "a new intermediate from your CA"
-                } else {
-                    "once the signed certificate is added"
-                },
-            ),
-        ];
-        let enter = match row {
-            0 => Some("Show the request"),
-            1 => Some("Add the signed certificate"),
-            3 if ready => Some("Replace"),
-            _ => None,
-        };
-        let said = match (&install.error, root) {
-            (Some(why), _) => Some(Err(why.as_str())),
-            (None, Some(Err(why))) => Some(Err(why.as_str())),
-            _ => None,
-        };
-        let note = "The same steps as at install. Nothing changes until Replace.";
-        (note, rows, enter, said)
+        own::page(app)
     };
     // While the request is made or the certificates are kept.
     let busy = app
@@ -280,7 +253,14 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     if let Some(said) = said {
         // The list's last line is the blank one before it.
         lines.pop();
-        lines.extend(line(t, said));
+        lines.extend(line(t, said.as_deref().map_err(String::as_str)));
+    }
+    if let Some(hint) = install.p12_hint().filter(|_| app.maint.certs.imported()) {
+        lines.extend(
+            wrap(&hint, 76, 2)
+                .into_iter()
+                .map(|l| Line::styled(format!("    {l}"), t.dim())),
+        );
     }
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -294,8 +274,8 @@ impl<H: Host> App<H> {
             }
             self.run = None;
         }
-        let pem = std::fs::read_to_string(self.root.join(ROOT_CERT.trim_start_matches('/')));
-        let root = pem
+        let read = |abs: &str| std::fs::read_to_string(self.root.join(abs.trim_start_matches('/')));
+        let root = read(ROOT_CERT)
             .map_err(|e| format!("{ROOT_CERT}: {e}"))
             .and_then(|pem| {
                 let name = platform_pki::issuer_common_name(&pem)
@@ -307,12 +287,21 @@ impl<H: Host> App<H> {
             root: Some(root),
             ..Replace::default()
         };
-        if self.maint.certs.quick {
+        if self.maint.certs.imported() {
+            return self.open_import();
+        }
+        if self.maint.certs.quick() {
             self.nav.row = 0;
             return;
         }
         // Your own CA: the install's request, made again or reused, for
-        // this host's names; the root stays the one agents trust.
+        // this host's names; the root stays the one agents trust. The CAs
+        // between go to ca-accept with it.
+        if let (Some(Ok((pem, _))), Ok(chain)) = (&mut self.maint.replace.root, read(CHAIN))
+            && !chain.trim().is_empty()
+        {
+            *pem = format!("{pem}\n{}", chain.trim());
+        }
         let install = &mut self.install;
         install.request = None;
         install.signed = None;
@@ -342,7 +331,10 @@ impl<H: Host> App<H> {
             }
             return;
         }
-        let quick = self.maint.certs.quick;
+        if self.maint.certs.imported() {
+            return self.import_key(key);
+        }
+        let quick = self.maint.certs.quick();
         if self.move_row(&key, if quick { 2 } else { 4 }) || key != Key::Enter {
             return;
         }
@@ -357,12 +349,22 @@ impl<H: Host> App<H> {
             (false, 0 | 1) if !made => self.make_request(),
             (false, 0) => self.nav.go(Screen::Install(Stage::Request)),
             (false, 1) => {
-                // The kept root goes with the signed certificate (ca-accept).
-                if let Some(Ok((pem, name))) = &self.maint.replace.root {
+                // The kept CAs go with the signed certificate (ca-accept),
+                // unless they were added again.
+                if let Some(Ok((pem, name))) = &self.maint.replace.root
+                    && !self.maint.replace.readded
+                {
                     self.install.root_pem = Some(pem.clone());
                     self.install.root_added = Some(name.clone());
                 }
                 self.nav.go(Screen::Install(Stage::Add(Which::Signed)));
+            }
+            // A new intermediate may come from another CA under the root.
+            (false, 2) => {
+                self.maint.replace.readded = true;
+                self.install.root_pem = None;
+                self.install.root_added = None;
+                self.nav.go(Screen::Install(Stage::Add(Which::Root)));
             }
             (false, 3) if self.install.accepted() => self.ask_replace(),
             _ => {}
@@ -409,8 +411,11 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn replace_yes(&mut self) {
+        if self.maint.certs.imported() {
+            return self.import_yes();
+        }
         let key = match &self.maint.replace.key {
-            Some((path, Ok(()))) if self.maint.certs.quick => Some(path.display().to_string()),
+            Some((path, Ok(()))) if self.maint.certs.quick() => Some(path.display().to_string()),
             _ => None,
         };
         let done = "Replaced".to_owned();
@@ -421,8 +426,13 @@ impl<H: Host> App<H> {
     /// A run ended: your own CA's certificate kept goes to Replace; a
     /// replacement says when agents have moved over.
     pub(super) fn replace_ended(&mut self) {
-        let quick = self.maint.certs.quick;
+        let quick = self.maint.certs.quick();
         let Some(run) = self.run.as_mut() else { return };
+        if matches!(run.work.kind, Kind::Replace { .. }) {
+            // Sent or not, no copy of an imported key stays.
+            run.work.wipe();
+            self.install.forget_key();
+        }
         match &mut run.work.kind {
             Kind::Ca { .. }
                 if self.nav.screen == Screen::Maint(Page::Replace) && self.install.accepted() =>
@@ -430,7 +440,7 @@ impl<H: Host> App<H> {
                 self.nav.row = 3;
             }
             Kind::Replace { done } => {
-                let Some(StepState::Done(out)) = &run.states[0] else {
+                let Some(StepState::Done(out)) = run.states.last().and_then(Option::as_ref) else {
                     return;
                 };
                 // `done<TAB>NEW UNTIL<TAB>PREVIOUS UNTIL`; the old one is
@@ -452,3 +462,9 @@ impl<H: Host> App<H> {
         }
     }
 }
+
+#[path = "replace_import.rs"]
+mod import;
+
+#[path = "replace_own.rs"]
+mod own;

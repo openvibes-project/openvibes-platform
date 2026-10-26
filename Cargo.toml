@@ -22,6 +22,13 @@ deadpool-postgres = { version = "0.14.2", features = ["rt_tokio_1"] }
 clap = { version = "4.6.7", features = ["derive"] }
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
 x509-parser = { version = "0.18", features = ["verify"] }
+p12-keystore = "0.4.1"
+pkcs5 = { version = "0.8.1", features = ["pbes2", "sha1-insecure", "3des"] }
+aes = "0.9.3"
+cbc = { version = "0.2.1", features = ["alloc"] }
+des = "0.9.0"
+md-5 = "0.11.0"
+der = { version = "0.8.2", features = ["alloc", "derive", "oid"] }
 time = "0.3"
 ring = "0.17"
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
@@ -30,6 +37,8 @@ hyper = { version = "1.11", features = ["http1", "server"] }
 hyper-util = { version = "0.1.20", features = ["tokio", "service", "server-graceful"] }
 tokio-rustls = { version = "0.26.5", default-features = false, features = ["ring", "tls12"] }
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-webpki = { version = "0.103.16", default-features = false, features = ["ring", "std"] }
+rustls-pki-types = "1.15.1"
 tower = { version = "0.5", default-features = false, features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "std"] }

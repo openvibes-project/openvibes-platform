@@ -138,7 +138,7 @@ fn replace_quick_wrong_key_then_right_key_then_runs() {
     assert!(text.contains("Esc  Cancel"), "{text}");
     app.key(Key::Enter);
     assert_eq!(calls(&app), [format!("ca-replace --root-key {key}")]);
-    let done = "Replaced · agents move over in 30 days · put the key offline again (0 s)";
+    let done = "Replaced · agents move over in 30 days · put the key offline again";
     assert_eq!(body(&app), done_body(&STEPS, done));
 
     // Back on the page, the old intermediate is still trusted.
@@ -249,7 +249,7 @@ fn replace_own_ca_paste_then_replace() {
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     assert_eq!(calls(&app)[2], "ca-replace");
-    let done = "Replaced · agents move over in 30 days (0 s)";
+    let done = "Replaced · agents move over in 30 days";
     assert_eq!(body(&app), done_body(&STEPS[1..], done));
 }
 
@@ -364,4 +364,124 @@ fn replace_shows_the_step_running_and_where_it_failed() {
     ] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
     }
+}
+
+macro_rules! fixture {
+    ($name:literal) => {
+        include_str!(concat!("../../../../platform-pki/tests/fixtures/", $name))
+    };
+}
+const FIXTURE_ROOT: &str = fixture!("root.crt");
+const ISSUING: &str = fixture!("issuing.crt");
+
+/// Your own CA's page on a host whose intermediate came through the
+/// fixtures' issuing CA (its `chain.crt`), the request made; the next
+/// one signed by issuing too.
+fn own_ca_chain() -> (App<SetupHost>, String) {
+    let (csr, _key) = intermediate_request().unwrap();
+    let by = platform_pki::KeyAndCert {
+        cert_pem: ISSUING.into(),
+        key_pem: fixture!("issuing.key").into(),
+    };
+    let cert = sign_intermediate(&by, &csr, Utc::now()).unwrap();
+    let (pems, _) = pki(10);
+    let mut app = app_with(pems);
+    app.host.plan = plan_text().replace("quick", "careful");
+    put(&app, ROOT, FIXTURE_ROOT);
+    put(&app, "/etc/openvibes/pki/chain.crt", ISSUING);
+    app.host.answers.borrow_mut().extend([
+        Ok(format!("request\n{csr}")),
+        Ok(format!("signed\tLime Lab Issuing CA\n{csr}")),
+    ]);
+    app.open_page(Page::Certificates);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    (app, cert)
+}
+
+/// From the Replace page: the signed certificate pasted and sent.
+fn add_signed(app: &mut App<SetupHost>, cert: &str) {
+    app.nav.row = 1;
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    app.key(Key::Paste(cert.to_owned()));
+    app.key(Key::Enter);
+    type_text(app, "pw");
+    app.key(Key::Enter);
+}
+
+#[test]
+fn replace_own_ca_sends_the_kept_root_then_its_chain() {
+    let (mut app, cert) = own_ca_chain();
+    let text = screen(&app);
+    assert!(text.contains("✓ Lime Lab Root CA (kept)"), "{text}");
+    add_signed(&mut app, &cert);
+    assert_eq!(
+        calls(&app)[1],
+        format!(
+            "ca-accept --cert {} --root-cert {}\n{}",
+            cert.trim(),
+            FIXTURE_ROOT.trim(),
+            ISSUING.trim()
+        )
+    );
+}
+
+#[test]
+fn replace_own_ca_may_add_the_cas_again() {
+    let (mut app, cert) = own_ca_chain();
+    app.nav.row = 2;
+    assert!(screen(&app).contains("Enter  Add your CA's certificate"));
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Add(Which::Root)));
+    app.key(Key::Esc);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::Replace));
+    assert!(screen(&app).contains("not added yet"), "{}", screen(&app));
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    app.key(Key::Paste(format!("{ISSUING}{FIXTURE_ROOT}")));
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::Replace));
+    assert!(
+        screen(&app).contains("✓ added · Lime Lab Root CA"),
+        "{}",
+        screen(&app)
+    );
+    add_signed(&mut app, &cert);
+    assert_eq!(
+        calls(&app)[1],
+        format!(
+            "ca-accept --cert {} --root-cert {ISSUING}{}",
+            cert.trim(),
+            FIXTURE_ROOT.trim()
+        )
+    );
+}
+
+#[test]
+fn replace_own_ca_adding_the_cas_after_acceptance_sends_them() {
+    let (mut app, cert) = own_ca_chain();
+    let (csr, _) = intermediate_request().unwrap();
+    app.host
+        .answers
+        .borrow_mut()
+        .push_back(Ok(format!("signed\tLime Lab Issuing CA\n{csr}")));
+    add_signed(&mut app, &cert);
+    app.nav.row = 2;
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    app.key(Key::Paste(format!("{ISSUING}{FIXTURE_ROOT}")));
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    assert_eq!(
+        calls(&app)[2],
+        format!(
+            "ca-accept --cert {} --root-cert {ISSUING}{}",
+            cert.trim(),
+            FIXTURE_ROOT.trim()
+        )
+    );
 }

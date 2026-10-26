@@ -251,3 +251,74 @@ fn a_final_check_that_says_nothing_or_fails_is_not_repaired() {
         );
     }
 }
+
+#[test]
+fn a_long_problem_wraps_under_its_column_at_80_columns() {
+    let lost = "certificates\tfailed\t/etc/openvibes/pki/chain.crt is missing: restore it from \
+                a backup (agents could not reach the root)\n";
+    let mut app = set_up(vec![Ok(lost.to_owned())]);
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    let at = text.find("▲ Server certificates").unwrap();
+    let lines: Vec<&str> = text[at..].lines().map(str::trim_end).take(3).collect();
+    assert!(
+        lines[0].ends_with("/etc/openvibes/pki/chain.crt is missing:"),
+        "{text}"
+    );
+    assert_eq!(
+        lines[1].trim_start(),
+        "restore it from a backup (agents could not…",
+        "{text}"
+    );
+    // Under the detail's column, not the title's (the first line starts at ▲).
+    let column = |line: &str, word: &str| line[..line.find(word).unwrap()].chars().count();
+    assert_eq!(
+        column(lines[1], "restore"),
+        column(lines[0], "/etc") + 4,
+        "{text}"
+    );
+    assert!(lines[2].contains("other steps in order"), "{text}");
+}
+
+/// More problems than 80×24 holds: one line each, then how many more; the
+/// actions stay in view.
+#[test]
+fn many_problems_leave_room_for_the_actions() {
+    let long = "a sentence long enough to need a second line at eighty columns, and then some";
+    let status: String = ["packages", "postgres", "certificates", "firewall"]
+        .iter()
+        .map(|s| format!("{s}\tfailed\t{long}\n"))
+        .collect();
+    let mut app = set_up(vec![Ok(status.clone())]);
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    for want in [
+        "4 problems found",
+        "▲ Install packages",
+        "⭣ 2 more",
+        "Fix 4 problems",
+        "Check again",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+    assert!(!text.contains("then some"), "one line each\n{text}");
+    // Two long problems: one line each too, so both and the actions fit.
+    let two: String = status.lines().take(2).map(|l| format!("{l}\n")).collect();
+    let mut app = set_up(vec![Ok(two)]);
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    for want in [
+        "▲ Install packages",
+        "▲ PostgreSQL",
+        "Fix 2 problems",
+        "Check again",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+}

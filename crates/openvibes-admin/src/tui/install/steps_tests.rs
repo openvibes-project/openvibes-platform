@@ -373,6 +373,7 @@ fn issue_87_says_a_bad_plan_and_moves_a_taken_port() {
         active: active.into(),
         ready: None,
         since: None,
+        last_run_failed: false,
     };
     for (active, moved) in [("failed", true), ("active", false)] {
         let mut app = app_with_plan(&format!("{PLAN}# no ca\n"), vec![]);

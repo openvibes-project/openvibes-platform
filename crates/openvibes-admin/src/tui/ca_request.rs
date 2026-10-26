@@ -1,6 +1,7 @@
 //! What the install's Certificates step and Maintenance › Certificates ›
 //! Replace both need around the CA: the helper's refusal as a sentence,
-//! a file picked in the file browser, and reading it (at most `MAX`).
+//! a file picked in the file browser, and reading it (at most `MAX`, or
+//! `MAX_FILE` bytes for Import from your PKI).
 //! Your own CA's request, paste box and two ways to add a certificate are
 //! the install's screens (`install/certs.rs`, `install/paste.rs`), which
 //! Replace opens as they are.
@@ -11,6 +12,9 @@ use super::{app::Key, maint::folder::Browse, ui::list::Scroll};
 
 /// The most a paste or a file gives: a certificate or a key is ~1 KiB.
 pub const MAX: usize = 64 * 1024;
+
+/// The most an Import file gives: a .p12 with a long chain is a few KiB.
+pub const MAX_FILE: u64 = 1024 * 1024;
 
 /// What the helper's failure says, without its prefixes.
 pub fn sentence(why: &str) -> String {
@@ -77,4 +81,14 @@ pub fn read(path: &std::path::Path) -> std::io::Result<String> {
         .take(MAX as u64)
         .read_to_end(&mut bytes)?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// The file's bytes, at most `MAX_FILE` of them: a .p12 is binary, so it
+/// is never decoded as text here.
+pub fn read_bytes(path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)?
+        .take(MAX_FILE)
+        .read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
