@@ -39,6 +39,8 @@ pub(super) struct SetupHost {
     pub(super) shells: Cell<usize>,
     /// `shell()` fails, as when the login shell cannot start.
     pub(super) no_shell: bool,
+    /// `own_console_cert()`: your own console certificate, if any.
+    pub(super) own: Option<String>,
     /// `certificates()` calls made.
     pub(super) cert_reads: Cell<usize>,
 }
@@ -77,6 +79,9 @@ impl Host for SetupHost {
         } else {
             vec![("/etc/openvibes/pki/intermediate.crt", Ok(String::new()))]
         }
+    }
+    fn own_console_cert(&self) -> Option<String> {
+        self.own.clone()
     }
     fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
         Ok(self.packages.clone())
@@ -161,6 +166,7 @@ fn built(
         pems: Vec::new(),
         shells: Cell::new(0),
         no_shell: false,
+        own: None,
         cert_reads: Cell::new(0),
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);

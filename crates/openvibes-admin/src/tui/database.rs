@@ -7,7 +7,7 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 use platform_host::{Database, DiskUse, Host, HostError, ServiceStatus};
 
-use super::app::App;
+use super::{app::App, console_cert_check::console_cert_check};
 use crate::setup::pki::{INTERMEDIATE_WARN_DAYS, RENEW_DAYS};
 
 /// Disk use from which Health reports a problem.
@@ -34,7 +34,7 @@ pub struct Check {
     pub text: String,
 }
 
-fn check(problem: bool, text: String) -> Check {
+pub(super) fn check(problem: bool, text: String) -> Check {
     Check { problem, text }
 }
 
@@ -370,7 +370,13 @@ impl<H: Host> App<H> {
 /// problems first. The unit lines are built by Status, not here. Slow on a
 /// real host: `run` calls it on another thread.
 pub fn health_checks<H: Host>(host: &H) -> Vec<Check> {
-    let certificates = host.certificates();
+    let mut certificates = host.certificates();
+    // Your own console certificate is judged by its own check, not by the
+    // platform's renewal and address rules.
+    let own = host.own_console_cert();
+    if own.is_some() {
+        certificates.retain(|(path, _)| !path.ends_with("/console-chain.pem"));
+    }
     let mut health = checks(
         &[],
         &certificates,
@@ -380,6 +386,16 @@ pub fn health_checks<H: Host>(host: &H) -> Vec<Check> {
         Utc::now(),
     );
     health.extend(uncovered(&certificates, &host.addresses()));
+    if let Some(own) = own {
+        let mut names = host
+            .setup_plan()
+            .ok()
+            .and_then(|text| crate::setup::plan::plan_of(&text).ok())
+            .map(|plan| plan.names())
+            .unwrap_or_default();
+        names.extend(host.addresses());
+        health.extend(console_cert_check(&own, &names, Utc::now()));
+    }
     health.extend(chain_check(&certificates, host.root_and_chain()));
     if let Some(files) = host.signer() {
         health.extend(signer_checks(&files));

@@ -10,7 +10,7 @@ use zeroize::Zeroizing;
 use super::Ctx;
 
 /// The admin's own certificate for the console: the leaf, then the CAs above it.
-pub(crate) const OWN_CERT: &str = "/etc/openvibes/tls/console-own.crt";
+pub(crate) const OWN_CERT: &str = platform_host::OWN_CONSOLE_CERT;
 /// Its key, 0600 root.
 pub(crate) const OWN_KEY: &str = "/etc/openvibes/tls/console-own.key";
 
