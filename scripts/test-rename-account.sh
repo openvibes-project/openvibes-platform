@@ -44,11 +44,17 @@ run post ingest "$cfg"
 cmp -s "$cfg" "$T/before" || fail "second run changed the config"
 grep -q ALTER "$T/log" && fail "renamed a role that is already renamed"
 
-# PostgreSQL unreachable: success, and the statement is printed.
+# PostgreSQL unreachable on a set-up host: success, and the statement is
+# printed.
 echo postgres >> "$T/users"
-touch "$T/down"
-run post vulns || fail "failed the transaction"
+touch "$T/down" "$T/setup.toml"
+run post vulns "" "$T/setup.toml" || fail "failed the transaction"
 grep -q 'ALTER ROLE openvibes_vulns RENAME TO "openvibes-vulns";' "$T/err" || fail "statement not printed"
+# Reinstalled after Remove everything: the postgres user is left, PostgreSQL
+# and setup.toml are gone; nothing to rename, nothing to say.
+echo 'database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-admin"' > "$T/again.toml"
+run post admin "$T/again.toml" "$T/no-setup.toml" || fail "failed the transaction"
+[[ ! -s $T/err ]] || fail "a reinstall printed: $(cat "$T/err")"
 sed -i '/^postgres$/d' "$T/users"
 
 # A fresh install (install walkthrough, 2026-10-08): PostgreSQL is not on

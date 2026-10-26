@@ -502,7 +502,9 @@ the admin TUI work (`openvibes-admin`, `openvibes-ingest`,
   On a fresh install PostgreSQL is not on the host yet (Setup installs it)
   and the config points at the local socket: there is no role to rename,
   so nothing is printed (install walkthrough, 2026-10-08, where the message
-  alarmed a new user).
+  alarmed a new user). The same after Remove everything, which leaves the
+  `postgres` user but not `setup.toml`: a host that is not set up and whose
+  config points here has no role to rename.
 
 `%post` only changes the config and the role once the OS account was
 renamed, and warns when the roles are not as expected (neither name, or
