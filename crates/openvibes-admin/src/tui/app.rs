@@ -345,6 +345,10 @@ impl<H: Host> App<H> {
                     self.console_left();
                 }
                 self.nav.pop();
+                // Home's summary from fresh checks, not the ones Status read.
+                if self.nav.screen == Screen::Home {
+                    self.load_health();
+                }
                 // A note from another screen is not news here.
                 self.message = None;
                 self.find_held_status_item();

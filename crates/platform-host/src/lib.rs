@@ -208,8 +208,8 @@ pub trait Host {
     fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
         Vec::new()
     }
-    /// [`ROOT_CERT`] as text and whether [`CHAIN`] exists; `None` without
-    /// a readable root.
+    /// [`ROOT_CERT`] as text and whether [`CHAIN`] exists, or the new one
+    /// a Replace cut short left beside it; `None` without a readable root.
     fn root_and_chain(&self) -> Option<(String, bool)> {
         None
     }

@@ -98,6 +98,18 @@ pub fn items(services: &[ServiceStatus], checks: &[Check]) -> Vec<Item> {
     out
 }
 
+/// A problem drawn red: one that has happened, or a stopped unit.
+fn red(item: &Item) -> bool {
+    matches!(
+        item,
+        Item::Problem { red: true, .. }
+            | Item::Problem {
+                fix: Some(Fix::Start(_)),
+                ..
+            }
+    )
+}
+
 /// How a unit's state reads on Status and Service.
 pub fn state_word(active: &str) -> &str {
     match active {
@@ -145,8 +157,8 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         heading(&mut rows, "Needs attention", String::new());
     }
     for item in &items {
-        if let Item::Problem { text, fix, red, .. } = item {
-            let (mark, style) = if *red || matches!(fix, Some(Fix::Start(_))) {
+        if let Item::Problem { text, .. } = item {
+            let (mark, style) = if red(item) {
                 ("■ ", t.red())
             } else {
                 ("▲ ", t.yellow())
@@ -158,6 +170,11 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         }
     }
     let installed: Vec<&ServiceStatus> = app.services.iter().filter(|s| s.installed).collect();
+    // As wide as the longest unit's mark and name, so the states line up.
+    let name_w = installed
+        .iter()
+        .map(|s| s.unit.label().chars().count() + 2)
+        .fold(18, usize::max);
     let running = installed.iter().filter(|s| s.active == "active").count();
     heading(
         &mut rows,
@@ -214,7 +231,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         app.nav.row,
         &mut scroll,
         area.height.saturating_sub(HELP_LINES),
-        18,
+        name_w,
     );
     // Under the list: the highlighted problem or check in full, wrapped
     // over up to HELP_LINES lines.
@@ -308,13 +325,14 @@ impl<H: Host> App<H> {
     }
 
     /// Home's one-line summary: a failed refresh first, then no services,
-    /// then the problems.
+    /// then the problems, red as on Status when one of them is.
     pub(super) fn status_line(&self) -> Line<'static> {
-        let problems = self
-            .status_items()
+        let items = self.status_items();
+        let problems = items
             .iter()
             .filter(|i| matches!(i, Item::Problem { .. }))
             .count();
+        let any_red = items.iter().any(red);
         let installed = self.services.iter().filter(|s| s.installed).count();
         let (mark, style, text) = if let Some(error) = &self.message {
             ("✗ ", self.theme.red(), error.clone())
@@ -336,11 +354,12 @@ impl<H: Host> App<H> {
             } else {
                 &format!("{problems} things need")
             };
-            (
-                "▲ ",
-                self.theme.yellow(),
-                format!("{things} attention · see Status"),
-            )
+            let (mark, style) = if any_red {
+                ("■ ", self.theme.red())
+            } else {
+                ("▲ ", self.theme.yellow())
+            };
+            (mark, style, format!("{things} attention · see Status"))
         };
         Line::from(vec![
             Span::raw("    "),

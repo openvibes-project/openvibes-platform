@@ -37,19 +37,27 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     };
     let bar = app.bar(Bar::home(&[("Enter", enter)]));
     let area = frame::draw(frame, &app.theme, head, None, &bar);
-    let mut status = app.status_line();
+    let mut lines = vec![app.status_line()];
+    // The work's note beside the summary, else on a line of its own.
     if let Some(note) = app.work_note() {
-        status.spans.push(Span::raw("   "));
-        status.spans.extend(note);
+        let note = Line::from(note);
+        if lines[0].width() + 3 + note.width() <= usize::from(area.width) {
+            lines[0].spans.push(Span::raw("   "));
+            lines[0].spans.extend(note.spans);
+        } else {
+            lines.push(Line::from([vec![Span::raw("    ")], note.spans].concat()));
+        }
     }
-    let mut lines = vec![status];
     let mut scroll = app.nav.scroll.get();
+    let height = area
+        .height
+        .saturating_sub(u16::try_from(lines.len()).unwrap_or(u16::MAX));
     lines.extend(list::lines(
         &app.theme,
         &rows(&HOME),
         app.nav.row,
         &mut scroll,
-        area.height.saturating_sub(1),
+        height,
         15,
     ));
     app.nav.scroll.set(scroll);

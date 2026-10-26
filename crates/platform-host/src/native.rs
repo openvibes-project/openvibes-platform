@@ -331,7 +331,7 @@ impl<R: Runner> Host for Native<R> {
 
     fn root_and_chain(&self) -> Option<(String, bool)> {
         let root = std::fs::read_to_string(crate::ROOT_CERT).ok()?;
-        Some((root, std::path::Path::new(crate::CHAIN).exists()))
+        Some((root, chain_in_place(crate::CHAIN)))
     }
 
     fn own_console_cert(&self) -> Option<String> {
@@ -465,8 +465,27 @@ fn effective_root() -> bool {
     crate::shell::euid() == Some(0)
 }
 
+/// Whether `chain` exists, or the new one a Replace cut short by a crash
+/// left beside it (Repair finishes that; the chain is not lost).
+fn chain_in_place(chain: &str) -> bool {
+    [chain.to_owned(), format!("{chain}.new")]
+        .iter()
+        .any(|path| std::path::Path::new(path).exists())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_new_chain_left_by_a_crash_counts_as_in_place() {
+        let dir = std::env::temp_dir().join(format!("ov-chain-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let chain = dir.join("chain.crt").display().to_string();
+        assert!(!super::chain_in_place(&chain));
+        std::fs::write(format!("{chain}.new"), "").unwrap();
+        assert!(super::chain_in_place(&chain));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn the_package_list_refreshes_our_index_only_as_root() {
         let refresh = super::upgrades_args(true);

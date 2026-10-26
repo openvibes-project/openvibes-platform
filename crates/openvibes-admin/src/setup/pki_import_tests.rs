@@ -234,3 +234,18 @@ fn a_lost_chain_is_never_issued_without() {
     assert_eq!(applied, lost);
     assert!(!fake.called(&with(&ADMIN, &["ca", "issue-server"])));
 }
+
+#[test]
+fn a_replace_cut_short_before_its_chain_is_not_a_lost_chain() {
+    // Crashed after the bundle was renamed, before the chain was: the chain
+    // waits beside its place, and Repair's `finish_interrupted` ends it.
+    let fake = Fake::new("import-chain-staged");
+    let names = ["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"];
+    installed_certificates(&fake, &names, 10);
+    fake.file(INTERMEDIATE, OURS);
+    fake.file(ROOT_CERT, ROOT);
+    fake.file(INTERMEDIATE_KEY, OURS_KEY);
+    fake.file(&format!("{CHAIN}.new"), ISSUING);
+    let state = check(&fake.ctx(&import_plan()), Step::Certificates);
+    assert!(!state.detail().contains("is missing"), "{state:?}");
+}

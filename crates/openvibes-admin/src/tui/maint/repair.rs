@@ -271,8 +271,9 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
                 ])
             });
             lines.push(Line::raw(""));
-            // The actions stay in view: the problems get what is left, two
-            // lines each, else one, else as many as fit and how many more.
+            // The actions stay in view: the problems get what is left, whole,
+            // else two lines each, else one, else as many as fit and how
+            // many more.
             let rows: Vec<Row> = entries(&steps, half)
                 .iter()
                 .map(|(_, n, v)| Row::entry(n, v))
@@ -293,8 +294,12 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             let wrapped = |max| -> Vec<Vec<String>> {
                 details.iter().map(|(_, d)| wrap(d, 47, max)).collect()
             };
-            let mut parts = wrapped(2);
-            if parts.iter().map(Vec::len).sum::<usize>() > room {
+            let fits = |parts: &[Vec<String>]| parts.iter().map(Vec::len).sum::<usize>() <= room;
+            let mut parts = wrapped(usize::MAX);
+            if !fits(&parts) {
+                parts = wrapped(2);
+            }
+            if !fits(&parts) {
                 parts = wrapped(1);
             }
             let shown = if n > room { room.saturating_sub(1) } else { n };
