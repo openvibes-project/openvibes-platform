@@ -17,6 +17,10 @@ const SERVER: &str = include_str!("../../../platform-pki/tests/fixtures/server.c
 const SERVER_KEY: &str = include_str!("../../../platform-pki/tests/fixtures/server.key");
 const OTHER_KEY: &str = include_str!("../../../platform-pki/tests/fixtures/short.key");
 const ISSUING: &str = include_str!("../../../platform-pki/tests/fixtures/issuing.crt");
+const CLIENT_ONLY: &str =
+    include_str!("../../../platform-pki/tests/fixtures/server-client-only.crt");
+const OLD_CERT: &str = "/etc/openvibes/tls/console-own.crt.old";
+const OLD_KEY: &str = "/etc/openvibes/tls/console-own.key.old";
 const EXPIRED: &str = include_str!("../../../platform-pki/tests/fixtures/server-expired.crt");
 const CHAIN: &str = "/etc/openvibes/tls/console-chain.pem";
 const KEY: &str = "/etc/openvibes/tls/console-key.pem";
@@ -53,29 +57,133 @@ fn set_keeps_the_pair_and_installs_it() {
     assert!(restarted(&fake));
 }
 
+/// A certificate for a name the plan does not have, with its key.
+fn elsewhere() -> String {
+    let root = platform_pki::generate_root(Utc::now()).unwrap();
+    let issuer = platform_pki::Issuer::load(&root.cert_pem, &root.key_pem).unwrap();
+    let pair = issuer
+        .issue_server(&["other.example.org".to_owned()], Utc::now())
+        .unwrap();
+    format!("{}{}", pair.cert_pem, pair.key_pem)
+}
+
 #[test]
 fn set_refuses_and_writes_nothing() {
     let plan = plan(&[Ingest, Console]);
+    let name = "*.limebox.se";
+    let wrong_key = format!("Not the key of {name}: paste the key it was made with.");
     for (test, bundle, said) in [
         (
             "ca",
             format!("{ISSUING}{SERVER_KEY}"),
-            "This is a CA certificate",
+            "This is a CA certificate: pick the console's own certificate.",
         ),
-        ("expired", format!("{EXPIRED}{SERVER_KEY}"), "Expired on "),
         (
-            "key",
-            format!("{SERVER}{OTHER_KEY}"),
-            "Not the key of this certificate",
+            "expired",
+            format!("{EXPIRED}{SERVER_KEY}"),
+            "Expired on 2026-06-01: ask for a new one.",
         ),
-        ("nokey", SERVER.to_owned(), "holds no private key"),
+        ("key", format!("{SERVER}{OTHER_KEY}"), wrong_key.as_str()),
+        (
+            "client",
+            format!("{CLIENT_ONLY}{SERVER_KEY}"),
+            "Not for servers (its extended key usage): ask for a server certificate.",
+        ),
+        (
+            "covers",
+            elsewhere(),
+            "Covers none of this console's names: add one under Names first.",
+        ),
+        (
+            "nokey",
+            SERVER.to_owned(),
+            "The bundle holds no private key (PRIVATE KEY).",
+        ),
     ] {
         let fake = issuing(&format!("cert-refuse-{test}"));
         let error = set(&fake.ctx(&plan), &bundle, Utc::now()).unwrap_err();
-        assert!(error.contains(said), "{test}: {error}");
+        assert_eq!(error, said, "{test}");
         assert!(!fake.root.join("etc/openvibes/tls").exists(), "{test}");
         assert!(!restarted(&fake), "{test}");
     }
+}
+
+/// A directory where the certificate's temporary file goes: its write fails
+/// after the key's succeeded.
+fn block_cert_write(fake: &Fake) {
+    let dir = format!("{}/.console-own.crt.setup", "etc/openvibes/tls");
+    std::fs::create_dir_all(fake.root.join(dir)).unwrap();
+}
+
+#[test]
+fn a_failed_write_leaves_the_old_pair_whole() {
+    let fake = issuing("cert-write-old");
+    fake.file(OWN_CERT, "OLD CERT");
+    fake.file(OWN_KEY, "OLD KEY");
+    block_cert_write(&fake);
+    let plan = plan(&[Ingest, Console]);
+    let bundle = format!("{SERVER}{SERVER_KEY}");
+    assert!(set(&fake.ctx(&plan), &bundle, Utc::now()).is_err());
+    assert_eq!(fake.text(OWN_CERT), "OLD CERT");
+    assert_eq!(fake.text(OWN_KEY), "OLD KEY");
+    assert_eq!(mode(&fake, OWN_KEY), 0o600);
+    for gone in [OLD_CERT, OLD_KEY] {
+        assert!(!fake.root.join(gone.trim_start_matches('/')).exists());
+    }
+    assert!(!restarted(&fake));
+}
+
+#[test]
+fn a_failed_write_without_an_old_pair_leaves_neither_file() {
+    let fake = issuing("cert-write-none");
+    block_cert_write(&fake);
+    let plan = plan(&[Ingest, Console]);
+    let bundle = format!("{SERVER}{SERVER_KEY}");
+    assert!(set(&fake.ctx(&plan), &bundle, Utc::now()).is_err());
+    for gone in [OWN_CERT, OWN_KEY] {
+        assert!(!fake.root.join(gone.trim_start_matches('/')).exists());
+    }
+}
+
+#[test]
+fn a_new_one_replaces_the_old_and_leaves_no_copy() {
+    let fake = issuing("cert-replace-pair");
+    fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
+    fake.file(OWN_CERT, "OLD CERT");
+    fake.file(OWN_KEY, "OLD KEY");
+    let plan = plan(&[Ingest, Console]);
+    set(
+        &fake.ctx(&plan),
+        &format!("{SERVER}{SERVER_KEY}"),
+        Utc::now(),
+    )
+    .unwrap();
+    assert_eq!(fake.text(OWN_KEY), SERVER_KEY);
+    for gone in [OLD_CERT, OLD_KEY] {
+        assert!(!fake.root.join(gone.trim_start_matches('/')).exists());
+    }
+}
+
+#[test]
+fn copies_left_by_a_crash_are_put_back_first() {
+    let plan = plan(&[Ingest, Console]);
+    let fake = issuing("cert-leftover-reset");
+    fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
+    fake.file(OLD_CERT, "OLD CERT");
+    fake.file(OLD_KEY, "OLD KEY");
+    fake.file(OWN_CERT, "HALF");
+    // Reset removes the pair that was put back, copies included.
+    reset(&fake.ctx(&plan)).unwrap();
+    for gone in [OLD_CERT, OLD_KEY, OWN_CERT, OWN_KEY] {
+        assert!(!fake.root.join(gone.trim_start_matches('/')).exists());
+    }
+    let fake = issuing("cert-leftover-set");
+    fake.file(OLD_CERT, "OLD CERT");
+    fake.file(OLD_KEY, "OLD KEY");
+    // A refused new one: the pair put back is what stays.
+    set(&fake.ctx(&plan), "nonsense", Utc::now()).unwrap_err();
+    assert_eq!(fake.text(OWN_CERT), "OLD CERT");
+    assert_eq!(fake.text(OWN_KEY), "OLD KEY");
 }
 
 #[test]
@@ -129,7 +237,7 @@ fn the_key_never_reaches_argv_or_journal() {
 #[test]
 fn the_sentences() {
     let day = Utc::now();
-    let say = |e| console_cert_message(&e, Some("c.p12"));
+    let say = |e| console_cert_message(&e, "N", Some("c.p12"));
     assert_eq!(
         say(ServerCertError::NotForServers),
         "Not for servers (its extended key usage): ask for a server certificate."

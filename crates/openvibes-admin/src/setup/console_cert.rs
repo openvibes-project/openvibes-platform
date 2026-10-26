@@ -8,7 +8,10 @@
 use std::{fs, process::ExitCode};
 
 use chrono::{DateTime, Utc};
-use platform_host::{Step, runner::Runner};
+use platform_host::{
+    Step,
+    runner::{Runner, SystemRunner},
+};
 use platform_pki::{ChainError, PkiError, ServerCertError};
 
 use super::{
@@ -19,9 +22,10 @@ use super::{
     run_step, setup_guard,
 };
 
-/// The plain sentence for a refused certificate or key; `file` is the
-/// key's file when it came from one (a wrong password names it).
-pub fn console_cert_message(e: &ServerCertError, file: Option<&str>) -> String {
+/// The plain sentence for a refused certificate or key; `name` is the
+/// certificate's name, `file` the key's file when it came from one (a wrong
+/// password names it).
+pub fn console_cert_message(e: &ServerCertError, name: &str, file: Option<&str>) -> String {
     match e {
         ServerCertError::InvalidPem => import_message(&ChainError::InvalidPem, "", None),
         ServerCertError::IsCa => {
@@ -35,9 +39,8 @@ pub fn console_cert_message(e: &ServerCertError, file: Option<&str>) -> String {
         ServerCertError::CoversNone => {
             "Covers none of this console's names: add one under Names first.".into()
         }
-        // The signature carries no name: the certificate is the one sent.
         ServerCertError::Pki(PkiError::KeyMismatch) => {
-            "Not the key of this certificate: paste the key it was made with.".into()
+            format!("Not the key of {name}: paste the key it was made with.")
         }
         ServerCertError::Pki(PkiError::WrongPassword) => {
             import_message(&ChainError::Pki(PkiError::WrongPassword), "", file)
@@ -55,21 +58,61 @@ fn keep<R: Runner>(
     now: DateTime<Utc>,
 ) -> Result<platform_pki::ServerCert, String> {
     let (certs, key) = split(bundle)?;
-    let say = |e: ServerCertError| console_cert_message(&e, None);
-    let cert =
-        platform_pki::check_server_cert(&certs, &certificate_names(ctx), now).map_err(say)?;
+    let cert = platform_pki::check_server_cert(&certs, &certificate_names(ctx), now)
+        .map_err(|e| console_cert_message(&e, "", None))?;
+    let say = |e: ServerCertError| console_cert_message(&e, &cert.name, None);
     // PKCS#8 only (the TUI decrypts and converts); this checks it again.
     let key = platform_pki::pkcs8_pem(&key, None).map_err(key_message)?;
     platform_pki::check_server_key(&cert, &key).map_err(say)?;
     let owner = Some(("root", "root"));
-    let written = ctx
-        .put(OWN_KEY, key.as_bytes(), owner, 0o600)
+    // A pair already there is copied aside first, and put back when a
+    // write fails: never half old, half new.
+    let aside = pair().map(|(abs, mode)| (abs, old(abs), mode));
+    let kept = aside.iter().try_for_each(|(abs, old, mode)| {
+        if ctx.exists(abs) {
+            ctx.copy(abs, old, owner, *mode)
+        } else {
+            Ok(())
+        }
+    });
+    let written = kept
+        .and_then(|()| ctx.put(OWN_KEY, key.as_bytes(), owner, 0o600))
         .and_then(|()| ctx.put(OWN_CERT, cert.chain_pem.as_bytes(), owner, 0o644));
     if let Err(error) = written {
-        let _ = remove(ctx);
+        // What was aside comes back; a file with none aside goes.
+        for (abs, old, _) in &aside {
+            if fs::rename(ctx.path(old), ctx.path(abs)).is_err() {
+                let _ = fs::remove_file(ctx.path(abs));
+            }
+        }
         return Err(error);
     }
+    for (_, old, _) in &aside {
+        let _ = fs::remove_file(ctx.path(old));
+    }
     Ok(cert)
+}
+
+/// The pair with its modes, the key first.
+fn pair() -> [(&'static str, u32); 2] {
+    [(OWN_KEY, 0o600), (OWN_CERT, 0o644)]
+}
+
+fn old(abs: &str) -> String {
+    format!("{abs}.old")
+}
+
+/// Puts back the copies a run cut short left aside (nothing without any).
+fn put_back<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+    for (abs, _) in pair() {
+        match fs::rename(ctx.path(&old(abs)), ctx.path(abs)) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{abs}: {error}"));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// Removes the pair, the key first; whether there was one.
@@ -100,6 +143,7 @@ fn install<R: Runner>(ctx: &Ctx<R>, kept: &str) -> Result<(), String> {
 
 /// `set<TAB>NAME<TAB>UNTIL` once the console uses the certificate.
 pub fn set<R: Runner>(ctx: &Ctx<R>, bundle: &str, now: DateTime<Utc>) -> Result<String, String> {
+    put_back(ctx)?;
     let cert = keep(ctx, bundle, now)?;
     install(ctx, "The certificate is kept")?;
     Ok(format!(
@@ -112,6 +156,7 @@ pub fn set<R: Runner>(ctx: &Ctx<R>, bundle: &str, now: DateTime<Utc>) -> Result<
 /// `reset` once the console has the platform's certificate again; nothing
 /// to do (and nothing restarted) without an own pair.
 pub fn reset<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
+    put_back(ctx)?;
     if remove(ctx)? {
         install(ctx, "Your own certificate is removed")?;
     }
@@ -131,8 +176,8 @@ fn finish(done: Result<String, String>) -> ExitCode {
     }
 }
 
-/// `helper console-cert-set`: the bundle on stdin, under the Setup lock.
-pub fn run_set(input: &str) -> ExitCode {
+/// Takes the Setup lock, then runs `verb` on this host.
+fn locked(verb: impl FnOnce(&Ctx<SystemRunner>) -> Result<String, String>) -> ExitCode {
     let (_lock, plan) = match begin() {
         Ok(v) => v,
         Err(code) => return code,
@@ -140,19 +185,17 @@ pub fn run_set(input: &str) -> ExitCode {
     if let Err(code) = setup_guard() {
         return code;
     }
-    finish(set(&super::host_ctx(&plan, false), input, Utc::now()))
+    finish(verb(&super::host_ctx(&plan, false)))
+}
+
+/// `helper console-cert-set`: the bundle on stdin, under the Setup lock.
+pub fn run_set(input: &str) -> ExitCode {
+    locked(|ctx| set(ctx, input, Utc::now()))
 }
 
 /// `helper console-cert-reset`, under the Setup lock.
 pub fn run_reset() -> ExitCode {
-    let (_lock, plan) = match begin() {
-        Ok(v) => v,
-        Err(code) => return code,
-    };
-    if let Err(code) = setup_guard() {
-        return code;
-    }
-    finish(reset(&super::host_ctx(&plan, false)))
+    locked(reset)
 }
 
 #[cfg(test)]
