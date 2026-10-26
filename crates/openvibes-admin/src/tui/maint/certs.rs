@@ -1,9 +1,11 @@
-//! Maintenance › Certificates (certs2.py, certs4a.py, certs4b.py #10): the
-//! server certificates renew themselves, so the page says when next; the
-//! intermediate (an imported one: from your PKI, and the CAs above it), the
-//! previous one while agents move over, and the way to the Names page and
-//! to Replace the intermediate. The dates and names are read from the
-//! certificate files, not the plan; how the CA was made is the plan's.
+//! Maintenance › Certificates (certs2.py, certs4a.py, certs4b.py #10,
+//! certs4c.py #1, #9, #13): the server certificates renew themselves, so
+//! the page says when next; the console's (the platform's, or your own and
+//! when it ends); the intermediate (an imported one: from your PKI, and the
+//! CAs above it), the previous one while agents move over, and the way to
+//! the Names page, to Replace the intermediate and to the Console
+//! certificate. The dates and names are read from the certificate files,
+//! not the plan; how the CA was made is the plan's.
 
 use std::path::Path;
 
@@ -25,6 +27,8 @@ use crate::{
     },
     tui::{
         app::{App, Key},
+        console_cert_check::{WARN_DAYS, days_left},
+        install::server_check::name_of,
         run::Kind,
         status::wrap,
         ui::{
@@ -56,6 +60,8 @@ pub struct Certs {
     pub(super) ca: Option<CaMode>,
     /// Why Replace the intermediate did not open (ruling 7).
     refused: Option<String>,
+    /// Your own console certificate (its PEM), if the console uses one.
+    pub(super) own: Option<String>,
 }
 
 impl Certs {
@@ -126,7 +132,7 @@ pub(super) fn previous_until(root: &Path) -> Option<Result<String, String>> {
     )
 }
 
-/// "Web and agents": renewed automatically, and when next; red when the
+/// "Agents": renewed automatically, and when next; red when the
 /// renewal has not managed it with `RENEW_DAYS` left (Status says why).
 fn renewal(
     t: &Theme,
@@ -150,6 +156,34 @@ fn renewal(
     vec![
         Span::styled("renewed automatically", t.green()),
         Span::raw(when),
+    ]
+}
+
+/// "Console": the platform's, renewed with the agents; or your own, amber
+/// within `WARN_DAYS` of its end and red once ended.
+pub(super) fn console_row(t: &Theme, own: Option<&str>, now: DateTime<Utc>) -> Vec<Span<'static>> {
+    let Some(pem) = own else {
+        return vec![
+            Span::styled("from the platform", t.green()),
+            Span::raw(" · renewed with the agents"),
+        ];
+    };
+    let Ok(end) = until(pem) else {
+        return vec![Span::styled("your own · cannot be read", t.red())];
+    };
+    let date = end.format("%Y-%m-%d");
+    if end <= now {
+        return vec![Span::styled(format!("your own · ended on {date}"), t.red())];
+    }
+    let days = (end - now).num_days();
+    if days <= WARN_DAYS {
+        let text = format!("your own · ends {date}, {}", days_left(days));
+        return vec![Span::styled(text, t.yellow())];
+    }
+    let name = name_of(pem).map(|n| format!(" · {n}")).unwrap_or_default();
+    vec![
+        Span::styled("your own", t.bold()),
+        Span::raw(format!("{name} · until {date}")),
     ]
 }
 
@@ -181,6 +215,7 @@ fn signed_by(root: &Path, ours: Option<&str>) -> Result<Vec<String>, String> {
 fn report(
     t: &Theme,
     certs: Pems,
+    own: Option<&str>,
     ca: Option<CaMode>,
     above: Option<Result<Vec<String>, String>>,
     previous: Option<Result<String, String>>,
@@ -199,10 +234,8 @@ fn report(
         })
         .collect();
     if !server.is_empty() {
-        rows.push((
-            "Web and agents",
-            renewal(t, server.into_iter().collect(), now),
-        ));
+        rows.push(("Agents", renewal(t, server.into_iter().collect(), now)));
+        rows.push(("Console", console_row(t, own, now)));
     }
     if let Some(pem) = pem_of(certs, INGEST) {
         let names = pem.as_ref().map_err(ToString::to_string).and_then(|p| {
@@ -260,20 +293,16 @@ fn report(
             Some(Err(e)) => rows.push(("Previous intermediate", red(e))),
             None => {}
         }
-        if quick {
-            let text = "offline: needed only to replace the intermediate";
-            rows.push(("Root key", vec![Span::styled(text, t.dim())]));
-        }
     }
     rows
 }
 
-const ACTIONS: [&str; 2] = ["Names", "Replace the intermediate"];
+const ACTIONS: [&str; 3] = ["Names", "Replace the intermediate", "Console certificate"];
 
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let t = &app.theme;
     let certs = &app.maint.certs;
-    let row = app.nav.row.min(1);
+    let row = app.nav.row.min(2);
     let bar = app.bar(Bar::keys(&[("Enter", ACTIONS[row])]));
     let area = frame::draw(frame, t, head, Some("Certificates"), &bar);
     let mut lines = vec![Line::raw("")];
@@ -294,17 +323,30 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         Some(CaMode::Import) => "import the next one from your PKI",
         _ => "a new request for your CA",
     };
+    let console = if certs.own.is_some() {
+        "use a new one, or go back to the platform's"
+    } else {
+        "use your own"
+    };
     let rows = [
         Row::entry(ACTIONS[0], "add or remove a name agents use"),
         Row::entry(ACTIONS[1], replace),
+        Row::entry(ACTIONS[2], console),
     ];
+    let said = (certs.refused.as_deref()).map_or_else(Vec::new, |why| wrap(why, 72, 2));
+    // The three entries, a blank line above and below. Its last blank line
+    // may fall off the screen; with less room the list scrolls. A refusal
+    // takes that last line and the lines below.
+    let full = 7;
+    let used = lines.len() + said.len().saturating_sub(1);
+    let room = usize::from(area.height).saturating_sub(used);
+    let height = if room + 1 >= full { full } else { room.max(3) };
     let mut scroll = app.nav.scroll.get();
-    lines.extend(list::lines(t, &rows, row, &mut scroll, 5, 26));
+    lines.extend(list::lines(t, &rows, row, &mut scroll, height as u16, 26));
     app.nav.scroll.set(scroll);
-    if let Some(why) = &certs.refused {
-        // In the list's last (blank) line, after one more when there is room.
+    if !said.is_empty() {
+        // After one more blank line when there is room.
         lines.pop();
-        let said = wrap(why, 72, 2);
         if lines.len() + said.len() < usize::from(area.height) {
             lines.push(Line::raw(""));
         }
@@ -325,7 +367,13 @@ impl<H: Host> App<H> {
             .ok()
             .and_then(|text| plan_of(&text).ok())
             .map(|plan| plan.ca);
-        let certs = self.host.certificates();
+        let mut certs = self.host.certificates();
+        // The console's file holds your own certificate then: it is not
+        // renewed with the agents'.
+        let own = self.host.own_console_cert();
+        if own.is_some() {
+            certs.retain(|(path, _)| *path != SERVER[2]);
+        }
         let ours = pem_of(&certs, INTERMEDIATE).and_then(|pem| pem.as_ref().ok());
         let chained = self.root.join(CHAIN.trim_start_matches('/')).exists();
         // Always for an import; otherwise with CAs between ours and the
@@ -337,11 +385,20 @@ impl<H: Host> App<H> {
             above => Some(above),
         };
         let previous = previous_until(&self.root);
-        let rows = report(&self.theme, &certs, ca, above, previous, Utc::now());
+        let rows = report(
+            &self.theme,
+            &certs,
+            own.as_deref(),
+            ca,
+            above,
+            previous,
+            Utc::now(),
+        );
         self.maint.certs = Certs {
             rows,
             ca,
             refused: None,
+            own,
         };
         // Back from a replacement that ended: on Names (certs4a.py #10).
         if self
@@ -366,6 +423,10 @@ impl<H: Host> App<H> {
         }
         if self.nav.row == 0 {
             return self.open_page(Page::Names);
+        }
+        if self.nav.row == 2 {
+            let own = self.maint.certs.own.is_some();
+            return self.open_page(if own { Page::Console } else { Page::ConsoleUse });
         }
         // Another replacement now would drop the intermediate most agents
         // still hold certificates from: the helper refuses it too.

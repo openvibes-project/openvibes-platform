@@ -13,6 +13,7 @@ mod paste;
 mod quick;
 mod review;
 mod run;
+pub(super) mod server_check;
 pub(super) mod steps;
 mod welcome;
 pub(super) use run::draw;
@@ -37,7 +38,7 @@ mod steps_tests;
 
 use platform_host::Step;
 
-pub use import::{Imported, Locked};
+pub use import::{Added, Imported, Locked};
 
 use super::{
     maint::folder::Browse,
@@ -138,6 +139,10 @@ pub struct Install {
     pub unlocked: Option<zeroize::Zeroizing<String>>,
     /// The helper's `imported` line once it kept the import: Next goes on.
     pub import_done: Option<String>,
+    /// The console's names while Maintenance › Certificates › Console adds
+    /// your own certificate: the Certificate and Private key rows then
+    /// check a server certificate for them, not an intermediate.
+    pub server: Option<Vec<String>>,
     /// The paste box's last check, and a hash of what it depended on.
     pub checked: std::cell::RefCell<Option<(u64, paste::Said)>>,
     /// Keyed per run: no fixed digest of a key is kept.
@@ -169,6 +174,7 @@ impl Install {
             locked: None,
             unlocked: None,
             import_done: None,
+            server: None,
             checked: std::cell::RefCell::new(None),
             check_hasher: std::hash::RandomState::new(),
             console_port: ports::CONSOLE_DEFAULT.to_string(),

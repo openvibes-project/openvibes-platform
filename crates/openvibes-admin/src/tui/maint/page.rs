@@ -14,6 +14,10 @@ pub enum Page {
     Names,
     /// Replace the intermediate (certs2.py, certs4a.py).
     Replace,
+    /// The console's certificate, once yours is in (certs4c.py #10).
+    Console,
+    /// Use your own certificate for the console (certs4c.py #2-#8).
+    ConsoleUse,
     Uninstall,
     WhatsNew,
     /// The folder browser, reached with Tab from a typed folder.
@@ -33,6 +37,7 @@ impl Page {
             Page::Certificates => "Certificates",
             Page::Names => "Certificates › Names",
             Page::Replace => "Certificates › Replace",
+            Page::Console | Page::ConsoleUse => "Certificates › Console",
             Page::Uninstall => "Uninstall",
             Page::WhatsNew => "What's new",
             Page::Folder => "Choose a folder",
@@ -59,10 +64,16 @@ impl Page {
                 "Enter on a port types a new one; Apply moves it and opens the new port."
             }
             Page::Certificates => {
-                "Renewal is automatic. Names sets their names; Replace the intermediate makes a new one."
+                "Renewal is automatic. Names sets their names; Replace the intermediate makes a new one; Console certificate uses your own."
             }
             Page::Replace => {
                 "A new intermediate, trusted beside the old one until agents move over."
+            }
+            Page::Console => {
+                "Use a new one adds another; Go back to the platform's issues the platform's again."
+            }
+            Page::ConsoleUse => {
+                "Paste or pick the certificate and its key, or a .p12; Use it restarts the console with them."
             }
             Page::Names => {
                 "Enter on a name types it; Add a name adds one; Apply issues new certificates."

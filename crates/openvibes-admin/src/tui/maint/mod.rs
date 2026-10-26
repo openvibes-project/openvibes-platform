@@ -13,6 +13,9 @@ mod certs;
 mod certs_page_tests;
 #[cfg(test)]
 mod certs_tests;
+mod console_cert;
+#[cfg(test)]
+mod console_cert_tests;
 mod database;
 pub mod folder;
 mod names;
@@ -131,6 +134,8 @@ pub enum Then {
     Ports,
     Names,
     Replace,
+    ConsoleCertSet,
+    ConsoleCertReset,
     SignIn,
     Shell,
 }
@@ -200,7 +205,14 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
         Entry::Page(Page::SignIn) => "reset the admin password".into(),
         Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
         Entry::Page(Page::Uninstall) => "remove OpenVIBES from this host".into(),
-        Entry::Page(Page::Names | Page::Replace | Page::Folder | Page::WhatsNew) => String::new(),
+        Entry::Page(
+            Page::Names
+            | Page::Replace
+            | Page::Console
+            | Page::ConsoleUse
+            | Page::Folder
+            | Page::WhatsNew,
+        ) => String::new(),
     }
 }
 
@@ -315,6 +327,8 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
         Page::Certificates => certs::draw(frame, head, app),
         Page::Names => names::draw(frame, head, app),
         Page::Replace => replace::draw(frame, head, app),
+        Page::Console => console_cert::draw(frame, head, app),
+        Page::ConsoleUse => console_cert::draw_use(frame, head, app),
         Page::Uninstall => uninstall::draw(frame, head, app),
         Page::WhatsNew => update::draw_whats_new(frame, head, app),
         Page::Folder => folder::draw(frame, head, app),
@@ -369,6 +383,8 @@ impl<H: Host> App<H> {
             Page::Certificates => self.open_certificates(),
             Page::Names => self.open_names(),
             Page::Replace => self.open_replace(),
+            Page::Console => self.nav.row = 0,
+            Page::ConsoleUse => self.open_console_use(),
             Page::Uninstall => self.open_uninstall(),
             Page::WhatsNew | Page::Folder => {}
         }
@@ -387,6 +403,8 @@ impl<H: Host> App<H> {
             Page::Certificates => self.certificates_key(key),
             Page::Names => self.names_key(key),
             Page::Replace => self.replace_key(key),
+            Page::Console => self.console_key(key),
+            Page::ConsoleUse => self.console_use_key(key),
             Page::Uninstall => self.uninstall_key(key),
             Page::WhatsNew => {}
             Page::Folder => self.browse_key(key),
@@ -403,6 +421,8 @@ impl<H: Host> App<H> {
             Then::Ports => self.ports_yes(),
             Then::Names => self.names_yes(),
             Then::Replace => self.replace_yes(),
+            Then::ConsoleCertSet => self.console_set_yes(),
+            Then::ConsoleCertReset => self.console_reset_yes(),
             Then::SignIn => self.signin_yes(),
             Then::Shell => self.shell_yes(),
         }
@@ -422,6 +442,7 @@ impl<H: Host> App<H> {
             self.repair_ended();
             self.install_ended();
             self.replace_ended();
+            self.console_cert_ended();
         }
     }
 }

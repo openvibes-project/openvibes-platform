@@ -46,10 +46,8 @@ pub enum Call {
     /// `ca-import`: a company intermediate, its chain and key, on stdin.
     CaImport(Bundle),
     /// `console-cert-set`: the console's own certificate and key, on stdin.
-    #[cfg_attr(not(test), expect(dead_code))]
     ConsoleCertSet(Bundle),
     /// `console-cert-reset`: back to the platform's certificate.
-    #[cfg_attr(not(test), expect(dead_code))]
     ConsoleCertReset,
 }
 

@@ -1,18 +1,22 @@
 //! Import from your PKI's boxes and bar (`import.rs`): the chain and key
 //! checked as they are pasted or read, a .p12 or a locked key opened with
-//! "Its password", and what is added.
+//! "Its password", and what is added. For the console's own certificate
+//! (`Install::server`) the checks are `server_check.rs`'s.
 
 use platform_host::Host;
 use platform_pki::{Chain, ChainError, KeyInfo, P12, PkiError};
 use zeroize::{Zeroize, Zeroizing};
 
 use super::{
-    Imported, Install, Locked, Stage, Which,
+    Added, Imported, Install, Locked, Stage, Which,
     import::{CERT, KEY, KEY_FIRST, NEXT},
     paste::{ended, holds_private_key},
 };
 use crate::{
-    setup::import::{import_message, key_message},
+    setup::{
+        console_cert::console_cert_message,
+        import::{import_message, key_message},
+    },
     tui::{
         app::{App, Key},
         ca_request::{Picked, pick, read_bytes},
@@ -32,14 +36,11 @@ impl Install {
         which: Which,
         text: &str,
     ) -> Option<Result<Vec<String>, String>> {
-        let now = chrono::Utc::now();
         if which == Which::Cert {
-            let chain = platform_pki::check_chain(text, now);
-            return Some(
-                chain
-                    .map(|c| chain_lines(&c))
-                    .map_err(|e| import_message(&e, "", None)),
-            );
+            return Some(self.cert_of(text, None).map(|c| match &c {
+                Added::Chain(chain) => chain_lines(chain),
+                Added::Server(cert) => super::server_check::lines(cert),
+            }));
         }
         if self.unlocked.is_none() && platform_pki::is_locked(text) {
             return Some(match &self.error {
@@ -60,6 +61,9 @@ impl Install {
     pub(super) fn import_partial(&self, which: Which, text: &str) -> Option<String> {
         if which != Which::Cert {
             return None;
+        }
+        if let Some(names) = &self.server {
+            return super::server_check::partial(text, names);
         }
         match platform_pki::check_chain(text, chrono::Utc::now()) {
             Err(ChainError::Missing(_) | ChainError::NoCaBelow(_)) => {
@@ -84,11 +88,32 @@ impl Install {
                 false,
             ),
         };
-        let name = &imported.chain.name;
-        let names = self.cert_names();
-        let info = platform_pki::check_key(&imported.chain, &pkcs8, &names, chrono::Utc::now())
-            .map_err(|e| import_message(&e, name, None))?;
+        let info = self.key_fits(&imported.cert, &pkcs8, None)?;
         Ok((pkcs8, info, locked))
+    }
+
+    /// The box's certificates as the Certificate row takes them; `file`
+    /// is the .p12 they came from.
+    pub(super) fn cert_of(&self, text: &str, file: Option<&str>) -> Result<Added, String> {
+        if let Some(names) = &self.server {
+            return super::server_check::cert_of(text, names, file);
+        }
+        platform_pki::check_chain(text, chrono::Utc::now())
+            .map(Added::Chain)
+            .map_err(|e| import_message(&e, "", file))
+    }
+
+    /// The plain key is `cert`'s own (and, for an intermediate, may sign
+    /// for the names).
+    fn key_fits(&self, cert: &Added, pkcs8: &str, file: Option<&str>) -> Result<KeyInfo, String> {
+        match cert {
+            Added::Chain(chain) => {
+                let names = self.cert_names();
+                platform_pki::check_key(chain, pkcs8, &names, chrono::Utc::now())
+                    .map_err(|e| import_message(&e, &chain.name, file))
+            }
+            Added::Server(cert) => super::server_check::key_fits(cert, pkcs8, file),
+        }
     }
 
     /// The names the server certificates will carry, as `Plan::names`
@@ -134,20 +159,17 @@ fn capitalised(text: &str) -> String {
 impl<H: Host> App<H> {
     /// The certificate or key in the box is added; back to step 3.
     pub(super) fn import_use(&mut self, which: Which, text: &str) {
-        let now = chrono::Utc::now();
         let install = &mut self.install;
         if which == Which::Cert {
-            let Ok(chain) = platform_pki::check_chain(text, now) else {
+            let Ok(cert) = install.cert_of(text, None) else {
                 return;
             };
             // A key added before stays only if it is the new one's.
             let key = (install.imported.take())
                 .and_then(|i| i.key)
-                .filter(|(key, _)| {
-                    platform_pki::check_key(&chain, key, &install.cert_names(), now).is_ok()
-                });
+                .filter(|(key, _)| install.key_fits(&cert, key, None).is_ok());
             install.imported = Some(Imported {
-                chain,
+                cert,
                 key,
                 from: None,
             });
@@ -230,7 +252,10 @@ impl<H: Host> App<H> {
                     Err(e) => {
                         let file = install.shown(&path);
                         install.secret = None;
-                        install.error = Some(import_message(&ChainError::Pki(e), "", Some(&file)));
+                        install.error = Some(match install.server {
+                            Some(_) => console_cert_message(&e.into(), "", Some(&file)),
+                            None => import_message(&ChainError::Pki(e), "", Some(&file)),
+                        });
                     }
                     Ok(p12) => {
                         install.secret = None;
@@ -265,25 +290,23 @@ impl<H: Host> App<H> {
 
     /// A .p12 opened: its chain and key fill both rows, or one red line.
     fn import_p12(&mut self, p12: P12, file: String) {
-        let now = chrono::Utc::now();
-        let chain = match platform_pki::check_chain(&p12.certs_pem, now) {
-            Ok(chain) => chain,
-            Err(e) => {
-                self.install.error = Some(import_message(&e, "", Some(&file)));
+        let cert = match self.install.cert_of(&p12.certs_pem, Some(&file)) {
+            Ok(cert) => cert,
+            Err(why) => {
+                self.install.error = Some(why);
                 return;
             }
         };
-        let names = self.install.cert_names();
-        match platform_pki::check_key(&chain, &p12.key_pem, &names, now) {
+        match self.install.key_fits(&cert, &p12.key_pem, Some(&file)) {
             Ok(info) => {
                 self.install.imported = Some(Imported {
-                    chain,
+                    cert,
                     key: Some((p12.key_pem, info)),
                     from: Some(file),
                 });
                 self.added();
             }
-            Err(e) => self.install.error = Some(import_message(&e, &chain.name, Some(&file))),
+            Err(why) => self.install.error = Some(why),
         }
     }
 

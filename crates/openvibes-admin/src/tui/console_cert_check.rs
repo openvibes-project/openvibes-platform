@@ -3,12 +3,28 @@
 //! when it ends, that it ended, or that it covers none of the console's names.
 
 use chrono::{DateTime, Utc};
+use platform_host::Host;
 
 use super::database::{Check, check};
 
-/// Days before it ends that Status warns.
-const WARN_DAYS: i64 = 30;
+/// Days before it ends that Status (and Certificates) warns.
+pub const WARN_DAYS: i64 = 30;
 const HELP: &str = "Use a new one in Maintenance › Certificates.";
+
+/// The console's names: the plan's, then this host's addresses. Names come
+/// from the plan; without it, none.
+pub fn console_names<H: Host>(host: &H) -> Vec<String> {
+    let mut names = host
+        .setup_plan()
+        .ok()
+        .and_then(|text| crate::setup::plan::plan_of(&text).ok())
+        .map(|plan| plan.names())
+        .unwrap_or_default();
+    if !names.is_empty() {
+        names.extend(host.addresses());
+    }
+    names
+}
 
 /// The line for the own certificate `pem`, if anything is wrong. `names` are
 /// the console's (the plan's, then the host's addresses); none known, none
@@ -29,11 +45,7 @@ pub fn console_cert_check(pem: &str, names: &[String], now: DateTime<Utc>) -> Op
     }
     let days = (expires - now).num_days();
     if days <= WARN_DAYS {
-        let left = match days {
-            0 => "today".to_owned(),
-            1 => "in 1 day".to_owned(),
-            n => format!("in {n} days"),
-        };
+        let left = days_left(days);
         return Some(Check {
             help: Some(HELP.into()),
             ..check(
@@ -49,6 +61,15 @@ pub fn console_cert_check(pem: &str, names: &[String], now: DateTime<Utc>) -> Op
             "Console certificate: covers none of this console's names".into(),
         )
     })
+}
+
+/// "today", "in 1 day", "in 21 days".
+pub fn days_left(days: i64) -> String {
+    match days {
+        0 => "today".to_owned(),
+        1 => "in 1 day".to_owned(),
+        n => format!("in {n} days"),
+    }
 }
 
 #[cfg(test)]

@@ -7,7 +7,10 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 use platform_host::{Database, DiskUse, Host, HostError, ServiceStatus};
 
-use super::{app::App, console_cert_check::console_cert_check};
+use super::{
+    app::App,
+    console_cert_check::{console_cert_check, console_names},
+};
 use crate::setup::pki::{INTERMEDIATE_WARN_DAYS, RENEW_DAYS};
 
 /// Disk use from which Health reports a problem.
@@ -398,17 +401,7 @@ pub fn health_checks<H: Host>(host: &H) -> Vec<Check> {
     );
     health.extend(uncovered(&certificates, &host.addresses()));
     if let Some(own) = own {
-        // Names come from the plan; without it, none are judged.
-        let mut names = host
-            .setup_plan()
-            .ok()
-            .and_then(|text| crate::setup::plan::plan_of(&text).ok())
-            .map(|plan| plan.names())
-            .unwrap_or_default();
-        if !names.is_empty() {
-            names.extend(host.addresses());
-        }
-        health.extend(console_cert_check(&own, &names, Utc::now()));
+        health.extend(console_cert_check(&own, &console_names(host), Utc::now()));
     }
     health.extend(chain_check(&certificates, host.root_and_chain()));
     if let Some(files) = host.signer() {

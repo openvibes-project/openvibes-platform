@@ -55,6 +55,8 @@ server_step() {
   }
   server_ext serverAuth
   sign server.crt server.key "limebox.se" issuing.crt issuing.key
+  openssl pkcs12 -export -inkey server.key -in server.crt -certfile issuing.crt \
+    -keypbe AES-256-CBC -certpbe AES-256-CBC -passout "pass:$PASS" -out server.pfx
   sign server-expired.crt server.key "limebox.se" issuing.crt issuing.key "$FROM" 20260601000000Z
   sign server-future.crt server.key "limebox.se" issuing.crt issuing.key 20400101000000Z 20450101000000Z
   server_ext clientAuth
@@ -159,7 +161,7 @@ server_step
 cat > README <<README
 Test fixtures for platform-pki, made by make.sh with $(openssl version).
 Every certificate is valid 2026-01-01 to 2046-01-01, except short.crt.
-Password of every encrypted key, modern.pfx and legacy.pfx: correct horse
+Password of every encrypted key and .pfx: correct horse
 
 root.crt/.key            Lime Lab Root CA, RSA 4096, self-signed, path length 2
 issuing.crt/.key         Lime Lab Issuing CA, EC P-384, under the root, path length 1
@@ -186,6 +188,7 @@ server.crt/.key          limebox.se, EC P-256, under issuing, serverAuth, SAN DN
 server-expired.crt       the same key, valid until 2026-06-01
 server-future.crt        the same key, valid from 2040-01-01
 server-client-only.crt   the same key, extended key usage clientAuth only
+server.pfx               server.key, server.crt, issuing (AES-256-CBC)
 weak.key                 RSA 1024
 p521.key                 EC P-521
 big.key                  RSA 6144 (over ring's 4096-bit limit)

@@ -7,12 +7,13 @@
 //! after a refusal). The helper checks everything again.
 //! The decrypted key is forgotten once the helper has it, or when Import or
 //! the step is left. The boxes' checks and the password bar's keys are in
-//! `import_paste.rs`.
+//! `import_paste.rs`. Maintenance › Certificates › Console reuses the rows
+//! and screens for the console's own certificate (`Install::server`).
 
 use std::path::PathBuf;
 
 use platform_host::{Host, StepState};
-use platform_pki::{Chain, KeyInfo};
+use platform_pki::{Chain, KeyInfo, ServerCert};
 use ratatui::{
     Frame,
     text::{Line, Span},
@@ -39,6 +40,7 @@ pub(super) const HELP: &str =
     "Paste or pick the certificate and its key, or a .p12 with its password.";
 pub(super) const PASTE_NOTE: &str =
     "Our intermediate first, then each CA above it, ending with the root.";
+pub(super) const SERVER_NOTE: &str = "The console's certificate first, then the CAs above it.";
 pub(super) const KEY_NOTE: &str = "It stays on this host, readable by root only.";
 pub(super) const KEY_FIRST: &str = "Add the certificate first: the key is checked against it.";
 
@@ -47,9 +49,34 @@ pub(super) const CERT: usize = 3;
 pub(super) const KEY: usize = 4;
 pub(super) const NEXT: usize = 5;
 
+/// What the Certificate row added: an intermediate and the CAs above it
+/// (Import, Replace), or the console's own certificate (4c).
+pub enum Added {
+    Chain(Chain),
+    Server(ServerCert),
+}
+
+impl Added {
+    pub fn name(&self) -> &str {
+        match self {
+            Added::Chain(chain) => &chain.name,
+            Added::Server(cert) => &cert.name,
+        }
+    }
+
+    /// What was added, as PEM: our intermediate, or the server certificate
+    /// and the CAs above it.
+    pub fn pem(&self) -> &str {
+        match self {
+            Added::Chain(chain) => &chain.ours,
+            Added::Server(cert) => &cert.chain_pem,
+        }
+    }
+}
+
 /// What Import from your PKI added.
 pub struct Imported {
-    pub chain: Chain,
+    pub cert: Added,
     /// The plain PKCS#8 key and what it is, until the helper has it.
     pub key: Option<(Zeroizing<String>, KeyInfo)>,
     /// The .p12 file both came from.
@@ -123,7 +150,7 @@ impl Install {
                 None => vec![Span::styled("not added yet", t.yellow())],
             },
         };
-        let name = (self.imported.as_ref()).map(|i| format!(" · {}", i.chain.name));
+        let name = (self.imported.as_ref()).map(|i| format!(" · {}", i.cert.name()));
         let key = self
             .both_added()
             .then(|| " · matches the certificate".to_owned());
@@ -131,10 +158,10 @@ impl Install {
     }
 
     /// `ca-import` with the chain and the plain key on stdin, once both
-    /// are added.
+    /// are added; `console-cert-set` for the console's own.
     pub(in crate::tui) fn import_call(&self) -> Option<Call> {
         let Some(Imported {
-            chain,
+            cert,
             key: Some((key, _)),
             ..
         }) = &self.imported
@@ -143,14 +170,21 @@ impl Install {
         };
         // Ours, the CAs above it, the root, then the one key.
         let mut bundle = Zeroizing::new(String::new());
-        let certs = std::iter::once(&chain.ours)
-            .chain(&chain.middle)
-            .chain([&chain.root]);
-        for pem in certs.chain([&**key]) {
+        let certs: Vec<&String> = match cert {
+            Added::Chain(chain) => std::iter::once(&chain.ours)
+                .chain(&chain.middle)
+                .chain([&chain.root])
+                .collect(),
+            Added::Server(cert) => vec![&cert.chain_pem],
+        };
+        for pem in certs.into_iter().chain([&**key]) {
             bundle.push_str(pem.trim_end());
             bundle.push('\n');
         }
-        Some(Call::CaImport(Bundle(bundle)))
+        Some(match cert {
+            Added::Chain(_) => Call::CaImport(Bundle(bundle)),
+            Added::Server(_) => Call::ConsoleCertSet(Bundle(bundle)),
+        })
     }
 
     /// The help line on step 3's rows 3 to 5.

@@ -80,13 +80,16 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Help(_) => " · Help".into(),
         Screen::Install(stage) => {
             let at = super::install::location(*stage);
-            // Replace opens the install's screens as they are.
-            let replace = Screen::Maint(super::maint::Page::Replace);
-            if app.nav.back.iter().any(|(screen, ..)| *screen == replace) {
-                at.replace(
-                    " · Install › Certificates ›",
-                    " · Maintenance › Certificates › Replace ›",
-                )
+            // Replace and Console open the install's screens as they are.
+            let from = |page| {
+                let page = Screen::Maint(page);
+                app.nav.back.iter().any(|(screen, ..)| *screen == page)
+            };
+            let certs = " · Install › Certificates ›";
+            if from(super::maint::Page::Replace) {
+                at.replace(certs, " · Maintenance › Certificates › Replace ›")
+            } else if from(super::maint::Page::ConsoleUse) {
+                at.replace(certs, " · Maintenance › Certificates › Console ›")
             } else {
                 at
             }

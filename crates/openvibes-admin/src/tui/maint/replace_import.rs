@@ -11,7 +11,7 @@ use crate::{
     setup::import::{IN_USE, another_root},
     tui::{
         app::{App, Key},
-        install::{Stage, Which},
+        install::{Added, Stage, Which},
         nav::Screen,
         run::{Call, Kind, Work},
         ui::list::Row,
@@ -26,17 +26,18 @@ const INTERMEDIATE: &str = "/etc/openvibes/pki/intermediate.crt";
 /// the intermediate in use; `None` before.
 fn checked<H: Host>(app: &App<H>) -> Option<Result<(), String>> {
     let imported = app.install.imported.as_ref().filter(|i| i.key.is_some())?;
+    let Added::Chain(chain) = &imported.cert else {
+        return None;
+    };
     let Some(Ok((root, _))) = &app.maint.replace.root else {
         return None;
     };
     let first = |pem: &str| platform_pki::certificates(pem).ok()?.into_iter().next();
-    if platform_pki::certificates(&imported.chain.root).ok()
-        != platform_pki::certificates(root).ok()
-    {
-        return Some(Err(another_root(&imported.chain.root, root)));
+    if platform_pki::certificates(&chain.root).ok() != platform_pki::certificates(root).ok() {
+        return Some(Err(another_root(&chain.root, root)));
     }
     let in_use = app.maint.replace.in_use.as_deref().and_then(first);
-    if in_use.is_some() && in_use == first(&imported.chain.ours) {
+    if in_use.is_some() && in_use == first(&chain.ours) {
         return Some(Err(IN_USE.into()));
     }
     Some(Ok(()))

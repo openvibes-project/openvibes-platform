@@ -341,6 +341,9 @@ impl<H: Host> App<H> {
                 if self.nav.screen == Screen::Maint(super::maint::Page::Replace) {
                     self.replace_left();
                 }
+                if self.nav.screen == Screen::Maint(super::maint::Page::ConsoleUse) {
+                    self.console_left();
+                }
                 self.nav.pop();
                 // A note from another screen is not news here.
                 self.message = None;
