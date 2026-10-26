@@ -947,7 +947,12 @@ pair already there is first copied to `console-own.key.old` and
 `console-own.crt.old`; a failed write puts it back (with none there, neither
 file stays), so there is never half old and half new (the certificates step
 fails on half a pair), and success removes the copies. Copies a crash left
-are put back at the start of `console-cert-set` and `console-cert-reset`. Then it runs the certificates step, which installs the
+are put back at the start of `console-cert-set` and `console-cert-reset`. A copy that cannot be made stops the run with the pair untouched.
+Ceiling: a crash in the short window between the writes and the removal of
+the copies, or a second failure while putting back, can leave a stale or
+mixed pair; nothing more is built for it, because the certificates step
+refuses a half or mismatched pair with a sentence (use your own certificate
+again, or go back to the platform's). Then it runs the certificates step, which installs the
 pair as the console's and restarts it, and prints
 `set<TAB>NAME<TAB>UNTIL` (YYYY-MM-DD). If the step fails the pair stays (it
 was the admin's choice) and the verb exits 1 with "The certificate is kept,

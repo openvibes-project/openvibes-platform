@@ -134,6 +134,22 @@ fn a_failed_write_leaves_the_old_pair_whole() {
 }
 
 #[test]
+fn a_failed_backup_leaves_the_old_pair_untouched() {
+    let fake = issuing("cert-backup-fails");
+    fake.file(OWN_CERT, "OLD CERT");
+    fake.file(OWN_KEY, "OLD KEY");
+    // The certificate's copy cannot be made, after the key's was.
+    let temp = "etc/openvibes/tls/.console-own.crt.old.setup";
+    std::fs::create_dir_all(fake.root.join(temp)).unwrap();
+    let plan = plan(&[Ingest, Console]);
+    let bundle = format!("{SERVER}{SERVER_KEY}");
+    assert!(set(&fake.ctx(&plan), &bundle, Utc::now()).is_err());
+    assert_eq!(fake.text(OWN_CERT), "OLD CERT");
+    assert_eq!(fake.text(OWN_KEY), "OLD KEY");
+    assert!(!fake.root.join(OLD_KEY.trim_start_matches('/')).exists());
+}
+
+#[test]
 fn a_failed_write_without_an_old_pair_leaves_neither_file() {
     let fake = issuing("cert-write-none");
     block_cert_write(&fake);

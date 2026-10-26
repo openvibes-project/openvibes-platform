@@ -66,29 +66,45 @@ fn keep<R: Runner>(
     platform_pki::check_server_key(&cert, &key).map_err(say)?;
     let owner = Some(("root", "root"));
     // A pair already there is copied aside first, and put back when a
-    // write fails: never half old, half new.
-    let aside = pair().map(|(abs, mode)| (abs, old(abs), mode));
-    let kept = aside.iter().try_for_each(|(abs, old, mode)| {
-        if ctx.exists(abs) {
-            ctx.copy(abs, old, owner, *mode)
-        } else {
-            Ok(())
+    // write fails: never half old, half new. A copy that fails stops here,
+    // with the pair untouched.
+    // ponytail: a crash between the writes and the removal of the copies,
+    // or a second failure while putting back, can leave a stale or mixed
+    // pair; the certificates step refuses it with a sentence (use your
+    // certificate again, or go back to the platform's).
+    let mut aside: Vec<(&str, String)> = Vec::new();
+    for (abs, mode) in pair() {
+        if !ctx.exists(abs) {
+            continue;
         }
-    });
-    let written = kept
-        .and_then(|()| ctx.put(OWN_KEY, key.as_bytes(), owner, 0o600))
+        let copy = old(abs);
+        if let Err(error) = ctx.copy(abs, &copy, owner, mode) {
+            for (_, copy) in aside {
+                let _ = fs::remove_file(ctx.path(&copy));
+            }
+            return Err(error);
+        }
+        aside.push((abs, copy));
+    }
+    let written = ctx
+        .put(OWN_KEY, key.as_bytes(), owner, 0o600)
         .and_then(|()| ctx.put(OWN_CERT, cert.chain_pem.as_bytes(), owner, 0o644));
     if let Err(error) = written {
         // What was aside comes back; a file with none aside goes.
-        for (abs, old, _) in &aside {
-            if fs::rename(ctx.path(old), ctx.path(abs)).is_err() {
-                let _ = fs::remove_file(ctx.path(abs));
+        for (abs, _) in pair() {
+            match aside.iter().find(|(had, _)| *had == abs) {
+                Some((_, copy)) => {
+                    let _ = fs::rename(ctx.path(copy), ctx.path(abs));
+                }
+                None => {
+                    let _ = fs::remove_file(ctx.path(abs));
+                }
             }
         }
         return Err(error);
     }
-    for (_, old, _) in &aside {
-        let _ = fs::remove_file(ctx.path(old));
+    for (_, copy) in &aside {
+        let _ = fs::remove_file(ctx.path(copy));
     }
     Ok(cert)
 }
