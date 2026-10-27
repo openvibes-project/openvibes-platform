@@ -211,9 +211,9 @@ psql -qX -v ON_ERROR_STOP=1 "${database_url}" >/dev/null <<'SQL'
 CREATE TEMP TABLE e2e_browsers AS
 SELECT * FROM (VALUES (1, 'chromium'), (2, 'firefox'), (3, 'webkit')) AS b (n, p);
 INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version, hostname, os_id, os_version, last_address,
-                    services_at, services_owners)
+                    services_at, services_owners, inventory_at)
 SELECT 'agent.00000000-0000-4000-8000-0000000004' || n || h, 'active', now() - interval '1 day', now(), '0.4.2',
-    name || '.example.test', 'debian', '12', ('192.0.2.' || (160 + n * 10 + h))::inet, now(), 'partial'
+    name || '.example.test', 'debian', '12', ('192.0.2.' || (160 + n * 10 + h))::inet, now(), 'partial', now()
 FROM e2e_browsers, LATERAL (VALUES (1, 'port-' || p || '-1'), (2, 'port-' || p || '-2'), (3, 'portout-' || p || '-1')) AS x (h, name);
 INSERT INTO host_listeners (agent_id, protocol, address, port, exposed, service, program)
 SELECT 'agent.00000000-0000-4000-8000-0000000004' || n || x.h, 'tcp', x.address::inet, x.port + (CASE WHEN x.port > 6000 THEN n ELSE 0 END),
@@ -236,6 +236,29 @@ FROM e2e_browsers, (VALUES (1, 'sshd.service', 'sshd', 1, 'root'), (2, 'sshd.ser
                            (3, 'far.service', 'far', 1, 'root')) AS x (h, unit, program, processes, run_as);
 INSERT INTO change_log (at, agent_id, kind, key, change)
 SELECT now() - interval '1 day', 'agent.00000000-0000-4000-8000-0000000004' || n || '1', 'service', 'build' || n || '.service', 'appeared'
+FROM e2e_browsers;
+-- The Software journey (software.spec.ts) reuses them again: swlibN 1.0 on
+-- port-P-1 and port-P-2 and 1.1 on portout-P-1 (an open vulnerability on
+-- port-P-1 that 1.1 fixes), swnewN 2.0 on port-P-1 only (installed a day ago;
+-- no unit is named like it, so Services stays as it was) and farN on portout-P-1 only, which the lead
+-- must never see.
+INSERT INTO package_versions (manager, name, version, arch)
+SELECT 'dpkg', x.name || n, x.version, 'amd64'
+FROM e2e_browsers, (VALUES ('swlib', '1.0'), ('swlib', '1.1'), ('swnew', '2.0'), ('far', '1.0')) AS x (name, version);
+INSERT INTO host_packages (agent_id, package_version_id)
+SELECT 'agent.00000000-0000-4000-8000-0000000004' || n || x.h, pv.id
+FROM e2e_browsers CROSS JOIN (VALUES (1, 'swlib', '1.0'), (2, 'swlib', '1.0'), (3, 'swlib', '1.1'), (1, 'swnew', '2.0'), (3, 'far', '1.0')) AS x (h, name, version)
+JOIN package_versions pv ON pv.name = x.name || n AND pv.version = x.version;
+INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
+SELECT 'DSA-SW-' || p, 'debian-12', 'debian', '12', 'important', 'swlib' || n || ': a flaw', 'https://security-tracker.debian.org/'
+FROM e2e_browsers;
+INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, fixed_at, last_evaluated_at, reboot_needed)
+SELECT 'agent.00000000-0000-4000-8000-0000000004' || n || '1', 'DSA-SW-' || p,
+    jsonb_build_array(jsonb_build_object('name', 'swlib' || n, 'installed', '1.0', 'fixed', '1.1')), now(), NULL, now(), false
+FROM e2e_browsers;
+INSERT INTO change_log (at, agent_id, kind, key, change, detail)
+SELECT now() - interval '1 day', 'agent.00000000-0000-4000-8000-0000000004' || n || '1', 'package', 'swnew' || n, 'appeared',
+    jsonb_build_object('manager', 'dpkg', 'version', '2.0', 'arch', 'amd64')
 FROM e2e_browsers;
 SQL
 

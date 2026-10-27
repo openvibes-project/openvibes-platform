@@ -31,6 +31,8 @@ import { registerPortListRoute } from "./routes/portList";
 import { registerPortPageRoutes } from "./routes/portPage";
 import { registerServiceListRoute } from "./routes/serviceList";
 import { registerServicePageRoutes } from "./routes/servicePage";
+import { registerSoftwareListRoute } from "./routes/softwareList";
+import { registerSoftwarePageRoutes } from "./routes/softwarePage";
 import { registerCheckSummaryRoutes } from "./routes/checkSummary";
 import { registerVulnListRoute } from "./routes/vulnList";
 import { registerVulnSummaryRoutes } from "./routes/vulnSummary";
@@ -59,6 +61,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   registerPortPageRoutes(ctx);
   registerServiceListRoute(ctx);
   registerServicePageRoutes(ctx);
+  registerSoftwareListRoute(ctx);
+  registerSoftwarePageRoutes(ctx);
   registerCheckSummaryRoutes(ctx);
   registerMetricRoutes(ctx);
   const roles = registerRoleRoutes(ctx);

@@ -11,6 +11,7 @@ An in-browser implementation of /api/v1 over invented data, for the GitHub Pages
 | `portNames.ts` | The fixed map of well-known ports (name, usual use, class, area, packages), as `port_names.rs` holds it. |
 | `portData.ts` | What the Ports list and a port's page read: each reachable host's listeners from its role, and the last week of the demo's listener change log. |
 | `serviceNames.ts` | The fixed map of well-known services (name, usual use, class, area, packages), as `service_names.rs` holds it. |
+| `softwareData.ts` | What the Software list and a package's page read: each reachable host's packages, the open advisories that name them, the services that run from them, and the demo's package change log. |
 | `serviceData.ts` | What the Services list and a service's page read: each reachable host's units from its role, the packages that match them by name, and the last weeks of the demo's service change log. |
 | `vulnSeed.ts` | Hand-made vulnerabilities for the cases the Vulnerabilities list and page must show (shared CVEs, due dates, assignees, a fixed pair, a lower-confidence match). |
 | `listQuery.ts` | Shared query validation for the list routes (`listQueryError`). |

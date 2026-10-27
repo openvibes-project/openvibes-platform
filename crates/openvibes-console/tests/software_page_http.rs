@@ -81,14 +81,20 @@ async fn the_page_has_a_header_tiles_versions_advisories_hosts_and_actions() {
     assert_eq!(body["header"]["name"], "openssl");
     assert_eq!(body["header"]["managers"], json!(["dpkg"]));
     assert_eq!(
-        (body["header"]["hosts"].clone(), body["header"]["of"].clone()),
+        (
+            body["header"]["hosts"].clone(),
+            body["header"]["of"].clone()
+        ),
         (2.into(), 2.into())
     );
     assert_eq!(
         body["tiles"],
         json!({"hosts": 2, "vulnerabilities": 2, "update_hosts": 1, "versions": 2})
     );
-    assert_eq!(body["week"], json!({"added": 1, "updated": 0, "removed": 0}));
+    assert_eq!(
+        body["week"],
+        json!({"added": 1, "updated": 0, "removed": 0})
+    );
     assert_eq!(body["no_fix"], 1);
     let versions = body["versions"].as_array().unwrap();
     assert_eq!(versions.len(), 2);
@@ -105,7 +111,10 @@ async fn the_page_has_a_header_tiles_versions_advisories_hosts_and_actions() {
     let (status, page) = fx.call(&fx.admin, "GET", &hosts("openssl", ""), None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page["total"], 2);
-    assert_eq!(page["segments"], json!({"all": 2, "update": 1, "current": 1}));
+    assert_eq!(
+        page["segments"],
+        json!({"all": 2, "update": 1, "current": 1})
+    );
     let lin = page["items"]
         .as_array()
         .unwrap()
@@ -115,7 +124,12 @@ async fn the_page_has_a_header_tiles_versions_advisories_hosts_and_actions() {
     assert_eq!(lin["update_to"], "3.0.12");
     assert_eq!(lin["versions"][0]["version"], "3.0.9");
     let (_, update) = fx
-        .call(&fx.admin, "GET", &hosts("openssl", "?segment=current&limit=1"), None)
+        .call(
+            &fx.admin,
+            "GET",
+            &hosts("openssl", "?segment=current&limit=1"),
+            None,
+        )
         .await;
     assert_eq!(update["total"], 1);
     assert_eq!(update["items"][0]["hostname"], "win-01");
@@ -131,7 +145,10 @@ async fn a_team_lead_sees_only_their_hosts() {
     let (status, body) = fx.call(&lead, "GET", &summary("openssl"), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["tiles"]["hosts"], 1);
-    assert_eq!(body["tiles"]["vulnerabilities"], 0, "both advisories are on L1");
+    assert_eq!(
+        body["tiles"]["vulnerabilities"], 0,
+        "both advisories are on L1"
+    );
     assert_eq!(body["can"]["export"], false, "no hosts.export");
     assert_eq!(body["can"]["add_to_case"], false);
     let (_, page) = fx.call(&lead, "GET", &hosts("openssl", ""), None).await;

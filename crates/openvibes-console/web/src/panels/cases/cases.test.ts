@@ -18,6 +18,7 @@ describe("itemPanel", () => {
     expect(itemPanel("finding", "agent-1//LNX-1")).toEqual({ kind: "finding", id: "/LNX-1" });
     expect(itemPanel("vulnerability", vulnerabilityRef("agent-1", "FEDORA-2026-3a2036b8"))).toEqual({ kind: "advisory", id: "FEDORA-2026-3a2036b8" });
     expect(itemPanel("host", "agent-1")).toEqual({ kind: "agent", id: "agent-1" });
+    expect(itemPanel("software", "openssh")).toEqual({ kind: "package", id: "openssh" });
     expect(itemPanel("software", "rpm/openssh")).toEqual({ kind: "package", id: "rpm/openssh" });
     expect(itemPanel("software", "deb/lib/x")).toEqual({ kind: "package", id: "deb/lib/x" });
     expect(itemPanel("port", "tcp/22")).toEqual({ kind: "port", id: "tcp/22" });
@@ -29,6 +30,7 @@ describe("itemPanel", () => {
     expect(refLabel("finding", "agent-1/hardening-ssh/SSH-002")).toBe("SSH-002 on agent-1");
     expect(refLabel("vulnerability", "agent-1/FEDORA-1")).toBe("FEDORA-1 on agent-1");
     expect(refLabel("software", "rpm/openssh")).toBe("openssh");
+    expect(refLabel("software", "openssh")).toBe("openssh");
     expect(refLabel("host", "agent-1")).toBe("agent-1");
   });
 });

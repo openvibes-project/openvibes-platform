@@ -66,7 +66,7 @@ pub(crate) struct SoftwareTilesView {
 
 /// One version in use.
 #[derive(Serialize, ToSchema)]
-pub(crate) struct SoftwareVersionView {
+pub(crate) struct SoftwarePageVersionView {
     /// `epoch:version-release`, epoch and release only when present.
     pub version: String,
     /// Architecture.
@@ -83,7 +83,7 @@ pub(crate) struct SoftwareVersionView {
 
 /// One open advisory on the package.
 #[derive(Serialize, ToSchema)]
-pub(crate) struct SoftwareAdvisoryView {
+pub(crate) struct SoftwarePageAdvisoryView {
     /// The advisory id.
     pub advisory_id: String,
     /// Severity.
@@ -158,9 +158,9 @@ pub(crate) struct SoftwarePageSummaryView {
     /// Installed, changed and removed this week.
     pub week: SoftwareWeekView,
     /// The versions in use, most hosts first.
-    pub versions: Vec<SoftwareVersionView>,
+    pub versions: Vec<SoftwarePageVersionView>,
     /// Open advisories, most urgent first, at most 50.
-    pub advisories: Vec<SoftwareAdvisoryView>,
+    pub advisories: Vec<SoftwarePageAdvisoryView>,
     /// Open advisories without a fix.
     pub no_fix: i64,
     /// Services using it, matched by name.
@@ -236,7 +236,7 @@ fn rfc(t: chrono::DateTime<chrono::Utc>) -> String {
     t.to_rfc3339()
 }
 
-impl From<VersionInUse> for SoftwareVersionView {
+impl From<VersionInUse> for SoftwarePageVersionView {
     fn from(v: VersionInUse) -> Self {
         Self {
             version: v.full(),
@@ -249,7 +249,7 @@ impl From<VersionInUse> for SoftwareVersionView {
     }
 }
 
-impl From<PackageAdvisory> for SoftwareAdvisoryView {
+impl From<PackageAdvisory> for SoftwarePageAdvisoryView {
     fn from(a: PackageAdvisory) -> Self {
         Self {
             advisory_id: a.advisory_id,

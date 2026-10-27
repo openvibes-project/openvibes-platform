@@ -1084,6 +1084,18 @@ At 10,000 hosts running 30 units each the unfiltered list takes 3.3 s at full
 reach and 1.8 s for one group's reach (`tests/service_list_timing.rs`, ignored;
 target 2 s, met for the scoped reach only; the statement runs with JIT off). See [console-services.md](console-services.md).
 
+## The Software list and a package's page (`software_list`, `software_summary`, `software_version`, step 5g)
+
+`software_list::software_list` answers `GET /v1/software-list` (one row per
+package name, filters with counts, five sorts, offset paging) in one
+statement (`software_list_sql`), and `software_summary` the page's summary
+and Hosts card, all inside the caller's reach. `software_version` holds the
+version text and the order that reads digit runs as numbers. On the sizing
+fleet (10,000 hosts, 400 packages each) the unfiltered list takes 1.6 s at
+full reach and 1.3 s for one group's reach; a sort by hosts and the heaviest
+filters 2.1 to 3.4 s (`tests/software_list_timing.rs`, ignored; target 2 s,
+met for the default view). See [console-software.md](console-software.md).
+
 ## Cases (`console_cases::…`, schemas 35, 36, 64, 66 and 67)
 
 - `cases`: `case_id`, a `number` from an identity column (unique, never

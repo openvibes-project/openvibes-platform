@@ -7585,6 +7585,36 @@ export interface components {
             /** @description Opaque cursor for the next page. */
             next_cursor?: string | null;
         };
+        /** @description One open advisory on the package. */
+        SoftwarePageAdvisoryView: {
+            /** @description The advisory id. */
+            advisory_id: string;
+            /** @description Its CVE ids. */
+            cves: string[];
+            /**
+             * Format: float
+             * @description CVSS base score.
+             */
+            cvss?: number | null;
+            /**
+             * Format: float
+             * @description EPSS probability.
+             */
+            epss?: number | null;
+            /** @description On the CISA KEV or EUVD exploited list. */
+            exploited: boolean;
+            /** @description The version that fixes it; absent when nothing does yet. */
+            fixed_in?: string | null;
+            /**
+             * Format: int64
+             * @description Hosts in reach it is open on.
+             */
+            hosts: number;
+            /** @description Severity. */
+            severity: string;
+            /** @description Title. */
+            title: string;
+        };
         /** @description One host that has the package. */
         SoftwarePageHostView: {
             /** @description The host. */
@@ -7619,7 +7649,7 @@ export interface components {
         /** @description A package's page above the Hosts table. */
         SoftwarePageSummaryView: {
             /** @description Open advisories, most urgent first, at most 50. */
-            advisories: components["schemas"]["SoftwareAdvisoryView"][];
+            advisories: components["schemas"]["SoftwarePageAdvisoryView"][];
             /** @description By group. */
             by_group: components["schemas"]["SoftwareGroupShareView"][];
             /** @description Actions. */
@@ -7638,9 +7668,30 @@ export interface components {
             /** @description Services using it, matched by name. */
             used_by: components["schemas"]["UsedByView"][];
             /** @description The versions in use, most hosts first. */
-            versions: components["schemas"]["SoftwareVersionView"][];
+            versions: components["schemas"]["SoftwarePageVersionView"][];
             /** @description Installed, changed and removed this week. */
             week: components["schemas"]["SoftwareWeekView"];
+        };
+        /** @description One version in use. */
+        SoftwarePageVersionView: {
+            /**
+             * Format: int64
+             * @description Open advisories that affect it.
+             */
+            advisories: number;
+            /** @description Architecture. */
+            arch: string;
+            /** @description Some of their CVE ids, at most four. */
+            cves: string[];
+            /**
+             * Format: int64
+             * @description Hosts in reach that have it.
+             */
+            hosts: number;
+            /** @description `dpkg` or `rpm`. */
+            manager: string;
+            /** @description `epoch:version-release`, epoch and release only when present. */
+            version: string;
         };
         /** @description Hosts in each segment. */
         SoftwareSegmentsView: {

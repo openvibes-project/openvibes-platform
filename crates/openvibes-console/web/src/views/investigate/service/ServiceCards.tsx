@@ -3,7 +3,7 @@
 // and Related on the right. Every card reads the summary but Hosts, which
 // pages its own route.
 import type { ServicePageHosts, ServicePageSummary } from "../../../api/types";
-import { portPath } from "../../../app/location";
+import { portPath, softwarePath } from "../../../app/location";
 import { viewLink } from "../../../app/nav";
 import { Card } from "../../../ui/detail/DetailPage";
 import { RelatedCard } from "../../../ui/detail/RelatedCard";
@@ -36,7 +36,7 @@ export function DetailsCard({ page }: { page: Page }) {
         <dt>Package</dt>
         <dd>
           {details.packages.length === 0 ? <span className="text-warn">Not from a package</span> : details.packages.map((p, i) => (
-            <span key={p.name}>{i > 0 && ", "}<a className="object-link mono" {...viewLink("/software")}>{p.name}</a><span className="subtle"> on {plural(p.hosts, "host")}</span></span>
+            <span key={p.name}>{i > 0 && ", "}<a className="object-link mono" {...viewLink(softwarePath(p.name))}>{p.name}</a><span className="subtle"> on {plural(p.hosts, "host")}</span></span>
           ))}
           <span className="subtle"> · matched by name</span>
           {details.packages.length > 0 && unpackaged > 0 && <span className="text-warn"> · not on {plural(unpackaged, "host")}</span>}

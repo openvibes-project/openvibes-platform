@@ -76,7 +76,7 @@ findings and vulnerabilities without an outcome).
 | `finding` | `agent/rule_set/rule`; the rule set may be empty (`agent//rule`) | yes | yes |
 | `vulnerability` | `agent/advisory` (one advisory on one host) | yes | yes |
 | `host` | the agent id | no | no |
-| `software` | `manager/name`; the name may contain `/` | no | no |
+| `software` | the package name (`openssl`), or `manager/name` from before step 5g | no | no |
 
 An exclusive item is in at most one open case. A database index enforces it,
 so two requests racing cannot both win. Closing a case frees its items;
@@ -104,6 +104,14 @@ only to someone with a listening host in reach, never makes a case visible
 by itself, and is refused as `item_not_found` when no host in reach
 listens on it. The case list's counts carry a `ports` kind count. See
 [console-ports.md](console-ports.md).
+
+### Software by its name (step 5g, no migration)
+
+The Software page adds the **bare package name** (`openssl`). A ref without
+`/` is the package under every manager and is accepted when a host in reach
+has a package of that name; `manager/name` (`rpm/openssl`, items from before
+5g) still parses and means only that manager's. Nothing else about the kind
+changes. See [console-software.md](console-software.md).
 
 ### Services as items (step 5f, migration 0067)
 

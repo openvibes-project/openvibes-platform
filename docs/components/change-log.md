@@ -4,8 +4,9 @@ The shared change log, from roles step 5e (spec §10 and its "Plan rulings,
 2026-10-25 (step 5e)", rulings 2 to 6; migration 0065). One table records
 what appeared on and went away from each host, for installed packages,
 listening ports and running services. The Ports pages read it now (This
-week, Recent changes, first seen) and so do the Services pages (5f); the
-Software pages (5g) will read the same rows.
+week, Recent changes, first seen), and so do the Services pages (5f) and
+the Software pages (5g); a package upgrade is `went_away` of the old version
+and `appeared` of the new one on the same host.
 
 ## Interfaces
 

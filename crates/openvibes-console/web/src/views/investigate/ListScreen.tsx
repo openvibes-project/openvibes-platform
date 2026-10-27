@@ -67,7 +67,7 @@ export const ListSummary = ({ parts, hosts }: { parts: { count: number; text: st
   <div className="view-pad host-summary"><SummaryLine parts={parts} tail={reportedTail(hosts)} /></div>
 );
 
-export function ListScreen<L extends { total: number }>({ page, title, listPath, query, icon, noun, search, columns, filters, legacyQuery, body }: {
+export function ListScreen<L extends { total: number }>({ page, title, listPath, query, icon, noun, search, columns, filters, legacyQuery, empty = "Agents report open ports and running services about an hour after they start.", body }: {
   /** The page's key for saved views and hidden columns ("ports"). */
   page: string;
   title: string;
@@ -82,6 +82,8 @@ export function ListScreen<L extends { total: number }>({ page, title, listPath,
   filters: (list: L | undefined, set: { host: string | null; hostName: string | undefined }) => ListFilter[];
   /** Turns a view saved in this browser before saved views lived on the console into a query. */
   legacyQuery: (query: string) => string;
+  /** What the empty list says when nothing is set; the default is the ports and services line. */
+  empty?: string;
   body: (list: L, hidden: readonly string[], offset: number) => ReactNode;
 }) {
   const { params } = useLocation();
@@ -112,7 +114,7 @@ export function ListScreen<L extends { total: number }>({ page, title, listPath,
       {list.error ? <div className="view-pad"><ErrorBox error={list.error} /></div> : !data ? <Loading /> : data.total === 0 ? (
         hasFilters(params)
           ? <Empty icon={icon} title={`No ${noun} matches these filters`}>Clear a filter to see more.</Empty>
-          : <Empty icon={icon} title={`No ${noun}s reported yet`}>Agents report open ports and running services about an hour after they start.</Empty>
+          : <Empty icon={icon} title={`No ${noun}s reported yet`}>{empty}</Empty>
       ) : body(data, hidden ?? [], Math.max(0, Number(params.get(PAGE)) || 0))}
     </div>
   );

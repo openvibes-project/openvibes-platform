@@ -126,7 +126,10 @@ async fn the_list_has_rows_counts_and_a_summary() {
     assert_eq!(openssl["update_hosts"], 1);
     assert_eq!(openssl["no_fix"], 0);
     let bash = row(&body, "bash");
-    assert_eq!((bash["dpkg"].clone(), bash["rpm"].clone()), (true.into(), true.into()));
+    assert_eq!(
+        (bash["dpkg"].clone(), bash["rpm"].clone()),
+        (true.into(), true.into())
+    );
     assert_eq!(bash["hosts"], 2, "one row for both managers");
     assert!(row(&body, "nginx")["used_by"][0]["unit"] == "nginx.service");
     assert!(row(&body, "bash").get("worst_severity").is_none());
@@ -157,7 +160,9 @@ async fn the_list_has_rows_counts_and_a_summary() {
         ("sort=hosts&dir=desc&limit=2", vec!["openssl", "bash"]),
         ("limit=1&offset=1", vec!["nginx"]),
     ] {
-        let (_, body) = fx.call(&fx.admin, "GET", &format!("{URL}?{query}"), None).await;
+        let (_, body) = fx
+            .call(&fx.admin, "GET", &format!("{URL}?{query}"), None)
+            .await;
         assert_eq!(names(&body), expected, "{query}");
     }
     fx.db.drop().await;
@@ -170,9 +175,17 @@ async fn a_team_lead_sees_only_their_groups() {
     let lead = fx.windows_lead().await;
     let (status, body) = fx.call(&lead, "GET", URL, None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(names(&body), ["bash", "nginx", "openssl"], "secretpkg is only on L1");
+    assert_eq!(
+        names(&body),
+        ["bash", "nginx", "openssl"],
+        "secretpkg is only on L1"
+    );
     assert_eq!(row(&body, "openssl")["hosts"], 1);
-    assert_eq!(row(&body, "openssl")["advisories"], 0, "OS-1 is open on L1 only");
+    assert_eq!(
+        row(&body, "openssl")["advisories"],
+        0,
+        "OS-1 is open on L1 only"
+    );
     assert_eq!(row(&body, "bash")["rpm"], false, "the rpm bash is L1's");
     assert_eq!(body["summary"]["reporting_hosts"], 1);
     let queries = [format!("host={L1}"), format!("group={other}")];
@@ -187,7 +200,14 @@ async fn the_software_page_keeps_saved_views_and_hidden_columns() {
         &fx,
         "software",
         ("Fixable", "fix=available"),
-        &["hosts", "versions", "vulns", "fix", "used_by", "week"],
+        &[
+            "hosts",
+            "versions",
+            "vulnerabilities",
+            "fix",
+            "used_by",
+            "week",
+        ],
         "package",
     )
     .await;

@@ -48,8 +48,10 @@ export function registerCaseRoutes(ctx: DemoContext) {
       // Like software: only when a host in reach listens on it.
       if (kind === "port") return portHosts(ctx).has(ref) ? { agent_id: null, title: ref, severity: null, gone: false } : undefined;
       if (kind === "service") return serviceHosts(ctx).has(ref) ? { agent_id: null, title: ref, severity: null, gone: false } : undefined;
-      const present = hosts().some((agent) => hostPackages(agent.id).some((p) => `${p.manager}/${p.name}` === ref));
-      return present ? { agent_id: null, title: rest, severity: null, gone: false } : undefined;
+      // A bare name is the package under every manager; `manager/name` is an older item.
+      const bare = !ref.includes("/");
+      const present = hosts().some((agent) => hostPackages(agent.id).some((p) => (bare ? p.name === ref : `${p.manager}/${p.name}` === ref)));
+      return present ? { agent_id: null, title: bare ? ref : rest, severity: null, gone: false } : undefined;
     },
     audit: (action, target) => audit(action, target, "case"),
   }, () => seedCases(data), browserPersistence("openvibes.v2.demo.cases"));

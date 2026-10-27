@@ -24141,6 +24141,71 @@
           }
         }
       },
+      "SoftwarePageAdvisoryView": {
+        "type": "object",
+        "description": "One open advisory on the package.",
+        "required": [
+          "advisory_id",
+          "severity",
+          "title",
+          "cves",
+          "exploited",
+          "hosts"
+        ],
+        "properties": {
+          "advisory_id": {
+            "type": "string",
+            "description": "The advisory id."
+          },
+          "cves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Its CVE ids."
+          },
+          "cvss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "CVSS base score."
+          },
+          "epss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "EPSS probability."
+          },
+          "exploited": {
+            "type": "boolean",
+            "description": "On the CISA KEV or EUVD exploited list."
+          },
+          "fixed_in": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version that fixes it; absent when nothing does yet."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach it is open on."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title."
+          }
+        }
+      },
       "SoftwarePageHostView": {
         "type": "object",
         "description": "One host that has the package.",
@@ -24251,7 +24316,7 @@
           "advisories": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SoftwareAdvisoryView"
+              "$ref": "#/components/schemas/SoftwarePageAdvisoryView"
             },
             "description": "Open advisories, most urgent first, at most 50."
           },
@@ -24296,13 +24361,56 @@
           "versions": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SoftwareVersionView"
+              "$ref": "#/components/schemas/SoftwarePageVersionView"
             },
             "description": "The versions in use, most hosts first."
           },
           "week": {
             "$ref": "#/components/schemas/SoftwareWeekView",
             "description": "Installed, changed and removed this week."
+          }
+        }
+      },
+      "SoftwarePageVersionView": {
+        "type": "object",
+        "description": "One version in use.",
+        "required": [
+          "version",
+          "arch",
+          "manager",
+          "hosts",
+          "advisories",
+          "cves"
+        ],
+        "properties": {
+          "advisories": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open advisories that affect it."
+          },
+          "arch": {
+            "type": "string",
+            "description": "Architecture."
+          },
+          "cves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Some of their CVE ids, at most four."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach that have it."
+          },
+          "manager": {
+            "type": "string",
+            "description": "`dpkg` or `rpm`."
+          },
+          "version": {
+            "type": "string",
+            "description": "`epoch:version-release`, epoch and release only when present."
           }
         }
       },

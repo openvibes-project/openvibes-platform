@@ -3,7 +3,7 @@
 // the request bodies and how the timeline and the API's refusals read.
 import { ApiError } from "../../api/client";
 import type { CaseEvent, CaseItem } from "../../api/types";
-import type { PanelRef } from "../../app/location";
+import { type PanelRef, packageName } from "../../app/location";
 import { date, plural } from "../../ui/format";
 import type { IconName } from "../../ui/Icon";
 
@@ -21,7 +21,7 @@ export const refHint: Record<CaseKind, string> = {
   compliance_finding: "agent-id/rule-set/rule-id",
   vulnerability: "agent-id/advisory-id",
   host: "Agent id, e.g. agent-00008",
-  software: "manager/name, e.g. rpm/openssh",
+  software: "Package name, e.g. openssh",
   port: "protocol/port, e.g. tcp/22",
   service: "Unit, e.g. sshd.service",
 };
@@ -69,7 +69,7 @@ export function refLabel(kind: string, ref: string): string {
     case "compliance_finding":
     case "finding": { const [agent, rest] = splitRef(ref); return `${splitRef(rest)[1]} on ${agent}`; }
     case "vulnerability": { const [agent, advisory] = splitRef(ref); return `${advisory} on ${agent}`; }
-    case "software": return splitRef(ref)[1] || ref;
+    case "software": return packageName(ref);
     case "port": return `${splitRef(ref)[1]}/${splitRef(ref)[0]}`;
     default: return ref;
   }

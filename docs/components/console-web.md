@@ -446,7 +446,7 @@ triage on alarms and findings stays as it is.
     count is partial; the first 20 names with `access.read`, "and N
     more").
   - **Right**: Items, as screen 32's table: Kind, Item (it opens its own
-    page: alarm, check, vulnerability, host; software its panel; a line
+    page: alarm, check, vulnerability, host, software, port, service; a line
     with its outcome and note), Severity, Host, Outcome and ✕. Kind,
     Severity and Host hide on a narrow card. Alarms, findings and
     vulnerabilities take an **Outcome** (Fixed only while the evidence is
@@ -467,7 +467,7 @@ triage on alarms and findings stays as it is.
     is dropped.
 - **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.write`): a button on
   an alarm's page (Details, and a command seen once), on each host row of a finding and of an advisory, on the
-  host page and its top vulnerabilities, and on the software panel. Its dialog
+  host page and its top vulnerabilities, and on the software page. Its dialog
   asks `/cases/for-item` first. An alarm, finding or vulnerability that is
   already in an open case shows that case (a link) and offers nothing else,
   because it can be in one at a time; a host or software lists the cases
@@ -494,13 +494,8 @@ triage on alarms and findings stays as it is.
 
 - **Hosts and the host page** (`/hosts`, `/hosts/{id}`): see
   [console-hosts.md](console-hosts.md).
-- **Software** (`/software`, `g w`): packages across the caller's hosts with
-  hosts, versions (highlighted when more than one is in use), open
-  advisories (worst severity, count, no-fix count, an Exploited flag) and
-  hosts with a fix available; the name filter and the "Fix available" and
-  "Multiple versions" chips go to the API; Load 100 more. A row opens the
-  `package` panel: versions in use with host share and advisory count, the
-  open advisories (each opens the advisory) and the hosts.
+- **Software** (`/software`, `g w`): the Software list and a package's page
+  (`/software/{name}`), see [console-software.md](console-software.md).
 - "Fix available" means an open vulnerability that has a fix (quiet by
   default; no-fix ones stay in Vulnerabilities).
 - On a phone, Software sits under More (`phoneMore`), so the bar keeps five
@@ -866,6 +861,13 @@ for the pages not yet moved; its saved views stay in the browser.
   address. The list has new filters, saved views and columns. This week and
   Recent changes start empty after the upgrade, as for ports. Services can
   be added to cases. See [console-services.md](console-services.md).
+- **Roles step 5g (Software):** the package panel became the package's page
+  `/software/{name}` (for example `/software/openssl`), and the old panel is
+  gone. Old links (`?open=package:rpm/openssl`) redirect to the new address.
+  The list has new filters (Vulnerabilities, Fix, Versions, Group, Type,
+  Changes), saved views and columns; This week and Recent changes read the
+  change log. Packages can be added to cases by their name. See
+  [console-software.md](console-software.md).
 
 ## Configuration
 

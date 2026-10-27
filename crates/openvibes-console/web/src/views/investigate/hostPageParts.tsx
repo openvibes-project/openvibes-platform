@@ -52,7 +52,7 @@ export function GroupMeters({ groups, empty, listLabel, meterLabel }: {
 
 /** The Recent changes card; `text` says what each kind of change means. */
 export function ChangeList({ changes, text }: {
-  changes: readonly { at: string; agent_id: string; hostname?: string | null; change: string }[];
+  changes: readonly { at: string; agent_id: string; hostname?: string | null; change: string; version?: string | null }[];
   text: Record<string, string>;
 }) {
   return (
@@ -61,7 +61,7 @@ export function ChangeList({ changes, text }: {
         <ul className="list list--plain" aria-label="Changes, newest first">
           {changes.map((c, i) => (
             <li key={`${c.at}:${c.agent_id}:${c.change}:${i}`} className="list__row list__row--static stack" style={{ alignItems: "flex-start" }}>
-              <span><ObjectLink to={{ kind: "agent", id: c.agent_id }}>{c.hostname ?? c.agent_id}</ObjectLink> {text[c.change] ?? c.change}</span>
+              <span><ObjectLink to={{ kind: "agent", id: c.agent_id }}>{c.hostname ?? c.agent_id}</ObjectLink> {text[c.change] ?? c.change}{c.version && <span className="mono subtle"> {c.version}</span>}</span>
               <span className="subtle"><Ago value={c.at} /></span>
             </li>
           ))}

@@ -104,8 +104,7 @@ pub(crate) async fn list_software_page(
             pick(p.versions.as_deref(), "versions", Versions::parse)?,
             pick(p.kind.as_deref(), "type", PackageType::parse)?,
             pick(p.changes.as_deref(), "changes", Changes::parse)?,
-            pick(p.sort.as_deref(), "sort", SoftwareSort::parse)?
-                .unwrap_or(SoftwareSort::Package),
+            pick(p.sort.as_deref(), "sort", SoftwareSort::parse)?.unwrap_or(SoftwareSort::Package),
             number(p.offset.as_deref(), 0, 100_000, "offset")?,
             number(p.limit.as_deref(), 50, 100, "limit")?,
         ))

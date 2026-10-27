@@ -13,7 +13,7 @@ const HIDEABLE: Record<string, readonly string[]> = {
   cases: ["severity", "status", "assignee", "hosts", "items", "updated"],
   ports: ["hosts", "exposed", "services", "groups", "week", "look"],
   services: ["hosts", "runs_as", "ports", "package", "week", "look"],
-  software: ["hosts", "versions", "vulns", "fix", "used_by", "week"],
+  software: ["hosts", "versions", "vulnerabilities", "fix", "used_by", "week"],
 };
 const MAX_VIEWS = 50;
 const CONTROL = /\p{Cc}/u;
