@@ -133,7 +133,10 @@ pub async fn port_summary(
                         COALESCE((SELECT array_agg(agent_id ORDER BY agent_id) FROM l), '{{}}'),
                         COALESCE((SELECT array_agg(DISTINCT u ORDER BY u) FROM l, unnest(l.units) u), '{{}}'),
                         COALESCE((SELECT array_agg(DISTINCT p ORDER BY p) FROM l, unnest(l.programs) p), '{{}}'),
-                        (SELECT min(greatest(l.enrolled_at, floor.at)) FROM l, floor),
+                        (SELECT min(greatest(l.enrolled_at, floor.at)) FROM l, floor
+                         WHERE NOT EXISTS (SELECT 1 FROM change_log c
+                                           WHERE c.kind = 'listener' AND c.key = $3::text || '/' || $4::int
+                                             AND c.agent_id = l.agent_id AND c.change = 'appeared')),
                         (SELECT floor.at FROM floor),
                         (SELECT count(*) FROM agents a
                          WHERE a.status = 'active' AND a.services_at IS NOT NULL AND {visible})"
@@ -151,19 +154,39 @@ pub async fn port_summary(
     let floor: DateTime<Utc> = me.get(7);
     let of: i64 = me.get(8);
 
-    let log = client
+    let counts = client
+        .query_one(
+            &format!(
+                "SELECT count(DISTINCT c.agent_id) FILTER (WHERE c.change = 'appeared' AND c.at > $5::timestamptz),
+                        count(DISTINCT c.agent_id) FILTER (WHERE c.change = 'went_away' AND c.at > $5::timestamptz),
+                        min(c.at) FILTER (WHERE c.change = 'appeared'),
+                        count(*)
+                 FROM change_log c JOIN agents a ON a.agent_id = c.agent_id
+                 WHERE c.kind = 'listener' AND c.key = $3::text AND a.status <> 'revoked' AND {visible}
+                   AND c.at > $4::timestamptz - interval '{KEPT} days'"
+            ),
+            &[&global, &groups, &key, &now, &(now - Duration::days(7))],
+        )
+        .await?;
+    let (week_added, week_removed): (i64, i64) = (counts.get(0), counts.get(1));
+    let first_logged: Option<DateTime<Utc>> = counts.get(2);
+    let logged: i64 = counts.get(3);
+    if listening == 0 && logged == 0 {
+        return Ok(None);
+    }
+    let events: Vec<PortEvent> = client
         .query(
             &format!(
                 "SELECT c.at, c.agent_id, a.hostname, c.change
                  FROM change_log c JOIN agents a ON a.agent_id = c.agent_id
                  WHERE c.kind = 'listener' AND c.key = $3::text AND a.status <> 'revoked' AND {visible}
                    AND c.at > $4::timestamptz - interval '{KEPT} days'
-                 ORDER BY c.at DESC, c.agent_id, c.change"
+                 ORDER BY c.at DESC, c.agent_id, c.change
+                 LIMIT 20"
             ),
             &[&global, &groups, &key, &now],
         )
-        .await?;
-    let events: Vec<PortEvent> = log
+        .await?
         .iter()
         .map(|row| PortEvent {
             at: row.get(0),
@@ -172,26 +195,6 @@ pub async fn port_summary(
             change: row.get(3),
         })
         .collect();
-    if listening == 0 && events.is_empty() {
-        return Ok(None);
-    }
-    let week = now - Duration::days(7);
-    let distinct = |change: &str| {
-        let mut hosts: Vec<&str> = events
-            .iter()
-            .filter(|e| e.at > week && e.change == change)
-            .map(|e| e.agent_id.as_str())
-            .collect();
-        hosts.sort_unstable();
-        hosts.dedup();
-        i64::try_from(hosts.len()).unwrap_or(i64::MAX)
-    };
-    let (week_added, week_removed) = (distinct("appeared"), distinct("went_away"));
-    let first_logged = events
-        .iter()
-        .filter(|e| e.change == "appeared")
-        .map(|e| e.at)
-        .min();
     let first_seen = [first_logged, enrolled_first]
         .into_iter()
         .flatten()
@@ -245,7 +248,7 @@ pub async fn port_summary(
         programs,
         owners_collected,
         by_group,
-        changes: events.into_iter().take(20).collect(),
+        changes: events,
         related: related(client, reach, protocol, port, info, &hosts, now).await?,
         hosts,
     }))

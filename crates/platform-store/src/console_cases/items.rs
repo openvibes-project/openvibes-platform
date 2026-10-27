@@ -179,7 +179,7 @@ pub(super) async fn resolve_item<'a>(
                     "SELECT NULL::text, NULL::text WHERE EXISTS (
                         SELECT 1 FROM host_listeners l
                         JOIN agents a ON a.agent_id = l.agent_id
-                        WHERE l.protocol = $3 AND l.port = $4 AND {visible})"
+                        WHERE l.protocol = $3 AND l.port = $4 AND a.status <> 'revoked' AND {visible})"
                 ),
                 &[&viewer.global, &viewer.groups, &protocol, &port],
             )

@@ -44,8 +44,9 @@ package is its name with `detail = {manager, version, arch}`.
   prunes older rows (see [openvibes-admin.md](openvibes-admin.md)).
   Daily partitions are the upgrade path if the volume ever needs them.
 - **First seen** on a page is the earliest of the earliest `appeared` in
-  reach and, for each host in reach that lists it now, the later of its
-  enrolment and the log's floor (`greatest(change_log_start, now - 90
+  reach and, for each host in reach that lists it now and has no `appeared`
+  event for it (its port was in the baseline or predates the log), the later
+  of its enrolment and the log's floor (`greatest(change_log_start, now - 90
   days)`). When that is the floor the page says "Before {date}", so it never
   claims a date later than the truth.
 

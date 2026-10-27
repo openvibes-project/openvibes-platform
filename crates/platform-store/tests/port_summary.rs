@@ -161,6 +161,15 @@ async fn first_seen_is_an_event_a_baseline_enrolment_or_before() {
         (seen.at - floor).abs() < chrono::Duration::minutes(1),
         "the 90-day floor"
     );
+    // A host older than the log whose port appeared 10 days ago: the event
+    // is the truth, not the floor its enrolment would give.
+    let s = summary(&c, &scope, &nothing(), ("tcp", 22)).await.unwrap();
+    let seen = s.first_seen.unwrap();
+    assert!(
+        !seen.before,
+        "an appeared event beats the host's old enrolment"
+    );
+    assert!(Utc::now() - seen.at < chrono::Duration::days(11));
     db.drop().await;
 }
 
@@ -287,12 +296,14 @@ async fn related_data(c: &Client) {
             ('{A}', 'baseline', 'port.redis.exposed', 'f', 1, 'high', now(), now(), current_date, 's', 90, 'm', '{{}}', now(), 'online', true, 'changes', NULL),
             ('{OUTSIDE}', 'baseline', 'port.ssh.exposed', 'f', 1, 'high', now(), now(), current_date, 's', 90, 'm', '{{}}', now(), 'online', true, 'changes', NULL);
          INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
-            VALUES ('ADV-1', 's', 'debian', '12', 'critical', 't', 'u'), ('ADV-2', 's', 'debian', '12', 'low', 't', 'u');
+            VALUES ('ADV-1', 'debian-12', 'debian', '12', 'critical', 't', 'u'), ('ADV-2', 'debian-12', 'debian', '12', 'low', 't', 'u'),
+                   ('ADV-3', 'cpe-nvd', 'debian', '12', 'important', 't', 'u');
          INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, fixed_at, last_evaluated_at) VALUES
             ('{A}', 'ADV-1', '[{{\"name\":\"openssh-server\",\"installed\":\"1\",\"fixed\":\"2\"}}]', now(), NULL, now()),
             ('{B}', 'ADV-1', '[{{\"name\":\"openssh-server\",\"installed\":\"1\",\"fixed\":\"2\"}}]', now(), NULL, now()),
             ('{B}', 'ADV-2', '[{{\"name\":\"openssh-server\",\"installed\":\"1\",\"fixed\":\"2\"}}]', now(), now(), now()),
-            ('{OUTSIDE}', 'ADV-1', '[{{\"name\":\"openssh-server\",\"installed\":\"1\",\"fixed\":\"2\"}}]', now(), NULL, now());
+            ('{OUTSIDE}', 'ADV-1', '[{{\"name\":\"openssh-server\",\"installed\":\"1\",\"fixed\":\"2\"}}]', now(), NULL, now()),
+            ('{A}', 'ADV-3', '[{{\"name\":\"openssh-server\",\"installed\":\"1\",\"fixed\":null}}]', now(), NULL, now());
          INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version, rule_id, rule_version,
                 severity, confidence, message, first_seen, last_seen, count, process, ancestors, received_at, state) VALUES
             ((now() AT TIME ZONE 'UTC')::date, '{A}', 'a1', 'rs', 1, 'r', 1, 'high', 50, 'm', now(), now(), 1,
@@ -338,7 +349,7 @@ async fn related_counts_listening_hosts_in_reach() {
             vulns[0].hosts
         ),
         ("openssh-server", 1, 2),
-        "open ones on A and B; not the fixed pair, not the outside host"
+        "open ones on A and B; not the fixed pair, the outside host or a lower-confidence match"
     );
     assert_eq!((vulns[1].advisories, vulns[1].hosts), (0, 0));
     let alarms = s.related.alarms.unwrap();

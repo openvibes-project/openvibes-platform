@@ -47,7 +47,8 @@ pub struct RelatedChecks {
 pub struct RelatedPackage {
     /// The package name.
     pub package: String,
-    /// Open advisories with a fix.
+    /// Open advisories on the listening hosts, as the Vulnerabilities list's
+    /// defaults count them: triage open, and not a lower-confidence match.
     pub advisories: i64,
     /// Listening hosts with one.
     pub hosts: i64,
@@ -204,7 +205,12 @@ async fn packages(
                 &format!(
                     "SELECT count(DISTINCT v.advisory_id), count(DISTINCT v.agent_id)
                      FROM vulnerabilities v JOIN agents a ON a.agent_id = v.agent_id
+                     JOIN advisories adv ON adv.advisory_id = v.advisory_id
+                     LEFT JOIN vulnerability_triage t ON t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
                      WHERE v.fixed_at IS NULL AND v.agent_id = ANY($3::text[]) AND {visible}
+                       AND (t.state IS NULL OR t.state = 'open'
+                            OR (t.state = 'accepted_risk' AND t.accepted_until <= now()))
+                       AND split_part(adv.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
                        AND EXISTS (SELECT 1 FROM jsonb_array_elements(v.packages) p
                                    WHERE p ->> 'name' = $4::text)"
                 ),
