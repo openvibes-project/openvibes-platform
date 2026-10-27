@@ -37,6 +37,8 @@ mod case_list_sql;
 mod case_people;
 /// A case's page: tiles, hosts with their problems, who can see it.
 pub mod case_summary;
+/// What appeared and went away on each host, written at ingest.
+pub mod change_log;
 /// A compliance check's area and collector, from its rule ID.
 pub mod check_area;
 /// The Compliance list: one row per check, filters, per-value counts,
@@ -109,6 +111,15 @@ pub mod ingest;
 pub mod inventory;
 mod maintenance;
 mod migrate;
+/// The Ports list: one row per port, filters, counts and the summary.
+pub mod port_list;
+mod port_list_sql;
+/// A fixed map of well-known ports: names, classes, related packages.
+pub mod port_names;
+/// A port's Related card: failing checks, advisories and alarms.
+pub mod port_related;
+/// A port's page: the summary and the Hosts table.
+pub mod port_summary;
 /// Rule-set assignment: defaults, group overrides, per-host state.
 pub mod rule_assignment;
 /// Draft rules for the site's own rule sets.

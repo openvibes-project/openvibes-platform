@@ -1,4 +1,6 @@
 import { useResource } from "../../../api/client";
+import { portPath } from "../../../app/location";
+import { viewLink } from "../../../app/nav";
 import type { HostServices } from "../../../api/types";
 import { Ago, Empty, ErrorBox, Loading } from "../../../ui/bits";
 import { Icon } from "../../../ui/Icon";
@@ -37,7 +39,7 @@ export function HostServicesTab({ id, show }: { id: string; show: "ports" | "ser
             <tbody>
               {data.listeners.map((l) => (
                 <tr key={`${l.protocol}/${l.address}/${l.port}`}>
-                  <td className="mono nowrap">{l.port}/{l.protocol}{l.exposed && <> <span className="badge badge--warn badge--plain">exposed</span></>}</td>
+                  <td className="mono nowrap"><a {...viewLink(portPath(l.protocol, l.port))}>{l.port}/{l.protocol}</a>{l.exposed && <> <span className="badge badge--warn badge--plain">exposed</span></>}</td>
                   <td className="mono hide-narrow">{l.address}</td>
                   <td className="mono">{l.service ?? "—"}</td>
                   <td className="mono hide-narrow">{l.program ?? "—"}</td>

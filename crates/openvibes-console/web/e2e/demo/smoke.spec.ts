@@ -56,7 +56,7 @@ test("the palette finds a host and opens it", async ({ page }) => {
 });
 
 test("a panel pops out into a window and docks back", async ({ page }) => {
-  await page.goto("/ports?open=port%3Atcp%3A22");
+  await page.goto("/services?open=service%3Achronyd.service");
   await page.getByRole("button", { name: "Open in a window" }).click();
   await expect(page.locator(".window")).toBeVisible();
   await expect(page.locator(".inspector")).toHaveCount(0);

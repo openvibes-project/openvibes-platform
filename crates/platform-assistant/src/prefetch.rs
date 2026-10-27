@@ -74,6 +74,16 @@ pub fn plan(question: &str, internet: u8) -> Vec<(&'static str, Value)> {
                     );
                 }
             }
+            "port" => {
+                // The console writes `tcp/22`; the lookup takes the number.
+                if let Some(port) = id
+                    .rsplit_once('/')
+                    .and_then(|(_, n)| n.parse::<u16>().ok())
+                    .filter(|n| *n > 0)
+                {
+                    add("host_services", json!({ "port": port }), max);
+                }
+            }
             _ => {}
         }
     }
@@ -112,7 +122,7 @@ fn context(question: &str) -> (Option<(&str, &str)>, &str) {
     let (Some(kind), Some(id), Some(tail)) = (words.next(), words.next(), words.next()) else {
         return (None, question);
     };
-    if !matches!(kind, "advisory" | "agent" | "finding") || !tail.starts_with('(') {
+    if !matches!(kind, "advisory" | "agent" | "finding" | "port") || !tail.starts_with('(') {
         return (None, question);
     }
     // The label may hold "): " itself; the question follows the last one.
@@ -194,6 +204,16 @@ mod tests {
                 json!({ "rule_set": "baseline", "rule": "port.ssh.exposed" })
             )]
         );
+    }
+
+    #[test]
+    fn a_port_attached_is_looked_up_by_its_number() {
+        assert_eq!(
+            plan("About port tcp/22 (22/tcp SSH): who listens?", 0),
+            [("host_services", json!({ "port": 22 }))]
+        );
+        assert!(plan("About port tcp/0 (0/tcp): who listens?", 0).is_empty());
+        assert!(plan("About port nonsense (x): who listens?", 0).is_empty());
     }
 
     #[test]

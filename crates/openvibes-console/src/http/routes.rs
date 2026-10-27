@@ -12,8 +12,8 @@ use crate::access::{
     session::session,
 };
 use crate::{
-    about, access, alarms, assistant, audit, cases, compliance, dashboards, hosts, lists, rules,
-    settings, vulnerabilities,
+    about, access, alarms, assistant, audit, cases, compliance, dashboards, hosts, lists, ports,
+    rules, settings, vulnerabilities,
 };
 
 pub(super) fn api_router() -> Router {
@@ -32,6 +32,7 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         .merge(assistant::routes())
         .merge(hosts::routes())
         .merge(compliance::routes())
+        .merge(ports::routes())
         .merge(alarms::routes())
         .merge(vulnerabilities::routes())
         .merge(audit::routes())

@@ -234,7 +234,7 @@ export function RelatedCheckCard({ page }: { page: Page }) {
   const { port, service, same_area: same } = page.related;
   const area = page.header.area;
   const sections = [
-    ...(port ? [{ label: "Port", value: <><ObjectLink to={{ kind: "port", id: `${port.protocol}:${port.port}` }}>{port.port}/{port.protocol}</ObjectLink>, exposed on {plural(port.hosts, "host")}</> }] : []),
+    ...(port ? [{ label: "Port", value: <><ObjectLink to={{ kind: "port", id: `${port.protocol}/${port.port}` }}>{port.port}/{port.protocol}</ObjectLink>, exposed on {plural(port.hosts, "host")}</> }] : []),
     ...(service ? [{ label: "Service", value: <><ObjectLink to={{ kind: "unit", id: service.unit }}>{service.unit}</ObjectLink>, on {plural(service.hosts, "host")}</> }] : []),
     { label: "Same area", value: same.checks === 0 ? <span className="subtle">No other failing checks in {area}</span>
       : <span className="row"><a className="object-link" {...viewLink("/compliance", { area })}>{plural(same.checks, "other failing check")} in {area}</a>

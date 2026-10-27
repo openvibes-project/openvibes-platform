@@ -2,10 +2,13 @@
 //! what ingest stores from a `HostServices` report, and the console's
 //! scoped reads. A report replaces the host's rows, like an inventory.
 
+use std::collections::BTreeSet;
+
 use chrono::{DateTime, Utc};
 
 use crate::{
     Client, StoreError,
+    change_log::{self, ChangeKind},
     console_read::{AgentScope, agent_visibility},
 };
 
@@ -71,16 +74,44 @@ pub async fn replace(
         .await?
         .and_then(|row| row.get(0));
     if current.as_deref() != Some(report.sha256.as_str()) {
-        tx.execute(
-            "DELETE FROM host_listeners WHERE agent_id = $1",
-            &[&agent_id],
-        )
-        .await?;
-        tx.execute(
-            "DELETE FROM host_services WHERE agent_id = $1",
-            &[&agent_id],
-        )
-        .await?;
+        let old_listeners = tx
+            .query(
+                "DELETE FROM host_listeners WHERE agent_id = $1 RETURNING protocol, port, exposed",
+                &[&agent_id],
+            )
+            .await?;
+        let old_units = tx
+            .query(
+                "DELETE FROM host_services WHERE agent_id = $1 RETURNING unit",
+                &[&agent_id],
+            )
+            .await?;
+        // A host's first report is its baseline: nothing to compare with.
+        if current.is_some() {
+            let old_listeners: Vec<(String, i32, bool)> = old_listeners
+                .iter()
+                .map(|row| (row.get(0), row.get(1), row.get(2)))
+                .collect();
+            let old_units: BTreeSet<String> = old_units.iter().map(|row| row.get(0)).collect();
+            let new_units: BTreeSet<String> =
+                report.services.iter().map(|s| s.unit.clone()).collect();
+            change_log::record(
+                &tx,
+                agent_id,
+                ChangeKind::Listener,
+                now,
+                &change_log::listener_diff(&old_listeners, &report.listeners),
+            )
+            .await?;
+            change_log::record(
+                &tx,
+                agent_id,
+                ChangeKind::Service,
+                now,
+                &change_log::key_diff(&old_units, &new_units),
+            )
+            .await?;
+        }
         // ponytail: one INSERT per row (at most 4,096 + 2,048 per report,
         // only when the digest changed); a COPY if hosts change constantly.
         for l in &report.listeners {

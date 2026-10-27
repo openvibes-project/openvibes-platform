@@ -18,7 +18,7 @@ const messages: Record<string, string> = {
   invalid_title: "Use 1 to 120 characters, without control characters",
   invalid_severity: "Use critical, high, medium or low",
   invalid_status: "Use open, investigating or closed",
-  invalid_kind: "Use alarm, compliance_finding, vulnerability, host or software",
+  invalid_kind: "Use alarm, compliance_finding, vulnerability, host, software or port",
   invalid_ref: "The id does not have the shape of this kind of item",
   too_many_items: "A case is created with at most 50 items",
   closing_note_required: "A closing note is required to close a case",
@@ -26,7 +26,7 @@ const messages: Record<string, string> = {
   invalid_note: "Use 1 to 4000 characters of plain text",
   note_required: "A note is required for this outcome",
   invalid_outcome: "Use resolved, false_positive, accepted_risk, confirmed_malicious or expected",
-  outcome_not_applicable: "Hosts and software need no outcome",
+  outcome_not_applicable: "Hosts, software and ports need no outcome",
   outcome_until_required: "Accepted risk needs a re-open date",
   outcome_until_past: "The date must be in the future",
   outcome_until_too_far: "The date must be within 365 days",
@@ -63,6 +63,7 @@ export function refOk(kind: CaseKind, ref: string): boolean {
     case "vulnerability": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
     case "host": return identifier.test(ref);
     case "software": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
+    case "port": return rest.length === 1 && (head === "tcp" || head === "udp") && /^[1-9]\d{0,4}$/.test(rest[0] ?? "") && Number(rest[0]) <= 65535;
   }
 }
 

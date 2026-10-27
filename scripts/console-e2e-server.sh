@@ -200,4 +200,30 @@ SELECT (now() AT TIME ZONE 'UTC')::date, agent_id, md5(agent_id), 'e2e', 1, 'e2e
 FROM agents WHERE agent_id LIKE 'agent.00000000-0000-4000-8000-0000000003%';
 SQL
 
+# The Ports journey (ports.spec.ts), one set per browser P = n: port-P-1 and
+# port-P-2 (the lead's reach) and portout-P-1 (outside it), each with a
+# services report. tcp/22 is on all three (exposed on port-P-1 and
+# portout-P-1, loopback on port-P-2); tcp/5432 on port-P-1 only, exposed (a
+# database reachable from the network); tcp/8000+n on port-P-1 only, started
+# a day ago (the change log); tcp/7000+n on portout-P-1 only, which the lead
+# must never see.
+psql -qX -v ON_ERROR_STOP=1 "${database_url}" >/dev/null <<'SQL'
+CREATE TEMP TABLE e2e_browsers AS
+SELECT * FROM (VALUES (1, 'chromium'), (2, 'firefox'), (3, 'webkit')) AS b (n, p);
+INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version, hostname, os_id, os_version, last_address,
+                    services_at, services_owners)
+SELECT 'agent.00000000-0000-4000-8000-0000000004' || n || h, 'active', now() - interval '1 day', now(), '0.4.2',
+    name || '.example.test', 'debian', '12', ('192.0.2.' || (160 + n * 10 + h))::inet, now(), 'partial'
+FROM e2e_browsers, LATERAL (VALUES (1, 'port-' || p || '-1'), (2, 'port-' || p || '-2'), (3, 'portout-' || p || '-1')) AS x (h, name);
+INSERT INTO host_listeners (agent_id, protocol, address, port, exposed, service, program)
+SELECT 'agent.00000000-0000-4000-8000-0000000004' || n || x.h, 'tcp', x.address::inet, x.port + (CASE WHEN x.port > 6000 THEN n ELSE 0 END),
+    x.address <> '127.0.0.1', x.service, x.program
+FROM e2e_browsers, (VALUES (1, '0.0.0.0', 22, 'sshd.service', 'sshd'), (2, '127.0.0.1', 22, 'sshd.service', 'sshd'),
+                           (3, '0.0.0.0', 22, 'sshd.service', 'sshd'), (1, '0.0.0.0', 5432, 'postgresql.service', 'postgres'),
+                           (1, '0.0.0.0', 8000, NULL, NULL), (3, '0.0.0.0', 7000, 'far.service', 'far')) AS x (h, address, port, service, program);
+INSERT INTO change_log (at, agent_id, kind, key, change)
+SELECT now() - interval '1 day', 'agent.00000000-0000-4000-8000-0000000004' || n || '1', 'listener', 'tcp/' || (8000 + n), 'appeared'
+FROM e2e_browsers;
+SQL
+
 exec "${bin}/openvibes-console" --config "${work}/console.toml"

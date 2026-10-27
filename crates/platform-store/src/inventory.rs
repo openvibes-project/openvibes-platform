@@ -9,7 +9,10 @@ use std::collections::BTreeSet;
 use deadpool_postgres::Transaction;
 use openvibes_core::{NormalizedPackage, OsRelease, inventory_fingerprint};
 
-use crate::{Client, StoreError};
+use crate::{
+    Client, StoreError,
+    change_log::{self, ChangeKind},
+};
 
 /// One installed package, as matching needs it: the normalised record of
 /// the P11 fingerprint (one row per distinct record).
@@ -102,10 +105,17 @@ pub async fn replace(
     now: DateTime<Utc>,
 ) -> Result<InventoryOutcome, StoreError> {
     let transaction = client.transaction().await?;
-    if locked_digest(&transaction, agent_id).await?.as_deref() == Some(sha256.as_slice()) {
+    let stored = locked_digest(&transaction, agent_id).await?;
+    if stored.as_deref() == Some(sha256.as_slice()) {
         return Ok(InventoryOutcome::Unchanged);
     }
     insert_versions(&transaction, packages).await?;
+    // A host's first report is its baseline: nothing to compare with.
+    let old = if stored.is_some() {
+        Some(stored_rows(&transaction, agent_id).await?)
+    } else {
+        None
+    };
     transaction
         .execute(
             "DELETE FROM host_packages WHERE agent_id = $1",
@@ -113,6 +123,16 @@ pub async fn replace(
         )
         .await?;
     link(&transaction, agent_id, packages).await?;
+    if let Some(old) = old {
+        change_log::record(
+            &transaction,
+            agent_id,
+            ChangeKind::Package,
+            now,
+            &change_log::package_diff(&old, packages),
+        )
+        .await?;
+    }
     finish(
         transaction,
         agent_id,
@@ -146,27 +166,9 @@ pub async fn apply_changes(
     if locked_digest(&transaction, agent_id).await?.as_deref() != Some(base.as_slice()) {
         return Ok(ChangesOutcome::Resync);
     }
-    let rows = transaction
-        .query(
-            "SELECT v.manager, v.name, v.epoch, v.version, v.release, v.arch, v.source,
-                    v.source_version
-             FROM host_packages h JOIN package_versions v ON v.id = h.package_version_id
-             WHERE h.agent_id = $1",
-            &[&agent_id],
-        )
-        .await?;
-    let mut set: BTreeSet<PackageRow> = rows
-        .iter()
-        .map(|row| PackageRow {
-            manager: row.get(0),
-            name: row.get(1),
-            epoch: row.get(2),
-            version: row.get(3),
-            release: row.get(4),
-            arch: row.get(5),
-            source: row.get(6),
-            source_version: row.get(7),
-        })
+    let mut set: BTreeSet<PackageRow> = stored_rows(&transaction, agent_id)
+        .await?
+        .into_iter()
         .collect();
     if !removed.iter().all(|row| set.remove(row))
         || !added.iter().all(|row| set.insert(row.clone()))
@@ -180,6 +182,14 @@ pub async fn apply_changes(
     insert_versions(&transaction, added).await?;
     unlink(&transaction, agent_id, removed).await?;
     link(&transaction, agent_id, added).await?;
+    change_log::record(
+        &transaction,
+        agent_id,
+        ChangeKind::Package,
+        now,
+        &change_log::package_diff(removed, added),
+    )
+    .await?;
     finish(
         transaction,
         agent_id,
@@ -191,6 +201,35 @@ pub async fn apply_changes(
     )
     .await?;
     Ok(ChangesOutcome::Stored)
+}
+
+/// The host's stored package rows.
+async fn stored_rows(
+    transaction: &Transaction<'_>,
+    agent_id: &str,
+) -> Result<Vec<PackageRow>, StoreError> {
+    let rows = transaction
+        .query(
+            "SELECT v.manager, v.name, v.epoch, v.version, v.release, v.arch, v.source,
+                    v.source_version
+             FROM host_packages h JOIN package_versions v ON v.id = h.package_version_id
+             WHERE h.agent_id = $1",
+            &[&agent_id],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|row| PackageRow {
+            manager: row.get(0),
+            name: row.get(1),
+            epoch: row.get(2),
+            version: row.get(3),
+            release: row.get(4),
+            arch: row.get(5),
+            source: row.get(6),
+            source_version: row.get(7),
+        })
+        .collect())
 }
 
 /// The host's stored fingerprint, with its row locked until the end of the

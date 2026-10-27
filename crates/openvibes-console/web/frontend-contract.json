@@ -23,7 +23,11 @@
     "/settings/people/{user_id}",
     "/settings/host-groups/{group_id}",
     "/hosts/{agent_id}",
-    "/alarms/{alarm_id}"
+    "/alarms/{alarm_id}",
+    "/ports/{port}/{protocol}",
+    "/cases/{case_id}",
+    "/vulnerabilities/{key}",
+    "/compliance/{rule_set_id}/{rule_id}"
   ],
   "publicAssets": [
     {

@@ -98,6 +98,40 @@ export const hostPath = (id: string) => `/hosts/${encodeURIComponent(id)}`;
 /** An alarm's page (approved screen 30). */
 export const alarmPath = (id: string) => `/alarms/${encodeURIComponent(id)}`;
 
+/** The Ports list's sortable columns (roles 5e): the old list also sorted by Services, which the server does not. */
+const PORT_SORTS = new Set(["port", "hosts", "exposed", "week"]);
+
+/** An old Ports query as today's (roles 5e ruling 19): `exposed=true` is Exposure: Exposed, and sorts no
+ * column has any more go with their direction. */
+export function portsQuery(query: string): string {
+  const params = new URLSearchParams(query);
+  if (params.get("exposed") === "true" && !params.has("exposure")) params.set("exposure", "exposed");
+  params.delete("exposed");
+  const sort = params.get("sort");
+  if (sort !== null && !PORT_SORTS.has(sort)) { params.delete("sort"); params.delete("dir"); }
+  return params.toString();
+}
+
+/** A port id in any spelling the console has used (`tcp/443`, `tcp:443`, `443/tcp`, `443` for TCP) as
+ * [protocol, port]; null when it is none of them or the port is out of range. */
+export function parsePortId(id: string): [string, number] | null {
+  const parts = id.split(/[/:]/);
+  if (parts.length > 2) return null;
+  const [first = "", second] = parts;
+  const [protocol, port] = parts.length === 1 ? ["tcp", first] : parts.length === 2 && /^\d+$/.test(first) ? [second ?? "", first] : [first, second ?? ""];
+  const number = /^[1-9]\d{0,4}$/.test(port) ? Number(port) : 0;
+  return (protocol === "tcp" || protocol === "udp") && number >= 1 && number <= 65535 ? [protocol, number] : null;
+}
+
+/** A port's page (approved screen 20; roles 5e ruling 18): it reads like "22/tcp". */
+export const portPath = (protocol: string, port: number | string) => `/ports/${encodeURIComponent(String(port))}/${encodeURIComponent(protocol)}`;
+
+/** The page of a port id in any spelling; the list for one that is none. */
+const portPage = (id: string) => {
+  const parsed = parsePortId(id);
+  return parsed ? portPath(...parsed) : "/ports";
+};
+
 /** A vulnerability's page (approved screen 26): a CVE, or an advisory id the page resolves (roles 5b ruling 7). */
 export const vulnPath = (key: string) => `/vulnerabilities/${encodeURIComponent(key)}`;
 
@@ -114,9 +148,9 @@ export function splitFindingId(id: string): [string, string] {
 /** The check a finding ref (`set/rule`, or `/rule` from before rule sets) names. */
 const findingPath = (id: string) => checkPath(...splitFindingId(id));
 
-const PAGES: Record<string, (id: string) => string> = { agent: hostPath, alarm: alarmPath, advisory: vulnPath, finding: findingPath, case: casePath };
+const PAGES: Record<string, (id: string) => string> = { agent: hostPath, alarm: alarmPath, advisory: vulnPath, finding: findingPath, case: casePath, port: portPage };
 
-/** The page an object opens instead of a panel: a host, an alarm, an advisory, a check (a finding) or a case; null for a panel. */
+/** The page an object opens instead of a panel: a host, an alarm, an advisory, a check (a finding), a case or a port; null for a panel. */
 export function pagePath(panel: PanelRef): string | null {
   return PAGES[panel.kind]?.(panel.id) ?? null;
 }
@@ -128,17 +162,18 @@ export function pagePath(panel: PanelRef): string | null {
  * `?open=finding:SET/RULE`, `?open=case:ID`, the assistant's `/agents?agent=ID`) is that
  * object's page, a whole page with no panels (as `nav.open` opens it). A host
  * panel wins over an alarm panel, an alarm over an advisory, an advisory over
- * a finding (roles 5c ruling 9), a finding over a case (roles 5d ruling 11). The old Vulnerabilities flags are today's signals (roles 5b ruling 7),
+ * a finding (roles 5c ruling 9), a finding over a case (roles 5d ruling 11), a case over a port (roles 5e ruling 19). The old Vulnerabilities flags are today's signals (roles 5b ruling 7),
  * the old Compliance filters today's (roles 5c ruling 9), and the old Cases filters today's (roles 5d).
  */
 export function redirect(location: AppLocation): AppLocation {
   const host = location.view === "/agents" ? location.params.get("agent") : null;
   const panel = location.panels.find((p) => p.kind === "agent") ?? (host ? { kind: "agent", id: host }
-    : ["alarm", "advisory", "finding", "case"].map((kind) => location.panels.find((p) => p.kind === kind)).find(Boolean));
+    : ["alarm", "advisory", "finding", "case", "port"].map((kind) => location.panels.find((p) => p.kind === kind)).find(Boolean));
   const page = panel && pagePath(panel);
   if (page) return { view: page, panels: [], params: new URLSearchParams() };
   if (location.view === "/vulnerabilities") return { ...location, params: new URLSearchParams(vulnerabilitiesQuery(location.params.toString())) };
   if (location.view === "/compliance") return { ...location, params: new URLSearchParams(complianceQuery(location.params.toString())) };
+  if (location.view === "/ports") return { ...location, params: new URLSearchParams(portsQuery(location.params.toString())) };
   if (location.view === "/cases") return { ...location, params: new URLSearchParams(casesQuery(location.params.toString())) };
   if (location.view !== "/agents") return location;
   return { ...location, view: "/hosts", params: new URLSearchParams(hostsQuery(location.params.toString())) };
