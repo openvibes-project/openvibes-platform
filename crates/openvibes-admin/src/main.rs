@@ -607,6 +607,9 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             platform_store::prune_alarm_hourly(client, Utc::now())
                 .await
                 .map_err(fail)?;
+            platform_store::change_log::prune(client, Utc::now())
+                .await
+                .map_err(fail)?;
             let audit_deleted = platform_store::audit::cleanup_expired_events(client, Utc::now())
                 .await
                 .map_err(fail)?;

@@ -37,6 +37,8 @@ mod case_list_sql;
 mod case_people;
 /// A case's page: tiles, hosts with their problems, who can see it.
 pub mod case_summary;
+/// What appeared and went away on each host, written at ingest.
+pub mod change_log;
 /// A compliance check's area and collector, from its rule ID.
 pub mod check_area;
 /// The Compliance list: one row per check, filters, per-value counts,
