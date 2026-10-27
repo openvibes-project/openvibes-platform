@@ -150,6 +150,8 @@ pub struct CaseKinds {
     pub hosts: i64,
     /// Software.
     pub software: i64,
+    /// Ports.
+    pub ports: i64,
 }
 
 /// One row: a case (ruling 9).
@@ -355,6 +357,7 @@ fn case_row(row: &Row) -> Option<CaseListRow> {
             vulnerabilities: row.get(17),
             hosts: row.get(18),
             software: row.get(19),
+            ports: row.get::<_, Option<i64>>(26).unwrap_or(0),
         },
         takes_outcome: row.get(20),
         with_outcome: row.get(21),

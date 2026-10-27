@@ -88,7 +88,7 @@ pub(super) fn invalid_message(code: &str) -> &'static str {
         "invalid_outcome" => {
             "Use resolved, false_positive, accepted_risk, confirmed_malicious or expected"
         }
-        "outcome_not_applicable" => "Hosts and software need no outcome",
+        "outcome_not_applicable" => "Hosts, software and ports need no outcome",
         "outcome_until_required" => "Accepted risk needs a re-open date",
         "outcome_until_past" => "The date must be in the future",
         "outcome_until_too_far" => "The date must be within 365 days",

@@ -172,7 +172,7 @@ async fn the_list_has_rows_counts_and_a_summary() {
     assert_eq!(r["host_count"], 1);
     assert_eq!(
         r["kinds"],
-        json!({"alarms": 0, "findings": 0, "vulnerabilities": 1, "hosts": 1, "software": 0})
+        json!({"alarms": 0, "findings": 0, "vulnerabilities": 1, "hosts": 1, "software": 0, "ports": 0})
     );
     assert_eq!(
         (&r["with_outcome"], &r["takes_outcome"]),

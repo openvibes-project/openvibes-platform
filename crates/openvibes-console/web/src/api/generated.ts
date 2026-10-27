@@ -3462,6 +3462,11 @@ export interface components {
             hosts: number;
             /**
              * Format: int64
+             * @description Ports.
+             */
+            ports: number;
+            /**
+             * Format: int64
              * @description Software.
              */
             software: number;

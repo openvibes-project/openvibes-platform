@@ -63,7 +63,7 @@ export function registerCaseListRoute(ctx: DemoContext & { cases: CaseStore }) {
     };
     const hostname = (id: string) => data.agents.find((a) => a.id === id)?.hostname ?? null;
     const rows: Row[] = cases.listed().map((l) => {
-      const kinds: Record<string, number> = { alarm: 0, compliance_finding: 0, vulnerability: 0, host: 0, software: 0 };
+      const kinds: Record<string, number> = { alarm: 0, compliance_finding: 0, vulnerability: 0, host: 0, software: 0, port: 0 };
       for (const i of l.visible) kinds[i.kind] = (kinds[i.kind] ?? 0) + 1;
       const hosts = [...new Set(l.visible.flatMap((i) => (i.agent_id === null ? [] : [i.agent_id])))];
       // By name, nameless last, then by id (the store's ORDER BY hostname, agent_id).
@@ -123,7 +123,7 @@ export function registerCaseListRoute(ctx: DemoContext & { cases: CaseStore }) {
         case_id: r.c.case_id, number: r.c.number, title: r.c.title, status: r.c.status, severity: r.c.severity,
         opened_by: userView(r.opener), assignee: r.assignee && userView(r.assignee), latest_note: r.note,
         hosts: r.hosts.slice(0, 5).map((agent_id) => ({ agent_id, hostname: hostname(agent_id) })), host_count: r.hosts.length,
-        kinds: { alarms: r.kinds.alarm, findings: r.kinds.compliance_finding, vulnerabilities: r.kinds.vulnerability, hosts: r.kinds.host, software: r.kinds.software },
+        kinds: { alarms: r.kinds.alarm, findings: r.kinds.compliance_finding, vulnerabilities: r.kinds.vulnerability, hosts: r.kinds.host, software: r.kinds.software, ports: r.kinds.port ?? 0 },
         takes_outcome: r.visible.filter((i) => EXCLUSIVE_KINDS.has(i.kind)).length,
         with_outcome: r.visible.filter((i) => EXCLUSIVE_KINDS.has(i.kind) && i.outcome !== null).length,
         ready: r.ready, updated_at: r.c.updated_at, resolution: r.c.resolution,

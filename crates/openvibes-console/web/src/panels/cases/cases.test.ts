@@ -20,7 +20,8 @@ describe("itemPanel", () => {
     expect(itemPanel("host", "agent-1")).toEqual({ kind: "agent", id: "agent-1" });
     expect(itemPanel("software", "rpm/openssh")).toEqual({ kind: "package", id: "rpm/openssh" });
     expect(itemPanel("software", "deb/lib/x")).toEqual({ kind: "package", id: "deb/lib/x" });
-    expect(itemPanel("port", "tcp/22")).toBeUndefined();
+    expect(itemPanel("port", "tcp/22")).toEqual({ kind: "port", id: "tcp/22" });
+    expect(itemPanel("service", "sshd.service")).toBeUndefined();
   });
 
   it("names an item by its id when the object is gone", () => {

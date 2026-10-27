@@ -14204,7 +14204,8 @@
           "findings",
           "vulnerabilities",
           "hosts",
-          "software"
+          "software",
+          "ports"
         ],
         "properties": {
           "alarms": {
@@ -14221,6 +14222,11 @@
             "type": "integer",
             "format": "int64",
             "description": "Hosts."
+          },
+          "ports": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Ports."
           },
           "software": {
             "type": "integer",

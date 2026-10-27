@@ -76,6 +76,7 @@ export function caseFilters(list: CaseList | undefined, set: { host: string | nu
 const KINDS: readonly [keyof CaseListRow["kinds"], IconName, string, string][] = [
   ["alarms", "alarm", "alarm", "alarms"], ["vulnerabilities", "vulnerabilities", "vulnerability", "vulnerabilities"],
   ["findings", "findings", "compliance finding", "compliance findings"], ["hosts", "agents", "host", "hosts"], ["software", "package", "software item", "software items"],
+  ["ports", "service", "port", "ports"],
 ];
 
 function Items({ row }: { row: CaseListRow }) {

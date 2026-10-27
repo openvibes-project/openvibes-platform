@@ -26,7 +26,7 @@ const messages: Record<string, string> = {
   invalid_note: "Use 1 to 4000 characters of plain text",
   note_required: "A note is required for this outcome",
   invalid_outcome: "Use resolved, false_positive, accepted_risk, confirmed_malicious or expected",
-  outcome_not_applicable: "Hosts and software need no outcome",
+  outcome_not_applicable: "Hosts, software and ports need no outcome",
   outcome_until_required: "Accepted risk needs a re-open date",
   outcome_until_past: "The date must be in the future",
   outcome_until_too_far: "The date must be within 365 days",
@@ -63,6 +63,7 @@ export function refOk(kind: CaseKind, ref: string): boolean {
     case "vulnerability": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
     case "host": return identifier.test(ref);
     case "software": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
+    case "port": return rest.length === 1 && (head === "tcp" || head === "udp") && /^[1-9]\d{0,4}$/.test(rest[0] ?? "") && Number(rest[0]) <= 65535;
   }
 }
 
