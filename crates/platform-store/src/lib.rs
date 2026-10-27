@@ -116,6 +116,10 @@ pub mod port_list;
 mod port_list_sql;
 /// A fixed map of well-known ports: names, classes, related packages.
 pub mod port_names;
+/// A port's Related card: failing checks, advisories and alarms.
+pub mod port_related;
+/// A port's page: the summary and the Hosts table.
+pub mod port_summary;
 /// Rule-set assignment: defaults, group overrides, per-host state.
 pub mod rule_assignment;
 /// Draft rules for the site's own rule sets.
