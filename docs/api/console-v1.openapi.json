@@ -10121,6 +10121,358 @@
         }
       }
     },
+    "/api/v1/software-list": {
+      "get": {
+        "tags": [
+          "software"
+        ],
+        "summary": "The Software list.",
+        "operationId": "list_software_page",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Package name or a service using it (contains).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vulns",
+            "in": "query",
+            "description": "exploited, critical_high, any or none: by the package's open advisories.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fix",
+            "in": "query",
+            "description": "available (an update fixes an open advisory somewhere) or none (an\nopen advisory has no fix yet).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "versions",
+            "in": "query",
+            "description": "one or several versions in use.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "dpkg or rpm.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "description": "A host group id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "changes",
+            "in": "query",
+            "description": "new, updated or removed this week.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "description": "An agent id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "package (default), hosts, vulnerabilities, versions or week.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc (default) or desc.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of packages on the caller's hosts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoftwareListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/software-pages/{name}/hosts": {
+      "get": {
+        "tags": [
+          "software"
+        ],
+        "summary": "A package's Hosts table.",
+        "operationId": "software_hosts_page_route",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "The package name, e.g. openssl",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "segment",
+            "in": "query",
+            "description": "all (default), update or current.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the hosts in the caller's reach that have it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoftwarePageHostsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_package or invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/software-pages/{name}/summary": {
+      "get": {
+        "tags": [
+          "software"
+        ],
+        "summary": "A package's page above the Hosts table.",
+        "operationId": "software_summary_page",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "The package name, e.g. openssl",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoftwarePageSummaryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_package",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "package_not_found: no host in reach has it",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/software/{manager}/{name}": {
       "get": {
         "tags": [
@@ -23230,6 +23582,24 @@
           }
         }
       },
+      "SoftwareActionsView": {
+        "type": "object",
+        "description": "What the caller may do here.",
+        "required": [
+          "export",
+          "add_to_case"
+        ],
+        "properties": {
+          "add_to_case": {
+            "type": "boolean",
+            "description": "Add the package to a case (`cases.write` and `cases.read`)."
+          },
+          "export": {
+            "type": "boolean",
+            "description": "Export the hosts (`hosts.export`)."
+          }
+        }
+      },
       "SoftwareAdvisoryView": {
         "type": "object",
         "description": "An advisory open on the package.",
@@ -23300,6 +23670,99 @@
           }
         }
       },
+      "SoftwareChangeView": {
+        "type": "object",
+        "description": "One entry of Recent changes.",
+        "required": [
+          "at",
+          "agent_id",
+          "change"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The host."
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "change": {
+            "type": "string",
+            "description": "`appeared` or `went_away`."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its hostname."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version it concerns, when the log has it."
+          }
+        }
+      },
+      "SoftwareCountsView": {
+        "type": "object",
+        "description": "Rows per filter value, each with the other filters applied.",
+        "required": [
+          "vulns",
+          "fix",
+          "versions",
+          "type",
+          "changes",
+          "group"
+        ],
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`new`, `updated`, `removed`."
+          },
+          "fix": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`available`, `none`."
+          },
+          "group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCountView"
+            },
+            "description": "Groups with a host in reach; `count` is the hosts of the group in\nreach, not packages (a package count per group would read every\npackage of every host)."
+          },
+          "type": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`dpkg`, `rpm`."
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`one`, `several`."
+          },
+          "vulns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`exploited`, `critical_high`, `any`, `none`."
+          }
+        }
+      },
       "SoftwareDetail": {
         "type": "object",
         "description": "One package: its versions in use and, paged, its hosts.",
@@ -23349,6 +23812,126 @@
           }
         }
       },
+      "SoftwareFirstSeenView": {
+        "type": "object",
+        "description": "When the package was first seen.",
+        "required": [
+          "at",
+          "before"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339: the earliest the log or an enrolment can tell."
+          },
+          "before": {
+            "type": "boolean",
+            "description": "The package was there before the log began (or before its 90 days):\nshown as \"Before {date}\"."
+          }
+        }
+      },
+      "SoftwareGroupShareView": {
+        "type": "object",
+        "description": "One bar of By group.",
+        "required": [
+          "group_id",
+          "name",
+          "kind",
+          "have",
+          "of"
+        ],
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "description": "Group id."
+          },
+          "have": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Members in reach that have the package."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind",
+            "description": "How the group gets its hosts."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group name."
+          },
+          "of": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Members in reach."
+          }
+        }
+      },
+      "SoftwareHeaderView": {
+        "type": "object",
+        "description": "The header: the facts line.",
+        "required": [
+          "name",
+          "managers",
+          "hosts",
+          "of"
+        ],
+        "properties": {
+          "first_seen": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SoftwareFirstSeenView",
+                "description": "First seen."
+              }
+            ]
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach that have it."
+          },
+          "managers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The package databases it is reported from (`dpkg`, `rpm`), sorted."
+          },
+          "name": {
+            "type": "string",
+            "description": "The package name."
+          },
+          "of": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active hosts in reach that have sent a package report."
+          }
+        }
+      },
+      "SoftwareHostVersionView": {
+        "type": "object",
+        "description": "A version of the package on a host.",
+        "required": [
+          "manager",
+          "version",
+          "arch"
+        ],
+        "properties": {
+          "arch": {
+            "type": "string",
+            "description": "Architecture."
+          },
+          "manager": {
+            "type": "string",
+            "description": "`dpkg` or `rpm`."
+          },
+          "version": {
+            "type": "string",
+            "description": "`epoch:version-release`, epoch and release only when present."
+          }
+        }
+      },
       "SoftwareHostView": {
         "type": "object",
         "description": "One host that has the package.",
@@ -23391,6 +23974,150 @@
           }
         }
       },
+      "SoftwareListRowView": {
+        "type": "object",
+        "description": "One row: a package name.",
+        "required": [
+          "name",
+          "hosts",
+          "versions",
+          "oldest",
+          "newest",
+          "dpkg",
+          "rpm",
+          "advisories",
+          "no_fix",
+          "exploited",
+          "update_hosts",
+          "used_by",
+          "used_by_total",
+          "week_added",
+          "week_updated",
+          "week_removed"
+        ],
+        "properties": {
+          "advisories": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open advisories on the hosts in reach."
+          },
+          "dpkg": {
+            "type": "boolean",
+            "description": "Reported from dpkg."
+          },
+          "exploited": {
+            "type": "boolean",
+            "description": "One of them is known to be exploited."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach that have it, under any package database."
+          },
+          "name": {
+            "type": "string",
+            "description": "The package name."
+          },
+          "newest": {
+            "type": "string",
+            "description": "The newest."
+          },
+          "no_fix": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those, advisories no update fixes."
+          },
+          "oldest": {
+            "type": "string",
+            "description": "The oldest version in use, `epoch:version-release`."
+          },
+          "rpm": {
+            "type": "boolean",
+            "description": "Reported from rpm."
+          },
+          "update_hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts where an update fixes an open advisory."
+          },
+          "used_by": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsedByView"
+            },
+            "description": "Services using it, most hosts first, at most 3."
+          },
+          "used_by_total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many services use it in all."
+          },
+          "versions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Versions in use (distinct epoch, version and release)."
+          },
+          "week_added": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts that installed it in the last 7 days."
+          },
+          "week_removed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts that removed it in the last 7 days."
+          },
+          "week_updated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts that changed its version in the last 7 days."
+          },
+          "worst_severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The worst severity among them."
+          }
+        }
+      },
+      "SoftwareListView": {
+        "type": "object",
+        "description": "One page of the Software list.",
+        "required": [
+          "items",
+          "total",
+          "counts",
+          "summary",
+          "generated_at"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/SoftwareCountsView",
+            "description": "Per-value counts."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareListRowView"
+            },
+            "description": "The page."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SoftwareSummaryLineView",
+            "description": "Summary line."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching every filter."
+          }
+        }
+      },
       "SoftwarePage": {
         "type": "object",
         "description": "A page of the fleet's software, by name.",
@@ -23411,6 +24138,267 @@
               "null"
             ],
             "description": "Opaque cursor for the next page."
+          }
+        }
+      },
+      "SoftwarePageHostView": {
+        "type": "object",
+        "description": "One host that has the package.",
+        "required": [
+          "agent_id",
+          "versions",
+          "used_by"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The host."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its hostname."
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its last address."
+          },
+          "os": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its operating system."
+          },
+          "reported_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339: its last package report; the web warns after 24 hours."
+          },
+          "update_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version an update would bring; absent when it is up to date."
+          },
+          "used_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Services running there that use the package."
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareHostVersionView"
+            },
+            "description": "The versions it has, newest first."
+          }
+        }
+      },
+      "SoftwarePageHostsView": {
+        "type": "object",
+        "description": "One page of the Hosts table.",
+        "required": [
+          "items",
+          "total",
+          "segments"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwarePageHostView"
+            },
+            "description": "The page."
+          },
+          "segments": {
+            "$ref": "#/components/schemas/SoftwareSegmentsView",
+            "description": "Every segment's size."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in the chosen segment."
+          }
+        }
+      },
+      "SoftwarePageSummaryView": {
+        "type": "object",
+        "description": "A package's page above the Hosts table.",
+        "required": [
+          "header",
+          "tiles",
+          "week",
+          "versions",
+          "advisories",
+          "no_fix",
+          "used_by",
+          "by_group",
+          "changes",
+          "can"
+        ],
+        "properties": {
+          "advisories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareAdvisoryView"
+            },
+            "description": "Open advisories, most urgent first, at most 50."
+          },
+          "by_group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareGroupShareView"
+            },
+            "description": "By group."
+          },
+          "can": {
+            "$ref": "#/components/schemas/SoftwareActionsView",
+            "description": "Actions."
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareChangeView"
+            },
+            "description": "The 20 newest changes in reach."
+          },
+          "header": {
+            "$ref": "#/components/schemas/SoftwareHeaderView",
+            "description": "Header."
+          },
+          "no_fix": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open advisories without a fix."
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/SoftwareTilesView",
+            "description": "Tiles."
+          },
+          "used_by": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsedByView"
+            },
+            "description": "Services using it, matched by name."
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareVersionView"
+            },
+            "description": "The versions in use, most hosts first."
+          },
+          "week": {
+            "$ref": "#/components/schemas/SoftwareWeekView",
+            "description": "Installed, changed and removed this week."
+          }
+        }
+      },
+      "SoftwareSegmentsView": {
+        "type": "object",
+        "description": "Hosts in each segment.",
+        "required": [
+          "all",
+          "update",
+          "current"
+        ],
+        "properties": {
+          "all": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All."
+          },
+          "current": {
+            "type": "integer",
+            "format": "int64",
+            "description": "No update is waiting."
+          },
+          "update": {
+            "type": "integer",
+            "format": "int64",
+            "description": "An update fixes an open advisory there."
+          }
+        }
+      },
+      "SoftwareSummaryLineView": {
+        "type": "object",
+        "description": "\"N with an exploited vulnerability · N with a fix available · N in several\nversions · N new this week · from N hosts' last reports\".",
+        "required": [
+          "exploited",
+          "fixable",
+          "several_versions",
+          "new_this_week",
+          "reporting_hosts"
+        ],
+        "properties": {
+          "exploited": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows with an exploited open advisory."
+          },
+          "fixable": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows with an update that fixes an open advisory somewhere."
+          },
+          "new_this_week": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows installed on a host this week."
+          },
+          "reporting_hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active hosts in reach that have sent a package report (the \"m\" of\n\"n of m\")."
+          },
+          "several_versions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows in more than one version."
+          }
+        }
+      },
+      "SoftwareTilesView": {
+        "type": "object",
+        "description": "The tiles.",
+        "required": [
+          "hosts",
+          "vulnerabilities",
+          "update_hosts",
+          "versions"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts that have it (of the header's `of`)."
+          },
+          "update_hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts where an update fixes an open advisory."
+          },
+          "versions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Versions in use."
+          },
+          "vulnerabilities": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open advisories on it."
           }
         }
       },
@@ -23518,6 +24506,32 @@
               "null"
             ],
             "description": "Worst severity among them (`critical`, `important`, `moderate`,\n`low`, `unrated`); absent without advisories."
+          }
+        }
+      },
+      "SoftwareWeekView": {
+        "type": "object",
+        "description": "Hosts that installed, changed the version of and removed it in the last 7 days.",
+        "required": [
+          "added",
+          "updated",
+          "removed"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Installed."
+          },
+          "removed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Removed."
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Changed version."
           }
         }
       },
@@ -24300,6 +25314,25 @@
           "up_to_date",
           "available"
         ]
+      },
+      "UsedByView": {
+        "type": "object",
+        "description": "A service that uses the package, matched by name.",
+        "required": [
+          "unit",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach running it."
+          },
+          "unit": {
+            "type": "string",
+            "description": "The unit, e.g. `nginx.service`."
+          }
+        }
       },
       "VulnActionsView": {
         "type": "object",

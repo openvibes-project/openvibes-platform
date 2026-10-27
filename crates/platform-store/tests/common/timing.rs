@@ -35,11 +35,12 @@ pub async fn groups(c: &Client) -> String {
          INSERT INTO console_host_group_membership (asset_group_id, agent_id)
          SELECT g.asset_group_id, a.agent_id FROM console_asset_groups g JOIN agents a
            ON abs(hashtext(a.agent_id || g.name)) % 4 = 0
-         ON CONFLICT DO NOTHING;
-         VACUUM ANALYZE;",
+         ON CONFLICT DO NOTHING;",
     )
     .await
     .unwrap();
+    // Alone: VACUUM cannot run in the transaction a batch makes.
+    c.batch_execute("VACUUM ANALYZE").await.unwrap();
     manual_group(c).await
 }
 

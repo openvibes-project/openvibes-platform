@@ -140,6 +140,13 @@ pub mod service_related;
 /// A service's page: the summary and the Hosts table.
 pub mod service_summary;
 pub mod signer;
+/// The Software list: one row per package name, filters, counts and the summary.
+pub mod software_list;
+mod software_list_sql;
+/// A package's page: the summary and the Hosts table.
+pub mod software_summary;
+/// Package versions as the Software pages write and order them.
+pub mod software_version;
 mod status;
 mod summary_parts;
 /// Enrollment tokens (stored only as hashes).

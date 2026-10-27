@@ -39,9 +39,13 @@ fn refs_are_checked_against_the_shape_the_panels_write() {
     // A package name may itself contain a slash.
     assert_eq!(
         parse_ref(ItemKind::Software, "npm/@scope/pkg"),
-        Some(Parsed::Software("npm", "@scope/pkg"))
+        Some(Parsed::Software(Some("npm"), "@scope/pkg"))
     );
-    assert_eq!(parse_ref(ItemKind::Software, "rpm"), None);
+    assert_eq!(
+        parse_ref(ItemKind::Software, "openssl"),
+        Some(Parsed::Software(None, "openssl")),
+        "a bare name is the package under every manager"
+    );
     assert_eq!(parse_ref(ItemKind::Software, "rpm/"), None);
     assert_eq!(
         parse_ref(ItemKind::Port, "tcp/22"),

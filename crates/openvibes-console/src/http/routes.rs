@@ -13,7 +13,7 @@ use crate::access::{
 };
 use crate::{
     about, access, alarms, assistant, audit, cases, compliance, dashboards, hosts, lists, ports,
-    rules, services, settings, vulnerabilities,
+    rules, services, settings, software_pages, vulnerabilities,
 };
 
 pub(super) fn api_router() -> Router {
@@ -34,6 +34,7 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         .merge(compliance::routes())
         .merge(ports::routes())
         .merge(services::routes())
+        .merge(software_pages::routes())
         .merge(alarms::routes())
         .merge(vulnerabilities::routes())
         .merge(audit::routes())
