@@ -54,7 +54,7 @@ describe("demo saved views", () => {
     expect(await save(server, "   ")).toMatchObject({ status: 422, body: { field_errors: [{ field: "name" }] } });
     expect(await save(server, "Long", "q=".padEnd(1001, "a"))).toMatchObject({ status: 422, body: { field_errors: [{ field: "query" }] } });
     expect(await save(server, "Ctl", "q=a\u0007")).toMatchObject({ status: 422, body: { field_errors: [{ field: "query" }] } });
-    expect(await save(server, "Ports", "", "ports")).toMatchObject({ status: 404, body: { code: "list_page_not_found" } });
+    expect(await save(server, "Nonsense", "", "nonsense")).toMatchObject({ status: 404, body: { code: "list_page_not_found" } });
     expect((await call(server, "GET", "/api/v1/saved-views?page=nope")).status).toBe(404);
     expect((await call(server, "POST", "/api/v1/saved-views", { page: "hosts", name: 3, query: "" })).status).toBe(400);
     for (let i = 1; i < 50; i += 1) expect((await save(server, `View ${i}`)).status).toBe(201);
@@ -106,6 +106,6 @@ describe("demo list columns", () => {
     expect(await call(server, "PUT", "/api/v1/list-columns/hosts", { hidden: ["os", "os"] })).toMatchObject({ status: 422, body: { title: "Unknown or repeated column" } });
     expect(await call(server, "PUT", "/api/v1/list-columns/hosts", { hidden: ["cpu"] })).toMatchObject({ status: 422 });
     expect((await call(server, "PUT", "/api/v1/list-columns/hosts", { hidden: "os" })).status).toBe(400);
-    expect((await call(server, "GET", "/api/v1/list-columns/ports")).body).toMatchObject({ code: "list_page_not_found" });
+    expect((await call(server, "GET", "/api/v1/list-columns/nonsense")).body).toMatchObject({ code: "list_page_not_found" });
   });
 });

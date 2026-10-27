@@ -1309,6 +1309,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/port-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Ports list. */
+        get: operations["list_port_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ports": {
         parameters: {
             query?: never;
@@ -5501,6 +5518,19 @@ export interface components {
             user_id: string;
             username: string;
         };
+        /** @description Rows per filter value, each with the other filters applied. */
+        PortCountsView: {
+            /** @description `new`, `look`. */
+            changes: components["schemas"]["CountView"][];
+            /** @description `exposed`, `local`. */
+            exposure: components["schemas"]["CountView"][];
+            /** @description Groups holding a listening host. */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description `tcp`, `udp`. */
+            protocol: components["schemas"]["CountView"][];
+            /** @description Owner units, then `~none` ("Owner not collected"). */
+            service: components["schemas"]["CountView"][];
+        };
         /** @description One port across the caller's hosts: a page of the hosts listening on it. */
         PortDetail: {
             /** @description Hosts on this page, by hostname. */
@@ -5514,6 +5544,20 @@ export interface components {
             port: number;
             /** @description `tcp` or `udp`. */
             protocol: string;
+        };
+        /** @description A group named in a row. */
+        PortGroupView: {
+            /**
+             * Format: int64
+             * @description Hosts of the group listening on the port.
+             */
+            hosts: number;
+            /** @description Group id. */
+            id: string;
+            /** @description How the group gets its hosts (automatic or rule). */
+            kind: components["schemas"]["HostGroupKind"];
+            /** @description Group name. */
+            name: string;
         };
         /** @description One host listening on a port (once per bound address). */
         PortHostView: {
@@ -5531,6 +5575,100 @@ export interface components {
             program?: string | null;
             /** @description The owning unit, when the agent saw it. */
             service?: string | null;
+        };
+        /** @description One row: a port. */
+        PortListRowView: {
+            /**
+             * Format: int64
+             * @description Of those, hosts where it is exposed (reachable from the network).
+             */
+            exposed_hosts: number;
+            /**
+             * @description Automatic and rule groups with a listening host, most hosts first,
+             *     at most 3.
+             */
+            groups: components["schemas"]["PortGroupView"][];
+            /**
+             * Format: int64
+             * @description How many such groups there are in all.
+             */
+            groups_total: number;
+            /**
+             * Format: int64
+             * @description Hosts in reach listening on it (the "n" of "n of m").
+             */
+            hosts: number;
+            /**
+             * @description Needs a look codes, in rule order: `database_exposed`,
+             *     `remote_admin_exposed`, `new_unusual`.
+             */
+            look: string[];
+            /** @description The usual name; absent for a port that is not well known. */
+            name?: string | null;
+            /** @description A listening host's owner is not collected. */
+            owners_missing: boolean;
+            /**
+             * Format: int32
+             * @description 1 to 65535.
+             */
+            port: number;
+            /** @description `tcp` or `udp`. */
+            protocol: string;
+            /** @description Owner units seen on it, sorted, at most 8. */
+            services: string[];
+            /**
+             * Format: int64
+             * @description Hosts that started listening in the last 7 days.
+             */
+            week_added: number;
+            /**
+             * Format: int64
+             * @description Hosts that stopped listening in the last 7 days.
+             */
+            week_removed: number;
+        };
+        /** @description One page of the Ports list. */
+        PortListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["PortCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["PortListRowView"][];
+            /** @description Summary line. */
+            summary: components["schemas"]["PortSummaryLineView"];
+            /**
+             * Format: int64
+             * @description Rows matching every filter.
+             */
+            total: number;
+        };
+        /**
+         * @description "N exposed on some host · N with new hosts this week · N need a look ·
+         *     from N hosts' last reports".
+         */
+        PortSummaryLineView: {
+            /**
+             * Format: int64
+             * @description Rows exposed on at least one host.
+             */
+            exposed: number;
+            /**
+             * Format: int64
+             * @description Rows with a Needs a look code.
+             */
+            need_a_look: number;
+            /**
+             * Format: int64
+             * @description Rows with a host that started listening this week.
+             */
+            new_this_week: number;
+            /**
+             * Format: int64
+             * @description Active hosts in reach that have sent a services report (the "m" of
+             *     "n of m").
+             */
+            reporting_hosts: number;
         };
         /** @description One port across the caller's hosts. */
         PortView: {
@@ -12422,6 +12560,85 @@ export interface operations {
             };
             /** @description Authentication required */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_port_page: {
+        parameters: {
+            query?: {
+                /** @description Port number, `22/tcp`, usual name or owner unit (contains). */
+                q?: string;
+                /** @description exposed (exposed on some host) or local (on none). */
+                exposure?: string;
+                /** @description tcp or udp. */
+                protocol?: string;
+                /** @description A host group id. */
+                group?: string;
+                /** @description An owner unit, or `~none` for an owner not collected. */
+                service?: string;
+                /** @description new (a host started listening this week) or look (needs a look). */
+                changes?: string;
+                /** @description An agent id. */
+                host?: string;
+                /** @description port (default), hosts, exposed or week. */
+                sort?: string;
+                /** @description asc (default) or desc. */
+                dir?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of ports on the caller's hosts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -53,7 +53,7 @@ export function registerAssetRoutes(ctx: DemoContext) {
         const row = rows.get(`${l.protocol}/${l.port}`) ?? { protocol: l.protocol, port: l.port, hosts: 0, exposed_hosts: 0, services: new Set() };
         row.hosts += 1;
         if (l.exposed) row.exposed_hosts += 1;
-        row.services.add(l.service);
+        if (l.service) row.services.add(l.service);
         rows.set(`${l.protocol}/${l.port}`, row);
       }
     }
@@ -114,19 +114,22 @@ export function registerAssetRoutes(ctx: DemoContext) {
 }
 
 // Assets v2: open ports and running services, from the host's role.
-const PORTS: Record<string, [number, string, string][]> = {
+// [port, unit, program, protocol (tcp unless given), exposed (unless false)]; a null unit is an owner the agent could not see.
+const PORTS: Record<string, [number, string | null, string | null, string?, boolean?][]> = {
   web: [[443, "nginx.service", "nginx"], [80, "nginx.service", "nginx"]], proxy: [[443, "haproxy.service", "haproxy"]], api: [[8080, "api.service", "node"]],
   db: [[5432, "postgresql.service", "postgres"]], cache: [[6379, "redis.service", "redis-server"]], mail: [[25, "postfix.service", "master"]],
+  vpn: [[1194, "openvpn-server@server.service", "openvpn", "udp"]], files: [[445, "smb.service", "smbd"], [8888, null, null]],
+  ws: [[3389, "xrdp.service", "xrdp"], [631, "cups.service", "cupsd", "tcp", false]], dns: [[53, "named.service", "named", "udp"], [53, "named.service", "named"]], nas: [[2049, "nfs-server.service", "nfsd"]],
 };
 export function hostServices(data: DemoContext["data"], agentId: string) {
   const role = (data.agents.find((a) => a.id === agentId)?.hostname ?? "").split("-")[0] ?? "";
   const own = PORTS[role] ?? [];
-  const listeners = [
-    ...own.map(([port, service, program]) => ({ protocol: "tcp", address: "0.0.0.0", port, exposed: true, service, program })),
+  const listeners = ([
+    ...own.map(([port, service, program, protocol = "tcp", exposed = true]) => ({ protocol, address: exposed ? "0.0.0.0" : "127.0.0.1", port, exposed, service, program })),
     { protocol: "tcp", address: "0.0.0.0", port: 22, exposed: true, service: "sshd.service", program: "sshd" },
     { protocol: "udp", address: "127.0.0.53", port: 53, exposed: false, service: "systemd-resolved.service", program: "systemd-resolve" },
-  ].sort((a, b) => Number(b.exposed) - Number(a.exposed) || a.port - b.port);
-  const units = new Map(listeners.map((l) => [l.service, l.program]));
+  ] as { protocol: string; address: string; port: number; exposed: boolean; service: string | null; program: string | null }[]).sort((a, b) => Number(b.exposed) - Number(a.exposed) || a.port - b.port);
+  const units = new Map(listeners.flatMap((l) => (l.service && l.program ? [[l.service, l.program] as const] : [])));
   units.set("chronyd.service", "chronyd");
   const services = [...units].map(([unit, program]) => ({ unit, programs: [program], processes: unit === "nginx.service" ? 3 : 1, run_as: "root" })).sort((a, b) => a.unit.localeCompare(b.unit));
   // The mail hosts' last report was refused (over 512 KiB): the tab says so.

@@ -21,6 +21,7 @@ mod dashboards;
 mod hosts;
 mod http;
 mod lists;
+mod ports;
 mod rules;
 #[cfg(feature = "dev-seed")]
 mod seeded;

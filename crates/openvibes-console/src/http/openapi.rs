@@ -52,6 +52,7 @@ use utoipa::OpenApi;
         crate::alarms::list::list_alarm_page,
         crate::vulnerabilities::list_page::list_vulnerability_page,
         crate::compliance::list_page::list_check_page,
+        crate::ports::list_page::list_port_page,
         crate::compliance::page::check_summary_page,
         crate::compliance::page::check_hosts_page,
         crate::vulnerabilities::page::vulnerability_summary_page,

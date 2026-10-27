@@ -6980,6 +6980,168 @@
         }
       }
     },
+    "/api/v1/port-list": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "The Ports list.",
+        "operationId": "list_port_page",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Port number, `22/tcp`, usual name or owner unit (contains).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "exposure",
+            "in": "query",
+            "description": "exposed (exposed on some host) or local (on none).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "description": "tcp or udp.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "description": "A host group id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "description": "An owner unit, or `~none` for an owner not collected.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "changes",
+            "in": "query",
+            "description": "new (a host started listening this week) or look (needs a look).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "description": "An agent id.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "port (default), hosts, exposed or week.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc (default) or desc.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of ports on the caller's hosts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ports": {
       "get": {
         "tags": [
@@ -18765,6 +18927,54 @@
           }
         }
       },
+      "PortCountsView": {
+        "type": "object",
+        "description": "Rows per filter value, each with the other filters applied.",
+        "required": [
+          "exposure",
+          "protocol",
+          "changes",
+          "group",
+          "service"
+        ],
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`new`, `look`."
+          },
+          "exposure": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`exposed`, `local`."
+          },
+          "group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCountView"
+            },
+            "description": "Groups holding a listening host."
+          },
+          "protocol": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "`tcp`, `udp`."
+          },
+          "service": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountView"
+            },
+            "description": "Owner units, then `~none` (\"Owner not collected\")."
+          }
+        }
+      },
       "PortDetail": {
         "type": "object",
         "description": "One port across the caller's hosts: a page of the hosts listening on it.",
@@ -18796,6 +19006,35 @@
           "protocol": {
             "type": "string",
             "description": "`tcp` or `udp`."
+          }
+        }
+      },
+      "PortGroupView": {
+        "type": "object",
+        "description": "A group named in a row.",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts of the group listening on the port."
+          },
+          "id": {
+            "type": "string",
+            "description": "Group id."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind",
+            "description": "How the group gets its hosts (automatic or rule)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group name."
           }
         }
       },
@@ -18847,6 +19086,160 @@
               "null"
             ],
             "description": "The owning unit, when the agent saw it."
+          }
+        }
+      },
+      "PortListRowView": {
+        "type": "object",
+        "description": "One row: a port.",
+        "required": [
+          "protocol",
+          "port",
+          "hosts",
+          "exposed_hosts",
+          "services",
+          "owners_missing",
+          "groups",
+          "groups_total",
+          "week_added",
+          "week_removed",
+          "look"
+        ],
+        "properties": {
+          "exposed_hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those, hosts where it is exposed (reachable from the network)."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortGroupView"
+            },
+            "description": "Automatic and rule groups with a listening host, most hosts first,\nat most 3."
+          },
+          "groups_total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many such groups there are in all."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach listening on it (the \"n\" of \"n of m\")."
+          },
+          "look": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Needs a look codes, in rule order: `database_exposed`,\n`remote_admin_exposed`, `new_unusual`."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The usual name; absent for a port that is not well known."
+          },
+          "owners_missing": {
+            "type": "boolean",
+            "description": "A listening host's owner is not collected."
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 to 65535."
+          },
+          "protocol": {
+            "type": "string",
+            "description": "`tcp` or `udp`."
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Owner units seen on it, sorted, at most 8."
+          },
+          "week_added": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts that started listening in the last 7 days."
+          },
+          "week_removed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts that stopped listening in the last 7 days."
+          }
+        }
+      },
+      "PortListView": {
+        "type": "object",
+        "description": "One page of the Ports list.",
+        "required": [
+          "items",
+          "total",
+          "counts",
+          "summary",
+          "generated_at"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/PortCountsView",
+            "description": "Per-value counts."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortListRowView"
+            },
+            "description": "The page."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/PortSummaryLineView",
+            "description": "Summary line."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching every filter."
+          }
+        }
+      },
+      "PortSummaryLineView": {
+        "type": "object",
+        "description": "\"N exposed on some host · N with new hosts this week · N need a look ·\nfrom N hosts' last reports\".",
+        "required": [
+          "exposed",
+          "new_this_week",
+          "need_a_look",
+          "reporting_hosts"
+        ],
+        "properties": {
+          "exposed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows exposed on at least one host."
+          },
+          "need_a_look": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows with a Needs a look code."
+          },
+          "new_this_week": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows with a host that started listening this week."
+          },
+          "reporting_hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active hosts in reach that have sent a services report (the \"m\" of\n\"n of m\")."
           }
         }
       },
