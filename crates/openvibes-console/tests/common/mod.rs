@@ -5,6 +5,7 @@
 pub mod bulk;
 pub mod cases;
 pub mod http;
+pub mod lists;
 pub mod people;
 pub mod suppressions;
 

@@ -141,6 +141,7 @@ pub mod service_related;
 pub mod service_summary;
 pub mod signer;
 mod status;
+mod summary_parts;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;
 pub mod triage_history;

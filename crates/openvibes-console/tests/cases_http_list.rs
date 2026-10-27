@@ -224,7 +224,7 @@ async fn requests_are_validated_and_the_list_pages_and_filters() {
             "invalid_severity",
         ),
         (
-            json!({"title": "x", "items": [{"kind": "service", "ref": "sshd.service"}]}),
+            json!({"title": "x", "items": [{"kind": "widget", "ref": "sshd.service"}]}),
             "kind",
             "invalid_kind",
         ),
@@ -294,7 +294,7 @@ async fn requests_are_validated_and_the_list_pages_and_filters() {
         assert_eq!(status, StatusCode::BAD_REQUEST, "{query}");
     }
     let (status, problem) = fx
-        .get(&alice, "/api/v1/cases/for-item?kind=service&ref=x")
+        .get(&alice, "/api/v1/cases/for-item?kind=widget&ref=x")
         .await;
     assert_eq!(
         (status, field_errors(&problem)),

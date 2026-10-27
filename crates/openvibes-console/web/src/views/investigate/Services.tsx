@@ -3,22 +3,16 @@
 // filter chips whose values and counts come from the server, saved views, the
 // person's columns, a summary line and paging by offset (all in the URL). A
 // row opens the service's page at /services/{unit} (service/ServicePage.tsx).
-import { useEffect, useState } from "react";
-
-import { invalidate, useResource } from "../../api/client";
 import type { ServiceList, ServiceListRow } from "../../api/types";
 import { portPath, servicePath } from "../../app/location";
 import { nav, useLocation, viewLink } from "../../app/nav";
-import { Empty, ErrorBox, Loading } from "../../ui/bits";
+import { Empty } from "../../ui/bits";
 import { type Column, DataTable } from "../../ui/DataTable";
 import { plural } from "../../ui/format";
-import { Icon } from "../../ui/Icon";
-import { FilterBar } from "../../ui/list/FilterBar";
-import { type ListFilter, PAGE, hasFilters } from "../../ui/list/filters";
-import { importBrowserViews, useHiddenColumns } from "../../ui/list/savedViews";
-import { SummaryLine } from "../../ui/list/SummaryLine";
-import { useHostName } from "../lists/HostChip";
+import { type ListFilter, PAGE } from "../../ui/list/filters";
 import { Pager } from "./Hosts";
+import { ListScreen, ListSummary } from "./ListScreen";
+import { isRoot } from "./service/ServiceCards";
 import { ServicePage } from "./service/ServicePage";
 
 const PAGE_SIZE = 50;
@@ -83,7 +77,7 @@ function Week({ row }: { row: ServiceListRow }) {
 
 /** "root" (amber) on every host, "root on 2 of 5" when only some, then the other users. */
 function RunsAs({ row }: { row: ServiceListRow }) {
-  const others = row.run_as.filter((u) => !ROOT.has(u.toLowerCase()));
+  const others = row.run_as.filter((u) => !isRoot(u));
   return (
     <span className="row">
       {row.root_hosts > 0 && <span className="badge badge--warn badge--plain" title={`Root or SYSTEM on ${plural(row.root_hosts, "host")}`}>{row.root_hosts === row.hosts ? "root" : `root on ${row.root_hosts.toLocaleString()} of ${row.hosts.toLocaleString()}`}</span>}
@@ -92,7 +86,6 @@ function RunsAs({ row }: { row: ServiceListRow }) {
     </span>
   );
 }
-const ROOT = new Set(["root", "0", "system", "localsystem", "nt authority\\system"]);
 
 const columns: Column<ServiceListRow>[] = [
   { key: "service", header: header("service"), width: "260px", sort: (r) => r.unit, render: (r) => (
@@ -139,7 +132,7 @@ export function ServiceListBody({ list, hidden, offset = 0 }: { list: ServiceLis
   ];
   return (
     <>
-      <div className="view-pad host-summary"><SummaryLine parts={parts} tail={s.reporting_hosts === 1 ? "from 1 host's last report" : `from ${s.reporting_hosts.toLocaleString()} hosts' last reports`} /></div>
+      <ListSummary parts={parts} hosts={s.reporting_hosts} />
       <DataTable label="Services" rows={list.items} rowKey={(r) => r.unit} serverSort serverPaged onOpen={(r) => nav.view(servicePath(r.unit))}
         columns={columns.filter((c) => c.key === "service" || !hidden.includes(c.key))} />
       <Pager offset={offset} shown={list.items.length} total={list.total} />
@@ -147,43 +140,11 @@ export function ServiceListBody({ list, hidden, offset = 0 }: { list: ServiceLis
   );
 }
 
-function ServiceListView() {
-  const { params } = useLocation();
-  const list = useResource<ServiceList>(`/api/v1/service-list?${apiQuery(params)}`);
-  const hidden = useHiddenColumns("services");
-  const host = params.get("host");
-  const hostName = useHostName(host);
-  // The last page stays on screen (and its counts in the chips) while the next loads.
-  const [kept, setKept] = useState<ServiceList>();
-  if (list.data && list.data !== kept) setKept(list.data);
-  const data = list.data ?? kept;
-  // Views saved in this browser before saved views lived on the console.
-  useEffect(() => { void importBrowserViews("services", "openvibes.v2.views./services", (query) => query); }, []);
-
-  return (
-    <div className="view">
-      <header className="view-header">
-        <div className="view-header__top">
-          <div className="view-header__title">
-            <h1>Services</h1>
-            {data && <span className="view-header__count num">{data.total.toLocaleString()}</span>}
-          </div>
-          <button type="button" className="icon-button" title="Refresh" aria-label="Refresh" onClick={() => invalidate("/api/v1/service-list")}>
-            <Icon name="refresh" size={16} />
-          </button>
-        </div>
-        <FilterBar page="services" label="Search services" placeholder="Search service, program, package or port…" filters={serviceFilters(data, { host, hostName })} columns={COLUMNS} />
-      </header>
-      {list.error ? <div className="view-pad"><ErrorBox error={list.error} /></div> : !data ? <Loading /> : data.total === 0 ? (
-        hasFilters(params)
-          ? <Empty icon="layers" title="No service matches these filters">Clear a filter to see more.</Empty>
-          : <Empty icon="layers" title="No services reported yet">Agents report open ports and running services about an hour after they start.</Empty>
-      ) : (
-        <ServiceListBody list={data} hidden={hidden ?? []} offset={Math.max(0, Number(params.get(PAGE)) || 0)} />
-      )}
-    </div>
-  );
-}
+const ServiceListView = () => (
+  <ListScreen<ServiceList> page="services" title="Services" listPath="/api/v1/service-list" query={apiQuery} icon="layers" noun="service" columns={COLUMNS} filters={serviceFilters} legacyQuery={(query) => query}
+    search={{ label: "Search services", placeholder: "Search service, program, package or port…" }}
+    body={(list, hidden, offset) => <ServiceListBody list={list} hidden={hidden} offset={offset} />} />
+);
 
 /** The unit in a /services/{unit} path; null when the path is not one (bad escapes, a sub-path, an empty unit). */
 export function unitOf(view: string): string | null {

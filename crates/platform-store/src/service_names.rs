@@ -5,7 +5,7 @@
 //!
 //! A unit is looked up by its *base*: lower case, with `.service` and any
 //! `@instance` removed (`postgresql@16-main.service` is `postgresql`). The
-//! SQL twin of [`base`] is [`BASE_SQL`].
+//! SQL twin of `base` is `BASE_SQL`.
 
 /// What kind of service a unit usually is.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -4,22 +4,15 @@
 // the person's columns, a summary line and paging by offset (all in the
 // URL). A row opens the port's page at /ports/{port}/{protocol}
 // (port/PortPage.tsx).
-import { useEffect, useState } from "react";
-
-import { invalidate, useResource } from "../../api/client";
 import type { PortList, PortListRow } from "../../api/types";
 import { parsePortId, portPath, portsQuery } from "../../app/location";
 import { nav, useLocation, viewLink } from "../../app/nav";
-import { Empty, ErrorBox, Loading } from "../../ui/bits";
+import { Empty } from "../../ui/bits";
 import { type Column, DataTable } from "../../ui/DataTable";
 import { plural } from "../../ui/format";
-import { Icon } from "../../ui/Icon";
-import { FilterBar } from "../../ui/list/FilterBar";
-import { type ListFilter, PAGE, hasFilters } from "../../ui/list/filters";
-import { importBrowserViews, useHiddenColumns } from "../../ui/list/savedViews";
-import { SummaryLine } from "../../ui/list/SummaryLine";
-import { useHostName } from "../lists/HostChip";
+import { type ListFilter, PAGE } from "../../ui/list/filters";
 import { Pager } from "./Hosts";
+import { ListScreen, ListSummary } from "./ListScreen";
 import { PortPage } from "./port/PortPage";
 
 const PAGE_SIZE = 50;
@@ -121,7 +114,7 @@ export function PortListBody({ list, hidden, offset = 0 }: { list: PortList; hid
   ];
   return (
     <>
-      <div className="view-pad host-summary"><SummaryLine parts={parts} tail={s.reporting_hosts === 1 ? "from 1 host's last report" : `from ${s.reporting_hosts.toLocaleString()} hosts' last reports`} /></div>
+      <ListSummary parts={parts} hosts={s.reporting_hosts} />
       <DataTable label="Ports" rows={list.items} rowKey={(r) => `${r.protocol}/${r.port}`} serverSort serverPaged onOpen={(r) => nav.view(portPath(r.protocol, r.port))}
         columns={columns.filter((c) => c.key === "port" || !hidden.includes(c.key))} />
       <Pager offset={offset} shown={list.items.length} total={list.total} />
@@ -129,43 +122,11 @@ export function PortListBody({ list, hidden, offset = 0 }: { list: PortList; hid
   );
 }
 
-function PortListView() {
-  const { params } = useLocation();
-  const list = useResource<PortList>(`/api/v1/port-list?${apiQuery(params)}`);
-  const hidden = useHiddenColumns("ports");
-  const host = params.get("host");
-  const hostName = useHostName(host);
-  // The last page stays on screen (and its counts in the chips) while the next loads.
-  const [kept, setKept] = useState<PortList>();
-  if (list.data && list.data !== kept) setKept(list.data);
-  const data = list.data ?? kept;
-  // Views saved in this browser before saved views lived on the console.
-  useEffect(() => { void importBrowserViews("ports", "openvibes.v2.views./ports", portsQuery); }, []);
-
-  return (
-    <div className="view">
-      <header className="view-header">
-        <div className="view-header__top">
-          <div className="view-header__title">
-            <h1>Ports</h1>
-            {data && <span className="view-header__count num">{data.total.toLocaleString()}</span>}
-          </div>
-          <button type="button" className="icon-button" title="Refresh" aria-label="Refresh" onClick={() => invalidate("/api/v1/port-list")}>
-            <Icon name="refresh" size={16} />
-          </button>
-        </div>
-        <FilterBar page="ports" label="Search ports" placeholder="Search port, name or service…" filters={portFilters(data, { host, hostName })} columns={COLUMNS} />
-      </header>
-      {list.error ? <div className="view-pad"><ErrorBox error={list.error} /></div> : !data ? <Loading /> : data.total === 0 ? (
-        hasFilters(params)
-          ? <Empty icon="activity" title="No port matches these filters">Clear a filter to see more.</Empty>
-          : <Empty icon="activity" title="No ports reported yet">Agents report open ports and running services about an hour after they start.</Empty>
-      ) : (
-        <PortListBody list={data} hidden={hidden ?? []} offset={Math.max(0, Number(params.get(PAGE)) || 0)} />
-      )}
-    </div>
-  );
-}
+const PortListView = () => (
+  <ListScreen<PortList> page="ports" title="Ports" listPath="/api/v1/port-list" query={apiQuery} icon="activity" noun="port" columns={COLUMNS} filters={portFilters} legacyQuery={portsQuery}
+    search={{ label: "Search ports", placeholder: "Search port, name or service…" }}
+    body={(list, hidden, offset) => <PortListBody list={list} hidden={hidden} offset={offset} />} />
+);
 
 /** The port in a /ports/{port}/{protocol} path ("22/tcp"); null when the path is not one (bad escapes, a sub-path). */
 export function portOf(view: string): [string, number] | null {

@@ -3,10 +3,10 @@
 //! card's permissions.
 
 use axum::http::StatusCode;
-use platform_store::console_roles::Reach;
 use serde_json::json;
 
 mod common;
+use common::lists;
 use common::people::{Fx, WIN};
 
 const W1: &str = "agent.00000000-0000-4000-8000-0000000000a1";
@@ -59,33 +59,7 @@ async fn paths_and_queries_are_validated() {
         assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");
         assert_eq!(body["code"], "invalid_unit", "{uri}");
     }
-    for (query, field) in [
-        ("segment=gone", "segment"),
-        ("offset=-1", "offset"),
-        ("offset=100001", "offset"),
-        ("limit=0", "limit"),
-        ("limit=101", "limit"),
-    ] {
-        let (status, body) = fx
-            .call(
-                &fx.admin,
-                "GET",
-                &hosts("nginx.service", &format!("?{query}")),
-                None,
-            )
-            .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{query}");
-        assert_eq!(body["field_errors"][0]["field"], field, "{query}");
-    }
-    let (status, _) = fx
-        .call(
-            &fx.admin,
-            "GET",
-            &hosts("nginx.service", "?surprise=1"),
-            None,
-        )
-        .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    lists::assert_hosts_queries_refused(&fx, |query| hosts("nginx.service", query)).await;
     let (status, body) = fx
         .call(&fx.admin, "GET", &summary("nothing.service"), None)
         .await;
@@ -93,14 +67,7 @@ async fn paths_and_queries_are_validated() {
         (status, body["code"].clone()),
         (StatusCode::NOT_FOUND, json!("service_not_found"))
     );
-    let request = axum::http::Request::builder()
-        .uri(summary("nginx.service"))
-        .body(axum::body::Body::empty())
-        .unwrap();
-    let response = tower::ServiceExt::oneshot(fx.router.clone(), request)
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    lists::assert_unauthorized(&fx, &summary("nginx.service")).await;
     fx.db.drop().await;
 }
 
@@ -216,31 +183,11 @@ async fn a_team_lead_sees_only_their_hosts_and_a_reader_without_the_rest_gets_le
         .call(&lead, "GET", &hosts("mystery.service", ""), None)
         .await;
     assert_eq!(page["total"], 0);
-    // hosts.read is required.
-    let role = fx.role("Cases only", &["cases.read"], Reach::All).await;
-    fx.db.user("co", &role, 5).await;
-    let co = common::http::sign_in(&fx.router, "co").await;
-    for uri in [summary("nginx.service"), hosts("nginx.service", "")] {
-        let (status, _) = fx.call(&co, "GET", &uri, None).await;
-        assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
-    }
-    // Export and cases are separate permissions that need a host in reach.
-    let role = fx
-        .role(
-            "Export and cases",
-            &["hosts.read", "hosts.export", "cases.read", "cases.write"],
-            Reach::Groups(vec![WIN.into()]),
-        )
-        .await;
-    fx.db.user("ec", &role, 6).await;
-    let ec = common::http::sign_in(&fx.router, "ec").await;
-    let (_, body) = fx.call(&ec, "GET", &summary("nginx.service"), None).await;
-    assert_eq!(
-        (
-            body["can"]["export"].clone(),
-            body["can"]["add_to_case"].clone()
-        ),
-        (json!(true), json!(true))
-    );
+    lists::assert_page_permissions(
+        &fx,
+        &[summary("nginx.service"), hosts("nginx.service", "")],
+        &summary("nginx.service"),
+    )
+    .await;
     fx.db.drop().await;
 }

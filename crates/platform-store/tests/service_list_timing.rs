@@ -10,8 +10,9 @@
 //! timing fails) to measure again without rebuilding it.
 
 mod common;
+use common::timing;
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use chrono::Utc;
 use platform_store::{
@@ -28,15 +29,9 @@ const LIMIT: Duration = Duration::from_secs(2);
 const FULL_REACH_LIMIT: Duration = Duration::from_secs(5);
 
 async fn fleet(c: &Client) -> String {
+    timing::hosts(c).await;
     c.batch_execute(
-        "SET statement_timeout = 0;
-         INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, hostname, os_id, os_version,
-                             services_at, services_owners)
-         SELECT 'agent.' || gen_random_uuid()::text, 'active', now() - interval '90 days', now(),
-                'host-' || n, 'debian', '12', now(), 'complete'
-         FROM generate_series(1, 10000) n;
-         CREATE TEMP TABLE gen AS SELECT agent_id, substr(hostname, 6)::int AS n FROM agents;
-         -- Host n runs 30 units out of 150; sshd, chronyd and rsyslog everywhere.
+        "         -- Host n runs 30 units out of 150; sshd, chronyd and rsyslog everywhere.
          CREATE TEMP TABLE unit_names AS
          SELECT j, CASE WHEN j = 0 THEN 'sshd.service' WHEN j = 1 THEN 'chronyd.service'
                         WHEN j = 2 THEN 'rsyslog.service' ELSE 'unit' || j || '.service' END AS unit
@@ -64,43 +59,11 @@ async fn fleet(c: &Client) -> String {
          SELECT now() - (random() * (CASE WHEN n % 20 = 0 THEN 7 ELSE 85 END) * interval '1 day'),
                 g.agent_id, 'service', 'unit' || (3 + (g.n * 7 + j * 13) % 147) || '.service',
                 CASE WHEN j % 4 = 0 THEN 'went_away' ELSE 'appeared' END
-         FROM gen g CROSS JOIN generate_series(1, 50) j;
-         INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind)
-         SELECT gen_random_uuid(), (CASE WHEN i < 10 THEN 'manual ' ELSE 'rule ' END) || i, now(), 't',
-                CASE WHEN i < 10 THEN 'manual' ELSE 'rule' END
-         FROM generate_series(0, 14) i;
-         INSERT INTO console_host_group_members (asset_group_id, agent_id, added_at, added_by)
-         SELECT g.asset_group_id, a.agent_id, now(), 't' FROM console_asset_groups g JOIN agents a
-           ON g.kind = 'manual' AND abs(hashtext(a.agent_id || g.name)) % 20 = 0;
-         INSERT INTO console_host_group_membership (asset_group_id, agent_id)
-         SELECT g.asset_group_id, a.agent_id FROM console_asset_groups g JOIN agents a
-           ON abs(hashtext(a.agent_id || g.name)) % 4 = 0
-         ON CONFLICT DO NOTHING;",
+         FROM gen g CROSS JOIN generate_series(1, 50) j;",
     )
     .await
     .unwrap();
-    c.batch_execute("VACUUM ANALYZE").await.unwrap();
-    c.query_one(
-        "SELECT asset_group_id::text FROM console_asset_groups WHERE name = 'manual 0'",
-        &[],
-    )
-    .await
-    .unwrap()
-    .get(0)
-}
-
-async fn median(c: &Client, q: &ServiceQuery<'_>, scope: &AgentScope) -> (Duration, i64) {
-    const RUNS: usize = 5;
-    let mut samples = Vec::with_capacity(RUNS);
-    let mut total = 0;
-    for _ in 0..RUNS {
-        let started = Instant::now();
-        let page = service_list(c, q, scope, Utc::now()).await.unwrap();
-        samples.push(started.elapsed());
-        total = page.total;
-    }
-    samples.sort();
-    (samples[RUNS / 2], total)
+    timing::groups(c).await
 }
 
 #[tokio::test]
@@ -115,14 +78,7 @@ async fn the_list_answers_within_two_seconds() {
                 .get()
                 .await
                 .unwrap();
-            let group = c
-                .query_one(
-                    "SELECT asset_group_id::text FROM console_asset_groups WHERE name = 'manual 0'",
-                    &[],
-                )
-                .await
-                .unwrap()
-                .get(0);
+            let group = timing::manual_group(&c).await;
             (None, c, group)
         }
         None => {
@@ -186,7 +142,10 @@ async fn the_list_answers_within_two_seconds() {
         ),
         ("one group's reach (about 500 hosts)", &base, &scoped),
     ] {
-        let (time, total) = median(&c, q, scope).await;
+        let (time, total) = timing::median(|| async {
+            service_list(&c, q, scope, Utc::now()).await.unwrap().total
+        })
+        .await;
         println!("{label}: {time:?} ({total} services)");
         let limit = if matches!(scope, AgentScope::Global) {
             FULL_REACH_LIMIT

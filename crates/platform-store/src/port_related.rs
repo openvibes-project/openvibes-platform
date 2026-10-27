@@ -221,13 +221,13 @@ async fn packages(
     Ok(out)
 }
 
-/// Open advisories of `package` on `hosts`, counted in `scope`.
-pub(crate) async fn package_advisories(
+/// Open advisories (and the hosts they are open on) of any of `packages` on `hosts`, counted in `scope`.
+pub(crate) async fn advisory_counts(
     client: &Client,
     scope: &AgentScope,
     hosts: &[String],
-    package: &str,
-) -> Result<RelatedPackage, StoreError> {
+    packages: &[String],
+) -> Result<(i64, i64), StoreError> {
     let (global, groups) = scope_params(scope);
     let visible = agent_visibility("a.agent_id", "$1", "$2");
     let row = client
@@ -242,15 +242,26 @@ pub(crate) async fn package_advisories(
                         OR (t.state = 'accepted_risk' AND t.accepted_until <= now()))
                    AND split_part(adv.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
                    AND EXISTS (SELECT 1 FROM jsonb_array_elements(v.packages) p
-                               WHERE p ->> 'name' = $4::text)"
+                               WHERE p ->> 'name' = ANY($4::text[]))"
             ),
-            &[&global, &groups, &hosts, &package],
+            &[&global, &groups, &hosts, &packages],
         )
         .await?;
+    Ok((row.get(0), row.get(1)))
+}
+
+/// Open advisories of `package` on `hosts`, counted in `scope`.
+pub(crate) async fn package_advisories(
+    client: &Client,
+    scope: &AgentScope,
+    hosts: &[String],
+    package: &str,
+) -> Result<RelatedPackage, StoreError> {
+    let (advisories, hosts) = advisory_counts(client, scope, hosts, &[package.to_owned()]).await?;
     Ok(RelatedPackage {
         package: package.to_owned(),
-        advisories: row.get(0),
-        hosts: row.get(1),
+        advisories,
+        hosts,
     })
 }
 

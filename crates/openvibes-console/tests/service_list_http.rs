@@ -2,10 +2,10 @@
 //! reach, and the saved-views page "services".
 
 use axum::http::StatusCode;
-use platform_store::console_roles::Reach;
 use serde_json::{Value, json};
 
 mod common;
+use common::lists::{self, count};
 use common::people::{Fx, WIN};
 
 const W1: &str = "agent.00000000-0000-4000-8000-0000000000a1";
@@ -65,20 +65,9 @@ fn row<'a>(body: &'a Value, unit: &str) -> &'a Value {
         .unwrap()
 }
 
-fn count(body: &Value, facet: &str, v: &str) -> Value {
-    body["counts"][facet]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|e| e["value"] == v)
-        .unwrap()["count"]
-        .clone()
-}
-
 #[tokio::test]
 async fn every_parameter_is_validated_and_named() {
     let Some(fx) = Fx::new().await else { return };
-    let long = "x".repeat(201);
     let bad = [
         ("runs_as=gone", "runs_as"),
         ("listens=sometimes", "listens"),
@@ -94,41 +83,19 @@ async fn every_parameter_is_validated_and_named() {
         ("limit=101", "limit"),
         ("q=%00", "q"),
     ];
-    for (query, field) in bad {
-        let (status, body) = fx
-            .call(&fx.admin, "GET", &format!("{URL}?{query}"), None)
-            .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{query}");
-        assert_eq!(body["code"], "invalid_query", "{query}");
-        assert_eq!(body["field_errors"][0]["field"], field, "{query}");
-    }
-    let (status, body) = fx
-        .call(&fx.admin, "GET", &format!("{URL}?q={long}"), None)
-        .await;
-    assert_eq!(
-        (status, &body["field_errors"][0]["field"]),
-        (StatusCode::BAD_REQUEST, &"q".into())
-    );
-    for ok in [
-        "limit=100&offset=100000",
-        "runs_as=root&listens=exposed&packaged=no&changes=look&sort=week&dir=desc",
-        "listens=none&sort=hosts",
-        "host=agent.x&runs_as=",
-        "q=sshd.service",
-    ] {
-        let (status, _) = fx
-            .call(&fx.admin, "GET", &format!("{URL}?{ok}"), None)
-            .await;
-        assert_eq!(status, StatusCode::OK, "{ok}");
-    }
-    let request = axum::http::Request::builder()
-        .uri(URL)
-        .body(axum::body::Body::empty())
-        .unwrap();
-    let response = tower::ServiceExt::oneshot(fx.router.clone(), request)
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    lists::assert_queries_validated(
+        &fx,
+        URL,
+        &bad,
+        &[
+            "limit=100&offset=100000",
+            "runs_as=root&listens=exposed&packaged=no&changes=look&sort=week&dir=desc",
+            "listens=none&sort=hosts",
+            "host=agent.x&runs_as=",
+            "q=sshd.service",
+        ],
+    )
+    .await;
     fx.db.drop().await;
 }
 
@@ -238,56 +205,21 @@ async fn a_team_lead_sees_only_their_groups() {
         "only W1's loopback"
     );
     assert_eq!(body["summary"]["reporting_hosts"], 1);
-    assert!(
-        body["counts"]["group"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|g| g["value"] != other.as_str())
-    );
-    for q in [format!("host={L1}"), format!("group={other}")] {
-        let (status, body) = fx.call(&lead, "GET", &format!("{URL}?{q}"), None).await;
-        assert_eq!(
-            (status, body["total"].clone()),
-            (StatusCode::OK, 0.into()),
-            "{q}"
-        );
-    }
-    // hosts.read is required
-    let role = fx.role("Cases only", &["cases.read"], Reach::All).await;
-    fx.db.user("co", &role, 5).await;
-    let co = common::http::sign_in(&fx.router, "co").await;
-    let (status, _) = fx.call(&co, "GET", URL, None).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    let queries = [format!("host={L1}"), format!("group={other}")];
+    lists::assert_out_of_reach(&fx, &lead, URL, &other, &queries).await;
     fx.db.drop().await;
 }
 
 #[tokio::test]
 async fn the_services_page_keeps_saved_views_and_hidden_columns() {
     let Some(fx) = Fx::new().await else { return };
-    let a = &fx.admin;
-    let (status, _) = fx
-        .call(
-            a,
-            "POST",
-            "/api/v1/saved-views",
-            Some(json!({"page": "services", "name": "Root", "query": "runs_as=root"})),
-        )
-        .await;
-    assert_eq!(status, StatusCode::CREATED);
-    let cols = "/api/v1/list-columns/services";
-    let (status, _) = fx
-        .call(
-            a,
-            "PUT",
-            cols,
-            Some(json!({"hidden": ["hosts", "runs_as", "ports", "package", "week", "look"]})),
-        )
-        .await;
-    assert_eq!(status, StatusCode::OK);
-    let (status, body) = fx
-        .call(a, "PUT", cols, Some(json!({"hidden": ["service"]})))
-        .await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    lists::assert_views_and_columns(
+        &fx,
+        "services",
+        ("Root", "runs_as=root"),
+        &["hosts", "runs_as", "ports", "package", "week", "look"],
+        "service",
+    )
+    .await;
     fx.db.drop().await;
 }

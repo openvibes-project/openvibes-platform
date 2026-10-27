@@ -3,7 +3,7 @@
 //! viewer's scope. Counts never include a host the viewer cannot see;
 //! revoked hosts are left out.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 
 use crate::{
     Client, StoreError,
@@ -12,10 +12,8 @@ use crate::{
     host_list::values,
     port_names::{self, PortInfo},
     port_related::{PortRelated, RelatedReach, related},
+    summary_parts::{KEPT, change_counts, first_seen, group_shares, recent_changes},
 };
-
-/// How long the change log keeps a port viewable after its last host.
-const KEPT: i64 = 90;
 
 /// When the port was first seen.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -154,82 +152,35 @@ pub async fn port_summary(
     let floor: DateTime<Utc> = me.get(7);
     let of: i64 = me.get(8);
 
-    let counts = client
-        .query_one(
-            &format!(
-                "SELECT count(DISTINCT c.agent_id) FILTER (WHERE c.change = 'appeared' AND c.at > $5::timestamptz),
-                        count(DISTINCT c.agent_id) FILTER (WHERE c.change = 'went_away' AND c.at > $5::timestamptz),
-                        min(c.at) FILTER (WHERE c.change = 'appeared'),
-                        count(*)
-                 FROM change_log c JOIN agents a ON a.agent_id = c.agent_id
-                 WHERE c.kind = 'listener' AND c.key = $3::text AND a.status <> 'revoked' AND {visible}
-                   AND c.at > $4::timestamptz - interval '{KEPT} days'"
-            ),
-            &[&global, &groups, &key, &now, &(now - Duration::days(7))],
-        )
-        .await?;
-    let (week_added, week_removed): (i64, i64) = (counts.get(0), counts.get(1));
-    let first_logged: Option<DateTime<Utc>> = counts.get(2);
-    let logged: i64 = counts.get(3);
+    let scope = (&global, &groups);
+    let counts = change_counts(client, "listener", &visible, scope, &key, now).await?;
+    let (week_added, week_removed, first_logged, logged) = (
+        counts.week_added,
+        counts.week_removed,
+        counts.first_logged,
+        counts.logged,
+    );
     if listening == 0 && logged == 0 {
         return Ok(None);
     }
-    let events: Vec<PortEvent> = client
-        .query(
-            &format!(
-                "SELECT c.at, c.agent_id, a.hostname, c.change
-                 FROM change_log c JOIN agents a ON a.agent_id = c.agent_id
-                 WHERE c.kind = 'listener' AND c.key = $3::text AND a.status <> 'revoked' AND {visible}
-                   AND c.at > $4::timestamptz - interval '{KEPT} days'
-                 ORDER BY c.at DESC, c.agent_id, c.change
-                 LIMIT 20"
-            ),
-            &[&global, &groups, &key, &now],
-        )
-        .await?
-        .iter()
-        .map(|row| PortEvent {
-            at: row.get(0),
-            agent_id: row.get(1),
-            hostname: row.get(2),
-            change: row.get(3),
-        })
-        .collect();
-    let first_seen = [first_logged, enrolled_first]
-        .into_iter()
-        .flatten()
-        .min()
-        .map(|at| FirstSeen {
+    let events: Vec<PortEvent> = recent_changes(
+        client,
+        "listener",
+        &visible,
+        scope,
+        &key,
+        now,
+        |at, agent_id, hostname, change| PortEvent {
             at,
-            before: at <= floor,
-        });
+            agent_id,
+            hostname,
+            change,
+        },
+    )
+    .await?;
+    let first_seen = first_seen(first_logged, enrolled_first, floor);
 
-    let by_group = client
-        .query(
-            &format!(
-                "SELECT g.asset_group_id::text, g.name, g.kind,
-                        count(*) FILTER (WHERE m.agent_id = ANY($3::text[])), count(*)
-                 FROM console_host_group_membership m
-                 JOIN agents a ON a.agent_id = m.agent_id
-                 JOIN console_asset_groups g ON g.asset_group_id = m.asset_group_id
-                 WHERE a.status <> 'revoked' AND {visible}
-                   AND m.asset_group_id IN (SELECT asset_group_id FROM console_host_group_membership
-                                            WHERE agent_id = ANY($3::text[]))
-                 GROUP BY g.asset_group_id, g.name, g.kind
-                 ORDER BY 4 DESC, lower(g.name), g.asset_group_id"
-            ),
-            &[&global, &groups, &hosts],
-        )
-        .await?
-        .iter()
-        .map(|row| GroupShare {
-            id: row.get(0),
-            name: row.get(1),
-            kind: GroupKind::parse(&row.get::<_, String>(2)),
-            listening: row.get(3),
-            of: row.get(4),
-        })
-        .collect();
+    let by_group = group_shares(client, &visible, scope, &hosts).await?;
 
     let info: Option<PortInfo> = port_names::port_info(protocol, port);
     Ok(Some(PortSummary {

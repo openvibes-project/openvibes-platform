@@ -11,8 +11,8 @@ use crate::{
     check_related::rule_unit,
     console_read::{AgentScope, agent_visibility},
     port_related::{
-        RelatedChecks, RelatedPackage, RelatedReach, failing_checks, package_advisories,
-        scope_params,
+        RelatedChecks, RelatedPackage, RelatedReach, advisory_counts, failing_checks,
+        package_advisories, scope_params,
     },
     service_names::{self, ServiceInfo},
 };
@@ -104,27 +104,7 @@ async fn vulnerabilities(
     if packages.is_empty() {
         return Ok(out);
     }
-    let (global, groups) = scope_params(scope);
-    let visible = agent_visibility("a.agent_id", "$1", "$2");
-    let row = client
-        .query_one(
-            &format!(
-                "SELECT count(DISTINCT v.advisory_id), count(DISTINCT v.agent_id)
-                 FROM vulnerabilities v JOIN agents a ON a.agent_id = v.agent_id
-                 JOIN advisories adv ON adv.advisory_id = v.advisory_id
-                 LEFT JOIN vulnerability_triage t ON t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
-                 WHERE v.fixed_at IS NULL AND v.agent_id = ANY($3::text[]) AND {visible}
-                   AND (t.state IS NULL OR t.state = 'open'
-                        OR (t.state = 'accepted_risk' AND t.accepted_until <= now()))
-                   AND split_part(adv.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
-                   AND EXISTS (SELECT 1 FROM jsonb_array_elements(v.packages) p
-                               WHERE p ->> 'name' = ANY($4::text[]))"
-            ),
-            &[&global, &groups, &hosts, &packages],
-        )
-        .await?;
-    out.advisories = row.get(0);
-    out.hosts = row.get(1);
+    (out.advisories, out.hosts) = advisory_counts(client, scope, hosts, packages).await?;
     Ok(out)
 }
 

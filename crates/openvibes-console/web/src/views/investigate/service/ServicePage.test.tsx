@@ -1,15 +1,9 @@
 // A service's page (approved screen 22), as markup: no DOM library in vitest
 // (see ui/controls.test.tsx); the actions are covered by e2e/demo/service-page.spec.ts.
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-// nav.ts reads the location when loaded.
-vi.hoisted(() => {
-  Object.assign(globalThis, { window: { location: { pathname: "/", search: "" }, history: { replaceState() {} }, addEventListener() {}, removeEventListener() {} } });
-});
-
-import type { ServicePageHosts, ServicePageSummary, Session } from "../../../api/types";
-import { SessionContext } from "../../../app/session";
+import { flat, render, text } from "../pageTestSupport";
+import type { ServicePageHosts, ServicePageSummary } from "../../../api/types";
 import { CHANGE_TEXT, HostsTable, isRoot, segmentOf, stale } from "./ServiceCards";
 import { ServiceView, exportRows } from "./ServicePage";
 
@@ -34,13 +28,6 @@ const fixture = (over: Partial<ServicePageSummary> = {}): ServicePageSummary => 
   can: ALL,
   ...over,
 });
-const session = { principal: { id: "u-me", username: "me", display_name: "Me" }, capabilities: [] } as unknown as Session;
-const render = (node: React.ReactNode, can = true) => renderToStaticMarkup(
-  <SessionContext.Provider value={{ session, demo: false, can: () => can, canEverywhere: () => can }}>{node}</SessionContext.Provider>,
-).replace(/<!-- -->/g, "");
-const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-/** The markup's text with tags dropped and nothing added, for a line that is one run ("a · b"). */
-const flat = (html: string) => html.replace(/<[^>]+>/g, "");
 
 describe("service page", () => {
   it("names the unit and its facts in the header", () => {
