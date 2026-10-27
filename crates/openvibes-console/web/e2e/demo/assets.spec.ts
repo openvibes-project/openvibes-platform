@@ -77,41 +77,43 @@ test("a host page shows its open ports and services; the fleet lists them (Asset
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.goto("/ports?exposed=true");
   await expect(page.locator(".view tbody tr").filter({ hasText: "22/tcp" })).toBeVisible();
-  await expect(page.locator(".view tbody tr").filter({ hasText: "53/udp" })).toHaveCount(0);
+  await expect(page.locator(".view tbody tr").filter({ hasText: "631/tcp" })).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
-test("fleet Ports and Services rows open the hosts that have them, linking to the Host page (#102)", async ({ page }) => {
+test("fleet Ports rows open the port's page and Services rows open the hosts that run them, linking to the Host page (#102)", async ({ page }) => {
   await page.goto("/ports");
   await page.locator(".view tbody tr").filter({ hasText: "443/tcp" }).first().locator("td").first().click();
-  const inspector = page.locator(".inspector");
-  await expect(inspector.locator(".panel-header__kind")).toContainText("Port");
-  const listening = inspector.getByRole("list", { name: "Hosts listening on this port" });
-  await expect(listening.locator("li").first()).toContainText("exposed");
-  await settled(page);
+  await expect(page).toHaveURL(/\/ports\/443\/tcp$/);
+  const listening = page.getByRole("table", { name: "Hosts", exact: true });
+  await expect(listening.locator("tbody tr").first()).toContainText("exposed");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await listening.locator("li a").first().click();
+  await listening.locator("tbody tr a").first().click();
   await expect(page).toHaveURL(/\/hosts\/agent-\d{5}$/);
   await expect(page.locator(".detail-page h1")).toBeVisible();
   await page.goto("/services");
   await page.locator(".view tbody tr").filter({ hasText: "chronyd.service" }).first().locator("td").first().click();
+  const inspector = page.locator(".inspector");
   await expect(inspector.locator(".panel-header__kind")).toContainText("Service");
   await expect(inspector.getByRole("list", { name: "Hosts running this service" }).locator("li").first()).toContainText("chronyd");
   await settled(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
-test("the fleet Ports and Services views work from the keyboard: j moves, Enter opens, Escape closes", async ({ page }) => {
-  for (const [path, kind] of [["/ports", "Port"], ["/services", "Service"]] as const) {
-    await page.goto(path);
-    await page.locator(".view table").focus();
-    await page.keyboard.press("j");
-    await page.keyboard.press("Enter");
-    const inspector = page.locator(".inspector");
-    await expect(inspector.locator(".panel-header__kind")).toContainText(kind);
-    await page.keyboard.press("Escape");
-    await expect(inspector).toHaveCount(0);
-  }
+test("the fleet Ports and Services views work from the keyboard: j moves, Enter opens (a port page, a service panel), Escape closes", async ({ page }) => {
+  await page.goto("/ports");
+  await page.locator(".view table").focus();
+  await page.keyboard.press("j");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/ports\/\d+\/(tcp|udp)$/);
+  await page.goto("/services");
+  await page.locator(".view table").focus();
+  await page.keyboard.press("j");
+  await page.keyboard.press("Enter");
+  const inspector = page.locator(".inspector");
+  await expect(inspector.locator(".panel-header__kind")).toContainText("Service");
+  await page.keyboard.press("Escape");
+  await expect(inspector).toHaveCount(0);
 });
 
 test("on a phone the host page and its lists never scroll the page sideways", async ({ page }) => {
@@ -123,21 +125,20 @@ test("on a phone the host page and its lists never scroll the page sideways", as
   }
 });
 
-test("panels load the hosts after the first page with Show more (#104)", async ({ page }) => {
-  await page.goto("/ports");
-  await page.locator(".view tbody tr").filter({ hasText: "22/tcp" }).first().locator("td").first().click();
-  const inspector = page.locator(".inspector");
-  const rows = inspector.getByRole("list", { name: "Hosts listening on this port" }).locator("li");
+test("a port's page pages its hosts and panels load the hosts after the first page with Show more (#104)", async ({ page }) => {
+  await page.goto("/ports/22/tcp");
+  const rows = page.getByRole("table", { name: "Hosts", exact: true }).locator("tbody tr");
   await expect(rows).toHaveCount(50);
-  const more = inspector.getByRole("button", { name: "Show more hosts" });
-  await more.click();
-  await expect(rows).toHaveCount(100);
-  await more.click();
-  await more.click();
-  await expect(rows).toHaveCount(183);
-  await expect(more).toHaveCount(0);
-  await settled(page);
+  await expect(page.getByText("1–50 of 177")).toBeVisible();
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page).toHaveURL(/offset=50/);
+  await expect(page.getByText("51–100 of 177")).toBeVisible();
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(rows).toHaveCount(27);
+  await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  const inspector = page.locator(".inspector");
   // The same in a package's panel; Enter on the focused button works too.
   await page.goto("/software");
   await page.locator(".view tbody tr").filter({ hasText: /^bash/ }).first().locator("td").first().click();

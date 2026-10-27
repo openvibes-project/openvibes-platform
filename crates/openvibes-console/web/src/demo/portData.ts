@@ -35,15 +35,15 @@ export function portHosts(ctx: DemoContext): Map<string, PortHost[]> {
 
 /**
  * The change log for listeners, in reach: the first host of a role starts a
- * port this week, one web host stopped port 80, one database host went
- * local-only two days ago, and one database host started 5432 ten days ago.
+ * port this week, one web host stopped port 80, one database host became
+ * reachable from the network two days ago, and one database host started 5432 ten days ago.
  */
 export function portChanges(ctx: DemoContext): PortChange[] {
   const now = Date.parse(ctx.iso());
   const first = (role: string) => ctx.hosts().find((a) => (a.hostname ?? "").startsWith(`${role}-`));
   const events: [string, string, string, PortChange["change"], number][] = [
     ["vpn", "udp/1194", "", "appeared", 1], ["files", "tcp/8888", "", "appeared", 2], ["ws", "tcp/3389", "", "appeared", 3],
-    ["web", "tcp/443", "", "appeared", 5], ["api", "tcp/80", "", "went_away", 1], ["db", "tcp/5432", "", "local", 2], ["db", "tcp/5432", "", "appeared", 10],
+    ["web", "tcp/443", "", "appeared", 5], ["api", "tcp/80", "", "went_away", 1], ["db", "tcp/5432", "", "exposed", 2], ["db", "tcp/5432", "", "appeared", 10],
   ];
   const out: PortChange[] = [];
   for (const [role, key, , change, days] of events) {

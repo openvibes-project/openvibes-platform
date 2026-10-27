@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { alarmPath, casePath, casesQuery, checkPath, complianceQuery, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, pushPanel, vulnerabilitiesQuery } from "./location";
+import { alarmPath, casePath, casesQuery, checkPath, complianceQuery, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, parsePortId, portPath, portsQuery, pushPanel, vulnerabilitiesQuery } from "./location";
 
 // An old panel link opens the object's page, with no panel left.
 const opensPage = (view: string, search: string, want: string) => {
@@ -11,9 +11,9 @@ const opensPage = (view: string, search: string, want: string) => {
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
-    const loc = parseLocation("/console/compliance", "?open=package%3Ab%2FR-1&open=port%3Atcp%3A443&q=web", "/console/");
+    const loc = parseLocation("/console/compliance", "?open=package%3Ab%2FR-1&open=unit%3Asshd.service&q=web", "/console/");
     expect(loc.view).toBe("/compliance");
-    expect(loc.panels).toEqual([{ kind: "package", id: "b/R-1" }, { kind: "port", id: "tcp:443" }]);
+    expect(loc.panels).toEqual([{ kind: "package", id: "b/R-1" }, { kind: "unit", id: "sshd.service" }]);
     expect(loc.params.get("q")).toBe("web");
   });
 
@@ -23,8 +23,8 @@ describe("location", () => {
   });
 
   it("reads the old /findings page as /compliance, keeping its filters", () => {
-    const loc = parseLocation("/console/findings", "?severity=high&open=port%3Atcp%3A443", "/console/");
-    expect(formatLocation(loc, "/console/")).toBe("/console/compliance?severity=high&open=port%3Atcp%3A443");
+    const loc = parseLocation("/console/findings", "?severity=high&open=unit%3Asshd.service", "/console/");
+    expect(formatLocation(loc, "/console/")).toBe("/console/compliance?severity=high&open=unit%3Asshd.service");
   });
 
   it.each([
@@ -119,6 +119,26 @@ describe("location", () => {
     ["?severity=important&sort=cvss&dir=desc", "/vulnerabilities?severity=important&sort=cvss&dir=desc"],
   ])("old_vulnerability_urls_keep_their_filters: /vulnerabilities%s reads as %s", (search, want) => {
     expect(formatLocation(parseLocation("/vulnerabilities", search, "/"), "/")).toBe(want);
+  });
+
+  it.each([
+    ["tcp/443", ["tcp", 443]], ["tcp:443", ["tcp", 443]], ["443/tcp", ["tcp", 443]], ["443", ["tcp", 443]], ["udp/53", ["udp", 53]], ["53/udp", ["udp", 53]],
+  ])("parse_port_id: %s is %j", (id, want) => {
+    expect(parsePortId(id)).toEqual(want);
+  });
+
+  it.each(["", "icmp/22", "tcp/0", "tcp/65536", "tcp/022", "tcp/ssh", "tcp/22/x", "-1", "tcp:", "/22"])("parse_port_id: %j is no port", (id) => {
+    expect(parsePortId(id)).toBeNull();
+  });
+
+  it("opens a port as its page, over the other objects, and keeps the list's old filters", () => {
+    expect(portPath("tcp", 22)).toBe("/ports/22/tcp");
+    for (const id of ["tcp/22", "tcp:22", "22/tcp", "22"]) expect(pagePath({ kind: "port", id })).toBe("/ports/22/tcp");
+    expect(pagePath({ kind: "port", id: "nonsense" })).toBe("/ports");
+    expect(portsQuery("exposed=true&sort=services&dir=asc&q=ssh")).toBe("q=ssh&exposure=exposed");
+    expect(portsQuery("exposed=true&exposure=local")).toBe("exposure=local");
+    expect(portsQuery("sort=hosts&dir=desc&exposure=exposed")).toBe("sort=hosts&dir=desc&exposure=exposed");
+    expect(formatLocation(parseLocation("/ports", "?exposed=true", "/"), "/")).toBe("/ports?exposure=exposed");
   });
 
   it("maps an old Vulnerabilities query's flags and sorts, and keeps today's", () => {

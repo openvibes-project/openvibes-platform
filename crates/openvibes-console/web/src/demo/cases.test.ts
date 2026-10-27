@@ -172,6 +172,20 @@ describe("demo cases: creating and changing", () => {
     expect((await call(server, "GET", "/api/v1/cases/for-item?kind=alarm&ref=x")).status).toBe(422);
   });
 
+  it("holds a port (tcp/22) in many cases when a host in reach listens on it, and refuses one nothing listens on", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const a = (await call<CaseDetail>(server, "POST", "/api/v1/cases", { title: "A", items: [{ kind: "port", ref: "tcp/22" }] })).body;
+    const b = (await call<CaseDetail>(server, "POST", "/api/v1/cases", { title: "B", items: [{ kind: "port", ref: "tcp/22" }] })).body;
+    expect(a.items).toHaveLength(1);
+    const holders = (await call<{ items: { case: CaseSummary }[] }>(server, "GET", "/api/v1/cases/for-item?kind=port&ref=tcp%2F22")).body.items.map((i) => i.case.number);
+    expect(holders).toEqual(expect.arrayContaining([a.number, b.number]));
+    expect((await call(server, "POST", `/api/v1/cases/${a.case_id}/items`, { kind: "port", ref: "tcp/22" })).body.code).toBe("item_already_in_case");
+    expect((await call(server, "POST", `/api/v1/cases/${a.case_id}/items`, { kind: "port", ref: "tcp/4444" })).body.code).toBe("item_not_found");
+    for (const ref of ["tcp/0", "icmp/22", "tcp/022", "tcp"]) expect((await call(server, "POST", `/api/v1/cases/${a.case_id}/items`, { kind: "port", ref })).status).toBe(422);
+    const list = (await call<{ items: { kinds: { ports: number } }[] }>(server, "GET", "/api/v1/case-list")).body.items;
+    expect(list.some((c) => c.kinds.ports === 1)).toBe(true);
+  });
+
   it("setting or changing the assignee needs cases.assign (an analyst has cases.write only)", async () => {
     const server = createDemoServer({ persona: "analyst" });
     expect((await call(server, "POST", "/api/v1/cases", { title: "Mine", severity: "low", assignee_user_id: "u-sam" })).status).toBe(403);

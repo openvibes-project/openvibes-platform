@@ -6,7 +6,7 @@
 // (portData.ts).
 import type { PortPageHosts, PortPageSummary } from "../../api/types";
 import type { DemoContext } from "../context";
-import { distribution, distributionName } from "../hostGroups";
+import { distribution, distributionName, isActive } from "../hostGroups";
 import { json, problem } from "../http";
 import { listQueryError } from "../listQuery";
 import { groupIdsOf, portChanges, portHosts } from "../portData";
@@ -45,7 +45,7 @@ export function registerPortPageRoutes(ctx: DemoContext) {
     const body: PortPageSummary = {
       header: {
         protocol: protocol as string, port: Number(port), ...(info ? { name: info.name, usual_use: info.usual_use } : {}),
-        listening: hosts.length, of: ctx.hosts().length, exposed, services: new Set(hosts.flatMap((h) => (h.service ? [h.service] : []))).size,
+        listening: hosts.length, of: ctx.hosts().filter((a) => isActive(ctx.facts(a))).length, exposed, services: new Set(hosts.flatMap((h) => (h.service ? [h.service] : []))).size,
         first_seen: { at: new Date(firstLogged?.at ?? now - 200 * 86_400_000).toISOString(), before: !firstLogged },
       },
       tiles: {
