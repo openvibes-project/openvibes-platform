@@ -2,7 +2,7 @@
 
 Guidance for AI coding agents working in this repository.
 
-Cross-repo status, decisions, and the handover routine shared by all AI tools live outside this repository in `../AGENTS.md`, `../status.md`, and `../decisions.md` (local only, never pushed). Read them at the start of a session. Cloud sessions cannot reach those files; they leave their handover in `docs/handover/` instead (newest first), and the next local session copies it into the shared notes.
+Work, status and binding decisions live on the [OpenVIBES project board](https://github.com/orgs/openvibes-project/projects/1): one issue per epic, feature or task (labels `type:*`, `area:*`, nested as sub-issues), and one closed `type:decision` issue per ruling (the board's *Decisions* view). Read the issue you work on, its parent and the relevant decisions at the start of a session; write progress and hand-offs as issue comments, and link PRs with `Closes #N`. The local handover routine shared by all AI tools is in `../AGENTS.md`.
 
 Built: sub-project 1, the ingest service (agents connect on port 18423),
 the admin CLI, the built-in PKI, storage, RPM packaging, and the
@@ -50,8 +50,7 @@ Rules:
   `Cargo.lock` (regenerate), `docs/components/README.md`. Resolve on rebase.
 - **Component docs**: every crate or module gets its page in
   `docs/components/` in the same change.
-- **Shared notes** (`../status.md`, `../decisions.md`, one directory with no
-  branches): edit only your own tool's section of `status.md`, only append to
-  `decisions.md`, and commit immediately after editing.
+- **Shared state** is the project board (issues and `type:decision` issues),
+  never local files; see the top of this file.
 - Tests use `scripts/test-db.sh`, which keeps its cluster under the
   worktree's own `target/`, so worktrees never share a database.
