@@ -47,6 +47,13 @@ fn refs_are_checked_against_the_shape_the_panels_write() {
         parse_ref(ItemKind::Port, "tcp/22"),
         Some(Parsed::Port("tcp", 22))
     );
+    assert_eq!(
+        parse_ref(ItemKind::Service, "sshd.service"),
+        Some(Parsed::Service("sshd.service"))
+    );
+    assert_eq!(parse_ref(ItemKind::Service, ""), None);
+    assert_eq!(parse_ref(ItemKind::Service, "a\nb"), None);
+    assert_eq!(parse_ref(ItemKind::Service, &"x".repeat(201)), None);
     for bad in [
         "tcp",
         "tcp/0",
@@ -70,10 +77,11 @@ fn only_alarms_findings_and_vulnerabilities_are_exclusive() {
         ("host", false),
         ("software", false),
         ("port", false),
+        ("service", false),
     ] {
         assert_eq!(ItemKind::parse(name).unwrap().exclusive(), exclusive);
     }
-    assert_eq!(ItemKind::parse("service"), None);
+    assert_eq!(ItemKind::parse("widget"), None);
 }
 
 #[test]

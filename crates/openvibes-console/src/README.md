@@ -9,6 +9,7 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `config.rs` | `console.toml`: listeners, transport, origin and agent install settings. |
 | `about.rs` | The About page: versions and the newer-release check. |
 | `about_tests.rs` | Tests for the About page and the newer-version check. |
+| `host_pages.rs` | What the port and service page routes share: the Related reach, the actions' reach checks and the Hosts query. |
 | `access/` | Who may do what: sign-in, roles, users, service accounts, role bindings, asset groups, host tags. |
 | `alarms/` | Alarms: list, the alarm page summary, detail and triage, suppressions, detection evidence. |
 | `assistant/` | The assistant: chat endpoints, runtime, lookups, internet switch. |
@@ -21,6 +22,7 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `hosts/` | Hosts: agents, certificates, enrollment tokens, install package, software, ports, presence, fleet. |
 | `http/` | Router assembly, route table, middleware, web app files, problems, OpenAPI. |
 | `ports/` | Ports: the list (`port-list`) and a port's page (summary and hosts). |
+| `services/` | Services: the list (`service-list`) and a service's page (summary and hosts). |
 | `rules/` | Rule sets and bundles, assignment, draft rules, rule tests, ATT&CK coverage. |
 | `settings/` | General settings: the typed list and changing one value. |
 | `server/` | The listeners: TLS, trusted peers, and serving the routers. |

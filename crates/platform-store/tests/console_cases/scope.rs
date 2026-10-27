@@ -130,7 +130,7 @@ async fn an_item_out_of_scope_cannot_be_added_and_does_not_say_whether_it_exists
     let web_alarm = fx.web_alarm.clone();
     let db_alarm = fx.db_alarm.clone();
     let missing = format!("{DB}0");
-    let hidden_and_missing: [(&str, &str); 9] = [
+    let hidden_and_missing: [(&str, &str); 11] = [
         ("host", DB),
         ("alarm", &db_alarm),
         ("compliance_finding", &db_finding),
@@ -138,6 +138,8 @@ async fn an_item_out_of_scope_cannot_be_added_and_does_not_say_whether_it_exists
         ("software", "rpm/bash"),
         ("port", "tcp/5432"),
         ("port", "tcp/9"),
+        ("service", "postgresql.service"),
+        ("service", "missing.service"),
         ("host", &missing),
         ("alarm", "999999"),
     ];
@@ -175,6 +177,7 @@ async fn an_item_out_of_scope_cannot_be_added_and_does_not_say_whether_it_exists
         ("alarm", web_alarm.as_str()),
         ("software", "rpm/openssl"),
         ("port", "tcp/22"),
+        ("service", "sshd.service"),
     ] {
         cases::add_item(
             &mut fx.console,
@@ -216,7 +219,7 @@ async fn malformed_items_are_invalid_not_missing() {
     let mut fx = setup().await;
     let case = open_case(&mut fx.console, &global(), ALICE, "Shapes", &[]).await;
     for (kind, reference, field) in [
-        ("service", "sshd.service", "kind"),
+        ("widget", "sshd.service", "kind"),
         ("alarm", "042", "ref"),
         ("alarm", "abc", "ref"),
         ("compliance_finding", WEB, "ref"),
@@ -226,6 +229,8 @@ async fn malformed_items_are_invalid_not_missing() {
         ("port", "tcp/0", "ref"),
         ("port", "icmp/22", "ref"),
         ("port", "tcp/022", "ref"),
+        ("service", "", "ref"),
+        ("service", "sshd\n.service", "ref"),
     ] {
         let refused = cases::add_item(
             &mut fx.console,

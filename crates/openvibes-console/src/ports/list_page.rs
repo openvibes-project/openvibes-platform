@@ -4,7 +4,7 @@
 
 use axum::{
     extract::{Query, State, rejection::QueryRejection},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
@@ -18,11 +18,8 @@ use super::list_page_types::PortListView;
 use crate::{
     Permission,
     access::guard::{authenticated_permission, unavailable_auth},
-    alarms::list::{is_uuid, number, pick},
-    http::{
-        AuthHttpState,
-        problem::{FieldError, ProblemDetails, problem_response},
-    },
+    alarms::list::{blank_to_none, check_text, group_and_dir, invalid_query_of, number, pick},
+    http::{AuthHttpState, problem::ProblemDetails},
 };
 
 /// Filters, sort and page. Empty values count as absent.
@@ -55,17 +52,7 @@ pub(crate) struct PortListParams {
 }
 
 pub(crate) fn invalid_query(field: &str) -> Response {
-    let mut p = ProblemDetails::new(
-        StatusCode::BAD_REQUEST,
-        "invalid_query",
-        "Port query parameters are invalid",
-    );
-    p.field_errors = Some(vec![FieldError {
-        field: field.into(),
-        code: "invalid".into(),
-        message: format!("The {field} parameter is invalid"),
-    }]);
-    problem_response(p)
+    invalid_query_of("Port query parameters are invalid", field)
 }
 
 /// The Ports list.
@@ -88,7 +75,7 @@ pub(crate) async fn list_port_page(
     let Ok(Query(mut p)) = query else {
         return invalid_query("query");
     };
-    for v in [
+    blank_to_none(&mut [
         &mut p.q,
         &mut p.exposure,
         &mut p.protocol,
@@ -100,32 +87,14 @@ pub(crate) async fn list_port_page(
         &mut p.dir,
         &mut p.offset,
         &mut p.limit,
-    ] {
-        if v.as_deref().is_some_and(str::is_empty) {
-            *v = None;
-        }
-    }
+    ]);
     let parsed = (|| {
-        for (field, v, max) in [
+        check_text(&[
             ("q", &p.q, 200),
             ("service", &p.service, 200),
             ("host", &p.host, 100),
-        ] {
-            if v.as_deref()
-                .is_some_and(|v| v.chars().count() > max || v.chars().any(char::is_control))
-            {
-                return Err(field);
-            }
-        }
-        let group = match p.group.as_deref() {
-            Some(g) if !is_uuid(g) => return Err("group"),
-            g => g.map(str::to_ascii_lowercase),
-        };
-        let descending = match p.dir.as_deref() {
-            None | Some("asc") => false,
-            Some("desc") => true,
-            Some(_) => return Err("dir"),
-        };
+        ])?;
+        let (group, descending) = group_and_dir(p.group.as_deref(), p.dir.as_deref())?;
         Ok((
             group,
             descending,

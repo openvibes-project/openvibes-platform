@@ -93,14 +93,13 @@ test("fleet Ports rows open the port's page and Services rows open the hosts tha
   await expect(page.locator(".detail-page h1")).toBeVisible();
   await page.goto("/services");
   await page.locator(".view tbody tr").filter({ hasText: "chronyd.service" }).first().locator("td").first().click();
-  const inspector = page.locator(".inspector");
-  await expect(inspector.locator(".panel-header__kind")).toContainText("Service");
-  await expect(inspector.getByRole("list", { name: "Hosts running this service" }).locator("li").first()).toContainText("chronyd");
+  await expect(page).toHaveURL(/\/services\/chronyd\.service$/);
+  await expect(page.getByRole("table", { name: "Hosts", exact: true }).locator("tbody tr").first()).toContainText("chrony");
   await settled(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
-test("the fleet Ports and Services views work from the keyboard: j moves, Enter opens (a port page, a service panel), Escape closes", async ({ page }) => {
+test("the fleet Ports and Services views work from the keyboard: j moves, Enter opens (a port page, a service page)", async ({ page }) => {
   await page.goto("/ports");
   await page.locator(".view table").focus();
   await page.keyboard.press("j");
@@ -110,10 +109,7 @@ test("the fleet Ports and Services views work from the keyboard: j moves, Enter 
   await page.locator(".view table").focus();
   await page.keyboard.press("j");
   await page.keyboard.press("Enter");
-  const inspector = page.locator(".inspector");
-  await expect(inspector.locator(".panel-header__kind")).toContainText("Service");
-  await page.keyboard.press("Escape");
-  await expect(inspector).toHaveCount(0);
+  await expect(page).toHaveURL(/\/services\/[^/]+$/);
 });
 
 test("on a phone the host page and its lists never scroll the page sideways", async ({ page }) => {

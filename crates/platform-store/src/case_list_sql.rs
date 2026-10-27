@@ -94,20 +94,21 @@ fn base() -> String {
         case_visible_with("c", "COALESCE(ag.hosted, 0) > 0"),
     );
     let kind = |k: &str| format!("count(*) FILTER (WHERE kind = '{k}')");
-    let (alarms, findings, vulns, hosts, software, ports) = (
+    let (alarms, findings, vulns, hosts, software, ports, services) = (
         kind("alarm"),
         kind("compliance_finding"),
         kind("vulnerability"),
         kind("host"),
         kind("software"),
         kind("port"),
+        kind("service"),
     );
     format!(
         "vi AS MATERIALIZED (
   SELECT i.case_id, i.kind, i.agent_id, i.outcome FROM case_items i WHERE {item}),
 ag AS MATERIALIZED (
   SELECT case_id, {alarms} AS alarms, {findings} AS findings, {vulns} AS vulnerabilities,
-         {hosts} AS host_items, {software} AS software, {ports} AS ports,
+         {hosts} AS host_items, {software} AS software, {ports} AS ports, {services} AS services,
          count(*) FILTER (WHERE kind IN {TAKES}) AS takes,
          count(*) FILTER (WHERE kind IN {TAKES} AND outcome IS NOT NULL) AS done,
          count(*) FILTER (WHERE agent_id IS NOT NULL) AS hosted,
@@ -122,6 +123,7 @@ r AS MATERIALIZED (
          COALESCE(ag.alarms, 0) AS alarms, COALESCE(ag.findings, 0) AS findings,
          COALESCE(ag.vulnerabilities, 0) AS vulnerabilities, COALESCE(ag.host_items, 0) AS host_items,
          COALESCE(ag.software, 0) AS software, COALESCE(ag.ports, 0) AS ports,
+         COALESCE(ag.services, 0) AS services,
          COALESCE(ag.takes, 0) AS takes, COALESCE(ag.done, 0) AS done,
          COALESCE(ag.on_host, false) AS on_host, gc.case_id IS NOT NULL AS in_group,
          (c.status <> 'closed' AND NOT EXISTS (SELECT 1 FROM case_items i
@@ -224,7 +226,7 @@ SELECT CASE WHEN p.ord IS NOT DISTINCT FROM (SELECT min(ord) FROM page) THEN m.m
        p.opened_by_user_id::text, ou.username, ou.display_name,
        p.assignee_user_id::text, au.username, au.display_name, n.body, n.at, h.hosts,
        p.alarms, p.findings, p.vulnerabilities, p.host_items, p.software, p.takes, p.done, p.updated_at,
-       h.host_count, p.ready, p.resolution, p.ports
+       h.host_count, p.ready, p.resolution, p.ports, p.services
 FROM meta m LEFT JOIN page p ON true
 LEFT JOIN console_users ou ON ou.user_id = p.opened_by_user_id
 LEFT JOIN console_users au ON au.user_id = p.assignee_user_id

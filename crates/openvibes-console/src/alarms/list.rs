@@ -70,6 +70,57 @@ fn invalid_query(field: &str) -> Response {
     problem_response(p)
 }
 
+/// A 400 `invalid_query` naming the parameter, under `title` ("Port query parameters are invalid").
+pub(crate) fn invalid_query_of(title: &'static str, field: &str) -> Response {
+    let mut p = ProblemDetails::new(StatusCode::BAD_REQUEST, "invalid_query", title);
+    p.field_errors = Some(vec![FieldError {
+        field: field.into(),
+        code: "invalid".into(),
+        message: format!("The {field} parameter is invalid"),
+    }]);
+    problem_response(p)
+}
+
+/// Empty values count as absent.
+pub(crate) fn blank_to_none(values: &mut [&mut Option<String>]) {
+    for v in values {
+        if v.as_deref().is_some_and(str::is_empty) {
+            **v = None;
+        }
+    }
+}
+
+/// The text parameters that are too long or hold control characters.
+pub(crate) fn check_text(
+    values: &[(&'static str, &Option<String>, usize)],
+) -> Result<(), &'static str> {
+    for (field, v, max) in values {
+        if v.as_deref()
+            .is_some_and(|v| v.chars().count() > *max || v.chars().any(char::is_control))
+        {
+            return Err(field);
+        }
+    }
+    Ok(())
+}
+
+/// A group id (lower-cased) and a sort direction (true for descending).
+pub(crate) fn group_and_dir(
+    group: Option<&str>,
+    dir: Option<&str>,
+) -> Result<(Option<String>, bool), &'static str> {
+    let group = match group {
+        Some(g) if !is_uuid(g) => return Err("group"),
+        g => g.map(str::to_ascii_lowercase),
+    };
+    let descending = match dir {
+        None | Some("asc") => false,
+        Some("desc") => true,
+        Some(_) => return Err("dir"),
+    };
+    Ok((group, descending))
+}
+
 pub(crate) fn is_uuid(s: &str) -> bool {
     s.len() == 36
         && s.char_indices().all(|(i, c)| match i {

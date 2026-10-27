@@ -12,7 +12,7 @@ describe("frontend contract", () => {
     const contract = JSON.parse(read("../../frontend-contract.json")) as { browserRoutes: string[] };
     const viewPaths = [...read("./registry.tsx").matchAll(/\{ path: "(\/[^"]*)"/g)].map((match) => match[1]);
     expect(viewPaths.length).toBeGreaterThan(5);
-    expect(new Set(contract.browserRoutes)).toEqual(new Set([...viewPaths, "/login", "/findings", "/agents", "/dashboards/{dashboard_id}", "/settings/roles/{role_id}", "/settings/people/{user_id}", "/settings/host-groups/{group_id}", "/hosts/{agent_id}", "/alarms/{alarm_id}", "/ports/{port}/{protocol}", "/cases/{case_id}", "/vulnerabilities/{key}", "/compliance/{rule_set_id}/{rule_id}"]));
+    expect(new Set(contract.browserRoutes)).toEqual(new Set([...viewPaths, "/login", "/findings", "/agents", "/dashboards/{dashboard_id}", "/settings/roles/{role_id}", "/settings/people/{user_id}", "/settings/host-groups/{group_id}", "/hosts/{agent_id}", "/alarms/{alarm_id}", "/ports/{port}/{protocol}", "/services/{unit}", "/cases/{case_id}", "/vulnerabilities/{key}", "/compliance/{rule_set_id}/{rule_id}"]));
     // A view with a prefix has pages below it, and a reload of one must reach the SPA.
     const prefixes = [...read("./registry.tsx").matchAll(/prefix: "(\/[^"]*)"/g)].map((match) => match[1] ?? "");
     for (const prefix of prefixes) expect(contract.browserRoutes.some((route) => route.startsWith(prefix)), prefix).toBe(true);

@@ -18,6 +18,7 @@ mod cases;
 mod compliance;
 mod config;
 mod dashboards;
+mod host_pages;
 mod hosts;
 mod http;
 mod lists;
@@ -26,6 +27,7 @@ mod rules;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;
+mod services;
 mod settings;
 mod vulnerabilities;
 

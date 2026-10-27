@@ -42,6 +42,7 @@ pub(super) enum Parsed<'a> {
     Host(&'a str),
     Software(&'a str, &'a str),
     Port(&'a str, i32),
+    Service(&'a str),
 }
 
 /// Checks `reference` against the shape its kind has in the console, so
@@ -81,6 +82,8 @@ pub(super) fn parse_ref(kind: ItemKind, reference: &str) -> Option<Parsed<'_>> {
                 && port.to_string() == number)
                 .then_some(Parsed::Port(protocol, port))
         }
+        // A systemd unit or Windows service name, as the agent reports it.
+        ItemKind::Service => free_text_ok(reference, 200).then_some(Parsed::Service(reference)),
     }
 }
 
@@ -182,6 +185,19 @@ pub(super) async fn resolve_item<'a>(
                         WHERE l.protocol = $3 AND l.port = $4 AND a.status <> 'revoked' AND {visible})"
                 ),
                 &[&viewer.global, &viewer.groups, &protocol, &port],
+            )
+            .await?
+        }
+        // Like ports: only if a host in reach runs it.
+        Parsed::Service(unit) => {
+            db.query_opt(
+                &format!(
+                    "SELECT NULL::text, NULL::text WHERE EXISTS (
+                        SELECT 1 FROM host_services s
+                        JOIN agents a ON a.agent_id = s.agent_id
+                        WHERE s.unit = $3 AND a.status <> 'revoked' AND {visible})"
+                ),
+                &[&viewer.global, &viewer.groups, &unit],
             )
             .await?
         }

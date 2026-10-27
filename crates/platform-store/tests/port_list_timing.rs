@@ -5,8 +5,9 @@
 //! Timings are recorded in docs/components/platform-store.md.
 
 mod common;
+use common::timing;
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use chrono::Utc;
 use platform_store::{
@@ -16,15 +17,9 @@ use platform_store::{
 };
 
 async fn fleet(c: &Client) -> String {
+    timing::hosts(c).await;
     c.batch_execute(
-        "SET statement_timeout = 0;
-         INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, hostname, os_id, os_version,
-                             services_at, services_owners)
-         SELECT 'agent.' || gen_random_uuid()::text, 'active', now() - interval '90 days', now(),
-                'host-' || n, 'debian', '12', now(), 'complete'
-         FROM generate_series(1, 10000) n;
-         CREATE TEMP TABLE gen AS SELECT agent_id, substr(hostname, 6)::int AS n FROM agents;
-         -- Host n listens on 20 ports out of about 300; tcp 22, 80, 443 and 5432 are common.
+        "         -- Host n listens on 20 ports out of about 300; tcp 22, 80, 443 and 5432 are common.
          INSERT INTO host_listeners (agent_id, protocol, address, port, exposed, service, program)
          SELECT g.agent_id, 'tcp', CASE WHEN x.exposed THEN '0.0.0.0'::inet ELSE '127.0.0.1'::inet END,
                 x.port, x.exposed, 'unit' || (x.port % 40) || '.service', NULL
@@ -37,43 +32,11 @@ async fn fleet(c: &Client) -> String {
          SELECT now() - (random() * (CASE WHEN n % 20 = 0 THEN 7 ELSE 85 END) * interval '1 day'),
                 g.agent_id, 'listener', 'tcp/' || (1000 + (g.n * 7 + j * 13) % 300),
                 CASE WHEN j % 4 = 0 THEN 'went_away' ELSE 'appeared' END
-         FROM gen g CROSS JOIN generate_series(1, 50) j;
-         INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by, kind)
-         SELECT gen_random_uuid(), (CASE WHEN i < 10 THEN 'manual ' ELSE 'rule ' END) || i, now(), 't',
-                CASE WHEN i < 10 THEN 'manual' ELSE 'rule' END
-         FROM generate_series(0, 14) i;
-         INSERT INTO console_host_group_members (asset_group_id, agent_id, added_at, added_by)
-         SELECT g.asset_group_id, a.agent_id, now(), 't' FROM console_asset_groups g JOIN agents a
-           ON g.kind = 'manual' AND abs(hashtext(a.agent_id || g.name)) % 20 = 0;
-         INSERT INTO console_host_group_membership (asset_group_id, agent_id)
-         SELECT g.asset_group_id, a.agent_id FROM console_asset_groups g JOIN agents a
-           ON abs(hashtext(a.agent_id || g.name)) % 4 = 0
-         ON CONFLICT DO NOTHING;",
+         FROM gen g CROSS JOIN generate_series(1, 50) j;",
     )
     .await
     .unwrap();
-    c.batch_execute("VACUUM ANALYZE").await.unwrap();
-    c.query_one(
-        "SELECT asset_group_id::text FROM console_asset_groups WHERE name = 'manual 0'",
-        &[],
-    )
-    .await
-    .unwrap()
-    .get(0)
-}
-
-async fn median(c: &Client, q: &PortQuery<'_>, scope: &AgentScope) -> (Duration, i64) {
-    const RUNS: usize = 5;
-    let mut samples = Vec::with_capacity(RUNS);
-    let mut total = 0;
-    for _ in 0..RUNS {
-        let started = Instant::now();
-        let page = port_list(c, q, scope, Utc::now()).await.unwrap();
-        samples.push(started.elapsed());
-        total = page.total;
-    }
-    samples.sort();
-    (samples[RUNS / 2], total)
+    timing::groups(c).await
 }
 
 #[tokio::test]
@@ -126,7 +89,8 @@ async fn the_list_answers_within_two_seconds() {
         ),
         ("one group's reach (about 500 hosts)", &base, &scoped),
     ] {
-        let (time, total) = median(&c, q, scope).await;
+        let (time, total) =
+            timing::median(async || port_list(&c, q, scope, Utc::now()).await.unwrap().total).await;
         println!("{label}: {time:?} ({total} ports)");
         assert!(time < Duration::from_secs(2), "{label}: {time:?}");
     }

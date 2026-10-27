@@ -103,6 +103,7 @@ pub(super) fn item_title() -> String {
                 WHERE ad.advisory_id = {REF_TAIL})
             WHEN 'host' THEN ha.hostname
             WHEN 'port' THEN i.ref
+            WHEN 'service' THEN i.ref
             ELSE {REF_TAIL}
         END"
     )

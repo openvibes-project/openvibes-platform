@@ -1073,7 +1073,18 @@ reach and 0.4 s for one group's reach
 (`tests/port_list_timing.rs`, ignored; limit 2 s). See
 [console-ports.md](console-ports.md).
 
-## Cases (`console_cases::…`, schemas 35, 36, 64 and 66)
+## The Services list and a service's page (`service_list`, `service_summary`, `service_related`, `service_names`, step 5f)
+
+`service_list::service_list` answers `GET /v1/service-list` (filters with
+counts, three sorts, offset paging) and `service_summary` and
+`service_related` the page's summary, Hosts card and Related card, all
+inside the caller's reach; `service_names` is the built-in map of about 45
+well-known units, and a unit is matched to installed packages by name.
+At 10,000 hosts running 30 units each the unfiltered list takes 3.3 s at full
+reach and 1.8 s for one group's reach (`tests/service_list_timing.rs`, ignored;
+target 2 s, met for the scoped reach only; the statement runs with JIT off). See [console-services.md](console-services.md).
+
+## Cases (`console_cases::…`, schemas 35, 36, 64, 66 and 67)
 
 - `cases`: `case_id`, a `number` from an identity column (unique, never
   reused), `title` (1–120), `status` (`open`, `investigating`, `closed`),

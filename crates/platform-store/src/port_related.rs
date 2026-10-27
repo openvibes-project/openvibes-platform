@@ -87,7 +87,7 @@ pub struct RelatedReach {
     pub alarms: Option<AgentScope>,
 }
 
-fn scope_params(scope: &AgentScope) -> (bool, Vec<String>) {
+pub(crate) fn scope_params(scope: &AgentScope) -> (bool, Vec<String>) {
     (scope.is_global(), scope.group_ids())
 }
 
@@ -124,6 +124,26 @@ async fn checks(
     now: DateTime<Utc>,
 ) -> Result<RelatedChecks, StoreError> {
     let area = info.and_then(|i| i.area);
+    let names_port = |rule_id: &str, expression: Option<&str>| {
+        expression
+            .and_then(|e| rule_port(rule_id, e))
+            .is_some_and(|(p, n)| p == protocol && n == port)
+    };
+    failing_checks(client, scope, hosts, now, area, &names_port).await
+}
+
+/// The failing checks on `hosts` (open, as the Compliance list counts
+/// them) that `names_it` says concern the page's subject, or whose area is
+/// `area`: the worst few and how many there are. Shared by the Ports and
+/// Services pages.
+pub(crate) async fn failing_checks(
+    client: &Client,
+    scope: &AgentScope,
+    hosts: &[String],
+    now: DateTime<Utc>,
+    area: Option<&'static str>,
+    names_it: &(dyn Fn(&str, Option<&str>) -> bool + Sync),
+) -> Result<RelatedChecks, StoreError> {
     let (global, groups) = scope_params(scope);
     let visible = agent_visibility("a.agent_id", "$1", "$2");
     let open = open_failing("$4");
@@ -153,11 +173,9 @@ async fn checks(
         .filter_map(|row| {
             let rule_id: String = row.get(1);
             let expression: Option<String> = row.get(5);
-            let names_port = expression
-                .as_deref()
-                .and_then(|e| rule_port(&rule_id, e))
-                .is_some_and(|(p, n)| p == protocol && n == port);
-            (names_port || area.is_some_and(|a| check_area(&rule_id) == a)).then(|| RelatedCheck {
+            (names_it(&rule_id, expression.as_deref())
+                || area.is_some_and(|a| check_area(&rule_id) == a))
+            .then(|| RelatedCheck {
                 rule_set_id: row.get(0),
                 title: row
                     .get::<_, Option<String>>(4)
@@ -196,34 +214,55 @@ async fn packages(
     info: Option<PortInfo>,
     hosts: &[String],
 ) -> Result<Vec<RelatedPackage>, StoreError> {
-    let (global, groups) = scope_params(scope);
-    let visible = agent_visibility("a.agent_id", "$1", "$2");
     let mut out = Vec::new();
     for package in info.map_or(&[][..], |i| i.packages) {
-        let row = client
-            .query_one(
-                &format!(
-                    "SELECT count(DISTINCT v.advisory_id), count(DISTINCT v.agent_id)
-                     FROM vulnerabilities v JOIN agents a ON a.agent_id = v.agent_id
-                     JOIN advisories adv ON adv.advisory_id = v.advisory_id
-                     LEFT JOIN vulnerability_triage t ON t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
-                     WHERE v.fixed_at IS NULL AND v.agent_id = ANY($3::text[]) AND {visible}
-                       AND (t.state IS NULL OR t.state = 'open'
-                            OR (t.state = 'accepted_risk' AND t.accepted_until <= now()))
-                       AND split_part(adv.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
-                       AND EXISTS (SELECT 1 FROM jsonb_array_elements(v.packages) p
-                                   WHERE p ->> 'name' = $4::text)"
-                ),
-                &[&global, &groups, &hosts, package],
-            )
-            .await?;
-        out.push(RelatedPackage {
-            package: (*package).to_owned(),
-            advisories: row.get(0),
-            hosts: row.get(1),
-        });
+        out.push(package_advisories(client, scope, hosts, package).await?);
     }
     Ok(out)
+}
+
+/// Open advisories (and the hosts they are open on) of any of `packages` on `hosts`, counted in `scope`.
+pub(crate) async fn advisory_counts(
+    client: &Client,
+    scope: &AgentScope,
+    hosts: &[String],
+    packages: &[String],
+) -> Result<(i64, i64), StoreError> {
+    let (global, groups) = scope_params(scope);
+    let visible = agent_visibility("a.agent_id", "$1", "$2");
+    let row = client
+        .query_one(
+            &format!(
+                "SELECT count(DISTINCT v.advisory_id), count(DISTINCT v.agent_id)
+                 FROM vulnerabilities v JOIN agents a ON a.agent_id = v.agent_id
+                 JOIN advisories adv ON adv.advisory_id = v.advisory_id
+                 LEFT JOIN vulnerability_triage t ON t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
+                 WHERE v.fixed_at IS NULL AND v.agent_id = ANY($3::text[]) AND {visible}
+                   AND (t.state IS NULL OR t.state = 'open'
+                        OR (t.state = 'accepted_risk' AND t.accepted_until <= now()))
+                   AND split_part(adv.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
+                   AND EXISTS (SELECT 1 FROM jsonb_array_elements(v.packages) p
+                               WHERE p ->> 'name' = ANY($4::text[]))"
+            ),
+            &[&global, &groups, &hosts, &packages],
+        )
+        .await?;
+    Ok((row.get(0), row.get(1)))
+}
+
+/// Open advisories of `package` on `hosts`, counted in `scope`.
+pub(crate) async fn package_advisories(
+    client: &Client,
+    scope: &AgentScope,
+    hosts: &[String],
+    package: &str,
+) -> Result<RelatedPackage, StoreError> {
+    let (advisories, hosts) = advisory_counts(client, scope, hosts, &[package.to_owned()]).await?;
+    Ok(RelatedPackage {
+        package: package.to_owned(),
+        advisories,
+        hosts,
+    })
 }
 
 async fn alarms(
@@ -255,7 +294,7 @@ async fn alarms(
                    AND EXISTS (SELECT 1 FROM host_listeners l
                                WHERE l.agent_id = al.agent_id AND l.protocol = $4::text AND l.port = $5::int
                                  AND l.program IS NOT NULL
-                                 AND l.program = regexp_replace(al.process ->> 'exe', '^.*/', ''))"
+                                 AND l.program = left(regexp_replace(al.process ->> 'exe', '^.*/', ''), 15))"
             ),
             &[&global, &groups, &hosts, &protocol, &port],
         )

@@ -6,6 +6,7 @@ import { registerCaseSummaryRoute } from "./caseSummary";
 import type { DemoContext } from "../context";
 import { browserPersistence, json, page, problem } from "../http";
 import { portHosts } from "../portData";
+import { serviceHosts } from "../serviceData";
 
 export function registerCaseRoutes(ctx: DemoContext) {
   const { data, actor, me, permissions, capabilities, rolesOf, reaches, triageKey, hosts, hostPackages, audit, route, send } = ctx;
@@ -46,6 +47,7 @@ export function registerCaseRoutes(ctx: DemoContext) {
       }
       // Like software: only when a host in reach listens on it.
       if (kind === "port") return portHosts(ctx).has(ref) ? { agent_id: null, title: ref, severity: null, gone: false } : undefined;
+      if (kind === "service") return serviceHosts(ctx).has(ref) ? { agent_id: null, title: ref, severity: null, gone: false } : undefined;
       const present = hosts().some((agent) => hostPackages(agent.id).some((p) => `${p.manager}/${p.name}` === ref));
       return present ? { agent_id: null, title: rest, severity: null, gone: false } : undefined;
     },

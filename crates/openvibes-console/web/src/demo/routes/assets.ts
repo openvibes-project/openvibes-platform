@@ -121,6 +121,8 @@ const PORTS: Record<string, [number, string | null, string | null, string?, bool
   vpn: [[1194, "openvpn-server@server.service", "openvpn", "udp"]], files: [[445, "smb.service", "smbd"], [8888, null, null]],
   ws: [[3389, "xrdp.service", "xrdp"], [631, "cups.service", "cupsd", "tcp", false]], dns: [[53, "named.service", "named", "udp"], [53, "named.service", "named"]], nas: [[2049, "nfs-server.service", "nfsd"]],
 };
+// Units that do not run as root; the rest do.
+const RUN_AS: Record<string, string> = { "postgresql.service": "postgres", "redis.service": "redis", "api.service": "app", "haproxy.service": "haproxy", "chronyd.service": "chrony", "systemd-resolved.service": "systemd-resolve", "cups.service": "lp" };
 export function hostServices(data: DemoContext["data"], agentId: string) {
   const role = (data.agents.find((a) => a.id === agentId)?.hostname ?? "").split("-")[0] ?? "";
   const own = PORTS[role] ?? [];
@@ -131,7 +133,7 @@ export function hostServices(data: DemoContext["data"], agentId: string) {
   ] as { protocol: string; address: string; port: number; exposed: boolean; service: string | null; program: string | null }[]).sort((a, b) => Number(b.exposed) - Number(a.exposed) || a.port - b.port);
   const units = new Map(listeners.flatMap((l) => (l.service && l.program ? [[l.service, l.program] as const] : [])));
   units.set("chronyd.service", "chronyd");
-  const services = [...units].map(([unit, program]) => ({ unit, programs: [program], processes: unit === "nginx.service" ? 3 : 1, run_as: "root" })).sort((a, b) => a.unit.localeCompare(b.unit));
+  const services = [...units].map(([unit, program]) => ({ unit, programs: [program], processes: unit === "nginx.service" ? 3 : 1, run_as: RUN_AS[unit] ?? "root" })).sort((a, b) => a.unit.localeCompare(b.unit));
   // The mail hosts' last report was refused (over 512 KiB): the tab says so.
   const refused = role === "mail" ? { refused: "too_large", refused_at: new Date(Date.now() - 5 * 60_000).toISOString() } : { refused: null, refused_at: null };
   // The build hosts run more than a report carries: their lists were cut.

@@ -1,15 +1,9 @@
 // A port's page (approved screen 20), as markup: no DOM library in vitest
 // (see ui/controls.test.tsx); the actions are covered by e2e/demo/port-page.spec.ts.
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-// nav.ts reads the location when loaded.
-vi.hoisted(() => {
-  Object.assign(globalThis, { window: { location: { pathname: "/", search: "" }, history: { replaceState() {} }, addEventListener() {}, removeEventListener() {} } });
-});
-
-import type { PortPageHosts, PortPageSummary, Session } from "../../../api/types";
-import { SessionContext } from "../../../app/session";
+import { flat, render, text } from "../pageTestSupport";
+import type { PortPageHosts, PortPageSummary } from "../../../api/types";
 import { CHANGE_TEXT, HostsTable, segmentOf, stale } from "./PortCards";
 import { PortView, exportRows } from "./PortPage";
 
@@ -31,13 +25,6 @@ const fixture = (over: Partial<PortPageSummary> = {}): PortPageSummary => ({
   can: ALL,
   ...over,
 });
-const session = { principal: { id: "u-me", username: "me", display_name: "Me" }, capabilities: [] } as unknown as Session;
-const render = (node: React.ReactNode, can = true) => renderToStaticMarkup(
-  <SessionContext.Provider value={{ session, demo: false, can: () => can, canEverywhere: () => can }}>{node}</SessionContext.Provider>,
-).replace(/<!-- -->/g, "");
-const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-/** The markup's text with tags dropped and nothing added, for a line that is one run ("a · b"). */
-const flat = (html: string) => html.replace(/<[^>]+>/g, "");
 
 describe("port page", () => {
   it("names the port and its facts in the header", () => {

@@ -130,8 +130,18 @@ pub mod rule_meta;
 pub mod rules;
 /// Saved views and hidden list columns per person and page (schema 56).
 pub mod saved_views;
+/// The Services list: one row per unit, filters, counts and the summary.
+pub mod service_list;
+mod service_list_sql;
+/// A fixed map of well-known services: names, classes, related packages.
+pub mod service_names;
+/// A service's Related card: failing checks, advisories and alarms.
+pub mod service_related;
+/// A service's page: the summary and the Hosts table.
+pub mod service_summary;
 pub mod signer;
 mod status;
+mod summary_parts;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;
 pub mod triage_history;

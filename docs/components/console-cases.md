@@ -105,6 +105,17 @@ by itself, and is refused as `item_not_found` when no host in reach
 listens on it. The case list's counts carry a `ports` kind count. See
 [console-ports.md](console-ports.md).
 
+### Services as items (step 5f, migration 0067)
+
+Item kind `service`, ref the unit as reported (1–200 characters, no control
+character, no `/`). Like software and ports it is fleet-wide (`agent_id` is
+null, enforced by `case_items_fleet_wide_check`, widened to cover the three
+kinds), takes no outcome, is visible inside a case only to someone with a
+host in reach running it, never makes a case visible by itself, and is
+refused as `item_not_found` when no host in reach runs it. The case list's
+counts carry a `services` kind count. See
+[console-services.md](console-services.md).
+
 ### The Cases list page (`GET /api/v1/case-list`)
 
 Step 5d rulings 5–10, following the other list pages (`compliance-list`):
