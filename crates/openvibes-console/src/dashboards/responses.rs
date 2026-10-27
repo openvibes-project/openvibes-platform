@@ -9,7 +9,10 @@ use chrono::SecondsFormat;
 use platform_store::dashboards::{Dashboard, Refusal};
 
 use super::layout::{validate_layout, validate_name};
-use crate::{DashboardView, ProblemDetails, SaveDashboardRequest, http::problem::problem_response};
+use crate::{
+    DashboardRole, DashboardView, ProblemDetails, SaveDashboardRequest,
+    http::problem::problem_response,
+};
 
 pub(super) fn view(dashboard: Dashboard, user_id: &str) -> DashboardView {
     DashboardView {
@@ -17,8 +20,15 @@ pub(super) fn view(dashboard: Dashboard, user_id: &str) -> DashboardView {
         dashboard_id: dashboard.dashboard_id,
         name: dashboard.name,
         owner_display_name: dashboard.owner_display_name,
-        shared_role_id: dashboard.shared_role_id,
-        shared_role_name: dashboard.shared_role_name,
+        visibility: dashboard.visibility.as_str().to_string(),
+        roles: dashboard
+            .roles
+            .into_iter()
+            .map(|role| DashboardRole {
+                role_id: role.role_id,
+                name: role.name,
+            })
+            .collect(),
         version: dashboard.version.try_into().unwrap_or_default(),
         layout: dashboard.layout,
         created_at: dashboard
@@ -66,6 +76,16 @@ pub(super) fn refused(refusal: Refusal) -> Response {
             StatusCode::UNPROCESSABLE_ENTITY,
             "unknown_role",
             "No such role",
+        ),
+        Refusal::RoleNotHeld => ProblemDetails::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "role_not_held",
+            "You can only share with roles you hold",
+        ),
+        Refusal::NoRoles => ProblemDetails::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "no_roles",
+            "Choose at least one role to share with",
         ),
     })
 }

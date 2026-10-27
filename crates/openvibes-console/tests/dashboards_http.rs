@@ -452,13 +452,26 @@ async fn sharing_needs_the_permission_and_shows_read_only_to_the_role() {
             &bob_uri,
             &bob,
             &bob_csrf,
-            Some(json!({"role_id": "viewer"})),
+            Some(json!({"visibility": "roles", "role_ids": ["viewer"]})),
             None
         )
         .await
         .0,
         StatusCode::FORBIDDEN
     );
+    {
+        // Alice shares only with roles she holds.
+        let mut client = db.pool.get().await.unwrap();
+        platform_store::console_people::give_role(
+            &mut client,
+            platform_store::console_roles::Principal::User("11111111-1111-4111-8111-111111111111"),
+            "analyst",
+            "test",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    }
     let (_, team, _) = call(
         &router,
         "POST",
@@ -482,7 +495,7 @@ async fn sharing_needs_the_permission_and_shows_read_only_to_the_role() {
             &format!("{uri}/sharing"),
             &alice,
             &alice_csrf,
-            Some(json!({"role_id": "no_such"})),
+            Some(json!({"visibility": "roles", "role_ids": ["no_such"]})),
             None
         )
         .await
@@ -495,13 +508,17 @@ async fn sharing_needs_the_permission_and_shows_read_only_to_the_role() {
         &format!("{uri}/sharing"),
         &alice,
         &alice_csrf,
-        Some(json!({"role_id": "analyst"})),
+        Some(json!({"visibility": "roles", "role_ids": ["analyst"]})),
         None,
     )
     .await;
     assert_eq!(
-        (status, shared["shared_role_id"].as_str()),
-        (StatusCode::OK, Some("analyst"))
+        (
+            status,
+            shared["visibility"].as_str(),
+            shared["roles"][0]["role_id"].as_str()
+        ),
+        (StatusCode::OK, Some("roles"), Some("analyst"))
     );
     let (_, seen, _) = call(&router, "GET", &uri, &bob, "", None, None).await;
     assert_eq!(
@@ -548,7 +565,7 @@ async fn sharing_needs_the_permission_and_shows_read_only_to_the_role() {
         &format!("{uri}/sharing"),
         &alice,
         &alice_csrf,
-        Some(json!({"role_id": null})),
+        Some(json!({"visibility": "private"})),
         None,
     )
     .await;
@@ -561,6 +578,96 @@ async fn sharing_needs_the_permission_and_shows_read_only_to_the_role() {
             .await
             .1["dashboard_id"],
         Value::Null
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn publishing_to_everyone_is_seen_by_all_and_edited_only_by_the_owner() {
+    let (db, router) = setup().await;
+    let (alice, alice_csrf) = login(&router, "alice").await;
+    let (bob, bob_csrf) = login(&router, "bob").await;
+    let (_, made, _) = call(
+        &router,
+        "POST",
+        "/api/v1/dashboards",
+        &alice,
+        &alice_csrf,
+        Some(json!({"name": "For all", "layout": layout()})),
+        None,
+    )
+    .await;
+    let uri = format!(
+        "/api/v1/dashboards/{}",
+        made["dashboard_id"].as_str().unwrap()
+    );
+    let (status, shared, _) = call(
+        &router,
+        "PUT",
+        &format!("{uri}/sharing"),
+        &alice,
+        &alice_csrf,
+        Some(json!({"visibility": "everyone"})),
+        None,
+    )
+    .await;
+    assert_eq!(
+        (
+            status,
+            shared["visibility"].as_str(),
+            shared["roles"].as_array().map(Vec::len)
+        ),
+        (StatusCode::OK, Some("everyone"), Some(0))
+    );
+    let (status, seen, _) = call(&router, "GET", &uri, &bob, "", None, None).await;
+    assert_eq!(
+        (status, seen["mine"].as_bool()),
+        (StatusCode::OK, Some(false))
+    );
+    // A person without the permission cannot publish, nor use another's id.
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            &format!("{uri}/sharing"),
+            &bob,
+            &bob_csrf,
+            Some(json!({"visibility": "everyone"})),
+            None
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    // Anyone may make a copy; it is private to them.
+    let (status, copy, _) = call(
+        &router,
+        "POST",
+        "/api/v1/dashboards",
+        &bob,
+        &bob_csrf,
+        Some(json!({"name": "Copy of For all", "layout": seen["layout"]})),
+        None,
+    )
+    .await;
+    assert_eq!(
+        (status, copy["visibility"].as_str(), copy["mine"].as_bool()),
+        (StatusCode::CREATED, Some("private"), Some(true))
+    );
+    // An unknown visibility is a bad request.
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            &format!("{uri}/sharing"),
+            &alice,
+            &alice_csrf,
+            Some(json!({"visibility": "world"})),
+            None
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
     );
     db.drop().await;
 }

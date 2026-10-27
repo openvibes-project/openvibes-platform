@@ -426,14 +426,14 @@ export function buildDemoData(now = Date.now()) {
     now, rules: RULES, agents, addresses, labels, groupChanges, certificates, findings, triage, advisories, vulnerabilities, access,
     enrollmentTokens, ruleSets, bundles, serviceAccounts, serviceTokens, audit, alarms,
     dashboards: [
-      { dashboard_id: "d-admin-morning", owner: "u-admin", name: "My morning check", shared_role_id: null as string | null,
+      { dashboard_id: "d-admin-morning", owner: "u-admin", name: "My morning check", visibility: "private" as "private" | "roles" | "everyone", role_ids: [] as string[],
         layout: { schema: 1 as const, widgets: [
           { id: "exploited", type: "number" as const, x: 0, y: 0, w: 3, h: 2, config: { metric: "vulns.exploited" } },
           { id: "stale", type: "number" as const, x: 3, y: 0, w: 3, h: 2, config: { metric: "agents.stale" } },
           { id: "attention", type: "attention" as const, x: 0, y: 2, w: 8, h: 6, config: { include: ["exploited", "compliance"], limit: 8 } },
           { id: "note", type: "note" as const, x: 8, y: 2, w: 4, h: 3, config: { text: ["Patch window: Thursday 20:00", "https://wiki.example.test/patching"] } },
         ] } },
-      { dashboard_id: "d-ola-triage", owner: "u-ola", name: "Analyst triage", shared_role_id: "analyst" as string | null,
+      { dashboard_id: "d-ola-triage", owner: "u-ola", name: "Analyst triage", visibility: "roles" as "private" | "roles" | "everyone", role_ids: ["analyst"],
         layout: { schema: 1 as const, widgets: [
           { id: "critical", type: "list" as const, x: 0, y: 0, w: 8, h: 6, config: { view: "/compliance", query: "severity=critical", limit: 10 } },
           { id: "trend", type: "trend" as const, x: 8, y: 0, w: 4, h: 3, config: { finding: "baseline/port.ssh.exposed", days: 14 } },

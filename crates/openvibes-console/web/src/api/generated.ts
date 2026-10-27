@@ -4547,6 +4547,13 @@ export interface components {
             /** @description At most 100 own dashboards plus those shared with the viewer's roles. */
             items: components["schemas"]["DashboardView"][];
         };
+        /** @description A role a dashboard is shared with. */
+        DashboardRole: {
+            /** @description Role name. */
+            name: string;
+            /** @description Role id. */
+            role_id: string;
+        };
         /** @description One dashboard as the viewer sees it. */
         DashboardView: {
             /** @description RFC 3339 creation time. */
@@ -4561,10 +4568,11 @@ export interface components {
             name: string;
             /** @description Display name of the owner. */
             owner_display_name: string;
-            /** @description Role it is shared with, if any. */
-            shared_role_id?: string | null;
-            /** @description That role's name, for display. */
-            shared_role_name?: string | null;
+            /**
+             * @description The roles it is shared with. The owner sees all of them; anyone else
+             *     only the roles they hold themselves.
+             */
+            roles: components["schemas"]["DashboardRole"][];
             /** @description RFC 3339 last change. */
             updated_at: string;
             /**
@@ -4572,6 +4580,8 @@ export interface components {
              * @description Version for `If-Match`.
              */
             version: number;
+            /** @description Who may view it besides the owner: `private`, `roles` or `everyone`. */
+            visibility: string;
         };
         /** @description Historical rule content for one authorized observation. */
         DetectionRuleView: {
@@ -7251,10 +7261,12 @@ export interface components {
          * @enum {string}
          */
         Severity: "critical" | "high" | "medium" | "low";
-        /** @description Share with a role, or stop sharing with `null`. */
+        /** @description Who a dashboard is shared with. */
         ShareDashboardRequest: {
-            /** @description Built-in role id, or `null`. */
-            role_id?: string | null;
+            /** @description For `roles`: one or more roles the caller holds. Ignored otherwise. */
+            role_ids?: string[];
+            /** @description `private` (stop sharing), `roles` or `everyone`. */
+            visibility: string;
         };
         /** @description Accepted signed-envelope JSON shape for preview and publish requests. */
         SignedRuleEnvelopeRequest: {
@@ -12706,7 +12718,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Unknown role */
+            /** @description Unknown role, a role the caller does not hold, or no role */
             422: {
                 headers: {
                     [name: string]: unknown;

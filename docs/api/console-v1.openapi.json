@@ -5442,7 +5442,7 @@
             }
           },
           "422": {
-            "description": "Unknown role",
+            "description": "Unknown role, a role the caller does not hold, or no role",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17078,6 +17078,24 @@
           }
         }
       },
+      "DashboardRole": {
+        "type": "object",
+        "description": "A role a dashboard is shared with.",
+        "required": [
+          "role_id",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Role name."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Role id."
+          }
+        }
+      },
       "DashboardView": {
         "type": "object",
         "description": "One dashboard as the viewer sees it.",
@@ -17086,6 +17104,8 @@
           "name",
           "owner_display_name",
           "mine",
+          "visibility",
+          "roles",
           "version",
           "layout",
           "created_at",
@@ -17116,19 +17136,12 @@
             "type": "string",
             "description": "Display name of the owner."
           },
-          "shared_role_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Role it is shared with, if any."
-          },
-          "shared_role_name": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "That role's name, for display."
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardRole"
+            },
+            "description": "The roles it is shared with. The owner sees all of them; anyone else\nonly the roles they hold themselves."
           },
           "updated_at": {
             "type": "string",
@@ -17139,6 +17152,10 @@
             "format": "int64",
             "description": "Version for `If-Match`.",
             "minimum": 0
+          },
+          "visibility": {
+            "type": "string",
+            "description": "Who may view it besides the owner: `private`, `roles` or `everyone`."
           }
         }
       },
@@ -23382,14 +23399,21 @@
       },
       "ShareDashboardRequest": {
         "type": "object",
-        "description": "Share with a role, or stop sharing with `null`.",
+        "description": "Who a dashboard is shared with.",
+        "required": [
+          "visibility"
+        ],
         "properties": {
-          "role_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Built-in role id, or `null`."
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For `roles`: one or more roles the caller holds. Ignored otherwise."
+          },
+          "visibility": {
+            "type": "string",
+            "description": "`private` (stop sharing), `roles` or `everyone`."
           }
         },
         "additionalProperties": false

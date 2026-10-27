@@ -16,7 +16,8 @@ mod responses;
 mod types;
 
 pub use types::{
-    DashboardPage, DashboardView, HomeDashboard, SaveDashboardRequest, ShareDashboardRequest,
+    DashboardPage, DashboardRole, DashboardView, HomeDashboard, SaveDashboardRequest,
+    ShareDashboardRequest,
 };
 
 /// Dashboards, their sharing, the user's home dashboard, and the count

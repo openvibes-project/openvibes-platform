@@ -60,7 +60,8 @@ pub use compliance::{
 };
 pub use config::{AgentInstallConfig, ConsoleConfig, ConsoleTransportMode, load_config};
 pub use dashboards::{
-    DashboardPage, DashboardView, HomeDashboard, SaveDashboardRequest, ShareDashboardRequest,
+    DashboardPage, DashboardRole, DashboardView, HomeDashboard, SaveDashboardRequest,
+    ShareDashboardRequest,
 };
 pub use hosts::{
     AgentAlarmsView, AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus,

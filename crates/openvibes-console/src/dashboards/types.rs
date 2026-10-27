@@ -12,10 +12,11 @@ pub struct DashboardView {
     pub owner_display_name: String,
     /// Whether the viewer owns it (only owners may change it).
     pub mine: bool,
-    /// Role it is shared with, if any.
-    pub shared_role_id: Option<String>,
-    /// That role's name, for display.
-    pub shared_role_name: Option<String>,
+    /// Who may view it besides the owner: `private`, `roles` or `everyone`.
+    pub visibility: String,
+    /// The roles it is shared with. The owner sees all of them; anyone else
+    /// only the roles they hold themselves.
+    pub roles: Vec<DashboardRole>,
     /// Version for `If-Match`.
     pub version: u64,
     /// Layout: `{ "schema": 1, "widgets": [...] }`.
@@ -25,6 +26,15 @@ pub struct DashboardView {
     pub created_at: String,
     /// RFC 3339 last change.
     pub updated_at: String,
+}
+
+/// A role a dashboard is shared with.
+#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+pub struct DashboardRole {
+    /// Role id.
+    pub role_id: String,
+    /// Role name.
+    pub name: String,
 }
 
 /// Dashboards visible to the viewer: own first, then shared.
@@ -45,12 +55,15 @@ pub struct SaveDashboardRequest {
     pub layout: serde_json::Value,
 }
 
-/// Share with a role, or stop sharing with `null`.
+/// Who a dashboard is shared with.
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ShareDashboardRequest {
-    /// Built-in role id, or `null`.
-    pub role_id: Option<String>,
+    /// `private` (stop sharing), `roles` or `everyone`.
+    pub visibility: String,
+    /// For `roles`: one or more roles the caller holds. Ignored otherwise.
+    #[serde(default)]
+    pub role_ids: Vec<String>,
 }
 
 /// The dashboard that opens first; `null` is the built-in Overview.

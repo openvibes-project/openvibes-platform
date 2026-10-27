@@ -1026,28 +1026,31 @@ when `OPENVIBES_TEST_DATABASE_URL` is unset.
 
 ## Dashboards (`dashboards::…`, schema 26)
 
-A dashboard is a named layout owned by one console user, optionally shared
-with a role. Only the layout is stored; widgets read their data through the
+A dashboard is a named layout owned by one console user, `private`, shared
+with some of the owner's roles or with `everyone` (`visibility`, schema 68). Only the layout is stored; widgets read their data through the
 permission-checked console API, so sharing never exposes data.
 
-- `list_visible(user)`: own dashboards first, then those shared with a role
-  the user holds through any unrevoked binding, each group by name. Since
-  schema 52 shares live in `console_dashboard_roles` (a dashboard may be
-  shared with several roles after the upgrade); `shared_role_id` in
-  responses is the first by id. `get_visible(user, id)` returns `None` for unknown,
+- `list_visible(user)`: own dashboards first, then those shared with
+  everyone or with a role the user holds through any unrevoked binding, each
+  group by name. Shares with roles live in `console_dashboard_roles`; a
+  dashboard's `roles` are all of them for its owner and only the viewer's
+  own for anyone else. `get_visible(user, id)` returns `None` for unknown,
   invisible and malformed ids (ids are compared as text).
 - `create` (at most `MAX_DASHBOARDS_PER_OWNER` = 100 per owner, serialised
   per owner), `update` (owner only, `expected_version` must match),
   `delete` (owner only; homes pointing at it go by cascade),
-  `set_sharing(role | None)` (owner only, replaces all of the dashboard's
-  shares with that one role or none; the caller checks
-  `dashboards.share`), `home` (only if still visible) and
+  `set_sharing(visibility, role_ids)` (owner only; replaces the dashboard's
+  roles; `roles` needs at least one role and every one must exist and be
+  held by the owner, else `NoRoles`, `UnknownRole` or `RoleNotHeld`; the
+  caller checks `dashboards.share` for roles and `dashboards.publish` for
+  everyone), `privatise_orphans` (run by `delete_role`: a dashboard left
+  shared with roles but with none becomes private), `home` (only if still visible) and
   `set_home(id | None)` (must be visible).
 - Ids are checked to be UUIDs in Rust (malformed ids are not found without a
   query) and compared as `uuid`, so lookups use the primary key and any case
   works.
 - Refusals are values, not errors: `Refusal::{NotFound, NotOwner, Stale,
-  TooMany, UnknownRole}`.
+  TooMany, UnknownRole, RoleNotHeld, NoRoles}`.
 - Every change writes its audit row (`dashboard.create`, `.update`,
   `.delete`, `.share`, `.home`; target kind `dashboard`) in the same
   transaction. The row carries the name, never the layout.
@@ -1363,7 +1366,8 @@ unique regardless of case. Role bindings lose `asset_group_id`: migration 52
 turns each holder's scoped bindings of one role into one role reaching those
 groups, keeps held former built-ins (viewer, analyst, operator) as ordinary
 roles reaching all hosts, deletes unheld ones, and shows `admin` as
-Administrator. Dashboard shares move from `console_dashboards.shared_role_id`
+Administrator. (Schema 68 then adds `console_dashboards.visibility`: a
+dashboard with shares becomes `roles`, the rest `private`.) Dashboard shares move from `console_dashboards.shared_role_id`
 (dropped) to `console_dashboard_roles`, and a share with a role whose scoped
 holders moved is copied to their new roles, so nobody loses a dashboard.
 The console role may write roles, their permissions and groups, dashboard

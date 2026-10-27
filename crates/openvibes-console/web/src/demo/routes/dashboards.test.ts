@@ -40,8 +40,8 @@ describe("demo dashboards", () => {
     const own = (await json(await viewer.handle("GET", "/api/v1/dashboards"))).items as { name: string; mine: boolean }[];
     expect(own.some((d) => d.name === "My morning check")).toBe(false);
     const mine = await json(await viewer.handle("POST", "/api/v1/dashboards", { name: "Viewer's", layout }));
-    expect((await viewer.handle("PUT", `/api/v1/dashboards/${String(mine.dashboard_id)}/sharing`, { role_id: "viewer" })).status).toBe(403);
-    expect((await admin.handle("PUT", "/api/v1/dashboards/d-admin-morning/sharing", { role_id: "no_such" })).status).toBe(422);
+    expect((await viewer.handle("PUT", `/api/v1/dashboards/${String(mine.dashboard_id)}/sharing`, { visibility: "roles", role_ids: ["viewer"] })).status).toBe(403);
+    expect((await admin.handle("PUT", "/api/v1/dashboards/d-admin-morning/sharing", { visibility: "roles", role_ids: ["no_such"] })).status).toBe(422);
   });
 
   it("shows the seeded team dashboard to analysts read-only and lets them make it home", async () => {
@@ -55,12 +55,28 @@ describe("demo dashboards", () => {
     expect((await analyst.handle("PUT", "/api/v1/me/home", { dashboard_id: "d-admin-morning" })).status).toBe(404);
   });
 
-  it("names the role a dashboard is shared with, as the API does", async () => {
+  it("names the roles a dashboard is shared with, as the API does", async () => {
     const analyst = createDemoServer({ persona: "analyst" });
-    const items = (await json(await analyst.handle("GET", "/api/v1/dashboards"))).items as { name: string; shared_role_name: string | null }[];
-    expect(items.find((d) => d.name === "Analyst triage")?.shared_role_name).toBe("Analyst");
+    const items = (await json(await analyst.handle("GET", "/api/v1/dashboards"))).items as { name: string; visibility: string; roles: { name: string }[] }[];
+    const team = items.find((d) => d.name === "Analyst triage");
+    expect([team?.visibility, team?.roles.map((r) => r.name)]).toEqual(["roles", ["Analyst"]]);
     const own = await json(await createDemoServer({ persona: "admin" }).handle("POST", "/api/v1/dashboards", { name: "Mine", layout }));
-    expect(own.shared_role_name).toBeNull();
+    expect([own.visibility, own.roles]).toEqual(["private", []]);
+  });
+
+  it("shares with roles the owner holds, with everyone, and back to private", async () => {
+    const admin = createDemoServer({ persona: "admin" });
+    const uri = "/api/v1/dashboards/d-admin-morning/sharing";
+    expect((await admin.handle("PUT", uri, { visibility: "world" })).status).toBe(400);
+    expect((await admin.handle("PUT", uri, { visibility: "roles", role_ids: [] })).status).toBe(422);
+    const everyone = await json(await admin.handle("PUT", uri, { visibility: "everyone", role_ids: ["viewer"] }));
+    expect([everyone.visibility, everyone.roles]).toEqual(["everyone", []]);
+    const viewer = await json(await admin.handle("PUT", uri, { visibility: "private" }));
+    expect(viewer.version).toBe(3);
+    // Sharing with everyone needs dashboards.publish, which a plain sharer lacks.
+    const lead = createDemoServer({ persona: "team_lead" });
+    const made = await json(await lead.handle("POST", "/api/v1/dashboards", { name: "Lead's", layout }));
+    expect((await lead.handle("PUT", `/api/v1/dashboards/${String(made.dashboard_id)}/sharing`, { visibility: "everyone" })).status).toBe(403);
   });
 
   it("checks a save in the server's order: If-Match, then the body, then ownership and version", async () => {

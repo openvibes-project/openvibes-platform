@@ -7,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use platform_store::dashboards::{self as store, Refusal};
+use platform_store::dashboards::{self as store, Refusal, Visibility};
 
 use super::responses::{bad_request, checked, invalid, refused, view, with_etag};
 use crate::{
@@ -176,7 +176,7 @@ pub(crate) async fn delete_dashboard(
 }
 
 #[utoipa::path(put, path = "/api/v1/dashboards/{dashboard_id}/sharing", tag = "dashboards", params(("dashboard_id" = String, Path)), request_body = crate::ShareDashboardRequest,
-    responses((status = 200, description = "Sharing changed", body = crate::DashboardView), (status = 404, description = "Not found or not visible", body = ProblemDetails, content_type = "application/problem+json"), (status = 422, description = "Unknown role", body = ProblemDetails, content_type = "application/problem+json"), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
+    responses((status = 200, description = "Sharing changed", body = crate::DashboardView), (status = 404, description = "Not found or not visible", body = ProblemDetails, content_type = "application/problem+json"), (status = 422, description = "Unknown role, a role the caller does not hold, or no role", body = ProblemDetails, content_type = "application/problem+json"), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn share_dashboard(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -187,20 +187,30 @@ pub(crate) async fn share_dashboard(
         Ok(user) => user,
         Err(response) => return response,
     };
-    let may_share = user
-        .capabilities
-        .iter()
-        .any(|c| c.permission == Permission::DashboardsShare && c.scope == PermissionScope::Global);
-    if !may_share {
+    let Ok(Json(request)) = payload else {
+        return bad_request();
+    };
+    let Some(visibility) = Visibility::parse(&request.visibility) else {
+        return bad_request();
+    };
+    let holds = |permission| {
+        user.capabilities
+            .iter()
+            .any(|c| c.permission == permission && c.scope == PermissionScope::Global)
+    };
+    // Making a dashboard private again is always the owner's right.
+    let allowed = match visibility {
+        Visibility::Private => true,
+        Visibility::Roles => holds(Permission::DashboardsShare),
+        Visibility::Everyone => holds(Permission::DashboardsPublish),
+    };
+    if !allowed {
         return problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,
             "permission_denied",
             "Access is not available",
         ));
     }
-    let Ok(Json(request)) = payload else {
-        return bad_request();
-    };
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
@@ -208,7 +218,8 @@ pub(crate) async fn share_dashboard(
         &mut client,
         &user.user_id,
         &id,
-        request.role_id.as_deref(),
+        visibility,
+        &request.role_ids,
         Utc::now(),
     )
     .await

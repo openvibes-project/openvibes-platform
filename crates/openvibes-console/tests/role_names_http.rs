@@ -94,17 +94,53 @@ async fn sharers_list_the_roles_they_hold_and_see_the_shared_role_by_name() {
         )
         .await;
     assert_eq!(status, StatusCode::CREATED, "{made}");
-    assert_eq!(made["shared_role_name"], Value::Null, "{made}");
+    assert_eq!(
+        (
+            made["visibility"].as_str(),
+            made["roles"].as_array().map(Vec::len)
+        ),
+        (Some("private"), Some(0)),
+        "{made}"
+    );
     let sharing = format!(
         "/api/v1/dashboards/{}/sharing",
         made["dashboard_id"].as_str().unwrap()
     );
+    // Everyone needs dashboards.publish, which Sharers lacks; a role she
+    // does not hold is refused.
+    let (status, _) = fx
+        .call(
+            &sal,
+            "PUT",
+            &sharing,
+            Some(json!({"visibility": "everyone"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, refused) = fx
+        .call(
+            &sal,
+            "PUT",
+            &sharing,
+            Some(json!({"visibility": "roles", "role_ids": [fx.win_viewers]})),
+        )
+        .await;
+    assert_eq!(
+        (status, refused["code"].as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, Some("role_not_held")),
+        "{refused}"
+    );
     let (status, shared) = fx
-        .call(&sal, "PUT", &sharing, Some(json!({"role_id": sharers})))
+        .call(
+            &sal,
+            "PUT",
+            &sharing,
+            Some(json!({"visibility": "roles", "role_ids": [sharers]})),
+        )
         .await;
     assert_eq!(status, StatusCode::OK, "{shared}");
-    assert_eq!(shared["shared_role_name"], "Sharers", "{shared}");
+    assert_eq!(shared["roles"][0]["name"], "Sharers", "{shared}");
     let (_, list) = fx.call(&sal, "GET", "/api/v1/dashboards", None).await;
-    assert_eq!(list["items"][0]["shared_role_name"], "Sharers", "{list}");
+    assert_eq!(list["items"][0]["roles"][0]["name"], "Sharers", "{list}");
     fx.db.drop().await;
 }

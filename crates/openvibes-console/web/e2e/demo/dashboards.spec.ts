@@ -96,8 +96,9 @@ test("an analyst sees the team dashboard read-only", async ({ page }) => {
   await page.getByRole("menuitemradio", { name: "Analyst triage" }).click();
   await expect(page.getByText("Shared by")).toContainText("with Analyst");
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Make a copy" })).toBeVisible();
   await page.getByRole("button", { name: "Dashboard menu" }).click();
-  await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Make a copy" })).toBeVisible();
 });
 
 test("an admin shares a dashboard with a role they hold, by name", async ({ page }) => {
@@ -105,9 +106,15 @@ test("an admin shares a dashboard with a role they hold, by name", async ({ page
   await page.getByRole("menuitemradio", { name: "My morning check" }).click();
   await page.getByRole("button", { name: "Dashboard menu" }).click();
   // Only the roles the admin holds: Administrator, not Analyst.
-  await expect(page.getByRole("menuitemradio", { name: "Analyst" })).toHaveCount(0);
-  await page.getByRole("menuitemradio", { name: "Administrator" }).click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Analyst" })).toHaveCount(0);
+  await page.getByRole("menuitemcheckbox", { name: "Administrator" }).click();
   await expect(page.locator("#main").getByText("Shared with Administrator")).toBeVisible();
+  // The menu stays open for more roles; Everyone and Only you replace the roles.
+  await page.getByRole("menuitemradio", { name: "Everyone" }).click();
+  await expect(page.getByTestId("sharing-badge")).toHaveText("Everyone");
+  await page.getByRole("button", { name: "Dashboard menu" }).click();
+  await page.getByRole("menuitemradio", { name: "Only you" }).click();
+  await expect(page.getByTestId("sharing-badge")).toHaveText("Only you");
 });
 
 for (const scheme of ["light", "dark"] as const) {
@@ -157,7 +164,7 @@ test("a dashboard with a widget type this console does not know still renders", 
     ] };
     const now = new Date().toISOString();
     localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
-      { dashboard_id: "d-future", owner: "u-admin", name: "From a newer console", shared_role_id: null, layout, version: 1, created_at: now, updated_at: now },
+      { dashboard_id: "d-future", owner: "u-admin", name: "From a newer console", visibility: "private", role_ids: [], layout, version: 1, created_at: now, updated_at: now },
     ], homes: [["u-admin", "d-future"]] }));
   });
   await page.goto("/");
@@ -214,7 +221,7 @@ for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
       const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 3, h: 4, config: { metric: "all.open.critical", trend: 30 } }] };
       const now = new Date().toISOString();
       localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
-        { dashboard_id: "d-crit", owner: "u-admin", name: "Critical", shared_role_id: null, layout, version: 1, created_at: now, updated_at: now },
+        { dashboard_id: "d-crit", owner: "u-admin", name: "Critical", visibility: "private", role_ids: [], layout, version: 1, created_at: now, updated_at: now },
       ], homes: [["u-admin", "d-crit"]] }));
     });
     await page.goto("/");

@@ -1,5 +1,5 @@
 //! User dashboards: a named layout owned by one console user, optionally
-//! shared with a role. Only layouts are stored; widgets read their data
+//! shared with some of the viewer's roles or with everyone. Only layouts are stored; widgets read their data
 //! through the permission-checked console API. Every change and its audit
 //! row commit together; the layout is never copied into the audit log.
 
@@ -10,6 +10,47 @@ use crate::{Client, StoreError};
 
 /// Most dashboards one user may own.
 pub const MAX_DASHBOARDS_PER_OWNER: i64 = 100;
+
+/// Who may view a dashboard besides its owner.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Visibility {
+    /// Only the owner.
+    Private,
+    /// Holders of one of its roles.
+    Roles,
+    /// Every signed-in person.
+    Everyone,
+}
+
+impl Visibility {
+    /// The stored and API spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Private => "private",
+            Self::Roles => "roles",
+            Self::Everyone => "everyone",
+        }
+    }
+
+    /// Parses the stored and API spelling.
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "private" => Some(Self::Private),
+            "roles" => Some(Self::Roles),
+            "everyone" => Some(Self::Everyone),
+            _ => None,
+        }
+    }
+}
+
+/// A role a dashboard is shared with.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SharedRole {
+    /// Role id.
+    pub role_id: String,
+    /// Role name.
+    pub name: String,
+}
 
 /// One stored dashboard as seen by a viewer.
 #[derive(Clone, Debug, PartialEq)]
@@ -24,11 +65,11 @@ pub struct Dashboard {
     pub name: String,
     /// Validated layout document (see the console's layout validation).
     pub layout: serde_json::Value,
-    /// Role whose holders may view the dashboard (since schema 52 the first,
-    /// by id, of the roles it is shared with).
-    pub shared_role_id: Option<String>,
-    /// That role's name.
-    pub shared_role_name: Option<String>,
+    /// Who may view it besides the owner.
+    pub visibility: Visibility,
+    /// The roles it is shared with, by name. The owner sees all of them;
+    /// anyone else only the ones they hold themselves.
+    pub roles: Vec<SharedRole>,
     /// Version for conditional updates.
     pub version: i64,
     /// Creation time.
@@ -48,22 +89,38 @@ pub enum Refusal {
     Stale,
     /// The owner already has [`MAX_DASHBOARDS_PER_OWNER`].
     TooMany,
-    /// The role to share with does not exist.
+    /// A role to share with does not exist.
     UnknownRole,
+    /// A role to share with is not one the caller holds.
+    RoleNotHeld,
+    /// Sharing with roles needs at least one role.
+    NoRoles,
 }
 
+/// Roles `$1` holds through live bindings.
+const HELD: &str = "SELECT b.role_id FROM console_role_bindings b
+    WHERE b.user_id = $1::text::uuid AND b.revoked_at IS NULL";
+
+/// Columns of one dashboard as seen by `$1`: the owner sees every role it is
+/// shared with, anyone else only their own.
 const COLUMNS: &str =
     "d.dashboard_id::text, d.owner_user_id::text, u.display_name, d.name, d.layout,
-    (SELECT min(dr.role_id) FROM console_dashboard_roles dr WHERE dr.dashboard_id = d.dashboard_id),
-    d.version::bigint, d.created_at, d.updated_at,
-    (SELECT r.display_name FROM console_dashboard_roles dr JOIN console_roles r USING (role_id)
-     WHERE dr.dashboard_id = d.dashboard_id ORDER BY dr.role_id LIMIT 1)";
+    d.visibility, d.version::bigint, d.created_at, d.updated_at,
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('role_id', r.role_id, 'name', r.display_name)
+         ORDER BY lower(r.display_name), r.role_id), '[]'::jsonb)
+     FROM console_dashboard_roles dr JOIN console_roles r USING (role_id)
+     WHERE dr.dashboard_id = d.dashboard_id
+       AND (d.owner_user_id = $1::text::uuid
+            OR dr.role_id IN (SELECT b.role_id FROM console_role_bindings b
+                WHERE b.user_id = $1::text::uuid AND b.revoked_at IS NULL)))";
 
-/// Visible to `$1`: owned, or shared with a role of one of `$1`'s live bindings.
-const VISIBLE: &str = "(d.owner_user_id = $1::text::uuid OR EXISTS (
+/// Visible to `$1`: owned, shared with everyone, or shared with a role of one
+/// of `$1`'s live bindings.
+const VISIBLE: &str = "(d.owner_user_id = $1::text::uuid OR d.visibility = 'everyone' OR (
+    d.visibility = 'roles' AND EXISTS (
     SELECT 1 FROM console_dashboard_roles dr JOIN console_role_bindings b USING (role_id)
     WHERE dr.dashboard_id = d.dashboard_id AND b.user_id = $1::text::uuid
-      AND b.revoked_at IS NULL))";
+      AND b.revoked_at IS NULL)))";
 
 /// True for a canonical UUID (8-4-4-4-12 hex, any case). Other ids are simply
 /// not found, before any query, so a cast can never fail.
@@ -76,17 +133,28 @@ fn is_uuid(id: &str) -> bool {
 }
 
 fn dashboard(row: &Row) -> Dashboard {
+    let roles: serde_json::Value = row.get(9);
     Dashboard {
         dashboard_id: row.get(0),
         owner_user_id: row.get(1),
         owner_display_name: row.get(2),
         name: row.get(3),
         layout: row.get(4),
-        shared_role_id: row.get(5),
+        visibility: Visibility::parse(row.get::<_, &str>(5)).unwrap_or(Visibility::Private),
         version: row.get(6),
         created_at: row.get(7),
         updated_at: row.get(8),
-        shared_role_name: row.get(9),
+        roles: roles
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|role| {
+                Some(SharedRole {
+                    role_id: role.get("role_id")?.as_str()?.to_string(),
+                    name: role.get("name")?.as_str()?.to_string(),
+                })
+            })
+            .collect(),
     }
 }
 
@@ -171,6 +239,7 @@ async fn lock_owned(
 
 async fn reread(
     tx: &deadpool_postgres::Transaction<'_>,
+    user_id: &str,
     dashboard_id: &str,
 ) -> Result<Dashboard, StoreError> {
     let row = tx
@@ -178,9 +247,9 @@ async fn reread(
             &format!(
                 "SELECT {COLUMNS} FROM console_dashboards d
                  JOIN console_users u ON u.user_id = d.owner_user_id
-                 WHERE d.dashboard_id = $1::text::uuid"
+                 WHERE d.dashboard_id = $2::text::uuid"
             ),
-            &[&dashboard_id],
+            &[&user_id, &dashboard_id],
         )
         .await?;
     Ok(dashboard(&row))
@@ -230,7 +299,7 @@ pub async fn create(
         serde_json::json!({ "name": name }),
     )
     .await?;
-    let created = reread(&tx, &id).await?;
+    let created = reread(&tx, user_id, &id).await?;
     tx.commit().await?;
     Ok(Ok(created))
 }
@@ -270,7 +339,7 @@ pub async fn update(
         serde_json::json!({ "name": name }),
     )
     .await?;
-    let updated = reread(&tx, dashboard_id).await?;
+    let updated = reread(&tx, user_id, dashboard_id).await?;
     tx.commit().await?;
     Ok(Ok(updated))
 }
@@ -310,13 +379,15 @@ pub async fn delete(
     Ok(Ok(()))
 }
 
-/// Shares an owned dashboard with `role_id`, or stops sharing (`None`).
-/// The caller checks `dashboards.share` first.
+/// Sets who an owned dashboard is shared with: nobody, some of the owner's
+/// own roles (at least one), or everyone. The caller checks `dashboards.share`
+/// (roles) and `dashboards.publish` (everyone) first.
 pub async fn set_sharing(
     client: &mut Client,
     user_id: &str,
     dashboard_id: &str,
-    role_id: Option<&str>,
+    visibility: Visibility,
+    role_ids: &[String],
     now: DateTime<Utc>,
 ) -> Result<Result<Dashboard, Refusal>, StoreError> {
     let tx = client.transaction().await?;
@@ -329,44 +400,71 @@ pub async fn set_sharing(
         tx.rollback().await?;
         return Ok(Err(refusal));
     }
-    if let Some(role_id) = role_id {
-        let known = tx
-            .query_opt(
-                "SELECT 1 FROM console_roles WHERE role_id = $1",
-                &[&role_id],
-            )
-            .await?
-            .is_some();
-        if !known {
+    let mut roles: Vec<&str> = if visibility == Visibility::Roles {
+        role_ids.iter().map(String::as_str).collect()
+    } else {
+        Vec::new()
+    };
+    roles.sort_unstable();
+    roles.dedup();
+    if visibility == Visibility::Roles {
+        let refusal = if roles.is_empty() {
+            Some(Refusal::NoRoles)
+        } else {
+            let known: i64 = tx
+                .query_one(
+                    "SELECT count(*) FROM console_roles WHERE role_id = ANY($1)",
+                    &[&roles],
+                )
+                .await?
+                .get(0);
+            let held: i64 = tx
+                .query_one(
+                    &format!("SELECT count(*) FROM console_roles WHERE role_id = ANY($2) AND role_id IN ({HELD})"),
+                    &[&user_id, &roles],
+                )
+                .await?
+                .get(0);
+            if usize::try_from(known).ok() != Some(roles.len()) {
+                Some(Refusal::UnknownRole)
+            } else if usize::try_from(held).ok() != Some(roles.len()) {
+                Some(Refusal::RoleNotHeld)
+            } else {
+                None
+            }
+        };
+        if let Some(refusal) = refusal {
             tx.rollback().await?;
-            return Ok(Err(Refusal::UnknownRole));
+            return Ok(Err(refusal));
         }
     }
-    let old: Option<String> = tx
+    let old = tx
         .query_one(
-            "SELECT min(role_id) FROM console_dashboard_roles WHERE dashboard_id = $1::text::uuid",
+            "SELECT d.visibility, COALESCE(array_agg(dr.role_id ORDER BY dr.role_id)
+                 FILTER (WHERE dr.role_id IS NOT NULL), '{}')
+             FROM console_dashboards d
+             LEFT JOIN console_dashboard_roles dr USING (dashboard_id)
+             WHERE d.dashboard_id = $1::text::uuid GROUP BY d.dashboard_id",
             &[&dashboard_id],
         )
-        .await?
-        .get(0);
-    // One role or none, as the API takes today; the table can hold several
-    // (after migration 52), and responses show the first by id.
+        .await?;
+    let (old_visibility, old_roles): (String, Vec<String>) = (old.get(0), old.get(1));
     tx.execute(
         "DELETE FROM console_dashboard_roles WHERE dashboard_id = $1::text::uuid",
         &[&dashboard_id],
     )
     .await?;
-    if let Some(role_id) = role_id {
+    for role_id in &roles {
         tx.execute(
             "INSERT INTO console_dashboard_roles (dashboard_id, role_id) VALUES ($1::text::uuid, $2)",
-            &[&dashboard_id, &role_id],
+            &[&dashboard_id, role_id],
         )
         .await?;
     }
     tx.execute(
-        "UPDATE console_dashboards SET version = version + 1, updated_at = $2
+        "UPDATE console_dashboards SET visibility = $2, version = version + 1, updated_at = $3
          WHERE dashboard_id = $1::text::uuid",
-        &[&dashboard_id, &now],
+        &[&dashboard_id, &visibility.as_str(), &now],
     )
     .await?;
     audit(
@@ -374,12 +472,33 @@ pub async fn set_sharing(
         user_id,
         "dashboard.share",
         dashboard_id,
-        serde_json::json!({ "from": old, "to": role_id }),
+        serde_json::json!({
+            "from": { "visibility": old_visibility, "roles": old_roles },
+            "to": { "visibility": visibility.as_str(), "roles": roles },
+        }),
     )
     .await?;
-    let shared = reread(&tx, dashboard_id).await?;
+    let shared = reread(&tx, user_id, dashboard_id).await?;
     tx.commit().await?;
     Ok(Ok(shared))
+}
+
+/// Dashboards left shared with roles but with none (their last role was
+/// deleted) become private. Runs in the transaction that deleted the role;
+/// the owner's change is audited with the role's deletion.
+pub async fn privatise_orphans(
+    tx: &deadpool_postgres::Transaction<'_>,
+    now: DateTime<Utc>,
+) -> Result<u64, StoreError> {
+    Ok(tx
+        .execute(
+            "UPDATE console_dashboards d
+             SET visibility = 'private', version = version + 1, updated_at = $1
+             WHERE d.visibility = 'roles' AND NOT EXISTS (
+                 SELECT 1 FROM console_dashboard_roles dr WHERE dr.dashboard_id = d.dashboard_id)",
+            &[&now],
+        )
+        .await?)
 }
 
 /// The user's home dashboard if it is set and still visible to them.

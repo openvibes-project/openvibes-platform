@@ -156,7 +156,7 @@ test("odd stored values show as selected extras and survive a save", async ({ pa
   await page.evaluate((w) => {
     const now = new Date().toISOString();
     localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
-      { dashboard_id: "d-odd", owner: "u-admin", name: "Odd", shared_role_id: null, layout: { schema: 1, widgets: w }, version: 1, created_at: now, updated_at: now },
+      { dashboard_id: "d-odd", owner: "u-admin", name: "Odd", visibility: "private", role_ids: [], layout: { schema: 1, widgets: w }, version: 1, created_at: now, updated_at: now },
     ], homes: [["u-admin", "d-odd"]] }));
   }, widgets);
   await page.goto("/");

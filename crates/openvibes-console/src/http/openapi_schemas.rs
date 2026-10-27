@@ -316,6 +316,7 @@ use crate::{
     crate::cases::AddCaseNoteRequest,
     crate::cases::SetCaseItemOutcomeRequest,
     crate::dashboards::DashboardView,
+    crate::dashboards::DashboardRole,
     crate::dashboards::DashboardPage,
     crate::dashboards::SaveDashboardRequest,
     crate::dashboards::ShareDashboardRequest,
