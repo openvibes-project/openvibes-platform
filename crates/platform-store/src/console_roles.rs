@@ -358,7 +358,7 @@ pub async fn delete_role(
     }
     tx.execute("DELETE FROM console_roles WHERE role_id = $1", &[&role_id])
         .await?;
-    crate::dashboards::privatise_orphans(&tx, now).await?;
+    crate::dashboards::privatise_orphans(&tx, actor_id, role_id, now).await?;
     audit(&tx, "rbac.role.deleted", actor_id, now, &role).await?;
     tx.commit().await?;
     Ok(RoleWrite::Saved(role))

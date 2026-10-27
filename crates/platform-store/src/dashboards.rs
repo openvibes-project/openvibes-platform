@@ -407,7 +407,25 @@ pub async fn set_sharing(
     };
     roles.sort_unstable();
     roles.dedup();
+    let old = tx
+        .query_one(
+            "SELECT d.visibility, COALESCE(array_agg(dr.role_id ORDER BY dr.role_id)
+                 FILTER (WHERE dr.role_id IS NOT NULL), '{}')
+             FROM console_dashboards d
+             LEFT JOIN console_dashboard_roles dr USING (dashboard_id)
+             WHERE d.dashboard_id = $1::text::uuid GROUP BY d.dashboard_id",
+            &[&dashboard_id],
+        )
+        .await?;
+    let (old_visibility, old_roles): (String, Vec<String>) = (old.get(0), old.get(1));
     if visibility == Visibility::Roles {
+        // A role the owner has since left may stay on the dashboard (and be
+        // unticked); only roles being added must be held.
+        let added: Vec<&str> = roles
+            .iter()
+            .copied()
+            .filter(|role| !old_roles.iter().any(|old| old == role))
+            .collect();
         let refusal = if roles.is_empty() {
             Some(Refusal::NoRoles)
         } else {
@@ -421,13 +439,13 @@ pub async fn set_sharing(
             let held: i64 = tx
                 .query_one(
                     &format!("SELECT count(*) FROM console_roles WHERE role_id = ANY($2) AND role_id IN ({HELD})"),
-                    &[&user_id, &roles],
+                    &[&user_id, &added],
                 )
                 .await?
                 .get(0);
             if usize::try_from(known).ok() != Some(roles.len()) {
                 Some(Refusal::UnknownRole)
-            } else if usize::try_from(held).ok() != Some(roles.len()) {
+            } else if usize::try_from(held).ok() != Some(added.len()) {
                 Some(Refusal::RoleNotHeld)
             } else {
                 None
@@ -438,17 +456,6 @@ pub async fn set_sharing(
             return Ok(Err(refusal));
         }
     }
-    let old = tx
-        .query_one(
-            "SELECT d.visibility, COALESCE(array_agg(dr.role_id ORDER BY dr.role_id)
-                 FILTER (WHERE dr.role_id IS NOT NULL), '{}')
-             FROM console_dashboards d
-             LEFT JOIN console_dashboard_roles dr USING (dashboard_id)
-             WHERE d.dashboard_id = $1::text::uuid GROUP BY d.dashboard_id",
-            &[&dashboard_id],
-        )
-        .await?;
-    let (old_visibility, old_roles): (String, Vec<String>) = (old.get(0), old.get(1));
     tx.execute(
         "DELETE FROM console_dashboard_roles WHERE dashboard_id = $1::text::uuid",
         &[&dashboard_id],
@@ -485,20 +492,41 @@ pub async fn set_sharing(
 
 /// Dashboards left shared with roles but with none (their last role was
 /// deleted) become private. Runs in the transaction that deleted the role;
-/// the owner's change is audited with the role's deletion.
+/// each gets a `dashboard.share` audit row naming the person who deleted it.
 pub async fn privatise_orphans(
     tx: &deadpool_postgres::Transaction<'_>,
+    actor_id: &str,
+    deleted_role_id: &str,
     now: DateTime<Utc>,
-) -> Result<u64, StoreError> {
-    Ok(tx
-        .execute(
+) -> Result<usize, StoreError> {
+    let ids: Vec<String> = tx
+        .query(
             "UPDATE console_dashboards d
              SET visibility = 'private', version = version + 1, updated_at = $1
              WHERE d.visibility = 'roles' AND NOT EXISTS (
-                 SELECT 1 FROM console_dashboard_roles dr WHERE dr.dashboard_id = d.dashboard_id)",
+                 SELECT 1 FROM console_dashboard_roles dr WHERE dr.dashboard_id = d.dashboard_id)
+             RETURNING d.dashboard_id::text",
             &[&now],
         )
-        .await?)
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    let detail = serde_json::json!({
+        "from": { "visibility": "roles", "roles": [deleted_role_id] },
+        "to": { "visibility": "private", "roles": [] },
+        "reason": "role deleted",
+    });
+    for id in &ids {
+        tx.execute(
+            "INSERT INTO audit_log (at, actor, action, target, result, detail, actor_kind, actor_id,
+                 actor_display, target_kind, target_id)
+             VALUES ($4, $1, 'dashboard.share', $2, 'success', $3, 'user', $1, $1, 'dashboard', $2)",
+            &[&actor_id, id, &detail, &now],
+        )
+        .await?;
+    }
+    Ok(ids.len())
 }
 
 /// The user's home dashboard if it is set and still visible to them.

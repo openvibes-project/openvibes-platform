@@ -756,6 +756,19 @@ async fn deleting_the_last_role_makes_the_dashboard_private() {
         (Visibility::Private, 0)
     );
     assert!(after_two.version > after_one.version);
+    // The owner finds why it changed: a share row naming who deleted the role.
+    let reasons: Vec<String> = client
+        .query(
+            "SELECT detail->>'reason' FROM audit_log
+             WHERE action = 'dashboard.share' AND target_id = $1 AND detail ? 'reason'",
+            &[&made.dashboard_id],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.get(0))
+        .collect();
+    assert_eq!(reasons, ["role deleted"]);
     db.drop().await;
 }
 
@@ -792,6 +805,72 @@ async fn upgrade_makes_role_shares_roles_and_the_rest_private() {
             ("Mine".to_owned(), "private".to_owned()),
             ("Shared".to_owned(), "roles".to_owned()),
         ]
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_role_the_owner_left_can_stay_but_not_be_added() {
+    let (db, mut client) = setup().await;
+    let mut ids = Vec::new();
+    for name in ["Ops", "Night", "Extra"] {
+        let role = match create_role(
+            &mut client,
+            &RoleInput {
+                name,
+                description: "",
+                permissions: &["hosts.read".to_owned()],
+                reach: &Reach::None,
+            },
+            "test",
+            Utc::now(),
+        )
+        .await
+        .unwrap()
+        {
+            RoleWrite::Saved(role) => role.role_id,
+            _ => panic!("role not saved"),
+        };
+        give_role(
+            &mut client,
+            Principal::User(ALICE),
+            &role,
+            "test",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+        ids.push(role);
+    }
+    let (ops, night, extra) = (ids[0].as_str(), ids[1].as_str(), ids[2].as_str());
+    let made = dashboards::create(&mut client, ALICE, "Team", &layout(), Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+    let id = made.dashboard_id;
+    share(&mut client, &id, Visibility::Roles, &[ops, night])
+        .await
+        .unwrap();
+    remove_role(&mut client, Principal::User(ALICE), ops, "test", Utc::now())
+        .await
+        .unwrap();
+    // Adding a held role while the left one stays works; so does dropping
+    // another one with the left role staying.
+    let added = share(&mut client, &id, Visibility::Roles, &[ops, night, extra])
+        .await
+        .unwrap();
+    assert_eq!(added.roles.len(), 3);
+    let dropped = share(&mut client, &id, Visibility::Roles, &[ops, extra])
+        .await
+        .unwrap();
+    assert_eq!(dropped.roles.len(), 2);
+    // The left role can be removed, and then it cannot come back.
+    share(&mut client, &id, Visibility::Roles, &[extra])
+        .await
+        .unwrap();
+    assert_eq!(
+        share(&mut client, &id, Visibility::Roles, &[ops, extra]).await,
+        Err(Refusal::RoleNotHeld)
     );
     db.drop().await;
 }

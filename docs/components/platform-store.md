@@ -1040,11 +1040,12 @@ permission-checked console API, so sharing never exposes data.
   per owner), `update` (owner only, `expected_version` must match),
   `delete` (owner only; homes pointing at it go by cascade),
   `set_sharing(visibility, role_ids)` (owner only; replaces the dashboard's
-  roles; `roles` needs at least one role and every one must exist and be
-  held by the owner, else `NoRoles`, `UnknownRole` or `RoleNotHeld`; the
+  roles; `roles` needs at least one role and every one must exist and every
+  one being added must be held by the owner (a role already on the dashboard
+  may stay or be removed after the owner left it), else `NoRoles`, `UnknownRole` or `RoleNotHeld`; the
   caller checks `dashboards.share` for roles and `dashboards.publish` for
   everyone), `privatise_orphans` (run by `delete_role`: a dashboard left
-  shared with roles but with none becomes private), `home` (only if still visible) and
+  shared with roles but with none becomes private, with a `dashboard.share` audit row), `home` (only if still visible) and
   `set_home(id | None)` (must be visible).
 - Ids are checked to be UUIDs in Rust (malformed ids are not found without a
   query) and compared as `uuid`, so lookups use the primary key and any case
