@@ -133,7 +133,10 @@ async fn setup() -> Fx {
              INSERT INTO version_vulnerabilities VALUES (2, 'FEDORA-2', 'bash', now());
              INSERT INTO host_listeners (agent_id, protocol, address, port, exposed) VALUES
                 ('{WEB}', 'tcp', '0.0.0.0', 22, true),
-                ('{DB}', 'tcp', '0.0.0.0', 5432, true);"
+                ('{DB}', 'tcp', '0.0.0.0', 5432, true);
+             INSERT INTO host_services (agent_id, unit, programs, processes, run_as) VALUES
+                ('{WEB}', 'sshd.service', '{{sshd}}', 1, 'root'),
+                ('{DB}', 'postgresql.service', '{{postgres}}', 4, 'postgres');"
         ))
         .await
         .unwrap();

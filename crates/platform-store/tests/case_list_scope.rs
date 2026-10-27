@@ -153,6 +153,35 @@ async fn a_port_counts_beside_a_visible_alarm() {
     db.drop().await;
 }
 
+/// A service is fleet-wide like a port: it never makes a case visible...
+#[tokio::test]
+async fn a_service_only_case_is_hidden_from_a_scoped_viewer() {
+    let (db, c) = common::migrated().await;
+    let web = fixture(&c, &[("service", "sshd.service", None, None)]).await;
+    assert_eq!(list(&c, &web, CAT).await.total, 0);
+    db.drop().await;
+}
+
+/// ...but it counts when a visible alarm shows the case.
+#[tokio::test]
+async fn a_service_counts_beside_a_visible_alarm() {
+    let (db, c) = common::migrated().await;
+    let web = fixture(
+        &c,
+        &[
+            ("service", "sshd.service", None, None),
+            ("alarm", "7", Some(A1), None),
+        ],
+    )
+    .await;
+    let page = list(&c, &web, CAT).await;
+    assert_eq!(
+        (page.rows[0].kinds.services, page.rows[0].kinds.alarms),
+        (1, 1)
+    );
+    db.drop().await;
+}
+
 #[tokio::test]
 async fn software_and_a_visible_alarm_show_the_software() {
     let (db, c) = common::migrated().await;

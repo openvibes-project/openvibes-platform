@@ -60,6 +60,8 @@ pub enum ItemKind {
     Software,
     /// A port across the fleet; the ref is `tcp/22` or `udp/53`.
     Port,
+    /// A service across the fleet; the ref is the unit, e.g. `sshd.service`.
+    Service,
 }
 
 impl ItemKind {
@@ -72,6 +74,7 @@ impl ItemKind {
             Self::Host => "host",
             Self::Software => "software",
             Self::Port => "port",
+            Self::Service => "service",
         }
     }
 
@@ -84,6 +87,7 @@ impl ItemKind {
             "host" => Self::Host,
             "software" => Self::Software,
             "port" => Self::Port,
+            "service" => Self::Service,
             _ => return None,
         })
     }

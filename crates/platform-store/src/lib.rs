@@ -120,6 +120,15 @@ pub mod port_names;
 pub mod port_related;
 /// A port's page: the summary and the Hosts table.
 pub mod port_summary;
+/// The Services list: one row per unit, filters, counts and the summary.
+pub mod service_list;
+mod service_list_sql;
+/// A fixed map of well-known services: names, classes, related packages.
+pub mod service_names;
+/// A service's Related card: failing checks, advisories and alarms.
+pub mod service_related;
+/// A service's page: the summary and the Hosts table.
+pub mod service_summary;
 /// Rule-set assignment: defaults, group overrides, per-host state.
 pub mod rule_assignment;
 /// Draft rules for the site's own rule sets.
