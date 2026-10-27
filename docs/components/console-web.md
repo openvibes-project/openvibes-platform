@@ -860,6 +860,12 @@ for the pages not yet moved; its saved views stay in the browser.
   from then on, and a port first seen before the upgrade shows "Before
   {date}". Ports can be added to cases. See
   [console-ports.md](console-ports.md).
+- **Roles step 5f (Services):** the service panel became the service's page
+  `/services/{unit}` (for example `/services/sshd.service`), and the old unit
+  panel is gone. Old links (`?open=unit:sshd.service`) redirect to the new
+  address. The list has new filters, saved views and columns. This week and
+  Recent changes start empty after the upgrade, as for ports. Services can
+  be added to cases. See [console-services.md](console-services.md).
 
 ## Configuration
 

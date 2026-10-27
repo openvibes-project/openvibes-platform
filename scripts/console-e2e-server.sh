@@ -224,6 +224,19 @@ FROM e2e_browsers, (VALUES (1, '0.0.0.0', 22, 'sshd.service', 'sshd'), (2, '127.
 INSERT INTO change_log (at, agent_id, kind, key, change)
 SELECT now() - interval '1 day', 'agent.00000000-0000-4000-8000-0000000004' || n || '1', 'listener', 'tcp/' || (8000 + n), 'appeared'
 FROM e2e_browsers;
+-- The Services journey (services.spec.ts) reuses these hosts: sshd.service on
+-- all three (root; exposed on port-P-1 and portout-P-1), postgresql.service on
+-- port-P-1 only (not root, exposed: a database reachable from the network),
+-- build-n.service on port-P-1 only (root, not a usual service, started a day
+-- ago) and far.service on portout-P-1 only, which the lead must never see.
+INSERT INTO host_services (agent_id, unit, programs, processes, run_as)
+SELECT 'agent.00000000-0000-4000-8000-0000000004' || n || x.h, replace(x.unit, 'N', n::text), ARRAY[x.program], x.processes, x.run_as
+FROM e2e_browsers, (VALUES (1, 'sshd.service', 'sshd', 1, 'root'), (2, 'sshd.service', 'sshd', 1, 'root'), (3, 'sshd.service', 'sshd', 1, 'root'),
+                           (1, 'postgresql.service', 'postgres', 4, 'postgres'), (1, 'buildN.service', 'builder', 2, 'root'),
+                           (3, 'far.service', 'far', 1, 'root')) AS x (h, unit, program, processes, run_as);
+INSERT INTO change_log (at, agent_id, kind, key, change)
+SELECT now() - interval '1 day', 'agent.00000000-0000-4000-8000-0000000004' || n || '1', 'service', 'build' || n || '.service', 'appeared'
+FROM e2e_browsers;
 SQL
 
 exec "${bin}/openvibes-console" --config "${work}/console.toml"

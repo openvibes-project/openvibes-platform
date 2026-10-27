@@ -61,7 +61,7 @@ export function NewCasePage() {
       <div className="view-pad" style={{ paddingTop: 20 }}><a className="subtle" {...viewLink("/cases")}>Cases</a></div>
       <div className="view-pad stack" style={{ maxWidth: 640, paddingBottom: 40 }}>
         <h1>New case</h1>
-        <p className="subtle">Add what belongs to it afterwards, or use Add to case on an alarm, compliance finding, vulnerability, host, software or port.</p>
+        <p className="subtle">Add what belongs to it afterwards, or use Add to case on an alarm, compliance finding, vulnerability, host, software, port or service.</p>
         <form className="stack" onSubmit={submit}>
           <label className="field">Title<input className="input" required maxLength={120} autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Suspicious shell on web-02" /></label>
           <SelectField label="Severity">

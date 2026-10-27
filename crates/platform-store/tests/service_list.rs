@@ -81,14 +81,21 @@ async fn one_row_per_unit_stays_inside_the_scope() {
     assert_eq!(ssh.run_as, ["root"]);
     assert_eq!(ssh.programs, ["sshd"]);
     assert_eq!(
-        ssh.ports.iter().map(|p| (p.port, p.exposed, p.hosts)).collect::<Vec<_>>(),
+        ssh.ports
+            .iter()
+            .map(|p| (p.port, p.exposed, p.hosts))
+            .collect::<Vec<_>>(),
         [(22, true, 3)]
     );
     let nginx = row(&page, "nginx.service");
     assert_eq!((nginx.hosts, nginx.root_hosts), (2, 0));
     assert_eq!((nginx.exposed_hosts, nginx.listening_hosts), (2, 2));
     let pg = row(&page, "postgresql.service");
-    assert_eq!((pg.exposed_hosts, pg.listening_hosts), (1, 2), "A is loopback only");
+    assert_eq!(
+        (pg.exposed_hosts, pg.listening_hosts),
+        (1, 2),
+        "A is loopback only"
+    );
     assert_eq!(pg.run_as, ["postgres"]);
     assert_eq!(page.summary.reporting_hosts, 3);
     let global = run(&c, &query(), &AgentScope::Global).await;
@@ -102,7 +109,10 @@ async fn packages_match_by_name_and_the_map() {
     let (db, c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
     let page = run(&c, &query(), &AgentScope::AssetGroups(vec![mine])).await;
-    assert_eq!(row(&page, "nginx.service").package.as_deref(), Some("nginx"));
+    assert_eq!(
+        row(&page, "nginx.service").package.as_deref(),
+        Some("nginx")
+    );
     assert_eq!(
         row(&page, "named.service").package.as_deref(),
         Some("bind"),
@@ -126,14 +136,24 @@ async fn needs_a_look_and_this_week() {
     assert_eq!(row(&page, "postgresql.service").look, ["database_exposed"]);
     assert!(row(&page, "sshd.service").look.is_empty());
     assert_eq!(
-        (row(&page, "mystery.service").week_added, row(&page, "mystery.service").week_removed),
+        (
+            row(&page, "mystery.service").week_added,
+            row(&page, "mystery.service").week_removed
+        ),
         (1, 0)
     );
     assert_eq!(
-        (row(&page, "cups.service").week_added, row(&page, "cups.service").week_removed),
+        (
+            row(&page, "cups.service").week_added,
+            row(&page, "cups.service").week_removed
+        ),
         (0, 1)
     );
-    assert_eq!(row(&page, "nginx.service").week_added, 0, "40 days ago is not this week");
+    assert_eq!(
+        row(&page, "nginx.service").week_added,
+        0,
+        "40 days ago is not this week"
+    );
     let s = &page.summary;
     assert_eq!((s.root, s.exposed, s.not_packaged), (4, 4, 2));
     assert_eq!((s.new_this_week, s.need_a_look), (1, 3));
@@ -146,49 +166,109 @@ async fn filters_and_their_counts() {
     let (mine, web) = fixture(&c).await;
     let scope = AgentScope::AssetGroups(vec![mine]);
 
-    let q = ServiceQuery { runs_as: Some(RunsAs::Other), ..query() };
-    assert_eq!(units(&run(&c, &q, &scope).await), ["nginx.service", "postgresql.service"]);
-
-    let q = ServiceQuery { listens: Some(Listens::Local), ..query() };
-    assert_eq!(units(&run(&c, &q, &scope).await), ["cups.service"]);
-    let q = ServiceQuery { listens: Some(Listens::None), ..query() };
-    assert_eq!(units(&run(&c, &q, &scope).await), ["mystery.service"]);
-    let q = ServiceQuery { listens: Some(Listens::Exposed), ..query() };
+    let q = ServiceQuery {
+        runs_as: Some(RunsAs::Other),
+        ..query()
+    };
     assert_eq!(
         units(&run(&c, &q, &scope).await),
-        ["named.service", "nginx.service", "postgresql.service", "sshd.service"]
+        ["nginx.service", "postgresql.service"]
     );
 
-    let q = ServiceQuery { packaged: Some(Packaged::No), ..query() };
-    assert_eq!(units(&run(&c, &q, &scope).await), ["cups.service", "mystery.service"]);
-    let q = ServiceQuery { packaged: Some(Packaged::Yes), ..query() };
+    let q = ServiceQuery {
+        listens: Some(Listens::Local),
+        ..query()
+    };
+    assert_eq!(units(&run(&c, &q, &scope).await), ["cups.service"]);
+    let q = ServiceQuery {
+        listens: Some(Listens::None),
+        ..query()
+    };
+    assert_eq!(units(&run(&c, &q, &scope).await), ["mystery.service"]);
+    let q = ServiceQuery {
+        listens: Some(Listens::Exposed),
+        ..query()
+    };
+    assert_eq!(
+        units(&run(&c, &q, &scope).await),
+        [
+            "named.service",
+            "nginx.service",
+            "postgresql.service",
+            "sshd.service"
+        ]
+    );
+
+    let q = ServiceQuery {
+        packaged: Some(Packaged::No),
+        ..query()
+    };
+    assert_eq!(
+        units(&run(&c, &q, &scope).await),
+        ["cups.service", "mystery.service"]
+    );
+    let q = ServiceQuery {
+        packaged: Some(Packaged::Yes),
+        ..query()
+    };
     assert_eq!(run(&c, &q, &scope).await.total, 4);
 
-    let q = ServiceQuery { changes: Some(Changes::New), ..query() };
+    let q = ServiceQuery {
+        changes: Some(Changes::New),
+        ..query()
+    };
     assert_eq!(units(&run(&c, &q, &scope).await), ["mystery.service"]);
-    let q = ServiceQuery { changes: Some(Changes::Look), ..query() };
+    let q = ServiceQuery {
+        changes: Some(Changes::Look),
+        ..query()
+    };
     assert_eq!(run(&c, &q, &scope).await.total, 3);
 
-    let q = ServiceQuery { host: Some(A), ..query() };
+    let q = ServiceQuery {
+        host: Some(A),
+        ..query()
+    };
     assert_eq!(
         units(&run(&c, &q, &scope).await),
         ["nginx.service", "postgresql.service", "sshd.service"]
     );
-    let q = ServiceQuery { group: Some(&web), ..query() };
+    let q = ServiceQuery {
+        group: Some(&web),
+        ..query()
+    };
     let page = run(&c, &q, &scope).await;
     assert_eq!(
         units(&page),
-        ["cups.service", "mystery.service", "named.service", "nginx.service", "postgresql.service", "sshd.service"],
+        [
+            "cups.service",
+            "mystery.service",
+            "named.service",
+            "nginx.service",
+            "postgresql.service",
+            "sshd.service"
+        ],
         "web-01 and web-02 between them run all but nothing else"
     );
 
     // Counts apply the other filters but not their own.
-    let q = ServiceQuery { runs_as: Some(RunsAs::Other), packaged: Some(Packaged::No), ..query() };
+    let q = ServiceQuery {
+        runs_as: Some(RunsAs::Other),
+        packaged: Some(Packaged::No),
+        ..query()
+    };
     let page = run(&c, &q, &scope).await;
     assert_eq!(page.total, 0);
-    assert_eq!(count(&page.counts.runs_as, RunsAs::Root), 2, "cups and mystery");
+    assert_eq!(
+        count(&page.counts.runs_as, RunsAs::Root),
+        2,
+        "cups and mystery"
+    );
     assert_eq!(count(&page.counts.runs_as, RunsAs::Other), 0);
-    assert_eq!(count(&page.counts.packaged, Packaged::Yes), 2, "nginx and postgresql run as other users");
+    assert_eq!(
+        count(&page.counts.packaged, Packaged::Yes),
+        2,
+        "nginx and postgresql run as other users"
+    );
     assert_eq!(count(&page.counts.listens, Listens::None), 0);
     db.drop().await;
 }
@@ -207,7 +287,10 @@ async fn search_covers_unit_name_program_package_and_port() {
         ("POSTGRES", vec!["postgresql.service"]),
         ("zzz", vec![]),
     ] {
-        let q = ServiceQuery { q: Some(text), ..query() };
+        let q = ServiceQuery {
+            q: Some(text),
+            ..query()
+        };
         assert_eq!(units(&run(&c, &q, &scope).await), want, "{text}");
     }
     db.drop().await;
@@ -218,15 +301,30 @@ async fn sorts_and_pages_are_stable() {
     let (db, c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
     let scope = AgentScope::AssetGroups(vec![mine]);
-    let q = ServiceQuery { sort: ServiceSort::Hosts, descending: true, ..query() };
+    let q = ServiceQuery {
+        sort: ServiceSort::Hosts,
+        descending: true,
+        ..query()
+    };
     assert_eq!(units(&run(&c, &q, &scope).await)[0], "sshd.service");
-    let q = ServiceQuery { sort: ServiceSort::Week, descending: true, ..query() };
+    let q = ServiceQuery {
+        sort: ServiceSort::Week,
+        descending: true,
+        ..query()
+    };
     assert_eq!(units(&run(&c, &q, &scope).await)[0], "mystery.service");
-    let q = ServiceQuery { limit: 2, offset: 4, ..query() };
+    let q = ServiceQuery {
+        limit: 2,
+        offset: 4,
+        ..query()
+    };
     let page = run(&c, &q, &scope).await;
     assert_eq!(units(&page), ["postgresql.service", "sshd.service"]);
     assert_eq!(page.total, 6);
-    let q = ServiceQuery { offset: 50, ..query() };
+    let q = ServiceQuery {
+        offset: 50,
+        ..query()
+    };
     let page = run(&c, &q, &scope).await;
     assert!(page.rows.is_empty());
     assert_eq!(page.total, 6, "an empty page still carries the total");
@@ -251,7 +349,11 @@ async fn the_sql_base_equals_the_rust_base() {
         "x.service.service",
     ] {
         let from_sql: String = c.query_one(&sql, &[&unit]).await.unwrap().get(0);
-        assert_eq!(from_sql, platform_store::service_names::base(unit), "{unit}");
+        assert_eq!(
+            from_sql,
+            platform_store::service_names::base(unit),
+            "{unit}"
+        );
     }
     db.drop().await;
 }

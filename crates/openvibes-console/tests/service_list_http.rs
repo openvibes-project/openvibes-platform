@@ -147,11 +147,18 @@ async fn the_list_has_rows_counts_and_a_summary() {
     let ssh = row(&body, "sshd.service");
     assert_eq!(ssh["name"], "OpenSSH server");
     assert_eq!(
-        (ssh["hosts"].clone(), ssh["root_hosts"].clone(), ssh["package_hosts"].clone()),
+        (
+            ssh["hosts"].clone(),
+            ssh["root_hosts"].clone(),
+            ssh["package_hosts"].clone()
+        ),
         (2.into(), 2.into(), 1.into())
     );
     assert_eq!(ssh["package"], "openssh-server");
-    assert_eq!(ssh["ports"], json!([{"protocol": "tcp", "port": 22, "exposed": true, "hosts": 2}]));
+    assert_eq!(
+        ssh["ports"],
+        json!([{"protocol": "tcp", "port": 22, "exposed": true, "hosts": 2}])
+    );
     assert_eq!(ssh["look"], json!(["root_unpackaged"]), "L1 has no package");
     assert_eq!(ssh["groups"], json!([]), "the manual group is left out");
     let pg = row(&body, "postgresql.service");
@@ -185,7 +192,10 @@ async fn the_list_has_rows_counts_and_a_summary() {
             None,
         )
         .await;
-    assert_eq!(units(&body), ["sshd.service", "postgresql.service", "mystery.service"]);
+    assert_eq!(
+        units(&body),
+        ["sshd.service", "postgresql.service", "mystery.service"]
+    );
     let (_, body) = fx
         .call(&fx.admin, "GET", &format!("{URL}?listens=none"), None)
         .await;
@@ -217,8 +227,16 @@ async fn a_team_lead_sees_only_their_groups() {
         "mystery is only on L1"
     );
     assert_eq!(row(&body, "sshd.service")["hosts"], 1);
-    assert_eq!(row(&body, "sshd.service")["look"], json!([]), "W1 has the package");
-    assert_eq!(row(&body, "postgresql.service")["exposed_hosts"], 0, "only W1's loopback");
+    assert_eq!(
+        row(&body, "sshd.service")["look"],
+        json!([]),
+        "W1 has the package"
+    );
+    assert_eq!(
+        row(&body, "postgresql.service")["exposed_hosts"],
+        0,
+        "only W1's loopback"
+    );
     assert_eq!(body["summary"]["reporting_hosts"], 1);
     assert!(
         body["counts"]["group"]

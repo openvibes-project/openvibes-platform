@@ -1,8 +1,6 @@
 //! The Services list answer (`GET /v1/service-list`).
 
-use platform_store::service_list::{
-    OwnedPort, ServiceGroup, ServiceListPage, ServiceListRow,
-};
+use platform_store::service_list::{OwnedPort, ServiceGroup, ServiceListPage, ServiceListRow};
 use serde::Serialize;
 use utoipa::ToSchema;
 

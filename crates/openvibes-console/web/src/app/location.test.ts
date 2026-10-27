@@ -11,9 +11,9 @@ const opensPage = (view: string, search: string, want: string) => {
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
-    const loc = parseLocation("/console/compliance", "?open=package%3Ab%2FR-1&open=unit%3Asshd.service&q=web", "/console/");
+    const loc = parseLocation("/console/compliance", "?open=package%3Ab%2FR-1&open=finding-group%3Abaseline%2FOV-1&q=web", "/console/");
     expect(loc.view).toBe("/compliance");
-    expect(loc.panels).toEqual([{ kind: "package", id: "b/R-1" }, { kind: "unit", id: "sshd.service" }]);
+    expect(loc.panels).toEqual([{ kind: "package", id: "b/R-1" }, { kind: "finding-group", id: "baseline/OV-1" }]);
     expect(loc.params.get("q")).toBe("web");
   });
 
@@ -23,8 +23,8 @@ describe("location", () => {
   });
 
   it("reads the old /findings page as /compliance, keeping its filters", () => {
-    const loc = parseLocation("/console/findings", "?severity=high&open=unit%3Asshd.service", "/console/");
-    expect(formatLocation(loc, "/console/")).toBe("/console/compliance?severity=high&open=unit%3Asshd.service");
+    const loc = parseLocation("/console/findings", "?severity=high&open=package%3Arpm%2Fopenssh", "/console/");
+    expect(formatLocation(loc, "/console/")).toBe("/console/compliance?severity=high&open=package%3Arpm%2Fopenssh");
   });
 
   it.each([
@@ -85,7 +85,16 @@ describe("location", () => {
     opensPage(view, search, want);
   });
 
+  it.each([
+    ["/services", "?open=unit%3Asshd.service", "/services/sshd.service"],
+    ["/hosts", "?open=unit%3Aopenvpn-server%40server.service", "/services/openvpn-server%40server.service"],
+    ["/", "?open=unit%3Asshd.service&open=agent%3Aagent-00005", "/hosts/agent-00005"],
+  ])("old_unit_links_open_the_page: an old unit panel on %s%s is the service's page, %s", (view, search, want) => {
+    opensPage(view, search, want);
+  });
+
   it("names the page an object opens instead of a panel", () => {
+    expect(pagePath({ kind: "unit", id: "nginx.service" })).toBe("/services/nginx.service");
     expect(pagePath({ kind: "finding", id: "hardening-linux-l1/harden.ssh.permit_root_login" })).toBe("/compliance/hardening-linux-l1/harden.ssh.permit_root_login");
     expect(alarmPath("7 /x")).toBe("/alarms/7%20%2Fx");
     expect(pagePath({ kind: "alarm", id: "7" })).toBe("/alarms/7");

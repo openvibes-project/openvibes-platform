@@ -7,14 +7,14 @@ import type { PanelRef } from "../../app/location";
 import { date, plural } from "../../ui/format";
 import type { IconName } from "../../ui/Icon";
 
-export const CASE_KINDS = ["alarm", "compliance_finding", "vulnerability", "host", "software", "port"] as const;
+export const CASE_KINDS = ["alarm", "compliance_finding", "vulnerability", "host", "software", "port", "service"] as const;
 export type CaseKind = (typeof CASE_KINDS)[number];
 export const isCaseKind = (value: string): value is CaseKind => (CASE_KINDS as readonly string[]).includes(value);
 /** Kinds that can be in one open case only, and that need an outcome to close. */
 export const EXCLUSIVE_KINDS: ReadonlySet<string> = new Set(["alarm", "compliance_finding", "vulnerability"]);
 
-export const kindLabel: Record<CaseKind | "finding", string> = { alarm: "Alarm", compliance_finding: "Compliance finding", vulnerability: "Vulnerability", host: "Host", software: "Software", port: "Port", finding: "Compliance finding" };
-export const kindIcon: Record<CaseKind | "finding", IconName> = { alarm: "alarm", compliance_finding: "findings", vulnerability: "vulnerabilities", host: "agents", software: "package", port: "service", finding: "findings" };
+export const kindLabel: Record<CaseKind | "finding", string> = { alarm: "Alarm", compliance_finding: "Compliance finding", vulnerability: "Vulnerability", host: "Host", software: "Software", port: "Port", service: "Service", finding: "Compliance finding" };
+export const kindIcon: Record<CaseKind | "finding", IconName> = { alarm: "alarm", compliance_finding: "findings", vulnerability: "vulnerabilities", host: "agents", software: "package", port: "service", service: "layers", finding: "findings" };
 /** What to paste to add an item by id, per kind. */
 export const refHint: Record<CaseKind, string> = {
   alarm: "Alarm id, e.g. 9001",
@@ -23,6 +23,7 @@ export const refHint: Record<CaseKind, string> = {
   host: "Agent id, e.g. agent-00008",
   software: "manager/name, e.g. rpm/openssh",
   port: "protocol/port, e.g. tcp/22",
+  service: "Unit, e.g. sshd.service",
 };
 const statusLabel: Record<string, string> = { open: "Open", investigating: "Investigating", closed: "Closed" };
 const statusTone: Record<string, string> = { open: "bad", investigating: "warn", closed: "ok" };
@@ -56,6 +57,7 @@ export function itemPanel(kind: string, ref: string): PanelRef | undefined {
     case "host": return { kind: "agent", id: ref };
     case "software": return { kind: "package", id: ref };
     case "port": return { kind: "port", id: ref };
+    case "service": return { kind: "unit", id: ref };
     default: return undefined;
   }
 }

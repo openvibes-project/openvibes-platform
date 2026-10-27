@@ -245,6 +245,10 @@ pub async fn service_list(
     let q = query.q.map(str::trim).filter(|q| !q.is_empty());
     let name_bases = q.map(service_names::bases_named).unwrap_or_default();
     let (map_bases, map_packages) = service_names::package_pairs();
+    // The statement's estimated cost crosses the server's JIT threshold, and
+    // compiling it costs more than running it (1.5 s of a 0.4 s query on a
+    // 2,500-host reach), so this connection runs it without JIT.
+    client.batch_execute("SET jit = off").await?;
     let rows = client
         .query(
             &statement(query.sort, query.descending),
@@ -269,7 +273,9 @@ pub async fn service_list(
                 &map_packages,
             ],
         )
-        .await?;
+        .await;
+    client.batch_execute("RESET jit").await?;
+    let rows = rows?;
     let meta: serde_json::Value = rows.first().and_then(|r| r.get(0)).unwrap_or_default();
     let meta: Meta = serde_json::from_value(meta).map_err(|_| StoreError::Query)?;
     Ok(ServiceListPage {

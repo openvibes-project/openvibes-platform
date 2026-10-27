@@ -196,7 +196,7 @@ export function ItemsCard({ detail, editable }: { detail: CaseDetail; editable: 
     <Card id="items" flush title={<>Items <span className="subtle num">{detail.items.length.toLocaleString()}</span></>}
       aside={editable && !adding && <button type="button" className="button button--small" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add item</button>}>
       {adding && <div className="person-card__body"><AddItem c={detail} onDone={() => setAdding(false)} /></div>}
-      {detail.items.length === 0 ? <p className="person-card__body subtle">No items yet. Hosts, alarms, vulnerabilities, compliance findings, software and ports can all be added.</p> : (
+      {detail.items.length === 0 ? <p className="person-card__body subtle">No items yet. Hosts, alarms, vulnerabilities, compliance findings, software, ports and services can all be added.</p> : (
         <div className="table-wrap" ref={wrap}>
           <table className="table table--compact" aria-label="Items">
             <thead><tr>

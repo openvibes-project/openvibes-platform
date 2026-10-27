@@ -18,7 +18,7 @@ const row = (over: Partial<CaseListRow> = {}): CaseListRow => ({
   opened_by: user("u-sam", "Sam Analyst"), assignee: user("u-sam", "Sam Analyst"),
   latest_note: { text: "One command is the health check; sh -c id is not ours.", at: "2026-10-25T08:00:00Z" },
   hosts: [{ agent_id: "a-1", hostname: "web-01" }], host_count: 1,
-  kinds: { alarms: 2, findings: 0, vulnerabilities: 1, hosts: 0, software: 0, ports: 0 }, with_outcome: 1, takes_outcome: 3, ready: false,
+  kinds: { alarms: 2, findings: 0, vulnerabilities: 1, hosts: 0, software: 0, ports: 0, services: 0 }, with_outcome: 1, takes_outcome: 3, ready: false,
   updated_at: "2026-10-25T08:10:00Z", ...over,
 });
 const list = (over: Partial<CaseList> = {}): CaseList => ({
@@ -26,9 +26,9 @@ const list = (over: Partial<CaseList> = {}): CaseList => ({
     row(),
     row({ case_id: "c-103", number: 103, title: "PostgreSQL started a shell on db-02", status: "open", severity: "critical", assignee: null, latest_note: null,
       hosts: ["db-01", "db-02", "db-03", "db-04", "db-05"].map((h) => ({ agent_id: h, hostname: h })), host_count: 8,
-      kinds: { alarms: 1, findings: 1, vulnerabilities: 0, hosts: 1, software: 0, ports: 0 }, with_outcome: 2, takes_outcome: 2, ready: true }),
+      kinds: { alarms: 1, findings: 1, vulnerabilities: 0, hosts: 1, software: 0, ports: 0, services: 0 }, with_outcome: 2, takes_outcome: 2, ready: true }),
     row({ case_id: "c-90", number: 90, title: "Empty", hosts: [], host_count: 0, latest_note: null,
-      kinds: { alarms: 0, findings: 0, vulnerabilities: 0, hosts: 0, software: 0, ports: 0 }, with_outcome: 0, takes_outcome: 0, ready: true }),
+      kinds: { alarms: 0, findings: 0, vulnerabilities: 0, hosts: 0, software: 0, ports: 0, services: 0 }, with_outcome: 0, takes_outcome: 0, ready: true }),
   ],
   total: 3, generated_at: "2026-10-25T10:00:00Z",
   summary: { open: 1, investigating: 2, unassigned: 1, ready_to_close: 2 },

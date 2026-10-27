@@ -54,11 +54,7 @@ async fn paths_and_queries_are_validated() {
     let Some(fx) = Fx::new().await else { return };
     seed(&fx).await;
     let long = "x".repeat(201);
-    for uri in [
-        summary("%00"),
-        summary(&long),
-        hosts("%0A", ""),
-    ] {
+    for uri in [summary("%00"), summary(&long), hosts("%0A", "")] {
         let (status, body) = fx.call(&fx.admin, "GET", &uri, None).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");
         assert_eq!(body["code"], "invalid_unit", "{uri}");
@@ -71,16 +67,28 @@ async fn paths_and_queries_are_validated() {
         ("limit=101", "limit"),
     ] {
         let (status, body) = fx
-            .call(&fx.admin, "GET", &hosts("nginx.service", &format!("?{query}")), None)
+            .call(
+                &fx.admin,
+                "GET",
+                &hosts("nginx.service", &format!("?{query}")),
+                None,
+            )
             .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{query}");
         assert_eq!(body["field_errors"][0]["field"], field, "{query}");
     }
     let (status, _) = fx
-        .call(&fx.admin, "GET", &hosts("nginx.service", "?surprise=1"), None)
+        .call(
+            &fx.admin,
+            "GET",
+            &hosts("nginx.service", "?surprise=1"),
+            None,
+        )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    let (status, body) = fx.call(&fx.admin, "GET", &summary("nothing.service"), None).await;
+    let (status, body) = fx
+        .call(&fx.admin, "GET", &summary("nothing.service"), None)
+        .await;
     assert_eq!(
         (status, body["code"].clone()),
         (StatusCode::NOT_FOUND, json!("service_not_found"))
@@ -100,11 +108,17 @@ async fn paths_and_queries_are_validated() {
 async fn the_page_has_a_header_tiles_hosts_and_actions() {
     let Some(fx) = Fx::new().await else { return };
     seed(&fx).await;
-    let (status, body) = fx.call(&fx.admin, "GET", &summary("nginx.service"), None).await;
+    let (status, body) = fx
+        .call(&fx.admin, "GET", &summary("nginx.service"), None)
+        .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["header"]["name"], "nginx");
     assert_eq!(
-        (body["header"]["running"].clone(), body["header"]["of"].clone(), body["header"]["root"].clone()),
+        (
+            body["header"]["running"].clone(),
+            body["header"]["of"].clone(),
+            body["header"]["root"].clone()
+        ),
         (2.into(), 2.into(), 1.into())
     );
     // The administrator holds every permission.
@@ -114,7 +128,10 @@ async fn the_page_has_a_header_tiles_hosts_and_actions() {
     assert_eq!(body["tiles"]["versions"], 1);
     assert_eq!(body["details"]["programs"], json!(["nginx"]));
     assert_eq!(body["details"]["processes"], 4);
-    assert_eq!(body["details"]["packages"], json!([{"name": "nginx", "hosts": 1}]));
+    assert_eq!(
+        body["details"]["packages"],
+        json!([{"name": "nginx", "hosts": 1}])
+    );
     assert_eq!(body["details"]["week"], json!({"added": 1, "removed": 0}));
     assert_eq!(
         body["ports"],
@@ -127,7 +144,9 @@ async fn the_page_has_a_header_tiles_hosts_and_actions() {
     assert!(body["related"]["vulnerabilities"].is_object());
     assert!(body["related"]["alarms"].is_object());
 
-    let (status, page) = fx.call(&fx.admin, "GET", &hosts("nginx.service", ""), None).await;
+    let (status, page) = fx
+        .call(&fx.admin, "GET", &hosts("nginx.service", ""), None)
+        .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page["total"], 2);
     assert_eq!(page["segments"], json!({"all": 2, "exposed": 1, "root": 1}));
@@ -137,12 +156,23 @@ async fn the_page_has_a_header_tiles_hosts_and_actions() {
         .iter()
         .find(|h| h["hostname"] == "win-01")
         .unwrap();
-    assert_eq!(win["package"], json!({"name": "nginx", "version": "1.22.1"}));
+    assert_eq!(
+        win["package"],
+        json!({"name": "nginx", "version": "1.22.1"})
+    );
     assert_eq!(win["processes"], 3);
-    assert_eq!(win["ports"], json!([{"protocol": "tcp", "port": 443, "exposed": true}]));
+    assert_eq!(
+        win["ports"],
+        json!([{"protocol": "tcp", "port": 443, "exposed": true}])
+    );
     assert_eq!(win["problems"], json!({"alarms": 0, "vulnerabilities": 0}));
     let (_, root) = fx
-        .call(&fx.admin, "GET", &hosts("nginx.service", "?segment=root&limit=1"), None)
+        .call(
+            &fx.admin,
+            "GET",
+            &hosts("nginx.service", "?segment=root&limit=1"),
+            None,
+        )
         .await;
     assert_eq!(root["total"], 1);
     assert_eq!(root["items"][0]["hostname"], "lin-01");
@@ -158,7 +188,9 @@ async fn a_team_lead_sees_only_their_hosts_and_a_reader_without_the_rest_gets_le
     let (status, body) = fx.call(&lead, "GET", &summary("nginx.service"), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["tiles"]["running"], 1);
-    assert!(body["tiles"].get("alarms").is_none() && body["tiles"].get("vulnerabilities").is_none());
+    assert!(
+        body["tiles"].get("alarms").is_none() && body["tiles"].get("vulnerabilities").is_none()
+    );
     assert_eq!(body["can"]["export"], false, "no hosts.export");
     assert_eq!(body["can"]["add_to_case"], false);
     for section in ["compliance", "vulnerabilities", "alarms"] {
@@ -167,16 +199,22 @@ async fn a_team_lead_sees_only_their_hosts_and_a_reader_without_the_rest_gets_le
             "{section} needs its own permission"
         );
     }
-    let (_, page) = fx.call(&lead, "GET", &hosts("nginx.service", ""), None).await;
+    let (_, page) = fx
+        .call(&lead, "GET", &hosts("nginx.service", ""), None)
+        .await;
     assert_eq!(page["total"], 1);
     assert_eq!(page["items"][0]["problems"], json!({}));
     // mystery.service is only on L1, which the lead does not reach: 404, not 403.
-    let (status, body) = fx.call(&lead, "GET", &summary("mystery.service"), None).await;
+    let (status, body) = fx
+        .call(&lead, "GET", &summary("mystery.service"), None)
+        .await;
     assert_eq!(
         (status, body["code"].clone()),
         (StatusCode::NOT_FOUND, json!("service_not_found"))
     );
-    let (_, page) = fx.call(&lead, "GET", &hosts("mystery.service", ""), None).await;
+    let (_, page) = fx
+        .call(&lead, "GET", &hosts("mystery.service", ""), None)
+        .await;
     assert_eq!(page["total"], 0);
     // hosts.read is required.
     let role = fx.role("Cases only", &["cases.read"], Reach::All).await;
@@ -198,7 +236,10 @@ async fn a_team_lead_sees_only_their_hosts_and_a_reader_without_the_rest_gets_le
     let ec = common::http::sign_in(&fx.router, "ec").await;
     let (_, body) = fx.call(&ec, "GET", &summary("nginx.service"), None).await;
     assert_eq!(
-        (body["can"]["export"].clone(), body["can"]["add_to_case"].clone()),
+        (
+            body["can"]["export"].clone(),
+            body["can"]["add_to_case"].clone()
+        ),
         (json!(true), json!(true))
     );
     fx.db.drop().await;

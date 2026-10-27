@@ -5,9 +5,7 @@ use platform_store::{
     port_related::{RelatedCheck, RelatedChecks, RelatedPackage},
     port_summary::GroupShare,
     service_related::{ServiceAlarms, ServiceRelated, ServiceVulnerabilities},
-    service_summary::{
-        ServiceEvent, ServiceHostRow, ServiceHostsPage, ServiceSummary,
-    },
+    service_summary::{ServiceEvent, ServiceHostRow, ServiceHostsPage, ServiceSummary},
 };
 use serde::Serialize;
 use utoipa::ToSchema;

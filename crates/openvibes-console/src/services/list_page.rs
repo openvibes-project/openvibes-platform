@@ -134,7 +134,8 @@ pub(crate) async fn list_service_page(
             number(p.limit.as_deref(), 50, 100, "limit")?,
         ))
     })();
-    let (group, descending, runs_as, listens, packaged, changes, sort, offset, limit) = match parsed {
+    let (group, descending, runs_as, listens, packaged, changes, sort, offset, limit) = match parsed
+    {
         Ok(v) => v,
         Err(field) => return invalid_query(field),
     };

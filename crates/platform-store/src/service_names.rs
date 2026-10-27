@@ -66,12 +66,23 @@ const SERVICES: &[(&[&str], ServiceInfo)] = &[
             )
         },
     ),
-    (&["nginx"], info("nginx", "Web server and proxy", Other, &["nginx"])),
+    (
+        &["nginx"],
+        info("nginx", "Web server and proxy", Other, &["nginx"]),
+    ),
     (
         &["apache2", "httpd"],
-        info("Apache HTTP Server", "Web server", Other, &["apache2", "httpd"]),
+        info(
+            "Apache HTTP Server",
+            "Web server",
+            Other,
+            &["apache2", "httpd"],
+        ),
     ),
-    (&["haproxy"], info("HAProxy", "Load balancer", Other, &["haproxy"])),
+    (
+        &["haproxy"],
+        info("HAProxy", "Load balancer", Other, &["haproxy"]),
+    ),
     (
         &["postgresql"],
         info(
@@ -92,59 +103,249 @@ const SERVICES: &[(&[&str], ServiceInfo)] = &[
     ),
     (
         &["mongod", "mongodb"],
-        info("MongoDB", "MongoDB database", Database, &["mongodb-org-server", "mongodb-server"]),
+        info(
+            "MongoDB",
+            "MongoDB database",
+            Database,
+            &["mongodb-org-server", "mongodb-server"],
+        ),
     ),
     (
         &["redis", "redis-server"],
-        info("Redis", "Redis database", Database, &["redis", "redis-server"]),
+        info(
+            "Redis",
+            "Redis database",
+            Database,
+            &["redis", "redis-server"],
+        ),
     ),
-    (&["memcached"], info("Memcached", "Memcached cache", Database, &["memcached"])),
+    (
+        &["memcached"],
+        info("Memcached", "Memcached cache", Database, &["memcached"]),
+    ),
     (
         &["elasticsearch"],
-        info("Elasticsearch", "Elasticsearch database", Database, &["elasticsearch"]),
+        info(
+            "Elasticsearch",
+            "Elasticsearch database",
+            Database,
+            &["elasticsearch"],
+        ),
     ),
-    (&["cassandra"], info("Cassandra", "Cassandra database", Database, &["cassandra"])),
+    (
+        &["cassandra"],
+        info("Cassandra", "Cassandra database", Database, &["cassandra"]),
+    ),
     (
         &["docker"],
-        info("Docker", "Container engine", Other, &["docker-ce", "docker.io", "moby-engine"]),
+        info(
+            "Docker",
+            "Container engine",
+            Other,
+            &["docker-ce", "docker.io", "moby-engine"],
+        ),
     ),
-    (&["containerd"], info("containerd", "Container runtime", Other, &["containerd", "containerd.io"])),
-    (&["kubelet"], info("kubelet", "Kubernetes node agent", Other, &["kubelet"])),
-    (&["libvirtd"], info("libvirt", "Virtual machine manager", Other, &["libvirt-daemon", "libvirt-bin"])),
-    (&["crond", "cron"], info("cron", "Scheduled jobs", Other, &["cronie", "cron"])),
-    (&["atd"], info("at", "One-off scheduled jobs", Other, &["at"])),
+    (
+        &["containerd"],
+        info(
+            "containerd",
+            "Container runtime",
+            Other,
+            &["containerd", "containerd.io"],
+        ),
+    ),
+    (
+        &["kubelet"],
+        info("kubelet", "Kubernetes node agent", Other, &["kubelet"]),
+    ),
+    (
+        &["libvirtd"],
+        info(
+            "libvirt",
+            "Virtual machine manager",
+            Other,
+            &["libvirt-daemon", "libvirt-bin"],
+        ),
+    ),
+    (
+        &["crond", "cron"],
+        info("cron", "Scheduled jobs", Other, &["cronie", "cron"]),
+    ),
+    (
+        &["atd"],
+        info("at", "One-off scheduled jobs", Other, &["at"]),
+    ),
     (
         &["rsyslog", "rsyslogd"],
         info("rsyslog", "System logging", Other, &["rsyslog"]),
     ),
-    (&["auditd"], info("Linux audit", "Audit logging", Other, &["audit", "auditd"])),
-    (&["chronyd", "chrony"], info("chrony", "Time sync", Other, &["chrony"])),
-    (&["ntpd", "ntp"], info("ntpd", "Time sync", Other, &["ntp", "ntpsec"])),
-    (&["systemd-timesyncd"], info("systemd-timesyncd", "Time sync", Other, &["systemd-timesyncd"])),
-    (&["named", "bind9"], info("BIND", "Name server", Other, &["bind", "bind9"])),
-    (&["unbound"], info("Unbound", "Name resolver", Other, &["unbound"])),
-    (&["dnsmasq"], info("dnsmasq", "DNS and DHCP", Other, &["dnsmasq"])),
-    (&["smb", "smbd"], info("Samba", "Windows file sharing", Other, &["samba", "samba-common-bin"])),
-    (&["nmb", "nmbd"], info("Samba names", "Windows name service", Other, &["samba", "samba-common-bin"])),
-    (&["nfs-server", "nfs-kernel-server"], info("NFS server", "Network file sharing", Other, &["nfs-utils", "nfs-kernel-server"])),
-    (&["rpcbind"], info("rpcbind", "Remote procedure calls", Other, &["rpcbind"])),
-    (&["cups", "cupsd"], info("CUPS", "Printing", Other, &["cups"])),
-    (&["avahi-daemon"], info("Avahi", "Local network discovery (mDNS)", Other, &["avahi", "avahi-daemon"])),
-    (&["bluetooth"], info("Bluetooth", "Bluetooth devices", Other, &["bluez"])),
-    (&["firewalld"], info("firewalld", "Host firewall", Other, &["firewalld"])),
-    (&["fail2ban"], info("Fail2ban", "Blocks repeated failed logins", Other, &["fail2ban"])),
-    (&["networkmanager"], info("NetworkManager", "Network configuration", Other, &["NetworkManager", "network-manager"])),
-    (&["postfix"], info("Postfix", "Mail server", Other, &["postfix"])),
-    (&["exim4", "exim"], info("Exim", "Mail server", Other, &["exim4", "exim"])),
-    (&["sendmail"], info("Sendmail", "Mail server", Other, &["sendmail"])),
-    (&["dovecot"], info("Dovecot", "Mail access (IMAP, POP3)", Other, &["dovecot", "dovecot-core"])),
-    (&["vsftpd"], info("vsftpd", "File transfer (FTP)", Other, &["vsftpd"])),
-    (&["snmpd"], info("SNMP agent", "Device monitoring", Other, &["net-snmp", "snmpd"])),
-    (&["sssd"], info("SSSD", "Directory logins", Other, &["sssd"])),
-    (&["tailscaled"], info("Tailscale", "VPN", Other, &["tailscale"])),
-    (&["telnet", "telnetd", "telnet.socket"], info("Telnet server", "Unencrypted remote login", RemoteAdmin, &["telnetd", "telnet-server"])),
-    (&["xrdp"], info("xrdp", "Remote desktop (RDP)", RemoteAdmin, &["xrdp"])),
-    (&["vncserver", "tigervnc", "x11vnc"], info("VNC server", "Remote desktop", RemoteAdmin, &["tigervnc-server", "x11vnc"])),
+    (
+        &["auditd"],
+        info("Linux audit", "Audit logging", Other, &["audit", "auditd"]),
+    ),
+    (
+        &["chronyd", "chrony"],
+        info("chrony", "Time sync", Other, &["chrony"]),
+    ),
+    (
+        &["ntpd", "ntp"],
+        info("ntpd", "Time sync", Other, &["ntp", "ntpsec"]),
+    ),
+    (
+        &["systemd-timesyncd"],
+        info(
+            "systemd-timesyncd",
+            "Time sync",
+            Other,
+            &["systemd-timesyncd"],
+        ),
+    ),
+    (
+        &["named", "bind9"],
+        info("BIND", "Name server", Other, &["bind", "bind9"]),
+    ),
+    (
+        &["unbound"],
+        info("Unbound", "Name resolver", Other, &["unbound"]),
+    ),
+    (
+        &["dnsmasq"],
+        info("dnsmasq", "DNS and DHCP", Other, &["dnsmasq"]),
+    ),
+    (
+        &["smb", "smbd"],
+        info(
+            "Samba",
+            "Windows file sharing",
+            Other,
+            &["samba", "samba-common-bin"],
+        ),
+    ),
+    (
+        &["nmb", "nmbd"],
+        info(
+            "Samba names",
+            "Windows name service",
+            Other,
+            &["samba", "samba-common-bin"],
+        ),
+    ),
+    (
+        &["nfs-server", "nfs-kernel-server"],
+        info(
+            "NFS server",
+            "Network file sharing",
+            Other,
+            &["nfs-utils", "nfs-kernel-server"],
+        ),
+    ),
+    (
+        &["rpcbind"],
+        info("rpcbind", "Remote procedure calls", Other, &["rpcbind"]),
+    ),
+    (
+        &["cups", "cupsd"],
+        info("CUPS", "Printing", Other, &["cups"]),
+    ),
+    (
+        &["avahi-daemon"],
+        info(
+            "Avahi",
+            "Local network discovery (mDNS)",
+            Other,
+            &["avahi", "avahi-daemon"],
+        ),
+    ),
+    (
+        &["bluetooth"],
+        info("Bluetooth", "Bluetooth devices", Other, &["bluez"]),
+    ),
+    (
+        &["firewalld"],
+        info("firewalld", "Host firewall", Other, &["firewalld"]),
+    ),
+    (
+        &["fail2ban"],
+        info(
+            "Fail2ban",
+            "Blocks repeated failed logins",
+            Other,
+            &["fail2ban"],
+        ),
+    ),
+    (
+        &["networkmanager"],
+        info(
+            "NetworkManager",
+            "Network configuration",
+            Other,
+            &["NetworkManager", "network-manager"],
+        ),
+    ),
+    (
+        &["postfix"],
+        info("Postfix", "Mail server", Other, &["postfix"]),
+    ),
+    (
+        &["exim4", "exim"],
+        info("Exim", "Mail server", Other, &["exim4", "exim"]),
+    ),
+    (
+        &["sendmail"],
+        info("Sendmail", "Mail server", Other, &["sendmail"]),
+    ),
+    (
+        &["dovecot"],
+        info(
+            "Dovecot",
+            "Mail access (IMAP, POP3)",
+            Other,
+            &["dovecot", "dovecot-core"],
+        ),
+    ),
+    (
+        &["vsftpd"],
+        info("vsftpd", "File transfer (FTP)", Other, &["vsftpd"]),
+    ),
+    (
+        &["snmpd"],
+        info(
+            "SNMP agent",
+            "Device monitoring",
+            Other,
+            &["net-snmp", "snmpd"],
+        ),
+    ),
+    (
+        &["sssd"],
+        info("SSSD", "Directory logins", Other, &["sssd"]),
+    ),
+    (
+        &["tailscaled"],
+        info("Tailscale", "VPN", Other, &["tailscale"]),
+    ),
+    (
+        &["telnet", "telnetd", "telnet.socket"],
+        info(
+            "Telnet server",
+            "Unencrypted remote login",
+            RemoteAdmin,
+            &["telnetd", "telnet-server"],
+        ),
+    ),
+    (
+        &["xrdp"],
+        info("xrdp", "Remote desktop (RDP)", RemoteAdmin, &["xrdp"]),
+    ),
+    (
+        &["vncserver", "tigervnc", "x11vnc"],
+        info(
+            "VNC server",
+            "Remote desktop",
+            RemoteAdmin,
+            &["tigervnc-server", "x11vnc"],
+        ),
+    ),
 ];
 
 /// The base of a unit: lower case, `.service` and any `@instance` removed.
@@ -231,9 +432,11 @@ pub fn package_pairs() -> (Vec<String>, Vec<String>) {
     SERVICES
         .iter()
         .flat_map(|(names, info)| {
-            names
-                .iter()
-                .flat_map(move |n| info.packages.iter().map(move |p| ((*n).to_owned(), (*p).to_lowercase())))
+            names.iter().flat_map(move |n| {
+                info.packages
+                    .iter()
+                    .map(move |p| ((*n).to_owned(), (*p).to_lowercase()))
+            })
         })
         .unzip()
 }
@@ -250,7 +453,10 @@ mod tests {
         assert_eq!(base("telnet.socket"), "telnet.socket");
         assert_eq!(base("Spooler"), "spooler");
         assert_eq!(service_info("ssh.service").unwrap().area, Some("SSH"));
-        assert_eq!(service_info("postgresql@16-main.service").unwrap().class, Database);
+        assert_eq!(
+            service_info("postgresql@16-main.service").unwrap().class,
+            Database
+        );
         assert!(service_info("mystery.service").is_none());
     }
 
@@ -264,10 +470,18 @@ mod tests {
         assert!(bases_named("zzz").is_empty());
         let (bases, packages) = package_pairs();
         assert_eq!(bases.len(), packages.len());
-        assert!(bases.iter().zip(&packages).any(|(b, p)| b == "sshd" && p == "openssh-server"));
+        assert!(
+            bases
+                .iter()
+                .zip(&packages)
+                .any(|(b, p)| b == "sshd" && p == "openssh-server")
+        );
         for (names, info) in SERVICES {
             assert!(!names.is_empty() && !info.name.is_empty() && !info.usual_use.is_empty());
-            assert!(names.iter().all(|n| *n == n.to_lowercase()), "{names:?} is lower case");
+            assert!(
+                names.iter().all(|n| *n == n.to_lowercase()),
+                "{names:?} is lower case"
+            );
         }
     }
 }

@@ -4,6 +4,10 @@
 //! and the page read `p`. Only fixed internal strings are formatted in;
 //! every value is bound.
 //!
+//! `pmg` reaches `host_packages` through a lateral index lookup per matched
+//! package version: left to itself the planner scans every installed package
+//! of every host (20 million rows on the timing fleet).
+//!
 //! Parameters: `$1` global scope, `$2` scope group ids, `$3` search, `$4`
 //! bases whose usual name matches the search, `$5` runs as, `$6` listens,
 //! `$7` packaged, `$8` group, `$9` changes, `$10` host, `$11` now, `$12`
@@ -11,11 +15,7 @@
 //! admin, `$16` bases of every known service, `$17` and `$18` the map's
 //! (base, package) pairs.
 
-use crate::{
-    console_read::agent_visibility,
-    service_list::ServiceSort,
-    service_names::base_sql,
-};
+use crate::{console_read::agent_visibility, service_list::ServiceSort, service_names::base_sql};
 
 /// The filters, each a condition over a `p` row.
 #[derive(Clone, Copy, PartialEq)]
@@ -45,9 +45,8 @@ fn filter(facet: Facet) -> &'static str {
             "($3::text IS NULL OR p.base = ANY($4::text[])
               OR position(lower($3) in lower(p.unit)) > 0
               OR position(lower($3) in lower(coalesce(p.pkg, ''))) > 0
-              OR EXISTS (SELECT 1 FROM unnest(p.programs) s WHERE position(lower($3) in lower(s)) > 0)
-              OR EXISTS (SELECT 1 FROM up WHERE up.unit = p.unit
-                         AND position(lower($3) in up.port::text || '/' || up.protocol) > 0))"
+              OR p.uid IN (SELECT uid FROM usp)
+              OR p.unit IN (SELECT unit FROM ups))"
         }
         Facet::RunsAs => {
             "($5::text IS NULL OR ($5 = 'root' AND p.priv_hosts > 0)
@@ -62,12 +61,12 @@ fn filter(facet: Facet) -> &'static str {
             "($7::text IS NULL OR ($7 = 'yes' AND p.pk_hosts = p.hosts)
               OR ($7 = 'no' AND p.pk_hosts < p.hosts))"
         }
-        Facet::Group => "($8::text IS NULL OR p.unit IN (SELECT unit FROM gsel))",
+        Facet::Group => "($8::text IS NULL OR p.uid IN (SELECT uid FROM gsel))",
         Facet::Changes => {
             "($9::text IS NULL OR ($9 = 'new' AND p.added > 0)
               OR ($9 = 'look' AND cardinality(p.look) > 0))"
         }
-        Facet::Host => "($10::text IS NULL OR p.unit IN (SELECT unit FROM hsel))",
+        Facet::Host => "($10::text IS NULL OR p.uid IN (SELECT uid FROM hsel))",
     }
 }
 
@@ -98,85 +97,106 @@ pub(crate) fn statement(sort: ServiceSort, descending: bool) -> String {
         except(Some(Facet::Group)),
         except(Some(Facet::Changes)),
     );
-    let unit_base = base_sql("s.unit");
-    let cand_base = base_sql("hu.unit");
+    let unit_base = base_sql("u.unit");
     format!(
         "WITH reach AS MATERIALIZED (
-           SELECT a.agent_id, a.status, a.services_at FROM agents a
+           SELECT a.agent_id, a.status, a.services_at, row_number() OVER () AS aid FROM agents a
            WHERE a.status <> 'revoked' AND {visible}),
+         ub AS MATERIALIZED (
+           SELECT u.unit, {unit_base} AS base, row_number() OVER () AS uid
+           FROM (SELECT DISTINCT unit FROM host_services) u),
          hu AS MATERIALIZED (
-           SELECT s.agent_id, s.unit, {unit_base} AS base, s.programs, s.processes, s.run_as,
+           SELECT a.aid, ub.uid, s.programs, s.run_as,
                   lower(coalesce(s.run_as, '')) IN ('root', '0', 'system', 'localsystem', 'nt authority\\system') AS priv
-           FROM host_services s JOIN reach a ON a.agent_id = s.agent_id),
+           FROM host_services s JOIN reach a ON a.agent_id = s.agent_id JOIN ub ON ub.unit = s.unit),
          cand AS (
-           SELECT DISTINCT {cand_base} AS b, {cand_base} AS p FROM hu
+           SELECT DISTINCT ub.base AS b, ub.base AS p FROM ub
            UNION
            SELECT m.b, m.p FROM unnest($17::text[], $18::text[]) AS m(b, p)),
+         mpv AS MATERIALIZED (
+           SELECT c.b, pv.id, pv.name
+           FROM cand c JOIN package_versions pv ON lower(pv.name) = c.p),
+         pm AS MATERIALIZED (
+           SELECT a.aid, x.b, min(x.name) AS pkg
+           FROM (SELECT hp.agent_id, m.b, m.name FROM mpv m
+                 CROSS JOIN LATERAL (SELECT h.agent_id FROM host_packages h
+                                     WHERE h.package_version_id = m.id OFFSET 0) hp) x
+           JOIN reach a ON a.agent_id = x.agent_id
+           GROUP BY a.aid, x.b),
          pmg AS MATERIALIZED (
-           SELECT hp.agent_id, c.b AS base, min(pv.name) AS pkg
-           FROM cand c JOIN package_versions pv ON lower(pv.name) = c.p
-           JOIN host_packages hp ON hp.package_version_id = pv.id
-           JOIN reach a ON a.agent_id = hp.agent_id
-           GROUP BY hp.agent_id, c.b),
-         lo AS MATERIALIZED (
-           SELECT l.agent_id, l.service AS unit, l.protocol, l.port, bool_or(l.exposed) AS exposed
-           FROM host_listeners l JOIN reach a ON a.agent_id = l.agent_id
-           WHERE l.service IS NOT NULL
-           GROUP BY l.agent_id, l.service, l.protocol, l.port),
+           SELECT pm.aid, ub.uid, pm.pkg FROM pm JOIN ub ON ub.base = pm.b),
          lg AS (
-           SELECT agent_id, unit, bool_or(exposed) AS exposed FROM lo GROUP BY agent_id, unit),
+           SELECT a.aid, ub.uid, bool_or(l.exposed) AS exposed
+           FROM host_listeners l JOIN reach a ON a.agent_id = l.agent_id JOIN ub ON ub.unit = l.service
+           GROUP BY a.aid, ub.uid),
          hx AS MATERIALIZED (
-           SELECT hu.agent_id, hu.unit, hu.base, hu.programs, hu.run_as, hu.priv, pmg.pkg,
-                  lg.agent_id IS NOT NULL AS lis, COALESCE(lg.exposed, false) AS exp
-           FROM hu LEFT JOIN pmg ON pmg.agent_id = hu.agent_id AND pmg.base = hu.base
-           LEFT JOIN lg ON lg.agent_id = hu.agent_id AND lg.unit = hu.unit),
-         up AS (
-           SELECT unit, protocol, port, bool_or(exposed) AS exposed, count(*) AS hosts
-           FROM lo GROUP BY unit, protocol, port),
-         prg AS (
-           SELECT x.unit, array_agg(DISTINCT pr ORDER BY pr) AS programs
-           FROM hx x, unnest(x.programs) pr GROUP BY x.unit),
-         ras AS (
-           SELECT unit, array_agg(DISTINCT run_as ORDER BY run_as) AS run_as
-           FROM hx WHERE run_as IS NOT NULL GROUP BY unit),
+           SELECT hu.aid, hu.uid, hu.priv, pmg.pkg,
+                  lg.aid IS NOT NULL AS lis, COALESCE(lg.exposed, false) AS exp
+           FROM hu LEFT JOIN pmg ON pmg.aid = hu.aid AND pmg.uid = hu.uid
+           LEFT JOIN lg ON lg.aid = hu.aid AND lg.uid = hu.uid),
+         ups AS (
+           SELECT DISTINCT l.service AS unit
+           FROM host_listeners l JOIN reach a ON a.agent_id = l.agent_id
+           WHERE $3::text IS NOT NULL AND l.service IS NOT NULL
+             AND position(lower($3) in l.port::text || '/' || l.protocol) > 0),
+         usp AS (
+           SELECT DISTINCT x.uid
+           FROM hu x, unnest(x.programs) pr
+           WHERE $3::text IS NOT NULL AND position(lower($3) in lower(pr)) > 0),
          wk AS (
-           SELECT c.key AS unit,
-                  count(DISTINCT c.agent_id) FILTER (WHERE c.change = 'appeared') AS added,
-                  count(DISTINCT c.agent_id) FILTER (WHERE c.change = 'went_away') AS removed
-           FROM change_log c JOIN reach a ON a.agent_id = c.agent_id
-           WHERE c.kind = 'service' AND c.change IN ('appeared', 'went_away')
-             AND c.at > $11::timestamptz - interval '7 days'
-           GROUP BY c.key),
+           SELECT d.key AS unit,
+                  count(*) FILTER (WHERE d.change = 'appeared') AS added,
+                  count(*) FILTER (WHERE d.change = 'went_away') AS removed
+           FROM (SELECT DISTINCT c.key, c.change, c.agent_id
+                 FROM change_log c JOIN reach a ON a.agent_id = c.agent_id
+                 WHERE c.kind = 'service' AND c.change IN ('appeared', 'went_away')
+                   AND c.at > $11::timestamptz - interval '7 days') d
+           GROUP BY d.key),
          gp AS MATERIALIZED (
-           SELECT m.asset_group_id, h.unit, count(*) AS hosts
-           FROM hx h JOIN console_host_group_membership m ON m.agent_id = h.agent_id
-           GROUP BY m.asset_group_id, h.unit),
+           SELECT m.asset_group_id, h.uid, count(*) AS hosts
+           FROM hx h JOIN reach r ON r.aid = h.aid
+           JOIN console_host_group_membership m ON m.agent_id = r.agent_id
+           GROUP BY m.asset_group_id, h.uid),
          gsel AS (
-           SELECT unit FROM gp WHERE asset_group_id::text = lower($8::text)),
+           SELECT uid FROM gp WHERE asset_group_id::text = lower($8::text)),
          hsel AS (
-           SELECT unit FROM hx WHERE agent_id = $10::text),
+           SELECT h.uid FROM hx h JOIN reach r ON r.aid = h.aid WHERE r.agent_id = $10::text),
          p0 AS (
-           SELECT h.unit, max(h.base) AS base, count(*) AS hosts,
-                  count(*) FILTER (WHERE h.priv) AS priv_hosts,
-                  count(*) FILTER (WHERE h.pkg IS NOT NULL) AS pk_hosts,
-                  count(*) FILTER (WHERE h.priv AND h.pkg IS NULL) AS bad_hosts,
-                  count(*) FILTER (WHERE h.exp) AS exposed_hosts,
-                  count(*) FILTER (WHERE h.lis) AS listen_hosts,
-                  min(h.pkg) AS pkg
-           FROM hx h GROUP BY h.unit),
+           SELECT u.unit, u.base, x.*
+           FROM (SELECT h.uid, count(*) AS hosts,
+                        count(*) FILTER (WHERE h.priv) AS priv_hosts,
+                        count(*) FILTER (WHERE h.pkg IS NOT NULL) AS pk_hosts,
+                        count(*) FILTER (WHERE h.priv AND h.pkg IS NULL) AS bad_hosts,
+                        count(*) FILTER (WHERE h.exp) AS exposed_hosts,
+                        count(*) FILTER (WHERE h.lis) AS listen_hosts,
+                        min(h.pkg) AS pkg
+                 FROM hx h GROUP BY h.uid) x JOIN ub u ON u.uid = x.uid),
          p AS (
-           SELECT p0.*, COALESCE(prg.programs, '{{}}') AS programs, COALESCE(ras.run_as, '{{}}') AS run_as,
-                  COALESCE(wk.added, 0) AS added, COALESCE(wk.removed, 0) AS removed,
+           SELECT p0.*, COALESCE(wk.added, 0) AS added, COALESCE(wk.removed, 0) AS removed,
                   array_remove(ARRAY[
                     CASE WHEN p0.bad_hosts > 0 THEN 'root_unpackaged' END,
                     CASE WHEN p0.base = ANY($14::text[]) AND p0.exposed_hosts > 0 THEN 'database_exposed' END,
                     CASE WHEN p0.base = ANY($15::text[]) AND p0.exposed_hosts > 0 THEN 'remote_admin_exposed' END,
                     CASE WHEN NOT p0.base = ANY($16::text[]) AND COALESCE(wk.added, 0) > 0 THEN 'new_unusual' END
                   ], NULL) AS look
-           FROM p0 LEFT JOIN prg USING (unit) LEFT JOIN ras USING (unit) LEFT JOIN wk USING (unit)),
+           FROM p0 LEFT JOIN wk USING (unit)),
          m AS (SELECT p.* FROM p WHERE {all}),
          page AS (
            SELECT m.* FROM m ORDER BY {order} LIMIT $12 OFFSET $13),
+         prg AS (
+           SELECT d.uid, array_agg(d.pr ORDER BY d.pr) AS programs
+           FROM (SELECT DISTINCT x.uid, pr FROM hu x, unnest(x.programs) pr
+                 WHERE x.uid IN (SELECT uid FROM page)) d GROUP BY d.uid),
+         ras AS (
+           SELECT d.uid, array_agg(d.run_as ORDER BY d.run_as) AS run_as
+           FROM (SELECT DISTINCT x.uid, x.run_as FROM hu x
+                 WHERE x.run_as IS NOT NULL AND x.uid IN (SELECT uid FROM page)) d GROUP BY d.uid),
+         up AS (
+           SELECT l.service AS unit, l.protocol, l.port, bool_or(l.exposed) AS exposed,
+                  count(DISTINCT l.agent_id) AS hosts
+           FROM host_listeners l JOIN reach a ON a.agent_id = l.agent_id
+           WHERE l.service IN (SELECT unit FROM page)
+           GROUP BY l.service, l.protocol, l.port),
          meta AS (
            SELECT jsonb_build_object(
              'total', (SELECT count(*) FROM m),
@@ -197,7 +217,7 @@ pub(crate) fn statement(sort: ServiceSort, descending: bool) -> String {
                'groups', (SELECT COALESCE(jsonb_agg(jsonb_build_array(g.asset_group_id::text, g.name, g.kind, COALESCE(c.n, 0))), '[]')
                           FROM console_asset_groups g LEFT JOIN (
                             SELECT gp.asset_group_id AS gid, count(*) AS n
-                            FROM gp JOIN p ON p.unit = gp.unit
+                            FROM gp JOIN p ON p.uid = gp.uid
                             WHERE {no_group} GROUP BY gp.asset_group_id) c ON c.gid = g.asset_group_id
                           WHERE c.n > 0
                              OR (g.asset_group_id::text = lower($8::text)
@@ -212,16 +232,16 @@ pub(crate) fn statement(sort: ServiceSort, descending: bool) -> String {
                                    WHERE a.status = 'active' AND a.services_at IS NOT NULL))
            ) AS meta)
          SELECT meta.meta, page.unit, page.hosts, page.priv_hosts, page.pk_hosts, page.exposed_hosts,
-                page.listen_hosts, page.run_as, page.programs, page.pkg, page.added, page.removed, page.look,
+                page.listen_hosts, COALESCE(ras.run_as, '{{}}') AS run_as, COALESCE(prg.programs, '{{}}') AS programs, page.pkg, page.added, page.removed, page.look,
                 (SELECT COALESCE(jsonb_agg(jsonb_build_array(g.asset_group_id::text, g.name, g.kind, gp.hosts)
                                            ORDER BY gp.hosts DESC, lower(g.name), g.asset_group_id), '[]')
                  FROM gp JOIN console_asset_groups g ON g.asset_group_id = gp.asset_group_id
-                 WHERE gp.unit = page.unit AND g.kind <> 'manual') AS groups,
+                 WHERE gp.uid = page.uid AND g.kind <> 'manual') AS groups,
                 (SELECT COALESCE(jsonb_agg(jsonb_build_array(u.protocol, u.port, u.exposed, u.hosts)
                                            ORDER BY u.exposed DESC, u.port, u.protocol), '[]')
                  FROM up u WHERE u.unit = page.unit) AS ports,
                 page.base
-         FROM meta LEFT JOIN page ON true
+         FROM meta LEFT JOIN page ON true LEFT JOIN prg ON prg.uid = page.uid LEFT JOIN ras ON ras.uid = page.uid
          ORDER BY {order_page}",
         order_page = order.replace("m.", "page.")
     )

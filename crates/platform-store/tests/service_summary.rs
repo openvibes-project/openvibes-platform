@@ -44,29 +44,48 @@ async fn summary_stays_inside_the_scope() {
     let (db, c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
     let scope = scoped(&mine);
-    let s = summary(&c, &scope, &nothing(), "sshd.service").await.unwrap();
+    let s = summary(&c, &scope, &nothing(), "sshd.service")
+        .await
+        .unwrap();
     assert_eq!((s.running, s.of, s.root, s.exposed), (3, 3, 3, 3));
     assert_eq!(s.name, Some("OpenSSH server"));
     assert_eq!(s.processes, 3);
     assert_eq!(s.programs, ["sshd"]);
     assert_eq!(s.run_as, [("root".to_owned(), 3)]);
     assert_eq!(s.packages.len(), 1);
-    assert_eq!((s.packages[0].name.as_str(), s.packages[0].hosts), ("openssh-server", 3));
-    assert_eq!((s.package_hosts, s.versions), (3, Some(2)), "9.2p1 and 9.6p1");
+    assert_eq!(
+        (s.packages[0].name.as_str(), s.packages[0].hosts),
+        ("openssh-server", 3)
+    );
+    assert_eq!(
+        (s.package_hosts, s.versions),
+        (3, Some(2)),
+        "9.2p1 and 9.6p1"
+    );
     assert_eq!(s.ports.len(), 1);
-    assert_eq!((s.ports[0].port, s.ports[0].exposed, s.ports[0].hosts), (22, true, 3));
+    assert_eq!(
+        (s.ports[0].port, s.ports[0].exposed, s.ports[0].hosts),
+        (22, true, 3)
+    );
     assert!(
         s.changes
             .iter()
             .all(|e| e.agent_id != OUTSIDE && e.agent_id != GONE)
     );
-    assert!(s.by_group.iter().all(|g| g.of <= 3), "group sizes count hosts in reach");
+    assert!(
+        s.by_group.iter().all(|g| g.of <= 3),
+        "group sizes count hosts in reach"
+    );
     let global = summary(&c, &AgentScope::Global, &nothing(), "sshd.service")
         .await
         .unwrap();
     assert_eq!((global.running, global.of), (4, 4));
     // A unit run only outside the scope is absent for the scoped viewer.
-    assert!(summary(&c, &scope, &nothing(), "far.service").await.is_none());
+    assert!(
+        summary(&c, &scope, &nothing(), "far.service")
+            .await
+            .is_none()
+    );
     assert!(
         summary(&c, &AgentScope::Global, &nothing(), "far.service")
             .await
@@ -88,12 +107,18 @@ async fn a_service_that_went_away_stays_viewable_for_90_days() {
     )
     .await
     .unwrap();
-    let gone = summary(&c, &scope, &nothing(), "gone.service").await.unwrap();
+    let gone = summary(&c, &scope, &nothing(), "gone.service")
+        .await
+        .unwrap();
     assert_eq!((gone.running, gone.exposed, gone.root), (0, 0, 0));
     assert_eq!(gone.week_removed, 1);
     assert_eq!(gone.changes.len(), 1);
     assert_eq!(gone.versions, None);
-    assert!(summary(&c, &scope, &nothing(), "older.service").await.is_none());
+    assert!(
+        summary(&c, &scope, &nothing(), "older.service")
+            .await
+            .is_none()
+    );
     db.drop().await;
 }
 
@@ -108,7 +133,9 @@ async fn this_week_first_seen_and_packages() {
     )
     .await
     .unwrap();
-    let mystery = summary(&c, &scope, &nothing(), "mystery.service").await.unwrap();
+    let mystery = summary(&c, &scope, &nothing(), "mystery.service")
+        .await
+        .unwrap();
     assert_eq!((mystery.week_added, mystery.week_removed), (1, 0));
     assert!(mystery.packages.is_empty());
     assert_eq!((mystery.package_hosts, mystery.versions), (0, None));
@@ -118,11 +145,15 @@ async fn this_week_first_seen_and_packages() {
     assert!(!seen.before);
     assert!(Utc::now() - seen.at < chrono::Duration::days(3));
     // nginx appeared on A 40 days ago; B has no event, so its enrolment counts too.
-    let nginx = summary(&c, &scope, &nothing(), "nginx.service").await.unwrap();
+    let nginx = summary(&c, &scope, &nothing(), "nginx.service")
+        .await
+        .unwrap();
     assert_eq!(nginx.week_added, 0);
     assert_eq!(nginx.exposed, 2);
     assert_eq!(nginx.versions, Some(2));
-    let named = summary(&c, &scope, &nothing(), "named.service").await.unwrap();
+    let named = summary(&c, &scope, &nothing(), "named.service")
+        .await
+        .unwrap();
     assert_eq!(named.packages[0].name, "bind", "matched through the map");
     c.execute(
         "UPDATE agents SET enrolled_at = now() - interval '400 days' WHERE agent_id = $1",
@@ -144,37 +175,83 @@ async fn hosts_rows_have_versions_ports_and_segments() {
     let (db, c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
     let scope = scoped(&mine);
-    let page = service_hosts_page(&c, &scope, &nothing(), "postgresql.service", ServiceSegment::All, 0, 50)
-        .await
-        .unwrap();
+    let page = service_hosts_page(
+        &c,
+        &scope,
+        &nothing(),
+        "postgresql.service",
+        ServiceSegment::All,
+        0,
+        50,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         (page.segments.all, page.segments.exposed, page.segments.root),
         (2, 1, 0)
     );
     let a = page.rows.iter().find(|r| r.agent_id == A).unwrap();
-    assert_eq!(a.package, Some(("postgresql".to_owned(), "15.8".to_owned())));
+    assert_eq!(
+        a.package,
+        Some(("postgresql".to_owned(), "15.8".to_owned()))
+    );
     assert_eq!(a.ports, [("tcp".to_owned(), 5432, false)]);
     assert_eq!((a.processes, a.run_as.as_deref()), (5, Some("postgres")));
     assert_eq!(a.hostname.as_deref(), Some("web-01"));
     assert!(a.owners_partial && a.reported_at.is_some());
-    assert_eq!((a.problems.alarms, a.problems.vulnerabilities), (None, None));
-    let exposed = service_hosts_page(&c, &scope, &nothing(), "postgresql.service", ServiceSegment::Exposed, 0, 50)
-        .await
-        .unwrap();
+    assert_eq!(
+        (a.problems.alarms, a.problems.vulnerabilities),
+        (None, None)
+    );
+    let exposed = service_hosts_page(
+        &c,
+        &scope,
+        &nothing(),
+        "postgresql.service",
+        ServiceSegment::Exposed,
+        0,
+        50,
+    )
+    .await
+    .unwrap();
     assert_eq!(exposed.rows.len(), 1);
     assert_eq!(exposed.rows[0].agent_id, C);
     assert_eq!(exposed.total, 1);
-    let root = service_hosts_page(&c, &scope, &nothing(), "sshd.service", ServiceSegment::Root, 0, 50)
-        .await
-        .unwrap();
+    let root = service_hosts_page(
+        &c,
+        &scope,
+        &nothing(),
+        "sshd.service",
+        ServiceSegment::Root,
+        0,
+        50,
+    )
+    .await
+    .unwrap();
     assert_eq!(root.total, 3, "A, B, C; not the revoked or outside host");
     // Paging by hostname.
-    let first = service_hosts_page(&c, &scope, &nothing(), "sshd.service", ServiceSegment::All, 0, 2)
-        .await
-        .unwrap();
-    let rest = service_hosts_page(&c, &scope, &nothing(), "sshd.service", ServiceSegment::All, 2, 2)
-        .await
-        .unwrap();
+    let first = service_hosts_page(
+        &c,
+        &scope,
+        &nothing(),
+        "sshd.service",
+        ServiceSegment::All,
+        0,
+        2,
+    )
+    .await
+    .unwrap();
+    let rest = service_hosts_page(
+        &c,
+        &scope,
+        &nothing(),
+        "sshd.service",
+        ServiceSegment::All,
+        2,
+        2,
+    )
+    .await
+    .unwrap();
     let names: Vec<_> = first
         .rows
         .iter()
@@ -182,9 +259,17 @@ async fn hosts_rows_have_versions_ports_and_segments() {
         .map(|r| r.hostname.clone().unwrap())
         .collect();
     assert_eq!(names, ["db-01", "web-01", "web-02"]);
-    let beyond = service_hosts_page(&c, &scope, &nothing(), "sshd.service", ServiceSegment::All, 50, 10)
-        .await
-        .unwrap();
+    let beyond = service_hosts_page(
+        &c,
+        &scope,
+        &nothing(),
+        "sshd.service",
+        ServiceSegment::All,
+        50,
+        10,
+    )
+    .await
+    .unwrap();
     assert!(beyond.rows.is_empty());
     assert_eq!(beyond.segments.all, 3, "the counts answer on an empty page");
     db.drop().await;
@@ -237,7 +322,9 @@ async fn related_counts_hosts_running_the_unit_in_reach() {
     let (mine, _) = fixture(&c).await;
     related_data(&c).await;
     let scope = scoped(&mine);
-    let s = summary(&c, &scope, &all(&scope), "nginx.service").await.unwrap();
+    let s = summary(&c, &scope, &all(&scope), "nginx.service")
+        .await
+        .unwrap();
     let checks = s.related.compliance.unwrap();
     let ids: Vec<_> = checks
         .items
@@ -253,24 +340,48 @@ async fn related_counts_hosts_running_the_unit_in_reach() {
     let vulns = s.related.vulnerabilities.unwrap();
     assert_eq!(vulns.packages.len(), 1);
     assert_eq!(
-        (vulns.packages[0].package.as_str(), vulns.packages[0].advisories, vulns.packages[0].hosts),
+        (
+            vulns.packages[0].package.as_str(),
+            vulns.packages[0].advisories,
+            vulns.packages[0].hosts
+        ),
         ("nginx", 1, 2),
         "open ones on A and B; not the fixed one or the outside host"
     );
     assert_eq!((vulns.advisories, vulns.hosts), (1, 2));
     let alarms = s.related.alarms.unwrap();
     assert!(!alarms.programs_not_collected);
-    assert_eq!((alarms.open, alarms.hosts), (1, 1), "only A's nginx alarm matches");
+    assert_eq!(
+        (alarms.open, alarms.hosts),
+        (1, 1),
+        "only A's nginx alarm matches"
+    );
     // Per-host problems.
-    let page = service_hosts_page(&c, &scope, &all(&scope), "nginx.service", ServiceSegment::All, 0, 50)
-        .await
-        .unwrap();
+    let page = service_hosts_page(
+        &c,
+        &scope,
+        &all(&scope),
+        "nginx.service",
+        ServiceSegment::All,
+        0,
+        50,
+    )
+    .await
+    .unwrap();
     let a = page.rows.iter().find(|r| r.agent_id == A).unwrap();
     let b = page.rows.iter().find(|r| r.agent_id == B).unwrap();
-    assert_eq!((a.problems.alarms, a.problems.vulnerabilities), (Some(1), Some(1)));
-    assert_eq!((b.problems.alarms, b.problems.vulnerabilities), (Some(0), Some(1)));
+    assert_eq!(
+        (a.problems.alarms, a.problems.vulnerabilities),
+        (Some(1), Some(1))
+    );
+    assert_eq!(
+        (b.problems.alarms, b.problems.vulnerabilities),
+        (Some(0), Some(1))
+    );
     // A unit with no package or program: nothing to count.
-    let odd = summary(&c, &scope, &all(&scope), "mystery.service").await.unwrap();
+    let odd = summary(&c, &scope, &all(&scope), "mystery.service")
+        .await
+        .unwrap();
     assert_eq!(odd.related.vulnerabilities.unwrap(), Default::default());
     assert_eq!(odd.related.compliance.unwrap().items, []);
     db.drop().await;
@@ -282,7 +393,9 @@ async fn related_sections_need_their_permission() {
     let (mine, _) = fixture(&c).await;
     related_data(&c).await;
     let scope = scoped(&mine);
-    let s = summary(&c, &scope, &nothing(), "nginx.service").await.unwrap();
+    let s = summary(&c, &scope, &nothing(), "nginx.service")
+        .await
+        .unwrap();
     assert!(
         s.related.compliance.is_none()
             && s.related.vulnerabilities.is_none()
@@ -292,15 +405,29 @@ async fn related_sections_need_their_permission() {
         alarms: Some(scope.clone()),
         ..RelatedReach::default()
     };
-    let s = summary(&c, &scope, &only_alarms, "nginx.service").await.unwrap();
+    let s = summary(&c, &scope, &only_alarms, "nginx.service")
+        .await
+        .unwrap();
     assert!(
         s.related.compliance.is_none()
             && s.related.vulnerabilities.is_none()
             && s.related.alarms.is_some()
     );
-    let page = service_hosts_page(&c, &scope, &only_alarms, "nginx.service", ServiceSegment::All, 0, 50)
-        .await
-        .unwrap();
-    assert!(page.rows.iter().all(|r| r.problems.vulnerabilities.is_none() && r.problems.alarms.is_some()));
+    let page = service_hosts_page(
+        &c,
+        &scope,
+        &only_alarms,
+        "nginx.service",
+        ServiceSegment::All,
+        0,
+        50,
+    )
+    .await
+    .unwrap();
+    assert!(
+        page.rows
+            .iter()
+            .all(|r| r.problems.vulnerabilities.is_none() && r.problems.alarms.is_some())
+    );
     db.drop().await;
 }

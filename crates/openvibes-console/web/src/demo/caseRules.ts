@@ -64,6 +64,7 @@ export function refOk(kind: CaseKind, ref: string): boolean {
     case "host": return identifier.test(ref);
     case "software": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
     case "port": return rest.length === 1 && (head === "tcp" || head === "udp") && /^[1-9]\d{0,4}$/.test(rest[0] ?? "") && Number(rest[0]) <= 65535;
+    case "service": return ref.length >= 1 && ref.length <= 200 && !hasControl(ref) && !ref.includes("/");
   }
 }
 

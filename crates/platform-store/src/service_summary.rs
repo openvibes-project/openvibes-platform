@@ -23,7 +23,9 @@ const KEPT: i64 = 90;
 /// SQL: does the `run_as` column `col` name root or SYSTEM? The twin of the
 /// list's test (ruling 5).
 fn privileged(col: &str) -> String {
-    format!("lower(coalesce({col}, '')) IN ('root', '0', 'system', 'localsystem', 'nt authority\\system')")
+    format!(
+        "lower(coalesce({col}, '')) IN ('root', '0', 'system', 'localsystem', 'nt authority\\system')"
+    )
 }
 
 /// One entry of Recent changes.
