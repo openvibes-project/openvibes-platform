@@ -256,6 +256,9 @@ hosts out.
   refused the host's last report since the last good one (`too_large`,
   `invalid`, `wrong_agent`; the Ports and Services tabs then say so above
   the older lists). 404 outside the caller's scope.
+- The Ports list and a port's page (`GET /api/v1/port-list`,
+  `/api/v1/ports/{protocol}/{port}/summary` and `/hosts`, step 5e) are in
+  [console-ports.md](console-ports.md).
 - `GET /api/v1/ports`: one row per (protocol, port) with `hosts`,
   `exposed_hosts` and up to 8 owning services; `exposed=true` keeps ports
   exposed on at least one host.

@@ -7,7 +7,7 @@ The panels about hosts: comparing two, and something found across hosts (package
 | `ComparePanel.tsx` | Two hosts side by side, showing only what differs. |
 | `compare.ts` | Logic for ComparePanel.tsx: the difference between two lists, unit-tested. |
 | `PackagePanel.tsx` | One package across the fleet: versions and hosts. |
-| `PortPanel.tsx` | One port or service unit across the fleet and the hosts that have it. |
+| `UnitPanel.tsx` | One service unit across the fleet and the hosts that run it (a port is a page now; see `views/investigate/port/`). |
 | `MoreHosts.tsx` | The "Show more" paging for a panel's host list. |
 
 More: [docs/components/console-web.md](../../../../../../docs/components/console-web.md)

@@ -15,6 +15,7 @@ The lists you investigate from. A row opens its panel from `panels/` in the insp
 | `Software.tsx` | Packages across the fleet. |
 | `Ports.tsx` | The Ports list (approved screen 19): one row per port, filters and counts from the server, saved views, columns, paging; and the route to a port's page. |
 | `Services.tsx` | Running services across the fleet (5f rewrites it). |
+| `port/` | A port's page (screen 20); see its README. |
 | `Cases.tsx` | The Cases list (screen 31): one row per case over `/api/v1/case-list`, server filters with counts (Host as a chip), saved views, columns, summary line (ready to close) and paging. A row opens `/cases/{id}`; New case is `/cases/new`; routes both to `case/`. |
 | `case/` | A case's page (screen 32) and the new-case form; see its README. |
 

@@ -157,6 +157,9 @@ The usual request limits apply. Test: `tests/ca.rs`.
   as membership is at that moment, or all hosts), a recurrence reopens a mitigated one (or one whose
   accepted risk has expired), and the agent's
   largest `dropped_total` is kept.
+- A report's changes are written to the [change log](change-log.md) in the
+  same transaction (services here, packages on `/v1/inventory`); a host's
+  first report writes none.
 - `POST /v1/services` (authenticated, protocol P15): a `HostServices`,
   plain or `Content-Encoding: gzip`, for the caller's own `agent_id`.
   - Over 512 KiB uncompressed is 413, and like `/v1/alarms` it keeps that

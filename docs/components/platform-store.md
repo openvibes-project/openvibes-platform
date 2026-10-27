@@ -1054,7 +1054,26 @@ permission-checked console API, so sharing never exposes data.
 - Tested by `tests/console_dashboards.rs` (ownership, sharing through global
   and scoped bindings, revoked binding, versions, limit, home fallback).
 
-## Cases (`console_cases::…`, schemas 35, 36 and 64)
+## The change log (`change_log::…`, schema 65, step 5e)
+
+Ingest writes what appeared and went away on each host, in the same
+transaction as the host's rows; `openvibes-admin maintenance` prunes it
+after 90 days. See [change-log.md](change-log.md). Cost on ingest: a
+changed services report adds under 1 ms, a 150-package upgrade about 6 ms,
+an unchanged report nothing.
+
+## The Ports list and a port's page (`port_list`, `port_summary`, `port_names`, step 5e)
+
+`port_list::port_list` answers `GET /v1/port-list` (filters with counts,
+four sorts, offset paging) and `port_summary` the page's summary and Hosts
+card, both inside the caller's reach; `port_names` is the built-in map of
+about 40 well-known ports. At 10,000 hosts with 20 listeners each (about
+300 ports, 500,000 change-log rows) the unfiltered list takes 0.9 s at full
+reach and 0.4 s for one group's reach
+(`tests/port_list_timing.rs`, ignored; limit 2 s). See
+[console-ports.md](console-ports.md).
+
+## Cases (`console_cases::…`, schemas 35, 36, 64 and 66)
 
 - `cases`: `case_id`, a `number` from an identity column (unique, never
   reused), `title` (1–120), `status` (`open`, `investigating`, `closed`),

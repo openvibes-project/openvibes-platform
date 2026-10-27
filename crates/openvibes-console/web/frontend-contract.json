@@ -23,7 +23,9 @@
     "/settings/people/{user_id}",
     "/settings/host-groups/{group_id}",
     "/hosts/{agent_id}",
-    "/alarms/{alarm_id}"
+    "/alarms/{alarm_id}",
+    "/ports/{port}/{protocol}",
+    "/cases/{case_id}"
   ],
   "publicAssets": [
     {

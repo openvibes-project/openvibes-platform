@@ -94,6 +94,17 @@ item entries, plus `{from, to, until}` on `item_outcome`; `{}` for `resolved`
 (`manual`, `accepted_risk_expired` or `evidence_returned`). The timeline is oldest
 first and append-only (a trigger refuses UPDATE and DELETE).
 
+### Ports as items (step 5e, migration 0066)
+
+Item kind `port`, ref `tcp/22` (`tcp` or `udp`, a number 1–65535 without a
+leading zero; anything else is 400 `invalid_case`, field `ref`). Like
+software it is fleet-wide (`agent_id` is null, enforced with software by
+`case_items_fleet_wide_check`), takes no outcome, is visible inside a case
+only to someone with a listening host in reach, never makes a case visible
+by itself, and is refused as `item_not_found` when no host in reach
+listens on it. The case list's counts carry a `ports` kind count. See
+[console-ports.md](console-ports.md).
+
 ### The Cases list page (`GET /api/v1/case-list`)
 
 Step 5d rulings 5–10, following the other list pages (`compliance-list`):

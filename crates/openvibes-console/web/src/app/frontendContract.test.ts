@@ -12,7 +12,7 @@ describe("frontend contract", () => {
     const contract = JSON.parse(read("../../frontend-contract.json")) as { browserRoutes: string[] };
     const viewPaths = [...read("./registry.tsx").matchAll(/\{ path: "(\/[^"]*)"/g)].map((match) => match[1]);
     expect(viewPaths.length).toBeGreaterThan(5);
-    expect(new Set(contract.browserRoutes)).toEqual(new Set([...viewPaths, "/login", "/findings", "/agents", "/dashboards/{dashboard_id}", "/settings/roles/{role_id}", "/settings/people/{user_id}", "/settings/host-groups/{group_id}", "/hosts/{agent_id}", "/alarms/{alarm_id}"]));
+    expect(new Set(contract.browserRoutes)).toEqual(new Set([...viewPaths, "/login", "/findings", "/agents", "/dashboards/{dashboard_id}", "/settings/roles/{role_id}", "/settings/people/{user_id}", "/settings/host-groups/{group_id}", "/hosts/{agent_id}", "/alarms/{alarm_id}", "/ports/{port}/{protocol}", "/cases/{case_id}"]));
     expect(contract.browserRoutes[0]).toBe("/");
   });
 

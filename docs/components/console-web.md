@@ -850,6 +850,16 @@ for the pages not yet moved; its saved views stay in the browser.
   with no host-bound item is seen only by its opener, its assignee and
   people who read cases on every host. See
   [console-cases.md](console-cases.md#upgrading).
+- **Roles step 5e (Ports):** the port panel became the port's page
+  `/ports/{port}/{protocol}` (for example `/ports/22/tcp`), and Services
+  moved into its own file, still a panel until step 5f. Old links
+  (`?open=port:tcp/22`, `tcp:22`, `22/tcp`, a bare number for TCP) and the
+  old `?exposed=true` filter redirect to the new address. The list has
+  new filters, saved views and columns. This week and Recent changes start
+  empty after the upgrade: the [change log](change-log.md) only records
+  from then on, and a port first seen before the upgrade shows "Before
+  {date}". Ports can be added to cases. See
+  [console-ports.md](console-ports.md).
 
 ## Configuration
 
