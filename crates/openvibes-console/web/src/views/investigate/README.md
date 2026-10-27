@@ -13,7 +13,8 @@ The lists you investigate from. A row opens its panel from `panels/` in the insp
 | `Vulnerabilities.tsx` | The Vulnerabilities list (screen 25): one row per CVE, server filters with counts (Host and Advisory as chips), saved views, columns, summary line, paging and the bulk bar; routes `/vulnerabilities/{key}` to `vulnerability/`. |
 | `vulnerability/` | A vulnerability's page (screen 26); see its README. |
 | `Software.tsx` | Packages across the fleet. |
-| `Ports.tsx` | Open ports and running services across the fleet. |
+| `Ports.tsx` | Open ports across the fleet. |
+| `Services.tsx` | Running services across the fleet (5f rewrites it). |
 | `Cases.tsx` | The Cases list (screen 31): one row per case over `/api/v1/case-list`, server filters with counts (Host as a chip), saved views, columns, summary line (ready to close) and paging. A row opens `/cases/{id}`; New case is `/cases/new`; routes both to `case/`. |
 | `case/` | A case's page (screen 32) and the new-case form; see its README. |
 

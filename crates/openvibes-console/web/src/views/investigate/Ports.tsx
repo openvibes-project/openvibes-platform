@@ -4,7 +4,7 @@
 import { useMemo } from "react";
 
 import { useResource } from "../../api/client";
-import type { PortRow, UnitRow } from "../../api/types";
+import type { PortRow } from "../../api/types";
 import { nav, useLocation } from "../../app/nav";
 import { Empty, ErrorBox, Loading } from "../../ui/bits";
 import { DataTable } from "../../ui/DataTable";
@@ -33,27 +33,6 @@ export function Ports() {
             { key: "exposed", header: "Exposed on", numeric: true, width: "120px", sort: (r) => r.exposed_hosts,
               render: (r) => r.exposed_hosts > 0 ? <span className="badge badge--warn badge--plain">{r.exposed_hosts} hosts</span> : <span className="subtle">local only</span> },
             { key: "services", header: "Services", hideBelow: 560, sort: (r) => r.services.join(","), render: (r) => <span className="mono truncate">{r.services.join(", ") || "—"}</span> },
-          ]} />
-      )}
-    </div>
-  );
-}
-
-export function Services() {
-  const { params } = useLocation();
-  const q = (params.get("q") ?? "").toLowerCase();
-  const units = useResource<UnitRow[]>("/api/v1/services");
-  const rows = useMemo(() => (units.data ?? []).filter((r) => !q || r.unit.toLowerCase().includes(q)), [units.data, q]);
-  return (
-    <div className="view">
-      <ViewHeader title="Services" count={rows.length} total={units.data?.length ?? 0} refresh="/api/v1/services" placeholder="Filter by service…" />
-      {units.error ? <div className="view-pad"><ErrorBox error={units.error} /></div> : units.loading && !units.data ? <Loading /> : rows.length === 0 ? (
-        <Empty icon="layers" title={q ? "Nothing matches this filter" : "No services reported yet"}>{q ? "Clear the filter to see more." : NOT_YET}</Empty>
-      ) : (
-        <DataTable label="Services" rows={rows} onOpen={(r) => nav.open({ kind: "unit", id: r.unit }, true)} rowKey={(r) => r.unit} defaultSort={{ key: "unit", direction: "asc" }}
-          columns={[
-            { key: "unit", header: "Service", sort: (r) => r.unit, render: (r) => <span className="mono truncate">{r.unit}</span> },
-            { key: "hosts", header: "Hosts", numeric: true, width: "90px", sort: (r) => r.hosts, render: (r) => <strong className="num">{r.hosts}</strong> },
           ]} />
       )}
     </div>
