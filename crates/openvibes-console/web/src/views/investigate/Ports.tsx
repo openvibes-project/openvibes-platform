@@ -12,10 +12,9 @@ import { type Column, DataTable } from "../../ui/DataTable";
 import { plural } from "../../ui/format";
 import { type ListFilter, PAGE } from "../../ui/list/filters";
 import { Pager } from "./Hosts";
-import { ListScreen, ListSummary } from "./ListScreen";
+import { LookCell, ListScreen, ListSummary, Week, dash, groupValues, hostFilter, listApiQuery, named } from "./ListScreen";
 import { PortPage } from "./port/PortPage";
 
-const PAGE_SIZE = 50;
 /** The list's columns (keys as the console keeps hidden ones); Port is never hidden. */
 const COLUMNS = [
   { key: "port", label: "Port", fixed: true }, { key: "hosts", label: "Hosts" }, { key: "exposed", label: "Exposed" }, { key: "services", label: "Services" },
@@ -26,15 +25,7 @@ const header = (key: (typeof COLUMNS)[number]["key"]) => COLUMNS.find((c) => c.k
 const API_PARAMS = ["q", "exposure", "protocol", "group", "service", "changes", "host", "sort", "dir", PAGE];
 
 /** The API query for the list's URL: only what the API reads (it refuses anything else). */
-export function apiQuery(params: URLSearchParams): string {
-  const query = new URLSearchParams();
-  for (const key of API_PARAMS) {
-    const value = params.get(key);
-    if (value) query.set(key, value);
-  }
-  query.set("limit", String(PAGE_SIZE));
-  return query.toString();
-}
+export const apiQuery = (params: URLSearchParams) => listApiQuery(params, API_PARAMS);
 
 const EXPOSURE: Record<string, string> = { exposed: "Exposed", local: "Local only" };
 const CHANGES: Record<string, string> = { new: "New this week", look: "Needs a look" };
@@ -45,7 +36,6 @@ export const LOOK: Record<string, string> = {
   remote_admin_exposed: "Remote admin reachable from the network",
   new_unusual: "New this week, not a usual port",
 };
-const named = (labels: Record<string, string>) => (c: { value: string; count: number }) => ({ value: c.value, label: labels[c.value] ?? c.value, count: c.count });
 
 /** The filter chips, their values and counts from the list (none until it loads); Host only while set. */
 export function portFilters(list: PortList | undefined, set: { host: string | null; hostName: string | undefined }): ListFilter[] {
@@ -54,23 +44,10 @@ export function portFilters(list: PortList | undefined, set: { host: string | nu
     { param: "exposure", label: "Exposure", values: (c?.exposure ?? []).map(named(EXPOSURE)) },
     { param: "protocol", label: "Protocol", values: (c?.protocol ?? []).map(named({ tcp: "TCP", udp: "UDP" })) },
     { param: "changes", label: "Changes", values: (c?.changes ?? []).map(named(CHANGES)) },
-    { param: "group", label: "Group", values: (c?.group ?? []).map((g) => ({ value: g.value, label: g.name, count: g.count })) },
+    { param: "group", label: "Group", values: groupValues(c?.group) },
     { param: "service", label: "Service", values: (c?.service ?? []).map(named({ [NOT_COLLECTED]: "Owner not collected" })) },
-    { param: "host", label: "Host", chipOnly: true, values: set.host ? [{ value: set.host, label: set.hostName ?? set.host, count: list?.total ?? 0 }] : [] },
+    hostFilter(set, list?.total),
   ];
-}
-
-const dash = (text: string) => <span className="subtle" title={text}><span aria-hidden="true">—</span><span className="sr-only">{text}</span></span>;
-
-/** "+2 hosts" / "−1 host" / "No change" (ruling 8). */
-function Week({ row }: { row: PortListRow }) {
-  if (row.week_added === 0 && row.week_removed === 0) return <span className="subtle">No change</span>;
-  return (
-    <span className="row nowrap" style={{ gap: 6 }}>
-      {row.week_added > 0 && <span className="num">+{plural(row.week_added, "host")}</span>}
-      {row.week_removed > 0 && <span className="num subtle">−{plural(row.week_removed, "host")}</span>}
-    </span>
-  );
 }
 
 const columns: Column<PortListRow>[] = [
@@ -97,12 +74,7 @@ const columns: Column<PortListRow>[] = [
     </span>
   ) },
   { key: "week", header: header("week"), width: "150px", hideBelow: 820, sort: (r) => r.week_added, render: (r) => <Week row={r} /> },
-  { key: "look", header: header("look"), width: "260px", hideBelow: 1000, render: (r) => {
-    const [first, ...rest] = r.look;
-    return first === undefined ? dash("Nothing to look at") : (
-      <span className="row"><span className="badge badge--warn badge--plain">{LOOK[first] ?? first}</span>{rest.length > 0 && <span className="subtle" title={rest.map((c) => LOOK[c] ?? c).join(", ")}>+{rest.length}</span>}</span>
-    );
-  } },
+  { key: "look", header: header("look"), width: "260px", hideBelow: 1000, render: (r) => <LookCell look={r.look} labels={LOOK} /> },
 ];
 
 /** The summary line, the table and the pager for one loaded page. */

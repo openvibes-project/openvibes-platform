@@ -10,11 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use platform_store::{
-    port_related::RelatedReach,
-    port_summary::{PortSegment, port_hosts_page, port_summary},
-    vuln_summary::reaches_any,
-};
+use platform_store::port_summary::{PortSegment, port_hosts_page, port_summary};
 use serde::Deserialize;
 use utoipa::IntoParams;
 
@@ -25,7 +21,7 @@ use super::{
 use crate::{
     Permission,
     access::guard::{authenticated_capabilities, permission_denied, scope_of, unavailable_auth},
-    alarms::list::{number, pick},
+    host_pages::{holds, hosts_query, related_reach},
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
@@ -86,21 +82,13 @@ pub(crate) async fn port_summary_page(
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    let scope = |p| scope_of(&capabilities, p);
-    let reach = RelatedReach {
-        compliance: scope(Permission::ComplianceRead),
-        vulnerabilities: scope(Permission::VulnerabilitiesRead),
-        alarms: scope(Permission::AlarmsRead),
-    };
+    let reach = related_reach(&capabilities);
     let s = match port_summary(&client, &read, &reach, protocol, port, Utc::now()).await {
         Ok(Some(s)) => s,
         Ok(None) => return not_found(),
         Err(_) => return unavailable_auth(),
     };
-    let holds = async |p| match scope(p) {
-        Some(scope) => reaches_any(&client, &s.hosts, &scope).await,
-        None => Ok(false),
-    };
+    let holds = |p| holds(&client, &capabilities, &s.hosts, p);
     let (Ok(export), Ok(case_write), Ok(case_read), Ok(assistant)) = (
         holds(Permission::HostsExport).await,
         holds(Permission::CasesWrite).await,
@@ -159,15 +147,11 @@ pub(crate) async fn port_hosts_page_route(
     let Ok(Query(p)) = query else {
         return invalid_query("query");
     };
-    let present = |v: &Option<String>| v.clone().filter(|v| !v.is_empty());
-    let (segment, offset, limit) = (present(&p.segment), present(&p.offset), present(&p.limit));
-    let parsed = (|| {
-        Ok((
-            pick(segment.as_deref(), "segment", PortSegment::parse)?.unwrap_or(PortSegment::All),
-            number(offset.as_deref(), 0, 100_000, "offset")?,
-            number(limit.as_deref(), 50, 100, "limit")?,
-        ))
-    })();
+    let parsed = hosts_query(
+        (&p.segment, &p.offset, &p.limit),
+        PortSegment::parse,
+        PortSegment::All,
+    );
     let (segment, offset, limit) = match parsed {
         Ok(v) => v,
         Err(field) => return invalid_query(field),

@@ -10,11 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use platform_store::{
-    port_related::RelatedReach,
-    service_summary::{ServiceSegment, service_hosts_page, service_summary},
-    vuln_summary::reaches_any,
-};
+use platform_store::service_summary::{ServiceSegment, service_hosts_page, service_summary};
 use serde::Deserialize;
 use utoipa::IntoParams;
 
@@ -25,7 +21,7 @@ use super::{
 use crate::{
     Permission,
     access::guard::{authenticated_capabilities, permission_denied, scope_of, unavailable_auth},
-    alarms::list::{number, pick},
+    host_pages::{holds, hosts_query, related_reach},
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
@@ -50,15 +46,6 @@ fn invalid_unit() -> Response {
 /// A unit the store can look up.
 fn valid(unit: &str) -> bool {
     !unit.is_empty() && unit.chars().count() <= 200 && !unit.chars().any(char::is_control)
-}
-
-fn reach_of(capabilities: &[crate::EffectiveCapability]) -> RelatedReach {
-    let scope = |p| scope_of(capabilities, p);
-    RelatedReach {
-        compliance: scope(Permission::ComplianceRead),
-        vulnerabilities: scope(Permission::VulnerabilitiesRead),
-        alarms: scope(Permission::AlarmsRead),
-    }
 }
 
 /// A service's page above the Hosts table.
@@ -88,16 +75,13 @@ pub(crate) async fn service_summary_page(
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    let reach = reach_of(&capabilities);
+    let reach = related_reach(&capabilities);
     let s = match service_summary(&client, &read, &reach, &unit, Utc::now()).await {
         Ok(Some(s)) => s,
         Ok(None) => return not_found(),
         Err(_) => return unavailable_auth(),
     };
-    let holds = async |p| match scope_of(&capabilities, p) {
-        Some(scope) => reaches_any(&client, &s.hosts, &scope).await,
-        None => Ok(false),
-    };
+    let holds = |p| holds(&client, &capabilities, &s.hosts, p);
     let (Ok(export), Ok(case_write), Ok(case_read)) = (
         holds(Permission::HostsExport).await,
         holds(Permission::CasesWrite).await,
@@ -153,16 +137,11 @@ pub(crate) async fn service_hosts_page_route(
     let Ok(Query(p)) = query else {
         return invalid_query("query");
     };
-    let present = |v: &Option<String>| v.clone().filter(|v| !v.is_empty());
-    let (segment, offset, limit) = (present(&p.segment), present(&p.offset), present(&p.limit));
-    let parsed = (|| {
-        Ok((
-            pick(segment.as_deref(), "segment", ServiceSegment::parse)?
-                .unwrap_or(ServiceSegment::All),
-            number(offset.as_deref(), 0, 100_000, "offset")?,
-            number(limit.as_deref(), 50, 100, "limit")?,
-        ))
-    })();
+    let parsed = hosts_query(
+        (&p.segment, &p.offset, &p.limit),
+        ServiceSegment::parse,
+        ServiceSegment::All,
+    );
     let (segment, offset, limit) = match parsed {
         Ok(v) => v,
         Err(field) => return invalid_query(field),
@@ -170,7 +149,7 @@ pub(crate) async fn service_hosts_page_route(
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    let reach = reach_of(&capabilities);
+    let reach = related_reach(&capabilities);
     match service_hosts_page(&client, &read, &reach, &unit, segment, offset, limit).await {
         Ok(page) => axum::Json(ServicePageHostsView::from(page)).into_response(),
         Err(_) => unavailable_auth(),

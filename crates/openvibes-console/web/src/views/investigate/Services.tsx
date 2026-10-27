@@ -11,11 +11,10 @@ import { type Column, DataTable } from "../../ui/DataTable";
 import { plural } from "../../ui/format";
 import { type ListFilter, PAGE } from "../../ui/list/filters";
 import { Pager } from "./Hosts";
-import { ListScreen, ListSummary } from "./ListScreen";
+import { LookCell, ListScreen, ListSummary, Week, dash, groupValues, hostFilter, listApiQuery, named } from "./ListScreen";
 import { isRoot } from "./service/ServiceCards";
 import { ServicePage } from "./service/ServicePage";
 
-const PAGE_SIZE = 50;
 /** The list's columns (keys as the console keeps hidden ones); Service is never hidden. */
 const COLUMNS = [
   { key: "service", label: "Service", fixed: true }, { key: "hosts", label: "Hosts" }, { key: "runs_as", label: "Runs as" }, { key: "ports", label: "Ports" },
@@ -26,15 +25,7 @@ const header = (key: (typeof COLUMNS)[number]["key"]) => COLUMNS.find((c) => c.k
 const API_PARAMS = ["q", "runs_as", "listens", "packaged", "group", "changes", "host", "sort", "dir", PAGE];
 
 /** The API query for the list's URL: only what the API reads (it refuses anything else). */
-export function apiQuery(params: URLSearchParams): string {
-  const query = new URLSearchParams();
-  for (const key of API_PARAMS) {
-    const value = params.get(key);
-    if (value) query.set(key, value);
-  }
-  query.set("limit", String(PAGE_SIZE));
-  return query.toString();
-}
+export const apiQuery = (params: URLSearchParams) => listApiQuery(params, API_PARAMS);
 
 const RUNS_AS: Record<string, string> = { root: "Root or SYSTEM", other: "Another user" };
 const LISTENS: Record<string, string> = { exposed: "On an exposed port", local: "Local ports only", none: "No ports" };
@@ -47,7 +38,6 @@ export const LOOK: Record<string, string> = {
   remote_admin_exposed: "Remote admin reachable from the network",
   new_unusual: "New this week, not a usual service",
 };
-const named = (labels: Record<string, string>) => (c: { value: string; count: number }) => ({ value: c.value, label: labels[c.value] ?? c.value, count: c.count });
 
 /** The filter chips, their values and counts from the list (none until it loads); Host only while set. */
 export function serviceFilters(list: ServiceList | undefined, set: { host: string | null; hostName: string | undefined }): ListFilter[] {
@@ -57,22 +47,9 @@ export function serviceFilters(list: ServiceList | undefined, set: { host: strin
     { param: "listens", label: "Listens", values: (c?.listens ?? []).map(named(LISTENS)) },
     { param: "packaged", label: "Package", values: (c?.packaged ?? []).map(named(PACKAGED)) },
     { param: "changes", label: "Changes", values: (c?.changes ?? []).map(named(CHANGES)) },
-    { param: "group", label: "Group", values: (c?.group ?? []).map((g) => ({ value: g.value, label: g.name, count: g.count })) },
-    { param: "host", label: "Host", chipOnly: true, values: set.host ? [{ value: set.host, label: set.hostName ?? set.host, count: list?.total ?? 0 }] : [] },
+    { param: "group", label: "Group", values: groupValues(c?.group) },
+    hostFilter(set, list?.total),
   ];
-}
-
-const dash = (text: string) => <span className="subtle" title={text}><span aria-hidden="true">—</span><span className="sr-only">{text}</span></span>;
-
-/** "+2 hosts" / "−1 host" / "No change" (ruling 8). */
-function Week({ row }: { row: ServiceListRow }) {
-  if (row.week_added === 0 && row.week_removed === 0) return <span className="subtle">No change</span>;
-  return (
-    <span className="row nowrap" style={{ gap: 6 }}>
-      {row.week_added > 0 && <span className="num">+{plural(row.week_added, "host")}</span>}
-      {row.week_removed > 0 && <span className="num subtle">−{plural(row.week_removed, "host")}</span>}
-    </span>
-  );
 }
 
 /** "root" (amber) on every host, "root on 2 of 5" when only some, then the other users. */
@@ -113,12 +90,7 @@ const columns: Column<ServiceListRow>[] = [
     </div>
   ) },
   { key: "week", header: header("week"), width: "150px", hideBelow: 1000, sort: (r) => r.week_added, render: (r) => <Week row={r} /> },
-  { key: "look", header: header("look"), width: "260px", hideBelow: 1100, render: (r) => {
-    const [first, ...rest] = r.look;
-    return first === undefined ? dash("Nothing to look at") : (
-      <span className="row"><span className="badge badge--warn badge--plain">{LOOK[first] ?? first}</span>{rest.length > 0 && <span className="subtle" title={rest.map((c) => LOOK[c] ?? c).join(", ")}>+{rest.length}</span>}</span>
-    );
-  } },
+  { key: "look", header: header("look"), width: "260px", hideBelow: 1100, render: (r) => <LookCell look={r.look} labels={LOOK} /> },
 ];
 
 /** The summary line, the table and the pager for one loaded page. */

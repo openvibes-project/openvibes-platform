@@ -18,6 +18,7 @@ mod cases;
 mod compliance;
 mod config;
 mod dashboards;
+mod host_pages;
 mod hosts;
 mod http;
 mod lists;
