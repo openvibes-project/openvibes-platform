@@ -5,7 +5,7 @@ import type { SelectOption } from "../select";
 
 /** One filter chip: its URL parameter, its name, and its values with how many rows each matches.
  * `chipOnly`: set from elsewhere (a host page's tile), so drawn only while chosen. */
-export type ListFilter = { param: string; label: string; values: readonly { value: string; label: string; count: number }[]; chipOnly?: boolean };
+export type ListFilter = { param: string; label: string; values: readonly { value: string; label: string; count: number; hint?: string }[]; chipOnly?: boolean };
 
 /** Parameters that order the list rather than filter it: Clear all keeps them. */
 const ORDER = new Set(["sort", "dir"]);
@@ -14,7 +14,7 @@ export const PAGE = "offset";
 
 /** The values of a filter as Select options, the count beside each label. */
 export const valueOptions = (filter: ListFilter): SelectOption[] =>
-  filter.values.map((v) => ({ value: v.value, label: v.label, hint: v.count.toLocaleString() }));
+  filter.values.map((v) => ({ value: v.value, label: v.label, hint: v.hint ?? v.count.toLocaleString() }));
 
 /** The filters with a value chosen, as chips ("Status: Online"); a value the list no longer offers shows as is. */
 export function chosenFilters(filters: readonly ListFilter[], params: URLSearchParams): { param: string; text: string }[] {

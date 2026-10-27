@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-// Assets v1 on the demo: the fleet Software view and a host's software.
+// Assets v1 on the demo: a host's software, ports and services (the fleet Software list: software-list.spec.ts).
 
 // The inspector fades in; axe must measure colours after that, or text
 // mid-fade fails contrast (Firefox measured 4.37:1 for a 4.6:1 badge).
@@ -11,44 +11,6 @@ async function settled(page: import("@playwright/test").Page) {
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex");
-});
-
-test("software lists packages across hosts and opens the hosts that run one", async ({ page }) => {
-  await page.getByRole("link", { name: "Software", exact: true }).click();
-  const bash = page.locator(".view tbody tr").filter({ hasText: /^bash/ }).first();
-  await expect(bash).toBeVisible();
-  await page.getByPlaceholder("Filter by package name…").fill("nginx");
-  const nginx = page.locator(".view tbody tr").filter({ hasText: "nginx" }).first();
-  await nginx.locator("td").first().click();
-  const inspector = page.locator(".inspector");
-  await expect(inspector.locator(".panel-header__kind")).toContainText("Software");
-  await expect(inspector.getByRole("heading", { name: "Versions in use" }).or(inspector.getByText("Versions in use"))).toBeVisible();
-  await expect(inspector.getByText("Vulnerabilities (", { exact: false })).toBeVisible();
-  // A host is a whole page (approved screen 17): the package's panel closes.
-  await inspector.getByRole("list", { name: "Hosts that have it" }).locator("a").first().click();
-  await expect(page).toHaveURL(/\/hosts\/agent-\d{5}$/);
-  await expect(page.locator(".detail-page h1")).toBeVisible();
-  await settled(page);
-  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-});
-
-test("software shows advisories per package and filters to packages in several versions", async ({ page }) => {
-  await page.getByRole("link", { name: "Software", exact: true }).click();
-  await expect(page.getByRole("columnheader", { name: "Advisories" })).toBeVisible();
-  await page.getByRole("button", { name: "Multiple versions" }).or(page.getByRole("link", { name: "Multiple versions" })).first().click();
-  await expect(page).toHaveURL(/multiple_versions=true/);
-  const rows = page.locator(".view tbody tr");
-  await expect(rows.first()).toBeVisible();
-  // A package with an advisory lists it, linking to the vulnerability's page (screen 26),
-  // or to the list filtered by it when the advisory names several CVEs.
-  await page.goto("/software");
-  const withAdvisory = page.locator(".view tbody tr").filter({ has: page.locator(".badge--critical, .badge--important, .badge--moderate, .badge--low") }).first();
-  await withAdvisory.locator("td").first().click();
-  const inspector = page.locator(".inspector");
-  await inspector.getByRole("list", { name: "Open advisories" }).locator("a").first().click();
-  await expect(page).toHaveURL(/\/vulnerabilities(\/[^?]+|\?advisory=[^&]+&state=all)$/);
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(inspector).toHaveCount(0);
 });
 
 /** The first host of the Hosts list, opened: its page. */
@@ -121,7 +83,7 @@ test("on a phone the host page and its lists never scroll the page sideways", as
   }
 });
 
-test("a port's page pages its hosts and panels load the hosts after the first page with Show more (#104)", async ({ page }) => {
+test("a port's page pages its hosts (#104)", async ({ page }) => {
   await page.goto("/ports/22/tcp");
   const rows = page.getByRole("table", { name: "Hosts", exact: true }).locator("tbody tr");
   await expect(rows).toHaveCount(50);
@@ -134,15 +96,6 @@ test("a port's page pages its hosts and panels load the hosts after the first pa
   await expect(rows).toHaveCount(27);
   await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  const inspector = page.locator(".inspector");
-  // The same in a package's panel; Enter on the focused button works too.
-  await page.goto("/software");
-  await page.locator(".view tbody tr").filter({ hasText: /^bash/ }).first().locator("td").first().click();
-  const pkg = inspector.getByRole("list", { name: "Hosts that have it" }).locator("li");
-  await expect(pkg).toHaveCount(50);
-  await inspector.getByRole("button", { name: "Show more hosts" }).focus();
-  await page.keyboard.press("Enter");
-  await expect(pkg).toHaveCount(100);
 });
 
 test("a host whose lists were cut says some ports are not listed", async ({ page }) => {

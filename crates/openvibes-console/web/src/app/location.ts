@@ -135,6 +135,12 @@ const portPage = (id: string) => {
 /** A service's page (approved screen 22; roles 5f ruling 2): the unit as the agent reports it. */
 export const servicePath = (unit: string) => `/services/${encodeURIComponent(unit)}`;
 
+/** A package's page (approved screen 24; roles 5g ruling 2): one name across managers. */
+export const softwarePath = (name: string) => `/software/${encodeURIComponent(name)}`;
+
+/** The package name in a ref: the bare name, or the old `manager/name` of a package panel and of a case item. */
+export const packageName = (id: string) => id.replace(/^(?:rpm|dpkg)\//, "");
+
 /** A vulnerability's page (approved screen 26): a CVE, or an advisory id the page resolves (roles 5b ruling 7). */
 export const vulnPath = (key: string) => `/vulnerabilities/${encodeURIComponent(key)}`;
 
@@ -151,9 +157,9 @@ export function splitFindingId(id: string): [string, string] {
 /** The check a finding ref (`set/rule`, or `/rule` from before rule sets) names. */
 const findingPath = (id: string) => checkPath(...splitFindingId(id));
 
-const PAGES: Record<string, (id: string) => string> = { agent: hostPath, alarm: alarmPath, advisory: vulnPath, finding: findingPath, case: casePath, port: portPage, unit: servicePath };
+const PAGES: Record<string, (id: string) => string> = { agent: hostPath, alarm: alarmPath, advisory: vulnPath, finding: findingPath, case: casePath, port: portPage, unit: servicePath, package: (id) => softwarePath(packageName(id)) };
 
-/** The page an object opens instead of a panel: a host, an alarm, an advisory, a check (a finding), a case or a port or a service; null for a panel. */
+/** The page an object opens instead of a panel: a host, an alarm, an advisory, a check (a finding), a case or a port or a service or a package; null for a panel. */
 export function pagePath(panel: PanelRef): string | null {
   return PAGES[panel.kind]?.(panel.id) ?? null;
 }
@@ -165,13 +171,13 @@ export function pagePath(panel: PanelRef): string | null {
  * `?open=finding:SET/RULE`, `?open=case:ID`, the assistant's `/agents?agent=ID`) is that
  * object's page, a whole page with no panels (as `nav.open` opens it). A host
  * panel wins over an alarm panel, an alarm over an advisory, an advisory over
- * a finding (roles 5c ruling 9), a finding over a case (roles 5d ruling 11), a case over a port (roles 5e ruling 19), a port over a service (roles 5f ruling 16). The old Vulnerabilities flags are today's signals (roles 5b ruling 7),
+ * a finding (roles 5c ruling 9), a finding over a case (roles 5d ruling 11), a case over a port (roles 5e ruling 19), a port over a service (roles 5f ruling 16), a service over a package (roles 5g ruling 17). The old Vulnerabilities flags are today's signals (roles 5b ruling 7),
  * the old Compliance filters today's (roles 5c ruling 9), and the old Cases filters today's (roles 5d).
  */
 export function redirect(location: AppLocation): AppLocation {
   const host = location.view === "/agents" ? location.params.get("agent") : null;
   const panel = location.panels.find((p) => p.kind === "agent") ?? (host ? { kind: "agent", id: host }
-    : ["alarm", "advisory", "finding", "case", "port", "unit"].map((kind) => location.panels.find((p) => p.kind === kind)).find(Boolean));
+    : ["alarm", "advisory", "finding", "case", "port", "unit", "package"].map((kind) => location.panels.find((p) => p.kind === kind)).find(Boolean));
   const page = panel && pagePath(panel);
   if (page) return { view: page, panels: [], params: new URLSearchParams() };
   if (location.view === "/vulnerabilities") return { ...location, params: new URLSearchParams(vulnerabilitiesQuery(location.params.toString())) };

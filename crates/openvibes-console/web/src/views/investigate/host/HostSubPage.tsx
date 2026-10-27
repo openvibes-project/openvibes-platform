@@ -9,7 +9,6 @@ import { hostPath } from "../../../app/location";
 import { viewLink } from "../../../app/nav";
 import { useProvideTitle } from "../../../app/titles";
 import { Empty, ErrorBox, Loading, ObjectLink } from "../../../ui/bits";
-import { packageId } from "../Software";
 import { HostServicesTab } from "./HostServices";
 import { NoSuchHost, summaryPath } from "./HostPage";
 
@@ -38,7 +37,7 @@ export function SoftwareTab({ id }: { id: string }) {
         <ul className="list" aria-label="Installed software">
           {items.map((pkg) => (
             <li key={`${pkg.manager}/${pkg.name}/${pkg.version}/${pkg.release}/${pkg.arch}`}>
-              <ObjectLink to={{ kind: "package", id: packageId(pkg) }} className="list__row">
+              <ObjectLink to={{ kind: "package", id: pkg.name }} className="list__row">
                 <span className="mono grow truncate">{pkg.name}</span>
                 <span className="mono subtle nowrap">{pkg.version}{pkg.release ? `-${pkg.release}` : ""}</span>
                 {pkg.fixable_vulnerable && <span className="badge badge--warn badge--plain">fix available</span>}

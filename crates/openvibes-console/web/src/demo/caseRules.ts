@@ -62,7 +62,7 @@ export function refOk(kind: CaseKind, ref: string): boolean {
     case "compliance_finding": return rest.length === 2 && identifier.test(head) && (rest[0] === "" || identifier.test(rest[0] ?? "")) && identifier.test(rest[1] ?? "");
     case "vulnerability": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
     case "host": return identifier.test(ref);
-    case "software": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
+    case "software": return rest.length === 0 ? freeText(ref) : identifier.test(head) && freeText(rest.join("/"));
     case "port": return rest.length === 1 && (head === "tcp" || head === "udp") && /^[1-9]\d{0,4}$/.test(rest[0] ?? "") && Number(rest[0]) <= 65535;
     case "service": return ref.length >= 1 && ref.length <= 200 && !hasControl(ref) && !ref.includes("/");
   }

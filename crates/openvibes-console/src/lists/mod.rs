@@ -18,12 +18,13 @@ pub(crate) const PAGES: &[&str] = &[
     "cases",
     "ports",
     "services",
+    "software",
 ];
 
 /// The column keys a person may hide on a page; the first column of every
 /// page (`host`; alarms: `severity`; vulnerabilities: `severity` and
 /// `advisory`; compliance: `severity` and `check`; cases: `case` and
-/// `title`; ports: `port`; services: `service`) is never in the list.
+/// `title`; ports: `port`; services: `service`; software: `package`) is never in the list.
 pub(crate) fn hideable(page: &str) -> &'static [&'static str] {
     match page {
         "hosts" => &["os", "groups", "labels", "problems", "heartbeat", "agent"],
@@ -37,6 +38,14 @@ pub(crate) fn hideable(page: &str) -> &'static [&'static str] {
         ],
         "ports" => &["hosts", "exposed", "services", "groups", "week", "look"],
         "services" => &["hosts", "runs_as", "ports", "package", "week", "look"],
+        "software" => &[
+            "hosts",
+            "versions",
+            "vulnerabilities",
+            "fix",
+            "used_by",
+            "week",
+        ],
         _ => &[],
     }
 }

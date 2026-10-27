@@ -4,7 +4,7 @@
 // assistant citations for free.
 import type { ReactNode } from "react";
 
-import { parsePortId, splitFindingId } from "./location";
+import { packageName, parsePortId, splitFindingId } from "./location";
 import type { Access } from "./session";
 import { panelTitle } from "./titles";
 import { DashboardsView } from "../dashboards/DashboardsView";
@@ -17,7 +17,6 @@ import { EnrollmentTokenPanel } from "../panels/admin/EnrollmentTokenPanel";
 import { PublishBundle, RuleSetPanel } from "../panels/rules/RuleSetPanel";
 import { ServiceAccountPanel } from "../panels/admin/ServiceAccountPanel";
 import { SiteRulePanel } from "../panels/rules/SiteRulePanel";
-import { PackagePanel, splitPackageId } from "../panels/hosts/PackagePanel";
 import type { IconName } from "../ui/Icon";
 import { Cases } from "../views/investigate/Cases";
 import { Settings, settingsAccess } from "../views/admin/settings/Settings";
@@ -57,7 +56,7 @@ export const views: readonly ViewDef[] = [
   { path: "/compliance", prefix: "/compliance/", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "compliance.read" }], render: () => <Findings /> },
   { path: "/vulnerabilities", prefix: "/vulnerabilities/", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/hosts", prefix: "/hosts/", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "hosts.read" }], render: () => <Hosts /> },
-  { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "hosts.read" }], render: () => <Software /> },
+  { path: "/software", prefix: "/software/", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "hosts.read" }], render: () => <Software /> },
   { path: "/ports", prefix: "/ports/", label: "Ports", icon: "activity", group: "Investigate", phoneMore: true, keys: "g o", access: [{ permission: "hosts.read" }], render: () => <Ports /> },
   { path: "/services", prefix: "/services/", label: "Services", icon: "layers", group: "Investigate", phoneMore: true, keys: "g u", access: [{ permission: "hosts.read" }], render: () => <Services /> },
   { path: "/cases", prefix: "/cases/", label: "Cases", icon: "cases", group: "Investigate", keys: "g c", access: [{ permission: "cases.read" }], render: () => <Cases /> },
@@ -77,8 +76,8 @@ type PanelDef = {
   render: (id: string) => ReactNode;
 };
 
-/** Icons of objects that are pages, not panels (approved screens 17, 30, 26, 28, 32, 20 and 22). */
-const PAGE_ICONS: Record<string, IconName> = { agent: "agents", alarm: "alarm", advisory: "vulnerabilities", finding: "findings", case: "cases", port: "activity", unit: "layers" };
+/** Icons of objects that are pages, not panels (approved screens 17, 30, 26, 28, 32, 20, 22 and 24). */
+const PAGE_ICONS: Record<string, IconName> = { agent: "agents", alarm: "alarm", advisory: "vulnerabilities", finding: "findings", case: "cases", port: "activity", unit: "layers", package: "package" };
 /** An object's icon. */
 export const objectIcon = (kind: string): IconName => panels[kind]?.icon ?? PAGE_ICONS[kind] ?? "layers";
 
@@ -90,11 +89,10 @@ const portTitle = (id: string) => {
 
 /** The best known name of an object: learned from its panel, else from its id. */
 export function objectTitle(ref: { kind: string; id: string }): string {
-  return panelTitle(ref) ?? panels[ref.kind]?.title(ref.id) ?? (ref.kind === "finding" ? splitFindingId(ref.id)[1] : ref.kind === "case" ? "Case" : ref.kind === "port" ? portTitle(ref.id) : ref.id);
+  return panelTitle(ref) ?? panels[ref.kind]?.title(ref.id) ?? (ref.kind === "finding" ? splitFindingId(ref.id)[1] : ref.kind === "case" ? "Case" : ref.kind === "port" ? portTitle(ref.id) : ref.kind === "package" ? packageName(ref.id) : ref.id);
 }
 
 export const panels: Readonly<Record<string, PanelDef>> = {
-  package: { label: "Software", icon: "package", title: (id) => splitPackageId(id)[1], render: (id) => <PackagePanel id={id} /> },
   compare: { label: "Compare", icon: "agents", title: (id) => id.includes(" ") ? "Compare hosts" : "Compare with…", render: (id) => <ComparePanel id={id} /> },
   "rule-set": { label: "Rule set", icon: "rules", title: (id) => id, render: (id) => <RuleSetPanel id={id} /> },
   "enrollment-token": { label: "Enrollment token", icon: "enrollment", title: (id) => id === "new" ? "New token" : id, render: (id) => <EnrollmentTokenPanel id={id} /> },

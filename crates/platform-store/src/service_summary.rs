@@ -16,6 +16,7 @@ use crate::{
     service_list::OwnedPort,
     service_names::{self, ServiceInfo},
     service_related::{ServiceRelated, related},
+    software_version::{full_version, natural},
     summary_parts::{KEPT, change_counts, first_seen, group_shares, recent_changes},
 };
 
@@ -446,17 +447,7 @@ pub async fn service_hosts_page(
     let chosen: Vec<String> = newest.values().map(|v| v.0.clone()).collect();
     for (agent, (name, epoch, version, release)) in newest {
         if let Some(r) = page.iter_mut().find(|r| r.agent_id == agent) {
-            let epoch = if epoch > 0 {
-                format!("{epoch}:")
-            } else {
-                String::new()
-            };
-            let release = if release.is_empty() {
-                String::new()
-            } else {
-                format!("-{release}")
-            };
-            r.package = Some((name, format!("{epoch}{version}{release}")));
+            r.package = Some((name, full_version(epoch, &version, &release)));
         }
     }
     if let Some(alarms) = &reach.alarms {
@@ -526,35 +517,4 @@ pub async fn service_hosts_page(
         segments,
         rows: page,
     })
-}
-
-/// A version split into runs of digits (compared as numbers) and other text,
-/// so that `10.1` sorts after `9.9`.
-fn natural(version: &str) -> Vec<(u64, String)> {
-    let mut out = Vec::new();
-    let mut rest = version;
-    while !rest.is_empty() {
-        let digits = rest
-            .find(|c: char| !c.is_ascii_digit())
-            .unwrap_or(rest.len());
-        let (number, tail) = rest.split_at(digits);
-        let text = tail
-            .find(|c: char| c.is_ascii_digit())
-            .unwrap_or(tail.len());
-        out.push((number.parse().unwrap_or(0), tail[..text].to_owned()));
-        rest = &tail[text..];
-    }
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn versions_compare_by_their_numbers() {
-        assert!(natural("10.1") > natural("9.9"));
-        assert!(natural("9.2p1") < natural("9.10p1"));
-        assert_eq!(natural("1.0"), natural("1.0"));
-    }
 }

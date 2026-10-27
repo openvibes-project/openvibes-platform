@@ -29,6 +29,7 @@ mod seeded;
 mod server;
 mod services;
 mod settings;
+mod software_pages;
 mod vulnerabilities;
 
 pub use access::auth::{

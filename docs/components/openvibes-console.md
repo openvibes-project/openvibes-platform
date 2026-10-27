@@ -262,6 +262,9 @@ hosts out.
 - The Services list and a service's page (`GET /api/v1/service-list`,
   `/api/v1/services/{unit}/summary` and `/hosts`, step 5f) are in
   [console-services.md](console-services.md).
+- The Software list and a package's page (`GET /api/v1/software-list`,
+  `/api/v1/software-pages/{name}/summary` and `/hosts`, step 5g) are in
+  [console-software.md](console-software.md).
 - `GET /api/v1/ports`: one row per (protocol, port) with `hosts`,
   `exposed_hosts` and up to 8 owning services; `exposed=true` keeps ports
   exposed on at least one host.

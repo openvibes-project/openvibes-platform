@@ -1995,6 +1995,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/software-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Software list. */
+        get: operations["list_software_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/software-pages/{name}/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A package's Hosts table. */
+        get: operations["software_hosts_page_route"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/software-pages/{name}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A package's page above the Hosts table. */
+        get: operations["software_summary_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/software/{manager}/{name}": {
         parameters: {
             query?: never;
@@ -7290,6 +7341,13 @@ export interface components {
             /** @description `site` or `site-alarms`. */
             rule_set_id: string;
         };
+        /** @description What the caller may do here. */
+        SoftwareActionsView: {
+            /** @description Add the package to a case (`cases.write` and `cases.read`). */
+            add_to_case: boolean;
+            /** @description Export the hosts (`hosts.export`). */
+            export: boolean;
+        };
         /** @description An advisory open on the package. */
         SoftwareAdvisoryView: {
             /** @description Advisory id (opens the advisory view). */
@@ -7322,6 +7380,38 @@ export interface components {
             /** @description Link to the advisory. */
             url: string;
         };
+        /** @description One entry of Recent changes. */
+        SoftwareChangeView: {
+            /** @description The host. */
+            agent_id: string;
+            /** @description RFC 3339. */
+            at: string;
+            /** @description `appeared` or `went_away`. */
+            change: string;
+            /** @description Its hostname. */
+            hostname?: string | null;
+            /** @description The version it concerns, when the log has it. */
+            version?: string | null;
+        };
+        /** @description Rows per filter value, each with the other filters applied. */
+        SoftwareCountsView: {
+            /** @description `new`, `updated`, `removed`. */
+            changes: components["schemas"]["CountView"][];
+            /** @description `available`, `none`. */
+            fix: components["schemas"]["CountView"][];
+            /**
+             * @description Groups with a host in reach; `count` is the hosts of the group in
+             *     reach, not packages (a package count per group would read every
+             *     package of every host).
+             */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description `dpkg`, `rpm`. */
+            type: components["schemas"]["CountView"][];
+            /** @description `one`, `several`. */
+            versions: components["schemas"]["CountView"][];
+            /** @description `exploited`, `critical_high`, `any`, `none`. */
+            vulns: components["schemas"]["CountView"][];
+        };
         /** @description One package: its versions in use and, paged, its hosts. */
         SoftwareDetail: {
             /** @description Open advisories on the package, most urgent first (at most 200). */
@@ -7336,6 +7426,62 @@ export interface components {
             next_cursor?: string | null;
             /** @description Versions in use on visible hosts, most hosts first. */
             versions: components["schemas"]["SoftwareVersionView"][];
+        };
+        /** @description When the package was first seen. */
+        SoftwareFirstSeenView: {
+            /** @description RFC 3339: the earliest the log or an enrolment can tell. */
+            at: string;
+            /**
+             * @description The package was there before the log began (or before its 90 days):
+             *     shown as "Before {date}".
+             */
+            before: boolean;
+        };
+        /** @description One bar of By group. */
+        SoftwareGroupShareView: {
+            /** @description Group id. */
+            group_id: string;
+            /**
+             * Format: int64
+             * @description Members in reach that have the package.
+             */
+            have: number;
+            /** @description How the group gets its hosts. */
+            kind: components["schemas"]["HostGroupKind"];
+            /** @description Group name. */
+            name: string;
+            /**
+             * Format: int64
+             * @description Members in reach.
+             */
+            of: number;
+        };
+        /** @description The header: the facts line. */
+        SoftwareHeaderView: {
+            first_seen?: null | components["schemas"]["SoftwareFirstSeenView"];
+            /**
+             * Format: int64
+             * @description Hosts in reach that have it.
+             */
+            hosts: number;
+            /** @description The package databases it is reported from (`dpkg`, `rpm`), sorted. */
+            managers: string[];
+            /** @description The package name. */
+            name: string;
+            /**
+             * Format: int64
+             * @description Active hosts in reach that have sent a package report.
+             */
+            of: number;
+        };
+        /** @description A version of the package on a host. */
+        SoftwareHostVersionView: {
+            /** @description Architecture. */
+            arch: string;
+            /** @description `dpkg` or `rpm`. */
+            manager: string;
+            /** @description `epoch:version-release`, epoch and release only when present. */
+            version: string;
         };
         /** @description One host that has the package. */
         SoftwareHostView: {
@@ -7352,12 +7498,273 @@ export interface components {
             /** @description The version it has (`epoch:version-release`). */
             version: string;
         };
+        /** @description One row: a package name. */
+        SoftwareListRowView: {
+            /**
+             * Format: int64
+             * @description Open advisories on the hosts in reach.
+             */
+            advisories: number;
+            /** @description Reported from dpkg. */
+            dpkg: boolean;
+            /** @description One of them is known to be exploited. */
+            exploited: boolean;
+            /**
+             * Format: int64
+             * @description Hosts in reach that have it, under any package database.
+             */
+            hosts: number;
+            /** @description The package name. */
+            name: string;
+            /** @description The newest. */
+            newest: string;
+            /**
+             * Format: int64
+             * @description Of those, advisories no update fixes.
+             */
+            no_fix: number;
+            /** @description The oldest version in use, `epoch:version-release`. */
+            oldest: string;
+            /** @description Reported from rpm. */
+            rpm: boolean;
+            /**
+             * Format: int64
+             * @description Hosts where an update fixes an open advisory.
+             */
+            update_hosts: number;
+            /** @description Services using it, most hosts first, at most 3. */
+            used_by: components["schemas"]["UsedByView"][];
+            /**
+             * Format: int64
+             * @description How many services use it in all.
+             */
+            used_by_total: number;
+            /**
+             * Format: int64
+             * @description Versions in use (distinct epoch, version and release).
+             */
+            versions: number;
+            /**
+             * Format: int64
+             * @description Hosts that installed it in the last 7 days.
+             */
+            week_added: number;
+            /**
+             * Format: int64
+             * @description Hosts that removed it in the last 7 days.
+             */
+            week_removed: number;
+            /**
+             * Format: int64
+             * @description Hosts that changed its version in the last 7 days.
+             */
+            week_updated: number;
+            /** @description The worst severity among them. */
+            worst_severity?: string | null;
+        };
+        /** @description One page of the Software list. */
+        SoftwareListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["SoftwareCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["SoftwareListRowView"][];
+            /** @description Summary line. */
+            summary: components["schemas"]["SoftwareSummaryLineView"];
+            /**
+             * Format: int64
+             * @description Rows matching every filter.
+             */
+            total: number;
+        };
         /** @description A page of the fleet's software, by name. */
         SoftwarePage: {
             /** @description Packages on this page. */
             items: components["schemas"]["SoftwareView"][];
             /** @description Opaque cursor for the next page. */
             next_cursor?: string | null;
+        };
+        /** @description One open advisory on the package. */
+        SoftwarePageAdvisoryView: {
+            /** @description The advisory id. */
+            advisory_id: string;
+            /** @description Its CVE ids. */
+            cves: string[];
+            /**
+             * Format: float
+             * @description CVSS base score.
+             */
+            cvss?: number | null;
+            /**
+             * Format: float
+             * @description EPSS probability.
+             */
+            epss?: number | null;
+            /** @description On the CISA KEV or EUVD exploited list. */
+            exploited: boolean;
+            /** @description The version that fixes it; absent when nothing does yet. */
+            fixed_in?: string | null;
+            /**
+             * Format: int64
+             * @description Hosts in reach it is open on.
+             */
+            hosts: number;
+            /** @description Severity. */
+            severity: string;
+            /** @description Title. */
+            title: string;
+        };
+        /** @description One host that has the package. */
+        SoftwarePageHostView: {
+            /** @description The host. */
+            agent_id: string;
+            /** @description Its hostname. */
+            hostname?: string | null;
+            /** @description Its last address. */
+            ip?: string | null;
+            /** @description Its operating system. */
+            os?: string | null;
+            /** @description RFC 3339: its last package report; the web warns after 24 hours. */
+            reported_at?: string | null;
+            /** @description The version an update would bring; absent when it is up to date. */
+            update_to?: string | null;
+            /** @description Services running there that use the package. */
+            used_by: string[];
+            /** @description The versions it has, newest first. */
+            versions: components["schemas"]["SoftwareHostVersionView"][];
+        };
+        /** @description One page of the Hosts table. */
+        SoftwarePageHostsView: {
+            /** @description The page. */
+            items: components["schemas"]["SoftwarePageHostView"][];
+            /** @description Every segment's size. */
+            segments: components["schemas"]["SoftwareSegmentsView"];
+            /**
+             * Format: int64
+             * @description Hosts in the chosen segment.
+             */
+            total: number;
+        };
+        /** @description A package's page above the Hosts table. */
+        SoftwarePageSummaryView: {
+            /** @description Open advisories, most urgent first, at most 50. */
+            advisories: components["schemas"]["SoftwarePageAdvisoryView"][];
+            /** @description By group. */
+            by_group: components["schemas"]["SoftwareGroupShareView"][];
+            /** @description Actions. */
+            can: components["schemas"]["SoftwareActionsView"];
+            /** @description The 20 newest changes in reach. */
+            changes: components["schemas"]["SoftwareChangeView"][];
+            /** @description Header. */
+            header: components["schemas"]["SoftwareHeaderView"];
+            /**
+             * Format: int64
+             * @description Open advisories without a fix.
+             */
+            no_fix: number;
+            /** @description Tiles. */
+            tiles: components["schemas"]["SoftwareTilesView"];
+            /** @description Services using it, matched by name. */
+            used_by: components["schemas"]["UsedByView"][];
+            /** @description The versions in use, most hosts first. */
+            versions: components["schemas"]["SoftwarePageVersionView"][];
+            /** @description Installed, changed and removed this week. */
+            week: components["schemas"]["SoftwareWeekView"];
+        };
+        /** @description One version in use. */
+        SoftwarePageVersionView: {
+            /**
+             * Format: int64
+             * @description Open advisories that affect it.
+             */
+            advisories: number;
+            /** @description Architecture. */
+            arch: string;
+            /** @description Some of their CVE ids, at most four. */
+            cves: string[];
+            /**
+             * Format: int64
+             * @description Hosts in reach that have it.
+             */
+            hosts: number;
+            /** @description `dpkg` or `rpm`. */
+            manager: string;
+            /** @description `epoch:version-release`, epoch and release only when present. */
+            version: string;
+        };
+        /** @description Hosts in each segment. */
+        SoftwareSegmentsView: {
+            /**
+             * Format: int64
+             * @description All.
+             */
+            all: number;
+            /**
+             * Format: int64
+             * @description No update is waiting.
+             */
+            current: number;
+            /**
+             * Format: int64
+             * @description An update fixes an open advisory there.
+             */
+            update: number;
+        };
+        /**
+         * @description "N with an exploited vulnerability · N with a fix available · N in several
+         *     versions · N new this week · from N hosts' last reports".
+         */
+        SoftwareSummaryLineView: {
+            /**
+             * Format: int64
+             * @description Rows with an exploited open advisory.
+             */
+            exploited: number;
+            /**
+             * Format: int64
+             * @description Rows with an update that fixes an open advisory somewhere.
+             */
+            fixable: number;
+            /**
+             * Format: int64
+             * @description Rows installed on a host this week.
+             */
+            new_this_week: number;
+            /**
+             * Format: int64
+             * @description Active hosts in reach that have sent a package report (the "m" of
+             *     "n of m").
+             */
+            reporting_hosts: number;
+            /**
+             * Format: int64
+             * @description Rows in more than one version.
+             */
+            several_versions: number;
+        };
+        /** @description The tiles. */
+        SoftwareTilesView: {
+            /**
+             * Format: int64
+             * @description Hosts that have it (of the header's `of`).
+             */
+            hosts: number;
+            /**
+             * Format: int64
+             * @description Hosts where an update fixes an open advisory.
+             */
+            update_hosts: number;
+            /**
+             * Format: int64
+             * @description Versions in use.
+             */
+            versions: number;
+            /**
+             * Format: int64
+             * @description Open advisories on it.
+             */
+            vulnerabilities: number;
         };
         /** @description One version of a package in use. */
         SoftwareVersionView: {
@@ -7426,6 +7833,24 @@ export interface components {
              *     `low`, `unrated`); absent without advisories.
              */
             worst_severity?: string | null;
+        };
+        /** @description Hosts that installed, changed the version of and removed it in the last 7 days. */
+        SoftwareWeekView: {
+            /**
+             * Format: int64
+             * @description Installed.
+             */
+            added: number;
+            /**
+             * Format: int64
+             * @description Removed.
+             */
+            removed: number;
+            /**
+             * Format: int64
+             * @description Changed version.
+             */
+            updated: number;
         };
         /** @description A condition evaluated at detection time. */
         StepView: {
@@ -7732,6 +8157,16 @@ export interface components {
          * @enum {string}
          */
         UpdateState: "disabled" | "unavailable" | "up_to_date" | "available";
+        /** @description A service that uses the package, matched by name. */
+        UsedByView: {
+            /**
+             * Format: int64
+             * @description Hosts in reach running it.
+             */
+            hosts: number;
+            /** @description The unit, e.g. `nginx.service`. */
+            unit: string;
+        };
         /**
          * @description Actions allowed, each when the viewer holds its permission on a host in
          *     reach.
@@ -15754,6 +16189,224 @@ export interface operations {
             };
             /** @description Permission denied */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_software_page: {
+        parameters: {
+            query?: {
+                /** @description Package name or a service using it (contains). */
+                q?: string;
+                /** @description exploited, critical_high, any or none: by the package's open advisories. */
+                vulns?: string;
+                /**
+                 * @description available (an update fixes an open advisory somewhere) or none (an
+                 *     open advisory has no fix yet).
+                 */
+                fix?: string;
+                /** @description one or several versions in use. */
+                versions?: string;
+                /** @description dpkg or rpm. */
+                type?: string;
+                /** @description A host group id. */
+                group?: string;
+                /** @description new, updated or removed this week. */
+                changes?: string;
+                /** @description An agent id. */
+                host?: string;
+                /** @description package (default), hosts, vulnerabilities, versions or week. */
+                sort?: string;
+                /** @description asc (default) or desc. */
+                dir?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of packages on the caller's hosts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwareListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    software_hosts_page_route: {
+        parameters: {
+            query?: {
+                /** @description all (default), update or current. */
+                segment?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The package name, e.g. openssl */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the hosts in the caller's reach that have it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwarePageHostsView"];
+                };
+            };
+            /** @description invalid_package or invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    software_summary_page: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The package name, e.g. openssl */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwarePageSummaryView"];
+                };
+            };
+            /** @description invalid_package */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description package_not_found: no host in reach has it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

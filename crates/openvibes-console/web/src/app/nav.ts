@@ -10,14 +10,14 @@ let snapshot: AppLocation = read();
 let snapshotKey = window.location.pathname + window.location.search;
 settle();
 
-/** An old /findings, /agents, Vulnerabilities, Compliance, Cases or Ports address, or an old host, alarm, advisory, finding, case, port or unit panel: show the URL
+/** An old /findings, /agents, Vulnerabilities, Compliance, Cases or Ports address, or an old host, alarm, advisory, finding, case, port, unit or package panel: show the URL
  * of the page it now opens, in place, so history keeps no dead entry (plan ruling 1). */
 function settle() {
   const oldVulns = /\/vulnerabilities$/.test(window.location.pathname) && /[?&](exploited|reboot|nofix|lowconf|sort)=/.test(window.location.search);
   const oldChecks = /\/compliance$/.test(window.location.pathname) && /[?&](window|since|set|sort)=/.test(window.location.search);
   const oldCases = /\/cases$/.test(window.location.pathname) && /[?&](assignee=none|sort=)/.test(window.location.search);
   const oldPorts = /\/ports$/.test(window.location.pathname) && /[?&](exposed|sort)=/.test(window.location.search);
-  if (!oldVulns && !oldChecks && !oldCases && !oldPorts && !/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=(agent|alarm|advisory|finding|case|port|unit)(%3A|:)/i.test(window.location.search)) return;
+  if (!oldVulns && !oldChecks && !oldCases && !oldPorts && !/\/(findings|agents)$/.test(window.location.pathname) && !/[?&]open=(agent|alarm|advisory|finding|case|port|unit|package)(%3A|:)/i.test(window.location.search)) return;
   snapshotKey = formatLocation(snapshot, base);
   window.history.replaceState(null, "", snapshotKey);
 }

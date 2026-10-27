@@ -26,6 +26,7 @@
     "/alarms/{alarm_id}",
     "/ports/{port}/{protocol}",
     "/services/{unit}",
+    "/software/{package}",
     "/cases/{case_id}",
     "/vulnerabilities/{key}",
     "/compliance/{rule_set_id}/{rule_id}"

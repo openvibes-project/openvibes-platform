@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { alarmPath, casePath, casesQuery, checkPath, complianceQuery, formatLocation, hostPath, hostsQuery, pagePath, parseLocation, popPanel, parsePortId, portPath, portsQuery, pushPanel, vulnerabilitiesQuery } from "./location";
+import { alarmPath, casePath, casesQuery, checkPath, complianceQuery, formatLocation, hostPath, hostsQuery, packageName, pagePath, parseLocation, popPanel, parsePortId, portPath, portsQuery, pushPanel, vulnerabilitiesQuery } from "./location";
 
 // An old panel link opens the object's page, with no panel left.
 const opensPage = (view: string, search: string, want: string) => {
@@ -11,9 +11,9 @@ const opensPage = (view: string, search: string, want: string) => {
 
 describe("location", () => {
   it("reads the view, panel stack and filters from a URL", () => {
-    const loc = parseLocation("/console/compliance", "?open=package%3Ab%2FR-1&open=finding-group%3Abaseline%2FOV-1&q=web", "/console/");
+    const loc = parseLocation("/console/compliance", "?open=rule-set%3Abaseline&open=finding-group%3Abaseline%2FOV-1&q=web", "/console/");
     expect(loc.view).toBe("/compliance");
-    expect(loc.panels).toEqual([{ kind: "package", id: "b/R-1" }, { kind: "finding-group", id: "baseline/OV-1" }]);
+    expect(loc.panels).toEqual([{ kind: "rule-set", id: "baseline" }, { kind: "finding-group", id: "baseline/OV-1" }]);
     expect(loc.params.get("q")).toBe("web");
   });
 
@@ -23,8 +23,8 @@ describe("location", () => {
   });
 
   it("reads the old /findings page as /compliance, keeping its filters", () => {
-    const loc = parseLocation("/console/findings", "?severity=high&open=package%3Arpm%2Fopenssh", "/console/");
-    expect(formatLocation(loc, "/console/")).toBe("/console/compliance?severity=high&open=package%3Arpm%2Fopenssh");
+    const loc = parseLocation("/console/findings", "?severity=high&open=rule-set%3Abaseline", "/console/");
+    expect(formatLocation(loc, "/console/")).toBe("/console/compliance?severity=high&open=rule-set%3Abaseline");
   });
 
   it.each([
@@ -93,7 +93,19 @@ describe("location", () => {
     opensPage(view, search, want);
   });
 
+  it.each([
+    ["/software", "?open=package%3Arpm%2Fopenssh", "/software/openssh"],
+    ["/hosts", "?open=package%3Alibstdc%2B%2B6", "/software/libstdc%2B%2B6"],
+    ["/", "?open=package%3Adpkg%2Fcurl&open=unit%3Asshd.service", "/services/sshd.service"],
+  ])("old_package_links_open_the_page: an old package panel on %s%s is the package's page, %s", (view, search, want) => {
+    opensPage(view, search, want);
+  });
+
   it("names the page an object opens instead of a panel", () => {
+    expect(pagePath({ kind: "package", id: "openssl" })).toBe("/software/openssl");
+    expect(pagePath({ kind: "package", id: "dpkg/libc6" })).toBe("/software/libc6");
+    expect(packageName("rpm/openssh")).toBe("openssh");
+    expect(packageName("openssh")).toBe("openssh");
     expect(pagePath({ kind: "unit", id: "nginx.service" })).toBe("/services/nginx.service");
     expect(pagePath({ kind: "finding", id: "hardening-linux-l1/harden.ssh.permit_root_login" })).toBe("/compliance/hardening-linux-l1/harden.ssh.permit_root_login");
     expect(alarmPath("7 /x")).toBe("/alarms/7%20%2Fx");
@@ -102,7 +114,7 @@ describe("location", () => {
     expect(pagePath({ kind: "advisory", id: "X 1" })).toBe("/vulnerabilities/X%201");
     expect(pagePath({ kind: "case", id: "c 1" })).toBe("/cases/c%201");
     expect(pagePath({ kind: "case", id: "new" })).toBe("/cases/new");
-    expect(pagePath({ kind: "package", id: "x" })).toBeNull();
+    expect(pagePath({ kind: "rule-set", id: "x" })).toBeNull();
   });
 
   it("names a host's page", () => {

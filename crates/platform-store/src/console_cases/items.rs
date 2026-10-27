@@ -40,7 +40,8 @@ pub(super) enum Parsed<'a> {
     Finding(&'a str, &'a str, &'a str),
     Vulnerability(&'a str, &'a str),
     Host(&'a str),
-    Software(&'a str, &'a str),
+    /// The package database, when the ref names one, and the package.
+    Software(Option<&'a str>, &'a str),
     Port(&'a str, i32),
     Service(&'a str),
 }
@@ -69,11 +70,14 @@ pub(super) fn parse_ref(kind: ItemKind, reference: &str) -> Option<Parsed<'_>> {
                 .then_some(Parsed::Vulnerability(agent, advisory))
         }
         ItemKind::Host => identifier_ok(reference).then_some(Parsed::Host(reference)),
-        ItemKind::Software => {
-            let (manager, name) = reference.split_once('/')?;
-            (identifier_ok(manager) && free_text_ok(name, 256))
-                .then_some(Parsed::Software(manager, name))
-        }
+        // `name` is the package under every manager (what the Software page
+        // adds, roles plan step 5g ruling 14); `manager/name` is older items,
+        // kept. A package name has no `/` in rpm or dpkg.
+        ItemKind::Software => match reference.split_once('/') {
+            None => free_text_ok(reference, 256).then_some(Parsed::Software(None, reference)),
+            Some((manager, name)) => (identifier_ok(manager) && free_text_ok(name, 256))
+                .then_some(Parsed::Software(Some(manager), name)),
+        },
         ItemKind::Port => {
             let (protocol, number) = reference.split_once('/')?;
             let port: i32 = number.parse().ok()?;
@@ -169,7 +173,7 @@ pub(super) async fn resolve_item<'a>(
                         SELECT 1 FROM package_versions pv
                         JOIN host_packages hp ON hp.package_version_id = pv.id
                         JOIN agents a ON a.agent_id = hp.agent_id
-                        WHERE pv.manager = $3 AND pv.name = $4 AND {visible})"
+                        WHERE ($3::text IS NULL OR pv.manager = $3) AND pv.name = $4 AND {visible})"
                 ),
                 &[&viewer.global, &viewer.groups, &manager, &name],
             )
