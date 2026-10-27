@@ -53,6 +53,8 @@ use utoipa::OpenApi;
         crate::vulnerabilities::list_page::list_vulnerability_page,
         crate::compliance::list_page::list_check_page,
         crate::ports::list_page::list_port_page,
+        crate::ports::page::port_summary_page,
+        crate::ports::page::port_hosts_page_route,
         crate::compliance::page::check_summary_page,
         crate::compliance::page::check_hosts_page,
         crate::vulnerabilities::page::vulnerability_summary_page,

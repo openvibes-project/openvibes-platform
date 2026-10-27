@@ -7307,6 +7307,205 @@
         }
       }
     },
+    "/api/v1/ports/{protocol}/{port}/hosts": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "A port's Hosts table.",
+        "operationId": "port_hosts_page_route",
+        "parameters": [
+          {
+            "name": "protocol",
+            "in": "path",
+            "description": "tcp or udp",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "path",
+            "description": "1 to 65535",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "segment",
+            "in": "query",
+            "description": "all (default), exposed or local.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, 0 to 100000.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the listening hosts in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortPageHostsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_port or invalid_query, naming the parameter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ports/{protocol}/{port}/summary": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "A port's page above the Hosts table.",
+        "operationId": "port_summary_page",
+        "parameters": [
+          {
+            "name": "protocol",
+            "in": "path",
+            "description": "tcp or udp",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "path",
+            "description": "1 to 65535",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page in the caller's reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortPageSummaryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_port",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs hosts.read",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "port_not_found: nothing listens in reach",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/role-templates": {
       "get": {
         "tags": [
@@ -18927,6 +19126,59 @@
           }
         }
       },
+      "PortActionsView": {
+        "type": "object",
+        "description": "What the caller may do here.",
+        "required": [
+          "export",
+          "add_to_case",
+          "ask"
+        ],
+        "properties": {
+          "add_to_case": {
+            "type": "boolean",
+            "description": "Add the port to a case (`cases.write` and `cases.read`)."
+          },
+          "ask": {
+            "type": "boolean",
+            "description": "Ask the assistant (`assistant.use`, and the assistant is on)."
+          },
+          "export": {
+            "type": "boolean",
+            "description": "Export the hosts (`hosts.export`)."
+          }
+        }
+      },
+      "PortChangeView": {
+        "type": "object",
+        "description": "One entry of Recent changes.",
+        "required": [
+          "at",
+          "agent_id",
+          "change"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The host."
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "change": {
+            "type": "string",
+            "description": "`appeared`, `went_away`, `exposed` or `local`."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its hostname."
+          }
+        }
+      },
       "PortCountsView": {
         "type": "object",
         "description": "Rows per filter value, each with the other filters applied.",
@@ -19009,6 +19261,80 @@
           }
         }
       },
+      "PortDetailsView": {
+        "type": "object",
+        "description": "The Details card.",
+        "required": [
+          "programs",
+          "owners"
+        ],
+        "properties": {
+          "owners": {
+            "$ref": "#/components/schemas/PortOwnersView",
+            "description": "Owners collected."
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Distinct programs, sorted."
+          }
+        }
+      },
+      "PortFirstSeenView": {
+        "type": "object",
+        "description": "When the port was first seen.",
+        "required": [
+          "at",
+          "before"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339: the earliest the log or an enrolment can tell."
+          },
+          "before": {
+            "type": "boolean",
+            "description": "The port was there before the log began (or before its 90 days):\nshown as \"Before {date}\"."
+          }
+        }
+      },
+      "PortGroupShareView": {
+        "type": "object",
+        "description": "One bar of By group.",
+        "required": [
+          "group_id",
+          "name",
+          "kind",
+          "listening",
+          "of"
+        ],
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "description": "Group id."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HostGroupKind",
+            "description": "How the group gets its hosts."
+          },
+          "listening": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Members in reach listening on the port."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group name."
+          },
+          "of": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Members in reach."
+          }
+        }
+      },
       "PortGroupView": {
         "type": "object",
         "description": "A group named in a row.",
@@ -19035,6 +19361,75 @@
           "name": {
             "type": "string",
             "description": "Group name."
+          }
+        }
+      },
+      "PortHeaderView": {
+        "type": "object",
+        "description": "The header: the facts line.",
+        "required": [
+          "protocol",
+          "port",
+          "listening",
+          "of",
+          "exposed",
+          "services"
+        ],
+        "properties": {
+          "exposed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of the listening hosts, exposed ones."
+          },
+          "first_seen": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PortFirstSeenView",
+                "description": "First seen."
+              }
+            ]
+          },
+          "listening": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in reach listening on it."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The usual name."
+          },
+          "of": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active hosts in reach that have sent a services report."
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 to 65535.",
+            "minimum": 0
+          },
+          "protocol": {
+            "type": "string",
+            "description": "`tcp` or `udp`."
+          },
+          "services": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Distinct owner units seen on it."
+          },
+          "usual_use": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The usual use."
           }
         }
       },
@@ -19211,6 +19606,352 @@
           }
         }
       },
+      "PortOwnersView": {
+        "type": "object",
+        "description": "How many listening hosts reported an owner.",
+        "required": [
+          "collected",
+          "of"
+        ],
+        "properties": {
+          "collected": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Listening hosts whose owner was collected."
+          },
+          "of": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Listening hosts."
+          }
+        }
+      },
+      "PortPageHostView": {
+        "type": "object",
+        "description": "One host listening on the port.",
+        "required": [
+          "agent_id",
+          "bound",
+          "exposed",
+          "owners_partial"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The host."
+          },
+          "bound": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every address it binds."
+          },
+          "exposed": {
+            "type": "boolean",
+            "description": "Exposed on any of them."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its hostname."
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its last address."
+          },
+          "os": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its operating system."
+          },
+          "owners_partial": {
+            "type": "boolean",
+            "description": "The host's report leaves some owners out, so a missing owner is\n\"not collected\"."
+          },
+          "program": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The owning program, when collected."
+          },
+          "reported_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339: its last services report; the web warns after 24 hours."
+          },
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The owning unit, when collected."
+          }
+        }
+      },
+      "PortPageHostsView": {
+        "type": "object",
+        "description": "One page of the Hosts table.",
+        "required": [
+          "items",
+          "total",
+          "segments"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortPageHostView"
+            },
+            "description": "The page."
+          },
+          "segments": {
+            "$ref": "#/components/schemas/PortSegmentsView",
+            "description": "Every segment's size."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts in the chosen segment."
+          }
+        }
+      },
+      "PortPageSummaryView": {
+        "type": "object",
+        "description": "A port's page above the Hosts table.",
+        "required": [
+          "header",
+          "tiles",
+          "details",
+          "by_group",
+          "changes",
+          "related",
+          "can"
+        ],
+        "properties": {
+          "by_group": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortGroupShareView"
+            },
+            "description": "By group."
+          },
+          "can": {
+            "$ref": "#/components/schemas/PortActionsView",
+            "description": "Actions."
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortChangeView"
+            },
+            "description": "The 20 newest changes in reach."
+          },
+          "details": {
+            "$ref": "#/components/schemas/PortDetailsView",
+            "description": "Details."
+          },
+          "header": {
+            "$ref": "#/components/schemas/PortHeaderView",
+            "description": "Header."
+          },
+          "related": {
+            "$ref": "#/components/schemas/PortRelatedView",
+            "description": "Related."
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/PortTilesView",
+            "description": "Tiles."
+          }
+        }
+      },
+      "PortRelatedAlarmsView": {
+        "type": "object",
+        "description": "Open alarms from the port's program.",
+        "required": [
+          "program_not_collected",
+          "open",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts with one."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open alarms."
+          },
+          "program_not_collected": {
+            "type": "boolean",
+            "description": "No listening host names its program."
+          }
+        }
+      },
+      "PortRelatedCheckView": {
+        "type": "object",
+        "description": "A failing check concerning the port.",
+        "required": [
+          "rule_set_id",
+          "rule_id",
+          "title",
+          "severity",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Listening hosts failing it."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set."
+          },
+          "severity": {
+            "type": "string",
+            "description": "The worst open failing finding's severity."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title."
+          }
+        }
+      },
+      "PortRelatedChecksView": {
+        "type": "object",
+        "description": "Failing checks.",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "area": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The compliance area the card links to."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortRelatedCheckView"
+            },
+            "description": "Worst first, at most five."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All failing checks concerning the port."
+          }
+        }
+      },
+      "PortRelatedPackageView": {
+        "type": "object",
+        "description": "Open advisories of one package of the usual server.",
+        "required": [
+          "package",
+          "advisories",
+          "hosts"
+        ],
+        "properties": {
+          "advisories": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open advisories with a fix."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Listening hosts with one."
+          },
+          "package": {
+            "type": "string",
+            "description": "The package name."
+          }
+        }
+      },
+      "PortRelatedView": {
+        "type": "object",
+        "description": "The Related card; a section is absent without its permission.",
+        "properties": {
+          "alarms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PortRelatedAlarmsView",
+                "description": "With `alarms.read`."
+              }
+            ]
+          },
+          "compliance": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PortRelatedChecksView",
+                "description": "With `compliance.read`."
+              }
+            ]
+          },
+          "vulnerabilities": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PortRelatedPackageView"
+            },
+            "description": "With `vulnerabilities.read`; empty for a port with no package in the map."
+          }
+        }
+      },
+      "PortSegmentsView": {
+        "type": "object",
+        "description": "Hosts in each segment.",
+        "required": [
+          "all",
+          "exposed",
+          "local"
+        ],
+        "properties": {
+          "all": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All."
+          },
+          "exposed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Exposed."
+          },
+          "local": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Local only."
+          }
+        }
+      },
       "PortSummaryLineView": {
         "type": "object",
         "description": "\"N exposed on some host · N with new hosts this week · N need a look ·\nfrom N hosts' last reports\".",
@@ -19240,6 +19981,37 @@
             "type": "integer",
             "format": "int64",
             "description": "Active hosts in reach that have sent a services report (the \"m\" of\n\"n of m\")."
+          }
+        }
+      },
+      "PortTilesView": {
+        "type": "object",
+        "description": "The four tiles.",
+        "required": [
+          "listening",
+          "exposed",
+          "local",
+          "week"
+        ],
+        "properties": {
+          "exposed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Exposed: reachable from the network."
+          },
+          "listening": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts listening (of the header's `of`)."
+          },
+          "local": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Local only: bound to loopback."
+          },
+          "week": {
+            "$ref": "#/components/schemas/PortWeekView",
+            "description": "This week."
           }
         }
       },
@@ -19279,6 +20051,26 @@
               "type": "string"
             },
             "description": "Owning services seen for it, sorted, at most 8."
+          }
+        }
+      },
+      "PortWeekView": {
+        "type": "object",
+        "description": "Hosts that started and stopped listening in the last 7 days.",
+        "required": [
+          "added",
+          "removed"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Started."
+          },
+          "removed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Stopped."
           }
         }
       },

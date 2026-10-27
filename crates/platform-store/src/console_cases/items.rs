@@ -41,6 +41,7 @@ pub(super) enum Parsed<'a> {
     Vulnerability(&'a str, &'a str),
     Host(&'a str),
     Software(&'a str, &'a str),
+    Port(&'a str, i32),
 }
 
 /// Checks `reference` against the shape its kind has in the console, so
@@ -71,6 +72,14 @@ pub(super) fn parse_ref(kind: ItemKind, reference: &str) -> Option<Parsed<'_>> {
             let (manager, name) = reference.split_once('/')?;
             (identifier_ok(manager) && free_text_ok(name, 256))
                 .then_some(Parsed::Software(manager, name))
+        }
+        ItemKind::Port => {
+            let (protocol, number) = reference.split_once('/')?;
+            let port: i32 = number.parse().ok()?;
+            (matches!(protocol, "tcp" | "udp")
+                && (1..=65535).contains(&port)
+                && port.to_string() == number)
+                .then_some(Parsed::Port(protocol, port))
         }
     }
 }
@@ -160,6 +169,19 @@ pub(super) async fn resolve_item<'a>(
                         WHERE pv.manager = $3 AND pv.name = $4 AND {visible})"
                 ),
                 &[&viewer.global, &viewer.groups, &manager, &name],
+            )
+            .await?
+        }
+        // Like software: only if a host in reach listens on it.
+        Parsed::Port(protocol, port) => {
+            db.query_opt(
+                &format!(
+                    "SELECT NULL::text, NULL::text WHERE EXISTS (
+                        SELECT 1 FROM host_listeners l
+                        JOIN agents a ON a.agent_id = l.agent_id
+                        WHERE l.protocol = $3 AND l.port = $4 AND {visible})"
+                ),
+                &[&viewer.global, &viewer.groups, &protocol, &port],
             )
             .await?
         }

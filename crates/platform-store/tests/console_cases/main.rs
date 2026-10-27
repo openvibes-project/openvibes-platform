@@ -130,7 +130,10 @@ async fn setup() -> Fx {
                 fixed_at, last_evaluated_at) VALUES
                 ('{WEB}', 'FEDORA-1', '[]', now(), NULL, now()),
                 ('{DB}', 'FEDORA-1', '[]', now(), NULL, now());
-             INSERT INTO version_vulnerabilities VALUES (2, 'FEDORA-2', 'bash', now());"
+             INSERT INTO version_vulnerabilities VALUES (2, 'FEDORA-2', 'bash', now());
+             INSERT INTO host_listeners (agent_id, protocol, address, port, exposed) VALUES
+                ('{WEB}', 'tcp', '0.0.0.0', 22, true),
+                ('{DB}', 'tcp', '0.0.0.0', 5432, true);"
         ))
         .await
         .unwrap();

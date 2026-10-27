@@ -10,8 +10,19 @@ use crate::http::AuthHttpState;
 
 pub(crate) mod list_page;
 pub(crate) mod list_page_types;
+pub(crate) mod page;
+pub(crate) mod page_types;
 
-/// The Ports list.
+/// The Ports list and a port's page.
 pub(crate) fn routes() -> Router<AuthHttpState> {
-    Router::new().route("/v1/port-list", get(list_page::list_port_page))
+    Router::new()
+        .route("/v1/port-list", get(list_page::list_port_page))
+        .route(
+            "/v1/ports/{protocol}/{port}/summary",
+            get(page::port_summary_page),
+        )
+        .route(
+            "/v1/ports/{protocol}/{port}/hosts",
+            get(page::port_hosts_page_route),
+        )
 }

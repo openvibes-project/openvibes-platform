@@ -58,6 +58,8 @@ pub enum ItemKind {
     Host,
     /// A package across the fleet; the ref is `manager/name`.
     Software,
+    /// A port across the fleet; the ref is `tcp/22` or `udp/53`.
+    Port,
 }
 
 impl ItemKind {
@@ -69,6 +71,7 @@ impl ItemKind {
             Self::Vulnerability => "vulnerability",
             Self::Host => "host",
             Self::Software => "software",
+            Self::Port => "port",
         }
     }
 
@@ -80,6 +83,7 @@ impl ItemKind {
             "vulnerability" => Self::Vulnerability,
             "host" => Self::Host,
             "software" => Self::Software,
+            "port" => Self::Port,
             _ => return None,
         })
     }

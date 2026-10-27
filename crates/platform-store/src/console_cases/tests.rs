@@ -43,6 +43,22 @@ fn refs_are_checked_against_the_shape_the_panels_write() {
     );
     assert_eq!(parse_ref(ItemKind::Software, "rpm"), None);
     assert_eq!(parse_ref(ItemKind::Software, "rpm/"), None);
+    assert_eq!(
+        parse_ref(ItemKind::Port, "tcp/22"),
+        Some(Parsed::Port("tcp", 22))
+    );
+    for bad in [
+        "tcp",
+        "tcp/0",
+        "tcp/65536",
+        "tcp/022",
+        "tcp/+22",
+        "icmp/22",
+        "TCP/22",
+        "tcp/",
+    ] {
+        assert_eq!(parse_ref(ItemKind::Port, bad), None, "{bad:?}");
+    }
 }
 
 #[test]
@@ -53,10 +69,11 @@ fn only_alarms_findings_and_vulnerabilities_are_exclusive() {
         ("vulnerability", true),
         ("host", false),
         ("software", false),
+        ("port", false),
     ] {
         assert_eq!(ItemKind::parse(name).unwrap().exclusive(), exclusive);
     }
-    assert_eq!(ItemKind::parse("port"), None);
+    assert_eq!(ItemKind::parse("service"), None);
 }
 
 #[test]

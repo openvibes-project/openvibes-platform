@@ -1358,6 +1358,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ports/{protocol}/{port}/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A port's Hosts table. */
+        get: operations["port_hosts_page_route"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ports/{protocol}/{port}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A port's page above the Hosts table. */
+        get: operations["port_summary_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/role-templates": {
         parameters: {
             query?: never;
@@ -5518,6 +5552,26 @@ export interface components {
             user_id: string;
             username: string;
         };
+        /** @description What the caller may do here. */
+        PortActionsView: {
+            /** @description Add the port to a case (`cases.write` and `cases.read`). */
+            add_to_case: boolean;
+            /** @description Ask the assistant (`assistant.use`, and the assistant is on). */
+            ask: boolean;
+            /** @description Export the hosts (`hosts.export`). */
+            export: boolean;
+        };
+        /** @description One entry of Recent changes. */
+        PortChangeView: {
+            /** @description The host. */
+            agent_id: string;
+            /** @description RFC 3339. */
+            at: string;
+            /** @description `appeared`, `went_away`, `exposed` or `local`. */
+            change: string;
+            /** @description Its hostname. */
+            hostname?: string | null;
+        };
         /** @description Rows per filter value, each with the other filters applied. */
         PortCountsView: {
             /** @description `new`, `look`. */
@@ -5545,6 +5599,42 @@ export interface components {
             /** @description `tcp` or `udp`. */
             protocol: string;
         };
+        /** @description The Details card. */
+        PortDetailsView: {
+            /** @description Owners collected. */
+            owners: components["schemas"]["PortOwnersView"];
+            /** @description Distinct programs, sorted. */
+            programs: string[];
+        };
+        /** @description When the port was first seen. */
+        PortFirstSeenView: {
+            /** @description RFC 3339: the earliest the log or an enrolment can tell. */
+            at: string;
+            /**
+             * @description The port was there before the log began (or before its 90 days):
+             *     shown as "Before {date}".
+             */
+            before: boolean;
+        };
+        /** @description One bar of By group. */
+        PortGroupShareView: {
+            /** @description Group id. */
+            group_id: string;
+            /** @description How the group gets its hosts. */
+            kind: components["schemas"]["HostGroupKind"];
+            /**
+             * Format: int64
+             * @description Members in reach listening on the port.
+             */
+            listening: number;
+            /** @description Group name. */
+            name: string;
+            /**
+             * Format: int64
+             * @description Members in reach.
+             */
+            of: number;
+        };
         /** @description A group named in a row. */
         PortGroupView: {
             /**
@@ -5558,6 +5648,41 @@ export interface components {
             kind: components["schemas"]["HostGroupKind"];
             /** @description Group name. */
             name: string;
+        };
+        /** @description The header: the facts line. */
+        PortHeaderView: {
+            /**
+             * Format: int64
+             * @description Of the listening hosts, exposed ones.
+             */
+            exposed: number;
+            first_seen?: null | components["schemas"]["PortFirstSeenView"];
+            /**
+             * Format: int64
+             * @description Hosts in reach listening on it.
+             */
+            listening: number;
+            /** @description The usual name. */
+            name?: string | null;
+            /**
+             * Format: int64
+             * @description Active hosts in reach that have sent a services report.
+             */
+            of: number;
+            /**
+             * Format: int32
+             * @description 1 to 65535.
+             */
+            port: number;
+            /** @description `tcp` or `udp`. */
+            protocol: string;
+            /**
+             * Format: int64
+             * @description Distinct owner units seen on it.
+             */
+            services: number;
+            /** @description The usual use. */
+            usual_use?: string | null;
         };
         /** @description One host listening on a port (once per bound address). */
         PortHostView: {
@@ -5643,6 +5768,157 @@ export interface components {
              */
             total: number;
         };
+        /** @description How many listening hosts reported an owner. */
+        PortOwnersView: {
+            /**
+             * Format: int64
+             * @description Listening hosts whose owner was collected.
+             */
+            collected: number;
+            /**
+             * Format: int64
+             * @description Listening hosts.
+             */
+            of: number;
+        };
+        /** @description One host listening on the port. */
+        PortPageHostView: {
+            /** @description The host. */
+            agent_id: string;
+            /** @description Every address it binds. */
+            bound: string[];
+            /** @description Exposed on any of them. */
+            exposed: boolean;
+            /** @description Its hostname. */
+            hostname?: string | null;
+            /** @description Its last address. */
+            ip?: string | null;
+            /** @description Its operating system. */
+            os?: string | null;
+            /**
+             * @description The host's report leaves some owners out, so a missing owner is
+             *     "not collected".
+             */
+            owners_partial: boolean;
+            /** @description The owning program, when collected. */
+            program?: string | null;
+            /** @description RFC 3339: its last services report; the web warns after 24 hours. */
+            reported_at?: string | null;
+            /** @description The owning unit, when collected. */
+            service?: string | null;
+        };
+        /** @description One page of the Hosts table. */
+        PortPageHostsView: {
+            /** @description The page. */
+            items: components["schemas"]["PortPageHostView"][];
+            /** @description Every segment's size. */
+            segments: components["schemas"]["PortSegmentsView"];
+            /**
+             * Format: int64
+             * @description Hosts in the chosen segment.
+             */
+            total: number;
+        };
+        /** @description A port's page above the Hosts table. */
+        PortPageSummaryView: {
+            /** @description By group. */
+            by_group: components["schemas"]["PortGroupShareView"][];
+            /** @description Actions. */
+            can: components["schemas"]["PortActionsView"];
+            /** @description The 20 newest changes in reach. */
+            changes: components["schemas"]["PortChangeView"][];
+            /** @description Details. */
+            details: components["schemas"]["PortDetailsView"];
+            /** @description Header. */
+            header: components["schemas"]["PortHeaderView"];
+            /** @description Related. */
+            related: components["schemas"]["PortRelatedView"];
+            /** @description Tiles. */
+            tiles: components["schemas"]["PortTilesView"];
+        };
+        /** @description Open alarms from the port's program. */
+        PortRelatedAlarmsView: {
+            /**
+             * Format: int64
+             * @description Hosts with one.
+             */
+            hosts: number;
+            /**
+             * Format: int64
+             * @description Open alarms.
+             */
+            open: number;
+            /** @description No listening host names its program. */
+            program_not_collected: boolean;
+        };
+        /** @description A failing check concerning the port. */
+        PortRelatedCheckView: {
+            /**
+             * Format: int64
+             * @description Listening hosts failing it.
+             */
+            hosts: number;
+            /** @description Rule. */
+            rule_id: string;
+            /** @description Rule set. */
+            rule_set_id: string;
+            /** @description The worst open failing finding's severity. */
+            severity: string;
+            /** @description Title. */
+            title: string;
+        };
+        /** @description Failing checks. */
+        PortRelatedChecksView: {
+            /** @description The compliance area the card links to. */
+            area?: string | null;
+            /** @description Worst first, at most five. */
+            items: components["schemas"]["PortRelatedCheckView"][];
+            /**
+             * Format: int64
+             * @description All failing checks concerning the port.
+             */
+            total: number;
+        };
+        /** @description Open advisories of one package of the usual server. */
+        PortRelatedPackageView: {
+            /**
+             * Format: int64
+             * @description Open advisories with a fix.
+             */
+            advisories: number;
+            /**
+             * Format: int64
+             * @description Listening hosts with one.
+             */
+            hosts: number;
+            /** @description The package name. */
+            package: string;
+        };
+        /** @description The Related card; a section is absent without its permission. */
+        PortRelatedView: {
+            alarms?: null | components["schemas"]["PortRelatedAlarmsView"];
+            compliance?: null | components["schemas"]["PortRelatedChecksView"];
+            /** @description With `vulnerabilities.read`; empty for a port with no package in the map. */
+            vulnerabilities?: components["schemas"]["PortRelatedPackageView"][] | null;
+        };
+        /** @description Hosts in each segment. */
+        PortSegmentsView: {
+            /**
+             * Format: int64
+             * @description All.
+             */
+            all: number;
+            /**
+             * Format: int64
+             * @description Exposed.
+             */
+            exposed: number;
+            /**
+             * Format: int64
+             * @description Local only.
+             */
+            local: number;
+        };
         /**
          * @description "N exposed on some host · N with new hosts this week · N need a look ·
          *     from N hosts' last reports".
@@ -5670,6 +5946,26 @@ export interface components {
              */
             reporting_hosts: number;
         };
+        /** @description The four tiles. */
+        PortTilesView: {
+            /**
+             * Format: int64
+             * @description Exposed: reachable from the network.
+             */
+            exposed: number;
+            /**
+             * Format: int64
+             * @description Hosts listening (of the header's `of`).
+             */
+            listening: number;
+            /**
+             * Format: int64
+             * @description Local only: bound to loopback.
+             */
+            local: number;
+            /** @description This week. */
+            week: components["schemas"]["PortWeekView"];
+        };
         /** @description One port across the caller's hosts. */
         PortView: {
             /**
@@ -5691,6 +5987,19 @@ export interface components {
             protocol: string;
             /** @description Owning services seen for it, sorted, at most 8. */
             services: string[];
+        };
+        /** @description Hosts that started and stopped listening in the last 7 days. */
+        PortWeekView: {
+            /**
+             * Format: int64
+             * @description Started.
+             */
+            added: number;
+            /**
+             * Format: int64
+             * @description Stopped.
+             */
+            removed: number;
         };
         /** @description CSRF challenge returned before local password login. */
         PreauthResponse: {
@@ -12754,6 +13063,144 @@ export interface operations {
             };
             /** @description No visible host listens on it */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    port_hosts_page_route: {
+        parameters: {
+            query?: {
+                /** @description all (default), exposed or local. */
+                segment?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path: {
+                /** @description tcp or udp */
+                protocol: string;
+                /** @description 1 to 65535 */
+                port: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the listening hosts in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortPageHostsView"];
+                };
+            };
+            /** @description invalid_port or invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    port_summary_page: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description tcp or udp */
+                protocol: string;
+                /** @description 1 to 65535 */
+                port: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortPageSummaryView"];
+                };
+            };
+            /** @description invalid_port */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description port_not_found: nothing listens in reach */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

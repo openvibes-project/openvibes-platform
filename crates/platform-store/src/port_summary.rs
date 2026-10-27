@@ -92,6 +92,8 @@ pub struct PortSummary {
     pub changes: Vec<PortEvent>,
     /// The Related card.
     pub related: PortRelated,
+    /// The listening hosts in reach, for the actions' reach checks.
+    pub hosts: Vec<String>,
 }
 
 fn scope_params(scope: &AgentScope) -> (bool, Vec<String>) {
@@ -245,6 +247,7 @@ pub async fn port_summary(
         by_group,
         changes: events.into_iter().take(20).collect(),
         related: related(client, reach, protocol, port, info, &hosts, now).await?,
+        hosts,
     }))
 }
 

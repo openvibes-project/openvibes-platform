@@ -130,12 +130,14 @@ async fn an_item_out_of_scope_cannot_be_added_and_does_not_say_whether_it_exists
     let web_alarm = fx.web_alarm.clone();
     let db_alarm = fx.db_alarm.clone();
     let missing = format!("{DB}0");
-    let hidden_and_missing: [(&str, &str); 7] = [
+    let hidden_and_missing: [(&str, &str); 9] = [
         ("host", DB),
         ("alarm", &db_alarm),
         ("compliance_finding", &db_finding),
         ("vulnerability", &db_vuln),
         ("software", "rpm/bash"),
+        ("port", "tcp/5432"),
+        ("port", "tcp/9"),
         ("host", &missing),
         ("alarm", "999999"),
     ];
@@ -169,7 +171,11 @@ async fn an_item_out_of_scope_cannot_be_added_and_does_not_say_whether_it_exists
         Refusal::ItemNotFound
     );
     // The same items are fine for a global user, and in scope for Bob.
-    for (kind, reference) in [("alarm", web_alarm.as_str()), ("software", "rpm/openssl")] {
+    for (kind, reference) in [
+        ("alarm", web_alarm.as_str()),
+        ("software", "rpm/openssl"),
+        ("port", "tcp/22"),
+    ] {
         cases::add_item(
             &mut fx.console,
             &prod(),
@@ -210,13 +216,16 @@ async fn malformed_items_are_invalid_not_missing() {
     let mut fx = setup().await;
     let case = open_case(&mut fx.console, &global(), ALICE, "Shapes", &[]).await;
     for (kind, reference, field) in [
-        ("port", "tcp/22", "kind"),
+        ("service", "sshd.service", "kind"),
         ("alarm", "042", "ref"),
         ("alarm", "abc", "ref"),
         ("compliance_finding", WEB, "ref"),
         ("vulnerability", WEB, "ref"),
         ("host", "web 01", "ref"),
         ("software", "rpm", "ref"),
+        ("port", "tcp/0", "ref"),
+        ("port", "icmp/22", "ref"),
+        ("port", "tcp/022", "ref"),
     ] {
         let refused = cases::add_item(
             &mut fx.console,
