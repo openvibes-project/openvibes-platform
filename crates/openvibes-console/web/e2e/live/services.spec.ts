@@ -57,7 +57,7 @@ test("a team lead's Services list and service page stay inside their team; an Ad
     // The Needs a look and This week cells agree with the API.
     expect(mine.items.find((r) => r.unit === "postgresql.service")?.look).toEqual(["database_exposed"]);
     const fresh = mine.items.find((r) => r.unit === build);
-    expect([fresh?.week_added, fresh?.look, fresh?.package]).toEqual([1, ["root_unpackaged", "new_unusual"], null]);
+    expect([fresh?.week_added, fresh?.look, fresh?.package ?? null]).toEqual([1, ["root_unpackaged", "new_unusual"], null]);
     await expect(rows(lead).filter({ hasText: "postgresql.service" })).toContainText("Database reachable from the network");
     await expect(rows(lead).filter({ hasText: build })).toContainText("+1 host");
     await expect(rows(lead).filter({ hasText: build })).toContainText("Not a usual service");
