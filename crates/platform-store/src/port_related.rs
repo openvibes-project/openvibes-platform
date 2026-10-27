@@ -142,7 +142,7 @@ pub(crate) async fn failing_checks(
     hosts: &[String],
     now: DateTime<Utc>,
     area: Option<&'static str>,
-    names_it: &dyn Fn(&str, Option<&str>) -> bool,
+    names_it: &(dyn Fn(&str, Option<&str>) -> bool + Sync),
 ) -> Result<RelatedChecks, StoreError> {
     let (global, groups) = scope_params(scope);
     let visible = agent_visibility("a.agent_id", "$1", "$2");

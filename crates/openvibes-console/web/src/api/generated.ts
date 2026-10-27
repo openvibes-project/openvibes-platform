@@ -1808,6 +1808,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/service-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Services list. */
+        get: operations["list_service_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/services": {
         parameters: {
             query?: never;
@@ -1832,6 +1849,40 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_unit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/services/{unit}/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A service's Hosts table. */
+        get: operations["service_hosts_page_route"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/services/{unit}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A service's page above the Hosts table. */
+        get: operations["service_summary_page"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3465,6 +3516,11 @@ export interface components {
              * @description Ports.
              */
             ports: number;
+            /**
+             * Format: int64
+             * @description Services.
+             */
+            services: number;
             /**
              * Format: int64
              * @description Software.
@@ -5499,6 +5555,23 @@ export interface components {
             /** Format: password */
             readonly one_time_password: string;
         };
+        /** @description A port a service owns. */
+        OwnedPortView: {
+            /** @description Exposed on at least one host in reach. */
+            exposed: boolean;
+            /**
+             * Format: int64
+             * @description Hosts in reach where the service owns it.
+             */
+            hosts: number;
+            /**
+             * Format: int32
+             * @description 1 to 65535.
+             */
+            port: number;
+            /** @description `tcp` or `udp`. */
+            protocol: string;
+        };
         /**
          * @description Stable console permission identifiers, one per action (spec §3). Their
          *     metadata (area, column, scope, needs) lives in `access/catalogue.rs`.
@@ -6475,6 +6548,493 @@ export interface components {
             /** @description Stable service-account UUID. */
             service_account_id: string;
         };
+        /** @description What the caller may do here. */
+        ServiceActionsView: {
+            /** @description Add the service to a case (`cases.write` and `cases.read`). */
+            add_to_case: boolean;
+            /** @description Export the hosts (`hosts.export`). */
+            export: boolean;
+        };
+        /** @description One entry of Recent changes. */
+        ServiceChangeView: {
+            /** @description The host. */
+            agent_id: string;
+            /** @description RFC 3339. */
+            at: string;
+            /** @description `appeared` or `went_away`. */
+            change: string;
+            /** @description Its hostname. */
+            hostname?: string | null;
+        };
+        /** @description Rows per filter value, each with the other filters applied. */
+        ServiceCountsView: {
+            /** @description `new`, `look`. */
+            changes: components["schemas"]["CountView"][];
+            /** @description Groups holding a host running a service. */
+            group: components["schemas"]["GroupCountView"][];
+            /** @description `exposed`, `local`, `none`. */
+            listens: components["schemas"]["CountView"][];
+            /** @description `yes`, `no`. */
+            packaged: components["schemas"]["CountView"][];
+            /** @description `root`, `other`. */
+            runs_as: components["schemas"]["CountView"][];
+        };
+        /** @description The Details card. */
+        ServiceDetailsView: {
+            /**
+             * Format: int64
+             * @description Hosts running it that have any matched package.
+             */
+            package_hosts: number;
+            /** @description Packages matched to it by name. */
+            packages: components["schemas"]["ServicePackageView"][];
+            /**
+             * Format: int64
+             * @description Processes it runs across those hosts.
+             */
+            processes: number;
+            /** @description Distinct programs, sorted. */
+            programs: string[];
+            /** @description Users it runs as, most hosts first. */
+            run_as: components["schemas"]["ServiceRunAsView"][];
+            /** @description This week. */
+            week: components["schemas"]["ServiceWeekView"];
+        };
+        /** @description When the service was first seen. */
+        ServiceFirstSeenView: {
+            /** @description RFC 3339: the earliest the log or an enrolment can tell. */
+            at: string;
+            /**
+             * @description The service was there before the log began (or before its 90 days):
+             *     shown as "Before {date}".
+             */
+            before: boolean;
+        };
+        /** @description One bar of By group. */
+        ServiceGroupShareView: {
+            /** @description Group id. */
+            group_id: string;
+            /** @description How the group gets its hosts. */
+            kind: components["schemas"]["HostGroupKind"];
+            /** @description Group name. */
+            name: string;
+            /**
+             * Format: int64
+             * @description Members in reach.
+             */
+            of: number;
+            /**
+             * Format: int64
+             * @description Members in reach running the service.
+             */
+            running: number;
+        };
+        /** @description A group named in a row. */
+        ServiceGroupView: {
+            /**
+             * Format: int64
+             * @description Hosts of the group running the service.
+             */
+            hosts: number;
+            /** @description Group id. */
+            id: string;
+            /** @description How the group gets its hosts (automatic or rule). */
+            kind: components["schemas"]["HostGroupKind"];
+            /** @description Group name. */
+            name: string;
+        };
+        /** @description The header: the facts line. */
+        ServiceHeaderView: {
+            /**
+             * Format: int64
+             * @description Of the running hosts, those where it owns an exposed port.
+             */
+            exposed: number;
+            first_seen?: null | components["schemas"]["ServiceFirstSeenView"];
+            /** @description What it usually is. */
+            name?: string | null;
+            /**
+             * Format: int64
+             * @description Active hosts in reach that have sent a services report.
+             */
+            of: number;
+            /**
+             * Format: int64
+             * @description Of the running hosts, those where it runs as root or SYSTEM.
+             */
+            root: number;
+            /**
+             * Format: int64
+             * @description Hosts in reach running it.
+             */
+            running: number;
+            /** @description The unit as reported. */
+            unit: string;
+            /** @description Its usual use. */
+            usual_use?: string | null;
+        };
+        /** @description A package on a host and its version. */
+        ServiceHostPackageView: {
+            /** @description The installed package's name. */
+            name: string;
+            /** @description `epoch:version-release`, epoch and release only when present. */
+            version: string;
+        };
+        /** @description A port the service owns on a host. */
+        ServiceHostPortView: {
+            /** @description Bound to a non-loopback address. */
+            exposed: boolean;
+            /**
+             * Format: int32
+             * @description 1 to 65535.
+             */
+            port: number;
+            /** @description `tcp` or `udp`. */
+            protocol: string;
+        };
+        /** @description Open problems on a host; a count is absent without its permission. */
+        ServiceHostProblemsView: {
+            /**
+             * Format: int64
+             * @description Open alarms from the service's programs.
+             */
+            alarms?: number | null;
+            /**
+             * Format: int64
+             * @description Open advisories of the matched package.
+             */
+            vulnerabilities?: number | null;
+        };
+        /** @description One row: a service (a unit). */
+        ServiceListRowView: {
+            /**
+             * Format: int64
+             * @description Of those, hosts where it owns an exposed port.
+             */
+            exposed_hosts: number;
+            /**
+             * @description Automatic and rule groups with a host running it, most hosts first,
+             *     at most 3.
+             */
+            groups: components["schemas"]["ServiceGroupView"][];
+            /**
+             * Format: int64
+             * @description How many such groups there are in all.
+             */
+            groups_total: number;
+            /**
+             * Format: int64
+             * @description Hosts in reach running it (the "n" of "n of m").
+             */
+            hosts: number;
+            /**
+             * Format: int64
+             * @description Of those, hosts where it owns a port.
+             */
+            listening_hosts: number;
+            /**
+             * @description Needs a look codes, in rule order: `root_unpackaged`,
+             *     `database_exposed`, `remote_admin_exposed`, `new_unusual`.
+             */
+            look: string[];
+            /** @description What it usually is; absent for a service that is not well known. */
+            name?: string | null;
+            /** @description The package matched to it by name. */
+            package?: string | null;
+            /**
+             * Format: int64
+             * @description Of those, hosts with a package matched to it by name.
+             */
+            package_hosts: number;
+            /** @description Ports it owns, exposed first, at most 4. */
+            ports: components["schemas"]["OwnedPortView"][];
+            /**
+             * Format: int64
+             * @description How many ports it owns in all.
+             */
+            ports_total: number;
+            /** @description Its programs, sorted, at most 4. */
+            programs: string[];
+            /**
+             * Format: int64
+             * @description Of those, hosts where it runs as root or SYSTEM.
+             */
+            root_hosts: number;
+            /** @description The users it runs as, sorted, at most 4. */
+            run_as: string[];
+            /** @description The unit as reported, e.g. `sshd.service`. */
+            unit: string;
+            /** @description Its usual use. */
+            usual_use?: string | null;
+            /**
+             * Format: int64
+             * @description Hosts that started running it in the last 7 days.
+             */
+            week_added: number;
+            /**
+             * Format: int64
+             * @description Hosts that stopped running it in the last 7 days.
+             */
+            week_removed: number;
+        };
+        /** @description One page of the Services list. */
+        ServiceListView: {
+            /** @description Per-value counts. */
+            counts: components["schemas"]["ServiceCountsView"];
+            /** @description RFC 3339. */
+            generated_at: string;
+            /** @description The page. */
+            items: components["schemas"]["ServiceListRowView"][];
+            /** @description Summary line. */
+            summary: components["schemas"]["ServiceSummaryLineView"];
+            /**
+             * Format: int64
+             * @description Rows matching every filter.
+             */
+            total: number;
+        };
+        /** @description A package matched to it by name. */
+        ServicePackageView: {
+            /**
+             * Format: int64
+             * @description Hosts running the service that have it.
+             */
+            hosts: number;
+            /** @description The installed package's name. */
+            name: string;
+        };
+        /** @description One host running the service. */
+        ServicePageHostView: {
+            /** @description The host. */
+            agent_id: string;
+            /** @description Its hostname. */
+            hostname?: string | null;
+            /** @description Its last address. */
+            ip?: string | null;
+            /** @description Its operating system. */
+            os?: string | null;
+            /**
+             * @description The host's report leaves some owners out, so a missing port may just
+             *     not be collected.
+             */
+            owners_partial: boolean;
+            package?: null | components["schemas"]["ServiceHostPackageView"];
+            /** @description Ports it owns there. */
+            ports: components["schemas"]["ServiceHostPortView"][];
+            /** @description Open problems. */
+            problems: components["schemas"]["ServiceHostProblemsView"];
+            /**
+             * Format: int32
+             * @description Processes it runs there.
+             */
+            processes: number;
+            /** @description Its programs there. */
+            programs: string[];
+            /** @description RFC 3339: its last services report; the web warns after 24 hours. */
+            reported_at?: string | null;
+            /** @description The user it runs as there. */
+            run_as?: string | null;
+        };
+        /** @description One page of the Hosts table. */
+        ServicePageHostsView: {
+            /** @description The page. */
+            items: components["schemas"]["ServicePageHostView"][];
+            /** @description Every segment's size. */
+            segments: components["schemas"]["ServiceSegmentsView"];
+            /**
+             * Format: int64
+             * @description Hosts in the chosen segment.
+             */
+            total: number;
+        };
+        /** @description A service's page above the Hosts table. */
+        ServicePageSummaryView: {
+            /** @description By group. */
+            by_group: components["schemas"]["ServiceGroupShareView"][];
+            /** @description Actions. */
+            can: components["schemas"]["ServiceActionsView"];
+            /** @description The 20 newest changes in reach. */
+            changes: components["schemas"]["ServiceChangeView"][];
+            /** @description Details. */
+            details: components["schemas"]["ServiceDetailsView"];
+            /** @description Header. */
+            header: components["schemas"]["ServiceHeaderView"];
+            /** @description The ports it owns, exposed first. */
+            ports: components["schemas"]["OwnedPortView"][];
+            /** @description Related. */
+            related: components["schemas"]["ServiceRelatedView"];
+            /** @description Tiles. */
+            tiles: components["schemas"]["ServiceTilesView"];
+        };
+        /** @description Open alarms from the service's programs. */
+        ServiceRelatedAlarmsView: {
+            /**
+             * Format: int64
+             * @description Hosts with one.
+             */
+            hosts: number;
+            /**
+             * Format: int64
+             * @description Open alarms.
+             */
+            open: number;
+            /** @description No host running it names a program. */
+            programs_not_collected: boolean;
+        };
+        /** @description A failing check concerning the service. */
+        ServiceRelatedCheckView: {
+            /**
+             * Format: int64
+             * @description Hosts running the service that fail it.
+             */
+            hosts: number;
+            /** @description Rule. */
+            rule_id: string;
+            /** @description Rule set. */
+            rule_set_id: string;
+            /** @description The worst open failing finding's severity. */
+            severity: string;
+            /** @description Title. */
+            title: string;
+        };
+        /** @description Failing checks. */
+        ServiceRelatedChecksView: {
+            /** @description The compliance area the card links to. */
+            area?: string | null;
+            /** @description Worst first, at most five. */
+            items: components["schemas"]["ServiceRelatedCheckView"][];
+            /**
+             * Format: int64
+             * @description All failing checks concerning the service.
+             */
+            total: number;
+        };
+        /** @description Open advisories of one matched package. */
+        ServiceRelatedPackageView: {
+            /**
+             * Format: int64
+             * @description Open advisories with a fix.
+             */
+            advisories: number;
+            /**
+             * Format: int64
+             * @description Hosts running the service with one.
+             */
+            hosts: number;
+            /** @description The package name. */
+            package: string;
+        };
+        /** @description The Related card; a section is absent without its permission. */
+        ServiceRelatedView: {
+            alarms?: null | components["schemas"]["ServiceRelatedAlarmsView"];
+            compliance?: null | components["schemas"]["ServiceRelatedChecksView"];
+            vulnerabilities?: null | components["schemas"]["ServiceRelatedVulnerabilitiesView"];
+        };
+        /** @description Open advisories of the matched packages. */
+        ServiceRelatedVulnerabilitiesView: {
+            /**
+             * Format: int64
+             * @description Distinct open advisories across them.
+             */
+            advisories: number;
+            /**
+             * Format: int64
+             * @description Hosts with at least one.
+             */
+            hosts: number;
+            /** @description One entry per matched package. */
+            packages: components["schemas"]["ServiceRelatedPackageView"][];
+        };
+        /** @description A user it runs as, with the hosts where it does. */
+        ServiceRunAsView: {
+            /**
+             * Format: int64
+             * @description Hosts where it runs as this user.
+             */
+            hosts: number;
+            /** @description The user name (or uid). */
+            user: string;
+        };
+        /** @description Hosts in each segment. */
+        ServiceSegmentsView: {
+            /**
+             * Format: int64
+             * @description All.
+             */
+            all: number;
+            /**
+             * Format: int64
+             * @description It owns an exposed port.
+             */
+            exposed: number;
+            /**
+             * Format: int64
+             * @description It runs as root or SYSTEM.
+             */
+            root: number;
+        };
+        /**
+         * @description "N run as root · N listen on an exposed port · N not from a package · N
+         *     new this week · N need a look · from N hosts' last reports".
+         */
+        ServiceSummaryLineView: {
+            /**
+             * Format: int64
+             * @description Rows owning an exposed port on at least one host.
+             */
+            exposed: number;
+            /**
+             * Format: int64
+             * @description Rows with a Needs a look code.
+             */
+            need_a_look: number;
+            /**
+             * Format: int64
+             * @description Rows with a host that started running them this week.
+             */
+            new_this_week: number;
+            /**
+             * Format: int64
+             * @description Rows not from a package on at least one host.
+             */
+            not_packaged: number;
+            /**
+             * Format: int64
+             * @description Active hosts in reach that have sent a services report (the "m" of
+             *     "n of m").
+             */
+            reporting_hosts: number;
+            /**
+             * Format: int64
+             * @description Rows running as root or SYSTEM on at least one host.
+             */
+            root: number;
+        };
+        /** @description The tiles. A tile that needs a permission the caller lacks is absent. */
+        ServiceTilesView: {
+            /**
+             * Format: int64
+             * @description Open alarms from its programs (`alarms.read`).
+             */
+            alarms?: number | null;
+            /**
+             * Format: int64
+             * @description Hosts running it (of the header's `of`).
+             */
+            running: number;
+            /**
+             * Format: int64
+             * @description Versions of its matched package in use; absent when no package
+             *     matched.
+             */
+            versions?: number | null;
+            /**
+             * Format: int64
+             * @description Open vulnerabilities in its matched packages
+             *     (`vulnerabilities.read`).
+             */
+            vulnerabilities?: number | null;
+        };
         /** @description Token metadata for one service account. */
         ServiceTokenPage: {
             /** @description Tokens newest first, without secret material. */
@@ -6506,6 +7066,19 @@ export interface components {
             run_as?: string | null;
             /** @description The systemd unit. */
             unit: string;
+        };
+        /** @description Hosts that started and stopped running it in the last 7 days. */
+        ServiceWeekView: {
+            /**
+             * Format: int64
+             * @description Started.
+             */
+            added: number;
+            /**
+             * Format: int64
+             * @description Stopped.
+             */
+            removed: number;
         };
         /** @description Human principal represented by an authenticated browser session. */
         SessionPrincipal: {
@@ -14617,6 +15190,85 @@ export interface operations {
             };
         };
     };
+    list_service_page: {
+        parameters: {
+            query?: {
+                /** @description Unit, usual name, program, package or owned port (contains). */
+                q?: string;
+                /** @description root (root or SYSTEM on some host) or other (on none). */
+                runs_as?: string;
+                /** @description exposed (owns an exposed port on some host), local or none. */
+                listens?: string;
+                /** @description yes (from a package on every host) or no (not on some host). */
+                packaged?: string;
+                /** @description A host group id. */
+                group?: string;
+                /** @description new (a host started running it this week) or look (needs a look). */
+                changes?: string;
+                /** @description An agent id. */
+                host?: string;
+                /** @description service (default), hosts or week. */
+                sort?: string;
+                /** @description asc (default) or desc. */
+                dir?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of services on the caller's hosts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceListView"];
+                };
+            };
+            /** @description invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     list_services: {
         parameters: {
             query?: never;
@@ -14709,6 +15361,140 @@ export interface operations {
             };
             /** @description No visible host runs it */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    service_hosts_page_route: {
+        parameters: {
+            query?: {
+                /** @description all (default), exposed or root. */
+                segment?: string;
+                /** @description Rows to skip, 0 to 100000. */
+                offset?: string;
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The unit, e.g. sshd.service */
+                unit: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the hosts in the caller's reach running it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServicePageHostsView"];
+                };
+            };
+            /** @description invalid_unit or invalid_query, naming the parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    service_summary_page: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The unit, e.g. sshd.service */
+                unit: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page in the caller's reach */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServicePageSummaryView"];
+                };
+            };
+            /** @description invalid_unit */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs hosts.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description service_not_found: no host in reach runs it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

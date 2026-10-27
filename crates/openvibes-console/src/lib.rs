@@ -23,6 +23,7 @@ mod http;
 mod lists;
 mod ports;
 mod rules;
+mod services;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;

@@ -47,6 +47,8 @@ pub(crate) struct CaseKindsView {
     pub software: i64,
     /// Ports.
     pub ports: i64,
+    /// Services.
+    pub services: i64,
 }
 
 /// One row: a case. Items, hosts and counts are only those the viewer sees.
@@ -162,6 +164,7 @@ impl From<CaseListRow> for CaseListRowView {
                 hosts: r.kinds.hosts,
                 software: r.kinds.software,
                 ports: r.kinds.ports,
+                services: r.kinds.services,
             },
             with_outcome: r.with_outcome,
             takes_outcome: r.takes_outcome,

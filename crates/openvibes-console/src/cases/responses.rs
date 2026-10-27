@@ -78,7 +78,7 @@ pub(super) fn invalid_message(code: &str) -> &'static str {
         "invalid_title" => "Use 1 to 120 characters, without control characters",
         "invalid_severity" => "Use critical, high, medium or low",
         "invalid_status" => "Use open, investigating or closed",
-        "invalid_kind" => "Use alarm, compliance_finding, vulnerability, host, software or port",
+        "invalid_kind" => "Use alarm, compliance_finding, vulnerability, host, software, port or service",
         "invalid_ref" => "The id does not have the shape of this kind of item",
         "too_many_items" => "A case is created with at most 50 items",
         "closing_note_required" => "A closing note is required to close a case",
@@ -88,7 +88,7 @@ pub(super) fn invalid_message(code: &str) -> &'static str {
         "invalid_outcome" => {
             "Use resolved, false_positive, accepted_risk, confirmed_malicious or expected"
         }
-        "outcome_not_applicable" => "Hosts, software and ports need no outcome",
+        "outcome_not_applicable" => "Hosts, software, ports and services need no outcome",
         "outcome_until_required" => "Accepted risk needs a re-open date",
         "outcome_until_past" => "The date must be in the future",
         "outcome_until_too_far" => "The date must be within 365 days",
