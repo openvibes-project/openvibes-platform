@@ -90,10 +90,10 @@ export function createDashboardStore(seed: DemoDashboard[], rolesOf: (userId: st
     share: (userId: string, id: string, body: Record<string, unknown>, can: { share: boolean; publish: boolean }, roles: string[]): Result => {
       const visibility = body.visibility;
       if (visibility !== "private" && visibility !== "roles" && visibility !== "everyone") return problem(400, "invalid_request", "The request body is invalid");
-      if (visibility === "roles" && !can.share || visibility === "everyone" && !can.publish) return problem(403, "permission_denied", "Access is not available");
+      if ((visibility === "roles" && !can.share) || (visibility === "everyone" && !can.publish)) return problem(403, "permission_denied", "Access is not available");
       const row = owned(userId, id);
       if (isResult(row)) return row;
-      const asked = visibility === "roles" && Array.isArray(body.role_ids) ? [...new Set(body.role_ids.filter((r): r is string => typeof r === "string"))].sort() : [];
+      const asked = visibility === "roles" && Array.isArray(body.role_ids) ? [...new Set(body.role_ids.filter((r): r is string => typeof r === "string"))].sort((x, y) => x.localeCompare(y)) : [];
       if (visibility === "roles") {
         if (asked.length === 0) return problem(422, "no_roles", "Choose at least one role to share with");
         if (asked.some((r) => !roles.includes(r))) return problem(422, "unknown_role", "No such role");

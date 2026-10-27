@@ -126,7 +126,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
     const saved = await request<Dashboard>("PUT", `/api/v1/dashboards/${dashboard.dashboard_id}/sharing`, { visibility, role_ids: roleIds });
     invalidate("/api/v1/dashboards");
     invalidate(`/api/v1/dashboards/${dashboard.dashboard_id}`);
-    toast(sharingText(saved) === "Only you" ? "No longer shared" : `${sharingText(saved)}`);
+    toast(saved.visibility === "private" ? "No longer shared" : sharingText(saved));
   };
   // Ticking a role shares with it; unticking the last one stops sharing.
   const toggleRole = (roleId: string) => {
