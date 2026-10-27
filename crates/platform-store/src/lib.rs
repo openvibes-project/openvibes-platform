@@ -111,6 +111,11 @@ pub mod ingest;
 pub mod inventory;
 mod maintenance;
 mod migrate;
+/// The Ports list: one row per port, filters, counts and the summary.
+pub mod port_list;
+mod port_list_sql;
+/// A fixed map of well-known ports: names, classes, related packages.
+pub mod port_names;
 /// Rule-set assignment: defaults, group overrides, per-host state.
 pub mod rule_assignment;
 /// Draft rules for the site's own rule sets.
