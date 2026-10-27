@@ -237,7 +237,7 @@ struct Meta {
 /// One page of the Services list within `scope` (`hosts.read`); `now` dates
 /// "this week".
 pub async fn service_list(
-    client: &Client,
+    client: &mut Client,
     query: &ServiceQuery<'_>,
     scope: &AgentScope,
     now: DateTime<Utc>,
@@ -247,9 +247,12 @@ pub async fn service_list(
     let (map_bases, map_packages) = service_names::package_pairs();
     // The statement's estimated cost crosses the server's JIT threshold, and
     // compiling it costs more than running it (1.5 s of a 0.4 s query on a
-    // 2,500-host reach), so this connection runs it without JIT.
-    client.batch_execute("SET jit = off").await?;
-    let rows = client
+    // 2,500-host reach), so it runs without JIT. The setting is local to a
+    // transaction, so a dropped request cannot leave the pooled connection
+    // with JIT off.
+    let tx = client.transaction().await?;
+    tx.batch_execute("SET LOCAL jit = off").await?;
+    let rows = tx
         .query(
             &statement(query.sort, query.descending),
             &[
@@ -273,9 +276,8 @@ pub async fn service_list(
                 &map_packages,
             ],
         )
-        .await;
-    client.batch_execute("RESET jit").await?;
-    let rows = rows?;
+        .await?;
+    tx.commit().await?;
     let meta: serde_json::Value = rows.first().and_then(|r| r.get(0)).unwrap_or_default();
     let meta: Meta = serde_json::from_value(meta).map_err(|_| StoreError::Query)?;
     Ok(ServiceListPage {

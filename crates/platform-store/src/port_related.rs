@@ -294,7 +294,7 @@ async fn alarms(
                    AND EXISTS (SELECT 1 FROM host_listeners l
                                WHERE l.agent_id = al.agent_id AND l.protocol = $4::text AND l.port = $5::int
                                  AND l.program IS NOT NULL
-                                 AND l.program = regexp_replace(al.process ->> 'exe', '^.*/', ''))"
+                                 AND l.program = left(regexp_replace(al.process ->> 'exe', '^.*/', ''), 15))"
             ),
             &[&global, &groups, &hosts, &protocol, &port],
         )

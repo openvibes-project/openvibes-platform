@@ -51,6 +51,9 @@ const fn info(
     }
 }
 
+/// The packages every `systemd-*` unit may come from, mapped or not.
+pub const SYSTEMD: &[&str] = &["systemd", "systemd-udev", "udev"];
+
 /// Every known service: its base names (aliases across distributions) and
 /// what it is.
 const SERVICES: &[(&[&str], ServiceInfo)] = &[
@@ -346,6 +349,54 @@ const SERVICES: &[(&[&str], ServiceInfo)] = &[
             &["tigervnc-server", "x11vnc"],
         ),
     ),
+    (
+        &["systemd-journald", "systemd-logind"],
+        info("systemd", "System journal and logins", Other, SYSTEMD),
+    ),
+    (
+        &["systemd-udevd"],
+        info(
+            "udev",
+            "Device management",
+            Other,
+            &["systemd-udev", "udev", "systemd"],
+        ),
+    ),
+    (
+        &["systemd-machined", "systemd-userdbd", "systemd-homed"],
+        info(
+            "systemd",
+            "Containers, user records and home directories",
+            Other,
+            &["systemd", "systemd-container"],
+        ),
+    ),
+    (
+        &["getty", "serial-getty"],
+        info(
+            "getty",
+            "Login prompt on a console",
+            Other,
+            &["util-linux", "util-linux-core", "systemd"],
+        ),
+    ),
+    (
+        &["smartd"],
+        info("smartd", "Disk health monitor", Other, &["smartmontools"]),
+    ),
+    (
+        &["accounts-daemon"],
+        info(
+            "AccountsService",
+            "User account service",
+            Other,
+            &["accountsservice"],
+        ),
+    ),
+    (
+        &["mdmonitor"],
+        info("mdadm monitor", "Software RAID monitor", Other, &["mdadm"]),
+    ),
 ];
 
 /// The base of a unit: lower case, `.service` and any `@instance` removed.
@@ -385,6 +436,9 @@ pub fn candidates(unit: &str) -> Vec<String> {
     let mut names = vec![base.clone()];
     if let Some(info) = service_info(unit) {
         names.extend(info.packages.iter().map(|p| p.to_lowercase()));
+    }
+    if base.starts_with("systemd-") {
+        names.extend(SYSTEMD.iter().map(|p| (*p).to_owned()));
     }
     names.sort();
     names.dedup();

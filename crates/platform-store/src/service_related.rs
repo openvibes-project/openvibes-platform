@@ -133,7 +133,7 @@ async fn alarms(
                    AND {visible}
                    AND EXISTS (SELECT 1 FROM host_services s
                                WHERE s.agent_id = al.agent_id AND s.unit = $4
-                                 AND regexp_replace(al.process ->> 'exe', '^.*/', '') = ANY(s.programs))"
+                                 AND left(regexp_replace(al.process ->> 'exe', '^.*/', ''), 15) = ANY(s.programs))"
             ),
             &[&global, &groups, &hosts, &unit],
         )

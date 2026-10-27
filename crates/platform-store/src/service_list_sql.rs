@@ -15,7 +15,11 @@
 //! admin, `$16` bases of every known service, `$17` and `$18` the map's
 //! (base, package) pairs.
 
-use crate::{console_read::agent_visibility, service_list::ServiceSort, service_names::base_sql};
+use crate::{
+    console_read::agent_visibility,
+    service_list::ServiceSort,
+    service_names::{self, base_sql},
+};
 
 /// The filters, each a condition over a `p` row.
 #[derive(Clone, Copy, PartialEq)]
@@ -98,6 +102,11 @@ pub(crate) fn statement(sort: ServiceSort, descending: bool) -> String {
         except(Some(Facet::Changes)),
     );
     let unit_base = base_sql("u.unit");
+    let systemd = service_names::SYSTEMD
+        .iter()
+        .map(|p| format!("'{p}'"))
+        .collect::<Vec<_>>()
+        .join(", ");
     format!(
         "WITH reach AS MATERIALIZED (
            SELECT a.agent_id, a.status, a.services_at, row_number() OVER () AS aid FROM agents a
@@ -112,7 +121,9 @@ pub(crate) fn statement(sort: ServiceSort, descending: bool) -> String {
          cand AS (
            SELECT DISTINCT ub.base AS b, ub.base AS p FROM ub
            UNION
-           SELECT m.b, m.p FROM unnest($17::text[], $18::text[]) AS m(b, p)),
+           SELECT m.b, m.p FROM unnest($17::text[], $18::text[]) AS m(b, p)
+           UNION
+           SELECT ub.base, p FROM ub CROSS JOIN unnest(ARRAY[{systemd}]) AS p WHERE ub.base LIKE 'systemd-%'),
          mpv AS MATERIALIZED (
            SELECT c.b, pv.id, pv.name
            FROM cand c JOIN package_versions pv ON lower(pv.name) = c.p),

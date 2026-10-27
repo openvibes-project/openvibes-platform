@@ -121,11 +121,11 @@ pub(crate) async fn list_service_page(
         offset,
         limit,
     };
-    let Ok(client) = state.pool.get().await else {
+    let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
     let now = Utc::now();
-    match service_list(&client, &service_query, &scope, now).await {
+    match service_list(&mut client, &service_query, &scope, now).await {
         Ok(page) => axum::Json(ServiceListView::new(page, now)).into_response(),
         Err(_) => unavailable_auth(),
     }

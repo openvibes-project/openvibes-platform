@@ -3,6 +3,8 @@
 //! viewer's scope. Counts never include a host the viewer cannot see;
 //! revoked hosts are left out.
 
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -416,21 +418,45 @@ pub async fn service_hosts_page(
         .collect();
     let ids: Vec<String> = page.iter().map(|r| r.agent_id.clone()).collect();
     let candidates = service_names::candidates(unit);
-    let versions = client
+    // The newest installed version of each host's first matched package.
+    // Versions compare by their digit runs, so 10.x is newer than 9.x.
+    let installed = client
         .query(
-            "SELECT DISTINCT ON (hp.agent_id) hp.agent_id, pv.name,
-                    (CASE WHEN pv.epoch > 0 THEN pv.epoch::text || ':' ELSE '' END)
-                    || pv.version || (CASE WHEN pv.release <> '' THEN '-' || pv.release ELSE '' END)
+            "SELECT hp.agent_id, pv.name, pv.epoch::bigint, pv.version, pv.release
              FROM host_packages hp JOIN package_versions pv ON pv.id = hp.package_version_id
              WHERE hp.agent_id = ANY($1::text[]) AND lower(pv.name) = ANY($2::text[])
-             ORDER BY hp.agent_id, pv.name, pv.epoch DESC, pv.version DESC, pv.release DESC",
+             ORDER BY hp.agent_id, pv.name",
             &[&ids, &candidates],
         )
         .await?;
-    for row in &versions {
-        let agent: String = row.get(0);
+    let mut newest: BTreeMap<String, (String, i64, String, String)> = BTreeMap::new();
+    for row in &installed {
+        let (agent, name): (String, String) = (row.get(0), row.get(1));
+        let (epoch, version, release): (i64, String, String) = (row.get(2), row.get(3), row.get(4));
+        match newest.get(&agent) {
+            Some((first, e, v, r))
+                if *first != name
+                    || (*e, natural(v), natural(r))
+                        >= (epoch, natural(&version), natural(&release)) => {}
+            _ => {
+                newest.insert(agent, (name, epoch, version, release));
+            }
+        }
+    }
+    let chosen: Vec<String> = newest.values().map(|v| v.0.clone()).collect();
+    for (agent, (name, epoch, version, release)) in newest {
         if let Some(r) = page.iter_mut().find(|r| r.agent_id == agent) {
-            r.package = Some((row.get(1), row.get(2)));
+            let epoch = if epoch > 0 {
+                format!("{epoch}:")
+            } else {
+                String::new()
+            };
+            let release = if release.is_empty() {
+                String::new()
+            } else {
+                format!("-{release}")
+            };
+            r.package = Some((name, format!("{epoch}{version}{release}")));
         }
     }
     if let Some(alarms) = &reach.alarms {
@@ -445,7 +471,7 @@ pub async fn service_hosts_page(
                        AND {visible}
                        AND EXISTS (SELECT 1 FROM host_services s
                                    WHERE s.agent_id = al.agent_id AND s.unit = $4
-                                     AND regexp_replace(al.process ->> 'exe', '^.*/', '') = ANY(s.programs))
+                                     AND left(regexp_replace(al.process ->> 'exe', '^.*/', ''), 15) = ANY(s.programs))
                      GROUP BY al.agent_id"
                 ),
                 &[&g, &gr, &ids, &unit],
@@ -463,7 +489,7 @@ pub async fn service_hosts_page(
     if let Some(vulns) = &reach.vulnerabilities {
         let (g, gr) = scope_params(vulns);
         let visible = agent_visibility("a.agent_id", "$1", "$2");
-        let names: Vec<String> = versions.iter().map(|r| r.get::<_, String>(1)).collect();
+        let names = chosen;
         let counts = client
             .query(
                 &format!(
@@ -500,4 +526,35 @@ pub async fn service_hosts_page(
         segments,
         rows: page,
     })
+}
+
+/// A version split into runs of digits (compared as numbers) and other text,
+/// so that `10.1` sorts after `9.9`.
+fn natural(version: &str) -> Vec<(u64, String)> {
+    let mut out = Vec::new();
+    let mut rest = version;
+    while !rest.is_empty() {
+        let digits = rest
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(rest.len());
+        let (number, tail) = rest.split_at(digits);
+        let text = tail
+            .find(|c: char| c.is_ascii_digit())
+            .unwrap_or(tail.len());
+        out.push((number.parse().unwrap_or(0), tail[..text].to_owned()));
+        rest = &tail[text..];
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn versions_compare_by_their_numbers() {
+        assert!(natural("10.1") > natural("9.9"));
+        assert!(natural("9.2p1") < natural("9.10p1"));
+        assert_eq!(natural("1.0"), natural("1.0"));
+    }
 }

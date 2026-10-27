@@ -43,7 +43,10 @@ Web: `views/investigate/Services.tsx` (the list) and
   installed package named like the unit's base (lower case, `.service` and
   any `@instance` removed) or one of the map's packages for it. The page
   says "matched by name". An unusual package name shows "not from a package"
-  for a packaged service; the fix is one entry in the map.
+  for a packaged service; the fix is one entry in the map. Every `systemd-*` unit
+  also counts as packaged when `systemd`, `systemd-udev` or `udev` is installed,
+  and the map names the other stock root units (`getty@`, `smartd`,
+  `accounts-daemon`, `mdmonitor`) so a stock host has no false flag.
 - **Owns a port:** the listeners whose owner unit is this one. A host whose
   report leaves owners out can under-report ports ("not collected").
 - **Needs a look** (first match first; a row carries every code): runs as
@@ -105,7 +108,8 @@ The Hosts card shows its own error without hiding the rest of the page.
   not for the extreme full-reach fleet, which is far beyond a real one (the
   test fails above 5 s there). Three things made the difference: the package
   name match reaches `host_packages` through an index per matched package
-  (a scan of 20 million rows took 15 s), the statement runs with JIT off on
-  its connection (compiling it cost more than running it), and the programs
+  (a scan of 20 million rows took 15 s), the statement runs with JIT off (`SET LOCAL` in a
+  transaction, so a dropped request cannot leak it; compiling cost more than
+  running it), and the programs
   and users are read for the page's 50 rows only. A rollup table kept at
   ingest would be the next step if a real fleet needs it.

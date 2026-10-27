@@ -32,6 +32,13 @@ const SERVICES: [string[], ServiceInfo][] = [
   s(["chronyd", "chrony"], "chrony", "Time sync", ["chrony"]),
   s(["ntpd", "ntp"], "ntpd", "Time sync", ["ntp", "ntpsec"]),
   s(["systemd-timesyncd"], "systemd-timesyncd", "Time sync", ["systemd-timesyncd"]),
+  s(["systemd-journald", "systemd-logind"], "systemd", "System journal and logins", ["systemd", "systemd-udev", "udev"]),
+  s(["systemd-udevd"], "udev", "Device management", ["systemd-udev", "udev", "systemd"]),
+  s(["systemd-machined", "systemd-userdbd", "systemd-homed"], "systemd", "Containers, user records and home directories", ["systemd", "systemd-container"]),
+  s(["getty", "serial-getty"], "getty", "Login prompt on a console", ["util-linux", "util-linux-core", "systemd"]),
+  s(["smartd"], "smartd", "Disk health monitor", ["smartmontools"]),
+  s(["accounts-daemon"], "AccountsService", "User account service", ["accountsservice"]),
+  s(["mdmonitor"], "mdadm monitor", "Software RAID monitor", ["mdadm"]),
   s(["named", "bind9"], "BIND", "Name server", ["bind", "bind9"]),
   s(["unbound"], "Unbound", "Name resolver", ["unbound"]),
   s(["dnsmasq"], "dnsmasq", "DNS and DHCP", ["dnsmasq"]),
@@ -66,7 +73,9 @@ export const baseOf = (unit: string): string => {
 /** What the map knows about a unit, by its base. */
 export const serviceInfo = (unit: string): ServiceInfo | undefined => SERVICES.find(([names]) => names.includes(baseOf(unit)))?.[1];
 /** Installed-package names (lower case) that count as "from a package" for a unit. */
-export const candidates = (unit: string): string[] => [...new Set([baseOf(unit), ...(serviceInfo(unit)?.packages ?? []).map((p) => p.toLowerCase())])];
+/** Packages every `systemd-*` unit may come from, mapped or not. */
+const SYSTEMD = ["systemd", "systemd-udev", "udev"];
+export const candidates = (unit: string): string[] => [...new Set([baseOf(unit), ...(serviceInfo(unit)?.packages ?? []).map((p) => p.toLowerCase()), ...(baseOf(unit).startsWith("systemd-") ? SYSTEMD : [])])];
 /** Bases whose name or usual use contains `needle` (any case). */
 export const basesNamed = (needle: string): string[] => {
   const n = needle.toLowerCase();

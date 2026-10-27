@@ -431,3 +431,27 @@ async fn related_sections_need_their_permission() {
     );
     db.drop().await;
 }
+
+/// Programs are `/proc/pid/comm`, cut to 15 characters; an alarm's executable
+/// is the full name.
+#[tokio::test]
+async fn alarms_match_programs_cut_to_fifteen_characters() {
+    let (db, c) = common::migrated().await;
+    let (mine, _) = fixture(&c).await;
+    c.batch_execute(&format!(
+        "INSERT INTO host_services (agent_id, unit, programs, processes, run_as)
+            VALUES ('{A}', 'systemd-journald.service', '{{systemd-journal}}', 1, 'root');
+         INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version, rule_id, rule_version,
+                severity, confidence, message, first_seen, last_seen, count, process, ancestors, received_at, state) VALUES
+            ((now() AT TIME ZONE 'UTC')::date, '{A}', 'a1', 'rs', 1, 'r', 1, 'high', 50, 'm', now(), now(), 1,
+             '{{\"exe\":\"/usr/lib/systemd/systemd-journald\"}}', '[]', now(), 'open');"
+    ))
+    .await
+    .unwrap();
+    let scope = scoped(&mine);
+    let s = summary(&c, &scope, &all(&scope), "systemd-journald.service")
+        .await
+        .unwrap();
+    assert_eq!(s.related.alarms.unwrap().open, 1);
+    db.drop().await;
+}

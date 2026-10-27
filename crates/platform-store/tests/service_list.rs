@@ -31,7 +31,7 @@ fn query() -> ServiceQuery<'static> {
 }
 
 async fn run(
-    c: &deadpool_postgres::Client,
+    c: &mut deadpool_postgres::Client,
     q: &ServiceQuery<'_>,
     scope: &AgentScope,
 ) -> ServiceListPage {
@@ -55,9 +55,9 @@ fn count<T: PartialEq>(counts: &[(T, i64)], value: T) -> i64 {
 
 #[tokio::test]
 async fn one_row_per_unit_stays_inside_the_scope() {
-    let (db, c) = common::migrated().await;
+    let (db, mut c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
-    let page = run(&c, &query(), &AgentScope::AssetGroups(vec![mine])).await;
+    let page = run(&mut c, &query(), &AgentScope::AssetGroups(vec![mine])).await;
     assert_eq!(
         units(&page),
         [
@@ -98,7 +98,7 @@ async fn one_row_per_unit_stays_inside_the_scope() {
     );
     assert_eq!(pg.run_as, ["postgres"]);
     assert_eq!(page.summary.reporting_hosts, 3);
-    let global = run(&c, &query(), &AgentScope::Global).await;
+    let global = run(&mut c, &query(), &AgentScope::Global).await;
     assert!(units(&global).contains(&"far.service"));
     assert_eq!(row(&global, "sshd.service").hosts, 4);
     db.drop().await;
@@ -106,9 +106,9 @@ async fn one_row_per_unit_stays_inside_the_scope() {
 
 #[tokio::test]
 async fn packages_match_by_name_and_the_map() {
-    let (db, c) = common::migrated().await;
+    let (db, mut c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
-    let page = run(&c, &query(), &AgentScope::AssetGroups(vec![mine])).await;
+    let page = run(&mut c, &query(), &AgentScope::AssetGroups(vec![mine])).await;
     assert_eq!(
         row(&page, "nginx.service").package.as_deref(),
         Some("nginx")
@@ -123,11 +123,63 @@ async fn packages_match_by_name_and_the_map() {
     db.drop().await;
 }
 
+/// A stock host runs systemd-journald, getty@ and the like as root; their
+/// packages are systemd and util-linux, so none of them needs a look.
+#[tokio::test]
+async fn stock_system_units_come_from_their_packages() {
+    let (db, mut c) = common::migrated().await;
+    let (mine, _) = fixture(&c).await;
+    for unit in [
+        "systemd-journald.service",
+        "systemd-resolved.service",
+        "getty@tty1.service",
+        "serial-getty@ttyS0.service",
+    ] {
+        c.execute(
+            "INSERT INTO host_services (agent_id, unit, programs, processes, run_as)
+             VALUES ($1, $2, '{x}', 1, 'root')",
+            &[&A, &unit],
+        )
+        .await
+        .unwrap();
+    }
+    for name in ["systemd", "util-linux"] {
+        let id: i64 = c
+            .query_one(
+                "INSERT INTO package_versions (manager, name, version, arch)
+                 VALUES ('deb', $1, '252', 'amd64') RETURNING id",
+                &[&name],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        c.execute(
+            "INSERT INTO host_packages (agent_id, package_version_id) VALUES ($1, $2)",
+            &[&A, &id],
+        )
+        .await
+        .unwrap();
+    }
+    let page = run(&mut c, &query(), &AgentScope::AssetGroups(vec![mine])).await;
+    for (unit, package) in [
+        ("systemd-journald.service", "systemd"),
+        ("systemd-resolved.service", "systemd"),
+        ("getty@tty1.service", "systemd"),
+        ("serial-getty@ttyS0.service", "systemd"),
+    ] {
+        let r = row(&page, unit);
+        assert!(r.look.is_empty(), "{unit}: {:?}", r.look);
+        assert_eq!(r.package_hosts, 1, "{unit}");
+        assert_eq!(r.package.as_deref(), Some(package), "{unit}");
+    }
+    db.drop().await;
+}
+
 #[tokio::test]
 async fn needs_a_look_and_this_week() {
-    let (db, c) = common::migrated().await;
+    let (db, mut c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
-    let page = run(&c, &query(), &AgentScope::AssetGroups(vec![mine])).await;
+    let page = run(&mut c, &query(), &AgentScope::AssetGroups(vec![mine])).await;
     assert_eq!(row(&page, "cups.service").look, ["root_unpackaged"]);
     assert_eq!(
         row(&page, "mystery.service").look,
@@ -162,7 +214,7 @@ async fn needs_a_look_and_this_week() {
 
 #[tokio::test]
 async fn filters_and_their_counts() {
-    let (db, c) = common::migrated().await;
+    let (db, mut c) = common::migrated().await;
     let (mine, web) = fixture(&c).await;
     let scope = AgentScope::AssetGroups(vec![mine]);
 
@@ -171,7 +223,7 @@ async fn filters_and_their_counts() {
         ..query()
     };
     assert_eq!(
-        units(&run(&c, &q, &scope).await),
+        units(&run(&mut c, &q, &scope).await),
         ["nginx.service", "postgresql.service"]
     );
 
@@ -179,18 +231,18 @@ async fn filters_and_their_counts() {
         listens: Some(Listens::Local),
         ..query()
     };
-    assert_eq!(units(&run(&c, &q, &scope).await), ["cups.service"]);
+    assert_eq!(units(&run(&mut c, &q, &scope).await), ["cups.service"]);
     let q = ServiceQuery {
         listens: Some(Listens::None),
         ..query()
     };
-    assert_eq!(units(&run(&c, &q, &scope).await), ["mystery.service"]);
+    assert_eq!(units(&run(&mut c, &q, &scope).await), ["mystery.service"]);
     let q = ServiceQuery {
         listens: Some(Listens::Exposed),
         ..query()
     };
     assert_eq!(
-        units(&run(&c, &q, &scope).await),
+        units(&run(&mut c, &q, &scope).await),
         [
             "named.service",
             "nginx.service",
@@ -204,39 +256,39 @@ async fn filters_and_their_counts() {
         ..query()
     };
     assert_eq!(
-        units(&run(&c, &q, &scope).await),
+        units(&run(&mut c, &q, &scope).await),
         ["cups.service", "mystery.service"]
     );
     let q = ServiceQuery {
         packaged: Some(Packaged::Yes),
         ..query()
     };
-    assert_eq!(run(&c, &q, &scope).await.total, 4);
+    assert_eq!(run(&mut c, &q, &scope).await.total, 4);
 
     let q = ServiceQuery {
         changes: Some(Changes::New),
         ..query()
     };
-    assert_eq!(units(&run(&c, &q, &scope).await), ["mystery.service"]);
+    assert_eq!(units(&run(&mut c, &q, &scope).await), ["mystery.service"]);
     let q = ServiceQuery {
         changes: Some(Changes::Look),
         ..query()
     };
-    assert_eq!(run(&c, &q, &scope).await.total, 3);
+    assert_eq!(run(&mut c, &q, &scope).await.total, 3);
 
     let q = ServiceQuery {
         host: Some(A),
         ..query()
     };
     assert_eq!(
-        units(&run(&c, &q, &scope).await),
+        units(&run(&mut c, &q, &scope).await),
         ["nginx.service", "postgresql.service", "sshd.service"]
     );
     let q = ServiceQuery {
         group: Some(&web),
         ..query()
     };
-    let page = run(&c, &q, &scope).await;
+    let page = run(&mut c, &q, &scope).await;
     assert_eq!(
         units(&page),
         [
@@ -256,7 +308,7 @@ async fn filters_and_their_counts() {
         packaged: Some(Packaged::No),
         ..query()
     };
-    let page = run(&c, &q, &scope).await;
+    let page = run(&mut c, &q, &scope).await;
     assert_eq!(page.total, 0);
     assert_eq!(
         count(&page.counts.runs_as, RunsAs::Root),
@@ -275,7 +327,7 @@ async fn filters_and_their_counts() {
 
 #[tokio::test]
 async fn search_covers_unit_name_program_package_and_port() {
-    let (db, c) = common::migrated().await;
+    let (db, mut c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
     let scope = AgentScope::AssetGroups(vec![mine]);
     for (text, want) in [
@@ -291,14 +343,14 @@ async fn search_covers_unit_name_program_package_and_port() {
             q: Some(text),
             ..query()
         };
-        assert_eq!(units(&run(&c, &q, &scope).await), want, "{text}");
+        assert_eq!(units(&run(&mut c, &q, &scope).await), want, "{text}");
     }
     db.drop().await;
 }
 
 #[tokio::test]
 async fn sorts_and_pages_are_stable() {
-    let (db, c) = common::migrated().await;
+    let (db, mut c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
     let scope = AgentScope::AssetGroups(vec![mine]);
     let q = ServiceQuery {
@@ -306,26 +358,26 @@ async fn sorts_and_pages_are_stable() {
         descending: true,
         ..query()
     };
-    assert_eq!(units(&run(&c, &q, &scope).await)[0], "sshd.service");
+    assert_eq!(units(&run(&mut c, &q, &scope).await)[0], "sshd.service");
     let q = ServiceQuery {
         sort: ServiceSort::Week,
         descending: true,
         ..query()
     };
-    assert_eq!(units(&run(&c, &q, &scope).await)[0], "mystery.service");
+    assert_eq!(units(&run(&mut c, &q, &scope).await)[0], "mystery.service");
     let q = ServiceQuery {
         limit: 2,
         offset: 4,
         ..query()
     };
-    let page = run(&c, &q, &scope).await;
+    let page = run(&mut c, &q, &scope).await;
     assert_eq!(units(&page), ["postgresql.service", "sshd.service"]);
     assert_eq!(page.total, 6);
     let q = ServiceQuery {
         offset: 50,
         ..query()
     };
-    let page = run(&c, &q, &scope).await;
+    let page = run(&mut c, &q, &scope).await;
     assert!(page.rows.is_empty());
     assert_eq!(page.total, 6, "an empty page still carries the total");
     let _ = B;

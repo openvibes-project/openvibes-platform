@@ -70,7 +70,7 @@ async fn fleet(c: &Client) -> String {
 #[ignore = "timing run; see the module doc"]
 async fn the_list_answers_within_two_seconds() {
     let reuse = std::env::var("SERVICE_TIMING_DB_URL").ok();
-    let (db, c, group) = match &reuse {
+    let (db, mut c, group) = match &reuse {
         Some(url) => {
             let c = platform_store::connect(url)
                 .await
@@ -142,8 +142,11 @@ async fn the_list_answers_within_two_seconds() {
         ),
         ("one group's reach (about 500 hosts)", &base, &scoped),
     ] {
-        let (time, total) = timing::median(|| async {
-            service_list(&c, q, scope, Utc::now()).await.unwrap().total
+        let (time, total) = timing::median(async || {
+            service_list(&mut c, q, scope, Utc::now())
+                .await
+                .unwrap()
+                .total
         })
         .await;
         println!("{label}: {time:?} ({total} services)");

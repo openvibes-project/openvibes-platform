@@ -90,8 +90,7 @@ async fn the_list_answers_within_two_seconds() {
         ("one group's reach (about 500 hosts)", &base, &scoped),
     ] {
         let (time, total) =
-            timing::median(|| async { port_list(&c, q, scope, Utc::now()).await.unwrap().total })
-                .await;
+            timing::median(async || port_list(&c, q, scope, Utc::now()).await.unwrap().total).await;
         println!("{label}: {time:?} ({total} ports)");
         assert!(time < Duration::from_secs(2), "{label}: {time:?}");
     }

@@ -2,10 +2,7 @@
 //! `gen (agent_id, n)` to build rows from, 15 groups, a median of five runs.
 #![allow(dead_code, reason = "each test binary uses some of these")]
 
-use std::{
-    future::Future,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use platform_store::Client;
 
@@ -58,7 +55,7 @@ pub async fn manual_group(c: &Client) -> String {
 }
 
 /// The median of five runs of `run` and the total its last run answered.
-pub async fn median<F: Future<Output = i64>>(mut run: impl FnMut() -> F) -> (Duration, i64) {
+pub async fn median(mut run: impl AsyncFnMut() -> i64) -> (Duration, i64) {
     const RUNS: usize = 5;
     let mut samples = Vec::with_capacity(RUNS);
     let mut total = 0;
