@@ -140,7 +140,7 @@ describe("service hosts table", () => {
   });
 
   it("says 'not from a package', 'not collected' and a dash for problems the person may not read", () => {
-    const html = render(<HostsTable rows={[host({ agent_id: "a", package: undefined, ports: [], owners_partial: true, problems: {} })]} />);
+    const html = render(<HostsTable rows={[host({ agent_id: "a", package: null, ports: [], owners_partial: true, problems: {} })]} />);
     expect(text(html)).toContain("not from a package");
     expect(text(html)).toContain("not collected");
     expect(html).toContain("You may not read alarms or vulnerabilities here");
