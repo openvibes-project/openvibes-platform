@@ -174,6 +174,68 @@ async fn used_by_names_the_units_that_match_by_name() {
 }
 
 #[tokio::test]
+async fn no_fix_advisories_follow_the_hosts_os_release() {
+    let (db, mut c) = common::migrated().await;
+    let (mine, web) = fixture(&c).await;
+    let scope = AgentScope::AssetGroups(vec![mine]);
+    // nginx 1.22.1 also on C, then C moves to Debian 11: NG-1 and OS-3 are
+    // written for Debian 12, so only A (nginx) still has NG-1 and nobody has OS-3.
+    common::software::install(&c, common::software::C, "dpkg", "nginx", "1.22.1").await;
+    c.execute(
+        "UPDATE agents SET os_version = '11' WHERE agent_id = $1",
+        &[&common::software::C],
+    )
+    .await
+    .unwrap();
+    let page = run(&mut c, &query(), &scope).await;
+    assert_eq!(
+        row(&page, "openssl").no_fix,
+        0,
+        "3.0.9 is only on C, now Debian 11"
+    );
+    assert_eq!(row(&page, "nginx").no_fix, 1, "NG-1 through A");
+    c.execute(
+        "UPDATE agents SET os_version = '11' WHERE agent_id = $1",
+        &[&common::software::A],
+    )
+    .await
+    .unwrap();
+    let page = run(&mut c, &query(), &scope).await;
+    assert_eq!(row(&page, "nginx").no_fix, 0, "A moved too");
+
+    // A narrow reach (the Web group: A and B, two of the five hosts) with
+    // two releases takes its own path: A on Debian 11 holds 1.22.1, B on 12 holds 1.24.0.
+    c.execute(
+        "UPDATE agents SET os_version = '12' WHERE agent_id = $1",
+        &[&common::software::B],
+    )
+    .await
+    .unwrap();
+    let web = AgentScope::AssetGroups(vec![web]);
+    let page = run(&mut c, &query(), &web).await;
+    assert_eq!(
+        row(&page, "nginx").no_fix,
+        0,
+        "NG-1 is for Debian 12, A is on 11"
+    );
+    c.execute(
+        "UPDATE agents SET os_version = '12' WHERE agent_id = $1",
+        &[&common::software::A],
+    )
+    .await
+    .unwrap();
+    c.execute(
+        "UPDATE agents SET os_version = '11' WHERE agent_id = $1",
+        &[&common::software::B],
+    )
+    .await
+    .unwrap();
+    let page = run(&mut c, &query(), &web).await;
+    assert_eq!(row(&page, "nginx").no_fix, 1, "A is on 12 again");
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn this_week_reads_the_change_log_per_host() {
     let (db, mut c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
@@ -188,7 +250,11 @@ async fn this_week_reads_the_change_log_per_host() {
         (0, 1, 0),
         "went away and appeared on A: updated"
     );
-    assert_eq!(w("curl"), (1, 0, 0), "not the outside host's");
+    assert_eq!(
+        w("curl"),
+        (1, 0, 0),
+        "A's install; not the outside host's, and B installed and removed it: neither"
+    );
     assert_eq!(
         w("nginx"),
         (0, 0, 1),

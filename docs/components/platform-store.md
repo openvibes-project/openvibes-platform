@@ -1091,10 +1091,12 @@ package name, filters with counts, five sorts, offset paging) in one
 statement (`software_list_sql`), and `software_summary` the page's summary
 and Hosts card, all inside the caller's reach. `software_version` holds the
 version text and the order that reads digit runs as numbers. On the sizing
-fleet (10,000 hosts, 400 packages each) the unfiltered list takes 1.6 s at
-full reach and 1.3 s for one group's reach; a sort by hosts and the heaviest
-filters 2.1 to 3.4 s (`tests/software_list_timing.rs`, ignored; target 2 s,
-met for the default view). See [console-software.md](console-software.md).
+fleet (10,000 hosts, 400 packages each) the unfiltered list takes 1.7 s at
+full reach and 1.2 s for one group's reach (2.0 s and 2.1 s when a quarter of
+the hosts run another OS release, which the no-fix advisories need to know);
+a sort by hosts and the heaviest filters 2.2 to 3.1 s
+(`tests/software_list_timing.rs`, ignored; target 2 s, met for the default
+view). See [console-software.md](console-software.md).
 
 ## Cases (`console_cases::…`, schemas 35, 36, 64, 66 and 67)
 

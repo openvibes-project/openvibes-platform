@@ -14,6 +14,12 @@ import { ChangeList, GroupMeters, HostCell, HostsPanel, ReportedCell, segmentIn 
 type Page = SoftwarePageSummary;
 type HostRow = SoftwarePageHosts["items"][number];
 
+/** The advisory count: the full total, with how many of them the list holds when it stops at the top 50. */
+const advisoryCount = (page: Page) => {
+  const { vulnerabilities: total } = page.tiles;
+  return page.advisories.length < total ? `${page.advisories.length.toLocaleString()} of ${total.toLocaleString()}` : total.toLocaleString();
+};
+
 export function DetailsCard({ page }: { page: Page }) {
   const { header, versions, no_fix: noFix } = page;
   const main = versions[0];
@@ -24,13 +30,13 @@ export function DetailsCard({ page }: { page: Page }) {
         <dt>Most hosts run</dt><dd>{main ? <><span className="mono">{main.version}</span><span className="subtle"> on {plural(main.hosts, "host")}</span></> : <span className="subtle">None</span>}</dd>
         <dt>Versions in use</dt><dd className="num">{versions.length.toLocaleString()}</dd>
         <dt>Open vulnerabilities</dt>
-        <dd>{page.advisories.length === 0 ? <span className="subtle">None</span> : <>{page.advisories.length.toLocaleString()}{noFix > 0 && <span className="subtle"> · {noFix.toLocaleString()} with no fix yet</span>}</>}</dd>
+        <dd>{page.tiles.vulnerabilities === 0 ? <span className="subtle">None</span> : <>{page.tiles.vulnerabilities.toLocaleString()}{noFix > 0 && <span className="subtle"> · {noFix.toLocaleString()} with no fix yet</span>}</>}</dd>
       </dl>
     </Card>
   );
 }
 
-/** Versions in use, newest first, each with the share of hosts that run it; one with an open vulnerability is red. */
+/** Versions in use, most hosts first, each with the share of hosts that run it; one with an open vulnerability is red. */
 export function VersionsCard({ page }: { page: Page }) {
   const total = page.header.hosts;
   return (
@@ -86,7 +92,7 @@ export const ChangesCard = ({ page }: { page: Page }) => <ChangeList changes={pa
 /** Open advisories: what they affect, what fixes them and on how many hosts. */
 export function VulnerabilitiesCard({ page }: { page: Page }) {
   return (
-    <Card title={<>Vulnerabilities <span className="subtle num">{page.advisories.length.toLocaleString()}</span></>} flush={page.advisories.length > 0}>
+    <Card title={<>Vulnerabilities <span className="subtle num">{advisoryCount(page)}</span></>} flush={page.advisories.length > 0}>
       {page.advisories.length === 0 ? <p className="subtle">No open vulnerability on it.</p> : (
         <ul className="list" aria-label="Open vulnerabilities">
           {page.advisories.map((a) => (

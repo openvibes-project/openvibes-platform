@@ -42,6 +42,8 @@ export function registerSoftwarePageRoutes(ctx: DemoContext) {
     const agents = [...new Set(week.map((c) => c.agent))];
     const gone = (a: string) => week.some((c) => c.agent === a && c.change === "went_away");
     const came = (a: string) => week.some((c) => c.agent === a && c.change === "appeared");
+    // An upgrade is a went_away and an appeared at the same instant; installed and removed later is neither.
+    const upgraded = (a: string) => week.some((c) => c.agent === a && c.change === "appeared" && week.some((g) => g.agent === a && g.change === "went_away" && g.at === c.at));
     const anyHost = (permission: Parameters<typeof reaches>[0]) => hosts.some((h) => reaches(permission, h.id));
 
     const byVersionKey = new Map<string, { v: SoftwareHost["versions"][number]; hosts: Set<string> }>();
@@ -66,7 +68,7 @@ export function registerSoftwarePageRoutes(ctx: DemoContext) {
         first_seen: { at: new Date(firstLogged?.at ?? now - 200 * 86_400_000).toISOString(), before: !firstLogged },
       },
       tiles: { hosts: hosts.length, vulnerabilities: open.length, update_hosts: updateHosts.size, versions: versions.length },
-      week: { added: agents.filter((a) => came(a) && !gone(a)).length, updated: agents.filter((a) => came(a) && gone(a)).length, removed: agents.filter((a) => gone(a) && !came(a)).length },
+      week: { added: agents.filter((a) => came(a) && !gone(a)).length, updated: agents.filter(upgraded).length, removed: agents.filter((a) => gone(a) && !came(a)).length },
       versions,
       advisories: open.sort((a, b) => Number(b.exploited) - Number(a.exploited) || severityRank(a.severity) - severityRank(b.severity) || b.hosts.size - a.hosts.size || byteOrder(a.id, b.id))
         .map((a) => ({ advisory_id: a.id, title: a.title, severity: a.severity, cves: a.cves, ...(a.cvss == null ? {} : { cvss: a.cvss }), ...(a.epss == null ? {} : { epss: a.epss }),

@@ -55,8 +55,9 @@ pub async fn install(c: &Client, host: &str, manager: &str, name: &str, version:
 ///   feed (lower confidence).
 /// - `openssh-server` (dpkg): 9.2 on A, B and C; used by `sshd.service`.
 ///
-/// Changes: openssl updated on A (2 days ago), curl installed on A (1 day
-/// ago) and on the outside host, nginx removed from C (3 days ago) and
+/// Changes: openssl updated on A (2 days ago: the went-away and the appeared
+/// share one instant), curl installed on A (1 day ago) and on the outside
+/// host, installed on B and removed again a day later (counts in no column), nginx removed from C (3 days ago) and
 /// installed on A 40 days ago.
 pub async fn fixture(c: &Client) -> (String, String) {
     let groups = super::ports::fixture(c).await;
@@ -128,6 +129,7 @@ pub async fn fixture(c: &Client) -> (String, String) {
     )
     .await
     .unwrap();
+    let at = chrono::Utc::now();
     for (host, key, change, days, version) in [
         (A, "openssl", "went_away", 2, "0:3.0.9-1"),
         (A, "openssl", "appeared", 2, "0:3.0.11-1"),
@@ -135,12 +137,20 @@ pub async fn fixture(c: &Client) -> (String, String) {
         (OUTSIDE, "curl", "appeared", 1, "0:7.88-1"),
         (C, "nginx", "went_away", 3, "0:1.22.1-1"),
         (A, "nginx", "appeared", 40, "0:1.22.1-1"),
+        (B, "curl", "appeared", 2, "0:7.88-1"),
+        (B, "curl", "went_away", 1, "0:7.88-1"),
     ] {
         c.execute(
             "INSERT INTO change_log (at, agent_id, kind, key, change, detail)
-             VALUES (now() - make_interval(days => $4), $1, 'package', $2, $3,
+             VALUES ($4::timestamptz, $1, 'package', $2, $3,
                      jsonb_build_object('manager', 'dpkg', 'version', $5::text, 'arch', 'amd64'))",
-            &[&host, &key, &change, &days, &version],
+            &[
+                &host,
+                &key,
+                &change,
+                &(at - chrono::Duration::days(days)),
+                &version,
+            ],
         )
         .await
         .unwrap();

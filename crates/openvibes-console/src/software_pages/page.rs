@@ -39,13 +39,13 @@ fn invalid_package() -> Response {
     problem_response(ProblemDetails::new(
         StatusCode::BAD_REQUEST,
         "invalid_package",
-        "A package is 1 to 256 characters without control characters",
+        "A package is 1 to 200 characters without control characters",
     ))
 }
 
 /// A name the store can look up.
 fn valid(name: &str) -> bool {
-    !name.is_empty() && name.chars().count() <= 256 && !name.chars().any(char::is_control)
+    !name.is_empty() && name.chars().count() <= 200 && !name.chars().any(char::is_control)
 }
 
 /// A package's page above the Hosts table.

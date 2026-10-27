@@ -18,9 +18,9 @@ async fn seed(fx: &Fx) {
     let client = fx.db.pool.get().await.unwrap();
     client
         .batch_execute(&format!(
-            "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at, inventory_at) VALUES
-                ('{W1}', 'active', now(), 'win-01', now(), now()),
-                ('{L1}', 'active', now(), 'lin-01', now(), now());
+            "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at, inventory_at, os_id, os_version) VALUES
+                ('{W1}', 'active', now(), 'win-01', now(), now(), 'debian', '12'),
+                ('{L1}', 'active', now(), 'lin-01', now(), now(), 'debian', '12');
              INSERT INTO console_host_group_members (asset_group_id, agent_id, added_at, added_by)
                 VALUES ('{WIN}', '{W1}', now(), 't');
              INSERT INTO package_versions (manager, name, version, arch) VALUES
@@ -56,7 +56,7 @@ fn hosts(name: &str, query: &str) -> String {
 async fn paths_and_queries_are_validated() {
     let Some(fx) = Fx::new().await else { return };
     seed(&fx).await;
-    let long = "x".repeat(257);
+    let long = "x".repeat(201);
     for uri in [summary("%00"), summary(&long), hosts("%0A", "")] {
         let (status, body) = fx.call(&fx.admin, "GET", &uri, None).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");

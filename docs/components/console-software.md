@@ -43,14 +43,16 @@ Web: `views/investigate/Software.tsx` (the list) and
 - **Vulnerabilities:** the open advisories of the package, counted as the
   Vulnerabilities list's defaults count them (open or expired accepted
   risk, not a lower-confidence match), from the hosts' fixable pairs and
-  from the no-fix advisories of the versions in use. Worst severity,
+  from the no-fix advisories of the versions in use that are written for
+  the OS release of a host holding that version. Worst severity,
   count, and Exploited (a KEV or EUVD flag on a CVE).
 - **Fix:** "Update on n hosts" counts hosts with an open fixable advisory
   not waiting for a reboot; "No fix yet" when an open advisory has none.
 - **Used by:** the services that run from the package, by name (the unit's
   base or the service map's packages), most hosts first.
-- **This week:** hosts in reach with the package new, updated (the old
-  version went away and a new one appeared) or removed in the last 7 days.
+- **This week:** hosts in reach with the package new, updated (a
+  `went_away` and an `appeared` at the same instant) or removed in the last
+  7 days; a host that installed and removed it counts in none.
 - **Group chips** show the hosts the group has in reach, not packages.
 - **The Hosts card** gives each host its versions, "Update to x" (the newest
   fixed version of its open fixable advisories) or "Up to date", and the
@@ -99,10 +101,13 @@ The Hosts card shows its own error without hiding the rest of the page.
   software_list_timing -- --ignored --nocapture` (set
   `SOFTWARE_TIMING_PACKAGES=2000` for the extreme fleet). On the sizing fleet
   (10,000 hosts, 400 packages each out of 600 names, 2,000 advisories,
-  500,000 change rows) the unfiltered list answers in 1.6 s at full reach,
-  an exploited filter 1.5 to 1.7 s, a search 1.6 s, a group filter 2.1 s,
-  fix available with several versions 2.1 s, one group's reach (about 500
-  hosts) 1.3 s, and a sort by hosts 2.9 to 3.4 s. The target of 2 s holds
+  500,000 change rows) the unfiltered list answers in 1.7 s at full reach,
+  an exploited filter 1.6 s, a search 1.5 s, a group filter 1.8 s,
+  fix available with several versions 2.2 s, one group's reach (about 500
+  hosts) 1.2 s, and a sort by hosts 3.1 s. With a quarter of the hosts on
+  another OS release (the no-fix advisories are matched to each host's
+  release, so the links of the versions with a no-fix advisory are read) the
+  unfiltered list takes 2.0 s and one group's reach 2.1 s. The target of 2 s holds
   for the default view and the scoped reach; a sort by hosts and the
   heaviest filters run past it. On the extreme fleet (2,000 packages on each
   host, 3,000 names, 20 million links) the unfiltered list takes 2.5 s and a

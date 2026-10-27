@@ -219,3 +219,35 @@ async fn hosts_table_has_segments_and_the_update_to_version() {
     assert_eq!(nothing.total, 0);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn no_fix_advisories_follow_the_hosts_os_release() {
+    let (db, c) = common::migrated().await;
+    let (mine, _) = fixture(&c).await;
+    let scope = scoped(&mine);
+    // 3.0.9 is only on C; on Debian 11 the Debian 12 advisory OS-3 is not its.
+    c.execute(
+        "UPDATE agents SET os_version = '11' WHERE agent_id = $1",
+        &[&C],
+    )
+    .await
+    .unwrap();
+    let s = summary(&c, &scope, "openssl").await.unwrap();
+    assert_eq!((s.advisory_total, s.no_fix), (2, 0));
+    assert!(s.advisories.iter().all(|a| a.advisory_id != "OS-3"));
+    assert_eq!(s.versions[1].advisories, 1, "only OS-2 on 3.0.9");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn installed_and_removed_in_the_week_counts_in_no_column() {
+    let (db, c) = common::migrated().await;
+    let (mine, _) = fixture(&c).await;
+    let s = summary(&c, &scoped(&mine), "curl").await.unwrap();
+    assert_eq!(
+        (s.week_added, s.week_updated, s.week_removed),
+        (1, 0, 0),
+        "A installed it; B installed and removed it"
+    );
+    db.drop().await;
+}

@@ -207,8 +207,9 @@ pub async fn software_summary(
     let of: i64 = me.get(4);
 
     let scope_pair = (&global, &groups);
-    // The week, per host: installed, changed version (went away and appeared)
-    // or removed (ruling 8).
+    // The week, per host: installed, changed version (a went_away and an
+    // appeared at the same instant) or removed (ruling 8); installed and then
+    // removed counts in none.
     let week = client
         .query_one(
             &format!(
@@ -222,13 +223,15 @@ pub async fn software_summary(
                      AND c.at > $4::timestamptz - interval '{KEPT} days'
                    GROUP BY c.agent_id),
                  w AS (
-                   SELECT c.agent_id, bool_or(c.change = 'appeared') AS app, bool_or(c.change = 'went_away') AS gone
+                   SELECT c.agent_id, bool_or(c.change = 'appeared') AS app, bool_or(c.change = 'went_away') AS gone,
+                          COALESCE((array_agg(c.at) FILTER (WHERE c.change = 'appeared'))
+                                   && (array_agg(c.at) FILTER (WHERE c.change = 'went_away')), false) AS upg
                    FROM change_log c JOIN agents a ON a.agent_id = c.agent_id
                    WHERE c.kind = 'package' AND c.key = $3::text AND a.status <> 'revoked' AND {visible}
                      AND c.change IN ('appeared', 'went_away') AND c.at > $5::timestamptz
                    GROUP BY c.agent_id)
                  SELECT (SELECT count(*) FROM w WHERE app AND NOT gone),
-                        (SELECT count(*) FROM w WHERE app AND gone),
+                        (SELECT count(*) FROM w WHERE upg),
                         (SELECT count(*) FROM w WHERE gone AND NOT app),
                         (SELECT count(*) FROM d),
                         (SELECT min(first_at) FROM d)"
@@ -276,7 +279,9 @@ pub async fn software_summary(
                  hv AS (SELECT DISTINCT hp.package_version_id AS pvid, hp.agent_id
                         FROM package_versions pv JOIN host_packages hp ON hp.package_version_id = pv.id
                         WHERE pv.name = $1::text AND hp.agent_id = ANY($2::text[])),
-                 nf AS (SELECT DISTINCT vv.advisory_id FROM hv JOIN version_vulnerabilities vv ON vv.package_version_id = hv.pvid),
+                 nf AS (SELECT DISTINCT vv.advisory_id FROM hv JOIN version_vulnerabilities vv ON vv.package_version_id = hv.pvid
+                        JOIN advisories a ON a.advisory_id = vv.advisory_id
+                        JOIN agents ag ON ag.agent_id = hv.agent_id AND a.os_id = ag.os_id AND a.os_version = ag.os_release),
                  allv AS (SELECT advisory_id FROM fx UNION SELECT advisory_id FROM nf)
                  SELECT (SELECT count(*) FROM allv),
                         (SELECT count(*) FROM nf WHERE advisory_id NOT IN (SELECT advisory_id FROM fx)),
@@ -333,8 +338,10 @@ async fn versions_in_use(
                         FROM package_versions pv JOIN host_packages hp ON hp.package_version_id = pv.id
                         WHERE pv.name = $1::text AND hp.agent_id = ANY($2::text[])),
                  va AS (
-                   SELECT hv.pvid, vv.advisory_id FROM (SELECT DISTINCT pvid FROM hv) hv
+                   SELECT hv.pvid, vv.advisory_id FROM hv
                    JOIN version_vulnerabilities vv ON vv.package_version_id = hv.pvid
+                   JOIN advisories a ON a.advisory_id = vv.advisory_id
+                   JOIN agents ag ON ag.agent_id = hv.agent_id AND a.os_id = ag.os_id AND a.os_version = ag.os_release
                    UNION
                    SELECT hv.pvid, fx.advisory_id FROM hv JOIN fx ON fx.agent_id = hv.agent_id),
                  vc AS (SELECT va.pvid, count(DISTINCT va.advisory_id) AS advisories,
@@ -391,7 +398,9 @@ async fn advisories(
                    SELECT fx.advisory_id, fx.agent_id, fx.fixed FROM fx
                    UNION ALL
                    SELECT vv.advisory_id, hv.agent_id, NULL FROM hv
-                   JOIN version_vulnerabilities vv ON vv.package_version_id = hv.pvid),
+                   JOIN version_vulnerabilities vv ON vv.package_version_id = hv.pvid
+                   JOIN advisories a ON a.advisory_id = vv.advisory_id
+                   JOIN agents ag ON ag.agent_id = hv.agent_id AND a.os_id = ag.os_id AND a.os_version = ag.os_release),
                  grouped AS (SELECT advisory_id, count(DISTINCT agent_id) AS hosts, max(fixed) AS fixed
                              FROM hits GROUP BY advisory_id),
                  enriched AS (

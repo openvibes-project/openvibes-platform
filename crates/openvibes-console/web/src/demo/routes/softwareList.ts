@@ -53,13 +53,15 @@ export function registerSoftwareListRoute(ctx: DemoContext) {
       const agents = [...new Set(mine.map((c) => c.agent))];
       const gone = (a: string) => mine.some((c) => c.agent === a && c.change === "went_away");
       const came = (a: string) => mine.some((c) => c.agent === a && c.change === "appeared");
+      // An upgrade is a went_away and an appeared at the same instant; installed and removed later is neither.
+      const upgraded = (a: string) => mine.some((c) => c.agent === a && c.change === "appeared" && mine.some((g) => g.agent === a && g.change === "went_away" && g.at === c.at));
       const groups = new Set(hosts.flatMap((h) => groupIdsOf(ctx, h.id, ["automatic", "rule", "manual"])));
       pkgs.push({
         name, hosts: new Set(hosts.map((h) => h.id)), versions: distinct.length, rpm: distinct.some((v) => v.manager === "rpm"), dpkg: distinct.some((v) => v.manager === "dpkg"),
         oldest: fullVersion(distinct[0] as never), newest: fullVersion(distinct[distinct.length - 1] as never),
         adv: open.length, noFix: open.filter((a) => a.fixed == null).length, sev: open.length ? Math.min(...open.map((a) => severityRank(a.severity))) : null,
         exploited: open.some((a) => a.exploited), update: new Set(open.flatMap((a) => [...a.fixable])).size,
-        added: agents.filter((a) => came(a) && !gone(a)).length, updated: agents.filter((a) => came(a) && gone(a)).length, removed: agents.filter((a) => gone(a) && !came(a)).length,
+        added: agents.filter((a) => came(a) && !gone(a)).length, updated: agents.filter(upgraded).length, removed: agents.filter((a) => gone(a) && !came(a)).length,
         units: [...(unitsOf.get(name) ?? [])].map(([unit, h]) => [unit, h.size] as [string, number]).sort((a, b) => b[1] - a[1] || byteOrder(a[0], b[0])), groups,
       });
     }

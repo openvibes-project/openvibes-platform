@@ -4,7 +4,8 @@
 //! managers), and `hn` counts the hosts exactly for the names with several
 //! versions, where one host may hold two (`nm`); the open advisories of a
 //! name come from the fixable pairs in `vulnerabilities` and the no-fix pairs of the versions in use
-//! (`version_vulnerabilities`); `p` joins them with the change log's week
+//! (`version_vulnerabilities`, only those written for the OS release of a host
+//! in reach that holds the version, as the Vulnerabilities list counts them); `p` joins them with the change log's week
 //! and every filter, count and the page read `p`. Only fixed internal
 //! strings are formatted in; every value is bound.
 //!
@@ -143,7 +144,7 @@ pub(crate) fn statement(sort: SoftwareSort, descending: bool) -> String {
     };
     format!(
         "WITH reach AS MATERIALIZED (
-           SELECT a.agent_id, a.status, a.inventory_at, row_number() OVER () AS aid FROM agents a
+           SELECT a.agent_id, a.status, a.inventory_at, a.os_id, a.os_release, row_number() OVER () AS aid FROM agents a
            WHERE a.status <> 'revoked' AND {visible}),
          wide AS MATERIALIZED (
            SELECT (SELECT count(*) FROM reach) * 2 >= (SELECT count(*) FROM agents) AS wide),
@@ -184,10 +185,35 @@ pub(crate) fn statement(sort: SoftwareSort, descending: bool) -> String {
            WHERE v.fixed_at IS NULL AND NOT {LOW_CONFIDENCE}
              AND (t.state IS NULL OR t.state = 'open'
                   OR (t.state = 'accepted_risk' AND t.accepted_until <= $11::timestamptz))),
+         ros AS MATERIALIZED (SELECT DISTINCT os_id, os_release FROM reach),
+         rl AS MATERIALIZED (
+           SELECT hp.package_version_id AS pvid, r.os_id, r.os_release
+           FROM reach r JOIN host_packages hp ON hp.agent_id = r.agent_id
+           WHERE (SELECT count(*) FROM ros) > 1 AND NOT (SELECT wide FROM wide)),
+         -- The OS releases that hold a version: with one release in reach (the
+         -- usual fleet) every version in use has it, which needs no pass over
+         -- the links.
+         nfo AS MATERIALIZED (
+           SELECT pc.pvid, ros.os_id, ros.os_release
+           FROM pc CROSS JOIN ros WHERE (SELECT count(*) FROM ros) = 1
+           UNION ALL
+           -- `reach` again, joined to the links directly: the planner hashes the
+           -- hosts and scans the links in parallel, which it does not through a CTE.
+           SELECT DISTINCT hp.package_version_id, a.os_id, a.os_release
+           FROM host_packages hp
+           JOIN agents a ON a.agent_id = hp.agent_id AND a.status <> 'revoked' AND {visible}
+           WHERE (SELECT count(*) FROM ros) > 1 AND (SELECT wide FROM wide)
+             AND hp.package_version_id IN (SELECT package_version_id FROM version_vulnerabilities)
+           UNION ALL
+           -- A narrow reach reads the links of its few hosts.
+           SELECT DISTINCT rl.pvid, rl.os_id, rl.os_release FROM rl
+           WHERE rl.pvid IN (SELECT package_version_id FROM version_vulnerabilities)),
          nf AS MATERIALIZED (
-           SELECT pv.name, vv.advisory_id
-           FROM vu JOIN package_versions pv ON pv.id = vu.pvid
-           JOIN version_vulnerabilities vv ON vv.package_version_id = vu.pvid),
+           SELECT DISTINCT pv.name, vv.advisory_id
+           FROM nfo JOIN package_versions pv ON pv.id = nfo.pvid
+           JOIN version_vulnerabilities vv ON vv.package_version_id = nfo.pvid
+           JOIN advisories a ON a.advisory_id = vv.advisory_id
+                AND a.os_id = nfo.os_id AND a.os_version = nfo.os_release),
          adv AS MATERIALIZED (
            SELECT d.name, d.advisory_id, bool_or(d.fix) AS fix
            FROM (SELECT name, advisory_id, true AS fix FROM fx
@@ -221,10 +247,12 @@ pub(crate) fn statement(sort: SoftwareSort, descending: bool) -> String {
            FROM nm JOIN cand c ON c.pkg = lower(nm.name) JOIN uu ON uu.base = c.b),
          wk AS (
            SELECT d.name, count(*) FILTER (WHERE d.app AND NOT d.gone) AS added,
-                  count(*) FILTER (WHERE d.app AND d.gone) AS updated,
+                  count(*) FILTER (WHERE d.upg) AS updated,
                   count(*) FILTER (WHERE d.gone AND NOT d.app) AS removed
            FROM (SELECT c.key AS name, c.agent_id, bool_or(c.change = 'appeared') AS app,
-                        bool_or(c.change = 'went_away') AS gone
+                        bool_or(c.change = 'went_away') AS gone,
+                        COALESCE((array_agg(c.at) FILTER (WHERE c.change = 'appeared'))
+                                 && (array_agg(c.at) FILTER (WHERE c.change = 'went_away')), false) AS upg
                  FROM change_log c JOIN reach r ON r.agent_id = c.agent_id
                  WHERE c.kind = 'package' AND c.change IN ('appeared', 'went_away')
                    AND c.at > $11::timestamptz - interval '7 days'
