@@ -31,7 +31,7 @@ wait_for() {
 cleanup() {
     local status=$?
     if ((status != 0)); then
-        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm openvibes-llm-proxy openvibes-signer openvibes-fetch.socket "openvibes-fetch@*"; do
+        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm openvibes-llm-proxy openvibes-signer openvibes-fetch.socket "openvibes-fetch@*" openvibes-picture.socket "openvibes-picture@*"; do
             echo "--- $unit"
             "$PODMAN" exec "$C" journalctl -u "$unit" --no-pager -n 15 2>/dev/null || true
         done

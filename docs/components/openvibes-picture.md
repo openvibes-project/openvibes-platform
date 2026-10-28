@@ -61,8 +61,9 @@ console connects, and a crashing decoder takes down one upload.
 `openvibes-picture@.service` runs one process per connection as a
 `DynamicUser`, with `PrivateNetwork`, `AF_UNIX` only, `ProtectSystem=strict`,
 `PrivateTmp`, `LimitFSIZE=0`, no capabilities, no `@privileged @resources
-@network-io` system calls, `InaccessiblePaths=/etc/openvibes /var/lib`,
-`MemoryMax=256M`, `LimitCPU=10`, `RuntimeMaxSec=15`, `TasksMax=1`. The limits
+@network-io` system calls, `MemoryMax=256M`, `LimitCPU=10`,
+`RuntimeMaxSec=15`, `TasksMax=4`. The service's account is in no group, so the
+config files (0640, root and a service group) are unreadable to it. The limits
 are in the unit because the console's own filter forbids `setrlimit`. The
 units ship in the `openvibes-console` RPM, which also starts the socket.
 
