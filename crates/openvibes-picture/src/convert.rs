@@ -84,11 +84,10 @@ pub fn convert(data: &[u8], crop: Crop) -> Result<Output, Refusal> {
         let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
         let mut decoded = DynamicImage::from_decoder(decoder).map_err(|_| Refusal::Decode)?;
         decoded.apply_orientation(orientation);
-        // The crop is in the turned picture, as the browser showed it. Keep only
-        // the square before converting to RGBA, which lowers the peak memory.
-        let square_part = decoded.crop_imm(crop.x, crop.y, crop.size, crop.size);
+        // The crop is in the turned picture, as the browser showed it. Copy only the
+        // square, straight to 8-bit RGBA, so a 16-bit picture is not copied at 16 bits.
+        let rgba = imageops::crop_imm(&decoded, crop.x, crop.y, crop.size, crop.size).to_image();
         drop(decoded);
-        let rgba = square_part.into_rgba8();
         let big = if crop.size == LARGE {
             rgba
         } else {
