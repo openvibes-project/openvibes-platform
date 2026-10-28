@@ -76,6 +76,8 @@ pub struct App<H: Host> {
     pub packages: Option<Result<Vec<PackageUpdate>, String>>,
     /// The kind of job the helper left half done (`update`), from `/run`.
     pub half_done: Option<String>,
+    /// The last OS check says a restart is needed (Home and Status hint).
+    pub restart_needed: bool,
     /// Enter after an update: start the new version of the menu.
     pub reopen: bool,
     /// The update notice, looked up on another thread (`run`): dnf may
@@ -172,6 +174,7 @@ impl<H: Host> App<H> {
             versions_loaded: false,
             packages: None,
             half_done: None,
+            restart_needed: false,
             reopen: false,
             updates: None,
             health: None,
@@ -220,6 +223,10 @@ impl<H: Host> App<H> {
     /// sudo, which writes to the auth log.
     pub fn refresh(&mut self) {
         self.files_changed();
+        // The Operating system page notices an update ending elsewhere.
+        if self.nav.screen == Screen::Maint(super::maint::Page::Os) {
+            self.os_refreshed();
+        }
         self.ca = self.ca_exists();
         // The highlighted Status item stays highlighted if it is still there.
         let held = (self.nav.screen == Screen::Status)
@@ -437,6 +444,10 @@ impl<H: Host> App<H> {
     /// Reads again what the helper writes for the TUI (the half-done mark).
     pub(super) fn files_changed(&mut self) {
         self.half_done = super::maint::update_half_done(&self.root);
+        self.restart_needed = self
+            .host
+            .os_info()
+            .is_some_and(|os| os.updates.is_some_and(|found| found.restart));
     }
 
     /// Today's screens' own keys.

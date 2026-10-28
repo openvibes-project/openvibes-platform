@@ -1,6 +1,19 @@
 //! What a run is (an update, a backup, the install…): its titles, its
 //! result line and its password bar's words. Split from `run.rs` (size).
 
+/// What a Maintenance › Operating system run does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OsAction {
+    Check,
+    /// Upgrades `packages` packages (the count of the last check); `kernel`
+    /// says the last check found a new kernel among them.
+    Update {
+        packages: u32,
+        kernel: bool,
+    },
+    Restart,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Kind {
     Update {
@@ -58,6 +71,8 @@ pub enum Kind {
         /// The result line, without how long it took.
         done: String,
     },
+    /// Maintenance › Operating system.
+    Os(OsAction),
 }
 
 impl Kind {
@@ -89,6 +104,11 @@ impl Kind {
             Kind::ConsoleCert { set: false, .. } => {
                 "Going back to the platform's certificate".into()
             }
+            Kind::Os(OsAction::Check) => "Checking for updates".into(),
+            Kind::Os(OsAction::Update { packages, .. }) => {
+                format!("Updating {packages} packages")
+            }
+            Kind::Os(OsAction::Restart) => "Restarting".into(),
         }
     }
     pub fn done(&self) -> String {
@@ -111,6 +131,9 @@ impl Kind {
             Kind::Ports { done, .. } => done.clone(),
             Kind::Names { done, .. } => done.clone(),
             Kind::Replace { done } | Kind::ConsoleCert { done, .. } => done.clone(),
+            Kind::Os(OsAction::Check) => "Checked".into(),
+            Kind::Os(OsAction::Update { packages, .. }) => format!("{packages} packages updated"),
+            Kind::Os(OsAction::Restart) => "Restart started".into(),
         }
     }
     pub fn stopped(&self) -> String {
@@ -131,6 +154,9 @@ impl Kind {
             Kind::Names { .. } => "The change stopped".into(),
             Kind::Replace { .. } => "The replacement stopped".into(),
             Kind::ConsoleCert { .. } => "The console's certificate did not change".into(),
+            Kind::Os(OsAction::Check) => "The check failed".into(),
+            Kind::Os(OsAction::Update { .. }) => "The update stopped".into(),
+            Kind::Os(OsAction::Restart) => "The restart failed".into(),
         }
     }
     /// The password bar's label (the bar adds the colon): the shell asks
@@ -159,6 +185,9 @@ impl Kind {
             Kind::Replace { .. } => "Replace",
             Kind::ConsoleCert { set: true, .. } => "Use it",
             Kind::ConsoleCert { set: false, .. } => "Go back",
+            Kind::Os(OsAction::Check) => "Check",
+            Kind::Os(OsAction::Update { .. }) => "Update",
+            Kind::Os(OsAction::Restart) => "Restart",
         }
     }
 }

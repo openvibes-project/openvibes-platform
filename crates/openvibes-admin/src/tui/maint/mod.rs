@@ -19,6 +19,9 @@ mod console_cert_tests;
 mod database;
 pub mod folder;
 mod names;
+mod os;
+#[cfg(test)]
+mod os_tests;
 mod page;
 mod parts;
 #[cfg(test)]
@@ -112,6 +115,8 @@ pub struct Maint {
     pub replace: replace::Replace,
     /// Console sign-in: the new password, shown once; dropped on leaving.
     pub signin: Option<signin::Shown>,
+    /// Operating system: the distribution and last check, read when the page opens.
+    pub os: Option<platform_host::os_updates::OsInfo>,
 }
 
 impl Maint {
@@ -133,6 +138,8 @@ pub enum Then {
     Parts,
     Ports,
     Names,
+    OsUpdate,
+    OsRestart,
     Replace,
     ConsoleCertSet,
     ConsoleCertReset,
@@ -149,8 +156,9 @@ enum Entry {
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 11] = [
+const ENTRIES: [(Entry, &str); 12] = [
     (Entry::Page(Page::Update), "Update OpenVIBES"),
+    (Entry::Page(Page::Os), "Operating system"),
     (Entry::Page(Page::Repair), "Repair"),
     (Entry::Page(Page::Parts), "Optional parts"),
     (Entry::Page(Page::Ports), "Ports and addresses"),
@@ -172,6 +180,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
             None if update::updates_available(&app.packages) => "updates are available".into(),
             None => "up to date".into(),
         },
+        Entry::Page(Page::Os) => os::summary(&app.host),
         Entry::Page(Page::Repair) => "check every step, fix what is wrong".into(),
         Entry::Page(Page::Parts) => plan_of_host(app).map_or_else(
             || "cannot be read".into(),
@@ -247,16 +256,21 @@ pub(super) fn read_plan<H: Host>(host: &H) -> Result<Plan, String> {
     plan_of(&text).map_err(unread)
 }
 
+/// Other work running, or a half-done update or uninstall (Repair's words).
+pub(super) fn busy<H: Host>(app: &App<H>) -> Option<String> {
+    if app.run.as_ref().is_some_and(Run::running) {
+        return Some("Wait: other work is still running".into());
+    }
+    let (what, todo) = repair::half_note(app.half_done.as_deref()?);
+    Some(format!("{what}{todo}"))
+}
+
 /// Why a page's Apply must not ask now: other work running, a half-done
 /// update or uninstall (Repair's words), or a plan that is not the one
 /// the page opened with. `None` when it may ask.
 pub(super) fn cannot_ask<H: Host>(app: &App<H>, opened: Option<&Plan>) -> Option<String> {
-    if app.run.as_ref().is_some_and(Run::running) {
-        return Some("Wait: other work is still running".into());
-    }
-    if let Some(kind) = app.half_done.as_deref() {
-        let (what, todo) = repair::half_note(kind);
-        return Some(format!("{what}{todo}"));
+    if let Some(why) = busy(app) {
+        return Some(why);
     }
     match read_plan(&app.host) {
         Ok(plan) if Some(&plan) == opened => None,
@@ -321,6 +335,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
         Page::SignIn => signin::draw(frame, head, app),
         Page::Backup => backup::draw(frame, head, app),
         Page::Update => update::draw(frame, head, app),
+        Page::Os => os::draw(frame, head, app),
         Page::Repair => repair::draw(frame, head, app),
         Page::Parts => parts::draw(frame, head, app),
         Page::Ports => ports::draw(frame, head, app),
@@ -376,6 +391,7 @@ impl<H: Host> App<H> {
                 }
                 self.load_backup_choice();
             }
+            Page::Os => self.open_os(),
             Page::SignIn => self.open_signin(),
             Page::Repair => self.open_repair(),
             Page::Parts => self.open_parts(),
@@ -397,6 +413,7 @@ impl<H: Host> App<H> {
             Page::SignIn => self.signin_key(key),
             Page::Backup => self.backup_key(key),
             Page::Update => self.update_key(key),
+            Page::Os => self.os_key(key),
             Page::Repair => self.repair_key(key),
             Page::Parts => self.parts_key(key),
             Page::Ports => self.ports_key(key),
@@ -417,6 +434,8 @@ impl<H: Host> App<H> {
         match then {
             Then::Update => self.update_yes(),
             Then::Uninstall => self.uninstall_yes(),
+            Then::OsUpdate => self.os_update_yes(),
+            Then::OsRestart => self.os_restart_yes(),
             Then::Parts => self.parts_yes(),
             Then::Ports => self.ports_yes(),
             Then::Names => self.names_yes(),
@@ -443,6 +462,7 @@ impl<H: Host> App<H> {
             self.install_ended();
             self.replace_ended();
             self.console_cert_ended();
+            self.os_ended();
         }
     }
 }

@@ -348,6 +348,13 @@ pub enum Privileged<'a> {
     ConsoleCertSet(&'a Secret),
     /// `console-cert-reset`: back to the platform's own console certificate.
     ConsoleCertReset,
+    /// `os-check`: `dnf check-update` and friends; prints
+    /// `done<TAB>TOTAL<TAB>SECURITY<TAB>RESTART`.
+    OsCheck,
+    /// `os-update`: `dnf upgrade`, then as `os-check`.
+    OsUpdate,
+    /// `os-restart`: reboots the host.
+    OsRestart,
 }
 
 impl Privileged<'_> {
@@ -403,6 +410,9 @@ impl Privileged<'_> {
             Privileged::CaImport(_) => vec!["ca-import".into()],
             Privileged::ConsoleCertSet(_) => vec!["console-cert-set".into()],
             Privileged::ConsoleCertReset => vec!["console-cert-reset".into()],
+            Privileged::OsCheck => vec!["os-check".into()],
+            Privileged::OsUpdate => vec!["os-update".into()],
+            Privileged::OsRestart => vec!["os-restart".into()],
         }
     }
 

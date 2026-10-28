@@ -337,6 +337,30 @@ impl<R: Runner> Host for Native<R> {
         ))
     }
 
+    fn os_info(&self) -> Option<crate::os_updates::OsInfo> {
+        use crate::os_updates::{OS_UPDATES_FILE, OsInfo, OsUpdates, os_release};
+        if !std::path::Path::new(Dnf.path()).exists() {
+            return None;
+        }
+        let read = |path: &str| std::fs::read_to_string(path).ok();
+        Some(OsInfo {
+            name: os_release(&read("/etc/os-release").unwrap_or_default()),
+            kernel: read("/proc/sys/kernel/osrelease")
+                .map(|k| k.trim().to_owned())
+                .unwrap_or_default(),
+            updates: read(OS_UPDATES_FILE).and_then(|t| OsUpdates::from_file(&t)),
+            running: false,
+        })
+    }
+
+    fn os_update_running(&self) -> bool {
+        self.run(
+            Systemctl,
+            &["is-active", "--quiet", crate::os_updates::UPDATE_UNIT],
+        )
+        .is_ok_and(|out| out.status == 0)
+    }
+
     fn own_console_cert(&self) -> Option<String> {
         std::fs::read_to_string(crate::OWN_CONSOLE_CERT).ok()
     }

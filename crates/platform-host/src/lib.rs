@@ -5,6 +5,7 @@
 
 mod journal;
 pub mod native;
+pub mod os_updates;
 pub mod runner;
 pub mod service;
 pub mod setup;
@@ -254,6 +255,16 @@ pub trait Host {
     fn listeners(&self, port: u16) -> Result<String, HostError> {
         let _ = port;
         Ok(String::new())
+    }
+    /// The distribution, kernel and last update check; `None` on a host
+    /// without dnf (Maintenance › Operating system).
+    fn os_info(&self) -> Option<os_updates::OsInfo> {
+        None
+    }
+    /// The `openvibes-os-update` unit is active (a process start, so read
+    /// when the Operating system page opens or refreshes, not per draw).
+    fn os_update_running(&self) -> bool {
+        false
     }
     /// Opens the operator's login shell on this terminal and returns when
     /// it exits (Maintenance › Shell).

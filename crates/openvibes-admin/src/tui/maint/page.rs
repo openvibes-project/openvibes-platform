@@ -7,6 +7,7 @@ pub enum Page {
     SignIn,
     Backup,
     Update,
+    Os,
     Repair,
     Parts,
     Ports,
@@ -31,6 +32,7 @@ impl Page {
             Page::SignIn => "Console sign-in",
             Page::Backup => "Back up",
             Page::Update => "Update OpenVIBES",
+            Page::Os => "Operating system",
             Page::Repair => "Repair",
             Page::Parts => "Optional parts",
             Page::Ports => "Ports and addresses",
@@ -53,6 +55,9 @@ impl Page {
             }
             Page::Update => {
                 "Space ticks Back up first; Enter on Update now updates; What's new lists the packages."
+            }
+            Page::Os => {
+                "Update everything installs every package dnf has; Check again asks dnf what is waiting."
             }
             Page::Repair => {
                 "It checks every step first; Fix N problems repairs, then checks again."

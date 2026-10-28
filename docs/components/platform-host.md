@@ -173,3 +173,17 @@ and service allow-lists, config read and write through the helper, database comm
 account, the audit note after each action, `df` parsing, and that
 the RPM's polkit rule names exactly the units in `Unit::ALL`). The real rights are exercised by `scripts/systemd-e2e.sh`
 (section "Operators").
+
+## Operating system updates
+
+`os_updates` parses what `dnf` prints: `check_update_packages` (one format for
+`check-update` and `check-update --security`, wrapped dnf4 lines joined),
+`restart_answer` (`needs-restarting -r`'s own words; anything else is no
+answer), `short_kernel` and `os_release` (`PRETTY_NAME`, else `NAME
+VERSION_ID`, else "Linux"). It keeps the last check as `OsUpdates` in
+`OS_UPDATES_FILE` (`/etc/openvibes/os-updates`). `Host::os_info()` returns the
+distribution, kernel, last check and whether the `openvibes-os-update` unit is
+running (`Host::os_update_running()`, read when the page opens or refreshes, never per draw), or `None` without dnf. The password-gated verbs are
+`Privileged::OsCheck`, `OsUpdate` and `OsRestart` (`os-check`, `os-update`,
+`os-restart`, journalled under their own names); `Program::SystemdRun` runs
+the upgrade.
