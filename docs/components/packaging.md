@@ -105,7 +105,7 @@ RPM and is socket-activated like the fetcher: `openvibes-picture.socket`
 listens on `/run/openvibes-picture/picture.sock` (`SocketUser=root`,
 `SocketGroup=openvibes-console`, 0660, `Accept=yes`, `MaxConnections=4`), and
 `openvibes-picture@.service` runs one process per upload as a `DynamicUser`
-with no network, no writable paths, `MemoryMax=256M`, `LimitCPU=10` and
+with no network, no writable paths, `MemoryMax=384M`, `LimitCPU=10` and
 `RuntimeMaxSec=15`. The console service `Wants=` the socket, so a `dnf
 upgrade` starts it. Details: [openvibes-picture.md](openvibes-picture.md).
 

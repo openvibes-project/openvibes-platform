@@ -3,9 +3,10 @@
 use std::io::Cursor;
 
 use image::{
-    AnimationDecoder, DynamicImage, ImageReader, Limits, RgbaImage,
+    AnimationDecoder, DynamicImage, ImageDecoder, ImageReader, Limits, RgbaImage,
     codecs::gif::GifDecoder,
     imageops::{self, FilterType},
+    metadata::Orientation,
 };
 use webp_animation::{Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig};
 
@@ -79,9 +80,20 @@ pub fn convert(data: &[u8], crop: Crop) -> Result<Output, Refusal> {
         limits.max_image_height = Some(MAX_SIDE);
         limits.max_alloc = Some(192 * 1024 * 1024);
         reader.limits(limits);
-        let decoded: DynamicImage = reader.decode().map_err(|_| Refusal::Decode)?;
-        let rgba = decoded.into_rgba8();
-        let big = square(&rgba, crop, LARGE, FilterType::Lanczos3);
+        let mut decoder = reader.into_decoder().map_err(|_| Refusal::Decode)?;
+        let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
+        let mut decoded = DynamicImage::from_decoder(decoder).map_err(|_| Refusal::Decode)?;
+        decoded.apply_orientation(orientation);
+        // The crop is in the turned picture, as the browser showed it. Keep only
+        // the square before converting to RGBA, which lowers the peak memory.
+        let square_part = decoded.crop_imm(crop.x, crop.y, crop.size, crop.size);
+        drop(decoded);
+        let rgba = square_part.into_rgba8();
+        let big = if crop.size == LARGE {
+            rgba
+        } else {
+            imageops::resize(&rgba, LARGE, LARGE, FilterType::Lanczos3)
+        };
         let little = imageops::resize(&big, SMALL, SMALL, FilterType::Lanczos3);
         large
             .add_frame(big.as_raw(), 0)

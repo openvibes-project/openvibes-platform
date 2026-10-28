@@ -4,7 +4,7 @@
 
 use std::io::Cursor;
 
-use image::{ImageFormat, ImageReader};
+use image::{ImageDecoder, ImageFormat, ImageReader, metadata::Orientation};
 
 use crate::{MAX_BYTES, MAX_FRAMES, MAX_SIDE, MAX_WORK, Refusal};
 
@@ -137,6 +137,17 @@ fn frames(format: Format, data: &[u8]) -> Result<usize, Refusal> {
     }
 }
 
+/// Whether showing a picture with this orientation swaps its width and height.
+pub(crate) fn turns_sideways(orientation: Orientation) -> bool {
+    matches!(
+        orientation,
+        Orientation::Rotate90
+            | Orientation::Rotate270
+            | Orientation::Rotate90FlipH
+            | Orientation::Rotate270FlipH
+    )
+}
+
 /// Checks `data` against the limits, reading only its header. The caller has
 /// already bounded how much it read; this refuses over [`MAX_BYTES`] too.
 pub fn inspect(data: &[u8]) -> Result<Info, Refusal> {
@@ -144,9 +155,16 @@ pub fn inspect(data: &[u8]) -> Result<Info, Refusal> {
         return Err(Refusal::TooLarge);
     }
     let format = kind(data)?;
-    let (width, height) = ImageReader::with_format(Cursor::new(data), format.image())
-        .into_dimensions()
+    // The size as a person sees it: a phone photo stored sideways with an EXIF
+    // orientation is shown (and cropped by the browser) turned, so the crop is
+    // in that frame too.
+    let mut decoder = ImageReader::with_format(Cursor::new(data), format.image())
+        .into_decoder()
         .map_err(|_| Refusal::Decode)?;
+    let (mut width, mut height) = decoder.dimensions();
+    if turns_sideways(decoder.orientation().unwrap_or(Orientation::NoTransforms)) {
+        (width, height) = (height, width);
+    }
     if width == 0 || height == 0 || width > MAX_SIDE || height > MAX_SIDE {
         return Err(Refusal::Dimensions);
     }
@@ -157,7 +175,11 @@ pub fn inspect(data: &[u8]) -> Result<Info, Refusal> {
     if frames > MAX_FRAMES {
         return Err(Refusal::Frames);
     }
-    if u64::from(width) * u64::from(height) * frames as u64 > MAX_WORK && frames > 1 {
+    // Only a GIF stays animated; an animated WebP becomes a still of its first frame.
+    if format == Format::Gif
+        && frames > 1
+        && u64::from(width) * u64::from(height) * frames as u64 > MAX_WORK
+    {
         return Err(Refusal::Work);
     }
     Ok(Info {

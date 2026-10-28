@@ -181,8 +181,8 @@ fn size_pixels_and_frames_are_checked_from_the_header() {
     assert!(inspect(&encoded(ImageFormat::Png, 4096, 1)).is_ok());
     assert_eq!(inspect(&gif(301, 1)), Err(Refusal::Frames));
     assert_eq!(inspect(&gif(300, 1)).map(|info| info.frames), Ok(300));
-    // 100 frames of 1500 x 1500 is more work than the helper may do.
-    assert_eq!(inspect(&gif(100, 1500)), Err(Refusal::Work));
+    // 120 frames of 1000 x 1000 is more work than the helper may do; 100 is the cap.
+    assert_eq!(inspect(&gif(120, 1000)), Err(Refusal::Work));
     assert!(inspect(&gif(100, 1000)).is_ok());
 }
 
@@ -267,4 +267,69 @@ fn encoders_used_here_exist() {
     // Keeps ImageEncoder in use for the formats above.
     fn assert_encoder<T: ImageEncoder>() {}
     assert_encoder::<image::codecs::png::PngEncoder<Vec<u8>>>();
+}
+
+/// A 400 x 300 JPEG, red on the left half and blue on the right, with an EXIF
+/// orientation tag of `orientation` (6 = shown turned 90 degrees clockwise).
+fn jpeg_with_orientation(orientation: u8) -> Vec<u8> {
+    let image = RgbaImage::from_fn(400, 300, |x, _| {
+        if x < 200 {
+            Rgba([220, 20, 20, 255])
+        } else {
+            Rgba([20, 20, 220, 255])
+        }
+    });
+    let mut plain = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .to_rgb8()
+        .write_to(&mut plain, ImageFormat::Jpeg)
+        .unwrap();
+    let plain = plain.into_inner();
+    let mut exif = b"Exif\0\0MM\0\x2A\0\0\0\x08\0\x01\x01\x12\0\x03\0\0\0\x01".to_vec();
+    exif.extend_from_slice(&[0, orientation, 0, 0, 0, 0, 0, 0]);
+    let mut out = plain[..2].to_vec();
+    out.extend_from_slice(&[0xFF, 0xE1]);
+    out.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
+    out.extend_from_slice(&exif);
+    out.extend_from_slice(&plain[2..]);
+    out
+}
+
+#[test]
+fn a_photo_stored_sideways_is_cropped_the_way_the_browser_shows_it() {
+    let photo = jpeg_with_orientation(6);
+    // The browser shows it 300 wide and 400 tall, so that is the frame of the crop.
+    let info = inspect(&photo).unwrap();
+    assert_eq!((info.width, info.height), (300, 400));
+    // Inside the shown picture, though outside the stored one's height.
+    let output = convert(
+        &photo,
+        Crop {
+            x: 0,
+            y: 50,
+            size: 300,
+        },
+    )
+    .unwrap();
+    // Turned 90 degrees clockwise the red left half is the top: rows 50..200 of the
+    // crop's 300 are red, the rest blue.
+    let decoded = image::load_from_memory_with_format(&output.large, ImageFormat::WebP)
+        .unwrap()
+        .to_rgba8();
+    let (top, bottom) = (decoded.get_pixel(128, 10), decoded.get_pixel(128, 245));
+    assert!(top[0] > top[2] + 100, "top should be red: {top:?}");
+    assert!(
+        bottom[2] > bottom[0] + 100,
+        "bottom should be blue: {bottom:?}"
+    );
+    // A crop in the stored frame (400 wide) no longer fits.
+    let stored = Crop {
+        x: 0,
+        y: 0,
+        size: 400,
+    };
+    assert_eq!(convert(&photo, stored).err(), Some(Refusal::Crop));
+    // Not turned, the same file is 400 x 300.
+    let upright = inspect(&jpeg_with_orientation(1)).unwrap();
+    assert_eq!((upright.width, upright.height), (400, 300));
 }

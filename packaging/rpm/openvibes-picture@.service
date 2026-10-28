@@ -17,15 +17,17 @@ RuntimeMaxSec=15
 LimitCPU=10
 LimitFSIZE=0
 LimitCORE=0
-MemoryMax=256M
+# 4096 x 4096 frames of an animation peak near 230 MB; the headroom is for slower hardware.
+MemoryMax=384M
 MemorySwapMax=0
-TasksMax=4
+TasksMax=1
 UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
+PrivateUsers=yes
 PrivateNetwork=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
@@ -48,3 +50,7 @@ SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources @network-io
 CapabilityBoundingSet=
+# No config or state of any service is needed (the dash: skip a path that does not exist).
+InaccessiblePaths=-/etc/openvibes -/var/lib
+# Not LimitNPROC: after the switch to the dynamic user the kernel counts this process
+# against the limit, and exec fails with EAGAIN.

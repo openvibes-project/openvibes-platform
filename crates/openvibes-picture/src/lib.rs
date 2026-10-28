@@ -33,7 +33,7 @@ pub const SMALL: u32 = 64;
 /// Most pixels over all frames of an animation (width x height x frames):
 /// decoding one costs about 15 ns a pixel, so this stays well inside the
 /// 10 s of CPU the service allows.
-pub const MAX_WORK: u64 = 200_000_000;
+pub const MAX_WORK: u64 = 100_000_000;
 /// Most bytes of the stored large image.
 pub const MAX_OUTPUT: usize = 3 * 1024 * 1024;
 

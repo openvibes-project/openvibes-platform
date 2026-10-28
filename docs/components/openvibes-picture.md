@@ -8,7 +8,7 @@ upload itself. Spec: roles spec §9.2.
 ## Crate layout
 
 - `lib.rs`: the limits (`MAX_BYTES` 10 MiB, `MAX_SIDE` 4096, `MAX_FRAMES` 300,
-  `MAX_WORK` 200 million pixel-frames, `MAX_OUTPUT` 3 MiB), `Crop`, `Output`
+  `MAX_WORK` 100 million pixel-frames, `MAX_OUTPUT` 3 MiB), `Crop`, `Output`
   and `Refusal` (with its HTTP problem code and the sentence shown to the
   person).
 - `wire.rs`: the request and response bytes. This is all the console links
@@ -42,12 +42,16 @@ Refusal codes, and the console's problem codes (`picture_` + code): `too_large`
    `svg`; a HEIC/HEIF brand is `heic` ("Convert it to JPEG or PNG first");
    anything else is `unsupported`. AVIF is not accepted yet.
 3. The size and frame count from the header: over 4096 per side is
-   `dimensions`, over 300 frames `frames`, and for an animation more than 200
-   million pixels in all (width x height x frames) is `work`. The worst
-   accepted file (1024 x 1024 x 300 frames) converts in about 5 s.
-4. The crop: a square inside the picture, else `crop`.
-5. Decode with the `image` crate's own limits (4096 per side, 192 MiB), then
-   resize (Lanczos for a still, a cheaper filter for animation frames) and
+   `dimensions`, over 300 frames `frames`, and for a GIF more than 100
+   million pixels in all (width x height x frames) is `work`. The sizes are
+   those a person sees: a photo stored sideways with an EXIF orientation is
+   measured turned, as the browser shows and crops it. Measured worst cases:
+   1024 x 1024 x 300 frames about 5 s; 4096 x 4096 x 5 frames about 2 s and
+   230 MB.
+4. The crop: a square inside the picture as shown (after the EXIF
+   orientation), else `crop`.
+5. Decode with the `image` crate's own limits (4096 per side, 192 MiB), turn
+   the picture by its EXIF orientation, keep only the square, then resize (Lanczos for a still, a cheaper filter for animation frames) and
    encode lossy WebP at quality 80. A large result over 3 MiB is `output`.
 
 Only a GIF with more than one frame stays animated; every other type, an
@@ -61,8 +65,10 @@ console connects, and a crashing decoder takes down one upload.
 `openvibes-picture@.service` runs one process per connection as a
 `DynamicUser`, with `PrivateNetwork`, `AF_UNIX` only, `ProtectSystem=strict`,
 `PrivateTmp`, `LimitFSIZE=0`, no capabilities, no `@privileged @resources
-@network-io` system calls, `MemoryMax=256M`, `LimitCPU=10`,
-`RuntimeMaxSec=15`, `TasksMax=4`. The service's account is in no group, so the
+@network-io` system calls, `PrivateUsers`, `InaccessiblePaths=-/etc/openvibes -/var/lib`,
+`MemoryMax=384M`, `LimitCPU=10`, `RuntimeMaxSec=15`, `TasksMax=1`. There is
+no `LimitNPROC`: after the switch to the dynamic user the kernel counts the
+process itself against it and exec fails. The service's account is in no group, so the
 config files (0640, root and a service group) are unreadable to it. The limits
 are in the unit because the console's own filter forbids `setrlimit`. The
 units ship in the `openvibes-console` RPM, which also starts the socket.
