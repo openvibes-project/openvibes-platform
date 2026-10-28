@@ -2635,6 +2635,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "platform-settings"
+version = "0.2.9"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "platform-store"
 version = "0.2.9"
 dependencies = [
