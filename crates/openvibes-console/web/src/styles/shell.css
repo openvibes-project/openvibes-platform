@@ -73,9 +73,11 @@
 .assistant-toggle--on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .demo-badge { margin-right: 4px; }
 .avatar {
-  width: 32px; height: 32px; border-radius: 50%; border: 0; cursor: pointer; font-size: 12px; font-weight: 700;
+  width: 32px; height: 32px; border-radius: 50%; border: 0; padding: 0; overflow: hidden; cursor: pointer; font-size: 12px; font-weight: 700;
   background: linear-gradient(135deg, var(--accent), var(--accent-strong)); color: var(--accent-text);
 }
+.avatar-face { display: contents; }
+.avatar-img { display: block; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .menu { position: relative; }
 .menu__pop {
   position: absolute; right: 0; top: 40px; z-index: 60; min-width: 230px; padding: 6px; border-radius: var(--r-3);
@@ -266,7 +268,7 @@
 .people-roles__where { font-weight: 400; opacity: .8; }
 .person-page__crumb { padding-bottom: 0; }
 .person-page__head { display: flex; gap: 16px; align-items: center; padding: 8px 24px 16px; }
-.person-page__avatar { display: grid; place-items: center; width: 64px; height: 64px; flex: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 22px; }
+.person-page__avatar { overflow: hidden; display: grid; place-items: center; width: 64px; height: 64px; flex: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 22px; }
 .person-page__title { gap: 4px; min-width: 0; flex: 1 1 0; }
 .person-page__title h1, .person-page__title h2 { margin: 0; }
 .person-page__title h2 { font-size: 22px; }
@@ -411,3 +413,14 @@ div.detail-tile:hover { border-color: var(--line); }
 /* Subtle text stays readable on the highlighted row and the current process (axe, dark). */
 .cmd-once .subtle, .process--current .subtle { color: var(--text-2); }
 .alarm-command { overflow-wrap: anywhere; }
+
+/* Change picture (screen 7c) */
+.picture-dialog { min-width: min(420px, 90vw); }
+.picture-dialog__file { display: none; }
+.picture-dialog__crop { align-items: center; }
+.picture-crop { display: block; padding: 0; border: 0; position: relative; overflow: hidden; border-radius: 50%; background: var(--surface-3); cursor: grab; touch-action: none; outline-offset: 3px; }
+.picture-crop:active { cursor: grabbing; }
+.picture-crop img { position: absolute; max-width: none; user-select: none; }
+.picture-dialog__zoom { width: min(240px, 80vw); }
+.person-cell { gap: 10px; }
+.person-cell__avatar { overflow: hidden; display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 650; }

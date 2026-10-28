@@ -51,13 +51,14 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
 
   useEffect(() => onSignedOut(() => setAuth("signin")), []);
 
+  const reloadSession = useCallback(() => { request<Session>("GET", "/api/v1/session").then(setSession, () => undefined); }, []);
   const can = useCallback((permission: Permission) => allows(session, { permission }), [session]);
   const canEverywhere = useCallback((permission: Permission) => holdsEverywhere(session, permission), [session]);
   const canView = useCallback((path: string) => {
     const found = views.find((v) => v.path === path);
     return found !== undefined && (found.access.length === 0 || found.access.some((a) => can(a.permission)));
   }, [can]);
-  const context = useMemo(() => ({ session, demo: persona !== undefined, can, canEverywhere }), [session, persona, can, canEverywhere]);
+  const context = useMemo(() => ({ session, demo: persona !== undefined, can, canEverywhere, reloadSession }), [session, persona, can, canEverywhere, reloadSession]);
   const current = views.find((v) => v.path === view || (v.prefix !== undefined && view.startsWith(v.prefix)));
   const top = panels[panels.length - 1];
 

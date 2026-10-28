@@ -8,6 +8,8 @@ A person's page, a full page under Settings (`/settings/people/{id}`; approved s
 | `PersonMenu.tsx` | The ⋯ menu: Reset password, Disable and Enable, each asked in a dialog; hidden on your own page. |
 | `AddRoleDialog.tsx` | "+ Add role": a search over the roles the person does not hold and the viewer may hand out. |
 | `NewPersonDialog.tsx` | "+ New person" with its one-time password, shown once; also the modal and the one-time password box. |
+| `PictureDialog.tsx` | "Change picture": choose a file, move and zoom the round preview, save or remove. Opened from the account menu and the person page. |
+| `picture.ts` | The crop square and the drag arithmetic, without React. |
 | `people.ts` | Access grouping, the share check, role changes, refusals and the ⋯ actions, without React. |
 
 More: [docs/components/console-web.md](../../../../../../../docs/components/console-web.md)

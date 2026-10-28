@@ -20,6 +20,9 @@ pub struct PersonRow {
     pub last_sign_in_at: Option<String>,
     /// The roles they hold, with their reach.
     pub roles: Vec<RoleView>,
+    /// Version of their picture; null when they have none. Use it as `v` in
+    /// `/api/v1/users/{id}/picture`.
+    pub picture: Option<String>,
 }
 
 /// A person's page.
@@ -34,6 +37,9 @@ pub struct PersonView {
     pub last_sign_in_at: Option<String>,
     pub created_at: String,
     pub roles: Vec<RoleView>,
+    /// Version of their picture; null when they have none. Use it as `v` in
+    /// `/api/v1/users/{id}/picture`.
+    pub picture: Option<String>,
     /// Each permission they hold, where it applies and the role giving it.
     pub access: Vec<AccessLine>,
     /// Their newest actions (at most 10).

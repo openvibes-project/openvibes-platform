@@ -13,7 +13,9 @@ import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
 import { useSession } from "../app/session";
 import { personas, type Persona } from "../demo/personas";
+import { Avatar } from "../ui/avatar";
 import { Icon } from "../ui/Icon";
+import { PictureDialog } from "../views/admin/people/PictureDialog";
 import { setDensity, setTheme, useDensity, useTheme } from "./theme";
 
 const pinKey = "openvibes.v2.rail.pinned";
@@ -130,7 +132,7 @@ export function TopBar({ title, onPalette, onLogout, onChangePassword, persona, 
     return () => window.removeEventListener("mousedown", close);
   }, [menu]);
   const nextTheme = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
-  const initials = (session?.principal.display_name ?? "?").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  const [picturing, setPicturing] = useState(false);
 
   return (
     <header className="topbar">
@@ -152,7 +154,7 @@ export function TopBar({ title, onPalette, onLogout, onChangePassword, persona, 
         </button>
         <button type="button" className="icon-button" onClick={onHelp} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)"><Icon name="help" size={17} /></button>
         <div className="menu" ref={menuRef}>
-          <button type="button" className="avatar" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)} aria-label="Account">{initials}</button>
+          <button type="button" className="avatar" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)} aria-label="Account">{session && <Avatar userId={session.principal.id} name={session.principal.display_name} picture={session.principal.picture} />}</button>
           {menu && (
             <div className="menu__pop" role="menu">
               <div className="menu__who">
@@ -172,12 +174,14 @@ export function TopBar({ title, onPalette, onLogout, onChangePassword, persona, 
               <button type="button" role="menuitemcheckbox" aria-checked={density === "compact"} className="menu__item" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>
                 {density === "compact" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />} Compact rows
               </button>
+              <button type="button" role="menuitem" className="menu__item" onClick={() => { setMenu(false); setPicturing(true); }}><Icon name="user" size={14} /> Change picture</button>
               {!persona && <button type="button" role="menuitem" className="menu__item" onClick={() => { setMenu(false); onChangePassword(); }}><Icon name="access" size={14} /> Change password</button>}
               {!persona && <button type="button" role="menuitem" className="menu__item" onClick={onLogout}><Icon name="logout" size={14} /> Sign out</button>}
             </div>
           )}
         </div>
       </div>
+      {picturing && session && <PictureDialog userId={session.principal.id} name={session.principal.display_name} hasPicture={!!session.principal.picture} onClose={() => setPicturing(false)} />}
     </header>
   );
 }

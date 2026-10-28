@@ -7,6 +7,7 @@ import type { PersonRow } from "../../../api/types";
 import { nav, useLocation } from "../../../app/nav";
 import { useSession } from "../../../app/session";
 import { DataTable } from "../../../ui/DataTable";
+import { Avatar } from "../../../ui/avatar";
 import { Icon } from "../../../ui/Icon";
 import { ViewHeader } from "../../../ui/ViewHeader";
 import { Ago, Empty, ErrorBox, Loading } from "../../../ui/bits";
@@ -35,7 +36,7 @@ export function People() {
         <DataTable label="People" rows={rows} rowKey={(p) => p.user_id} onOpen={(p) => nav.view(`/settings/people/${encodeURIComponent(p.user_id)}`)}
           defaultSort={{ key: "name", direction: "asc" }}
           columns={[
-            { key: "name", header: "Person", sort: (p) => p.display_name, render: (p) => <div className="cell-two"><span>{p.display_name}</span><span className="mono subtle">{p.username}</span></div> },
+            { key: "name", header: "Person", sort: (p) => p.display_name, render: (p) => <div className="row person-cell"><Avatar className="person-cell__avatar" userId={p.user_id} name={p.display_name} picture={p.picture} /><div className="cell-two"><span>{p.display_name}</span><span className="mono subtle">{p.username}</span></div></div> },
             { key: "roles", header: "Roles", render: (p) => <span className="row row--wrap people-roles">{p.roles.length === 0 ? <span className="subtle">No roles</span> : p.roles.map((r) => (
               <span key={r.role_id} className="badge badge--accent badge--plain">{r.name}<span className="people-roles__where"> · {hostsSummary(r.reach)}</span></span>
             ))}</span> },

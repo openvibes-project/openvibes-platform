@@ -437,7 +437,7 @@ A draft reaches an agent only once published this way.
 Server code is `crates/openvibes-console/src`, one folder per area:
 
 - `http/`: routers, route table, middleware, serving the web app, error answers, the OpenAPI document.
-- `access/`: sign-in, session, permission checks, roles, users, service accounts, role bindings.
+- `access/`: sign-in, session, permission checks, roles, users, profile pictures (converted by the `openvibes-picture` helper), service accounts, role bindings.
 - `audit/`: the audit event list, CSV export, retention.
 - `hosts/`: agents, enrollment, install package, software, ports, presence, the site rule-set fleet, host groups and host labels.
 - `compliance/`: findings, finding groups, history, triage, and the triage shared by every kind: bulk triage of findings, alarms and vulnerabilities, and the per-host triage detail.

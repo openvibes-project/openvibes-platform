@@ -10,6 +10,8 @@ const LABELS: Record<string, string> = {
   "user.login": "Signed in",
   "user.created": "Created a person",
   "user.updated": "Changed a person's details",
+  "user.picture.set": "Set a person's picture",
+  "user.picture.removed": "Removed a person's picture",
   "user.disabled": "Disabled a person",
   "user.enabled": "Enabled a person",
   "user.password_reset": "Reset a password",

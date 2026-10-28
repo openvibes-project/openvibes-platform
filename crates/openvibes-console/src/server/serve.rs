@@ -89,7 +89,7 @@ pub async fn serve(
                     assistant_runtime,
                     update_checker,
                     config.agent_install.clone(),
-                    (None, None),
+                    (None, None, None),
                 ),
                 Some(pool),
             )

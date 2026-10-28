@@ -44,6 +44,8 @@ pub(crate) struct AuthHttpState {
     pub(crate) signer_socket: Arc<std::path::Path>,
     /// The fetch service's socket (assistant internet lookups).
     pub(crate) fetch_socket: Arc<std::path::Path>,
+    /// The picture helper's socket (profile picture conversion).
+    pub(crate) picture_socket: Arc<std::path::Path>,
     /// Internet lookups used per user this hour.
     pub(crate) internet_limits: Arc<crate::assistant::fetch_client::Limits>,
 }
@@ -77,7 +79,15 @@ pub fn public_router() -> Router {
 /// Builds the authenticated C3 router backed by the shared PostgreSQL store.
 /// Data routes remain absent until every query applies SQL-enforced asset scope.
 pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, [], None, None, None, (None, None))
+    authenticated_router_with_assistant(
+        pool,
+        public_origin,
+        [],
+        None,
+        None,
+        None,
+        (None, None, None),
+    )
 }
 
 /// As [`authenticated_router`], with the rule signer at `socket` instead of
@@ -94,7 +104,7 @@ pub fn authenticated_router_with_signer(
         None,
         None,
         None,
-        (Some(socket), None),
+        (Some(socket), None, None),
     )
 }
 
@@ -111,7 +121,7 @@ pub fn authenticated_router_with_fetch(
         None,
         None,
         None,
-        (None, Some(socket)),
+        (None, Some(socket), None),
     )
 }
 
@@ -130,7 +140,24 @@ pub fn authenticated_router_with_agent_install(
         None,
         None,
         Some(agent_install),
-        (None, None),
+        (None, None, None),
+    )
+}
+
+/// As [`authenticated_router`], with the picture helper at `socket` (tests).
+pub fn authenticated_router_with_picture(
+    pool: Pool,
+    public_origin: impl Into<Arc<str>>,
+    socket: std::path::PathBuf,
+) -> Router {
+    authenticated_router_with_assistant(
+        pool,
+        public_origin,
+        [],
+        None,
+        None,
+        None,
+        (None, None, Some(socket)),
     )
 }
 
@@ -144,7 +171,15 @@ pub fn authenticated_router_for_hosts(
     public_origin: impl Into<Arc<str>>,
     hosts: impl IntoIterator<Item = String>,
 ) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, hosts, None, None, None, (None, None))
+    authenticated_router_with_assistant(
+        pool,
+        public_origin,
+        hosts,
+        None,
+        None,
+        None,
+        (None, None, None),
+    )
 }
 
 pub(crate) fn authenticated_router_with_assistant(
@@ -154,8 +189,12 @@ pub(crate) fn authenticated_router_with_assistant(
     assistant: Option<crate::assistant::AssistantRuntime>,
     update_checker: Option<Arc<crate::about::UpdateChecker>>,
     agent_install: Option<crate::config::AgentInstallConfig>,
-    // The rule signer's and the fetch service's sockets; `None` is the default path.
-    (signer_socket, fetch_socket): (Option<std::path::PathBuf>, Option<std::path::PathBuf>),
+    // The rule signer's, fetch service's and picture helper's sockets; `None` is the default path.
+    (signer_socket, fetch_socket, picture_socket): (
+        Option<std::path::PathBuf>,
+        Option<std::path::PathBuf>,
+        Option<std::path::PathBuf>,
+    ),
 ) -> Router {
     let public_origin = public_origin.into();
     let mut allowed_hosts: Vec<String> = public_origin
@@ -184,6 +223,11 @@ pub(crate) fn authenticated_router_with_assistant(
         fetch_socket: fetch_socket
             .unwrap_or_else(|| {
                 std::path::PathBuf::from(crate::assistant::fetch_client::DEFAULT_FETCH_SOCKET)
+            })
+            .into(),
+        picture_socket: picture_socket
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(crate::access::pictures::DEFAULT_PICTURE_SOCKET)
             })
             .into(),
         internet_limits: Arc::default(),

@@ -46,6 +46,10 @@ pub struct SessionPrincipal {
     /// Local username when the identity has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
+    /// Version of their picture, as `v` in `/api/v1/users/{id}/picture`;
+    /// absent when they have none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub picture: Option<String>,
 }
 
 /// Successful response from `GET /api/v1/session` for an active session.

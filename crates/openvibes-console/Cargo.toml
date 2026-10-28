@@ -24,6 +24,7 @@ include_dir = { workspace = true, optional = true }
 platform-config = { path = "../platform-config" }
 platform-pki = { path = "../platform-pki" }
 openvibes-fetch = { path = "../openvibes-fetch" }
+openvibes-picture = { path = "../openvibes-picture", default-features = false }
 platform-assistant = { path = "../platform-assistant" }
 platform-store = { path = "../platform-store" }
 ring.workspace = true
@@ -46,6 +47,8 @@ serde_json.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+openvibes-picture = { path = "../openvibes-picture" }
+image = { version = "0.25", default-features = false, features = ["png"] }
 openvibes-signer = { path = "../openvibes-signer" }
 rcgen.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

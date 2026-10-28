@@ -22,5 +22,6 @@ pub(crate) use router::{AuthHttpState, authenticated_router_with_assistant};
 pub use router::{
     Readiness, authenticated_router, authenticated_router_for_hosts,
     authenticated_router_with_agent_install, authenticated_router_with_fetch,
-    authenticated_router_with_signer, development_router, health_router, public_router,
+    authenticated_router_with_picture, authenticated_router_with_signer, development_router,
+    health_router, public_router,
 };

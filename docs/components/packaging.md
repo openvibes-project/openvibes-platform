@@ -68,6 +68,9 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
 | `/var/lib/openvibes-llm/models/Qwen3.5-4B-Q4_K_M.gguf` and every earlier pinned file in `packaging/llm/past-models` (%ghost, fetched by `assistant model fetch`), `/var/lib/openvibes-llm/model.conf` (%ghost %config noreplace, written by `%post` on a fresh install) | 0444 root; 0644 root | llm-model |
 | `/usr/share/openvibes-llm/model.pin` | 0644 root | llm |
+| `/usr/bin/openvibes-picture` | 0755 root | console |
+| `/usr/lib/systemd/system/openvibes-picture.socket`, `openvibes-picture@.service` | 0644 root | console |
+| `/usr/lib/systemd/system-preset/91-openvibes-picture.preset` | 0644 root (enables the socket) | console |
 | `/usr/bin/openvibes-fetch` | 0755 root | fetch |
 | `/usr/lib/systemd/system/openvibes-fetch.socket`, `openvibes-fetch@.service` | 0644 root | fetch |
 | `/usr/lib/systemd/system-preset/80-openvibes-fetch.preset` | 0644 root (enables the socket) | fetch |
@@ -96,6 +99,15 @@ so `proxy_url` in `fetch.toml` stays commented until set by hand; Setup's
 console step adds `platform_domain` (the console's host, never searched for).
 Remove stops `openvibes-fetch.socket` with the console only when the package
 is installed (an offline-kit host has none).
+
+**openvibes-picture** (profile pictures) ships in the `openvibes-console`
+RPM and is socket-activated like the fetcher: `openvibes-picture.socket`
+listens on `/run/openvibes-picture/picture.sock` (`SocketUser=root`,
+`SocketGroup=openvibes-console`, 0660, `Accept=yes`, `MaxConnections=4`), and
+`openvibes-picture@.service` runs one process per upload as a `DynamicUser`
+with no network, no writable paths, `MemoryMax=384M`, `LimitCPU=10` and
+`RuntimeMaxSec=15`. The console service `Wants=` the socket, so a `dnf
+upgrade` starts it. Details: [openvibes-picture.md](openvibes-picture.md).
 
 **openvibes-signer** (own rules, board #107) runs as `openvibes-signer`
 with `openvibes-signer-clients` as its group, so its socket

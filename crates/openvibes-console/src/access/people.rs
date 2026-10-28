@@ -96,12 +96,16 @@ pub(crate) async fn list_people(
     let Ok(people) = console_people::people(&client).await else {
         return unavailable_auth();
     };
+    let Ok(mut pictures) = console_people::picture_etags(&client).await else {
+        return unavailable_auth();
+    };
     let rows: Vec<PersonRow> = people
         .into_iter()
         .filter_map(|person| {
             let mine = held(&person.role_ids, &roles);
             roles_fit(&editor, &mine).then(|| PersonRow {
                 roles: views(&mine),
+                picture: pictures.remove(&person.user_id),
                 last_sign_in_at: person.last_sign_in_at.map(rfc3339),
                 user_id: person.user_id,
                 username: person.username,
@@ -146,8 +150,12 @@ pub(crate) async fn get_person(
     let Ok(recent) = console_people::recent_activity(&client, &person.user_id, 10).await else {
         return unavailable_auth();
     };
+    let Ok(picture) = console_people::picture_etag(&client, &person.user_id).await else {
+        return unavailable_auth();
+    };
     let mine = held(&person.role_ids, &roles);
     Json(PersonView {
+        picture,
         roles: views(&mine),
         access: access_lines(&mine),
         recent: recent

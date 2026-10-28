@@ -511,7 +511,7 @@ Setting someone else's needs `access.users` within the share.
 3. **Decoding** runs in a separate helper process:
    - no network;
    - no writable files;
-   - memory capped at 256 MiB;
+   - memory capped at 256 MiB (plan ruling 3: 384M in the unit, see the step 7 plan);
    - 10 s of CPU;
    - killed when over either limit.
 
@@ -532,6 +532,11 @@ Setting someone else's needs `access.users` within the share.
    It is never served as HTML.
 6. **Audit:** uploads and removals are audited.
 7. **Without a picture,** the initials are shown, as today.
+
+**Plan rulings, 2026-10-28 (step 7):** see
+[the step 7 plan](../superpowers/plans/2026-10-28-roles-7-profile-pictures.md).
+Notably: AVIF is not accepted yet, the helper is socket-activated, and the
+global Content-Security-Policy replaces the per-route one.
 
 ## 10. Hosts list and host page
 

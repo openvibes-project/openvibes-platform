@@ -24,6 +24,8 @@ type SessionState = {
   can: (permission: Permission) => boolean;
   /** Held over every host, not just some host groups. */
   canEverywhere: (permission: Permission) => boolean;
+  /** Loads the session again (e.g. after the person changes their picture). */
+  reloadSession?: () => void;
 };
 
 export const SessionContext = createContext<SessionState>({ session: undefined, demo: false, can: () => false, canEverywhere: () => false });

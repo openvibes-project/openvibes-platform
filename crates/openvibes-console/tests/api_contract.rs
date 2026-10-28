@@ -64,6 +64,7 @@ fn session_and_page_dtos_have_stable_wire_names() {
             id: "user-1".to_owned(),
             display_name: "Console Admin".to_owned(),
             username: None,
+            picture: None,
         },
         authentication_method: AuthenticationMethod::LocalPassword,
         authentication_level: AuthenticationLevel::SingleFactor,

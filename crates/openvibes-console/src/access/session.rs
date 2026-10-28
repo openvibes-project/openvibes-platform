@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{Duration, SecondsFormat, Utc};
-use platform_store::console_auth;
+use platform_store::{console_auth, console_people};
 use subtle::ConstantTimeEq;
 
 use crate::{
@@ -127,8 +127,12 @@ pub(crate) async fn authenticated_session(
     if state.assistant.is_none() {
         capabilities.retain(|capability| capability.permission != crate::Permission::AssistantUse);
     }
+    let picture = console_people::picture_etag(&client, &active.user_id)
+        .await
+        .unwrap_or(None);
     let response = crate::SessionResponse {
         principal: crate::SessionPrincipal {
+            picture,
             id: active.user_id,
             display_name: active.display_name,
             username: Some(active.username),

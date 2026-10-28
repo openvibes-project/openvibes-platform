@@ -16,6 +16,7 @@ Who may do what in the console: sign-in and the session, the checks every area's
 | `users.rs` | Setting one's own password, and the one-time password generator. |
 | `people.rs` | The People API: list, a person's page, add and edit details, filtered to the editor's share; shared lookups and answers. |
 | `people_admin.rs` | Disable, enable and reset password for a person inside the editor's share. |
+| `pictures.rs` | Profile pictures: set (the original goes to the helper over its socket), remove and serve the stored WebP. |
 | `people_roles.rs` | Giving and removing roles for people and service accounts. |
 | `people_types.rs` | Request and response types of the People API and the host-group list. |
 | `editor.rs` | Who is changing access (`caller`), and the share checks on whole stored roles (`role_fits`, `roles_fit`, `within_share`). |

@@ -4,6 +4,7 @@
 import type { PersonView } from "../../api/types";
 import catalogue from "../../api/permissions.json";
 import type { DemoContext } from "../context";
+import { demoPictureVersion, removeDemoPicture, setDemoPicture } from "../../ui/avatar";
 import { json, problem } from "../http";
 import { ADMIN_ROLE } from "../share";
 import type { RoleHelpers } from "./roles";
@@ -25,7 +26,7 @@ export function registerAccessRoutes(ctx: DemoContext & { roles: RoleHelpers }) 
     const user = data.access.users.find((u) => u.user_id === id);
     return user && (user.user_id === me || rolesFit(rolesOf(user.user_id))) ? user : userNotFound();
   };
-  const row = (user: User) => ({ ...user, roles: rolesOf(user.user_id).map(roleView) });
+  const row = (user: User) => ({ ...user, picture: demoPictureVersion(user.user_id) ?? null, roles: rolesOf(user.user_id).map(roleView) });
   const accessLines = (userId: string): AccessLine[] => catalogue.flatMap((p) => rolesOf(userId).flatMap((role): AccessLine[] => {
     if (role.role_id !== ADMIN_ROLE && !role.permissions.includes(p.id)) return [];
     const line = { permission: p.id as AccessLine["permission"], label: p.label, area: p.area, from_role: role.name };
@@ -48,6 +49,27 @@ export function registerAccessRoutes(ctx: DemoContext & { roles: RoleHelpers }) 
     if (user instanceof Response) return user;
     const recent = data.audit.filter((e) => e.actor_id === id).slice(0, 10).map((e) => ({ action: e.action, target: e.target ?? null, at: e.at }));
     return json({ ...row(user), access: accessLines(id), recent });
+  });
+
+  // The demo keeps the chosen picture as it is (no crop, no conversion) and
+  // checks only what the server checks first: the person and the permission.
+  route("PUT", "/api/v1/users/{id}/picture", null, ({ id = "" }, _, body) => {
+    if (id !== me && !has("access.users")) return denied();
+    const user = visiblePerson(id);
+    if (user instanceof Response) return user;
+    const url = typeof body.data_url === "string" ? body.data_url : "";
+    if (!url.startsWith("data:image/")) return problem(422, "picture_unsupported", "Use a JPEG, PNG, GIF, WebP, BMP or TIFF picture");
+    const version = crypto.randomUUID().replaceAll("-", "").padEnd(64, "0");
+    setDemoPicture(id, { version, url });
+    audit("user.picture.set", user.username, "user");
+    return json({ picture: version });
+  });
+  route("DELETE", "/api/v1/users/{id}/picture", null, ({ id = "" }) => {
+    if (id !== me && !has("access.users")) return denied();
+    const user = visiblePerson(id);
+    if (user instanceof Response) return user;
+    if (removeDemoPicture(id)) audit("user.picture.removed", user.username, "user");
+    return noContent();
   });
 
   const displayName = (value: unknown) => {

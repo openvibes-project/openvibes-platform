@@ -1,6 +1,7 @@
 //! People (spec §4.4–4.6, §9.1): console users with their sign-in source
 //! and roles, a person's recent activity, their details, enable and reset
-//! password, and giving or removing a role from a user or service account.
+//! password, a person's picture, and giving or removing a role from a user
+//! or service account.
 //! Each change is audited in its own transaction.
 
 use chrono::{DateTime, Utc};
@@ -417,6 +418,136 @@ async fn binding_audit(
     )
     .await?;
     Ok(())
+}
+
+/// Which of a person's two stored images.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PictureSize {
+    /// 64 px.
+    Small,
+    /// 256 px.
+    Large,
+}
+
+/// A stored picture: the image and its strong ETag value.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Picture {
+    /// The WebP image.
+    pub image: Vec<u8>,
+    /// SHA-256 of both images, hex.
+    pub etag: String,
+}
+
+/// Stores a person's picture (replacing any), audited. Returns the ETag, or
+/// `None` when there is no such person.
+pub async fn set_picture(
+    client: &mut Client,
+    user_id: &str,
+    large: &[u8],
+    small: &[u8],
+    animated: bool,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<String>, StoreError> {
+    let tx = client.transaction().await?;
+    let row = tx
+        .query_opt(
+            "INSERT INTO console_user_pictures (user_id, large, small, etag, animated, updated_at, updated_by)
+             SELECT u.user_id, $2::bytea, $3::bytea, encode(sha256($2::bytea || $3::bytea), 'hex'), $4::boolean, $5::timestamptz, $6::text
+             FROM console_users u WHERE u.user_id = $1::text::uuid
+             ON CONFLICT (user_id) DO UPDATE SET large = EXCLUDED.large, small = EXCLUDED.small,
+                 etag = EXCLUDED.etag, animated = EXCLUDED.animated,
+                 updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by
+             RETURNING etag",
+            &[&user_id, &large, &small, &animated, &now, &actor_id],
+        )
+        .await?;
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+    let detail = serde_json::json!({ "animated": animated, "bytes": large.len() + small.len() });
+    audit(&tx, "user.picture.set", actor_id, now, user_id, detail).await?;
+    tx.commit().await?;
+    Ok(Some(row.get(0)))
+}
+
+/// Removes a person's picture, audited. False when they had none.
+pub async fn remove_picture(
+    client: &mut Client,
+    user_id: &str,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<bool, StoreError> {
+    let tx = client.transaction().await?;
+    let removed = tx
+        .execute(
+            "DELETE FROM console_user_pictures WHERE user_id = $1::text::uuid",
+            &[&user_id],
+        )
+        .await?;
+    if removed == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    audit(
+        &tx,
+        "user.picture.removed",
+        actor_id,
+        now,
+        user_id,
+        serde_json::json!({}),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// One image of a person's picture.
+pub async fn picture(
+    client: &Client,
+    user_id: &str,
+    size: PictureSize,
+) -> Result<Option<Picture>, StoreError> {
+    let column = match size {
+        PictureSize::Small => "small",
+        PictureSize::Large => "large",
+    };
+    let row = client
+        .query_opt(
+            &format!(
+                "SELECT {column}, etag FROM console_user_pictures WHERE user_id = $1::text::uuid"
+            ),
+            &[&user_id],
+        )
+        .await?;
+    Ok(row.map(|row| Picture {
+        image: row.get(0),
+        etag: row.get(1),
+    }))
+}
+
+/// The ETag of everyone's picture, by user id (no images read).
+pub async fn picture_etags(
+    client: &Client,
+) -> Result<std::collections::HashMap<String, String>, StoreError> {
+    Ok(client
+        .query("SELECT user_id::text, etag FROM console_user_pictures", &[])
+        .await?
+        .iter()
+        .map(|row| (row.get(0), row.get(1)))
+        .collect())
+}
+
+/// The ETag of one person's picture, if they have one.
+pub async fn picture_etag(client: &Client, user_id: &str) -> Result<Option<String>, StoreError> {
+    Ok(client
+        .query_opt(
+            "SELECT etag FROM console_user_pictures WHERE user_id = $1::text::uuid",
+            &[&user_id],
+        )
+        .await?
+        .map(|row| row.get(0)))
 }
 
 async fn audit(

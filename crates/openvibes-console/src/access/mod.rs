@@ -3,6 +3,7 @@
 
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{get, post, put},
 };
 
@@ -20,6 +21,7 @@ pub(crate) mod people_admin;
 pub(crate) mod people_roles;
 pub(crate) mod people_types;
 mod permission;
+pub(crate) mod pictures;
 pub(crate) mod rbac;
 pub(crate) mod roles;
 pub(crate) mod roles_types;
@@ -47,6 +49,13 @@ pub use session_types::{
 /// people and their roles, and service accounts and their tokens.
 pub(crate) fn routes() -> Router<AuthHttpState> {
     Router::new()
+        .route(
+            "/v1/users/{user_id}/picture",
+            get(pictures::get_picture)
+                .put(pictures::put_picture)
+                .delete(pictures::delete_picture)
+                .layer(DefaultBodyLimit::max(pictures::MAX_BODY)),
+        )
         .route("/v1/session", get(session::authenticated_session))
         .route("/v1/session/password", post(users::change_password))
         .route("/v1/permissions", get(roles::permissions))

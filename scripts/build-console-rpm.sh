@@ -49,7 +49,7 @@ cd -- "${repository_root}"
 # optional features (include_dir for embedded-ui) that no earlier build fetched.
 cargo fetch --locked
 scripts/build-console.sh --offline-cache-dir "${cache_dir}"
-env CARGO_NET_OFFLINE=true cargo build --release --locked -p openvibes-console --features embedded-ui
+env CARGO_NET_OFFLINE=true cargo build --release --locked -p openvibes-console -p openvibes-picture --features embedded-ui
 
 readonly rpm_topdir="${repository_root}/target/rpm-console"
 mkdir -p -- \
