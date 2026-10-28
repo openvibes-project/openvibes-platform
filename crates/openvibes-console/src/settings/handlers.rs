@@ -6,9 +6,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use platform_store::console_settings::{self as store, StoredSetting};
+use platform_store::console_settings::{self as store, SecretInfo, StoredSetting};
 
-use super::definitions::{DEFINITIONS, Definition, Kind, find};
 use super::types::{SettingChangeView, SettingView, SettingsView, UpdateSetting};
 use crate::Permission;
 use crate::access::editor::caller;
@@ -17,24 +16,41 @@ use crate::http::{
     AuthHttpState,
     problem::{FieldError, ProblemDetails, problem_response},
 };
+use platform_settings::{Applies, Definition, Kind, all, find};
 
-fn view(def: &Definition, stored: Option<&StoredSetting>) -> SettingView {
-    let (kind, min, max) = match def.kind {
-        Kind::Bool { .. } => ("bool", None, None),
-        Kind::Int { min, max, .. } => ("int", Some(min), Some(max)),
+/// A secret's row says only that it is set, when and by whom.
+fn view(
+    def: &Definition,
+    stored: Option<&StoredSetting>,
+    secret: Option<&SecretInfo>,
+) -> SettingView {
+    let (min, max) = match def.kind {
+        Kind::Int { min, max, .. } => (Some(min), Some(max)),
+        _ => (None, None),
+    };
+    let applies = match def.applies {
+        Applies::Live => "live",
+        Applies::Restart => "restart",
+    };
+    let (changed_at, changed_by) = match (stored, secret) {
+        (Some(s), _) => (Some(s.changed_at.to_rfc3339()), Some(s.changed_by.clone())),
+        (None, Some(s)) => (Some(s.changed_at.to_rfc3339()), Some(s.changed_by.clone())),
+        (None, None) => (None, None),
     };
     SettingView {
         key: def.key.into(),
         section: def.section.into(),
         label: def.label.into(),
         help: def.help.into(),
-        kind: kind.into(),
+        kind: def.kind_name().into(),
+        applies: applies.into(),
         min,
         max,
         default: def.default_value(),
         value: stored.map_or_else(|| def.default_value(), |s| s.value.clone()),
-        changed_at: stored.map(|s| s.changed_at.to_rfc3339()),
-        changed_by: stored.map(|s| s.changed_by.clone()),
+        is_set: def.is_secret().then_some(secret.is_some()),
+        changed_at,
+        changed_by,
     }
 }
 
@@ -56,13 +72,21 @@ pub(crate) async fn list_settings(
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    let (Ok(stored), Ok(recent)) = (store::all(&client).await, store::recent(&client, 5).await)
-    else {
+    let (Ok(stored), Ok(secrets), Ok(recent)) = (
+        store::all(&client).await,
+        store::secrets_set(&client).await,
+        store::recent(&client, 5).await,
+    ) else {
         return unavailable_auth();
     };
-    let items = DEFINITIONS
-        .iter()
-        .map(|def| view(def, stored.iter().find(|s| s.key == def.key)))
+    let items = all()
+        .map(|def| {
+            view(
+                def,
+                stored.iter().find(|s| s.key == def.key),
+                secrets.iter().find(|s| s.key == def.key),
+            )
+        })
         .collect();
     let recent = recent
         .into_iter()
@@ -107,13 +131,39 @@ pub(crate) async fn update_setting(
     let Ok(Json(request)) = payload else {
         return invalid("The request body is invalid");
     };
-    if let Err(message) = def.check(&request.value) {
-        return invalid(&message);
-    }
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
     let now = Utc::now();
+    // Null puts the setting back to its default; a secret is removed.
+    let reset = request.value.is_null();
+    if !reset && let Err(message) = def.check(&request.value) {
+        return invalid(&message);
+    }
+    if def.is_secret() {
+        let text = request.value.as_str();
+        if store::set_secret(&mut client, def.key, text, &editor.actor, now)
+            .await
+            .is_err()
+        {
+            return unavailable_auth();
+        }
+        let secret = text.map(|_| SecretInfo {
+            key: key.clone(),
+            changed_at: now,
+            changed_by: editor.actor.clone(),
+        });
+        return Json(view(def, None, secret.as_ref())).into_response();
+    }
+    if reset {
+        if store::reset(&mut client, def.key, &editor.actor, now)
+            .await
+            .is_err()
+        {
+            return unavailable_auth();
+        }
+        return Json(view(def, None, None)).into_response();
+    }
     if store::set(&mut client, def.key, &request.value, &editor.actor, now)
         .await
         .is_err()
@@ -126,7 +176,7 @@ pub(crate) async fn update_setting(
         changed_at: now,
         changed_by: editor.actor.clone(),
     };
-    Json(view(def, Some(&stored))).into_response()
+    Json(view(def, Some(&stored), None)).into_response()
 }
 
 fn invalid(message: &str) -> Response {

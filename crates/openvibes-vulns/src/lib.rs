@@ -16,5 +16,6 @@ pub mod osv_fetch;
 pub mod repodata;
 pub mod rpmver;
 pub mod service;
+pub mod settings;
 pub mod sources;
 pub mod updateinfo;

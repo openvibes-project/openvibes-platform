@@ -26,6 +26,7 @@ platform-pki = { path = "../platform-pki" }
 openvibes-fetch = { path = "../openvibes-fetch" }
 openvibes-picture = { path = "../openvibes-picture", default-features = false }
 platform-assistant = { path = "../platform-assistant" }
+platform-settings = { path = "../platform-settings" }
 platform-store = { path = "../platform-store" }
 ring.workspace = true
 rustls.workspace = true

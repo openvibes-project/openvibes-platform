@@ -397,6 +397,8 @@ div.detail-tile:hover { border-color: var(--line); }
 .general-row { gap: 24px; align-items: flex-start; }
 .general-row__text { min-width: 0; max-width: 60ch; }
 .general-row__number { width: 7em; flex: none; }
+.general-row__wide { width: 24em; max-width: 100%; flex: none; }
+.general-row__control { align-items: flex-end; gap: 8px; }
 .general-row__error { color: var(--bad); font-size: 13px; }
 /* Alarm suppressions (screen 14). */
 .suppressions__card:focus { outline: none; }

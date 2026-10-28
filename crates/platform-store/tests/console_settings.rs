@@ -72,9 +72,18 @@ async fn a_setting_goes_back_to_its_default_and_the_change_is_audited() {
     let (db, mut client) = common::migrated().await;
     let now = chrono::Utc::now();
     let key = "vulns.check_interval_minutes";
-    assert_eq!(console_settings::reset(&mut client, key, "a", now).await.unwrap(), None);
-    console_settings::set(&mut client, key, &serde_json::json!(30), "a", now).await.unwrap();
-    let old = console_settings::reset(&mut client, key, "a", now).await.unwrap();
+    assert_eq!(
+        console_settings::reset(&mut client, key, "a", now)
+            .await
+            .unwrap(),
+        None
+    );
+    console_settings::set(&mut client, key, &serde_json::json!(30), "a", now)
+        .await
+        .unwrap();
+    let old = console_settings::reset(&mut client, key, "a", now)
+        .await
+        .unwrap();
     assert_eq!(old, Some(serde_json::json!(30)));
     assert!(console_settings::values(&client).await.unwrap().is_empty());
     let recent = console_settings::recent(&client, 5).await.unwrap();
@@ -88,20 +97,44 @@ async fn a_secret_is_stored_apart_and_its_value_stays_out_of_the_audit_log() {
     let (db, mut client) = common::migrated().await;
     let now = chrono::Utc::now();
     let key = "vulns.nvd_api_key";
-    console_settings::set_secret(&mut client, key, Some("s3cret-key"), "admin-1", now).await.unwrap();
-    assert_eq!(console_settings::secret(&client, key).await.unwrap().as_deref(), Some("s3cret-key"));
+    console_settings::set_secret(&mut client, key, Some("s3cret-key"), "admin-1", now)
+        .await
+        .unwrap();
+    assert_eq!(
+        console_settings::secret(&client, key)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("s3cret-key")
+    );
     let set = console_settings::secrets_set(&client).await.unwrap();
-    assert_eq!((set.len(), set[0].key.as_str(), set[0].changed_by.as_str()), (1, key, "admin-1"));
+    assert_eq!(
+        (set.len(), set[0].key.as_str(), set[0].changed_by.as_str()),
+        (1, key, "admin-1")
+    );
     assert!(console_settings::values(&client).await.unwrap().is_empty());
     let audit: String = client
-        .query_one("SELECT string_agg(detail::text, ' ') FROM audit_log WHERE action = 'settings.changed'", &[])
+        .query_one(
+            "SELECT string_agg(detail::text, ' ') FROM audit_log WHERE action = 'settings.changed'",
+            &[],
+        )
         .await
         .unwrap()
         .get(0);
     assert!(!audit.contains("s3cret-key"), "{audit}");
-    assert!(audit.contains("\"new\": \"set\"") && audit.contains("\"old\": \"not set\""), "{audit}");
-    console_settings::set_secret(&mut client, key, None, "admin-1", now).await.unwrap();
+    assert!(
+        audit.contains("\"new\": \"set\"") && audit.contains("\"old\": \"not set\""),
+        "{audit}"
+    );
+    console_settings::set_secret(&mut client, key, None, "admin-1", now)
+        .await
+        .unwrap();
     assert_eq!(console_settings::secret(&client, key).await.unwrap(), None);
-    assert!(console_settings::secrets_set(&client).await.unwrap().is_empty());
+    assert!(
+        console_settings::secrets_set(&client)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     db.drop().await;
 }

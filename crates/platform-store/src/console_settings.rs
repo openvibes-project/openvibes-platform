@@ -175,7 +175,15 @@ pub async fn set_secret(
         }
     }
     let words = |set: bool| Value::from(if set { "set" } else { "not set" });
-    audit(&tx, key, &Some(words(was_set)), &words(value.is_some()), actor, now).await?;
+    audit(
+        &tx,
+        key,
+        &Some(words(was_set)),
+        &words(value.is_some()),
+        actor,
+        now,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }

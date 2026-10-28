@@ -136,7 +136,9 @@ fn check_text(check: Text, text: &str) -> Result<(), String> {
         Text::HttpsUrl | Text::HttpsUrlOrEmpty => match text {
             "" => Ok(()),
             _ if is_https(text) || is_loopback_http(text) => Ok(()),
-            _ => Err("Use an address that starts with https://, or leave it empty to turn it off".into()),
+            _ => Err(
+                "Use an address that starts with https://, or leave it empty to turn it off".into(),
+            ),
         },
         Text::ProxyOrEmpty => match text {
             "" => Ok(()),
@@ -154,7 +156,8 @@ fn check_text(check: Text, text: &str) -> Result<(), String> {
 }
 
 fn is_https(text: &str) -> bool {
-    text.strip_prefix("https://").is_some_and(|rest| !rest.is_empty())
+    text.strip_prefix("https://")
+        .is_some_and(|rest| !rest.is_empty())
 }
 
 /// Plain HTTP only on loopback (the services' own rule, for their tests).

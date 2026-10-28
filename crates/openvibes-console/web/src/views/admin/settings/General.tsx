@@ -32,11 +32,11 @@ export async function saveValue(key: string, value: unknown, send: (method: stri
 }
 
 /** A recorded value in words. */
-const show = (value: unknown) => (value === null || value === undefined ? "default" : value === true ? "on" : value === false ? "off" : String(value));
+const show = (value: unknown) => (value === "set" || value === "not set" ? String(value) : value === null || value === undefined ? "default" : value === true ? "on" : value === false ? "off" : String(value));
 
 function Row({ setting }: { setting: SettingView }) {
   const [, tick] = useState(0);
-  const [ed] = useState(() => createRowEditor(setting.key, setting.value, request, () => tick((n) => n + 1), () => invalidate("/api/v1/settings")));
+  const [ed] = useState(() => createRowEditor(setting.key, setting.value, request, () => tick((n) => n + 1), () => invalidate("/api/v1/settings"), setting.kind));
   useEffect(() => { ed.setValue(setting.value); });
   const { can } = useSession();
   const off = !can("settings.manage");
@@ -46,14 +46,23 @@ function Row({ setting }: { setting: SettingView }) {
       <div className="stack general-row__text">
         <strong>{setting.label}</strong>
         <span className="subtle">{setting.help}</span>
+        {setting.applies === "restart" && <span className="subtle">Applies after the service restarts.</span>}
         <span className="subtle" role="status">{result?.ok ? result.message : ""}</span>
         {result?.ok === false && <span className="general-row__error" role="alert">{result.message}</span>}
       </div>
-      {setting.kind === "bool"
-        ? <Switch bare label={setting.label} checked={setting.value === true} busy={busy} disabled={off} onChange={(checked) => void ed.save(checked)} />
-        : <input className="input general-row__number" type="number" aria-label={setting.label} min={setting.min ?? undefined} max={setting.max ?? undefined}
-            value={text ?? String(setting.value)} disabled={off} readOnly={busy} aria-disabled={busy || undefined} aria-invalid={result?.ok === false || undefined}
-            onChange={(e) => { if (!busy) ed.type(e.target.value); }} onBlur={() => void ed.commit()} onKeyDown={(e) => { if (e.key === "Enter") void ed.commit(); }} />}
+      <div className="stack general-row__control">
+        {setting.kind === "bool"
+          ? <Switch bare label={setting.label} checked={setting.value === true} busy={busy} disabled={off} onChange={(checked) => void ed.save(checked)} />
+          : <input className={`input ${setting.kind === "int" ? "general-row__number" : "general-row__wide"}`}
+              type={setting.kind === "int" ? "number" : setting.kind === "secret" ? "password" : "text"} aria-label={setting.label}
+              autoComplete={setting.kind === "secret" ? "new-password" : undefined} spellCheck={setting.kind === "int" ? undefined : false}
+              placeholder={setting.kind === "secret" ? (setting.is_set ? "Set. Type to replace" : "Not set") : undefined}
+              min={setting.min ?? undefined} max={setting.max ?? undefined}
+              value={text ?? (setting.kind === "secret" ? "" : String(setting.value ?? ""))} disabled={off} readOnly={busy} aria-disabled={busy || undefined} aria-invalid={result?.ok === false || undefined}
+              onChange={(e) => { if (!busy) ed.type(e.target.value); }} onBlur={() => void ed.commit()} onKeyDown={(e) => { if (e.key === "Enter") void ed.commit(); }} />}
+        {!off && setting.kind === "secret" && setting.is_set && <button type="button" className="button button--ghost" disabled={busy} onClick={() => void ed.reset()}>Remove</button>}
+        {!off && setting.kind !== "secret" && setting.kind !== "bool" && JSON.stringify(setting.value) !== JSON.stringify(setting.default) && <button type="button" className="button button--ghost" disabled={busy} onClick={() => void ed.reset()}>Reset to default</button>}
+      </div>
     </div>
   );
 }

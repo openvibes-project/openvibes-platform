@@ -5,7 +5,8 @@ import { saveValue, type Saved } from "./General";
 
 export type Send = (method: string, path: string, body?: unknown) => Promise<unknown>;
 
-export function createRowEditor(key: string, initial: unknown, send: Send, notify: () => void, onSaved: () => void) {
+/** `kind` is the setting's kind: a number is sent as a number, text and secrets as typed text. */
+export function createRowEditor(key: string, initial: unknown, send: Send, notify: () => void, onSaved: () => void, kind = "int") {
   let current = initial;
   const state: { text: string | undefined; busy: boolean; result: Saved | undefined } = { text: undefined, busy: false, result: undefined };
   const save = async (value: unknown) => {
@@ -25,10 +26,20 @@ export function createRowEditor(key: string, initial: unknown, send: Send, notif
     setValue(v: unknown) { current = v; },
     save,
     type(text: string) { state.text = text; state.result = undefined; notify(); },
-    /** On blur or Enter: sends the typed number only when it differs from the saved one. */
+    /** Puts the setting back to its default (a secret: removes it). */
+    reset() { return save(null); },
+    /** On blur or Enter: sends the typed value only when it differs from the saved one. */
     async commit() {
       const { text } = state;
       if (text === undefined || state.busy) return;
+      if (kind === "text" || kind === "secret") {
+        const typed = text.trim();
+        if (kind === "text" && typed === current) { state.text = undefined; notify(); return; }
+        // An emptied secret box means "no change"; Remove is its own button.
+        if (kind === "secret" && typed === "") { state.text = undefined; notify(); return; }
+        await save(typed);
+        return;
+      }
       if (text.trim() !== "" && Number(text) === current) { state.text = undefined; notify(); return; }
       await save(text.trim() === "" ? text : Number(text));
     },

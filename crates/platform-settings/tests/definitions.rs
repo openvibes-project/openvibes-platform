@@ -8,7 +8,8 @@ fn keys_are_unique_and_shaped_like_the_table_allows() {
         // console_settings.key: ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$
         assert!(key.contains('.'), "{key}");
         assert!(
-            key.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.'),
+            key.bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.'),
             "{key}"
         );
         assert!(key.as_bytes()[0].is_ascii_lowercase(), "{key}");
@@ -22,7 +23,12 @@ fn keys_are_unique_and_shaped_like_the_table_allows() {
 #[test]
 fn every_default_passes_its_own_check() {
     for definition in all().filter(|d| !d.is_secret()) {
-        assert_eq!(definition.check(&definition.default_value()), Ok(()), "{}", definition.key);
+        assert_eq!(
+            definition.check(&definition.default_value()),
+            Ok(()),
+            "{}",
+            definition.key
+        );
     }
 }
 
@@ -32,7 +38,13 @@ fn a_secret_has_no_default_and_must_be_one_clean_line() {
     assert!(matches!(key.kind, Kind::Secret));
     assert!(key.default_value().is_null());
     assert!(key.check(&json!("abc-123")).is_ok());
-    for bad in [json!(""), json!("  "), json!("a\nb"), json!("x".repeat(513)), json!(7)] {
+    for bad in [
+        json!(""),
+        json!("  "),
+        json!("a\nb"),
+        json!("x".repeat(513)),
+        json!(7),
+    ] {
         assert!(key.check(&bad).is_err(), "{bad}");
     }
 }
@@ -40,10 +52,22 @@ fn a_secret_has_no_default_and_must_be_one_clean_line() {
 #[test]
 fn urls_must_be_https_or_empty_where_empty_turns_the_source_off() {
     let kev = find("vulns.kev_url").unwrap();
-    for good in ["", "https://example.org/kev.json", "http://127.0.0.1:8080/x", "http://localhost/x"] {
+    for good in [
+        "",
+        "https://example.org/kev.json",
+        "http://127.0.0.1:8080/x",
+        "http://localhost/x",
+    ] {
         assert!(kev.check(&json!(good)).is_ok(), "{good}");
     }
-    for bad in ["http://example.org/x", "ftp://x", "https://", "https://a b", "example.org", "http://127.0.0.1.evil.org/x"] {
+    for bad in [
+        "http://example.org/x",
+        "ftp://x",
+        "https://",
+        "https://a b",
+        "example.org",
+        "http://127.0.0.1.evil.org/x",
+    ] {
         assert!(kev.check(&json!(bad)).is_err(), "{bad}");
     }
     let mirror = find("vulns.metalink_url").unwrap();
@@ -72,5 +96,10 @@ fn the_interval_and_sizes_have_ranges() {
 #[test]
 fn the_consoles_own_settings_are_still_there() {
     assert!(find("suppressions.require_approval").is_some());
-    assert!(find("sso.remove_inactive_days").unwrap().check(&json!(3651)).is_err());
+    assert!(
+        find("sso.remove_inactive_days")
+            .unwrap()
+            .check(&json!(3651))
+            .is_err()
+    );
 }

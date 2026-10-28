@@ -23565,10 +23565,15 @@
           "label",
           "help",
           "kind",
+          "applies",
           "default",
           "value"
         ],
         "properties": {
+          "applies": {
+            "type": "string",
+            "description": "`live` (reaches the service within about a minute) or `restart` (at\nthe service's next start)."
+          },
           "changed_at": {
             "type": [
               "string",
@@ -23590,13 +23595,20 @@
             "type": "string",
             "description": "One-sentence explanation."
           },
+          "is_set": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether a secret is set (`secret` only)."
+          },
           "key": {
             "type": "string",
             "description": "The key, such as `sso.remove_inactive_days`."
           },
           "kind": {
             "type": "string",
-            "description": "`bool` or `int`."
+            "description": "`bool`, `int`, `text` or `secret`."
           },
           "label": {
             "type": "string",
@@ -23623,7 +23635,7 @@
             "description": "The section it is shown under."
           },
           "value": {
-            "description": "The value now."
+            "description": "The value now; null for a secret, which is never shown."
           }
         }
       },
@@ -25697,7 +25709,7 @@
         ],
         "properties": {
           "value": {
-            "description": "A boolean or whole number, as the setting's kind says."
+            "description": "A boolean, whole number or text, as the setting's kind says. Null\nputs the setting back to its default (a secret: removes it)."
           }
         }
       },

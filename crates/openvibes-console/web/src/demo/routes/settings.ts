@@ -6,9 +6,9 @@ import { browserPersistence, json, page, problem } from "../http";
 
 // The typed general settings, as settings/definitions.rs lists them.
 const DEFINITIONS = [
-  { key: "suppressions.require_approval", section: "Alarm suppressions", label: "Suppressions need approval", kind: "bool", default: false,
+  { key: "suppressions.require_approval", section: "Alarm suppressions", label: "Suppressions need approval", kind: "bool", applies: "live", default: false,
     help: "A new suppression waits until someone else who can approve on those hosts accepts it. Matching alarms keep arriving while it waits." },
-  { key: "sso.remove_inactive_days", section: "Single sign-on", label: "Remove inactive single sign-on users", kind: "int", min: 1, max: 3650, default: 90,
+  { key: "sso.remove_inactive_days", section: "Single sign-on", label: "Remove inactive single sign-on users", kind: "int", applies: "live", min: 1, max: 3650, default: 90,
     help: "Days without a sign-in before a single sign-on user is removed. Takes effect once single sign-on is set up." },
 ] as const;
 type Stored = { value: unknown; changed_at: string; changed_by: string };
@@ -36,6 +36,16 @@ export function registerSettingsRoutes(ctx: DemoContext) {
     const def = DEFINITIONS.find((d) => d.key === params.key);
     if (!def) return problem(404, "setting_not_found", "No such setting");
     const v = body.value;
+    if (v === null) {
+      // Null puts the setting back to its default.
+      const old = state.values[def.key]?.value ?? null;
+      state.values = Object.fromEntries(Object.entries(state.values).filter(([k]) => k !== def.key));
+      state.recent.unshift({ at: iso(), actor, key: def.key, old, new: null });
+      state.recent.length = Math.min(state.recent.length, 5);
+      store?.save({ values: state.values });
+      audit("settings.changed", def.key, "setting");
+      return json(view(def));
+    }
     if (!fits(def, v)) {
       const message = def.kind === "bool" ? "Use true or false" : `Use a whole number from ${def.min} to ${def.max}`;
       return problem(422, "invalid_setting", "The setting value is invalid", { field_errors: [{ field: "value", code: "invalid", message }] });

@@ -15,8 +15,11 @@ import { type Send, createRowEditor } from "./rowEditor";
 
 const settings: SettingsView = {
   items: [
-    { key: "suppressions.require_approval", section: "Alarm suppressions", label: "Suppressions need approval", help: "A new suppression waits until someone else accepts it.", kind: "bool", default: false, value: true },
-    { key: "sso.remove_inactive_days", section: "Single sign-on", label: "Remove inactive single sign-on users", help: "Days without a sign-in.", kind: "int", min: 1, max: 3650, default: 90, value: 90 },
+    { key: "suppressions.require_approval", section: "Alarm suppressions", label: "Suppressions need approval", help: "A new suppression waits until someone else accepts it.", kind: "bool", applies: "live", default: false, value: true },
+    { key: "sso.remove_inactive_days", section: "Single sign-on", label: "Remove inactive single sign-on users", help: "Days without a sign-in.", kind: "int", applies: "live", min: 1, max: 3650, default: 90, value: 90 },
+    { key: "vulns.proxy_url", section: "Vulnerability feeds", label: "Proxy", help: "Where the feeds are fetched through.", kind: "text", applies: "live", default: "", value: "http://proxy.example:3128" },
+    { key: "vulns.nvd_api_key", section: "Vulnerability feeds", label: "NVD API key", help: "Raises the rate limit.", kind: "secret", applies: "live", default: null, value: null, is_set: true },
+    { key: "vulns.agent", section: "Vulnerability feeds", label: "Later", help: "Needs a restart.", kind: "int", applies: "restart", min: 1, max: 9, default: 1, value: 1 },
   ],
   recent: [{ at: "2026-10-16T09:00:00Z", actor: "alex", key: "suppressions.require_approval", old: null, new: true }],
 };
@@ -48,6 +51,43 @@ describe("General", () => {
     const out = html();
     expect(out).toContain("Changed a setting");
     expect(out).toContain("/audit?q=settings.changed");
+  });
+});
+
+describe("General text and secret rows", () => {
+  it("shows text as text, with a way back to the default when it was changed", () => {
+    const out = html();
+    expect(out).toMatch(/<input[^>]*type="text"[^>]*aria-label="Proxy"[^>]*value="http:\/\/proxy.example:3128"/);
+    expect(out).toContain("Reset to default");
+  });
+  it("never shows a secret, only that it is set, and offers Remove", () => {
+    const out = html();
+    expect(out).toMatch(/<input[^>]*type="password"[^>]*aria-label="NVD API key"/);
+    expect(out).toContain("Set. Type to replace");
+    expect(out).toContain(">Remove<");
+  });
+  it("says which settings wait for a restart", () => {
+    expect(html().match(/Applies after the service restarts/g)).toHaveLength(1);
+  });
+  it("sends a typed address as text, and null for a reset", async () => {
+    const sent: unknown[] = [];
+    const send: Send = async (_m, _p, body) => { sent.push(body); return {}; };
+    const text = createRowEditor("vulns.proxy_url", "", send, () => {}, () => {}, "text");
+    text.type(" http://p:1 ");
+    await text.commit();
+    await text.reset();
+    expect(sent).toEqual([{ value: "http://p:1" }, { value: null }]);
+  });
+  it("ignores an emptied secret box and an unchanged address", async () => {
+    const sent: unknown[] = [];
+    const send: Send = async (_m, _p, body) => { sent.push(body); return {}; };
+    const secret = createRowEditor("vulns.nvd_api_key", null, send, () => {}, () => {}, "secret");
+    secret.type("  ");
+    await secret.commit();
+    const text = createRowEditor("vulns.proxy_url", "http://p:1", send, () => {}, () => {}, "text");
+    text.type("http://p:1");
+    await text.commit();
+    expect(sent).toEqual([]);
   });
 });
 

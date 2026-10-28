@@ -35,7 +35,11 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         section: SECTION,
         label: "Check for new advisories every",
         help: "Minutes between feed checks, 15 to 1440. A check downloads only what changed.",
-        kind: Kind::Int { min: 15, max: 1440, default: 60 },
+        kind: Kind::Int {
+            min: 15,
+            max: 1440,
+            default: 60,
+        },
         applies: Applies::Live,
     },
     Definition {
@@ -54,7 +58,10 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         section: SECTION,
         label: "Repository architecture",
         help: "The advisory feed for this architecture is read; it covers every architecture.",
-        kind: Kind::Text { check: Text::Arch, default: "x86_64" },
+        kind: Kind::Text {
+            check: Text::Arch,
+            default: "x86_64",
+        },
         applies: Applies::Live,
     },
     Definition {
@@ -62,7 +69,10 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         section: SECTION,
         label: "Outbound proxy",
         help: "Every feed download goes through this proxy, e.g. http://proxy.example:3128. Empty means none.",
-        kind: Kind::Text { check: Text::ProxyOrEmpty, default: "" },
+        kind: Kind::Text {
+            check: Text::ProxyOrEmpty,
+            default: "",
+        },
         applies: Applies::Live,
     },
     Definition {
@@ -70,7 +80,11 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         section: SECTION,
         label: "Largest feed download (MiB)",
         help: "A compressed feed bigger than this is refused.",
-        kind: Kind::Int { min: 1, max: 1024, default: 64 },
+        kind: Kind::Int {
+            min: 1,
+            max: 1024,
+            default: 64,
+        },
         applies: Applies::Live,
     },
     Definition {
@@ -141,8 +155,11 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         section: SECTION,
         label: "Largest OSV download (MiB)",
         help: "Ubuntu's is about 760 MiB.",
-        kind: Kind::Int { min: 1, max: 8192, default: 2048 },
+        kind: Kind::Int {
+            min: 1,
+            max: 8192,
+            default: 2048,
+        },
         applies: Applies::Live,
     },
 ];
-
