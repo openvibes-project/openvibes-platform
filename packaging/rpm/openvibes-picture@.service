@@ -1,0 +1,53 @@
+[Unit]
+Description=OpenVIBES profile picture converter (one picture)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+# A failed per-connection instance is unloaded too, not left behind.
+CollectMode=inactive-or-failed
+
+[Service]
+# A throwaway account per picture: no files, no network, no database.
+DynamicUser=yes
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+ExecStart=/usr/bin/openvibes-picture
+# The decoder is handed files from any signed-in person: bound what it can
+# use. Limits are set here because the console's own sandbox forbids setrlimit.
+RuntimeMaxSec=15
+LimitCPU=10
+LimitFSIZE=0
+LimitCORE=0
+LimitNPROC=1
+MemoryMax=256M
+MemorySwapMax=0
+TasksMax=1
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+PrivateUsers=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+PrivateIPC=yes
+RemoveIPC=yes
+# The connection arrives as stdin/stdout: no sockets of its own.
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @network-io
+CapabilityBoundingSet=
+InaccessiblePaths=/etc/openvibes /var/lib

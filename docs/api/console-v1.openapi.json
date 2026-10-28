@@ -10967,6 +10967,236 @@
         }
       }
     },
+    "/api/v1/users/{user_id}/picture": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "A person's picture as a WebP image, at 64 or 256 px. Any signed-in person\nmay fetch it; it is never served as HTML.",
+        "operationId": "get_picture",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "`64` or `256`.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The image",
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified"
+          },
+          "404": {
+            "description": "No picture",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Sets a person's picture from an uploaded file and the square to keep.",
+        "operationId": "put_picture",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "query",
+            "description": "Left edge.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "y",
+            "in": "query",
+            "description": "Top edge.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "Side of the square.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The original picture, at most 10 MB",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PictureSet"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs access.users for someone else",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person inside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "picture_too_large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The picture was refused (picture_svg, picture_heic, picture_unsupported, picture_dimensions, picture_frames, picture_work, picture_crop, picture_decode, picture_output)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "picture_unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Removes a person's picture; their initials are shown again.",
+        "operationId": "delete_picture",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed (or there was none)"
+          },
+          "403": {
+            "description": "Needs access.users for someone else",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person inside your access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/users/{user_id}/reset-password": {
       "post": {
         "tags": [
@@ -19798,6 +20028,13 @@
             ],
             "description": "RFC 3339; null until their first sign-in."
           },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Version of their picture; null when they have none. Use it as `v` in\n`/api/v1/users/{id}/picture`."
+          },
           "roles": {
             "type": "array",
             "items": {
@@ -19859,6 +20096,13 @@
               "null"
             ]
           },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Version of their picture; null when they have none. Use it as `v` in\n`/api/v1/users/{id}/picture`."
+          },
           "recent": {
             "type": "array",
             "items": {
@@ -19877,6 +20121,19 @@
           },
           "username": {
             "type": "string"
+          }
+        }
+      },
+      "PictureSet": {
+        "type": "object",
+        "description": "The picture was saved.",
+        "required": [
+          "picture"
+        ],
+        "properties": {
+          "picture": {
+            "type": "string",
+            "description": "The picture's version; add it as `v` to the picture URL."
           }
         }
       },
@@ -23140,6 +23397,13 @@
           "id": {
             "type": "string",
             "description": "Stable local or federated user identifier."
+          },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Version of their picture, as `v` in `/api/v1/users/{id}/picture`;\nabsent when they have none."
           },
           "username": {
             "type": [

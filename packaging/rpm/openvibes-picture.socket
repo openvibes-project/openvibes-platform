@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenVIBES profile picture converter socket
+Documentation=https://github.com/openvibes-project/openvibes-platform
+
+[Socket]
+ListenStream=/run/openvibes-picture/picture.sock
+# Only the console (its account's group) can connect.
+SocketUser=root
+SocketGroup=openvibes-console
+SocketMode=0660
+DirectoryMode=0755
+# One short-lived process per picture: nothing stays running between uploads,
+# and an upload that crashes the decoder takes down only itself.
+Accept=yes
+MaxConnections=4
+
+[Install]
+WantedBy=sockets.target

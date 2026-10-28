@@ -8,6 +8,7 @@ import type { PersonView } from "../../../api/types";
 import { viewLink } from "../../../app/nav";
 import { useSession } from "../../../app/session";
 import { auditActionLabel } from "../../../ui/auditActions";
+import { Avatar } from "../../../ui/avatar";
 import { Ago, ErrorBox, Loading } from "../../../ui/bits";
 import { Card } from "../../../ui/detail/DetailPage";
 import { ago, date, plural } from "../../../ui/format";
@@ -16,7 +17,8 @@ import { toast } from "../../../ui/toast";
 import { countLabel, hostsSummary } from "../roles/roleState";
 import { AddRoleDialog } from "./AddRoleDialog";
 import { PersonMenu } from "./PersonMenu";
-import { accessGroups, changeRole, initials, personActions, refreshPeople, refusal, signsIn, userPath } from "./people";
+import { PictureDialog } from "./PictureDialog";
+import { accessGroups, changeRole, personActions, refreshPeople, refusal, signsIn, userPath } from "./people";
 
 export function PersonPage({ userId }: { userId: string }) {
   const person = useResource<PersonView>(userPath(userId));
@@ -33,6 +35,7 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
   const self = session?.principal.id === person.user_id;
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [picturing, setPicturing] = useState(false);
   // After Escape in Add role, focus goes back to the "Add role" button once it is shown again.
   const refocusAdd = useRef(false);
   const closeAdd = (refocus: boolean) => { refocusAdd.current = refocus; setAdding(false); };
@@ -46,16 +49,18 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
     <div className="view person-page">
       <div className="view-pad person-page__crumb subtle"><a {...link("/settings")}>Settings</a> › <a {...link("/settings", { tab: "people" })}>People</a></div>
       <header className="person-page__head">
-        <span className="person-page__avatar" aria-hidden="true">{initials(person.display_name)}</span>
+        <Avatar className="person-page__avatar" userId={person.user_id} name={person.display_name} picture={person.picture} size={256} />
         <div className="stack grow person-page__title">
           <div className="row"><h1>{person.display_name}</h1><span className={person.enabled ? "badge badge--ok" : "badge badge--plain"}>{person.enabled ? "Active" : "Disabled"}</span></div>
           <span className="subtle">{plural(person.roles.length, "role")} · {countLabel(permissions)} · {person.last_sign_in_at ? `last signed in ${ago(person.last_sign_in_at)}` : "never signed in"}</span>
         </div>
         <div className="row person-page__actions">
+          {(self || can("access.users")) && <button type="button" className="button" onClick={() => setPicturing(true)}>Change picture</button>}
           {(self || can("access.users")) && <button type="button" className="button" onClick={() => setEditing(!editing)}>{editing ? "Stop editing" : "Edit details"}</button>}
           <PersonMenu person={person} actions={personActions(person, self, can("access.users"))} onError={onError} />
         </div>
       </header>
+      {picturing && <PictureDialog userId={person.user_id} name={person.display_name} hasPicture={!!person.picture} onClose={() => setPicturing(false)} />}
       {error && <div className="callout callout--bad person-page__error" role="alert"><Icon name="alert" size={16} /><span>{error}</span></div>}
       <div className="person-page__cols">
         <div className="stack person-page__col">

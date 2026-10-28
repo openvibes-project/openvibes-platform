@@ -2160,6 +2160,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{user_id}/picture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A person's picture as a WebP image, at 64 or 256 px. Any signed-in person
+         *     may fetch it; it is never served as HTML.
+         */
+        get: operations["get_picture"];
+        /** Sets a person's picture from an uploaded file and the square to keep. */
+        put: operations["put_picture"];
+        post?: never;
+        /** Removes a person's picture; their initials are shown again. */
+        delete: operations["delete_picture"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{user_id}/reset-password": {
         parameters: {
             query?: never;
@@ -5670,6 +5692,11 @@ export interface components {
             enabled: boolean;
             /** @description RFC 3339; null until their first sign-in. */
             last_sign_in_at?: string | null;
+            /**
+             * @description Version of their picture; null when they have none. Use it as `v` in
+             *     `/api/v1/users/{id}/picture`.
+             */
+            picture?: string | null;
             /** @description The roles they hold, with their reach. */
             roles: components["schemas"]["RoleView"][];
             user_id: string;
@@ -5685,11 +5712,21 @@ export interface components {
             email?: string | null;
             enabled: boolean;
             last_sign_in_at?: string | null;
+            /**
+             * @description Version of their picture; null when they have none. Use it as `v` in
+             *     `/api/v1/users/{id}/picture`.
+             */
+            picture?: string | null;
             /** @description Their newest actions (at most 10). */
             recent: components["schemas"]["ActivityLine"][];
             roles: components["schemas"]["RoleView"][];
             user_id: string;
             username: string;
+        };
+        /** @description The picture was saved. */
+        PictureSet: {
+            /** @description The picture's version; add it as `v` to the picture URL. */
+            picture: string;
         };
         /** @description What the caller may do here. */
         PortActionsView: {
@@ -7147,6 +7184,11 @@ export interface components {
             display_name: string;
             /** @description Stable local or federated user identifier. */
             id: string;
+            /**
+             * @description Version of their picture, as `v` in `/api/v1/users/{id}/picture`;
+             *     absent when they have none.
+             */
+            picture?: string | null;
             /** @description Local username when the identity has one. */
             username?: string | null;
         };
@@ -16782,6 +16824,164 @@ export interface operations {
                 content?: never;
             };
             /** @description Needs access.users */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such person inside your access */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_picture: {
+        parameters: {
+            query: {
+                /** @description `64` or `256`. */
+                size: number;
+            };
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": number[];
+                };
+            };
+            /** @description Not modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No picture */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    put_picture: {
+        parameters: {
+            query: {
+                /** @description Left edge. */
+                x: number;
+                /** @description Top edge. */
+                y: number;
+                /** @description Side of the square. */
+                size: number;
+            };
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The original picture, at most 10 MB */
+        requestBody: {
+            content: {
+                "application/octet-stream": number[];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PictureSet"];
+                };
+            };
+            /** @description Needs access.users for someone else */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such person inside your access */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description picture_too_large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The picture was refused (picture_svg, picture_heic, picture_unsupported, picture_dimensions, picture_frames, picture_work, picture_crop, picture_decode, picture_output) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description picture_unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_picture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed (or there was none) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Needs access.users for someone else */
             403: {
                 headers: {
                     [name: string]: unknown;

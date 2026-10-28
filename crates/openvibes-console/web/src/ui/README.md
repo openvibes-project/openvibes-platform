@@ -19,6 +19,7 @@ Shared building blocks used by views, panels and dashboards. They know nothing a
 | `Menu.tsx` | A button that opens a short list of actions. |
 | `Switch.tsx` | An on/off row. |
 | `Field.tsx` | A labelled Select. |
+| `avatar.tsx` | A person's picture, or their initials when they have none (and the demo's own copy of pictures). |
 | `Icon.tsx` | The inline stroke icon set. |
 | `LineChart.tsx` | A line chart drawn at pixel size. |
 | `linechart.ts` | Logic for LineChart.tsx: paths, gaps and ticks. |

@@ -43,6 +43,7 @@ use crate::{
     crate::access::people_types::ActivityLine,
     crate::access::people_types::UpdatePerson,
     crate::access::people_types::OneTimePassword,
+    crate::access::pictures::PictureSet,
     crate::settings::SettingView,
     crate::settings::SettingChangeView,
     crate::settings::SettingsView,

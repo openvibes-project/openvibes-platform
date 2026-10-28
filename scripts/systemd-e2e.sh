@@ -257,6 +257,23 @@ TOML
     in_c 'journalctl -u "openvibes-fetch@*" -o cat | grep -q "user=\"e2e\""' || fail "the fetcher's journal has no line for the lookup"
     ok "openvibes-fetch answers per connection: off at level 0, unavailable at level 1 without outbound"
 
+    # The profile picture converter ships in the console RPM: its socket is
+    # enabled by the preset and pulled in by the console, and each picture is
+    # converted in a throwaway sandbox with no files and no network.
+    in_c 'systemctl is-enabled -q openvibes-picture.socket && systemctl is-active -q openvibes-picture.socket' ||
+        fail "openvibes-picture.socket is not enabled and active after the console upgrade"
+    [[ "$(in_c 'stat -c "%a %U:%G" /run/openvibes-picture/picture.sock')" == "660 root:openvibes-console" ]] ||
+        fail "picture socket has the wrong owner or mode"
+    picture_reply() { # CROP-JSON then the picture on stdin of the container's shell
+        in_c "{ printf '%s\\n' '$1'; base64 -d <<<'$2'; } | timeout 25 socat -t 25 - UNIX-CONNECT:/run/openvibes-picture/picture.sock | head -c 80"
+    }
+    png1='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=='
+    out=$(picture_reply '{"x":0,"y":0,"size":1}' "$png1") || fail "no reply from the picture socket"
+    [[ "$out" == '{"result":"ok"'* ]] || fail "picture conversion: $out"
+    out=$(picture_reply '{"x":0,"y":0,"size":1}' "$(printf '<svg/>' | base64)") || fail "no reply for an SVG"
+    [[ "$out" == '{"result":"refused","code":"svg"}'* ]] || fail "picture helper accepted an SVG: $out"
+    ok "openvibes-picture converts a picture per connection and refuses an SVG"
+
     in_c 'cat > /etc/openvibes/console.toml <<TOML
 development_listen = "0.0.0.0:443"
 health_listen = "127.0.0.1:18482"

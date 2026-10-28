@@ -1375,6 +1375,7 @@ The console role may write roles, their permissions and groups, dashboard
 shares, and `console_users` `email`, `display_name` and `last_sign_in_at`.
 `audit_log_actor_recent_idx` (`actor_id`, `at DESC`) serves a person's recent
 activity. People reads and writes and role gifts live in `console_people`.
+Schema 69 adds `console_user_pictures` (one row per person: the 256 px and 64 px WebP bytes, a SHA-256 `etag` over both, `animated`, who and when); `console_people` sets, removes and reads them, and the audit rows `user.picture.set` and `user.picture.removed` never hold image bytes. Deleting a person deletes their picture.
 Interface and guards: [console-auth-store.md](console-auth-store.md).
 Tests: `tests/custom_roles.rs` (upgrade, run to 52 only with
 `common::step_to`) and `tests/role_writes.rs`; tests that bind a former

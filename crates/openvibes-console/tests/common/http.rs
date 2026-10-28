@@ -222,6 +222,43 @@ pub async fn call_with(
     (response.status(), body(response).await)
 }
 
+/// Sends `method uri` as `who` with raw bytes; returns the whole response.
+pub async fn send_bytes(
+    router: &axum::Router,
+    method: &str,
+    uri: &str,
+    (cookie, csrf): &Session,
+    bytes: Vec<u8>,
+) -> axum::response::Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header(header::COOKIE, cookie)
+                .header(header::ORIGIN, ORIGIN)
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", csrf)
+                .header(header::CONTENT_TYPE, "application/octet-stream")
+                .body(Body::from(bytes))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+/// A body-less request as `who` with extra headers; returns the response.
+pub async fn send_with(
+    router: &axum::Router,
+    method: &str,
+    uri: &str,
+    who: &Session,
+    extra: &[(&str, &str)],
+) -> axum::response::Response {
+    send(router, method, uri, who, None, extra).await
+}
+
 async fn send(
     router: &axum::Router,
     method: &str,

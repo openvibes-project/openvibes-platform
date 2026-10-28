@@ -1,0 +1,28 @@
+[package]
+name = "openvibes-picture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# Decoding and encoding: the helper and tests need it; the console only
+# speaks to the helper and builds without it.
+default = ["decode"]
+decode = ["dep:gif", "dep:image", "dep:image-webp", "dep:webp-animation"]
+
+[[bin]]
+name = "openvibes-picture"
+path = "src/main.rs"
+required-features = ["decode"]
+
+[dependencies]
+gif = { version = "0.14", default-features = false, features = ["std"], optional = true }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "tiff"], optional = true }
+image-webp = { version = "0.2", default-features = false, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+webp-animation = { version = "0.10", features = ["static"], optional = true }
+
+[lints]
+workspace = true

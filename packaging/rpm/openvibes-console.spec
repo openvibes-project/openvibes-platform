@@ -14,6 +14,7 @@ URL:            https://github.com/openvibes-project/openvibes-platform
 BuildRequires:  systemd-rpm-macros
 # The assistant's internet lookups (off until an administrator turns them on).
 Recommends:     openvibes-fetch
+# Profile pictures are converted by a sandboxed helper; it is built with libwebp.
 %{?systemd_requires}
 Source0:        %{console_npm_cache_name}
 
@@ -31,6 +32,14 @@ printf '%s  %{SOURCE0}\n' '%{console_npm_cache_sha256}' | sha256sum --check --st
 %install
 S=%{console_repo_root}
 install -D -m 0755 $S/target/release/openvibes-console %{buildroot}%{_bindir}/openvibes-console
+%{_bindir}/openvibes-picture
+%{_unitdir}/openvibes-picture.socket
+%{_unitdir}/openvibes-picture@.service
+%{_prefix}/lib/systemd/system-preset/91-openvibes-picture.preset
+install -D -m 0755 $S/target/release/openvibes-picture %{buildroot}%{_bindir}/openvibes-picture
+install -D -m 0644 $S/packaging/rpm/openvibes-picture.socket %{buildroot}%{_unitdir}/openvibes-picture.socket
+install -D -m 0644 $S/packaging/rpm/openvibes-picture@.service %{buildroot}%{_unitdir}/openvibes-picture@.service
+install -D -m 0644 $S/packaging/rpm/openvibes-picture.preset %{buildroot}%{_prefix}/lib/systemd/system-preset/91-openvibes-picture.preset
 install -D -m 0644 $S/packaging/rpm/openvibes-console.service %{buildroot}%{_unitdir}/openvibes-console.service
 install -D -m 0644 $S/packaging/rpm/openvibes-console.sysusers %{buildroot}%{_sysusersdir}/openvibes-console.conf
 install -D -m 0644 $S/packaging/rpm/openvibes-console.preset %{buildroot}%{_prefix}/lib/systemd/system-preset/90-openvibes-console.preset
@@ -41,11 +50,11 @@ install -d -m 0700 %{buildroot}%{_sharedstatedir}/openvibes-console
 install -d -m 0755 %{buildroot}%{_sysconfdir}/openvibes/tls
 
 %post
-%systemd_post openvibes-console.service
+%systemd_post openvibes-console.service openvibes-picture.socket
 %preun
-%systemd_preun openvibes-console.service
+%systemd_preun openvibes-console.service openvibes-picture.socket
 %postun
-%systemd_postun_with_restart openvibes-console.service
+%systemd_postun_with_restart openvibes-console.service openvibes-picture.socket
 
 %files
 %dir %{_licensedir}/openvibes-console

@@ -71,6 +71,9 @@ in the programs).
 | quick-xml | 0.42.0 | MIT | Reading Fedora `updateinfo.xml` |
 | ratatui | 0.30.2 | MIT | Admin TUI screens |
 | rcgen | 0.14.10 | MIT OR Apache-2.0 | Making the platform's CA and certificates |
+| gif | 0.14.2 | MIT OR Apache-2.0 | Counting the frames of an uploaded GIF (openvibes-picture) |
+| image | 0.25.10 | MIT OR Apache-2.0 | Decoding uploaded profile pictures (JPEG, PNG, GIF, WebP, BMP, TIFF) and resizing them |
+| image-webp | 0.2.4 | MIT OR Apache-2.0 | Reading the header of an animated WebP upload |
 | ring | 0.17.14 | Apache-2.0 AND ISC | Cryptography under rustls and rcgen |
 | rpassword | 7.5.4 | Apache-2.0 | Reading passwords at the terminal |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT | TLS for the console and agent connections |
@@ -92,6 +95,7 @@ in the programs).
 | tracing-subscriber | 0.3.23 | MIT | Log output to the journal |
 | unicode-normalization | 0.1.25 | MIT OR Apache-2.0 | Normalising passwords before hashing |
 | ureq | 3.4.2 | MIT OR Apache-2.0 | HTTPS client (vulnerability feeds, assistant lookups) |
+| webp-animation | 0.10.0 | MIT | Encoding the stored WebP pictures (builds libwebp from source; needs a C compiler to build) |
 | utoipa | 5.5.0 | MIT OR Apache-2.0 | The console API's OpenAPI description |
 | x509-parser | 0.18.1 | MIT OR Apache-2.0 | Reading certificates |
 | zeroize | 1.9.0 | Apache-2.0 OR MIT | Wiping secrets from memory |

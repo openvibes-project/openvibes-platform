@@ -533,6 +533,11 @@ Setting someone else's needs `access.users` within the share.
 6. **Audit:** uploads and removals are audited.
 7. **Without a picture,** the initials are shown, as today.
 
+**Plan rulings, 2026-10-28 (step 7):** see
+[the step 7 plan](../superpowers/plans/2026-10-28-roles-7-profile-pictures.md).
+Notably: AVIF is not accepted yet, the helper is socket-activated, and the
+global Content-Security-Policy replaces the per-route one.
+
 ## 10. Hosts list and host page
 
 ### 10.1 The list (screen 16)

@@ -66,6 +66,32 @@ export async function request<T>(method: string, path: string, body?: unknown, e
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+  return answer<T>(response, path);
+}
+
+/** Sends `file` as it is (PUT, content type octet-stream), e.g. an uploaded picture. */
+export async function upload<T>(path: string, file: Blob): Promise<T> {
+  const response = demo
+    // The demo has no server to hand bytes to: it keeps the picture as a data URL.
+    ? await demo.handle("PUT", path, { data_url: await dataUrl(file) })
+    : await fetch(path, {
+      method: "PUT",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { accept: "application/json", "content-type": "application/octet-stream", "x-csrf-token": csrfToken },
+      body: file,
+    });
+  return answer<T>(response, path);
+}
+
+const dataUrl = (file: Blob) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result));
+  reader.onerror = () => reject(new Error("The file could not be read"));
+  reader.readAsDataURL(file);
+});
+
+async function answer<T>(response: Response, path: string): Promise<T> {
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   let payload: unknown;
