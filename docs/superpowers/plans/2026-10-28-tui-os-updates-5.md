@@ -4,7 +4,7 @@
 
 **Goal:** Maintenance › Operating system, on every install: distribution, kernel, last check, how many updates and how many for security, whether a restart is needed. Entries Update everything and Check again; the update keeps running when the screen is left; when it is done the bar offers Restart now or Later.
 
-**Architecture:** Four new root helper verbs with no free arguments (`os-check`, `os-update`, `os-restart-needed`, `os-restart`) run `dnf` and `needs-restarting` through the existing `Runner`. `os-check` writes the result to `/var/lib/openvibes/os-updates` (0644, plain `key=value`) so the TUI reads the last check and the menu value without a password; only Check again and Update ask for it. The TUI page follows Update OpenVIBES (`tui/maint/update.rs`): the standard question, a `Run`, the result line. The pure parsing of dnf's output lives in `platform-host` (`os_updates.rs`) so it is tested without a host.
+**Architecture:** Three new root helper verbs with no free arguments (`os-check`, which also asks `needs-restarting -r`, `os-update` and `os-restart`) run `dnf` and `needs-restarting` through the existing `Runner`. `os-check` writes the result to `/var/lib/openvibes/os-updates` (0644, plain `key=value`) so the TUI reads the last check and the menu value without a password; only Check again and Update ask for it. The TUI page follows Update OpenVIBES (`tui/maint/update.rs`): the standard question, a `Run`, the result line. The pure parsing of dnf's output lives in `platform-host` (`os_updates.rs`) so it is tested without a host.
 
 **Tech Stack:** Rust, platform-host (`Program`, `Runner`, `Privileged`), openvibes-admin helper and ratatui TUI, packaging sudoers drop-in.
 

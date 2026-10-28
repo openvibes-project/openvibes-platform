@@ -6,6 +6,17 @@
 /// The last check, `key=value` lines, 0644 root (written by `os-check`).
 pub const OS_UPDATES_FILE: &str = "/etc/openvibes/os-updates";
 
+/// What the Operating system page shows about this host.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OsInfo {
+    /// "AlmaLinux 9.6 (Sage Margay)".
+    pub name: String,
+    /// The running kernel, `uname -r`.
+    pub kernel: String,
+    /// The last check; `None` before the first.
+    pub updates: Option<OsUpdates>,
+}
+
 /// What the last check found.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct OsUpdates {

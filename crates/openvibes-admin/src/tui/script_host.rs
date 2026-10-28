@@ -8,7 +8,8 @@ use std::{
 };
 
 use platform_host::{
-    Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction, ServiceStatus, Unit,
+    Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction, ServiceStatus,
+    Unit, os_updates::OsInfo,
 };
 use ratatui::{Terminal, backend::TestBackend};
 
@@ -43,6 +44,8 @@ pub(super) struct SetupHost {
     pub(super) own: Option<String>,
     /// `certificates()` calls made.
     pub(super) cert_reads: Cell<usize>,
+    /// `os_info()`: the distribution and its last update check.
+    pub(super) os: RefCell<Option<OsInfo>>,
 }
 
 impl Host for SetupHost {
@@ -82,6 +85,9 @@ impl Host for SetupHost {
     }
     fn own_console_cert(&self) -> Option<String> {
         self.own.clone()
+    }
+    fn os_info(&self) -> Option<OsInfo> {
+        self.os.borrow().clone()
     }
     fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
         Ok(self.packages.clone())
@@ -168,6 +174,7 @@ fn built(
         no_shell: false,
         own: None,
         cert_reads: Cell::new(0),
+        os: RefCell::new(None),
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

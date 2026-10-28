@@ -361,7 +361,13 @@ fn every_screen_has_exactly_one_empty_line_under_its_title() {
     one_gap_after(&screen(&app, 80, 24), rule, "Maintenance");
     // These pages need a readable plan, which the script host has.
     let mut app = super::script_host::set_up(vec![]);
+    *app.host.os.borrow_mut() = Some(platform_host::os_updates::OsInfo {
+        name: "AlmaLinux 9.6 (Sage Margay)".into(),
+        kernel: "5.14.0-570".into(),
+        updates: None,
+    });
     for page in [
+        super::maint::Page::Os,
         super::maint::Page::Parts,
         super::maint::Page::Ports,
         super::maint::Page::Certificates,
@@ -379,6 +385,7 @@ fn the_menu_lists_the_2b1_entries_in_order() {
         super::maint::names(),
         [
             "Update OpenVIBES",
+            "Operating system",
             "Repair",
             "Optional parts",
             "Ports and addresses",

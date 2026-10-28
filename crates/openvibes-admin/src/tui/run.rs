@@ -49,6 +49,12 @@ pub enum Call {
     ConsoleCertSet(Bundle),
     /// `console-cert-reset`: back to the platform's certificate.
     ConsoleCertReset,
+    /// `os-check`: what dnf says is waiting.
+    OsCheck,
+    /// `os-update`: `dnf upgrade`, then a check.
+    OsUpdate,
+    /// `os-restart`: reboots the host.
+    OsRestart,
 }
 
 /// `ca-import`'s or `console-cert-set`'s certificates and key; Debug never shows them.
@@ -159,6 +165,9 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
             host.privileged(Privileged::ConsoleCertSet(&bundle), secret)
         }
         Call::ConsoleCertReset => host.privileged(Privileged::ConsoleCertReset, secret),
+        Call::OsCheck => host.privileged(Privileged::OsCheck, secret),
+        Call::OsUpdate => host.privileged(Privileged::OsUpdate, secret),
+        Call::OsRestart => host.privileged(Privileged::OsRestart, secret),
     }
 }
 
@@ -172,7 +181,10 @@ pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
             | Call::Update(..)
             | Call::Remove(..)
             | Call::AdminReset
-            | Call::ShellOpen,
+            | Call::ShellOpen
+            | Call::OsCheck
+            | Call::OsUpdate
+            | Call::OsRestart,
             Ok(out),
         ) => StepState::parse(out.trim_end()).unwrap_or_else(|| {
             StepState::Failed(format!("unexpected helper output: {}", out.trim()))

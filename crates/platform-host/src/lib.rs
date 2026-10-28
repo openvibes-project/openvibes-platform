@@ -256,6 +256,11 @@ pub trait Host {
         let _ = port;
         Ok(String::new())
     }
+    /// The distribution, kernel and last update check; `None` on a host
+    /// without dnf (Maintenance › Operating system).
+    fn os_info(&self) -> Option<os_updates::OsInfo> {
+        None
+    }
     /// Opens the operator's login shell on this terminal and returns when
     /// it exits (Maintenance › Shell).
     fn shell(&self) -> Result<(), HostError> {
