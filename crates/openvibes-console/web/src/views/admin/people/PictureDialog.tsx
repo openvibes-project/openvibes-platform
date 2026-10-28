@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { request, upload } from "../../../api/client";
 import { useSession } from "../../../app/session";
-import { demoPictures } from "../../../ui/avatar";
+import { removeDemoPicture } from "../../../ui/avatar";
 import { toast } from "../../../ui/toast";
 import { DialogHead, Modal } from "./NewPersonDialog";
 import { cropFor, cropQuery, dragCentre, MAX_BYTES, MAX_ZOOM } from "./picture";
@@ -16,7 +16,7 @@ const ACCEPT = "image/jpeg,image/png,image/gif,image/webp,image/bmp,image/tiff,.
 
 type Chosen = { file: File; url: string; width: number; height: number };
 
-export function PictureDialog({ userId, name, hasPicture, onClose }: { userId: string; name: string; hasPicture: boolean; onClose: () => void }) {
+export function PictureDialog({ userId, name, hasPicture, onClose }: Readonly<{ userId: string; name: string; hasPicture: boolean; onClose: () => void }>) {
   const { session, reloadSession } = useSession();
   const [chosen, setChosen] = useState<Chosen>();
   const [zoom, setZoom] = useState(1);
@@ -66,7 +66,7 @@ export function PictureDialog({ userId, name, hasPicture, onClose }: { userId: s
     setBusy(true);
     setError(undefined);
     request("DELETE", `${userPath(userId)}/picture`)
-      .then(() => { demoPictures.delete(userId); done("Picture removed"); }, (e: unknown) => setError(refusal(e, "The picture could not be removed.")))
+      .then(() => { removeDemoPicture(userId); done("Picture removed"); }, (e: unknown) => setError(refusal(e, "The picture could not be removed.")))
       .finally(() => setBusy(false));
   };
 
@@ -96,7 +96,8 @@ export function PictureDialog({ userId, name, hasPicture, onClose }: { userId: s
               <img alt="" draggable={false} src={chosen.url}
                 style={{ width: chosen.width * scale, height: chosen.height * scale, left: -crop.x * scale, top: -crop.y * scale }} />
             </button>
-            <label className="field picture-dialog__zoom">Zoom
+            <label className="field picture-dialog__zoom">
+              <span>Zoom</span>
               <input type="range" min={1} max={MAX_ZOOM} step={0.05} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
             </label>
           </div>

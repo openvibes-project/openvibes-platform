@@ -265,7 +265,8 @@ TOML
     [[ "$(in_c 'stat -c "%a %U:%G" /run/openvibes-picture/picture.sock')" == "660 root:openvibes-console" ]] ||
         fail "picture socket has the wrong owner or mode"
     picture_reply() { # CROP-JSON then the picture on stdin of the container's shell
-        in_c "{ printf '%s\\n' '$1'; base64 -d <<<'$2'; } | timeout 25 socat -t 25 - UNIX-CONNECT:/run/openvibes-picture/picture.sock | head -c 80"
+        local crop="$1" picture="$2"
+        in_c "{ printf '%s\\n' '$crop'; base64 -d <<<'$picture'; } | timeout 25 socat -t 25 - UNIX-CONNECT:/run/openvibes-picture/picture.sock | head -c 80"
     }
     png1='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=='
     out=$(picture_reply '{"x":0,"y":0,"size":1}' "$png1") || fail "no reply from the picture socket"

@@ -4,7 +4,7 @@
 import type { PersonView } from "../../api/types";
 import catalogue from "../../api/permissions.json";
 import type { DemoContext } from "../context";
-import { demoPictures } from "../../ui/avatar";
+import { demoPictureVersion, removeDemoPicture, setDemoPicture } from "../../ui/avatar";
 import { json, problem } from "../http";
 import { ADMIN_ROLE } from "../share";
 import type { RoleHelpers } from "./roles";
@@ -26,7 +26,7 @@ export function registerAccessRoutes(ctx: DemoContext & { roles: RoleHelpers }) 
     const user = data.access.users.find((u) => u.user_id === id);
     return user && (user.user_id === me || rolesFit(rolesOf(user.user_id))) ? user : userNotFound();
   };
-  const row = (user: User) => ({ ...user, picture: demoPictures.get(user.user_id)?.version ?? null, roles: rolesOf(user.user_id).map(roleView) });
+  const row = (user: User) => ({ ...user, picture: demoPictureVersion(user.user_id) ?? null, roles: rolesOf(user.user_id).map(roleView) });
   const accessLines = (userId: string): AccessLine[] => catalogue.flatMap((p) => rolesOf(userId).flatMap((role): AccessLine[] => {
     if (role.role_id !== ADMIN_ROLE && !role.permissions.includes(p.id)) return [];
     const line = { permission: p.id as AccessLine["permission"], label: p.label, area: p.area, from_role: role.name };
@@ -60,7 +60,7 @@ export function registerAccessRoutes(ctx: DemoContext & { roles: RoleHelpers }) 
     const url = typeof body.data_url === "string" ? body.data_url : "";
     if (!url.startsWith("data:image/")) return problem(422, "picture_unsupported", "Use a JPEG, PNG, GIF, WebP, BMP or TIFF picture");
     const version = crypto.randomUUID().replaceAll("-", "").padEnd(64, "0");
-    demoPictures.set(id, { version, url });
+    setDemoPicture(id, { version, url });
     audit("user.picture.set", user.username, "user");
     return json({ picture: version });
   });
@@ -68,7 +68,7 @@ export function registerAccessRoutes(ctx: DemoContext & { roles: RoleHelpers }) 
     if (id !== me && !has("access.users")) return denied();
     const user = visiblePerson(id);
     if (user instanceof Response) return user;
-    if (demoPictures.delete(id)) audit("user.picture.removed", user.username, "user");
+    if (removeDemoPicture(id)) audit("user.picture.removed", user.username, "user");
     return noContent();
   });
 

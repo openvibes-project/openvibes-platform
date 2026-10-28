@@ -1,6 +1,6 @@
 // The session, password changes and the About page.
 import type { DemoContext } from "../context";
-import { demoPictures } from "../../ui/avatar";
+import { demoPictureVersion } from "../../ui/avatar";
 import { json, problem } from "../http";
 
 /** The latest agent release the demo's update check reports (about/update). */
@@ -9,7 +9,7 @@ export const LATEST_AGENT_VERSION = "0.4.2";
 export function registerSessionRoutes(ctx: DemoContext) {
   const { data, iso, actor, capabilities, audit, route } = ctx;
   route("GET", "/api/v1/session", null, () => json({
-    principal: { id: `u-${actor}`, display_name: data.access.users.find((u) => u.username === actor)?.display_name ?? actor, username: actor, picture: demoPictures.get(`u-${actor}`)?.version },
+    principal: { id: `u-${actor}`, display_name: data.access.users.find((u) => u.username === actor)?.display_name ?? actor, username: actor, picture: demoPictureVersion(`u-${actor}`) },
     capabilities, csrf_token: "demo-csrf", authentication_level: "single_factor", authentication_method: "local_password",
     idle_expires_at: iso(Date.now() + 30 * 60_000), absolute_expires_at: iso(Date.now() + 12 * 3_600_000),
     password_must_change: false,

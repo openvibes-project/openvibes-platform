@@ -1,9 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Avatar, demoPictures, initialsOf, pictureSrc } from "./avatar";
+import { Avatar, clearDemoPictures, initialsOf, pictureSrc, setDemoPicture } from "./avatar";
 
-afterEach(() => demoPictures.clear());
+afterEach(clearDemoPictures);
 
 describe("avatar", () => {
   it("shows initials without a picture", () => {
@@ -19,7 +19,7 @@ describe("avatar", () => {
     expect(html).not.toContain("WW");
   });
   it("uses the demo's own copy when there is one", () => {
-    demoPictures.set("u-1", { version: "v", url: "data:image/png;base64,AA==" });
+    setDemoPicture("u-1", { version: "v", url: "data:image/png;base64,AA==" });
     expect(pictureSrc("u-1", "v", 64)).toBe("data:image/png;base64,AA==");
   });
 });

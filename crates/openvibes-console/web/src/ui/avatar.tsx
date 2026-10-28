@@ -4,8 +4,14 @@
 // and an unchanged one comes from the browser's cache.
 import { useState } from "react";
 
+const demoPictures = new Map<string, { version: string; url: string }>();
+
 /** The demo has no server to serve pictures: it keeps them here, by person. */
-export const demoPictures = new Map<string, { version: string; url: string }>();
+export const setDemoPicture = (userId: string, picture: { version: string; url: string }): void => { demoPictures.set(userId, picture); };
+export const demoPictureVersion = (userId: string): string | undefined => demoPictures.get(userId)?.version;
+/** Whether the person had a demo picture. */
+export const removeDemoPicture = (userId: string): boolean => demoPictures.delete(userId);
+export const clearDemoPictures = (): void => { demoPictures.clear(); };
 
 /** "WW" for Wendy Ward. */
 export const initialsOf = (name: string): string =>
@@ -15,13 +21,13 @@ export const pictureSrc = (userId: string, version: string, size: 64 | 256): str
   demoPictures.get(userId)?.url ?? `/api/v1/users/${encodeURIComponent(userId)}/picture?size=${size}&v=${encodeURIComponent(version)}`;
 
 /** The picture when there is one (and it loads), else the initials. */
-export function Avatar({ userId, name, picture, size = 64, className = "" }: {
+export function Avatar({ userId, name, picture, size = 64, className = "" }: Readonly<{
   userId: string;
   name: string;
   picture?: string | null | undefined;
   size?: 64 | 256;
   className?: string;
-}) {
+}>) {
   // A failed load (the picture was removed meanwhile) falls back to initials until the version changes.
   const [failed, setFailed] = useState<string>();
   const shown = picture && failed !== picture ? picture : undefined;
