@@ -7,7 +7,7 @@ store `platform_store::dashboards`, schema 26). Spec:
 ## Purpose
 
 People build their own views of the fleet: dashboards made of tiles, saved on
-the platform, opened on any device, optionally shared with a role. A dashboard
+the platform, opened on any device, optionally shared with some of the owner's roles or with everyone. A dashboard
 stores the questions, never the answers: a name and a layout of widgets. Every
 widget loads its data through the normal read APIs with the viewer's own
 permissions and asset-group scope, so a shared dashboard shows each viewer only
@@ -19,12 +19,12 @@ Browser session only; a service-account bearer token gets 403.
 
 | Route | Who | Result |
 |---|---|---|
-| `GET /api/v1/dashboards` | any signed-in user | own dashboards first, then those shared with a role the user holds, each by name (`DashboardPage`) |
+| `GET /api/v1/dashboards` | any signed-in user | own dashboards first, then those shared with everyone or with a role the user holds, each by name (`DashboardPage`) |
 | `POST /api/v1/dashboards` | any signed-in user | `201 DashboardView` + `ETag` |
-| `GET /api/v1/dashboards/{id}` | owner or holder of the shared role | `DashboardView` + `ETag` |
+| `GET /api/v1/dashboards/{id}` | owner, anyone (shared with everyone) or holder of a shared role | `DashboardView` + `ETag` |
 | `PUT /api/v1/dashboards/{id}` | owner, `If-Match` required | `DashboardView` + new `ETag` |
 | `DELETE /api/v1/dashboards/{id}` | owner | 204 |
-| `PUT /api/v1/dashboards/{id}/sharing` | owner with global `dashboards.share` | `{ "role_id": "analyst" \| null }`; the answer names the role in `shared_role_name` (`null` when not shared) |
+| `PUT /api/v1/dashboards/{id}/sharing` | owner; roles need global `dashboards.share`, everyone needs `dashboards.publish`, private needs nothing | `{ "visibility": "private" \| "roles" \| "everyone", "role_ids": [...] }` (role ids only for `roles`: at least one, all held by the caller). The answer has `visibility` and `roles` (`{role_id, name}`: all of them for the owner, only the viewer's own for anyone else) |
 | `GET /api/v1/me/home` | any signed-in user | `{ "dashboard_id": id \| null }` (`null` = built-in Overview) |
 | `PUT /api/v1/me/home` | any signed-in user | the dashboard must be visible |
 
@@ -37,7 +37,7 @@ string lists (≤ 16). Names: 1–80 characters, trimmed, no control characters.
 At most 100 dashboards per owner. Adding a widget type means adding it to
 `WIDGET_TYPES` here and to the UI in the same change.
 
-Audit: `dashboard.create`, `.update`, `.delete`, `.share` (old and new role),
+Audit: `dashboard.create`, `.update`, `.delete`, `.share` (old and new visibility and roles),
 `.home`, in the same transaction as the change; the name is recorded, never
 the layout.
 
@@ -67,7 +67,7 @@ None.
 | Situation | Result |
 |---|---|
 | no session | 401 |
-| bearer token, sharing without `dashboards.share`, editing someone else's dashboard | 403 |
+| bearer token, sharing with roles without `dashboards.share` or with everyone without `dashboards.publish`, editing someone else's dashboard | 403 |
 | unknown, invisible or malformed id | 404 (the same answer, so ids cannot be probed) |
 | stale version / missing `If-Match` | 412 / 428 |
 | invalid JSON body | 400 |

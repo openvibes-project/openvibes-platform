@@ -190,6 +190,10 @@ async fn visible(client: &Client, user: &str) -> BTreeSet<String> {
 #[tokio::test]
 async fn upgrade_keeps_shared_dashboards_visible() {
     let (db, client, _) = upgraded(false).await;
+    // The viewer helper reads today's schema (visibility came with 68).
+    for version in 53..=platform_store::SCHEMA_VERSION {
+        common::step_to(&client, version).await;
+    }
     // Shared with operator: its global holder and its scoped holders.
     assert!(visible(&client, OP).await.contains("Ops"));
     assert!(visible(&client, LAB).await.contains("Ops"));

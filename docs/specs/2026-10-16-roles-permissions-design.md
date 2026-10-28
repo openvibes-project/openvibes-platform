@@ -1156,6 +1156,11 @@ These fill gaps in the Software list (screen 23) and a package's page (screen 24
 - **When a role is deleted,** it is removed from every dashboard's roles,
   and a dashboard left with no roles becomes private.
 - **The header badge** shows Only you / Shared with … / Everyone.
+- **Plan rulings, 2026-10-27 (step 6):** see
+  [the step 6 plan](../superpowers/plans/2026-10-27-roles-6-dashboard-sharing.md).
+  Notably: only the owner's own held roles can be added, going back to private
+  needs no permission, and a viewer sees only the roles they hold on a
+  shared dashboard.
 
 ## 12. Upgrade
 

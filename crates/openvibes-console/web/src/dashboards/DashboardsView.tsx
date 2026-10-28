@@ -120,11 +120,33 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
     invalidate("/api/v1/me/home");
     toast(isHome ? "Home unchanged" : "Set as home");
   };
-  const share = async (roleId: string | null) => {
-    if (!dashboard) return;
-    await request("PUT", `/api/v1/dashboards/${dashboard.dashboard_id}/sharing`, { role_id: roleId });
+  // One change at a time, and the next set is built from the dashboard as last
+  // saved, until the refetch catches up.
+  const [sharing, setSharing] = useState(false);
+  const [saved, setSaved] = useState<Dashboard | null>(null);
+  const current = saved && dashboard && saved.dashboard_id === dashboard.dashboard_id && saved.version >= dashboard.version ? saved : dashboard;
+  const shared = new Set(current?.roles.map((r) => r.role_id));
+  const share = async (visibility: Dashboard["visibility"], roleIds: string[] = []) => {
+    if (!dashboard || sharing) return;
+    setSharing(true);
+    try {
+      await save(visibility, roleIds, dashboard);
+    } finally {
+      setSharing(false);
+    }
+  };
+  const save = async (visibility: Dashboard["visibility"], roleIds: string[], dashboard: Dashboard) => {
+    const result = await request<Dashboard>("PUT", `/api/v1/dashboards/${dashboard.dashboard_id}/sharing`, { visibility, role_ids: roleIds });
     invalidate("/api/v1/dashboards");
-    toast(roleId ? `Shared with ${roles.find((r) => r.role_id === roleId)?.name ?? "the role"}` : "No longer shared");
+    invalidate(`/api/v1/dashboards/${dashboard.dashboard_id}`);
+    setSaved(result);
+    toast(result.visibility === "private" ? "No longer shared" : sharingText(result));
+  };
+  // Ticking a role shares with it; unticking the last one stops sharing.
+  const toggleRole = (roleId: string) => {
+    const next = new Set(shared);
+    if (!next.delete(roleId)) next.add(roleId);
+    return next.size === 0 ? share("private") : share("roles", [...next]);
   };
   const fail = (error: unknown) => toast(apiMessage(error, "That did not work"), true);
 
@@ -138,8 +160,8 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
             <div><h1>{greeting()}{name ? `, ${name}` : ""}</h1>
               {agents.data && <p className="muted">{plural(agents.data.active, "host")} reporting{agents.data.stale > 0 ? `, ${agents.data.stale} stale` : ""}.</p>}</div>
           ) : (
-            <div><h1>{dashboard?.name}</h1>{!mine && <p className="muted">Shared by {dashboard?.owner_display_name}{dashboard?.shared_role_name ? ` with ${dashboard.shared_role_name}` : ""}</p>}
-              {mine && dashboard?.shared_role_name && <p className="muted">Shared with {dashboard.shared_role_name}</p>}</div>
+            <div><h1>{dashboard?.name}</h1>
+              {dashboard && current && <p className="muted">{!mine && `Shared by ${dashboard.owner_display_name} · `}<span className="badge" data-testid="sharing-badge">{sharingText(current)}</span></p>}</div>
           )}
         </div>
         <div className="row row--wrap">
@@ -164,6 +186,8 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
             </>
           ) : mine && dashboard ? (
             <button type="button" className="button dashboard-edit" onClick={() => editor.begin(dashboard)}><Icon name="pencil" size={15} /> Edit</button>
+          ) : dashboard ? (
+            <button type="button" className="button" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={15} /> Make a copy</button>
           ) : null}
           {!editing && (
             <div className="menu">
@@ -172,18 +196,25 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                 <div className="menu__pop" role="menu" onClick={(event) => {
                   // Close on a chosen item only: Delete's inline confirmation is not one, and
                   // closing on its click unmounted it as it opened (#236).
-                  if ((event.target as Element).closest('[role^="menuitem"]')) setMenu(false);
+                  const item = (event.target as Element).closest('[role^="menuitem"]');
+                  if (item && !item.hasAttribute("data-keep-open")) setMenu(false);
                 }}>
                   <div role="menuitem" aria-disabled="true" className="menu__note dashboard-phone-only">Editing needs a wider screen</div>
-                  <button type="button" role="menuitem" className="menu__item" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={14} /> Duplicate</button>
+                  <button type="button" role="menuitem" className="menu__item" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={14} /> {mine || builtin ? "Duplicate" : "Make a copy"}</button>
                   {mine && dashboard && <button type="button" role="menuitem" className="menu__item" onClick={() => { editor.begin(dashboard); setTimeout(() => document.querySelector<HTMLInputElement>(".dashboard-name")?.select(), 0); }}><Icon name="pencil" size={14} /> Rename</button>}
-                  {mine && can("dashboards.share") && (
+                  {mine && dashboard && current && (can("dashboards.share") || current.visibility !== "private") && (
                     <div className="menu__section">
-                      <div className="section-title">Share with role</div>
-                      {[null, ...roles.map((r) => r.role_id)].map((role) => (
-                        <button key={role ?? "none"} type="button" role="menuitemradio" aria-checked={(dashboard?.shared_role_id ?? null) === role} className="menu__item"
-                          onClick={() => void share(role).catch(fail)}>{(dashboard?.shared_role_id ?? null) === role ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />} {role === null ? "Not shared" : roles.find((r) => r.role_id === role)?.name ?? role}</button>
+                      <div className="section-title">Who can see this</div>
+                      <button type="button" role="menuitemradio" aria-checked={current.visibility === "private"} className="menu__item"
+                        onClick={() => void share("private").catch(fail)}>{tick(current.visibility === "private")} Only you</button>
+                      {can("dashboards.share") && [...roles, ...current.roles.filter((r) => !roles.some((h) => h.role_id === r.role_id))].map((role) => (
+                        <button key={role.role_id} type="button" role="menuitemcheckbox" data-keep-open disabled={sharing} aria-checked={shared.has(role.role_id)} className="menu__item"
+                          onClick={() => void toggleRole(role.role_id).catch(fail)}>{tick(shared.has(role.role_id))} {role.name}</button>
                       ))}
+                      {can("dashboards.publish") && (
+                        <button type="button" role="menuitemradio" aria-checked={current.visibility === "everyone"} className="menu__item"
+                          onClick={() => void share("everyone").catch(fail)}>{tick(current.visibility === "everyone")} Everyone</button>
+                      )}
                     </div>
                   )}
                   {mine && dashboard && (
@@ -203,6 +234,15 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
       </div>
     </header>
   );
+}
+
+const tick = (on: boolean) => on ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />;
+
+/** The header badge: who else can see a dashboard. */
+function sharingText(dashboard: Pick<Dashboard, "visibility" | "roles">) {
+  if (dashboard.visibility === "everyone") return "Everyone";
+  if (dashboard.visibility === "roles" && dashboard.roles.length > 0) return `Shared with ${dashboard.roles.map((r) => r.name).join(", ")}`;
+  return "Only you";
 }
 
 function DashboardSwitcher({ current }: { current: string | null }) {

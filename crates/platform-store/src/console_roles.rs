@@ -340,7 +340,8 @@ pub async fn update_role(
     Ok(written)
 }
 
-/// Deletes a role nobody holds; dashboards shared with it lose that share.
+/// Deletes a role nobody holds; dashboards shared with it lose that share,
+/// and one left with no role becomes private.
 pub async fn delete_role(
     client: &mut Client,
     role_id: &str,
@@ -357,6 +358,7 @@ pub async fn delete_role(
     }
     tx.execute("DELETE FROM console_roles WHERE role_id = $1", &[&role_id])
         .await?;
+    crate::dashboards::privatise_orphans(&tx, actor_id, role_id, now).await?;
     audit(&tx, "rbac.role.deleted", actor_id, now, &role).await?;
     tx.commit().await?;
     Ok(RoleWrite::Saved(role))

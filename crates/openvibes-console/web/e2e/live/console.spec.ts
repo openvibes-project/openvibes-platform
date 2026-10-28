@@ -222,7 +222,7 @@ test("a dashboard is created, saved, shared and seen read-only by an analyst", a
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
   await page.getByRole("button", { name: "Dashboard menu" }).click();
-  await page.getByRole("menuitemradio", { name: "Analyst" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Analyst" }).click();
   await expect(page.locator("#main").getByText("Shared with Analyst")).toBeVisible();
   const url = page.url();
   await page.reload();
@@ -233,7 +233,9 @@ test("a dashboard is created, saved, shared and seen read-only by an analyst", a
   await signIn(sam, "sam");
   await sam.goto(url);
   await expect(sam.getByRole("heading", { level: 1 })).toHaveText(name);
-  await expect(sam.getByText("Shared by Alex Admin with Analyst")).toBeVisible();
+  await expect(sam.getByText("Shared by Alex Admin")).toBeVisible();
+  await expect(sam.getByTestId("sharing-badge")).toHaveText("Shared with Analyst");
+  await expect(sam.getByRole("button", { name: "Make a copy" })).toBeVisible();
   await expect(sam.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
   await sam.close();
 });
