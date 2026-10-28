@@ -86,7 +86,7 @@ export async function upload<T>(path: string, file: Blob): Promise<T> {
 
 const dataUrl = (file: Blob) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result));
+  reader.onload = () => (typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("The file could not be read")));
   reader.onerror = () => reject(new Error("The file could not be read"));
   reader.readAsDataURL(file);
 });
