@@ -37,10 +37,9 @@ it; then the install proposes the first free port from 8443 and says so, and
 the console is at `https://HOST:PORT`. The agent ports (18423, 18424) move
 the same way, and the install command and package the console hands out
 (step 3) carry them. To move a
-port later: `sudo openvibes-admin setup --repair --console-port N` (or
-`--ingest-port`, `--distribution-port`, which also need
-`--move-agent-ports`: agents on other hosts then need their install line
-run again). Install asks for
+port later: Maintenance › Ports and addresses (Console, Agent connections,
+Rule distribution, then Apply; moving the agent ports means agents on other
+hosts need their install line run again). Install asks for
 your password once (not when sudo asks none, e.g. run as root) and then
 shows each step as it runs: packages,
 PostgreSQL, database, CA, certificates, console, services, firewall
@@ -83,16 +82,8 @@ The last screen shows, once:
 - what to do next: sign in, change the password, then add hosts from the
   console (Enrollment).
 
-Without a terminal, this does the same (keep the `--root-key-out` file as
-above; without it the root key is deleted):
-
-```sh
-sudo openvibes-admin setup --quick --components ingest,console,distribution,vulns,rules,agent \
-  --hostname NAME --root-key-out /root/openvibes-root-ca.key
-```
-
 Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Install
-and the `setup` command).
+screens; its `setup` command is the scripted form).
 
 ## Step 1 (offline): install from the kit
 
@@ -115,8 +106,7 @@ In the console (step 4 has how to sign in), open **Enrollment**. Under
 - **Install package** downloads a script that does the same: copy it to the
   host and run `sudo sh openvibes-agent-install.sh`.
 
-Without the console, `sudo openvibes-admin agent command` on the platform
-host prints the same line. It looks like:
+The command looks like:
 
 ```sh
 curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
@@ -159,22 +149,24 @@ give the console a certificate your browsers already trust: in
 
 ## Optional: alarms from a UniFi gateway
 
-1. Open UDP 514 on this host's firewall, e.g. with firewalld:
-   `sudo firewall-cmd --permanent --add-port=514/udp && sudo firewall-cmd --reload`.
-2. Register the gateway: `openvibes-admin device add --name "UCG Max" --address 192.168.1.1`.
-   The console screen for this comes later.
+1. Open UDP 514 on this host's firewall. Maintenance › Ports and addresses
+   shows Network devices (514/udp) but does not open it; the screen to do so
+   is [#494](https://github.com/openvibes-project/openvibes-platform/issues/494).
+2. Register the gateway. The console screen for this is
+   [#384](https://github.com/openvibes-project/openvibes-platform/issues/384);
+   until it ships, the gateway cannot be registered from a screen.
 3. In UniFi Network: Settings → Control Plane → Integrations → Activity
    Logging (Syslog) → **SIEM Server**. Set this host's address and port 514,
    and tick at least *Security Detections*.
-4. IPS/IDS detections now appear under **Alarms**. `openvibes-admin device
-   list` shows what the gateway has sent.
+4. IPS/IDS detections now appear under **Alarms**.
 
 ## Next
 
-- Other hosts: repeat step 3; `openvibes-admin agent list` shows them all.
+- Other hosts: repeat step 3; **Hosts** lists them all.
 - Check, repair, update, change components or uninstall: Maintenance
   (Update, Repair, Optional parts, Uninstall).
 - Services and configuration: the Services and Configuration tabs. Install
   added you to `openvibes-operators`; log in again before using them.
-- Hosts without network access: the agent's `export`, then
-  `openvibes-admin import` on the platform.
+- Hosts without network access: the agent writes an export file; loading it
+  into the platform has no screen yet
+  ([#495](https://github.com/openvibes-project/openvibes-platform/issues/495)).
