@@ -57,7 +57,7 @@ test("a person sets, sees and removes their own picture", async ({ page }) => {
   await dialog.getByLabel("Zoom").fill("2");
   await expect(preview).toHaveCSS("width", "960px");
   // Arrow keys move the picture under the circle.
-  const position = dialog.getByRole("group", { name: /Picture position/ });
+  const position = dialog.getByRole("button", { name: /Picture position/ });
   await position.focus();
   const before = await preview.evaluate((img) => img.style.left);
   await page.keyboard.press("ArrowLeft");

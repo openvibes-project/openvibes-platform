@@ -418,7 +418,7 @@ div.detail-tile:hover { border-color: var(--line); }
 .picture-dialog { min-width: min(420px, 90vw); }
 .picture-dialog__file { display: none; }
 .picture-dialog__crop { align-items: center; }
-.picture-crop { position: relative; overflow: hidden; border-radius: 50%; background: var(--surface-3); cursor: grab; touch-action: none; outline-offset: 3px; }
+.picture-crop { display: block; padding: 0; border: 0; position: relative; overflow: hidden; border-radius: 50%; background: var(--surface-3); cursor: grab; touch-action: none; outline-offset: 3px; }
 .picture-crop:active { cursor: grabbing; }
 .picture-crop img { position: absolute; max-width: none; user-select: none; }
 .picture-dialog__zoom { width: min(240px, 80vw); }

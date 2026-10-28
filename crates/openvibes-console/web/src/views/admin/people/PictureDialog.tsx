@@ -77,7 +77,7 @@ export function PictureDialog({ userId, name, hasPicture, onClose }: { userId: s
         <p className="subtle">Choose a JPEG, PNG, GIF, WebP, BMP or TIFF picture of at most 10 MB. A GIF stays animated. The file itself is not kept: only the round picture is.</p>
         {chosen && crop ? (
           <div className="stack picture-dialog__crop">
-            <div className="picture-crop" style={{ width: PREVIEW, height: PREVIEW }} tabIndex={0} role="group"
+            <button type="button" className="picture-crop" style={{ width: PREVIEW, height: PREVIEW }}
               aria-label="Picture position. Drag, or use the arrow keys."
               onPointerDown={(e) => { drag.current = { x: e.clientX, y: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId); }}
               onPointerMove={(e) => {
@@ -95,7 +95,7 @@ export function PictureDialog({ userId, name, hasPicture, onClose }: { userId: s
               }}>
               <img alt="" draggable={false} src={chosen.url}
                 style={{ width: chosen.width * scale, height: chosen.height * scale, left: -crop.x * scale, top: -crop.y * scale }} />
-            </div>
+            </button>
             <label className="field picture-dialog__zoom">Zoom
               <input type="range" min={1} max={MAX_ZOOM} step={0.05} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
             </label>
