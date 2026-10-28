@@ -32,10 +32,6 @@ printf '%s  %{SOURCE0}\n' '%{console_npm_cache_sha256}' | sha256sum --check --st
 %install
 S=%{console_repo_root}
 install -D -m 0755 $S/target/release/openvibes-console %{buildroot}%{_bindir}/openvibes-console
-%{_bindir}/openvibes-picture
-%{_unitdir}/openvibes-picture.socket
-%{_unitdir}/openvibes-picture@.service
-%{_prefix}/lib/systemd/system-preset/91-openvibes-picture.preset
 install -D -m 0755 $S/target/release/openvibes-picture %{buildroot}%{_bindir}/openvibes-picture
 install -D -m 0644 $S/packaging/rpm/openvibes-picture.socket %{buildroot}%{_unitdir}/openvibes-picture.socket
 install -D -m 0644 $S/packaging/rpm/openvibes-picture@.service %{buildroot}%{_unitdir}/openvibes-picture@.service
@@ -61,6 +57,10 @@ install -d -m 0755 %{buildroot}%{_sysconfdir}/openvibes/tls
 %license %{_licensedir}/openvibes-console/LICENSE
 %license %{_licensedir}/openvibes-console/NOTICE
 %{_bindir}/openvibes-console
+%{_bindir}/openvibes-picture
+%{_unitdir}/openvibes-picture.socket
+%{_unitdir}/openvibes-picture@.service
+%{_prefix}/lib/systemd/system-preset/91-openvibes-picture.preset
 %{_unitdir}/openvibes-console.service
 %{_sysusersdir}/openvibes-console.conf
 %{_prefix}/lib/systemd/system-preset/90-openvibes-console.preset
