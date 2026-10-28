@@ -15,7 +15,14 @@ pub struct OsInfo {
     pub kernel: String,
     /// The last check; `None` before the first.
     pub updates: Option<OsUpdates>,
+    /// An update is running now (the `openvibes-os-update` unit), maybe
+    /// started from another session.
+    pub running: bool,
 }
+
+/// The unit the root helper runs the upgrade in, so a dropped terminal
+/// does not stop it half way.
+pub const UPDATE_UNIT: &str = "openvibes-os-update";
 
 /// What the last check found.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -34,56 +41,73 @@ pub struct OsUpdates {
 
 /// The packages `dnf check-update` lists: lines of `NAME.ARCH VERSION REPO`
 /// up to the "Obsoleting Packages" heading (dnf starts with a blank line).
+/// dnf4 puts a name wider than its column on a line of its own and the
+/// version and repository on the next: the two are joined.
 #[must_use]
 pub fn check_update_packages(stdout: &str) -> Vec<String> {
-    stdout
+    let lines: Vec<Vec<&str>> = stdout
         .lines()
         .take_while(|line| !line.starts_with("Obsoleting"))
-        .filter_map(|line| {
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            let [full, _version, _repo] = fields[..] else {
-                return None;
-            };
-            full.contains('.').then(|| name_of(full).to_owned())
-        })
-        .collect()
+        .map(|line| line.split_whitespace().collect())
+        .collect();
+    let mut names = Vec::new();
+    let mut at = 0;
+    while at < lines.len() {
+        let (full, used) = match (&lines[at][..], lines.get(at + 1).map(Vec::as_slice)) {
+            ([full, _, _], _) => (*full, 1),
+            ([full], Some([_, _])) => (*full, 2),
+            _ => ("", 1),
+        };
+        if full.contains('.') {
+            names.push(name_of(full).to_owned());
+        }
+        at += used;
+    }
+    names
 }
 
 fn name_of(full: &str) -> &str {
     full.rsplit_once('.').map_or(full, |(name, _arch)| name)
 }
 
-/// The packages `dnf updateinfo list --security` names, without the
-/// version, each once.
+/// What `needs-restarting -r` said: yes and no are its own words (dnf4 and
+/// dnf5 print the same); anything else (the plugin is missing, no D-Bus) is
+/// not an answer.
 #[must_use]
-pub fn security_packages(stdout: &str) -> Vec<String> {
-    let mut names: Vec<String> = Vec::new();
-    for line in stdout.lines() {
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        let [_advisory, _severity, package] = fields[..] else {
-            continue;
-        };
-        let Some(name) = package_name(package) else {
-            continue;
-        };
-        if !names.contains(&name) {
-            names.push(name);
-        }
+pub fn restart_answer(stdout: &str) -> Option<bool> {
+    if stdout.contains("Reboot is required") {
+        Some(true)
+    } else if stdout.contains("Reboot should not be necessary") {
+        Some(false)
+    } else {
+        None
     }
-    names
 }
 
-/// `openssl-libs-1:3.2.2-6.el9.x86_64` → `openssl-libs`: drops the arch,
-/// release and version (the last two dashes).
-fn package_name(nevra: &str) -> Option<String> {
-    let (rest, _arch) = nevra.rsplit_once('.')?;
-    let (rest, _release) = rest.rsplit_once('-')?;
-    let (name, _version) = rest.rsplit_once('-')?;
-    Some(name.to_owned())
+/// The kernel version without its distribution and architecture tail:
+/// `5.14.0-570.12.1.el9_6.x86_64` → `5.14.0-570.12.1`.
+#[must_use]
+pub fn short_kernel(release: &str) -> &str {
+    let release = release.trim();
+    for marker in [".el", ".fc"] {
+        if let Some((head, _)) = release.split_once(marker) {
+            return head;
+        }
+    }
+    release.rsplit_once('.').map_or(release, |(head, arch)| {
+        if arch.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && arch.chars().any(|c| c.is_ascii_alphabetic())
+        {
+            head
+        } else {
+            release
+        }
+    })
 }
 
 impl OsUpdates {
-    /// The counts from the two dnf listings, both of the same check.
+    /// The counts from `check-update` and `check-update --security`
+    /// (the same format), and the restart answer.
     #[must_use]
     pub fn from_listings(
         check_update: &str,
@@ -92,13 +116,9 @@ impl OsUpdates {
         checked_at: i64,
     ) -> OsUpdates {
         let packages = check_update_packages(check_update);
-        let security = security_packages(security)
-            .iter()
-            .filter(|name| packages.contains(name))
-            .count();
         OsUpdates {
             total: packages.len() as u32,
-            security: security as u32,
+            security: check_update_packages(security).len() as u32,
             kernel: packages
                 .iter()
                 .any(|name| name == "kernel" || name.starts_with("kernel-core")),
@@ -141,12 +161,20 @@ impl OsUpdates {
     }
 }
 
-/// `PRETTY_NAME` of an os-release file: "AlmaLinux 9.6 (Sage Margay)".
+/// `PRETTY_NAME` of an os-release file: "AlmaLinux 9.6 (Sage Margay)";
+/// without it `NAME VERSION_ID`, else "Linux".
 #[must_use]
-pub fn os_release(text: &str) -> Option<String> {
-    text.lines().find_map(|line| {
-        let value = line.strip_prefix("PRETTY_NAME=")?;
-        let value = value.trim().trim_matches('"').trim_matches('\'');
-        (!value.is_empty()).then(|| value.to_owned())
+pub fn os_release(text: &str) -> String {
+    let value = |key: &str| {
+        text.lines().find_map(|line| {
+            let value = line.strip_prefix(key)?.strip_prefix('=')?;
+            let value = value.trim().trim_matches('"').trim_matches('\'');
+            (!value.is_empty()).then(|| value.to_owned())
+        })
+    };
+    value("PRETTY_NAME").unwrap_or_else(|| match (value("NAME"), value("VERSION_ID")) {
+        (Some(name), Some(version)) => format!("{name} {version}"),
+        (Some(name), None) => name,
+        _ => "Linux".to_owned(),
     })
 }

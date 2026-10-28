@@ -365,6 +365,7 @@ fn every_screen_has_exactly_one_empty_line_under_its_title() {
         name: "AlmaLinux 9.6 (Sage Margay)".into(),
         kernel: "5.14.0-570".into(),
         updates: None,
+        running: false,
     });
     for page in [
         super::maint::Page::Os,

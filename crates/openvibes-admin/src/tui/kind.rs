@@ -5,9 +5,11 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OsAction {
     Check,
-    /// Upgrades `packages` packages (the count of the last check).
+    /// Upgrades `packages` packages (the count of the last check); `kernel`
+    /// says the last check found a new kernel among them.
     Update {
         packages: u32,
+        kernel: bool,
     },
     Restart,
 }
@@ -103,7 +105,7 @@ impl Kind {
                 "Going back to the platform's certificate".into()
             }
             Kind::Os(OsAction::Check) => "Checking for updates".into(),
-            Kind::Os(OsAction::Update { packages }) => {
+            Kind::Os(OsAction::Update { packages, .. }) => {
                 format!("Updating {packages} packages")
             }
             Kind::Os(OsAction::Restart) => "Restarting".into(),
@@ -130,7 +132,7 @@ impl Kind {
             Kind::Names { done, .. } => done.clone(),
             Kind::Replace { done } | Kind::ConsoleCert { done, .. } => done.clone(),
             Kind::Os(OsAction::Check) => "Checked".into(),
-            Kind::Os(OsAction::Update { packages }) => format!("{packages} packages updated"),
+            Kind::Os(OsAction::Update { packages, .. }) => format!("{packages} packages updated"),
             Kind::Os(OsAction::Restart) => "Restart started".into(),
         }
     }

@@ -29,6 +29,8 @@ pub enum Fix {
     Enable(Unit),
     /// Finish a half-done job on its Maintenance page.
     Finish(super::maint::Page),
+    /// Go to a Maintenance page that can act on it.
+    Open(super::maint::Page),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -135,6 +137,10 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             fix: Some(Fix::Finish(_)),
             ..
         }) => Some("Finish it".to_owned()),
+        Some(Item::Problem {
+            fix: Some(Fix::Open(page)),
+            ..
+        }) => Some(format!("Open {}", page.title())),
         _ => None,
     };
     let keys: Vec<(&str, &str)> = enter.iter().map(|l| ("Enter", l.as_str())).collect();
@@ -318,6 +324,17 @@ pub(super) fn since_on(raw: &str, today: chrono::NaiveDate) -> String {
 impl<H: Host> App<H> {
     pub(super) fn status_items(&self) -> Vec<Item> {
         let mut out = items(&self.services, &self.database.health);
+        if self.restart_needed {
+            out.insert(
+                0,
+                Item::Problem {
+                    text: "A restart is needed for the updates".into(),
+                    fix: Some(Fix::Open(super::maint::Page::Os)),
+                    red: false,
+                    help: None,
+                },
+            );
+        }
         if let Some(problem) = super::maint::half_done_problem(self.half_done.as_deref()) {
             out.insert(0, problem);
         }

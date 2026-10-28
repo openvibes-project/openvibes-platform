@@ -190,7 +190,7 @@ impl<H: Host> App<H> {
                 self.question = Some((Question::Service(unit, ServiceAction::Start), true));
             }
             Fix::Enable(unit) => self.prompt = Some((unit, PasswordPrompt::default())),
-            Fix::Finish(page) => self.open_page(page),
+            Fix::Finish(page) | Fix::Open(page) => self.open_page(page),
         }
     }
 

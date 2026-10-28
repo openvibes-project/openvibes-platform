@@ -176,11 +176,14 @@ the RPM's polkit rule names exactly the units in `Unit::ALL`). The real rights a
 
 ## Operating system updates
 
-`os_updates` parses what `dnf` prints (`check_update_packages`,
-`security_packages`), keeps the last check as `OsUpdates` in
-`OS_UPDATES_FILE` (`/etc/openvibes/os-updates`) and reads `PRETTY_NAME`
-(`os_release`). `Host::os_info()` returns the distribution, kernel and last
-check (`OsInfo`), or `None` without dnf. The password-gated verbs are
+`os_updates` parses what `dnf` prints: `check_update_packages` (one format for
+`check-update` and `check-update --security`, wrapped dnf4 lines joined),
+`restart_answer` (`needs-restarting -r`'s own words; anything else is no
+answer), `short_kernel` and `os_release` (`PRETTY_NAME`, else `NAME
+VERSION_ID`, else "Linux"). It keeps the last check as `OsUpdates` in
+`OS_UPDATES_FILE` (`/etc/openvibes/os-updates`). `Host::os_info()` returns the
+distribution, kernel, last check and whether the `openvibes-os-update` unit is
+running (`OsInfo.running`), or `None` without dnf. The password-gated verbs are
 `Privileged::OsCheck`, `OsUpdate` and `OsRestart` (`os-check`, `os-update`,
-`os-restart`, journalled under their own names).
-
+`os-restart`, journalled under their own names); `Program::SystemdRun` runs
+the upgrade.

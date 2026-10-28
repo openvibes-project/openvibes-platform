@@ -16,6 +16,8 @@ pub enum Program {
     Curl,
     /// Packages (Setup, as root).
     Dnf,
+    /// A transient unit for work that must outlive the terminal (OS updates).
+    SystemdRun,
     /// Package queries.
     Rpm,
     /// Commands as a service account (Setup, as root).
@@ -54,6 +56,7 @@ impl Program {
             Program::Logger => "/usr/bin/logger",
             Program::Curl => "/usr/bin/curl",
             Program::Dnf => "/usr/bin/dnf",
+            Program::SystemdRun => "/usr/bin/systemd-run",
             Program::Rpm => "/usr/bin/rpm",
             Program::Runuser => "/usr/sbin/runuser",
             Program::PostgresqlSetup => "/usr/bin/postgresql-setup",

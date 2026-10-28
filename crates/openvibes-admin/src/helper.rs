@@ -118,9 +118,10 @@ pub enum HelperCommand {
     /// the renewal failed.
     CertificatesRenew,
     /// Asks dnf what operating system updates are waiting and keeps the
-    /// answer; prints `done<TAB>TOTAL<TAB>SECURITY<TAB>RESTART`.
+    /// answer; prints `done<TAB>TOTAL<TAB>SECURITY<TAB>RESTART<TAB>0`.
     OsCheck,
-    /// Upgrades every package dnf has, then checks again; prints as `os-check`.
+    /// Upgrades every package dnf has in its own systemd unit, then checks
+    /// again; prints as `os-check` plus the number upgraded.
     OsUpdate,
     /// Restarts the host; prints `done<TAB>restarting`.
     OsRestart,
@@ -353,7 +354,7 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::Ca(verb) => crate::helper_ca::run(verb),
         Verb::OsCheck => os_result(crate::setup::os::run_check(&SystemRunner, Path::new("/"))),
         Verb::OsUpdate => os_result(crate::setup::os::run_update(&SystemRunner, Path::new("/"))),
-        Verb::OsRestart => os_result(crate::setup::os::run_restart(&SystemRunner)),
+        Verb::OsRestart => os_result(crate::setup::os::run_restart(&SystemRunner, Path::new("/"))),
         Verb::ShellOpen => {
             println!("done\topened");
             ExitCode::SUCCESS

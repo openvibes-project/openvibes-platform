@@ -264,7 +264,7 @@ A repaired step reads "repaired: ..." in the list, and the journal line of each 
 
 **Console sign-in** (Maintenance › Console sign-in): for when nobody can sign in to the console any more. Enter asks "Reset the admin password?" ("old one stops", Yes first), then the sudo password, and runs the helper's `admin-reset` on the worker: a new one-time password for `admin` (4 groups of 4 characters, no look-alikes), which also clears the account's lock and re-enables it (`--recover`). The page then shows `Sign in as admin` and the password with "shown only now"; the bar is Enter Done. The password is moved out of the run's result into a `Zeroizing<String>` the moment the run ends and dropped when the page is left (Enter or Esc); it is never journalled, and opening the page again shows the entry, not the password. When the helper fails (no `admin` user, the database down, `setup.toml` unreadable) its words show in red as `✗ <text>` (e.g. "There is no local account named admin.", or the database error with "Repair first."), no password shows, and Enter is Try again; a `done` with no password counts as failed. Tests: `src/tui/maint/signin_tests.rs`.
 
-**Operating system** (Maintenance, second entry; `src/tui/maint/os.rs`, `os_tests.rs`; os2.py, approved.md 58): the distribution, kernel and last check, what dnf says is waiting, and the actions as entries. Everything it shows is read without a password from `Host::os_info()` (`/etc/os-release`, `/proc/sys/kernel/osrelease` and `/etc/openvibes/os-updates`, written by `os-check`); a host without `/usr/bin/dnf` shows the page with only a red line. Check again runs `os-check` at once (`Kind::Os(OsAction::Check)`, the sudo password in the bar) and the finished run is dropped so the page itself shows the new counts; Update everything asks `Install N updates?` and runs `os-update`; Restart now asks `Restart this host?` (No first) and runs `os-restart`. The run outlives the page like every Run (Home shows `N packages updated`). The Maintenance menu value comes from `os::summary`.
+**Operating system** (Maintenance, second entry; `src/tui/maint/os.rs`, `os_tests.rs`; os2.py, approved.md 58): the distribution, kernel and last check, what dnf says is waiting, and the actions as entries. Everything it shows is read without a password from `Host::os_info()` (`/etc/os-release`, `/proc/sys/kernel/osrelease` and `/etc/openvibes/os-updates`, written by `os-check`); a host without `/usr/bin/dnf` shows the page with only a red line. Check again runs `os-check` at once (`Kind::Os(OsAction::Check)`, the sudo password in the bar) and the finished run is dropped so the page itself shows the new counts; Update everything asks `Install N updates?` and runs `os-update`; Restart now asks `Restart this host?` (No first) and runs `os-restart`. The run outlives the page like every Run (Home shows `N packages updated`, the number the update really upgraded). While the update unit runs (also one started from another session) the page shows only that. When the last check says a restart is needed, Status counts "A restart is needed for the updates" and Enter opens this page (`Fix::Open`). The Maintenance menu value comes from `os::summary`.
 
 **Shell** (Maintenance › Shell, second to last): the operating system's command line, for experts. It has no page: Enter on the menu row (bar `Enter Open the shell`) asks "Open a shell?" ("for experts; logged", Yes first), then "Your login password:" in the bar (Enter Open, Esc Cancel; the same sudo password, said as the operator knows it). The password runs the helper's `shell-open` on the worker, which does nothing but is checked by sudo and journalled and audit-noted as `shell-open OPERATOR`; while it runs the bar spins over Maintenance. Under `sudo openvibes-admin` no password is asked. When the run is done, the main loop restores the terminal, prints `OpenVIBES shell · type exit to go back to the menu. Logged as USER, HH:MM.` (USER is the name the journal records) (teal) and `Changes here are yours: Repair can put OpenVIBES' own files right again.` (dim; both plain under `NO_COLOR`), runs `Host::shell` (the `SUDO_USER`'s login shell through `runuser -l` under sudo, otherwise the user's own), then takes the terminal back and redraws Maintenance with Shell highlighted. A shell that cannot start shows `✗ The shell could not start: <error>`; three wrong passwords show `✗ The shell did not open: three wrong passwords: nothing more was run` and open nothing; while other work runs the Yes is refused with "Wait: other work is still running". The finished run is dropped, so Home shows no result for it. Tests: `src/tui/maint/shell_tests.rs`.
 
@@ -1204,14 +1204,22 @@ unit tests.
 `helper os-check`, `os-update` and `os-restart` (`src/setup/os.rs`, `helper.rs`;
 no arguments, uid 0 only, journalled by sudo as their own names). `os-check`
 runs `dnf -q --refresh check-update` (exit 100 means updates are waiting, 0
-none, anything else an error), `dnf -q updateinfo list --security` (no
-advisory data counts as no security updates) and `dnf -q needs-restarting -r`
-(exit 1 without an error text means a restart is needed), writes
+none, anything else an error), `dnf -q check-update --security` (same format;
+no advisory data counts as no security updates) and `dnf -q needs-restarting
+-r` (decided by its own words, "Reboot is required" or "Reboot should not be
+necessary"; no answer, e.g. the plugin is missing, means no restart), writes
 `/etc/openvibes/os-updates` (0644, `key=value`: `total`, `security`, `kernel`,
-`restart`, `checked_at`) and prints `done<TAB>TOTAL<TAB>SECURITY<TAB>RESTART`;
-a failing `check-update` keeps the old file. `os-update` runs `dnf -y
---refresh upgrade` (the whole system, OpenVIBES' packages included; their
-scriptlets migrate as in any upgrade), then the same check. `os-restart` runs
-`systemctl reboot`. The parsing is `platform_host::os_updates`. Tests:
-`src/setup/os_tests.rs`, `crates/platform-host/tests/os_updates.rs`.
+`restart`, `checked_at`) and prints
+`done<TAB>TOTAL<TAB>SECURITY<TAB>RESTART<TAB>0`; a failing `check-update`
+keeps the old file. `os-update` lists what is waiting, then runs `systemd-run
+--unit=openvibes-os-update --collect --wait --pipe --quiet dnf -y --refresh
+upgrade` (a dropped SSH session cannot kill dnf half way; a second start says
+"An update is already running"; OpenVIBES' own packages are included and their
+scriptlets migrate as in any upgrade), then the same check (also after a
+failed upgrade, best effort, with the upgrade's error returned; a missing
+`needs-restarting` answer after a new kernel counts as a restart) and prints
+as `os-check` with the number of packages that are no longer waiting.
+`os-restart` refuses while the update unit is active or the Setup lock is
+held, then runs `systemctl reboot`. The parsing is `platform_host::os_updates`.
+Tests: `src/setup/os_tests.rs`, `crates/platform-host/tests/os_updates.rs`.
 

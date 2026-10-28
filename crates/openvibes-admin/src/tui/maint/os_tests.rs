@@ -20,6 +20,7 @@ fn info(updates: Option<OsUpdates>) -> OsInfo {
         name: "AlmaLinux 9.6 (Sage Margay)".into(),
         kernel: "5.14.0-570".into(),
         updates,
+        running: false,
     }
 }
 
@@ -120,7 +121,7 @@ fn the_page_shows_what_is_waiting_and_the_actions() {
         shown,
         "    ━━ Operating system ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\
          \n\
-         \x20   AlmaLinux 9.6 (Sage Margay) · kernel 5.14.0-570 · checked 10 minutes ago\n\
+         \x20   AlmaLinux 9.6 (Sage Margay) · kernel 5.14.0-570 · checked 10 min ago\n\
          \x20   ▲ 23 updates available, 4 for security · includes a new kernel\n\
          \n\
          \x20 ▸ Update everything    23 packages, then a restart\n\
@@ -284,8 +285,8 @@ fn other_work_running_refuses_the_question() {
 #[test]
 fn ago_reads_naturally() {
     assert_eq!(ago(5), "just now");
-    assert_eq!(ago(60), "1 minute ago");
-    assert_eq!(ago(600), "10 minutes ago");
+    assert_eq!(ago(60), "1 min ago");
+    assert_eq!(ago(600), "10 min ago");
     assert_eq!(ago(3 * 3600), "3 hours ago");
     assert_eq!(ago(2 * 86_400), "2 days ago");
     assert_eq!(ago(-5), "just now");
@@ -303,4 +304,84 @@ fn home_shows_the_finished_update() {
     assert_eq!(app.nav.screen, Screen::Home);
     let text = screen(&app);
     assert!(text.contains("23 packages updated"), "{text}");
+}
+
+fn real(name: &str, kernel: &str) -> OsInfo {
+    OsInfo {
+        name: name.into(),
+        kernel: kernel.into(),
+        ..waiting()
+    }
+}
+
+#[test]
+fn real_distribution_and_kernel_strings_fit_80_columns() {
+    for (name, kernel) in [
+        (
+            "AlmaLinux 9.6 (Sage Margay)",
+            "5.14.0-570.12.1.el9_6.x86_64",
+        ),
+        ("Fedora Linux 44 (Server Edition)", "6.17.4-300.fc44.x86_64"),
+        (
+            "Rocky Linux 9.6 (Blue Onyx) with a very long local name",
+            "5.14.0-570.12.1.el9_6.x86_64",
+        ),
+    ] {
+        let app = page(Some(real(name, kernel)), vec![]);
+        let text = screen(&app);
+        for line in text.lines() {
+            assert!(line.chars().count() <= 80, "{line:?}");
+        }
+        assert!(!text.contains(".x86_64"), "{text}");
+        assert!(text.contains("checked 10 min ago"), "{text}");
+    }
+}
+
+#[test]
+fn a_running_update_replaces_the_entries() {
+    let mut os = waiting();
+    os.running = true;
+    let app = page(Some(os), vec![]);
+    let text = body(&app);
+    assert!(text.contains("An update is running now"), "{text}");
+    assert!(!text.contains("Update everything"), "{text}");
+    assert!(!text.contains("Check again"), "{text}");
+}
+
+#[test]
+fn the_restart_line_names_the_kernel_only_when_there_was_one() {
+    for (kernel, reason) in [(true, "for the new kernel."), (false, "for the updates.")] {
+        let mut app = page(
+            Some(info(Some(found(2, 0, kernel, false, 60)))),
+            vec![Ok("done\t0\t0\ttrue\t2\n".into())],
+        );
+        *app.host.os.borrow_mut() = Some(info(Some(found(0, 0, false, true, 1))));
+        app.key(Key::Enter);
+        app.key(Key::Enter);
+        password(&mut app);
+        let text = screen(&app);
+        assert!(text.contains("✓ 2 packages updated"), "{text}");
+        assert!(text.contains(reason), "{text}");
+    }
+}
+
+#[test]
+fn home_hints_a_needed_restart_and_status_opens_the_page() {
+    let mut app = page(Some(info(Some(found(0, 0, false, true, 0)))), vec![]);
+    app.back();
+    app.restart_needed = true;
+    let items = app.status_items();
+    assert!(matches!(
+        &items[0],
+        crate::tui::status::Item::Problem { text, fix: Some(crate::tui::status::Fix::Open(Page::Os)), .. }
+            if text.contains("restart is needed")
+    ));
+    app.restart_needed = false;
+    assert!(app.status_items().iter().all(|i| !matches!(
+        i,
+        crate::tui::status::Item::Problem {
+            fix: Some(crate::tui::status::Fix::Open(_)),
+            ..
+        }
+    )));
 }

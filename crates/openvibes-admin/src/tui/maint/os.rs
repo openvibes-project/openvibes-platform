@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use platform_host::{
     Host, StepState,
-    os_updates::{OsInfo, OsUpdates},
+    os_updates::{OsInfo, OsUpdates, short_kernel},
 };
 use ratatui::{
     Frame,
@@ -52,11 +52,11 @@ fn now() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
 }
 
-/// "just now", "10 minutes ago", "3 hours ago", "2 days ago".
+/// "just now", "10 min ago", "3 hours ago", "2 days ago".
 pub(super) fn ago(seconds: i64) -> String {
     let (n, unit) = match seconds.max(0) {
         s if s < 60 => return "just now".into(),
-        s if s < 3600 => (s / 60, "minute"),
+        s if s < 3600 => return format!("{} min ago", s / 60),
         s if s < 86_400 => (s / 3600, "hour"),
         s => (s / 86_400, "day"),
     };
@@ -101,6 +101,10 @@ fn plural(n: u32, what: &str) -> String {
 fn choices(os: &OsInfo) -> Vec<Choice> {
     let found = os.updates.unwrap_or_default();
     let mut all = Vec::new();
+    // An update started elsewhere (or before this screen was left) goes on.
+    if os.running {
+        return all;
+    }
     if found.total > 0 {
         all.push(Choice::Update);
     }
@@ -146,10 +150,13 @@ fn info<H: Host>(app: &App<H>, os: &OsInfo) -> Vec<Line<'static>> {
         || "not checked yet".to_owned(),
         |found| format!("checked {}", ago(now() - found.checked_at)),
     );
-    let first = Line::raw(format!(
-        "    {} · kernel {} · {checked}",
-        os.name, os.kernel
-    ));
+    let head = format!("    {} · kernel {}", os.name, short_kernel(&os.kernel));
+    // 80 columns, and the kernel string of a real host can be long.
+    let first = if head.chars().count() + checked.chars().count() + 3 <= 76 {
+        vec![Line::raw(format!("{head} · {checked}"))]
+    } else {
+        vec![Line::raw(head), Line::raw(format!("    {checked}"))]
+    };
     let second = match os.updates {
         None => Line::styled("    Check again asks dnf what is waiting.", t.dim()),
         Some(found) if found.total > 0 => {
@@ -175,7 +182,15 @@ fn info<H: Host>(app: &App<H>, os: &OsInfo) -> Vec<Line<'static>> {
         ]),
         Some(_) => Line::styled("    ✓ Up to date", t.green()),
     };
-    vec![first, second]
+    let second = if os.running {
+        Line::from(vec![
+            Span::styled("    ▲ ", t.yellow()),
+            Span::raw("An update is running now. Check back in a few minutes."),
+        ])
+    } else {
+        second
+    };
+    first.into_iter().chain([second]).collect()
 }
 
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
@@ -214,6 +229,18 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     frame.render_widget(Paragraph::new(lines), area);
 }
 
+/// How many packages `os-update` says it upgraded (the last field).
+fn upgraded(run: &Run) -> Option<u32> {
+    run.states
+        .first()?
+        .as_ref()?
+        .detail()
+        .rsplit('\t')
+        .next()?
+        .parse()
+        .ok()
+}
+
 fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) {
     let t = &app.theme;
     let Kind::Os(what) = &run.work.kind else {
@@ -228,7 +255,7 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
                 "Asking dnf what is waiting…".to_owned(),
                 "This takes a moment.",
             ),
-            OsAction::Update { packages } => (
+            OsAction::Update { packages, .. } => (
                 format!("Updating {}…", plural(*packages, "package")),
                 "This takes a few minutes. You can leave this screen: it",
             ),
@@ -250,16 +277,25 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
             tick: app.tick_count,
         }
     } else if run.ok() {
+        let done = match (what, upgraded(run)) {
+            (OsAction::Update { .. }, Some(n)) => format!("{} updated", plural(n, "package")),
+            _ => run.work.kind.done(),
+        };
         lines.push(Line::styled(
-            format!("    ✓ {}{}", run.work.kind.done(), run.took()),
+            format!("    ✓ {done}{}", run.took()),
             t.green(),
         ));
-        if let (OsAction::Update { .. }, Some(os)) = (what, &app.maint.os)
+        if let (OsAction::Update { kernel, .. }, Some(os)) = (what, &app.maint.os)
             && os.updates.is_some_and(|f| f.restart)
         {
+            let reason = if *kernel {
+                "the new kernel"
+            } else {
+                "the updates"
+            };
             lines.push(Line::from(vec![
                 Span::styled("    ▲ ", t.yellow()),
-                Span::raw("A restart is needed for the new kernel."),
+                Span::raw(format!("A restart is needed for {reason}.")),
             ]));
             lines.push(Line::styled(
                 "    OpenVIBES starts again by itself after the restart;",
@@ -420,7 +456,13 @@ impl<H: Host> App<H> {
             .as_ref()
             .and_then(|o| o.updates)
             .map_or(0, |f| f.total);
-        let kind = Kind::Os(OsAction::Update { packages });
+        let kernel = self
+            .maint
+            .os
+            .as_ref()
+            .and_then(|o| o.updates)
+            .is_some_and(|f| f.kernel);
+        let kind = Kind::Os(OsAction::Update { packages, kernel });
         self.begin(Work::new(kind, vec![Call::OsUpdate]), 0);
     }
 

@@ -4,7 +4,7 @@
 
 **Goal:** Maintenance › Operating system, on every install: distribution, kernel, last check, how many updates and how many for security, whether a restart is needed. Entries Update everything and Check again; the update keeps running when the screen is left; when it is done the bar offers Restart now or Later.
 
-**Architecture:** Three new root helper verbs with no free arguments (`os-check`, which also asks `needs-restarting -r`, `os-update` and `os-restart`) run `dnf` and `needs-restarting` through the existing `Runner`. `os-check` writes the result to `/var/lib/openvibes/os-updates` (0644, plain `key=value`) so the TUI reads the last check and the menu value without a password; only Check again and Update ask for it. The TUI page follows Update OpenVIBES (`tui/maint/update.rs`): the standard question, a `Run`, the result line. The pure parsing of dnf's output lives in `platform-host` (`os_updates.rs`) so it is tested without a host.
+**Architecture:** Three new root helper verbs with no free arguments (`os-check`, which also asks `needs-restarting -r`, `os-update` and `os-restart`) run `dnf` and `needs-restarting` through the existing `Runner`. `os-check` writes the result to `/etc/openvibes/os-updates` (0644, plain `key=value`) so the TUI reads the last check and the menu value without a password; only Check again and Update ask for it. The TUI page follows Update OpenVIBES (`tui/maint/update.rs`): the standard question, a `Run`, the result line. The pure parsing of dnf's output lives in `platform-host` (`os_updates.rs`) so it is tested without a host.
 
 **Tech Stack:** Rust, platform-host (`Program`, `Runner`, `Privileged`), openvibes-admin helper and ratatui TUI, packaging sudoers drop-in.
 
@@ -22,9 +22,9 @@
 
 ## Rulings made while planning
 
-- **Q1 Restart needed:** `dnf needs-restarting -r` exit 1 means a restart is needed (kernel, glibc, systemd, …), exit 0 not. Cost if wrong: the text of one line.
-- **Q2 Security count:** `dnf updateinfo list --security` lines (unique packages), total from `dnf check-update` (exit 100 = updates, 0 = none, anything else = error). Cost if wrong: the numbers.
-- **Q3 What Update everything runs:** `dnf -y upgrade --refresh`, all packages including OpenVIBES' own (the OpenVIBES update still has its own page with backup and migrations; an OS update that pulls a new OpenVIBES package is the same as `dnf upgrade` today, and the package scripts migrate). Cost if wrong: exclude `openvibes-*` with `--exclude`.
+- **Q1 Restart needed:** `dnf needs-restarting -r`'s output decides ("Reboot is required" / "Reboot should not be necessary"; no answer is no restart) (kernel, glibc, systemd, …), exit 0 not. Cost if wrong: the text of one line.
+- **Q2 Security count:** `dnf check-update --security` (same format and parser as the total; `updateinfo` differs between dnf4 and dnf5), total from `dnf check-update` (exit 100 = updates, 0 = none, anything else = error). Cost if wrong: the numbers.
+- **Q3 What Update everything runs:** `dnf -y --refresh upgrade` in a transient `openvibes-os-update` unit (survives a dropped terminal), all packages including OpenVIBES' own (the OpenVIBES update still has its own page with backup and migrations; an OS update that pulls a new OpenVIBES package is the same as `dnf upgrade` today, and the package scripts migrate). Cost if wrong: exclude `openvibes-*` with `--exclude`.
 - **Q4 Services after the update:** nothing restarted by us; dnf and the RPM scriptlets restart what they restart, and `needs-restarting -r` plus the screen say the rest. The mockup's "restarts only the services whose packages changed" is the scriptlets' behaviour.
 - **Q5 Last check:** the time `os-check` last finished, in the state file; Update also writes it. Not refreshed by a timer (no new unit); the menu shows the last known counts, "not checked yet" before the first check.
 - **Q6 Leaving the screen:** the `Run` already outlives the page (Quit-while-running, design §10.11); Home shows the result as for Update. Restart now is `os-restart` (`systemctl reboot`), asked first with the standard question.
