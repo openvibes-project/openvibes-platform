@@ -65,7 +65,7 @@ console connects, and a crashing decoder takes down one upload.
 `openvibes-picture@.service` runs one process per connection as a
 `DynamicUser`, with `PrivateNetwork`, `AF_UNIX` only, `ProtectSystem=strict`,
 `PrivateTmp`, `LimitFSIZE=0`, no capabilities, no `@privileged @resources
-@network-io` system calls, `PrivateUsers`, `InaccessiblePaths=-/etc/openvibes -/var/lib`,
+@network-io` system calls, `InaccessiblePaths=-/etc/openvibes -/var/lib`,
 `MemoryMax=384M`, `LimitCPU=10`, `RuntimeMaxSec=15`, `TasksMax=1`. There is
 no `LimitNPROC`: after the switch to the dynamic user the kernel counts the
 process itself against it and exec fails. The service's account is in no group, so the

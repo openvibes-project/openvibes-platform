@@ -27,7 +27,6 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
-PrivateUsers=yes
 PrivateNetwork=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
@@ -52,5 +51,6 @@ SystemCallFilter=~@privileged @resources @network-io
 CapabilityBoundingSet=
 # No config or state of any service is needed (the dash: skip a path that does not exist).
 InaccessiblePaths=-/etc/openvibes -/var/lib
-# Not LimitNPROC: after the switch to the dynamic user the kernel counts this process
+# No PrivateUsers (setting up the namespace forks past TasksMax=1 and fails with EAGAIN) and
+# not LimitNPROC: after the switch to the dynamic user the kernel counts this process
 # against the limit, and exec fails with EAGAIN.
