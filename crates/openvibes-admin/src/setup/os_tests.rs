@@ -106,7 +106,6 @@ fn update_runs_in_its_own_unit_then_checks_again() {
             "--unit=openvibes-os-update",
             "--collect",
             "--wait",
-            "--pipe",
             "--quiet",
             "/usr/bin/dnf",
             "-y",

@@ -118,7 +118,6 @@ pub(crate) fn run_update<R: Runner>(runner: &R, root: &Path) -> Result<String, S
                 &unit,
                 "--collect",
                 "--wait",
-                "--pipe",
                 "--quiet",
                 "/usr/bin/dnf",
                 "-y",

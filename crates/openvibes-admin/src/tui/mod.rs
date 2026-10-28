@@ -221,7 +221,7 @@ pub fn run() -> ExitCode {
         app.tick(Instant::now());
         if matches!(
             app.nav.screen,
-            Screen::Home | Screen::Status | Screen::Service(_)
+            Screen::Home | Screen::Status | Screen::Service(_) | Screen::Maint(maint::Page::Os)
         ) && app.question.is_none()
             && app.prompt.is_none()
             && refreshed.elapsed() >= REFRESH
