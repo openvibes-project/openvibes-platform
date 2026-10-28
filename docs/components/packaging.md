@@ -632,6 +632,21 @@ rebuilds the dnf repository on its 30-minute schedule (no token). Spec:
 `docs/specs/2026-09-27-releases-design.md`. `scripts/test-sign-rpms.sh`
 tests the signing script with a throwaway key (CI's Fedora job).
 
+## Licence fields
+
+Each package's `License:` lists the licences of everything it ships, as an
+SPDX expression joined with `AND` (Fedora's Rust packaging guideline): the
+project's Apache-2.0 plus the licence of every crate its binaries link, and
+the console's React bundle (MIT). A dual-licensed crate stays a parenthesised
+`OR` group unless a licence it offers is already required by another crate.
+llama.cpp (MIT) is added by hand for the two model-server packages;
+packages with no binaries keep Apache-2.0.
+
+`scripts/rpm-license.py <crate>...` prints the expression for the binaries
+of the named crates (`cargo tree`, no build needed); rerun it when
+dependencies change and update the spec. Example:
+`scripts/rpm-license.py openvibes-ingest openvibes-netlog`.
+
 ## Known gaps
 
 - Run as `sudo -u openvibes-admin`, audit entries name the service account
