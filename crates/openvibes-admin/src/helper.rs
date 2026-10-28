@@ -13,7 +13,10 @@
 use std::{io::Read, path::Path, process::ExitCode};
 
 use clap::Subcommand;
-use platform_host::{CONFIG_DIR, RemoveStep, Service, Step, Unit, UpdateStep, runner::Runner};
+use platform_host::{
+    CONFIG_DIR, RemoveStep, Service, Step, Unit, UpdateStep,
+    runner::{Runner, SystemRunner},
+};
 
 use crate::{config_file, configs::MAX_BYTES};
 
@@ -114,6 +117,13 @@ pub enum HelperCommand {
     /// openvibes-certificates.timer as root); one log line, exit 0 unless
     /// the renewal failed.
     CertificatesRenew,
+    /// Asks dnf what operating system updates are waiting and keeps the
+    /// answer; prints `done<TAB>TOTAL<TAB>SECURITY<TAB>RESTART`.
+    OsCheck,
+    /// Upgrades every package dnf has, then checks again; prints as `os-check`.
+    OsUpdate,
+    /// Restarts the host; prints `done<TAB>restarting`.
+    OsRestart,
     /// Does nothing and prints `done<TAB>opened`: sudo checks the password
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
@@ -148,6 +158,9 @@ enum Verb {
     CertificatesRenew,
     AdminReset,
     ShellOpen,
+    OsCheck,
+    OsUpdate,
+    OsRestart,
     Ca(crate::helper_ca::CaVerb),
 }
 
@@ -230,6 +243,9 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::CertificatesRenew => Verb::CertificatesRenew,
         HelperCommand::AdminReset => Verb::AdminReset,
         HelperCommand::ShellOpen => Verb::ShellOpen,
+        HelperCommand::OsCheck => Verb::OsCheck,
+        HelperCommand::OsUpdate => Verb::OsUpdate,
+        HelperCommand::OsRestart => Verb::OsRestart,
         HelperCommand::Ca(command) => Verb::Ca(crate::helper_ca::verb(command)?),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
@@ -335,6 +351,9 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::AgentConfigUpgrade => crate::setup::agent_config_upgrade(),
         Verb::AdminReset => crate::setup::admin_reset::run(),
         Verb::Ca(verb) => crate::helper_ca::run(verb),
+        Verb::OsCheck => os_result(crate::setup::os::run_check(&SystemRunner, Path::new("/"))),
+        Verb::OsUpdate => os_result(crate::setup::os::run_update(&SystemRunner, Path::new("/"))),
+        Verb::OsRestart => os_result(crate::setup::os::run_restart(&SystemRunner)),
         Verb::ShellOpen => {
             println!("done\topened");
             ExitCode::SUCCESS
@@ -372,6 +391,16 @@ pub fn run(command: &HelperCommand) -> ExitCode {
                 Err(error) => failed(&format!("not saved: {error}")),
             }
         }
+    }
+}
+
+fn os_result(result: Result<String, String>) -> ExitCode {
+    match result {
+        Ok(line) => {
+            println!("{line}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => failed(&error),
     }
 }
 

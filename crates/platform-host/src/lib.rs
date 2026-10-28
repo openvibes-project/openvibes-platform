@@ -5,6 +5,7 @@
 
 mod journal;
 pub mod native;
+pub mod os_updates;
 pub mod runner;
 pub mod service;
 pub mod setup;

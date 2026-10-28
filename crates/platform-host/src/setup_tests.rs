@@ -76,3 +76,16 @@ fn console_cert_keeps_the_pem_out_of_argv_and_journal() {
     );
     assert!(reset.stdin(None).is_none());
 }
+
+#[test]
+fn the_os_verbs_take_no_arguments_and_no_input() {
+    for (verb, name) in [
+        (Privileged::OsCheck, "os-check"),
+        (Privileged::OsUpdate, "os-update"),
+        (Privileged::OsRestart, "os-restart"),
+    ] {
+        assert_eq!(verb.args(), [name]);
+        assert_eq!(verb.journal(), name);
+        assert!(verb.stdin(None).is_none());
+    }
+}
