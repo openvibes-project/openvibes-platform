@@ -223,6 +223,10 @@ impl<H: Host> App<H> {
     /// sudo, which writes to the auth log.
     pub fn refresh(&mut self) {
         self.files_changed();
+        // The Operating system page notices an update ending elsewhere.
+        if self.nav.screen == Screen::Maint(super::maint::Page::Os) {
+            self.os_refreshed();
+        }
         self.ca = self.ca_exists();
         // The highlighted Status item stays highlighted if it is still there.
         let held = (self.nav.screen == Screen::Status)

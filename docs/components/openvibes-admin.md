@@ -1212,8 +1212,8 @@ necessary"; no answer, e.g. the plugin is missing, means no restart), writes
 `restart`, `checked_at`) and prints
 `done<TAB>TOTAL<TAB>SECURITY<TAB>RESTART<TAB>0`; a failing `check-update`
 keeps the old file. `os-update` lists what is waiting, then runs `systemd-run
---unit=openvibes-os-update --collect --wait --pipe --quiet dnf -y --refresh
-upgrade` (a dropped SSH session cannot kill dnf half way; a second start says
+--unit=openvibes-os-update --collect --wait --quiet dnf -y --refresh
+upgrade` (no `--pipe`: dnf logs to the journal, so a dropped SSH session cannot kill it or break its output; a failure reads the last journal lines of the unit; a second start says
 "An update is already running"; OpenVIBES' own packages are included and their
 scriptlets migrate as in any upgrade), then the same check (also after a
 failed upgrade, best effort, with the upgrade's error returned; a missing

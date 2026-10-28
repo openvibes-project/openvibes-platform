@@ -46,6 +46,8 @@ pub(super) struct SetupHost {
     pub(super) cert_reads: Cell<usize>,
     /// `os_info()`: the distribution and its last update check.
     pub(super) os: RefCell<Option<OsInfo>>,
+    /// `os_update_running()` calls made.
+    pub(super) os_reads: Cell<usize>,
 }
 
 impl Host for SetupHost {
@@ -88,6 +90,10 @@ impl Host for SetupHost {
     }
     fn os_info(&self) -> Option<OsInfo> {
         self.os.borrow().clone()
+    }
+    fn os_update_running(&self) -> bool {
+        self.os_reads.set(self.os_reads.get() + 1);
+        false
     }
     fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
         Ok(self.packages.clone())
@@ -175,6 +181,7 @@ fn built(
         own: None,
         cert_reads: Cell::new(0),
         os: RefCell::new(None),
+        os_reads: Cell::new(0),
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

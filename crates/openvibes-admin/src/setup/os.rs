@@ -12,7 +12,7 @@ use std::{
 use platform_host::{
     os_updates::{OS_UPDATES_FILE, OsUpdates, UPDATE_UNIT, check_update_packages, restart_answer},
     runner::{
-        Program::{Dnf, Systemctl, SystemdRun},
+        Program::{Dnf, Journalctl, Systemctl, SystemdRun},
         Runner,
     },
 };
@@ -44,6 +44,19 @@ fn listing<R: Runner>(runner: &R, args: &[&str]) -> Result<String, String> {
         0 | UPDATES_WAITING => Ok(out.stdout),
         _ => Err(format!("dnf could not check: {}", tail(&out.stderr))),
     }
+}
+
+/// Why the upgrade unit failed: the last journal lines of the unit, else
+/// what systemd-run said.
+fn upgrade_log<R: Runner>(runner: &R, said: &str) -> String {
+    runner
+        .run(
+            Journalctl,
+            &["-u", UPDATE_UNIT, "-n", "3", "-o", "cat", "--no-pager"],
+        )
+        .ok()
+        .filter(|out| out.status == 0 && !out.stdout.trim().is_empty())
+        .map_or_else(|| tail(said), |out| tail(&out.stdout))
 }
 
 /// Asks dnf what is waiting, keeps the answer and returns it. `restart_if_unknown`
@@ -115,10 +128,15 @@ pub(crate) fn run_update<R: Runner>(runner: &R, root: &Path) -> Result<String, S
         )
         .map_err(|error| format!("systemd-run: {error}"))?;
     let failure = (upgraded.status != 0).then(|| {
-        if upgraded.stderr.contains("already") {
+        // systemd-run's own words only: dnf logs to the journal, not here.
+        if upgraded.stderr.contains("already exists") || upgraded.stderr.contains("already loaded")
+        {
             "An update is already running".to_owned()
         } else {
-            format!("dnf upgrade failed: {}", tail(&upgraded.stderr))
+            format!(
+                "dnf upgrade failed: {}",
+                upgrade_log(runner, &upgraded.stderr)
+            )
         }
     });
     // Best effort after a failure: the state should still tell the truth.

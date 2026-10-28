@@ -134,7 +134,12 @@ fn update_reports_how_many_packages_it_upgraded() {
 #[test]
 fn a_failed_upgrade_still_checks_and_returns_the_upgrade_error() {
     let fake = scripted("os-update-fail");
-    fake.fail(&UPGRADE, "Error: transaction failed");
+    fake.fail(&UPGRADE, "Job failed. See journalctl.");
+    fake.answer(
+        &["/usr/bin/journalctl", "-u", "openvibes-os-update"],
+        0,
+        "Error: transaction failed\n",
+    );
     let error = run_update(&fake, &fake.root).unwrap_err();
     assert!(error.contains("transaction failed"), "{error}");
     assert!(fake.called(&CHECK));

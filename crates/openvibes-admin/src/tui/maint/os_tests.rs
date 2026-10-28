@@ -385,3 +385,13 @@ fn home_hints_a_needed_restart_and_status_opens_the_page() {
         }
     )));
 }
+
+#[test]
+fn the_unit_state_is_read_when_the_page_opens_not_per_draw() {
+    let app = page(Some(waiting()), vec![]);
+    let reads = app.host.os_reads.get();
+    for _ in 0..5 {
+        let _ = screen(&app);
+    }
+    assert_eq!(app.host.os_reads.get(), reads);
+}

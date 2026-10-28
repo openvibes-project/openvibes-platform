@@ -348,7 +348,24 @@ impl<H: Host> App<H> {
         if os_run(self).is_some_and(|r| !r.running() && r.ok()) {
             self.run = None;
         }
-        self.maint.os = self.host.os_info();
+        self.read_os();
+    }
+
+    /// Reads the host again, the running unit with it (a process start, so
+    /// only here, never per draw).
+    pub(super) fn read_os(&mut self) {
+        self.maint.os = self.host.os_info().map(|mut os| {
+            os.running |= self.host.os_update_running();
+            os
+        });
+    }
+
+    /// The periodic refresh on this page: no own run, so the unit's state
+    /// and the counts are read again.
+    pub(in crate::tui) fn os_refreshed(&mut self) {
+        if os_run(self).is_none() {
+            self.read_os();
+        }
     }
 
     /// A run ended: the counts are read again.
@@ -356,7 +373,7 @@ impl<H: Host> App<H> {
         if os_run(self).is_none_or(Run::running) {
             return;
         }
-        self.maint.os = self.host.os_info();
+        self.read_os();
         // A finished check shows as the page itself, with its new counts.
         if os_run(self).is_some_and(|r| r.ok() && r.work.kind == Kind::Os(OsAction::Check)) {
             self.run = None;
