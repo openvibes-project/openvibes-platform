@@ -9,6 +9,7 @@ import { useSession } from "../../../app/session";
 import { auditActionLabel } from "../../../ui/auditActions";
 import { ErrorBox, Loading } from "../../../ui/bits";
 import { ago } from "../../../ui/format";
+import { Select } from "../../../ui/Select";
 import { Switch } from "../../../ui/Switch";
 import { link } from "../groups/groupApi";
 import { Card } from "../../../ui/detail/DetailPage";
@@ -19,6 +20,7 @@ const APPROVE = "alarms.suppressions.approve";
 /** What a section's "default" means, where it is not the built-in value. */
 const SECTION_NOTES: Record<string, string> = {
   "Vulnerability feeds": "Default is what vulns.toml says (the built-in value unless it was edited on the server). A change reaches the service within a minute and restarts its running feed downloads.",
+  "Assistant": "Default is what the [assistant] part of console.toml says (the built-in value unless it was edited on the server); certificate and key file paths stay in that file. A change applies the next time the console restarts (Maintenance › Service in the admin tool). If the settings are not valid together the console starts with the file alone and logs why.",
   "Agent connections": "Default is what ingest.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool). “Keep findings” also sets how long maintenance keeps them.",
   "Rule distribution": "Default is what distribution.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool).",
 };
@@ -59,6 +61,9 @@ function Row({ setting }: { setting: SettingView }) {
       <div className="stack general-row__control">
         {setting.kind === "bool"
           ? <Switch bare label={setting.label} checked={setting.value === true} busy={busy} disabled={off} onChange={(checked) => void ed.save(checked)} />
+          : setting.kind === "choice"
+          ? <Select label={setting.label} value={String(setting.value ?? setting.default ?? "")} disabled={off || busy} onChange={(word) => void ed.save(word)}
+              options={(setting.options ?? []).map((word) => ({ value: word, label: word }))} />
           : <input className={`input ${setting.kind === "int" ? "general-row__number" : "general-row__wide"}`}
               type={setting.kind === "int" ? "number" : setting.kind === "secret" ? "password" : "text"} aria-label={setting.label}
               autoComplete={setting.kind === "secret" ? "new-password" : undefined} spellCheck={setting.kind === "int" ? undefined : false}

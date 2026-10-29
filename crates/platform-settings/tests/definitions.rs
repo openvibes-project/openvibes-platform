@@ -123,3 +123,30 @@ fn an_address_may_not_carry_a_user_name_and_password() {
     // an @ in the path is not credentials
     assert!(kev.check(&json!("https://example.org/a@b.json")).is_ok());
 }
+
+#[test]
+fn a_choice_accepts_only_its_words() {
+    let profile = find("assistant.profile").unwrap();
+    assert_eq!(profile.options(), Some(&["small", "medium", "large"][..]));
+    assert_eq!(profile.default_value(), json!("small"));
+    assert_eq!(profile.kind_name(), "choice");
+    for good in ["small", "medium", "large"] {
+        assert!(profile.check(&json!(good)).is_ok(), "{good}");
+    }
+    for bad in [json!("huge"), json!(""), json!(1), json!(null)] {
+        assert!(profile.check(&bad).is_err(), "{bad}");
+    }
+    assert!(find("vulns.arch").unwrap().options().is_none());
+}
+
+#[test]
+fn the_assistant_key_is_a_secret_and_the_address_may_be_http() {
+    assert!(find("assistant.backend.api_key").unwrap().is_secret());
+    let url = find("assistant.backend.url").unwrap();
+    for good in ["", "http://127.0.0.1:8080/v1", "https://llm.example/v1"] {
+        assert!(url.check(&json!(good)).is_ok(), "{good}");
+    }
+    for bad in ["ftp://x", "llm.example", "http://u:p@h/v1", "http://a b"] {
+        assert!(url.check(&json!(bad)).is_err(), "{bad}");
+    }
+}

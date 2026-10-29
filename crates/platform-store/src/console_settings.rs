@@ -142,11 +142,23 @@ pub struct SecretInfo {
     pub changed_by: String,
 }
 
+/// The table a secret lives in: the console's own (`assistant.*`, which the
+/// console process must read to use) or the services' (`service_secrets`,
+/// which the console role can write but not read).
+fn secret_table(key: &str) -> &'static str {
+    if key.starts_with("assistant.") {
+        "console_secrets"
+    } else {
+        "service_secrets"
+    }
+}
+
 /// Which secrets are set (never their values).
 pub async fn secrets_set(client: &impl GenericClient) -> Result<Vec<SecretInfo>, StoreError> {
     let rows = client
         .query(
-            "SELECT key, changed_at, changed_by FROM service_secrets ORDER BY key",
+            "SELECT key, changed_at, changed_by FROM service_secrets
+             UNION ALL SELECT key, changed_at, changed_by FROM console_secrets ORDER BY key",
             &[],
         )
         .await?;
@@ -169,11 +181,12 @@ pub async fn set_secret(
     actor: &str,
     now: DateTime<Utc>,
 ) -> Result<(), StoreError> {
+    let table = secret_table(key);
     let tx = client.transaction().await?;
     tx.execute("SELECT pg_advisory_xact_lock(hashtext($1))", &[&key])
         .await?;
     let was_set = tx
-        .query_opt("SELECT 1 FROM service_secrets WHERE key = $1", &[&key])
+        .query_opt(&format!("SELECT 1 FROM {table} WHERE key = $1"), &[&key])
         .await?
         .is_some();
     match value {
@@ -182,20 +195,22 @@ pub async fn set_secret(
         // statements safe).
         Some(value) if was_set => {
             tx.execute(
-                "UPDATE service_secrets SET value = $2, changed_at = $3, changed_by = $4 WHERE key = $1",
+                &format!(
+                    "UPDATE {table} SET value = $2, changed_at = $3, changed_by = $4 WHERE key = $1"
+                ),
                 &[&key, &value, &now, &actor],
             )
             .await?;
         }
         Some(value) => {
             tx.execute(
-                "INSERT INTO service_secrets (key, value, changed_at, changed_by) VALUES ($1, $2, $3, $4)",
+                &format!("INSERT INTO {table} (key, value, changed_at, changed_by) VALUES ($1, $2, $3, $4)"),
                 &[&key, &value, &now, &actor],
             )
             .await?;
         }
         None => {
-            tx.execute("DELETE FROM service_secrets WHERE key = $1", &[&key])
+            tx.execute(&format!("DELETE FROM {table} WHERE key = $1"), &[&key])
                 .await?;
         }
     }
@@ -213,10 +228,14 @@ pub async fn set_secret(
     Ok(())
 }
 
-/// A secret's value; only a service's role may read it.
+/// A secret's value; only the role that uses it may read it.
 pub async fn secret(client: &impl GenericClient, key: &str) -> Result<Option<String>, StoreError> {
+    let table = secret_table(key);
     Ok(client
-        .query_opt("SELECT value FROM service_secrets WHERE key = $1", &[&key])
+        .query_opt(
+            &format!("SELECT value FROM {table} WHERE key = $1"),
+            &[&key],
+        )
         .await?
         .map(|row| row.get(0)))
 }

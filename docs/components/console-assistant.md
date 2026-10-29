@@ -66,6 +66,20 @@ assistant-setup` writes this section for the bundled llama.cpp and model
 ([openvibes-llm.md](openvibes-llm.md)). Another local service such as Ollama
 is run separately and configured by hand.
 
+### Settings from the console
+
+The same options (all but the certificate and key file paths and `ca_file`)
+can be set in the console under Settings › General › Assistant, and the API
+key can be typed there (it goes to `console_secrets`, is never shown again, and
+wins over `api_key_file`). They are `assistant.*` rows of `console_settings`
+([platform-settings.md](platform-settings.md)). The console reads them once at
+start and puts each over the file, so a change applies at the next restart of
+the console (Maintenance › Service in the admin tool); a setting nobody
+changed keeps the file's value. If the combination fails the rules above, the
+console logs why and starts with the file alone instead of not starting.
+Tests: `assistant::stored_tests`, `tests/settings_http.rs`,
+`platform-store/tests/console_settings.rs`.
+
 Example:
 
 ```toml

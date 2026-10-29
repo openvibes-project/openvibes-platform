@@ -46,6 +46,9 @@ fn view(
         applies: applies.into(),
         min,
         max,
+        options: def
+            .options()
+            .map(|words| words.iter().map(|word| (*word).into()).collect()),
         default: def.default_value(),
         value: stored.map_or_else(|| def.default_value(), |s| s.value.clone()),
         is_set: def.is_secret().then_some(secret.is_some()),

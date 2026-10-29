@@ -29,6 +29,14 @@ the service reads them once at start. General (console reads them itself): `supp
 metalink URL, architecture, proxy, largest download (MiB), KEV, EPSS, NVD,
 EUVD and OSV addresses, largest OSV download (MiB), and the NVD API key (a
 secret, stored in `service_secrets`, never shown again). Text must be one
+line without spaces. Assistant (`assistant.*`, 15, all `Restart`: the console
+builds the assistant once at start): on/off, backend address and model, the
+API key (a secret, kept in `console_secrets`, which the console role can read
+and no other service role can), hardware profile, lookup mode and data
+location and pseudonymization (choices: `Kind::Choice` lists the allowed words),
+conversation retention, lookups per question, questions per person per hour,
+concurrency, allow-remote, proxy and request deadline. Certificate and key
+file paths stay in `[assistant]` of `console.toml`. Text must be one
 line without spaces; an address must be HTTPS (plain HTTP only on loopback) and may not carry a user name and password (the value is shown again and audited). A secret is trimmed by the console and may hold visible ASCII only (it goes into an HTTP header).
 
 ## How to test

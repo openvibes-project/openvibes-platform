@@ -61,18 +61,30 @@ pub async fn serve(
             drop(client);
             // One-time, bounded: index stored rule bundles not yet indexed.
             tokio::spawn(crate::rules::meta::backfill_on_start(pool.clone()));
-            let assistant_runtime = config
-                .assistant
-                .as_ref()
-                .filter(|assistant| assistant.enabled)
-                .map(|assistant| {
-                    assistant
-                        .validate()
-                        .map_err(|_| ConsoleError::Config)
-                        .and_then(crate::assistant::AssistantRuntime::new)
-                })
-                .transpose()?
-                .flatten();
+            // The console's own settings sit over the file; a wrong one must
+            // not stop the console, so those that fail fall back to the file.
+            let (stored, api_key) = {
+                let client = pool
+                    .get()
+                    .await
+                    .map_err(|_| platform_store::StoreError::Unavailable)?;
+                let stored = platform_store::console_settings::values(&client)
+                    .await
+                    .unwrap_or_default();
+                let api_key = platform_store::console_settings::secret(
+                    &client,
+                    platform_settings::assistant_keys::API_KEY,
+                )
+                .await
+                .unwrap_or_default();
+                (stored, api_key)
+            };
+            let assistant_runtime =
+                crate::assistant::stored::resolve(config.assistant.as_ref(), &stored, api_key)
+                    .map_err(|_| ConsoleError::Config)?
+                    .map(crate::assistant::AssistantRuntime::new)
+                    .transpose()?
+                    .flatten();
             crate::about::mark_started();
             let update_checker = config
                 .update_check

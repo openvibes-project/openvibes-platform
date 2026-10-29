@@ -23608,7 +23608,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "`bool`, `int`, `text` or `secret`."
+            "description": "`bool`, `int`, `text`, `choice` or `secret`."
           },
           "label": {
             "type": "string",
@@ -23629,6 +23629,16 @@
             ],
             "format": "int64",
             "description": "Smallest allowed value (`int` only)."
+          },
+          "options": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The allowed words (`choice` only)."
           },
           "section": {
             "type": "string",
