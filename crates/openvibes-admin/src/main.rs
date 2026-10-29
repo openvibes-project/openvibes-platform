@@ -497,7 +497,6 @@ fn store_error(error: StoreError) -> String {
     }
 }
 
-/// Refuses to act on a database that is not at this build's schema.
 /// The console's "Keep findings (days)" setting, else the built-in 90 (also
 /// when the setting cannot be read, so maintenance still runs).
 async fn stored_retention_days(client: &platform_store::Client) -> u32 {
@@ -512,6 +511,7 @@ async fn stored_retention_days(client: &platform_store::Client) -> u32 {
         .unwrap_or(90)
 }
 
+/// Refuses to act on a database that is not at this build's schema.
 async fn require_current_schema(client: &platform_store::Client) -> Result<(), String> {
     match platform_store::schema_version(client)
         .await
