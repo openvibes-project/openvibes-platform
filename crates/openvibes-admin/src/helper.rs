@@ -396,7 +396,6 @@ fn failed(error: &str) -> ExitCode {
     ExitCode::FAILURE
 }
 
-/// Standard input: at most 64 KiB of UTF-8.
 /// The journal units of `unit`: the socket and the timer say little;
 /// their services say why.
 fn journal_units(unit: Unit) -> Vec<&'static str> {
