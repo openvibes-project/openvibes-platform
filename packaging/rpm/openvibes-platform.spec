@@ -53,6 +53,7 @@ BuildRequires:  systemd-rpm-macros
 OpenVIBES platform services.
 
 %package -n openvibes-ingest
+License:        Apache-2.0 AND BSD-3-Clause AND ISC AND MIT AND Unicode-3.0
 Requires(pre):  shadow-utils procps-ng systemd
 Summary:        OpenVIBES agent-facing ingest service
 %{?systemd_requires}
@@ -63,6 +64,7 @@ Also ships openvibes-netlog: UniFi IPS/IDS events (CEF over UDP syslog,
 port 514) from registered network devices become alarms.
 
 %package -n openvibes-distribution
+License:        Apache-2.0 AND BSD-3-Clause AND ISC AND MIT AND Unicode-3.0
 Requires(pre):  shadow-utils procps-ng systemd
 Summary:        OpenVIBES rule distribution service
 %{?systemd_requires}
@@ -71,6 +73,7 @@ Summary:        OpenVIBES rule distribution service
 Serves operator-published, offline-signed rule bundles to enrolled OpenVIBES agents over mTLS.
 
 %package -n openvibes-vulns
+License:        Apache-2.0 AND BSD-3-Clause AND CDLA-Permissive-2.0 AND ISC AND MIT AND Unicode-3.0
 Requires(pre):  shadow-utils procps-ng systemd
 Summary:        OpenVIBES vulnerability feeds and matching
 %{?systemd_requires}
@@ -80,6 +83,7 @@ Fetches Fedora security advisories and matches them against the package
 inventories OpenVIBES agents report.
 
 %package -n openvibes-admin
+License:        Apache-2.0 AND BSD-3-Clause AND CDLA-Permissive-2.0 AND ISC AND MIT AND Unicode-3.0 AND Zlib
 Requires(pre):  shadow-utils procps-ng systemd
 # The administration TUI: operators act through sudo, polkit and curl;
 # Setup checks ports with ss (iproute).
@@ -98,8 +102,8 @@ Summary:        OpenVIBES operator CLI and maintenance timer
 Schema migration, built-in CA, tokens, agents, and daily partition maintenance.
 
 %package -n openvibes-signer
+License:        Apache-2.0 AND BSD-3-Clause AND ISC AND MIT AND Unicode-3.0
 Summary:        OpenVIBES rule signer for the site's own rules
-License:        Apache-2.0
 # Its state directory's group is openvibes-operators, from openvibes-admin.
 Requires:       openvibes-admin = %{version}-%{release}
 Requires(pre):  openvibes-admin = %{version}-%{release}
@@ -111,8 +115,8 @@ console, only after checking the publishing user's password and permission
 itself. Listens on a Unix socket only the console can reach.
 
 %package -n openvibes-fetch
+License:        Apache-2.0 AND BSD-3-Clause AND CDLA-Permissive-2.0 AND ISC AND MIT AND Unicode-3.0
 Summary:        OpenVIBES internet fetcher for the console's assistant
-License:        Apache-2.0
 # The migration that creates its database role comes with openvibes-admin.
 Requires:       openvibes-admin = %{version}-%{release}
 %{?systemd_requires}
