@@ -78,17 +78,37 @@ fn off_means_no_assistant() {
 }
 
 #[test]
-fn settings_that_fail_the_assistants_rules_fall_back_to_the_file() {
+fn settings_that_fail_the_assistants_rules_leave_it_off() {
+    // plain http to another host is refused by the assistant's own rules
     let config = file(
         json!({"enabled": true, "backend": {"url": "http://127.0.0.1:8080/v1", "model": "file-model"}}),
     );
-    // plain http to another host is refused by the assistant's own rules
     let settings = stored(&[("assistant.backend.url", json!("http://llm.example/v1"))]);
-    let assistant = resolve(Some(&config), &settings, None).unwrap().unwrap();
-    assert_eq!(assistant.backend.unwrap().model, "file-model");
-    // and with no usable file, enabled without a backend is an error
+    assert!(resolve(Some(&config), &settings, None).unwrap().is_none());
+    // enabled without a backend, from settings alone
     let settings = stored(&[("assistant.enabled", json!(true))]);
     assert!(resolve(None, &settings, None).unwrap().is_none());
+}
+
+#[test]
+fn a_restriction_set_in_the_console_is_never_undone_by_a_looser_file() {
+    let config = file(
+        json!({"enabled": true, "backend": {"url": "https://llm.example/v1", "model": "m", "allow_remote": true, "data_location": "external"}}),
+    );
+    assert!(
+        resolve(Some(&config), &stored(&[]), None)
+            .unwrap()
+            .is_some()
+    );
+    // switching "allow a backend off this host" off must not fall back to the file
+    let settings = stored(&[("assistant.backend.allow_remote", json!(false))]);
+    assert!(resolve(Some(&config), &settings, None).unwrap().is_none());
+}
+
+#[test]
+fn an_invalid_file_with_nothing_stored_is_still_an_error() {
+    let config = file(json!({"enabled": true}));
+    assert!(resolve(Some(&config), &stored(&[]), None).is_err());
 }
 
 #[test]

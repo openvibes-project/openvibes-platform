@@ -26,8 +26,8 @@ twelve `vulns.*` feed settings, which the vulnerability service applies over
 its file within about a minute ([openvibes-vulns.md](openvibes-vulns.md)), the
 ingest and distribution ones (applied at their next restart) and the fifteen
 `assistant.*` ones, which the console reads once at start over `[assistant]`
-of `console.toml`; settings that fail the assistant's own rules together fall
-back to the file alone, with a log line ([console-assistant.md](console-assistant.md)).
+of `console.toml`; settings that fail the assistant's own rules together leave
+the assistant off, with a log line ([console-assistant.md](console-assistant.md)).
 
 ## Failure behaviour
 

@@ -76,7 +76,9 @@ wins over `api_key_file`). They are `assistant.*` rows of `console_settings`
 start and puts each over the file, so a change applies at the next restart of
 the console (Maintenance › Service in the admin tool); a setting nobody
 changed keeps the file's value. If the combination fails the rules above, the
-console logs why and starts with the file alone instead of not starting.
+console still starts but the assistant stays off and the console logs why: the
+file may be looser than what an administrator just set (for example allowing a
+remote backend that they switched off), so it is not used instead.
 Tests: `assistant::stored_tests`, `tests/settings_http.rs`,
 `platform-store/tests/console_settings.rs`.
 

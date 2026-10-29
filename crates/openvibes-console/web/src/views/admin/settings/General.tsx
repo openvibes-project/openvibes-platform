@@ -20,7 +20,7 @@ const APPROVE = "alarms.suppressions.approve";
 /** What a section's "default" means, where it is not the built-in value. */
 const SECTION_NOTES: Record<string, string> = {
   "Vulnerability feeds": "Default is what vulns.toml says (the built-in value unless it was edited on the server). A change reaches the service within a minute and restarts its running feed downloads.",
-  "Assistant": "Default is what the [assistant] part of console.toml says (the built-in value unless it was edited on the server); certificate and key file paths stay in that file. A change applies the next time the console restarts (Maintenance › Service in the admin tool). If the settings are not valid together the console starts with the file alone and logs why.",
+  "Assistant": "Default is what the [assistant] part of console.toml says (the built-in value unless it was edited on the server); certificate and key file paths stay in that file. A change applies the next time the console restarts (Maintenance › Service in the admin tool). If the settings are not valid together the assistant stays off and the console logs why.",
   "Agent connections": "Default is what ingest.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool). “Keep findings” also sets how long maintenance keeps them.",
   "Rule distribution": "Default is what distribution.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool).",
 };
@@ -72,7 +72,7 @@ function Row({ setting }: { setting: SettingView }) {
               value={text ?? (setting.kind === "secret" ? "" : String(setting.value ?? ""))} disabled={off} readOnly={busy} aria-disabled={busy || undefined} aria-invalid={result?.ok === false || undefined}
               onChange={(e) => { if (!busy) ed.type(e.target.value); }} onBlur={() => void ed.commit()} onKeyDown={(e) => { if (e.key === "Enter") void ed.commit(); }} />}
         {!off && setting.kind === "secret" && setting.is_set && <button type="button" className="button button--ghost" disabled={busy} onClick={() => void ed.reset()}>Remove</button>}
-        {!off && setting.kind !== "secret" && setting.kind !== "bool" && JSON.stringify(setting.value) !== JSON.stringify(setting.default) && <button type="button" className="button button--ghost" disabled={busy} onClick={() => void ed.reset()}>Reset to default</button>}
+        {!off && setting.kind !== "secret" && setting.changed_at != null && <button type="button" className="button button--ghost" disabled={busy} onClick={() => void ed.reset()}>Reset to default</button>}
       </div>
     </div>
   );

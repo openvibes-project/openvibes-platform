@@ -288,6 +288,9 @@ async fn the_assistant_key_is_readable_by_the_console_only() {
         "openvibes-vulns",
         "openvibes-ingest",
         "openvibes-distribution",
+        "openvibes-fetch",
+        "openvibes-netlog",
+        "openvibes-signer",
     ] {
         client
             .batch_execute(&format!("SET ROLE \"{role}\""))

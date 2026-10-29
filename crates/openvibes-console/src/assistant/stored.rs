@@ -106,32 +106,31 @@ pub(crate) fn overlay(
 }
 
 /// The checked assistant: the file with the console's settings on top and
-/// the stored API key, or, when those do not pass the assistant's own rules,
-/// the file alone (a wrong setting must not stop the console starting).
+/// the stored API key. When the stored settings do not pass the assistant's
+/// own rules the assistant is off (and the reason is logged): falling back to
+/// the file could undo a restriction the administrator just set.
 ///
 /// # Errors
-/// The file alone is not valid either.
+/// No console setting is stored and the file is not valid.
 pub(crate) fn resolve(
     file: Option<&AssistantConfig>,
     stored: &HashMap<String, Value>,
     api_key: Option<String>,
 ) -> Result<Option<Assistant>, platform_assistant::ConfigError> {
-    let checked = overlay(file, stored)
-        .filter(|config| config.enabled)
-        .map(|config| config.validate());
-    match checked {
-        Some(Ok(mut assistant)) => {
-            if let (Some(backend), Some(key)) = (assistant.backend.as_mut(), api_key) {
-                backend.set_api_key(Some(key));
-            }
-            Ok(Some(assistant))
+    let changed = stored.keys().any(|name| name.starts_with(key::PREFIX));
+    let Some(config) = overlay(file, stored).filter(|config| config.enabled) else {
+        return Ok(None);
+    };
+    let mut assistant = match config.validate() {
+        Ok(assistant) => assistant,
+        Err(error) if changed => {
+            tracing::warn!(%error, "the assistant settings from the console are not valid; the assistant stays off");
+            return Ok(None);
         }
-        Some(Err(error)) => {
-            tracing::warn!(%error, "the assistant settings from the console are not valid; using the configuration file alone");
-            file.filter(|config| config.enabled)
-                .map(AssistantConfig::validate)
-                .transpose()
-        }
-        None => Ok(None),
+        Err(error) => return Err(error),
+    };
+    if let (Some(backend), Some(key)) = (assistant.backend.as_mut(), api_key) {
+        backend.set_api_key(Some(key));
     }
+    Ok(Some(assistant))
 }
