@@ -6,7 +6,6 @@ use handlers::{list_settings, update_setting};
 
 use crate::http::AuthHttpState;
 
-mod definitions;
 pub(crate) mod handlers;
 mod types;
 

@@ -2019,6 +2019,7 @@ dependencies = [
  "platform-config",
  "platform-password",
  "platform-pki",
+ "platform-settings",
  "platform-store",
  "rcgen",
  "ring",
@@ -2216,6 +2217,7 @@ dependencies = [
  "deadpool-postgres",
  "flate2",
  "platform-config",
+ "platform-settings",
  "platform-store",
  "quick-xml",
  "ruzstd",
@@ -2632,6 +2634,13 @@ dependencies = [
  "time",
  "x509-parser",
  "zeroize",
+]
+
+[[package]]
+name = "platform-settings"
+version = "0.2.9"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

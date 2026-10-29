@@ -66,3 +66,168 @@ async fn require_approval_is_false_until_set() {
     assert!(!console_settings::require_approval(&client).await.unwrap());
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_setting_goes_back_to_its_default_and_the_change_is_audited() {
+    let (db, mut client) = common::migrated().await;
+    let now = chrono::Utc::now();
+    let key = "vulns.check_interval_minutes";
+    assert_eq!(
+        console_settings::reset(&mut client, key, "a", now)
+            .await
+            .unwrap(),
+        None
+    );
+    console_settings::set(&mut client, key, &serde_json::json!(30), "a", now)
+        .await
+        .unwrap();
+    let old = console_settings::reset(&mut client, key, "a", now)
+        .await
+        .unwrap();
+    assert_eq!(old, Some(serde_json::json!(30)));
+    assert!(console_settings::values(&client).await.unwrap().is_empty());
+    let recent = console_settings::recent(&client, 5).await.unwrap();
+    assert_eq!(recent[0].detail["new"], serde_json::Value::Null);
+    assert_eq!(recent[0].detail["old"], serde_json::json!(30));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_secret_is_stored_apart_and_its_value_stays_out_of_the_audit_log() {
+    let (db, mut client) = common::migrated().await;
+    let now = chrono::Utc::now();
+    let key = "vulns.nvd_api_key";
+    console_settings::set_secret(&mut client, key, Some("s3cret-key"), "admin-1", now)
+        .await
+        .unwrap();
+    assert_eq!(
+        console_settings::secret(&client, key)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("s3cret-key")
+    );
+    let set = console_settings::secrets_set(&client).await.unwrap();
+    assert_eq!(
+        (set.len(), set[0].key.as_str(), set[0].changed_by.as_str()),
+        (1, key, "admin-1")
+    );
+    assert!(console_settings::values(&client).await.unwrap().is_empty());
+    let audit: String = client
+        .query_one(
+            "SELECT string_agg(detail::text, ' ') FROM audit_log WHERE action = 'settings.changed'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(!audit.contains("s3cret-key"), "{audit}");
+    assert!(
+        audit.contains("\"new\": \"set\"") && audit.contains("\"old\": \"not set\""),
+        "{audit}"
+    );
+    console_settings::set_secret(&mut client, key, None, "admin-1", now)
+        .await
+        .unwrap();
+    assert_eq!(console_settings::secret(&client, key).await.unwrap(), None);
+    assert!(
+        console_settings::secrets_set(&client)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    db.drop().await;
+}
+
+/// The real roles, not the superuser: the console writes a secret and cannot
+/// read it back, the vulnerability service reads it and cannot write it.
+#[tokio::test]
+async fn the_roles_can_do_exactly_what_the_grants_say() {
+    let (db, mut client) = common::migrated().await;
+    let now = chrono::Utc::now();
+    let key = "vulns.nvd_api_key";
+    use serde_json::json;
+
+    client
+        .batch_execute("SET ROLE \"openvibes-console\"")
+        .await
+        .unwrap();
+    // set, replace, and the other settings calls the console makes
+    console_settings::set_secret(&mut client, key, Some("first-key"), "admin-1", now)
+        .await
+        .unwrap();
+    console_settings::set_secret(&mut client, key, Some("second-key"), "admin-2", now)
+        .await
+        .unwrap();
+    let set = console_settings::secrets_set(&client).await.unwrap();
+    assert_eq!((set.len(), set[0].changed_by.as_str()), (1, "admin-2"));
+    console_settings::set(
+        &mut client,
+        "vulns.proxy_url",
+        &json!("http://p:1"),
+        "admin-1",
+        now,
+    )
+    .await
+    .unwrap();
+    let old = console_settings::reset(&mut client, "vulns.proxy_url", "admin-1", now)
+        .await
+        .unwrap();
+    assert_eq!(old, Some(json!("http://p:1")));
+    // the value is not readable by the console's role, however it asks
+    for sql in [
+        "SELECT value FROM service_secrets",
+        "SELECT * FROM service_secrets",
+        "SELECT count(*) FROM service_secrets WHERE value = 'second-key'",
+    ] {
+        let error = client.query(sql, &[]).await.unwrap_err();
+        let said = error
+            .as_db_error()
+            .map_or_else(String::new, |e| e.message().to_owned());
+        assert!(said.contains("permission denied"), "{sql}: {error:?}");
+    }
+    assert!(console_settings::secret(&client, key).await.is_err());
+    client.batch_execute("RESET ROLE").await.unwrap();
+
+    console_settings::set(
+        &mut client,
+        "vulns.check_interval_minutes",
+        &json!(30),
+        "a",
+        now,
+    )
+    .await
+    .unwrap();
+    client
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
+        .await
+        .unwrap();
+    assert_eq!(
+        console_settings::secret(&client, key)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("second-key")
+    );
+    assert_eq!(
+        console_settings::values(&client).await.unwrap()["vulns.check_interval_minutes"],
+        json!(30)
+    );
+    assert!(
+        console_settings::set_secret(&mut client, key, Some("x"), "a", now)
+            .await
+            .is_err()
+    );
+    client.batch_execute("RESET ROLE").await.unwrap();
+
+    client
+        .batch_execute("SET ROLE \"openvibes-console\"")
+        .await
+        .unwrap();
+    console_settings::set_secret(&mut client, key, None, "admin-1", now)
+        .await
+        .unwrap();
+    client.batch_execute("RESET ROLE").await.unwrap();
+    assert_eq!(console_settings::secret(&client, key).await.unwrap(), None);
+    db.drop().await;
+}

@@ -269,6 +269,55 @@ async fn first_inventory_fetches_its_feed_without_waiting_for_the_hourly_check()
     db.drop().await;
 }
 
+#[tokio::test]
+async fn a_changed_console_setting_reaches_the_running_service() {
+    let db = TestDb::create().await;
+    let mut admin = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut admin).await.unwrap();
+    let content = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/updateinfo-f44.xml.zst"),
+    )
+    .unwrap();
+    let (template, kev_url) = mirror(content).await;
+    let health = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let health_addr = health.local_addr().unwrap();
+    // The file has the KEV source off.
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let task = tokio::spawn(service::run_polling(
+        config(&db, health_addr, template, String::new()),
+        health,
+        async {
+            let _ = stopped.await;
+        },
+        Duration::from_millis(200),
+    ));
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    wait_for(
+        &db,
+        "SELECT count(*) FROM cve_enrichment WHERE kev_added IS NOT NULL",
+        0,
+    )
+    .await;
+    // The console turns it on; no restart.
+    admin
+        .execute(
+            "INSERT INTO console_settings (key, value, changed_at, changed_by)
+             VALUES ('vulns.kev_url', to_jsonb($1::text), now(), 'test')",
+            &[&kev_url],
+        )
+        .await
+        .unwrap();
+    wait_for(
+        &db,
+        "SELECT count(*) FROM cve_enrichment WHERE kev_added IS NOT NULL",
+        5,
+    )
+    .await;
+    let _ = stop.send(());
+    task.await.unwrap().unwrap();
+    db.drop().await;
+}
+
 /// Minimal HTTP GET returning the status code.
 async fn reqwest_like(addr: SocketAddr, path: &str) -> u16 {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};

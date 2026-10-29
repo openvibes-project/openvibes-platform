@@ -568,8 +568,18 @@ Table `console_settings (key, value jsonb, changed_at, changed_by)`: one row
 per changed key; a key with no row has its default (kept in the console).
 `all`, `set` (one transaction: lock the row, upsert, audit `settings.changed`
 with `{key, old, new}`; returns the old value), `recent` (newest change
-audits) and `require_approval(&impl GenericClient)` (false when the row is
-absent or not a bool). Tests: `tests/console_settings.rs`.
+audits), `reset` (delete the row, audit), `values` (every stored value by
+key, for a service to apply over its file) and `require_approval(&impl
+GenericClient)` (false when the row is absent or not a bool).
+
+Schema 70 adds `service_secrets (key, value, changed_at, changed_by)` for
+settings that are secrets (the NVD API key). The console's role may write
+it and read only `key`, `changed_at`, `changed_by` (column grants), so no
+console query can return a value; `openvibes-vulns` may read it.
+`secrets_set` (which are set), `set_secret` (set or remove; an UPDATE or an INSERT under an advisory lock, never an upsert, because `EXCLUDED.value` would need SELECT on the value; the audit line
+says `set` or `not set`, never the value) and `secret` (a service reads
+one). `console_settings` also grants DELETE to the console and SELECT to
+`openvibes-vulns`. Tests: `tests/console_settings.rs`.
 
 ## Saved views and list columns (`saved_views::…`, schema 56)
 

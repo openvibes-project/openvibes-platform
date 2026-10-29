@@ -15,8 +15,11 @@ pub(crate) struct SettingView {
     pub label: String,
     /// One-sentence explanation.
     pub help: String,
-    /// `bool` or `int`.
+    /// `bool`, `int`, `text` or `secret`.
     pub kind: String,
+    /// `live` (reaches the service within about a minute) or `restart` (at
+    /// the service's next start).
+    pub applies: String,
     /// Smallest allowed value (`int` only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min: Option<i64>,
@@ -25,8 +28,11 @@ pub(crate) struct SettingView {
     pub max: Option<i64>,
     /// The value when nobody changed it.
     pub default: Value,
-    /// The value now.
+    /// The value now; null for a secret, which is never shown.
     pub value: Value,
+    /// Whether a secret is set (`secret` only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_set: Option<bool>,
     /// When it was last changed (RFC 3339), if ever.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub changed_at: Option<String>,
@@ -62,6 +68,7 @@ pub(crate) struct SettingsView {
 /// The new value.
 #[derive(Deserialize, ToSchema)]
 pub(crate) struct UpdateSetting {
-    /// A boolean or whole number, as the setting's kind says.
+    /// A boolean, whole number or text, as the setting's kind says. Null
+    /// puts the setting back to its default (a secret: removes it).
     pub value: Value,
 }

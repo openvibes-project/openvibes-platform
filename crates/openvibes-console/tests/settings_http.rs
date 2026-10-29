@@ -19,7 +19,7 @@ async fn settings_are_typed_guarded_and_audited() {
     let (status, body) = fx.call(a, "GET", "/api/v1/settings", None).await;
     assert_eq!(status, StatusCode::OK);
     let items = body["items"].as_array().unwrap();
-    assert_eq!(items.len(), 2);
+    assert_eq!(items.len(), 14);
     let find = |key: &str| items.iter().find(|i| i["key"] == key).unwrap();
     assert_eq!(find("suppressions.require_approval")["value"], json!(false));
     assert_eq!(find("sso.remove_inactive_days")["value"], json!(90));
@@ -124,5 +124,81 @@ async fn settings_are_typed_guarded_and_audited() {
         assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
         assert_eq!(body["code"], "invalid_query");
     }
+    fx.db.drop().await;
+}
+
+#[tokio::test]
+async fn text_and_secret_settings_reset_and_never_show_a_secret() {
+    let Some(fx) = Fx::new().await else { return };
+    let a = &fx.admin;
+    let proxy = "/api/v1/settings/vulns.proxy_url";
+    let key = "/api/v1/settings/vulns.nvd_api_key";
+
+    let (_, body) = fx.call(a, "GET", "/api/v1/settings", None).await;
+    let items = body["items"].as_array().unwrap();
+    let find = |key: &str| items.iter().find(|i| i["key"] == key).unwrap().clone();
+    assert_eq!(find("vulns.proxy_url")["kind"], json!("text"));
+    assert_eq!(find("vulns.proxy_url")["applies"], json!("live"));
+    assert_eq!(find("vulns.nvd_api_key")["kind"], json!("secret"));
+    assert_eq!(find("vulns.nvd_api_key")["is_set"], json!(false));
+
+    // text is checked, stored, and put back with null
+    for bad in [
+        json!("ftp://x"),
+        json!(5),
+        json!("http://a b"),
+        json!("http://u:p@proxy.example:3128"),
+    ] {
+        let (status, body) = fx
+            .call(a, "PATCH", proxy, Some(json!({"value": bad})))
+            .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}");
+        assert_eq!(body["code"], "invalid_setting");
+    }
+    let (status, body) = fx
+        .call(
+            a,
+            "PATCH",
+            proxy,
+            Some(json!({"value": "http://proxy.example:3128"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["value"], json!("http://proxy.example:3128"));
+    let (status, body) = fx
+        .call(a, "PATCH", proxy, Some(json!({"value": null})))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["value"], json!(""));
+    assert!(body.get("changed_at").is_none());
+
+    // a secret is set, reported as set, never returned, and removed with null
+    for bad in [json!(5), json!("  "), json!("a b"), json!("kéy")] {
+        let (status, _) = fx.call(a, "PATCH", key, Some(json!({"value": bad}))).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}");
+    }
+    let (status, body) = fx
+        .call(a, "PATCH", key, Some(json!({"value": "s3cret-key\n"})))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["is_set"], json!(true));
+    assert_eq!(body["value"], json!(null));
+    let (_, body) = fx.call(a, "GET", "/api/v1/settings", None).await;
+    assert!(!body.to_string().contains("s3cret-key"));
+    let set = body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["key"] == "vulns.nvd_api_key")
+        .unwrap()
+        .clone();
+    assert_eq!(set["is_set"], json!(true));
+    assert!(set["changed_by"].as_str().is_some());
+    // the audit line says set or not set, never the value
+    let recent = body["recent"].to_string();
+    assert!(recent.contains("\"set\""), "{recent}");
+    let (status, body) = fx.call(a, "PATCH", key, Some(json!({"value": null}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["is_set"], json!(false));
     fx.db.drop().await;
 }

@@ -6,16 +6,24 @@
 ## Interfaces
 
 - `GET /api/v1/settings` returns `{items, recent}`: each item has `key`,
-  `section`, `label`, `help`, `kind` (`bool` or `int`), `min`/`max` (int),
-  `default`, `value`, and `changed_at`/`changed_by` once changed; `recent`
+  `section`, `label`, `help`, `kind` (`bool`, `int`, `text` or `secret`),
+  `applies` (`live` or `restart`), `min`/`max` (int), `default`, `value`
+  (null for a secret), `is_set` (secrets only) and `changed_at`/`changed_by`
+  once changed; `recent`
   holds the last five changes (`at`, `actor`, `key`, `old`, `new`), newest
   first.
-- `PATCH /api/v1/settings/{key}` with `{"value": …}` returns the item.
+- `PATCH /api/v1/settings/{key}` with `{"value": …}` returns the item. A
+  `null` value puts the setting back to its default (a secret: removes it).
+  A secret goes to `service_secrets`, is never returned, and the audit line
+  says only `set` or `not set`.
 
 Both need `settings.manage` (Administrator only); the PATCH needs the CSRF
-token. The definitions live in `definitions.rs`; a key with no stored row
-has its default. Keys now: `suppressions.require_approval` (bool, false),
-`sso.remove_inactive_days` (int 1 to 3650, 90).
+token. The definitions live in the `platform-settings` crate
+([platform-settings.md](platform-settings.md)) so the services check the
+same rules; a key with no stored row has its default. Keys: the two general
+ones (`suppressions.require_approval`, `sso.remove_inactive_days`) and the
+twelve `vulns.*` feed settings, which the vulnerability service applies over
+its file within about a minute ([openvibes-vulns.md](openvibes-vulns.md)).
 
 ## Failure behaviour
 
@@ -28,5 +36,5 @@ stored. A database failure is the usual 503. Every change is audited as
 
 `cargo test -p platform-store --test console_settings` and
 `cargo test -p openvibes-console --test settings_http` (with
-`OPENVIBES_TEST_DATABASE_URL`, see `scripts/test-db.sh`), plus the unit test
-in `definitions.rs`.
+`OPENVIBES_TEST_DATABASE_URL`, see `scripts/test-db.sh`), plus
+`cargo test -p platform-settings`.

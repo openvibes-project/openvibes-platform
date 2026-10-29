@@ -7262,6 +7262,11 @@ export interface components {
         };
         /** @description One setting with its current value. */
         SettingView: {
+            /**
+             * @description `live` (reaches the service within about a minute) or `restart` (at
+             *     the service's next start).
+             */
+            applies: string;
             /** @description When it was last changed (RFC 3339), if ever. */
             changed_at?: string | null;
             /** @description Who last changed it, if anyone. */
@@ -7270,9 +7275,11 @@ export interface components {
             default: unknown;
             /** @description One-sentence explanation. */
             help: string;
+            /** @description Whether a secret is set (`secret` only). */
+            is_set?: boolean | null;
             /** @description The key, such as `sso.remove_inactive_days`. */
             key: string;
-            /** @description `bool` or `int`. */
+            /** @description `bool`, `int`, `text` or `secret`. */
             kind: string;
             /** @description Short name. */
             label: string;
@@ -7288,7 +7295,7 @@ export interface components {
             min?: number | null;
             /** @description The section it is shown under. */
             section: string;
-            /** @description The value now. */
+            /** @description The value now; null for a secret, which is never shown. */
             value: unknown;
         };
         /** @description All settings and the latest changes. */
@@ -8203,7 +8210,10 @@ export interface components {
         };
         /** @description The new value. */
         UpdateSetting: {
-            /** @description A boolean or whole number, as the setting's kind says. */
+            /**
+             * @description A boolean, whole number or text, as the setting's kind says. Null
+             *     puts the setting back to its default (a secret: removes it).
+             */
             value: unknown;
         };
         /**

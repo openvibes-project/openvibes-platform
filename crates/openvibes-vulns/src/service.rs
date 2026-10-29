@@ -18,22 +18,31 @@ use crate::{
     matching,
     osv::Release,
     osv_fetch::{self, OsvSync},
+    settings::{self, Stored},
     sources::{self, NvdClient},
 };
 
-/// Runs until `shutdown`. Startup failures are returned as messages.
+/// Runs until `shutdown`. Startup failures are returned as messages. The
+/// console's `vulns.*` settings are applied over `file`; when one changes
+/// (polled about every minute) the feed tasks are rebuilt with the new
+/// values, so no restart is needed.
 pub async fn run(
-    config: VulnsConfig,
+    file: VulnsConfig,
     health: TcpListener,
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), String> {
-    config.validate()?;
-    let fetcher = Fetcher::new(
-        &config.metalink_url,
-        config.proxy_url.as_deref(),
-        config.max_download_bytes,
-    )?;
-    let pool = platform_store::connect(&config.database_url)
+    run_polling(file, health, shutdown, settings::POLL).await
+}
+
+/// [`run`] asking for changed settings every `poll` (tests use a short one).
+pub async fn run_polling(
+    file: VulnsConfig,
+    health: TcpListener,
+    shutdown: impl Future<Output = ()>,
+    poll: Duration,
+) -> Result<(), String> {
+    file.validate()?;
+    let pool = platform_store::connect(&file.database_url)
         .await
         .map_err(|error| error.to_string())?;
     let health_pool = pool.clone();
@@ -44,16 +53,103 @@ pub async fn run(
             .with_state(health_pool);
         let _ = axum::serve(health, app).await;
     });
+    tokio::pin!(shutdown);
+    let mut stored = settings::load(&pool).await.unwrap_or_else(|error| {
+        tracing::warn!(%error, "cannot read the console settings; using the file only");
+        Stored::default()
+    });
+    let mut first = true;
+    // After a failure the file alone is tried; when that fails too the
+    // service waits for a settings change instead of looping.
+    let mut file_only = false;
+    let result = loop {
+        let in_use = if file_only {
+            Stored::default()
+        } else {
+            stored.clone()
+        };
+        let config = effective(&file, &in_use);
+        let stop = async {
+            tokio::select! {
+                () = &mut shutdown => None,
+                now = settings::changed(&pool, &stored, poll) => Some(now),
+            }
+        };
+        match serve(
+            config,
+            in_use.nvd_key().map(str::to_owned),
+            pool.clone(),
+            stop,
+        )
+        .await
+        {
+            Ok(Some(now)) => {
+                stored = now;
+                file_only = false;
+            }
+            Ok(None) => break Ok(()),
+            // At start an error is the operator's to see; later a setting
+            // that cannot be applied must not take the service down.
+            Err(error) if first => break Err(error),
+            Err(error) if !file_only && stored != Stored::default() => {
+                tracing::warn!(%error, "the console settings cannot be applied; using the file only");
+                file_only = true;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "cannot run; trying again at the next poll");
+                tokio::select! {
+                    () = &mut shutdown => break Ok(()),
+                    () = tokio::time::sleep(poll) => {}
+                    now = settings::changed(&pool, &stored, poll) => {
+                        stored = now;
+                        file_only = false;
+                    }
+                }
+            }
+        }
+        first = false;
+    };
+    health_task.abort();
+    result
+}
+
+/// The file with the stored settings over it, or the file alone when the
+/// result is not valid.
+fn effective(file: &VulnsConfig, stored: &Stored) -> VulnsConfig {
+    let config = settings::overlay(file, stored);
+    match config.validate() {
+        Ok(()) => config,
+        Err(error) => {
+            tracing::warn!(%error, "the console settings are not valid; using the file only");
+            file.clone()
+        }
+    }
+}
+
+/// The feed tasks for one configuration, until `stop` resolves (its value
+/// is returned).
+async fn serve<T>(
+    config: VulnsConfig,
+    console_key: Option<String>,
+    pool: Pool,
+    stop: impl Future<Output = T>,
+) -> Result<T, String> {
+    let fetcher = Fetcher::new(
+        &config.metalink_url,
+        config.proxy_url.as_deref(),
+        config.max_download_bytes,
+    )?;
     let every = Duration::from_secs(config.check_interval_minutes * 60);
     // NVD is paced to its rate limit, so it runs apart from the main loop.
     let nvd_task = if config.nvd_url.is_empty() {
         None
     } else {
-        let key = config
-            .nvd_api_key_file
-            .as_deref()
-            .map(sources::read_api_key)
-            .transpose()?;
+        // The key set in the console wins over the file's.
+        let key = match (console_key, config.nvd_api_key_file.as_deref()) {
+            (Some(key), _) => Some(key),
+            (None, Some(path)) => Some(sources::read_api_key(path)?),
+            (None, None) => None,
+        };
         let nvd = NvdClient::new(&fetcher, &config.nvd_url, key, None)?;
         Some(tokio::spawn(nvd_loop(pool.clone(), nvd, every)))
     };
@@ -86,10 +182,10 @@ pub async fn run(
     ));
     let mut interval = tokio::time::interval(every);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    tokio::pin!(shutdown);
-    loop {
+    tokio::pin!(stop);
+    let stopped = loop {
         tokio::select! {
-            () = &mut shutdown => break,
+            stopped = &mut stop => break stopped,
             _ = interval.tick() => {
                 check_all(&pool, &fetcher, &config.arch).await;
                 enrich_all(&pool, &fetcher, &config).await;
@@ -102,14 +198,13 @@ pub async fn run(
                 &agent,
             ).await,
         }
-    }
+    };
     listener.abort();
     rematch_retry.abort();
-    health_task.abort();
     for task in [nvd_task, osv_task].into_iter().flatten() {
         task.abort();
     }
-    Ok(())
+    Ok(stopped)
 }
 
 async fn ready(State(pool): State<Pool>) -> StatusCode {
