@@ -8,6 +8,7 @@
 //! agree on what is valid. No database code lives here.
 
 mod agent;
+mod assistant;
 mod definition;
 mod general;
 mod vulns;
@@ -21,6 +22,7 @@ pub fn all() -> impl Iterator<Item = &'static Definition> {
         .chain(agent::ingest::DEFINITIONS.iter())
         .chain(agent::distribution::DEFINITIONS.iter())
         .chain(vulns::DEFINITIONS.iter())
+        .chain(assistant::DEFINITIONS.iter())
 }
 
 /// The setting with this key.
@@ -49,5 +51,15 @@ pub mod ingest_keys {
 pub mod distribution_keys {
     pub use crate::agent::distribution::{
         MAX_CONNECTIONS, MAX_IN_FLIGHT, PREFIX, REQUEST_TIMEOUT_SECONDS,
+    };
+}
+
+/// The assistant's keys; the console reads them under this prefix when it
+/// starts.
+pub mod assistant_keys {
+    pub use crate::assistant::{
+        ALLOW_REMOTE, API_KEY, CONCURRENCY, CONVERSATION_RETENTION_DAYS, DATA_LOCATION,
+        DEADLINE_SECONDS, ENABLED, LOOKUP_MODE, MAX_LOOKUPS, MODEL, PREFIX, PROFILE, PROXY_URL,
+        PSEUDONYMIZE, QUESTIONS_PER_USER_PER_HOUR, URL,
     };
 }

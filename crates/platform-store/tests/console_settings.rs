@@ -249,3 +249,80 @@ async fn the_roles_can_do_exactly_what_the_grants_say() {
     assert_eq!(console_settings::secret(&client, key).await.unwrap(), None);
     db.drop().await;
 }
+
+/// The assistant's key is the one secret the console itself uses, so it lives
+/// where the console role can read it and no other service role can.
+#[tokio::test]
+async fn the_assistant_key_is_readable_by_the_console_only() {
+    let (db, mut client) = common::migrated().await;
+    let now = chrono::Utc::now();
+    let key = "assistant.backend.api_key";
+
+    client
+        .batch_execute("SET ROLE \"openvibes-console\"")
+        .await
+        .unwrap();
+    console_settings::set_secret(&mut client, key, Some("model-key-1"), "admin-1", now)
+        .await
+        .unwrap();
+    console_settings::set_secret(&mut client, key, Some("model-key-2"), "admin-2", now)
+        .await
+        .unwrap();
+    assert_eq!(
+        console_settings::secret(&client, key)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("model-key-2")
+    );
+    let set = console_settings::secrets_set(&client).await.unwrap();
+    assert_eq!(
+        set.iter()
+            .map(|s| (s.key.as_str(), s.changed_by.as_str()))
+            .collect::<Vec<_>>(),
+        [(key, "admin-2")]
+    );
+    client.batch_execute("RESET ROLE").await.unwrap();
+
+    for role in [
+        "openvibes-vulns",
+        "openvibes-ingest",
+        "openvibes-distribution",
+        "openvibes-fetch",
+        "openvibes-netlog",
+        "openvibes-signer",
+    ] {
+        client
+            .batch_execute(&format!("SET ROLE \"{role}\""))
+            .await
+            .unwrap();
+        assert!(
+            console_settings::secret(&client, key).await.is_err(),
+            "{role}"
+        );
+        client.batch_execute("RESET ROLE").await.unwrap();
+    }
+
+    // the audit line says set or not set, never the value
+    let audit: serde_json::Value = client
+        .query_one(
+            "SELECT detail FROM audit_log WHERE action = 'settings.changed' ORDER BY id DESC LIMIT 1",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(audit["new"], serde_json::json!("set"));
+    assert!(!audit.to_string().contains("model-key"));
+
+    client
+        .batch_execute("SET ROLE \"openvibes-console\"")
+        .await
+        .unwrap();
+    console_settings::set_secret(&mut client, key, None, "admin-1", now)
+        .await
+        .unwrap();
+    assert_eq!(console_settings::secret(&client, key).await.unwrap(), None);
+    client.batch_execute("RESET ROLE").await.unwrap();
+    db.drop().await;
+}

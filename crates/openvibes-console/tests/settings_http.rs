@@ -19,7 +19,7 @@ async fn settings_are_typed_guarded_and_audited() {
     let (status, body) = fx.call(a, "GET", "/api/v1/settings", None).await;
     assert_eq!(status, StatusCode::OK);
     let items = body["items"].as_array().unwrap();
-    assert_eq!(items.len(), 24);
+    assert_eq!(items.len(), 39);
     let find = |key: &str| items.iter().find(|i| i["key"] == key).unwrap();
     assert_eq!(find("suppressions.require_approval")["value"], json!(false));
     assert_eq!(find("sso.remove_inactive_days")["value"], json!(90));
@@ -197,6 +197,56 @@ async fn text_and_secret_settings_reset_and_never_show_a_secret() {
     // the audit line says set or not set, never the value
     let recent = body["recent"].to_string();
     assert!(recent.contains("\"set\""), "{recent}");
+    let (status, body) = fx.call(a, "PATCH", key, Some(json!({"value": null}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["is_set"], json!(false));
+    fx.db.drop().await;
+}
+
+#[tokio::test]
+async fn the_assistant_settings_are_checked_and_its_key_is_never_shown() {
+    let Some(fx) = Fx::new().await else { return };
+    let a = &fx.admin;
+    let profile = "/api/v1/settings/assistant.profile";
+    let key = "/api/v1/settings/assistant.backend.api_key";
+
+    let (_, body) = fx.call(a, "GET", "/api/v1/settings", None).await;
+    let items = body["items"].as_array().unwrap();
+    let find = |key: &str| items.iter().find(|i| i["key"] == key).unwrap().clone();
+    assert_eq!(find("assistant.profile")["kind"], json!("choice"));
+    assert_eq!(
+        find("assistant.profile")["options"],
+        json!(["small", "medium", "large"])
+    );
+    assert_eq!(find("assistant.enabled")["applies"], json!("restart"));
+
+    let (status, body) = fx
+        .call(a, "PATCH", profile, Some(json!({"value": "huge"})))
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["code"], "invalid_setting");
+    let (status, body) = fx
+        .call(a, "PATCH", profile, Some(json!({"value": "medium"})))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["value"], json!("medium"));
+
+    let (status, body) = fx
+        .call(a, "PATCH", key, Some(json!({"value": "model-key-123\n"})))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["is_set"], json!(true));
+    assert_eq!(body["value"], json!(null));
+    let (_, body) = fx.call(a, "GET", "/api/v1/settings", None).await;
+    assert!(!body.to_string().contains("model-key-123"));
+    let set = body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["key"] == "assistant.backend.api_key")
+        .unwrap()
+        .clone();
+    assert_eq!(set["is_set"], json!(true));
     let (status, body) = fx.call(a, "PATCH", key, Some(json!({"value": null}))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["is_set"], json!(false));

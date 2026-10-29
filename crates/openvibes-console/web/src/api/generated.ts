@@ -7279,7 +7279,7 @@ export interface components {
             is_set?: boolean | null;
             /** @description The key, such as `sso.remove_inactive_days`. */
             key: string;
-            /** @description `bool`, `int`, `text` or `secret`. */
+            /** @description `bool`, `int`, `text`, `choice` or `secret`. */
             kind: string;
             /** @description Short name. */
             label: string;
@@ -7293,6 +7293,8 @@ export interface components {
              * @description Smallest allowed value (`int` only).
              */
             min?: number | null;
+            /** @description The allowed words (`choice` only). */
+            options?: string[] | null;
             /** @description The section it is shown under. */
             section: string;
             /** @description The value now; null for a secret, which is never shown. */

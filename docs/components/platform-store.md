@@ -581,7 +581,11 @@ says `set` or `not set`, never the value) and `secret` (a service reads
 one). `console_settings` also grants DELETE to the console and SELECT to
 `openvibes-vulns` (and, in schema 71, to `openvibes-ingest` and
 `openvibes-distribution`, which read their own keys once at start with
-`read_with_prefix`). Tests: `tests/console_settings.rs`.
+`read_with_prefix`). Schema 72 adds `console_secrets` (same columns) for
+secrets the console itself uses, the assistant's API key: the console role
+has SELECT, INSERT, UPDATE and DELETE on it, no other role has anything.
+`set_secret`, `secret` and `secrets_set` pick the table by key (`assistant.*`
+goes to `console_secrets`). Tests: `tests/console_settings.rs`.
 
 ## Saved views and list columns (`saved_views::…`, schema 56)
 

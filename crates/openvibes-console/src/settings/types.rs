@@ -15,7 +15,7 @@ pub(crate) struct SettingView {
     pub label: String,
     /// One-sentence explanation.
     pub help: String,
-    /// `bool`, `int`, `text` or `secret`.
+    /// `bool`, `int`, `text`, `choice` or `secret`.
     pub kind: String,
     /// `live` (reaches the service within about a minute) or `restart` (at
     /// the service's next start).
@@ -26,6 +26,9 @@ pub(crate) struct SettingView {
     /// Largest allowed value (`int` only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max: Option<i64>,
+    /// The allowed words (`choice` only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<String>>,
     /// The value when nobody changed it.
     pub default: Value,
     /// The value now; null for a secret, which is never shown.

@@ -6,15 +6,15 @@
 ## Interfaces
 
 - `GET /api/v1/settings` returns `{items, recent}`: each item has `key`,
-  `section`, `label`, `help`, `kind` (`bool`, `int`, `text` or `secret`),
-  `applies` (`live` or `restart`), `min`/`max` (int), `default`, `value`
+  `section`, `label`, `help`, `kind` (`bool`, `int`, `text`, `choice` or `secret`),
+  `applies` (`live` or `restart`), `min`/`max` (int), `options` (choice: the allowed words), `default`, `value`
   (null for a secret), `is_set` (secrets only) and `changed_at`/`changed_by`
   once changed; `recent`
   holds the last five changes (`at`, `actor`, `key`, `old`, `new`), newest
   first.
 - `PATCH /api/v1/settings/{key}` with `{"value": …}` returns the item. A
   `null` value puts the setting back to its default (a secret: removes it).
-  A secret goes to `service_secrets`, is never returned, and the audit line
+  A secret goes to `service_secrets` (the assistant's API key, `assistant.backend.api_key`, to `console_secrets`), is never returned, and the audit line
   says only `set` or `not set`.
 
 Both need `settings.manage` (Administrator only); the PATCH needs the CSRF
@@ -23,7 +23,11 @@ token. The definitions live in the `platform-settings` crate
 same rules; a key with no stored row has its default. Keys: the two general
 ones (`suppressions.require_approval`, `sso.remove_inactive_days`) and the
 twelve `vulns.*` feed settings, which the vulnerability service applies over
-its file within about a minute ([openvibes-vulns.md](openvibes-vulns.md)).
+its file within about a minute ([openvibes-vulns.md](openvibes-vulns.md)), the
+ingest and distribution ones (applied at their next restart) and the fifteen
+`assistant.*` ones, which the console reads once at start over `[assistant]`
+of `console.toml`; settings that fail the assistant's own rules together leave
+the assistant off, with a log line ([console-assistant.md](console-assistant.md)).
 
 ## Failure behaviour
 

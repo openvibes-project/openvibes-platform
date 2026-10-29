@@ -17,8 +17,9 @@ const settings: SettingsView = {
   items: [
     { key: "suppressions.require_approval", section: "Alarm suppressions", label: "Suppressions need approval", help: "A new suppression waits until someone else accepts it.", kind: "bool", applies: "live", default: false, value: true },
     { key: "sso.remove_inactive_days", section: "Single sign-on", label: "Remove inactive single sign-on users", help: "Days without a sign-in.", kind: "int", applies: "live", min: 1, max: 3650, default: 90, value: 90 },
-    { key: "vulns.proxy_url", section: "Vulnerability feeds", label: "Proxy", help: "Where the feeds are fetched through.", kind: "text", applies: "live", default: "", value: "http://proxy.example:3128" },
+    { key: "vulns.proxy_url", section: "Vulnerability feeds", label: "Proxy", help: "Where the feeds are fetched through.", kind: "text", applies: "live", default: "", value: "http://proxy.example:3128", changed_at: "2026-10-16T09:00:00Z", changed_by: "alex" },
     { key: "vulns.nvd_api_key", section: "Vulnerability feeds", label: "NVD API key", help: "Raises the rate limit.", kind: "secret", applies: "live", default: null, value: null, is_set: true },
+    { key: "assistant.profile", section: "Assistant", label: "Hardware profile", help: "How much of each question is sent.", kind: "choice", applies: "restart", options: ["small", "medium", "large"], default: "small", value: "medium" },
     { key: "vulns.agent", section: "Vulnerability feeds", label: "Later", help: "Needs a restart.", kind: "int", applies: "restart", min: 1, max: 9, default: 1, value: 1 },
   ],
   recent: [{ at: "2026-10-16T09:00:00Z", actor: "alex", key: "suppressions.require_approval", old: null, new: true }],
@@ -60,6 +61,21 @@ describe("General text and secret rows", () => {
     expect(out).toMatch(/<input[^>]*type="text"[^>]*aria-label="Proxy"[^>]*value="http:\/\/proxy.example:3128"/);
     expect(out).toContain("Reset to default");
   });
+  it("shows a choice as a list with the saved word selected and a way back to the default", () => {
+    const out = html();
+    expect(out).toContain("Hardware profile");
+    expect(out).toContain(">medium<");
+    expect(out).toContain("part of console.toml says");
+  });
+  it("offers the way back for any stored row, even one equal to the default, and a bool too", () => {
+    const view = (item: SettingsView["items"][number]) => renderToStaticMarkup(
+      <SessionContext.Provider value={{ session: undefined, demo: false, can: () => true, canEverywhere: () => true }}><GeneralBody settings={{ items: [item], recent: [] }} /></SessionContext.Provider>,
+    );
+    const stored = { changed_at: "2026-10-16T09:00:00Z", changed_by: "alex" };
+    expect(view({ key: "a.b", section: "S", label: "A", help: "h", kind: "int", applies: "live", min: 1, max: 9, default: 1, value: 1, ...stored })).toContain("Reset to default");
+    expect(view({ key: "a.c", section: "S", label: "B", help: "h", kind: "bool", applies: "live", default: false, value: false, ...stored })).toContain("Reset to default");
+    expect(view({ key: "a.d", section: "S", label: "C", help: "h", kind: "int", applies: "live", min: 1, max: 9, default: 1, value: 1 })).not.toContain("Reset to default");
+  });
   it("never shows a secret, only that it is set, and offers Remove", () => {
     const out = html();
     expect(out).toMatch(/<input[^>]*type="password"[^>]*aria-label="NVD API key"/);
@@ -67,7 +83,7 @@ describe("General text and secret rows", () => {
     expect(out).toContain(">Remove<");
   });
   it("says which settings wait for a restart", () => {
-    expect(html().match(/Applies after the service restarts/g)).toHaveLength(1);
+    expect(html().match(/Applies after the service restarts/g)).toHaveLength(2);
   });
   it("sends a typed address as text, and null for a reset", async () => {
     const sent: unknown[] = [];

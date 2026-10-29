@@ -15,12 +15,15 @@ pub(crate) mod internet;
 mod internet_types;
 mod lookups;
 mod runtime;
+pub(crate) mod stored;
 mod types;
 
 #[cfg(test)]
 mod internet_tests;
 #[cfg(test)]
 mod lookup_tests;
+#[cfg(test)]
+mod stored_tests;
 
 pub(crate) use lookups::{Access, ConsoleReadLookups};
 pub(crate) use runtime::{AssistantRuntime, LeasedChatBackend};

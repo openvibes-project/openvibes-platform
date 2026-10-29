@@ -20,6 +20,10 @@ pub enum Text {
     ProxyOrEmpty,
     /// An architecture name such as `x86_64`.
     Arch,
+    /// An `http://` or `https://` address; empty means none.
+    HttpUrlOrEmpty,
+    /// One line of text without spaces; empty means none.
+    Plain,
 }
 
 /// A setting's type and limits.
@@ -44,6 +48,13 @@ pub enum Kind {
         /// What it must look like.
         check: Text,
         /// The value when nobody changed it (the service's built-in one).
+        default: &'static str,
+    },
+    /// One of a fixed list of words.
+    Choice {
+        /// The allowed values, in display order.
+        options: &'static [&'static str],
+        /// The value when nobody changed it.
         default: &'static str,
     },
     /// A secret: stored apart, never shown again.
@@ -77,8 +88,17 @@ impl Definition {
         match self.kind {
             Kind::Bool { default } => default.into(),
             Kind::Int { default, .. } => default.into(),
-            Kind::Text { default, .. } => default.into(),
+            Kind::Text { default, .. } | Kind::Choice { default, .. } => default.into(),
             Kind::Secret => Value::Null,
+        }
+    }
+
+    /// The allowed words of a choice.
+    #[must_use]
+    pub fn options(&self) -> Option<&'static [&'static str]> {
+        match self.kind {
+            Kind::Choice { options, .. } => Some(options),
+            _ => None,
         }
     }
 
@@ -95,6 +115,7 @@ impl Definition {
             Kind::Bool { .. } => "bool",
             Kind::Int { .. } => "int",
             Kind::Text { .. } => "text",
+            Kind::Choice { .. } => "choice",
             Kind::Secret => "secret",
         }
     }
@@ -114,6 +135,10 @@ impl Definition {
             Kind::Text { check, .. } => match value.as_str() {
                 Some(text) => check_text(check, text),
                 None => Err("Use text".into()),
+            },
+            Kind::Choice { options, .. } => match value.as_str() {
+                Some(text) if options.contains(&text) => Ok(()),
+                _ => Err(format!("Use one of: {}", options.join(", "))),
             },
             Kind::Secret => match value.as_str() {
                 Some("") => Err("Type the value, or remove it".into()),
@@ -155,6 +180,12 @@ fn check_text(check: Text, text: &str) -> Result<(), String> {
             _ if text.starts_with("http://") || text.starts_with("https://") => Ok(()),
             _ => Err("Use an address like http://proxy.example:3128, or leave it empty".into()),
         },
+        Text::HttpUrlOrEmpty => match text {
+            "" => Ok(()),
+            _ if text.starts_with("http://") || text.starts_with("https://") => Ok(()),
+            _ => Err("Use an address like https://llm.example:8443/v1, or leave it empty".into()),
+        },
+        Text::Plain => Ok(()),
         Text::Arch => {
             if !text.is_empty() && text.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
                 Ok(())

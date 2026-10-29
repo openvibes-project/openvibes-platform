@@ -61,18 +61,23 @@ pub async fn serve(
             drop(client);
             // One-time, bounded: index stored rule bundles not yet indexed.
             tokio::spawn(crate::rules::meta::backfill_on_start(pool.clone()));
-            let assistant_runtime = config
-                .assistant
-                .as_ref()
-                .filter(|assistant| assistant.enabled)
-                .map(|assistant| {
-                    assistant
-                        .validate()
-                        .map_err(|_| ConsoleError::Config)
-                        .and_then(crate::assistant::AssistantRuntime::new)
-                })
-                .transpose()?
-                .flatten();
+            // The console's own settings sit over the file. If they cannot be
+            // read or do not pass the assistant's rules the assistant stays
+            // off (the console still starts): the file may be looser than
+            // what an administrator just set.
+            let assistant_runtime = match assistant_settings(&pool).await {
+                Ok((stored, api_key)) => {
+                    crate::assistant::stored::resolve(config.assistant.as_ref(), &stored, api_key)
+                        .map_err(|_| ConsoleError::Config)?
+                        .map(crate::assistant::AssistantRuntime::new)
+                        .transpose()?
+                        .flatten()
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "the assistant settings could not be read; the assistant stays off");
+                    None
+                }
+            };
             crate::about::mark_started();
             let update_checker = config
                 .update_check
@@ -330,4 +335,27 @@ async fn stop_requested(mut receiver: watch::Receiver<bool>) {
         return;
     }
     let _ = receiver.wait_for(|stop| *stop).await;
+}
+
+/// Every stored console setting and the assistant's API key.
+async fn assistant_settings(
+    pool: &platform_store::Pool,
+) -> Result<
+    (
+        std::collections::HashMap<String, serde_json::Value>,
+        Option<String>,
+    ),
+    platform_store::StoreError,
+> {
+    let client = pool
+        .get()
+        .await
+        .map_err(|_| platform_store::StoreError::Unavailable)?;
+    let stored = platform_store::console_settings::values(&client).await?;
+    let api_key = platform_store::console_settings::secret(
+        &client,
+        platform_settings::assistant_keys::API_KEY,
+    )
+    .await?;
+    Ok((stored, api_key))
 }
