@@ -1,7 +1,6 @@
 //! Maintenance (spec §6): the menu and the pages behind it, on today's
 //! backend. Pages whose backend comes with a later step are not listed
-//! until then; today's Settings files screen stays behind the menu until
-//! its page replaces it.
+//! until then.
 
 #[cfg(test)]
 mod apply_tests;

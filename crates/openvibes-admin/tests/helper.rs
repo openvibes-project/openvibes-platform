@@ -44,12 +44,7 @@ fn unknown_verbs_are_refused() {
 
 #[test]
 fn config_verbs_refuse_other_services_before_anything_else() {
-    for args in [
-        ["config-read", "llm"],
-        ["config-read", "../../etc/shadow"],
-        ["config-write", "ingest.toml"],
-        ["config-write", ""],
-    ] {
+    for args in [["config-read", "llm"], ["config-read", "../../etc/shadow"]] {
         let out = helper(&args);
         assert_eq!(out.status.code(), Some(2), "{args:?}");
         assert!(
@@ -60,12 +55,12 @@ fn config_verbs_refuse_other_services_before_anything_else() {
 }
 
 #[test]
-fn config_verbs_need_root() {
-    for verb in ["config-read", "config-write"] {
-        let out = helper(&[verb, "ingest"]);
-        assert_eq!(out.status.code(), Some(1), "{verb}");
-        assert!(String::from_utf8_lossy(&out.stderr).contains("helper must run as root"));
-    }
+fn config_read_needs_root_and_there_is_no_config_write() {
+    let out = helper(&["config-read", "ingest"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("helper must run as root"));
+    // the verb was removed with the Settings files screen (TUI 6d)
+    assert_eq!(helper(&["config-write", "ingest"]).status.code(), Some(2));
 }
 
 #[test]

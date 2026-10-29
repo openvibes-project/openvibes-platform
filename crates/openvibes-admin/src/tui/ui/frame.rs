@@ -2,7 +2,7 @@
 //! empty line, an optional title rule, the content, and the bar. The
 //! content starts on the line right after the rule (or the gap): a list's
 //! top line is the one empty line (or its scroll hint); screens that start
-//! with anything else add their own blank first. Legacy screens get only the location line.
+//! with anything else add their own blank first.
 
 use ratatui::{
     Frame,

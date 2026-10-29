@@ -219,18 +219,24 @@ inactive whenever the assistant is idle (see [openvibes-llm.md](openvibes-llm.md
 **Configuration**: there is no settings editor in the TUI any more (the old
 Maintenance › Settings files screen went with TUI rework step 6d). The limits,
 timeouts, feed addresses, proxy and assistant options are changed in the
-console, Settings › General ([platform-settings.md](platform-settings.md));
-listen ports, certificates and the database connection have their Maintenance
-pages (Ports and addresses, which keeps the console's public address in step,
-Certificates, Database). What nothing edits is left to the
-files in `/etc/openvibes/` (`ingest.toml`, `distribution.toml`, `vulns.toml`,
+console, Settings › General ([platform-settings.md](platform-settings.md)).
+Setup and Repair write what they own: the listen ports (Maintenance › Ports
+and addresses, which also keeps the console's public address in step) and the
+certificate files they issue. Maintenance › Database only reports. Everything
+else in `/etc/openvibes/` (`ingest.toml`, `distribution.toml`, `vulns.toml`,
 `console.toml` with the assistant's `[assistant]` section, `admin.toml`;
-`llm.conf` is an environment file), changed by hand: each `health_listen`,
-`database_pool_size`, `osv_dir`, `development_listen`, the trusted proxy
-settings and the assistant's file paths (`api_key_file`, `ca_file`,
-`client_certificate_file`, `client_key_file`). A service reads its file at
-start, so restart it afterwards (Status › the service). `helper config-write`
-(a checked write of one service file as root) stays for scripts.
+`llm.conf` is an environment file) is changed by hand with an editor, as
+root: `database_url` (in all five files) and `database_pool_size`, the
+certificate, key and CA file paths (`server_certificate_file`,
+`server_key_file`, `client_ca_file`, `issuing_certificate_file`,
+`issuing_key_file`), each `health_listen`, the console's `transport_mode`,
+`development_listen`, `unix_socket_file`, `trusted_proxy_addresses` and
+`trusted_proxy_uids`, `osv_dir`, and the assistant's file paths
+(`api_key_file`, `ca_file`, `client_certificate_file`, `client_key_file`). A
+service reads its file at start, so restart it afterwards (Status › the
+service). There is no helper verb that writes a service file any more
+(`config-write` was removed with the screen); `config-read` stays for
+Certificates › Replace.
 
 **Database** (Maintenance › Database): a report only (spec §6). It shows the schema ("N · up to date", or "migration pending"), the database size with its disk's size and use ("3.1 GB on a 120 GB disk (41% used)"), the data kept (90 days, set in the console), and the automatic nightly clean-up with the date of its last run ("ran today") and what it removed. The timer's time of day is not shown: no host call reads it. These are read on another thread (the disk too) from `status` (run as `openvibes-admin`) and from the maintenance service's journal (`helper logs` now reads `openvibes-maintenance.service` along with the timer). Migrations run in Update; the clean-up has no button.
 
@@ -321,10 +327,6 @@ sudo; it checks its arguments first and refuses unless run as root:
 - `logs UNIT LINES`: the unit must be one of the six, LINES 1 to 500;
 - `config-read SERVICE`: prints `/etc/openvibes/SERVICE.toml` (`ingest`,
   `distribution`, `vulns`, `console`, `admin`; regular files only);
-- `config-write SERVICE`: replaces that file with standard input (at most
-  64 KiB of UTF-8) once the service's type accepts it: a temp file in
-  `/etc/openvibes`, the original owner, group and mode, `SERVICE.toml.bak`,
-  then an atomic rename. A refused or failed write leaves the old file.
 
 ## Configuration
 

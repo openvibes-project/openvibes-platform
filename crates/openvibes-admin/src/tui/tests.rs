@@ -119,13 +119,6 @@ impl Host for FakeHost {
             Service::Admin => Ok("database_url = \n".into()),
         }
     }
-    fn write_config(&self, service: Service, toml: &str) -> Result<(), HostError> {
-        if self.refuse {
-            return Err(HostError::NotOperator);
-        }
-        self.writes.borrow_mut().push((service, toml.into()));
-        Ok(())
-    }
     fn is_set_up(&self) -> bool {
         true
     }

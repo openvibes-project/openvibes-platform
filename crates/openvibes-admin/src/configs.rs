@@ -1,6 +1,7 @@
-//! The configuration files the Configuration screen edits (admin TUI spec
-//! §5), checked by each service's own configuration type, so the TUI and
-//! the root helper accept exactly what the service will start with.
+//! The configuration files the admin tool edits (Setup, Replace, assistant
+//! setup and tuning), checked by each service's own configuration type, so
+//! the tool and the root helper accept exactly what the service will start
+//! with.
 
 use platform_host::Service;
 use serde::{Deserialize, de::DeserializeOwned};

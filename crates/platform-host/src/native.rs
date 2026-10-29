@@ -192,13 +192,6 @@ impl<R: Runner> Host for Native<R> {
             .map(|out| out.stdout)
     }
 
-    fn write_config(&self, service: Service, toml: &str) -> Result<(), HostError> {
-        let result = self.helper(&["config-write", service.name()], Some(toml.as_bytes()));
-        let outcome = if result.is_ok() { "ok" } else { "failed" };
-        self.journal("config-write", service.name(), outcome);
-        result.map(drop)
-    }
-
     fn is_set_up(&self) -> bool {
         std::path::Path::new(SETUP_FILE).exists()
     }

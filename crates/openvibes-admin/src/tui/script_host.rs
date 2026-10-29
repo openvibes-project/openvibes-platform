@@ -63,9 +63,6 @@ impl Host for SetupHost {
     fn read_config(&self, _: Service) -> Result<String, HostError> {
         Err(HostError::NotOperator)
     }
-    fn write_config(&self, _: Service, _: &str) -> Result<(), HostError> {
-        Err(HostError::NotOperator)
-    }
     fn is_set_up(&self) -> bool {
         self.set_up
     }
