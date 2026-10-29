@@ -98,7 +98,7 @@ const INGEST: &[Field] = &[
     field(
         "finding_retention_days",
         Integer,
-        "Findings older than this are not stored, 1 to 36500 days (default 90); match maintenance --retention-days.",
+        "Findings older than this are not stored, 1 to 36500 days (default 90); the console setting “Keep findings” overrides this file for ingest and maintenance.",
     ),
     field(
         "request_timeout_seconds",

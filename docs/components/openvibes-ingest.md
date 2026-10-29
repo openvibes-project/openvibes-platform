@@ -30,7 +30,7 @@ Strict TOML (unknown keys refused), absolute paths only:
 | `max_in_flight` | 4096 | at least 1 |
 | `inventory_request_timeout_seconds` | 180 | 1 to 900; deadline for a whole inventory report (8 MiB at 500 kbit/s); other requests keep `request_timeout_seconds` |
 | `max_inventory_in_flight` | 4 | 1 to 128; inventory reports handled at once (each up to 8 MiB; the slot is taken before the body is read), above it 503 |
-| `finding_retention_days` | 90 | 1 to 36500; match `openvibes-admin maintenance` |
+| `finding_retention_days` | 90 | 1 to 36500; `openvibes-admin maintenance` uses the same console setting unless given `--retention-days` |
 | `request_timeout_seconds` | 10 | 1 to 300; TLS handshake, request headers, and each whole request |
 | `max_connections` | 1024 | 1 to 65536; keep below the process's file limit (`LimitNOFILE`) |
 | `database_pool_size` | 16 | 1 to 1024 |
@@ -44,7 +44,7 @@ General › Agent connections (`ingest.*` rows of `console_settings`, see
 start, over the file, so a change applies at the next restart of the service
 (Maintenance › Service in the admin tool). The file value is what applies for
 anything nobody changed. If the settings cannot be read or are not valid the
-service starts with the file alone and logs why. Tests:
+service starts with the file alone and logs why. The database grant is read access to the whole `console_settings` table (not only this service's prefix); secrets live in a table the service cannot read. Tests:
 `tests/console_settings.rs`.
 
 ## TLS and authentication

@@ -69,7 +69,7 @@ General › Rule distribution (`distribution.*` rows of `console_settings`, see
 start, over the file, so a change applies at the next restart of the service
 (Maintenance › Service in the admin tool). The file value is what applies for
 anything nobody changed. If the settings cannot be read or are not valid the
-service starts with the file alone and logs why. Tests:
+service starts with the file alone and logs why. The database grant is read access to the whole `console_settings` table (not only this service's prefix); secrets live in a table the service cannot read. Tests:
 `tests/console_settings.rs`.
 
 ## Failure behaviour

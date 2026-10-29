@@ -1984,6 +1984,7 @@ dependencies = [
  "platform-config",
  "platform-host",
  "platform-pki",
+ "platform-settings",
  "platform-store",
  "ratatui",
  "ring",

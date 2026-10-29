@@ -19,6 +19,8 @@ const APPROVE = "alarms.suppressions.approve";
 /** What a section's "default" means, where it is not the built-in value. */
 const SECTION_NOTES: Record<string, string> = {
   "Vulnerability feeds": "Default is what vulns.toml says (the built-in value unless it was edited on the server). A change reaches the service within a minute and restarts its running feed downloads.",
+  "Agent connections": "Default is what ingest.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool). “Keep findings” also sets how long maintenance keeps them.",
+  "Rule distribution": "Default is what distribution.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool).",
 };
 const slug = (section: string) => `general-${section.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
