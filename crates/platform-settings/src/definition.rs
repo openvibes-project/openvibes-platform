@@ -116,9 +116,15 @@ impl Definition {
                 None => Err("Use text".into()),
             },
             Kind::Secret => match value.as_str() {
-                Some(text) if text.trim().is_empty() => Err("Type the value, or remove it".into()),
-                Some(text) if text.len() > MAX_SECRET || text.chars().any(char::is_control) => {
-                    Err("Use one line of at most 512 characters".into())
+                Some("") => Err("Type the value, or remove it".into()),
+                // A key goes into an HTTP header: visible ASCII only.
+                Some(text)
+                    if text.len() > MAX_SECRET || !text.bytes().all(|b| b.is_ascii_graphic()) =>
+                {
+                    Err(
+                        "Use letters, digits and symbols without spaces, at most 512 characters"
+                            .into(),
+                    )
                 }
                 Some(_) => Ok(()),
                 None => Err("Use text".into()),
@@ -130,6 +136,10 @@ impl Definition {
 fn check_text(check: Text, text: &str) -> Result<(), String> {
     if text.len() > MAX_TEXT || text.chars().any(|c| c.is_control() || c == ' ') {
         return Err("Use one line without spaces".into());
+    }
+    if has_userinfo(text) {
+        // The value is shown again and written to the audit log.
+        return Err("Leave out the user name and password".into());
     }
     match check {
         Text::HttpsUrl if text.is_empty() => Err("This cannot be empty".into()),
@@ -153,6 +163,16 @@ fn check_text(check: Text, text: &str) -> Result<(), String> {
             }
         }
     }
+}
+
+/// `scheme://user:password@host`: credentials in the address.
+fn has_userinfo(text: &str) -> bool {
+    text.split_once("://").is_some_and(|(_, rest)| {
+        rest.split(['/', '?', '#'])
+            .next()
+            .unwrap_or("")
+            .contains('@')
+    })
 }
 
 fn is_https(text: &str) -> bool {

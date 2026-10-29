@@ -143,7 +143,12 @@ async fn text_and_secret_settings_reset_and_never_show_a_secret() {
     assert_eq!(find("vulns.nvd_api_key")["is_set"], json!(false));
 
     // text is checked, stored, and put back with null
-    for bad in [json!("ftp://x"), json!(5), json!("http://a b")] {
+    for bad in [
+        json!("ftp://x"),
+        json!(5),
+        json!("http://a b"),
+        json!("http://u:p@proxy.example:3128"),
+    ] {
         let (status, body) = fx
             .call(a, "PATCH", proxy, Some(json!({"value": bad})))
             .await;
@@ -168,12 +173,12 @@ async fn text_and_secret_settings_reset_and_never_show_a_secret() {
     assert!(body.get("changed_at").is_none());
 
     // a secret is set, reported as set, never returned, and removed with null
-    for bad in [json!(5), json!("  "), json!("a\nb")] {
+    for bad in [json!(5), json!("  "), json!("a b"), json!("kéy")] {
         let (status, _) = fx.call(a, "PATCH", key, Some(json!({"value": bad}))).await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}");
     }
     let (status, body) = fx
-        .call(a, "PATCH", key, Some(json!({"value": "s3cret-key"})))
+        .call(a, "PATCH", key, Some(json!({"value": "s3cret-key\n"})))
         .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["is_set"], json!(true));

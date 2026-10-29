@@ -40,8 +40,9 @@ fn a_secret_has_no_default_and_must_be_one_clean_line() {
     assert!(key.check(&json!("abc-123")).is_ok());
     for bad in [
         json!(""),
-        json!("  "),
+        json!("a b"),
         json!("a\nb"),
+        json!("kéy"),
         json!("x".repeat(513)),
         json!(7),
     ] {
@@ -102,4 +103,23 @@ fn the_consoles_own_settings_are_still_there() {
             .check(&json!(3651))
             .is_err()
     );
+}
+
+#[test]
+fn an_address_may_not_carry_a_user_name_and_password() {
+    let proxy = find("vulns.proxy_url").unwrap();
+    assert!(proxy.check(&json!("http://proxy.example:3128")).is_ok());
+    for bad in [
+        "http://user:pass@proxy.example:3128",
+        "https://u@proxy.example",
+    ] {
+        assert!(proxy.check(&json!(bad)).is_err(), "{bad}");
+    }
+    let kev = find("vulns.kev_url").unwrap();
+    assert!(
+        kev.check(&json!("https://user:pw@example.org/kev.json"))
+            .is_err()
+    );
+    // an @ in the path is not credentials
+    assert!(kev.check(&json!("https://example.org/a@b.json")).is_ok());
 }

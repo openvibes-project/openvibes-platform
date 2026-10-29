@@ -25,7 +25,7 @@ General (console reads them itself): `suppressions.require_approval`,
 metalink URL, architecture, proxy, largest download (MiB), KEV, EPSS, NVD,
 EUVD and OSV addresses, largest OSV download (MiB), and the NVD API key (a
 secret, stored in `service_secrets`, never shown again). Text must be one
-line without spaces; an address must be HTTPS (plain HTTP only on loopback).
+line without spaces; an address must be HTTPS (plain HTTP only on loopback) and may not carry a user name and password (the value is shown again and audited). A secret is trimmed by the console and may hold visible ASCII only (it goes into an HTTP header).
 
 ## How to test
 

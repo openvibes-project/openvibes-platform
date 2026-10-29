@@ -136,6 +136,13 @@ pub(crate) async fn update_setting(
     };
     let now = Utc::now();
     // Null puts the setting back to its default; a secret is removed.
+    let mut request = request;
+    if def.is_secret()
+        && let Some(text) = request.value.as_str()
+    {
+        // A pasted key often carries a trailing newline.
+        request.value = text.trim().into();
+    }
     let reset = request.value.is_null();
     if !reset && let Err(message) = def.check(&request.value) {
         return invalid(&message);

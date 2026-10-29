@@ -576,7 +576,7 @@ Schema 70 adds `service_secrets (key, value, changed_at, changed_by)` for
 settings that are secrets (the NVD API key). The console's role may write
 it and read only `key`, `changed_at`, `changed_by` (column grants), so no
 console query can return a value; `openvibes-vulns` may read it.
-`secrets_set` (which are set), `set_secret` (set or remove; the audit line
+`secrets_set` (which are set), `set_secret` (set or remove; an UPDATE or an INSERT under an advisory lock, never an upsert, because `EXCLUDED.value` would need SELECT on the value; the audit line
 says `set` or `not set`, never the value) and `secret` (a service reads
 one). `console_settings` also grants DELETE to the console and SELECT to
 `openvibes-vulns`. Tests: `tests/console_settings.rs`.

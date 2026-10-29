@@ -160,11 +160,19 @@ pub async fn set_secret(
         .await?
         .is_some();
     match value {
+        // Not an upsert: `EXCLUDED.value` needs SELECT on `value`, which the
+        // console's role does not have (the advisory lock makes the two
+        // statements safe).
+        Some(value) if was_set => {
+            tx.execute(
+                "UPDATE service_secrets SET value = $2, changed_at = $3, changed_by = $4 WHERE key = $1",
+                &[&key, &value, &now, &actor],
+            )
+            .await?;
+        }
         Some(value) => {
             tx.execute(
-                "INSERT INTO service_secrets (key, value, changed_at, changed_by) VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (key) DO UPDATE
-                 SET value = EXCLUDED.value, changed_at = EXCLUDED.changed_at, changed_by = EXCLUDED.changed_by",
+                "INSERT INTO service_secrets (key, value, changed_at, changed_by) VALUES ($1, $2, $3, $4)",
                 &[&key, &value, &now, &actor],
             )
             .await?;

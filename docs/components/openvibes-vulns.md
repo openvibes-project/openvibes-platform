@@ -204,8 +204,13 @@ tasks with the new values, no restart. The file stays the base: it still
 decides the database, the health listener and the OSV directory, and it is
 what applies for every setting nobody changed. Stored values go through the
 same `validate()`; a value that cannot be applied logs a warning and the
-service carries on with the file. The key set in the console wins over
-`nvd_api_key_file`. Tests: `src/settings_tests.rs`,
+service carries on with the file; if the file alone cannot run either
+(for example `nvd_api_key_file` became unreadable) it waits one poll, or a
+settings change, before trying again. A rebuild stops the running feed work: a
+change to any key restarts an NVD sync or a large OSV download in progress
+(the new tasks start with a full check at once). "Default" in the console
+means what `vulns.toml` says for a key nobody changed. The key set in the
+console wins over `nvd_api_key_file`. Tests: `src/settings_tests.rs`,
 `tests/service.rs::a_changed_console_setting_reaches_the_running_service`.
 
 Packaged as the `openvibes-vulns` RPM with its unit and user

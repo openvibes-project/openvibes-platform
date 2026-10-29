@@ -16,6 +16,10 @@ import { createRowEditor } from "./rowEditor";
 
 const SAVED = "Saved · recorded in the audit log";
 const APPROVE = "alarms.suppressions.approve";
+/** What a section's "default" means, where it is not the built-in value. */
+const SECTION_NOTES: Record<string, string> = {
+  "Vulnerability feeds": "Default is what vulns.toml says (the built-in value unless it was edited on the server). A change reaches the service within a minute and restarts its running feed downloads.",
+};
 const slug = (section: string) => `general-${section.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
 export type Saved = { ok: boolean; message: string };
@@ -112,6 +116,7 @@ export function GeneralBody({ settings, roles, names = new Map() }: { settings: 
             <div key={s} id={slug(s)}>
               <Card title={s}>
                 <div className="stack">
+                  {SECTION_NOTES[s] && <p className="subtle">{SECTION_NOTES[s]}</p>}
                   {settings.items.filter((i) => i.section === s).map((item) => (
                     <div key={item.key} className="stack">
                       <Row setting={item} />

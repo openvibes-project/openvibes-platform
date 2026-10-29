@@ -59,24 +59,52 @@ pub async fn run_polling(
         Stored::default()
     });
     let mut first = true;
+    // After a failure the file alone is tried; when that fails too the
+    // service waits for a settings change instead of looping.
+    let mut file_only = false;
     let result = loop {
-        let config = effective(&file, &stored);
+        let in_use = if file_only {
+            Stored::default()
+        } else {
+            stored.clone()
+        };
+        let config = effective(&file, &in_use);
         let stop = async {
             tokio::select! {
                 () = &mut shutdown => None,
                 now = settings::changed(&pool, &stored, poll) => Some(now),
             }
         };
-        let key = stored.nvd_key().map(str::to_owned);
-        match serve(config, key, pool.clone(), stop).await {
-            Ok(Some(now)) => stored = now,
+        match serve(
+            config,
+            in_use.nvd_key().map(str::to_owned),
+            pool.clone(),
+            stop,
+        )
+        .await
+        {
+            Ok(Some(now)) => {
+                stored = now;
+                file_only = false;
+            }
             Ok(None) => break Ok(()),
             // At start an error is the operator's to see; later a setting
             // that cannot be applied must not take the service down.
             Err(error) if first => break Err(error),
-            Err(error) => {
+            Err(error) if !file_only && stored != Stored::default() => {
                 tracing::warn!(%error, "the console settings cannot be applied; using the file only");
-                stored = Stored::default();
+                file_only = true;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "cannot run; trying again at the next poll");
+                tokio::select! {
+                    () = &mut shutdown => break Ok(()),
+                    () = tokio::time::sleep(poll) => {}
+                    now = settings::changed(&pool, &stored, poll) => {
+                        stored = now;
+                        file_only = false;
+                    }
+                }
             }
         }
         first = false;

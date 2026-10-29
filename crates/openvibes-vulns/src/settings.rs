@@ -16,10 +16,19 @@ use crate::config::VulnsConfig;
 pub const POLL: Duration = Duration::from_secs(60);
 
 /// The `vulns.*` rows and the NVD API key as stored.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Default, Eq, PartialEq)]
 pub struct Stored {
     values: HashMap<String, Value>,
     nvd_key: Option<String>,
+}
+
+impl std::fmt::Debug for Stored {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Stored")
+            .field("values", &self.values)
+            .field("nvd_key", &self.nvd_key.as_ref().map(|_| "<set>"))
+            .finish()
+    }
 }
 
 impl Stored {
