@@ -130,6 +130,71 @@ impl IngestConfig {
     }
 }
 
+impl IngestConfig {
+    /// The file with the console's `ingest.*` settings over it. A value of
+    /// the wrong type is ignored (the console does not store one).
+    #[must_use]
+    pub fn with_stored(
+        &self,
+        values: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> Self {
+        use platform_settings::ingest_keys as key;
+        let number = |name: &str| values.get(name).and_then(serde_json::Value::as_u64);
+        let mut config = self.clone();
+        if let Some(days) = number(key::CLIENT_CERTIFICATE_DAYS).and_then(|n| u32::try_from(n).ok())
+        {
+            config.client_certificate_days = days;
+        }
+        if let Some(n) = number(key::MAX_IN_FLIGHT).and_then(|n| usize::try_from(n).ok()) {
+            config.max_in_flight = n;
+        }
+        if let Some(n) = number(key::INVENTORY_REQUEST_TIMEOUT_SECONDS) {
+            config.inventory_request_timeout_seconds = n;
+        }
+        if let Some(n) = number(key::MAX_INVENTORY_IN_FLIGHT).and_then(|n| usize::try_from(n).ok())
+        {
+            config.max_inventory_in_flight = n;
+        }
+        if let Some(days) = number(key::FINDING_RETENTION_DAYS).and_then(|n| u32::try_from(n).ok())
+        {
+            config.finding_retention_days = days;
+        }
+        if let Some(n) = number(key::REQUEST_TIMEOUT_SECONDS) {
+            config.request_timeout_seconds = n;
+        }
+        if let Some(n) = number(key::MAX_CONNECTIONS).and_then(|n| usize::try_from(n).ok()) {
+            config.max_connections = n;
+        }
+        config
+    }
+
+    /// The file with the settings stored in the database over it, read once
+    /// at start. When they cannot be read or are not valid the file alone
+    /// is used and the reason logged: the service always starts.
+    pub async fn with_console_settings(self) -> Self {
+        let stored = match platform_store::console_settings::read_with_prefix(
+            &self.database_url,
+            platform_settings::ingest_keys::PREFIX,
+        )
+        .await
+        {
+            Ok(stored) => stored,
+            Err(error) => {
+                tracing::warn!(%error, "cannot read the console settings; using the file only");
+                return self;
+            }
+        };
+        let config = self.with_stored(&stored);
+        match config.validate() {
+            Ok(()) => config,
+            Err(_) => {
+                tracing::warn!("the console settings are not valid; using the file only");
+                self
+            }
+        }
+    }
+}
+
 /// Loads and validates the configuration file.
 pub fn load_config(path: &std::path::Path) -> Result<IngestConfig, IngestError> {
     let config: IngestConfig = platform_config::load(path).map_err(|_| IngestError::Config)?;

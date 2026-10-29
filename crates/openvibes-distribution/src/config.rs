@@ -75,6 +75,56 @@ impl DistributionConfig {
     }
 }
 
+impl DistributionConfig {
+    /// The file with the console's `distribution.*` settings over it. A value
+    /// of the wrong type is ignored (the console does not store one).
+    #[must_use]
+    pub fn with_stored(
+        &self,
+        values: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> Self {
+        use platform_settings::distribution_keys as key;
+        let number = |name: &str| values.get(name).and_then(serde_json::Value::as_u64);
+        let mut config = self.clone();
+        if let Some(n) = number(key::MAX_IN_FLIGHT).and_then(|n| usize::try_from(n).ok()) {
+            config.max_in_flight = n;
+        }
+        if let Some(n) = number(key::REQUEST_TIMEOUT_SECONDS) {
+            config.request_timeout_seconds = n;
+        }
+        if let Some(n) = number(key::MAX_CONNECTIONS).and_then(|n| usize::try_from(n).ok()) {
+            config.max_connections = n;
+        }
+        config
+    }
+
+    /// The file with the settings stored in the database over it, read once
+    /// at start. When they cannot be read or are not valid the file alone
+    /// is used and the reason logged: the service always starts.
+    pub async fn with_console_settings(self) -> Self {
+        let stored = match platform_store::console_settings::read_with_prefix(
+            &self.database_url,
+            platform_settings::distribution_keys::PREFIX,
+        )
+        .await
+        {
+            Ok(stored) => stored,
+            Err(error) => {
+                tracing::warn!(%error, "cannot read the console settings; using the file only");
+                return self;
+            }
+        };
+        let config = self.with_stored(&stored);
+        match config.validate() {
+            Ok(()) => config,
+            Err(_) => {
+                tracing::warn!("the console settings are not valid; using the file only");
+                self
+            }
+        }
+    }
+}
+
 /// Loads and validates the configuration file.
 pub fn load_config(path: &std::path::Path) -> Result<DistributionConfig, DistributionError> {
     let config: DistributionConfig =

@@ -579,7 +579,9 @@ console query can return a value; `openvibes-vulns` may read it.
 `secrets_set` (which are set), `set_secret` (set or remove; an UPDATE or an INSERT under an advisory lock, never an upsert, because `EXCLUDED.value` would need SELECT on the value; the audit line
 says `set` or `not set`, never the value) and `secret` (a service reads
 one). `console_settings` also grants DELETE to the console and SELECT to
-`openvibes-vulns`. Tests: `tests/console_settings.rs`.
+`openvibes-vulns` (and, in schema 71, to `openvibes-ingest` and
+`openvibes-distribution`, which read their own keys once at start with
+`read_with_prefix`). Tests: `tests/console_settings.rs`.
 
 ## Saved views and list columns (`saved_views::…`, schema 56)
 

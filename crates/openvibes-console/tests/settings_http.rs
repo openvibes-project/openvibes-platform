@@ -19,7 +19,7 @@ async fn settings_are_typed_guarded_and_audited() {
     let (status, body) = fx.call(a, "GET", "/api/v1/settings", None).await;
     assert_eq!(status, StatusCode::OK);
     let items = body["items"].as_array().unwrap();
-    assert_eq!(items.len(), 14);
+    assert_eq!(items.len(), 24);
     let find = |key: &str| items.iter().find(|i| i["key"] == key).unwrap();
     assert_eq!(find("suppressions.require_approval")["value"], json!(false));
     assert_eq!(find("sso.remove_inactive_days")["value"], json!(90));

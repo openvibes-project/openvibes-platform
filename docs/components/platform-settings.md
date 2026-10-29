@@ -20,7 +20,11 @@ applies the same keys over its file, so both agree on what is valid.
 
 ## Keys
 
-General (console reads them itself): `suppressions.require_approval`,
+Agent connections (`ingest.*`, 7 numbers: certificate lifetime, requests at
+once, inventory deadline and uploads at once, findings kept, request
+deadline, open connections) and Rule distribution (`distribution.*`, 3:
+requests at once, request deadline, open connections) are all `Restart`:
+the service reads them once at start. General (console reads them itself): `suppressions.require_approval`,
 `sso.remove_inactive_days`. Vulnerability feeds (all live): check interval,
 metalink URL, architecture, proxy, largest download (MiB), KEV, EPSS, NVD,
 EUVD and OSV addresses, largest OSV download (MiB), and the NVD API key (a

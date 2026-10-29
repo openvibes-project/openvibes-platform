@@ -220,6 +220,24 @@ async fn the_roles_can_do_exactly_what_the_grants_say() {
     );
     client.batch_execute("RESET ROLE").await.unwrap();
 
+    // ingest and distribution read the settings, never a secret
+    for role in ["openvibes-ingest", "openvibes-distribution"] {
+        client
+            .batch_execute(&format!("SET ROLE \"{role}\""))
+            .await
+            .unwrap();
+        assert_eq!(
+            console_settings::values(&client).await.unwrap()["vulns.check_interval_minutes"],
+            json!(30),
+            "{role}"
+        );
+        assert!(
+            console_settings::secret(&client, key).await.is_err(),
+            "{role}"
+        );
+        client.batch_execute("RESET ROLE").await.unwrap();
+    }
+
     client
         .batch_execute("SET ROLE \"openvibes-console\"")
         .await

@@ -99,7 +99,7 @@ pub async fn run_polling(
                 tracing::warn!(%error, "cannot run; trying again at the next poll");
                 tokio::select! {
                     () = &mut shutdown => break Ok(()),
-                    () = tokio::time::sleep(poll) => {}
+                    () = tokio::time::sleep(poll) => file_only = false,
                     now = settings::changed(&pool, &stored, poll) => {
                         stored = now;
                         file_only = false;

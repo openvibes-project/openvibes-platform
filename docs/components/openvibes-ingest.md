@@ -35,6 +35,18 @@ Strict TOML (unknown keys refused), absolute paths only:
 | `max_connections` | 1024 | 1 to 65536; keep below the process's file limit (`LimitNOFILE`) |
 | `database_pool_size` | 16 | 1 to 1024 |
 
+### Settings from the console
+
+The numbers above (all but the paths, listeners, `database_url` and
+`database_pool_size`) can also be set in the console under Settings ›
+General › Agent connections (`ingest.*` rows of `console_settings`, see
+[platform-settings.md](platform-settings.md)). The service reads them once at
+start, over the file, so a change applies at the next restart of the service
+(Maintenance › Service in the admin tool). The file value is what applies for
+anything nobody changed. If the settings cannot be read or are not valid the
+service starts with the file alone and logs why. Tests:
+`tests/console_settings.rs`.
+
 ## TLS and authentication
 
 Shared with distribution: implemented in
