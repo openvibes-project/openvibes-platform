@@ -55,9 +55,22 @@ database_pool_size = 16         # default, 1 to 1024
 Unknown keys, relative paths, a non-loopback `health_listen`, or
 out-of-range values stop startup with "invalid distribution configuration".
 The database role `openvibes-distribution` may only read `agents`,
-`certificates`, `rule_sets`, `rule_bundles`, `schema_version`, the
+`certificates`, `rule_sets`, `rule_bundles`, `schema_version`, `console_settings` (its own
+settings, read at start), the
 rule-set assignment tables, and the tag and selector columns that decide
 group membership ([rule-set-assignment.md](rule-set-assignment.md)).
+
+### Settings from the console
+
+The numbers above (all but the paths, listeners, `database_url` and
+`database_pool_size`) can also be set in the console under Settings ›
+General › Rule distribution (`distribution.*` rows of `console_settings`, see
+[platform-settings.md](platform-settings.md)). The service reads them once at
+start, over the file, so a change applies at the next restart of the service
+(Maintenance › Service in the admin tool). The file value is what applies for
+anything nobody changed. If the settings cannot be read or are not valid the
+service starts with the file alone and logs why. The database grant is read access to the whole `console_settings` table (not only this service's prefix); secrets live in a table the service cannot read. Tests:
+`tests/console_settings.rs`.
 
 ## Failure behaviour
 

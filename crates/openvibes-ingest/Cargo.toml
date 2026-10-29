@@ -12,6 +12,7 @@ openvibes-core.workspace = true
 platform-agent-server = { path = "../platform-agent-server" }
 platform-config = { path = "../platform-config" }
 platform-pki = { path = "../platform-pki" }
+platform-settings = { path = "../platform-settings" }
 platform-store = { path = "../platform-store" }
 serde.workspace = true
 serde_json.workspace = true

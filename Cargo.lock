@@ -1984,6 +1984,7 @@ dependencies = [
  "platform-config",
  "platform-host",
  "platform-pki",
+ "platform-settings",
  "platform-store",
  "ratatui",
  "ring",
@@ -2060,6 +2061,7 @@ dependencies = [
  "platform-agent-server",
  "platform-config",
  "platform-pki",
+ "platform-settings",
  "platform-store",
  "rcgen",
  "rustls",
@@ -2067,6 +2069,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-rustls",
+ "tracing",
  "tracing-subscriber",
 ]
 
@@ -2099,6 +2102,7 @@ dependencies = [
  "platform-agent-server",
  "platform-config",
  "platform-pki",
+ "platform-settings",
  "platform-store",
  "rcgen",
  "rustls",

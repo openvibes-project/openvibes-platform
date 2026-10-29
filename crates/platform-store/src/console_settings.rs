@@ -114,6 +114,23 @@ pub async fn values(
         .collect())
 }
 
+/// The stored values whose key starts with `prefix`, read once over a
+/// connection of its own: a service uses this at start, before its pool
+/// exists, to apply the console's settings over its file.
+///
+/// # Errors
+/// The database could not be reached or read.
+pub async fn read_with_prefix(
+    database_url: &str,
+    prefix: &str,
+) -> Result<std::collections::HashMap<String, Value>, StoreError> {
+    let pool = crate::connect_sized(database_url, 1).await?;
+    let client = pool.get().await.map_err(|_| StoreError::Unavailable)?;
+    let mut values = values(&client).await?;
+    values.retain(|key, _| key.starts_with(prefix));
+    Ok(values)
+}
+
 /// When a secret was last set and by whom; the value is never read here.
 #[derive(Clone, Debug)]
 pub struct SecretInfo {

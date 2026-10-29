@@ -7,6 +7,7 @@
 //! from the database applies the same ones over its file, so both sides
 //! agree on what is valid. No database code lives here.
 
+mod agent;
 mod definition;
 mod general;
 mod vulns;
@@ -15,7 +16,11 @@ pub use definition::{Applies, Definition, Kind, Text};
 
 /// Every setting, in display order.
 pub fn all() -> impl Iterator<Item = &'static Definition> {
-    general::DEFINITIONS.iter().chain(vulns::DEFINITIONS.iter())
+    general::DEFINITIONS
+        .iter()
+        .chain(agent::ingest::DEFINITIONS.iter())
+        .chain(agent::distribution::DEFINITIONS.iter())
+        .chain(vulns::DEFINITIONS.iter())
 }
 
 /// The setting with this key.
@@ -29,5 +34,20 @@ pub mod vulns_keys {
     pub use crate::vulns::{
         ARCH, CHECK_INTERVAL_MINUTES, EPSS_URL, EUVD_URL, KEV_URL, MAX_DOWNLOAD_MIB, METALINK_URL,
         NVD_API_KEY, NVD_URL, OSV_MAX_DOWNLOAD_MIB, OSV_URL, PREFIX, PROXY_URL,
+    };
+}
+
+/// The ingest service's keys; it reads them under this prefix.
+pub mod ingest_keys {
+    pub use crate::agent::ingest::{
+        CLIENT_CERTIFICATE_DAYS, FINDING_RETENTION_DAYS, INVENTORY_REQUEST_TIMEOUT_SECONDS,
+        MAX_CONNECTIONS, MAX_IN_FLIGHT, MAX_INVENTORY_IN_FLIGHT, PREFIX, REQUEST_TIMEOUT_SECONDS,
+    };
+}
+
+/// The rule distribution service's keys; it reads them under this prefix.
+pub mod distribution_keys {
+    pub use crate::agent::distribution::{
+        MAX_CONNECTIONS, MAX_IN_FLIGHT, PREFIX, REQUEST_TIMEOUT_SECONDS,
     };
 }

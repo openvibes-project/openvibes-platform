@@ -68,9 +68,10 @@ enum Command {
     Status,
     /// Create upcoming finding partitions and drop expired ones.
     Maintenance {
-        /// Keep findings for this many days (1 to 36500).
-        #[arg(long, default_value_t = 90, value_parser = clap::value_parser!(u32).range(1..=36500))]
-        retention_days: u32,
+        /// Keep findings for this many days (1 to 36500). Without it: the
+        /// console's "Keep findings" setting, else 90.
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=36500))]
+        retention_days: Option<u32>,
         /// Keep daily count history for this many days (30 to 3650).
         #[arg(long, default_value_t = 400, value_parser = clap::value_parser!(u32).range(30..=3650))]
         history_days: u32,
@@ -496,6 +497,20 @@ fn store_error(error: StoreError) -> String {
     }
 }
 
+/// The console's "Keep findings (days)" setting, else the built-in 90 (also
+/// when the setting cannot be read, so maintenance still runs).
+async fn stored_retention_days(client: &platform_store::Client) -> u32 {
+    let stored = platform_store::console_settings::all(client).await;
+    let days = stored.ok().and_then(|rows| {
+        rows.into_iter()
+            .find(|row| row.key == platform_settings::ingest_keys::FINDING_RETENTION_DAYS)
+            .and_then(|row| row.value.as_u64())
+    });
+    days.and_then(|days| u32::try_from(days).ok())
+        .filter(|days| (1..=36_500).contains(days))
+        .unwrap_or(90)
+}
+
 /// Refuses to act on a database that is not at this build's schema.
 async fn require_current_schema(client: &platform_store::Client) -> Result<(), String> {
     match platform_store::schema_version(client)
@@ -588,9 +603,13 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             retention_days,
             history_days,
         } => {
+            let retention_days = match retention_days {
+                Some(days) => *days,
+                None => stored_retention_days(client).await,
+            };
             let today = Utc::now().date_naive();
             let cutoff = today
-                .checked_sub_signed(Duration::days(i64::from(*retention_days)))
+                .checked_sub_signed(Duration::days(i64::from(retention_days)))
                 .ok_or("retention window out of range")?;
             // Every day in the retention window gets a partition, so a late
             // or backlogged finding always has somewhere to go.

@@ -26,6 +26,7 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let config = config.with_console_settings().await;
     let shutdown = async {
         let _ = tokio::signal::ctrl_c().await;
     };
