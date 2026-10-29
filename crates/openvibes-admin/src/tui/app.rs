@@ -9,7 +9,6 @@ use std::{
 use platform_host::{Host, HostError, PackageUpdate, ServiceStatus, Unit};
 
 use super::{
-    configuration::Configuration,
     database::{Check, DatabaseScreen},
     nav::{Nav, Screen},
     password::PasswordPrompt,
@@ -40,21 +39,13 @@ pub enum Key {
     Paste(String),
 }
 
-/// Which screen `Screen::Legacy` shows (Settings files only).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Tab {
-    Configuration,
-}
-
 /// The TUI's state: where the operator is (`nav`), what the host reports
 /// (`services`, the health checks in `database`), the bar's question, prompt
 /// and running work, and the screens' own state (`install`, `config`,
 /// `database`).
 pub struct App<H: Host> {
     pub host: H,
-    pub tab: Tab,
     pub install: super::install::Install,
-    pub config: Configuration,
     pub database: DatabaseScreen,
     pub services: Vec<ServiceStatus>,
     /// Index into `services` of the unit whose log `logs` holds.
@@ -154,9 +145,7 @@ impl<H: Host> App<H> {
         }
         let mut app = App {
             host,
-            tab: Tab::Configuration,
             install,
-            config: Configuration::default(),
             database: DatabaseScreen::default(),
             services: Vec::new(),
             selected: 0,
@@ -235,9 +224,7 @@ impl<H: Host> App<H> {
         match self.host.services() {
             Ok(services) => {
                 self.services = services;
-                if self.nav.screen != Screen::Legacy {
-                    self.message = None;
-                }
+                self.message = None;
             }
             Err(error) => self.message = Some(error.to_string()),
         }
@@ -282,22 +269,8 @@ impl<H: Host> App<H> {
         self.nav.row = 0;
     }
 
-    /// Opens `tab`, loading what it shows: today's screen behind Maintenance.
-    pub(super) fn open(&mut self, tab: Tab) {
-        self.message = None;
-        if self.nav.screen != Screen::Legacy {
-            self.nav.go(Screen::Legacy);
-        }
-        match tab {
-            Tab::Configuration => {
-                self.tab = Tab::Configuration;
-                self.load_config();
-            }
-        }
-    }
-
-    /// One key: a legacy screen keeps its own keys; elsewhere ? opens Help,
-    /// Esc goes back, q quits from Home, the rest is the screen's.
+    /// One key: ? opens Help, Esc goes back, q quits from Home, the rest is
+    /// the screen's.
     pub fn key(&mut self, key: Key) {
         self.outcome = None;
         // The tool removed itself: Enter (or q) quits, nothing else is left.
@@ -322,9 +295,6 @@ impl<H: Host> App<H> {
         }
         if self.asking.is_some() {
             return self.asking_key(key);
-        }
-        if self.nav.screen == Screen::Legacy {
-            return self.legacy_key(key);
         }
         if self.maint.editing()
             && let Screen::Maint(page) = self.nav.screen.clone()
@@ -381,7 +351,7 @@ impl<H: Host> App<H> {
                 Screen::Status => self.status_key(key),
                 Screen::Service(unit) => self.service_key(unit, key),
                 Screen::Log(_) => self.log_key(key),
-                Screen::Help(_) | Screen::Legacy | Screen::Install(_) => {}
+                Screen::Help(_) | Screen::Install(_) => {}
             },
         }
     }
@@ -393,7 +363,6 @@ impl<H: Host> App<H> {
             || self.install.editing.is_some()
             || self.install.secret.is_some()
             || self.maint.editing()
-            || (self.nav.screen == Screen::Legacy && self.config.editing.is_some())
     }
 
     /// The paste box is open and nothing is asked in the bar.
@@ -448,13 +417,6 @@ impl<H: Host> App<H> {
             .host
             .os_info()
             .is_some_and(|os| os.updates.is_some_and(|found| found.restart));
-    }
-
-    /// Today's screens' own keys.
-    pub(super) fn legacy_dispatch(&mut self, key: Key) {
-        match self.tab {
-            Tab::Configuration => self.config_key(key),
-        }
     }
 }
 

@@ -311,17 +311,6 @@ fn quit_when_done_waits_while_a_password_is_asked_again() {
 }
 
 #[test]
-fn the_password_is_typed_on_a_legacy_screen_too() {
-    let mut app = super::script_host::app(false, vec![]);
-    app.open(super::app::Tab::Configuration);
-    assert_eq!(app.nav.screen, super::nav::Screen::Legacy);
-    app.begin(fix(vec![Call::Repair(Step::Packages)]), 0);
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    assert_eq!(app.host.calls.borrow()[0].1, "pw");
-}
-
-#[test]
 fn grouped_work_reports_one_state_per_label() {
     let calls = |n: usize| vec![Call::Repair(Step::Packages); n];
     let work = Work::grouped(

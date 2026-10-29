@@ -77,13 +77,6 @@ pub fn draw(
     content
 }
 
-pub fn legacy(frame: &mut Frame, theme: &Theme, header: &Header) -> Rect {
-    let area = frame.area();
-    let [top, rest] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
-    frame.render_widget(Paragraph::new(logo::location_line(theme, header)), top);
-    rest
-}
-
 #[cfg(test)]
 mod tests {
     use ratatui::{Terminal, backend::TestBackend};

@@ -68,7 +68,7 @@ use ratatui::{
 };
 
 use super::{
-    app::{App, Key, Tab},
+    app::{App, Key},
     nav::Screen,
     run::{Kind, Run},
     status::wrap,
@@ -150,13 +150,12 @@ pub enum Then {
 #[derive(Clone, Copy)]
 enum Entry {
     Page(Page),
-    Legacy(Tab),
     /// Asked on the menu: no page (shell.py).
     Shell,
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 12] = [
+const ENTRIES: [(Entry, &str); 11] = [
     (Entry::Page(Page::Update), "Update OpenVIBES"),
     (Entry::Page(Page::Os), "Operating system"),
     (Entry::Page(Page::Repair), "Repair"),
@@ -166,14 +165,12 @@ const ENTRIES: [(Entry, &str); 12] = [
     (Entry::Page(Page::Database), "Database"),
     (Entry::Page(Page::SignIn), "Console sign-in"),
     (Entry::Page(Page::Backup), "Back up"),
-    (Entry::Legacy(Tab::Configuration), "Settings files"),
     (Entry::Shell, "Shell"),
     (Entry::Page(Page::Uninstall), "Uninstall"),
 ];
 
 fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
     match entry {
-        Entry::Legacy(_) => "feeds, proxy, limits, database connection".into(),
         Entry::Shell => "the operating system's command line, for experts".into(),
         Entry::Page(Page::Update) => match &app.update {
             Some(v) => format!("{v} is available"),
@@ -356,7 +353,6 @@ impl<H: Host> App<H> {
             return;
         }
         match ENTRIES[self.nav.row].0 {
-            Entry::Legacy(tab) => self.open(tab),
             Entry::Page(page) => self.open_page(page),
             Entry::Shell => self.ask_shell(),
         }

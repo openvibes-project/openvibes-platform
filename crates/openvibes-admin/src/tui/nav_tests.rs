@@ -5,30 +5,13 @@ use std::sync::mpsc;
 use platform_host::{PackageUpdate, Unit};
 
 use super::{
-    app::{App, Key, Tab},
+    app::Key,
     database::Check,
     nav::Screen,
     script_host::set_up,
     status::Item,
-    tests::{FakeHost, app, screen},
+    tests::{app, screen},
 };
-
-/// Configuration, highlighting a field Setup does not own (the first
-/// fields are Setup's, read-only here).
-fn editable_field(app: &mut App<FakeHost>) {
-    app.open(Tab::Configuration);
-    while app.config.form.as_ref().unwrap().fields()[app.config.selected].key
-        != "max_inventory_in_flight"
-    {
-        app.key(Key::Down);
-    }
-}
-
-fn type_text<H: platform_host::Host>(app: &mut App<H>, text: &str) {
-    for c in text.chars() {
-        app.key(Key::Char(c));
-    }
-}
 
 #[test]
 fn a_set_up_host_opens_home_with_the_frame() {
@@ -69,46 +52,6 @@ fn question_mark_opens_help_and_esc_closes_it() {
     );
     app.key(Key::Esc);
     assert_eq!(app.nav.screen, Screen::Home);
-}
-
-#[test]
-fn maintenance_reaches_todays_screens_and_esc_comes_back() {
-    let mut app = app(false);
-    app.key(Key::Down);
-    app.key(Key::Enter);
-    assert_eq!(app.nav.screen, Screen::Maintenance);
-    app.nav.row = super::maint::row_of("Settings files");
-    app.key(Key::Enter);
-    assert_eq!(
-        (app.nav.screen.clone(), app.tab),
-        (Screen::Legacy, Tab::Configuration)
-    );
-    let text = screen(&app, 80, 24);
-    assert!(text.contains("Maintenance › Settings files"), "{text}");
-    app.key(Key::Esc);
-    assert_eq!(app.nav.screen, Screen::Maintenance);
-}
-
-#[test]
-fn esc_while_typing_in_a_legacy_screen_cancels_the_field_not_the_screen() {
-    let mut app = app(false);
-    editable_field(&mut app);
-    app.key(Key::Enter); // edit the field
-    assert!(app.config.editing.is_some());
-    app.key(Key::Esc);
-    assert!(app.config.editing.is_none(), "the field is cancelled");
-    assert_eq!(app.nav.screen, Screen::Legacy, "still on the screen");
-}
-
-#[test]
-fn q_types_into_a_configuration_value() {
-    let mut app = app(false);
-    editable_field(&mut app);
-    app.key(Key::Enter);
-    app.key(Key::ClearLine);
-    type_text(&mut app, "queue");
-    assert_eq!(app.config.editing.as_deref(), Some("queue"));
-    assert!(!app.quit);
 }
 
 #[test]
@@ -278,29 +221,6 @@ fn one_problem_is_singular() {
 }
 
 #[test]
-fn esc_with_unsaved_settings_asks_and_yes_goes_back_to_maintenance() {
-    let mut app = app(false);
-    app.key(Key::Down);
-    app.key(Key::Enter);
-    app.nav.row = super::maint::row_of("Settings files");
-    app.key(Key::Enter);
-    assert_eq!(app.tab, Tab::Configuration);
-    editable_field(&mut app);
-    app.key(Key::Enter);
-    app.key(Key::ClearLine);
-    type_text(&mut app, "8");
-    app.key(Key::Enter);
-    app.key(Key::Esc);
-    assert!(app.config.prompt.is_some(), "unsaved: Esc asks first");
-    app.key(Key::Esc);
-    assert!(app.config.prompt.is_none());
-    assert_eq!(app.nav.screen, Screen::Legacy, "Esc to the question stays");
-    app.key(Key::Esc);
-    app.key(Key::Char('y'));
-    assert_eq!(app.nav.screen, Screen::Maintenance);
-}
-
-#[test]
 fn the_update_notice_arrives_from_the_background_without_blocking() {
     let mut app = app(false);
     let (send, updates) = mpsc::channel();
@@ -394,7 +314,6 @@ fn the_menu_lists_the_2b1_entries_in_order() {
             "Database",
             "Console sign-in",
             "Back up",
-            "Settings files",
             "Shell",
             "Uninstall",
         ]
@@ -404,16 +323,4 @@ fn the_menu_lists_the_2b1_entries_in_order() {
 #[test]
 fn no_components_and_ports_entry() {
     assert!(!super::maint::names().contains(&"Components and ports"));
-}
-
-#[test]
-fn the_legacy_screen_advertises_neither_tab_nor_q() {
-    let tab = Tab::Configuration;
-    let mut app = app(false);
-    app.open(tab);
-    let text = screen(&app, 80, 24);
-    let footer = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap();
-    assert!(!footer.contains("Tab"), "{tab:?}: {footer}");
-    assert!(!footer.contains("q quit"), "{tab:?}: {footer}");
-    assert!(footer.contains("Esc back"), "{tab:?}: {footer}");
 }

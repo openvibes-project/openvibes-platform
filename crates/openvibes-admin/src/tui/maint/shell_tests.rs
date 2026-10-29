@@ -31,10 +31,7 @@ fn yes(app: &mut App<SetupHost>) {
 #[test]
 fn shell_is_second_to_last() {
     let names = names();
-    assert_eq!(
-        names[names.len() - 4..],
-        ["Back up", "Settings files", "Shell", "Uninstall"]
-    );
+    assert_eq!(names[names.len() - 3..], ["Back up", "Shell", "Uninstall"]);
     let text = screen(&menu(vec![]));
     assert!(text.contains("▸ Shell"), "{text}");
     assert!(
