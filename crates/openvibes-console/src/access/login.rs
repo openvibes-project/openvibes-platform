@@ -343,6 +343,7 @@ pub(crate) async fn login(
             now,
             idle_expires_at: now + Duration::minutes(30),
             absolute_expires_at: now + Duration::hours(8),
+            authentication_method: "local_password",
             audit: session_audit,
         },
     )

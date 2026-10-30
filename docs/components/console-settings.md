@@ -42,7 +42,11 @@ and the list shows each one's SHA-256 fingerprint and expiry. Our side is
 `GET /api/v1/sso/service-provider` (needs `settings.manage`: entity ID, reply
 URL, metadata URL) and `GET /auth/saml/metadata`, the SAML 2.0 service
 provider metadata (HTTP-POST binding, persistent NameID), which needs no
-session. The switch also needs one certificate that has not expired. The rules are checked and then written without a lock, so two administrators acting at once could leave it on without a certificate; the sign-in slice re-checks everything at each sign-in and refuses when anything is missing or expired. Signing in with the identity provider is not part of this slice (the reply URL does not answer yet).
+session. The switch also needs one certificate that has not expired. The rules are checked and then written without a lock, so two administrators acting at once could leave it on without a certificate; sign-in therefore re-checks everything each time and refuses when anything is missing or expired.
+
+## Signing in through the identity provider
+
+Full flow, checks and audit reasons: [console-sso.md](console-sso.md).
 
 ## Failure behaviour
 

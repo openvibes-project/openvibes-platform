@@ -13,7 +13,7 @@ dev-seed = []
 [dependencies]
 platform-password.workspace = true
 argon2 = { version = "=0.6.0", features = ["zeroize"] }
-axum = { workspace = true, features = ["matched-path", "query"] }
+axum = { workspace = true, features = ["form", "matched-path", "query"] }
 base64.workspace = true
 chrono.workspace = true
 ed25519-dalek.workspace = true
@@ -29,6 +29,7 @@ platform-assistant = { path = "../platform-assistant" }
 platform-settings = { path = "../platform-settings" }
 platform-store = { path = "../platform-store" }
 ring.workspace = true
+samael = { version = "=0.0.22", default-features = false, features = ["xmlsec"] }
 rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -52,6 +53,7 @@ openvibes-picture = { path = "../openvibes-picture" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 openvibes-signer = { path = "../openvibes-signer" }
 rcgen.workspace = true
+samael = { version = "=0.0.22", default-features = false, features = ["xmlsec"] }
 tokio = { workspace = true, features = ["test-util"] }
 tower.workspace = true
 

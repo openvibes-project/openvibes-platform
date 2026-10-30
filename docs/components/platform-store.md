@@ -587,6 +587,27 @@ has SELECT, INSERT, UPDATE and DELETE on it, no other role has anything.
 `set_secret`, `secret` and `secrets_set` pick the table by key (`assistant.*`
 goes to `console_secrets`). Tests: `tests/console_settings.rs`.
 
+## Single sign-on (`console_sso::…`, schema 73)
+
+Tables `console_sso_users` (user id, identity provider issuer and NameID
+`subject`, unique together; the link is never by email or username),
+`console_saml_requests` (relay token hash, request ID, browser cookie hash,
+five-minute expiry, `consumed_at`) and `console_saml_seen` (hash of issuer
+and assertion ID, kept until an hour after the assertion ends). The console
+role has SELECT, INSERT, UPDATE and DELETE on them. `console_role_bindings`
+gains `source` (`manual`, or `sso` for roles the identity provider's groups
+gave). `start_request` forgets expired rows, refuses over 2,000 waiting
+sign-ins and stores one; `take_request` uses a request up once, only with
+the matching browser hash and before it expires; `sign_in` records the
+assertion (a repeat is `Replay`), finds or creates the person (username
+`sso.` plus 16 hex of the SHA-256 of issuer and subject, `auth_source`
+`sso`, no password), and in one transaction sets their `sso` role bindings to
+the roles whose display name equals one of the groups, case-insensitively.
+Nobody is created without a role; a person left with none gets `NoRole` and
+their `sso` bindings revoked; a disabled person gets `Disabled`. `refuse`
+writes `auth.saml.refused` with a fixed reason code. Tests:
+`tests/console_sso.rs` (run as the console role).
+
 ## Saved views and list columns (`saved_views::…`, schema 56)
 
 Tables `console_saved_views` (name unique per person and page regardless of

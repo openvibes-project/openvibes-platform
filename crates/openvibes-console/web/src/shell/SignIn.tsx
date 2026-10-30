@@ -9,12 +9,35 @@ async function preauth(signal: AbortSignal | null = null): Promise<string> {
   return ((await response.json()) as { csrf_token: string }).csrf_token;
 }
 
+/** The single sign-on button above the password form, and the notice after a refused attempt. */
+export function SsoOption({ enabled, failed }: { enabled: boolean; failed: boolean }) {
+  return (
+    <>
+      {failed && <p className="confirm__error" role="alert">Single sign-on did not work. Try again, or ask an administrator.</p>}
+      {enabled && <a className="button button--primary" href="/auth/saml/start">Sign in with single sign-on</a>}
+      {enabled && <p className="signin__or">or sign in with a password</p>}
+    </>
+  );
+}
+
 export function SignIn({ onDemo }: { onDemo?: (() => void) | undefined }) {
   const [ready, setReady] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [sso, setSso] = useState(false);
+  const failed = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("sso") === "failed";
+
+  // Single sign-on is offered when an administrator turned it on and set it up.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/auth/v1/sso", { cache: "no-store", credentials: "same-origin", signal: controller.signal })
+      .then((response) => (response.ok ? (response.json() as Promise<{ enabled: boolean }>) : { enabled: false }))
+      .then((status) => setSso(status.enabled))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   // Only checks that sign-in is available; each attempt takes its own token.
   useEffect(() => {
@@ -55,6 +78,7 @@ export function SignIn({ onDemo }: { onDemo?: (() => void) | undefined }) {
           <img className="signin__logo" src={`${import.meta.env.BASE_URL}brand/openvibes-wordmark-light.svg`} alt="OpenVIBES" />
         </picture>
         <h1>Sign in</h1>
+        <SsoOption enabled={sso} failed={failed} />
         <label className="field">Username<input className="input" autoComplete="username" required value={username} onChange={(e) => setUsername(e.target.value)} /></label>
         <label className="field">Password<input className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         {error && <p className="confirm__error" role="alert">{error}</p>}

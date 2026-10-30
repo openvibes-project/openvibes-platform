@@ -356,6 +356,7 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
                 now,
                 idle_expires_at: now + Duration::minutes(30),
                 absolute_expires_at: now + Duration::hours(8),
+                authentication_method: "local_password",
                 audit: platform_store::console_auth::AuditContext {
                     request_id: Some("req-login-1"),
                     source_address: Some("127.0.0.1"),
@@ -452,6 +453,7 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
                 now: now + Duration::minutes(2) + Duration::seconds(1),
                 idle_expires_at: now + Duration::minutes(32),
                 absolute_expires_at: now + Duration::hours(8),
+                authentication_method: "local_password",
                 audit: platform_store::console_auth::AuditContext::default(),
             },
         )
@@ -519,6 +521,7 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
                 now: now + Duration::minutes(3),
                 idle_expires_at: now + Duration::minutes(33),
                 absolute_expires_at: now + Duration::hours(8),
+                authentication_method: "local_password",
                 audit: platform_store::console_auth::AuditContext::default(),
             },
         )

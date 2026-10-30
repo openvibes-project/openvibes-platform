@@ -1,14 +1,20 @@
-//! Single sign-on, first slice: the settings checks, the pasted identity
-//! provider certificates, and our side for the identity provider (the
-//! service provider metadata). Signing in comes with the next slice.
+//! Single sign-on: the settings checks, the pasted identity provider
+//! certificates, our side for the identity provider (the service provider
+//! metadata) and the sign-in itself.
 
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    extract::DefaultBodyLimit,
+    routing::{get, post},
+};
 
 use crate::http::AuthHttpState;
 
 mod certificates;
 mod change;
+mod provider;
 pub(crate) mod service_provider;
+pub(crate) mod signin;
 #[cfg(test)]
 mod tests;
 
@@ -27,5 +33,12 @@ pub(crate) fn api_routes() -> Router<AuthHttpState> {
 /// The paths under `/auth` that need no session: the identity provider
 /// and its administrator fetch the metadata.
 pub(crate) fn auth_routes() -> Router<AuthHttpState> {
-    Router::new().route("/saml/metadata", get(service_provider::metadata))
+    Router::new()
+        .route("/saml/metadata", get(service_provider::metadata))
+        .route("/saml/start", get(signin::start))
+        .route(
+            "/saml/acs",
+            post(signin::acs).layer(DefaultBodyLimit::max(1024 * 1024)),
+        )
+        .route("/v1/sso", get(signin::status))
 }

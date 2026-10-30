@@ -137,7 +137,11 @@ pub(crate) async fn authenticated_session(
             display_name: active.display_name,
             username: Some(active.username),
         },
-        authentication_method: crate::AuthenticationMethod::LocalPassword,
+        authentication_method: if active.auth_source == "sso" {
+            crate::AuthenticationMethod::Saml
+        } else {
+            crate::AuthenticationMethod::LocalPassword
+        },
         authentication_level: crate::AuthenticationLevel::SingleFactor,
         capabilities,
         csrf_token: csrf,
