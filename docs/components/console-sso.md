@@ -74,6 +74,31 @@ made with samael's own identity provider, then broken one way at a time),
 `cargo test -p platform-store --test console_sso` (need
 `OPENVIBES_TEST_DATABASE_URL`), `npx vitest run src/shell/SignIn.test.tsx`.
 
+## Housekeeping, locks and the off switch
+
+- `openvibes-admin maintenance` (the daily timer) forgets expired sign-in
+  requests and remembered assertions, and removes single sign-on people with
+  no sign-in for `sso.remove_inactive_days` days (default 90; a person never
+  signed in counts from when they were created). A person that cases, alarms
+  or triage still point at cannot be deleted: they keep their row but lose
+  every role (however given) and their sessions; the next sign-in sets the
+  group roles again. Deleted people are audited `user.removed`, the others
+  `user.access_removed` (actor `console-sso`).
+- Switching `sso.enabled` from on to off (console settings, Reset to default
+  or `openvibes-admin sso off`) ends every live session of single sign-on
+  people in the same transaction; the count is in the `settings.changed`
+  audit detail as `sso_sessions_revoked`. Local accounts are untouched.
+- People page: for someone who signs in this way the name, email and roles
+  are locked (409 `managed_by_sso` on `PATCH /api/v1/users/{id}`, adding a
+  role and password reset; removing a role is still allowed; the page hides Edit details, Add role and Remove). Their picture
+  and Disable still work.
+- Turning it off without the console: `openvibes-admin sso status` prints
+  `on`, `off` or `not set up`; `openvibes-admin sso off` sets the stored
+  switch off (audited as `settings.changed`; `already off` or `not set up`
+  change nothing). The TUI's Maintenance › Console sign-in shows the state
+  and has "Turn single sign-on off" (helper verb `sso-off`, asks for the sudo
+  password like the password reset).
+
 ## Known limits
 
 - `GET /auth/saml/start` needs no sign-in; at most 2,000 sign-ins can wait at

@@ -37,7 +37,8 @@ enum Holder {
     params(("user_id" = String, Path), ("role_id" = String, Path)),
     responses((status = 204, description = "Held"),
         (status = 403, description = "Needs access.grant; the role is outside your access; or yourself", body = ProblemDetails, content_type = "application/problem+json"),
-        (status = 404, description = "No such person inside your access, or no such role", body = ProblemDetails, content_type = "application/problem+json")))]
+        (status = 404, description = "No such person inside your access, or no such role", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "managed_by_sso: roles are given by their groups", body = ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn give_user_role(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -52,7 +53,7 @@ pub(crate) async fn give_user_role(
     responses((status = 204, description = "Not held"),
         (status = 403, description = "Needs access.grant; the role is outside your access; or yourself", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 404, description = "No such person inside your access, or no such role", body = ProblemDetails, content_type = "application/problem+json"),
-        (status = 409, description = "last_administrator", body = ProblemDetails, content_type = "application/problem+json")))]
+        (status = 409, description = "last_administrator, or managed_by_sso", body = ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn remove_user_role(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -124,6 +125,9 @@ async fn change(
         Holder::User(id) => match visible_person(&client, &editor, id).await {
             Ok((person, _)) if person.user_id == editor.actor => {
                 return forbidden("Nobody can change their own roles");
+            }
+            Ok((person, _)) if person.auth_source == "sso" && give => {
+                return crate::sso::managed_by_sso();
             }
             Ok((person, _)) => person.user_id,
             Err(response) => return response,

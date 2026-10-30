@@ -335,6 +335,133 @@ pub async fn refuse(
     Ok(())
 }
 
+/// What one cleanup pass did.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Cleaned {
+    /// Sign-in requests and remembered assertions that ran out.
+    pub expired: u64,
+    /// Inactive single sign-on people removed.
+    pub removed: u64,
+    /// Inactive people who could not be removed (cases or alarms still point
+    /// at them): their roles and sessions were taken away instead.
+    pub access_removed: u64,
+}
+
+/// The daily cleanup: forgets expired sign-in requests and assertions, and
+/// removes single sign-on people with no sign-in for `inactive_days` days.
+/// Someone who cannot be deleted because history points at them keeps the
+/// row but loses their `sso` roles and sessions; the next sign-in sets the
+/// roles again from their groups.
+///
+/// # Errors
+/// The database could not be written.
+pub async fn clean(
+    client: &mut Client,
+    inactive_days: i64,
+    now: DateTime<Utc>,
+) -> Result<Cleaned, StoreError> {
+    let mut done = Cleaned {
+        expired: client
+            .execute(
+                "DELETE FROM console_saml_requests WHERE expires_at < $1",
+                &[&now],
+            )
+            .await?
+            + client
+                .execute(
+                    "DELETE FROM console_saml_seen WHERE expires_at < $1",
+                    &[&now],
+                )
+                .await?,
+        ..Cleaned::default()
+    };
+    let cutoff = now - Duration::days(inactive_days);
+    let mut after = String::from("00000000-0000-0000-0000-000000000000");
+    loop {
+        let idle = client
+            .query(
+                "SELECT u.user_id::text, u.username
+                 FROM console_sso_users s JOIN console_users u USING (user_id)
+                 WHERE COALESCE(u.last_sign_in_at, u.created_at) < $1 AND u.user_id::text > $2
+                 ORDER BY u.user_id LIMIT 500",
+                &[&cutoff, &after],
+            )
+            .await?;
+        let Some(last) = idle.last() else {
+            break;
+        };
+        after = last.get(0);
+        for row in &idle {
+            let (user_id, username): (String, String) = (row.get(0), row.get(1));
+            let detail = |deleted: bool| serde_json::json!({"reason": "inactive", "days": inactive_days, "deleted": deleted});
+            let tx = client.transaction().await?;
+            // Still idle? Someone may have signed in since the list was read.
+            let still = tx
+                .query_opt(
+                    "SELECT 1 FROM console_users
+                     WHERE user_id = $1::text::uuid AND COALESCE(last_sign_in_at, created_at) < $2
+                     FOR UPDATE",
+                    &[&user_id, &cutoff],
+                )
+                .await?;
+            if still.is_none() {
+                continue;
+            }
+            match tx
+                .execute(
+                    "DELETE FROM console_users WHERE user_id = $1::text::uuid",
+                    &[&user_id],
+                )
+                .await
+            {
+                Ok(_) => {
+                    audit(&tx, "user.removed", &user_id, &username, detail(true), now).await?;
+                    tx.commit().await?;
+                    done.removed += 1;
+                }
+                Err(error)
+                    if error.code()
+                        == Some(&tokio_postgres::error::SqlState::FOREIGN_KEY_VIOLATION) =>
+                {
+                    drop(tx);
+                    let tx = client.transaction().await?;
+                    // Every role goes, however it was given: with none left
+                    // they cannot sign in until a group gives one again.
+                    let bindings = tx
+                        .execute(
+                            "UPDATE console_role_bindings SET revoked_at = $2, revoked_by = 'console-sso'
+                             WHERE user_id = $1::text::uuid AND revoked_at IS NULL",
+                            &[&user_id, &now],
+                        )
+                        .await?;
+                    let sessions = tx
+                        .execute(
+                            "UPDATE console_sessions SET revoked_at = $2
+                             WHERE user_id = $1::text::uuid AND revoked_at IS NULL",
+                            &[&user_id, &now],
+                        )
+                        .await?;
+                    if bindings + sessions > 0 {
+                        audit(
+                            &tx,
+                            "user.access_removed",
+                            &user_id,
+                            &username,
+                            detail(false),
+                            now,
+                        )
+                        .await?;
+                        done.access_removed += 1;
+                    }
+                    tx.commit().await?;
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+    Ok(done)
+}
+
 /// How long an assertion is remembered at least: an hour past its own end.
 #[must_use]
 pub fn remember_until(not_on_or_after: DateTime<Utc>) -> DateTime<Utc> {

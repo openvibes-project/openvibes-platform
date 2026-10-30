@@ -93,7 +93,8 @@ pub(crate) async fn enable_person(
     params(("user_id" = String, Path)),
     responses((status = 200, description = "The one-time password", body = OneTimePassword),
         (status = 403, description = "Needs access.users; use_change_password for yourself", body = ProblemDetails, content_type = "application/problem+json"),
-        (status = 404, description = "No such person inside your access", body = ProblemDetails, content_type = "application/problem+json")))]
+        (status = 404, description = "No such person inside your access", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "managed_by_sso: they have no password", body = ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn reset_password(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -111,6 +112,9 @@ pub(crate) async fn reset_password(
             "use_change_password",
             "Use Change password for your own account",
         ));
+    }
+    if person.auth_source == "sso" {
+        return crate::sso::managed_by_sso();
     }
     let (password, phc) = match one_time_credentials(&state).await {
         Ok(credentials) => credentials,

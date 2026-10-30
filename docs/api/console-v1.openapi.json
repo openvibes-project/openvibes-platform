@@ -10897,6 +10897,16 @@
               }
             }
           },
+          "409": {
+            "description": "managed_by_sso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "422": {
             "description": "invalid_user or invalid_email",
             "content": {
@@ -11285,6 +11295,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "managed_by_sso: they have no password",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -11330,6 +11350,16 @@
           },
           "404": {
             "description": "No such person inside your access, or no such role",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "managed_by_sso: roles are given by their groups",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11389,7 +11419,7 @@
             }
           },
           "409": {
-            "description": "last_administrator",
+            "description": "last_administrator, or managed_by_sso",
             "content": {
               "application/problem+json": {
                 "schema": {

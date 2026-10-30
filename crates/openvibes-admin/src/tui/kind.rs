@@ -34,6 +34,8 @@ pub enum Kind {
     Report,
     /// A new one-time password for the console's admin.
     SignIn,
+    /// Single sign-on turned off.
+    SsoOff,
     /// Maintenance › Shell: the password, then the operator's shell.
     Shell,
     /// The first install, run from the Install screens.
@@ -92,6 +94,7 @@ impl Kind {
             Kind::Uninstall { .. } => "Uninstalling".into(),
             Kind::Report => "Reading the database".into(),
             Kind::SignIn => "Resetting the admin password".into(),
+            Kind::SsoOff => "Turning single sign-on off".into(),
             Kind::Shell => "Opening the shell".into(),
             Kind::Install => "Installing".into(),
             Kind::Ca { accept: false } => "Making the request".into(),
@@ -123,6 +126,7 @@ impl Kind {
             Kind::Uninstall { .. } => "OpenVIBES is removed".into(),
             Kind::Report => "Read".into(),
             Kind::SignIn => "Admin password reset".into(),
+            Kind::SsoOff => "Single sign-on is off".into(),
             Kind::Shell => "Shell opened".into(),
             Kind::Install => "OpenVIBES is installed".into(),
             Kind::Ca { accept: false } => "Request made".into(),
@@ -145,6 +149,7 @@ impl Kind {
             Kind::Uninstall { .. } => "The uninstall stopped".into(),
             Kind::Report => "The database could not be read".into(),
             Kind::SignIn => "The reset failed".into(),
+            Kind::SsoOff => "Single sign-on is still as it was".into(),
             Kind::Shell => "The shell did not open".into(),
             Kind::Install => "The install stopped".into(),
             Kind::Ca { accept: false } => "The request failed".into(),
@@ -177,6 +182,7 @@ impl Kind {
             Kind::Uninstall { .. } => "Uninstall",
             Kind::Report => "Read",
             Kind::SignIn => "Reset",
+            Kind::SsoOff => "Turn off",
             Kind::Shell => "Open",
             Kind::Install => "Install",
             Kind::Ca { accept: false } => "Continue",

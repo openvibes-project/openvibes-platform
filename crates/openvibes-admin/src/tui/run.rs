@@ -34,6 +34,8 @@ pub enum Call {
     Logs(Unit, u16),
     /// `admin-reset`: a new one-time password for the console's `admin`.
     AdminReset,
+    /// `sso-off`: turns single sign-on off.
+    SsoOff,
     /// `shell-open`: sudo checks the password and the call is journalled;
     /// the shell itself opens once the run is done.
     ShellOpen,
@@ -152,6 +154,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         }),
         Call::Logs(unit, lines) => host.logs(*unit, *lines).map(|l| l.join("\n")),
         Call::AdminReset => host.privileged(Privileged::AdminReset, secret),
+        Call::SsoOff => host.privileged(Privileged::SsoOff, secret),
         Call::ShellOpen => host.privileged(Privileged::ShellOpen, secret),
         Call::CaRequest(copy) => host.privileged(Privileged::CaRequest(copy.as_deref()), secret),
         Call::CaAccept(cert, root) => host.privileged(Privileged::CaAccept(cert, root), secret),
@@ -181,6 +184,7 @@ pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
             | Call::Update(..)
             | Call::Remove(..)
             | Call::AdminReset
+            | Call::SsoOff
             | Call::ShellOpen
             | Call::OsCheck
             | Call::OsUpdate

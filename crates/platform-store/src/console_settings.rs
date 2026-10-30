@@ -68,7 +68,10 @@ pub async fn set(
         &[&key, value, &now, &actor],
     )
     .await?;
-    let detail = serde_json::json!({"key": key, "old": old, "new": value});
+    let mut detail = serde_json::json!({"key": key, "old": old, "new": value});
+    if let Some(revoked) = end_sso_sessions(&tx, key, &old, value, now).await? {
+        detail["sso_sessions_revoked"] = revoked.into();
+    }
     tx.execute(
         "INSERT INTO audit_log (at, actor, action, target, result, detail, actor_kind, actor_id,
              actor_display, target_kind, target_id)
@@ -98,9 +101,35 @@ pub async fn reset(
         .map(|row| row.get(0));
     if old.is_some() {
         audit(&tx, key, &old, &Value::Null, actor, now).await?;
+        end_sso_sessions(&tx, key, &old, &Value::Null, now).await?;
     }
     tx.commit().await?;
     Ok(old)
+}
+
+/// Turning single sign-on off ends every session that came from it, so what
+/// the identity provider granted does not outlive the switch. Returns how
+/// many were ended when this change was that flip.
+async fn end_sso_sessions(
+    tx: &impl GenericClient,
+    key: &str,
+    old: &Option<Value>,
+    new: &Value,
+    now: DateTime<Utc>,
+) -> Result<Option<u64>, StoreError> {
+    let was_on = old.as_ref() == Some(&Value::Bool(true));
+    if key != "sso.enabled" || !was_on || new == &Value::Bool(true) {
+        return Ok(None);
+    }
+    let ended = tx
+        .execute(
+            "UPDATE console_sessions SET revoked_at = $1
+             WHERE revoked_at IS NULL
+               AND user_id IN (SELECT user_id FROM console_sso_users)",
+            &[&now],
+        )
+        .await?;
+    Ok(Some(ended))
 }
 
 /// Every stored value by key: what a service applies over its file.

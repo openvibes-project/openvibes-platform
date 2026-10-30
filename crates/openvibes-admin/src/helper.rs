@@ -107,6 +107,9 @@ pub enum HelperCommand {
     /// Gives the console's `admin` a new one-time password, unlocked and
     /// enabled; prints `done<TAB>PASSWORD` (Console sign-in, break-glass).
     AdminReset,
+    /// Turns single sign-on off (Console sign-in); prints
+    /// `done<TAB>off`, `done<TAB>already off` or `done<TAB>not set up`.
+    SsoOff,
     /// Renews the server certificates that expire within 30 days (run by
     /// openvibes-certificates.timer as root); one log line, exit 0 unless
     /// the renewal failed.
@@ -151,6 +154,7 @@ enum Verb {
     AgentConfigUpgrade,
     CertificatesRenew,
     AdminReset,
+    SsoOff,
     ShellOpen,
     OsCheck,
     OsUpdate,
@@ -235,6 +239,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::AgentConfigUpgrade => Verb::AgentConfigUpgrade,
         HelperCommand::CertificatesRenew => Verb::CertificatesRenew,
         HelperCommand::AdminReset => Verb::AdminReset,
+        HelperCommand::SsoOff => Verb::SsoOff,
         HelperCommand::ShellOpen => Verb::ShellOpen,
         HelperCommand::OsCheck => Verb::OsCheck,
         HelperCommand::OsUpdate => Verb::OsUpdate,
@@ -343,6 +348,7 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::UpgradeMigrate => crate::setup::upgrade_migrate(),
         Verb::AgentConfigUpgrade => crate::setup::agent_config_upgrade(),
         Verb::AdminReset => crate::setup::admin_reset::run(),
+        Verb::SsoOff => crate::setup::sso_off::run(),
         Verb::Ca(verb) => crate::helper_ca::run(verb),
         Verb::OsCheck => os_result(crate::setup::os::run_check(&SystemRunner, Path::new("/"))),
         Verb::OsUpdate => os_result(crate::setup::os::run_update(&SystemRunner, Path::new("/"))),

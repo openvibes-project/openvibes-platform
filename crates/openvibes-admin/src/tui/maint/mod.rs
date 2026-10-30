@@ -114,6 +114,9 @@ pub struct Maint {
     pub replace: replace::Replace,
     /// Console sign-in: the new password, shown once; dropped on leaving.
     pub signin: Option<signin::Shown>,
+    /// Console sign-in: whether single sign-on is `on`, `off` or `not set up`,
+    /// read when the page opens.
+    pub sso: Option<String>,
     /// Operating system: the distribution and last check, read when the page opens.
     pub os: Option<platform_host::os_updates::OsInfo>,
 }
@@ -143,6 +146,7 @@ pub enum Then {
     ConsoleCertSet,
     ConsoleCertReset,
     SignIn,
+    SsoOff,
     Shell,
 }
 
@@ -207,7 +211,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
         ),
         Entry::Page(Page::Certificates) => certs::summary(&app.host),
         Entry::Page(Page::Database) => "schema, size, automatic clean-up".into(),
-        Entry::Page(Page::SignIn) => "reset the admin password".into(),
+        Entry::Page(Page::SignIn) => "reset the admin password, turn single sign-on off".into(),
         Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
         Entry::Page(Page::Uninstall) => "remove OpenVIBES from this host".into(),
         Entry::Page(
@@ -438,6 +442,7 @@ impl<H: Host> App<H> {
             Then::ConsoleCertSet => self.console_set_yes(),
             Then::ConsoleCertReset => self.console_reset_yes(),
             Then::SignIn => self.signin_yes(),
+            Then::SsoOff => self.sso_off_yes(),
             Then::Shell => self.shell_yes(),
         }
     }

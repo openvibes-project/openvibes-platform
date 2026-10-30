@@ -80,6 +80,8 @@ pub enum Database {
     FeedsStatus,
     /// `rules list`.
     RulesList,
+    /// `sso status`: `on`, `off` or `not set up`.
+    SsoStatus,
 }
 
 impl Database {
@@ -90,6 +92,7 @@ impl Database {
             Database::Status => &["status"],
             Database::FeedsStatus => &["feeds", "status"],
             Database::RulesList => &["rules", "list"],
+            Database::SsoStatus => &["sso", "status"],
         }
     }
 }

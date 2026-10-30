@@ -163,3 +163,186 @@ async fn groups_become_roles_and_a_replay_is_refused() {
     drop(client);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn the_cleanup_removes_the_inactive_and_spares_the_busy() {
+    let (db, mut client) = common::migrated().await;
+    let role = client
+        .query_one(
+            "SELECT lower(display_name) FROM console_roles ORDER BY role_id LIMIT 1",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get::<_, String>(0);
+    let groups = vec![role];
+    let mut ids = Vec::new();
+    for (subject, assertion) in [("old", "a1"), ("busy", "a2"), ("recent", "a3")] {
+        let SignIn::Allowed { user_id, .. } =
+            sign_in(&mut client, &person(subject, &groups, assertion))
+                .await
+                .unwrap()
+        else {
+            panic!("signed in")
+        };
+        ids.push(user_id);
+    }
+    let long_ago = Utc::now() - Duration::days(200);
+    for id in &ids[..2] {
+        client
+            .execute(
+                "UPDATE console_users SET last_sign_in_at = $2 WHERE user_id = $1::text::uuid",
+                &[id, &long_ago],
+            )
+            .await
+            .unwrap();
+    }
+    // "busy" opened a case, so it cannot be deleted
+    client
+        .execute(
+            "INSERT INTO cases (case_id, title, status, severity, opened_by_user_id, created_at, updated_at)
+             VALUES (gen_random_uuid(), 't', 'open', 'low', $1::text::uuid, now(), now())",
+            &[&ids[1]],
+        )
+        .await
+        .unwrap();
+    // and holds a role granted by hand, which must go too
+    client
+        .execute(
+            "INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+             SELECT gen_random_uuid(), $1::text::uuid, role_id, now(), 'test' FROM console_roles
+             WHERE role_id NOT IN (SELECT role_id FROM console_role_bindings WHERE user_id = $1::text::uuid)
+             LIMIT 1",
+            &[&ids[1]],
+        )
+        .await
+        .unwrap();
+    client
+        .execute(
+            "INSERT INTO console_saml_seen (assertion_sha256, expires_at) VALUES (sha256('x'::bytea), now() - interval '1 day')",
+            &[],
+        )
+        .await
+        .unwrap();
+    client
+        .batch_execute("SET ROLE \"openvibes-console\"")
+        .await
+        .unwrap();
+    client.batch_execute("RESET ROLE").await.unwrap();
+
+    let done = platform_store::console_sso::clean(&mut client, 90, Utc::now())
+        .await
+        .unwrap();
+    assert_eq!((done.removed, done.access_removed), (1, 1));
+    assert!(done.expired >= 1);
+    let left: Vec<String> = client
+        .query(
+            "SELECT user_id::text FROM console_sso_users ORDER BY 1",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    assert!(!left.contains(&ids[0]) && left.contains(&ids[1]) && left.contains(&ids[2]));
+    let busy_roles: i64 = client
+        .query_one("SELECT count(*) FROM console_role_bindings WHERE user_id = $1::text::uuid AND revoked_at IS NULL", &[&ids[1]])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(busy_roles, 0);
+    // a second pass has nothing left to do
+    let again = platform_store::console_sso::clean(&mut client, 90, Utc::now())
+        .await
+        .unwrap();
+    assert_eq!((again.removed, again.access_removed), (0, 0));
+    let actions: Vec<String> = client
+        .query(
+            "SELECT action FROM audit_log WHERE action IN ('user.removed', 'user.access_removed') ORDER BY action",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    assert_eq!(actions, ["user.access_removed", "user.removed"]);
+    drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn turning_single_sign_on_off_ends_its_sessions_only() {
+    let (db, mut client) = common::migrated().await;
+    let role = client
+        .query_one(
+            "SELECT lower(display_name) FROM console_roles ORDER BY role_id LIMIT 1",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get::<_, String>(0);
+    let SignIn::Allowed { user_id, .. } = sign_in(&mut client, &person("u-9", &[role], "a9"))
+        .await
+        .unwrap()
+    else {
+        panic!("signed in")
+    };
+    client
+        .execute(
+            "INSERT INTO console_users (user_id, username, display_name, created_at)
+             VALUES (gen_random_uuid(), 'local-one', 'Local One', now())",
+            &[],
+        )
+        .await
+        .unwrap();
+    for (who, name) in [(user_id.as_str(), "x"), ("local", "y")] {
+        let who_sql = if who == "local" {
+            "(SELECT user_id FROM console_users WHERE user_id NOT IN (SELECT user_id FROM console_sso_users) LIMIT 1)"
+        } else {
+            "$1::text::uuid"
+        };
+        let sql = format!(
+            "INSERT INTO console_sessions (session_sha256, csrf_sha256, user_id, auth_generation,
+                 created_at, last_seen_at, idle_expires_at, absolute_expires_at)
+             SELECT sha256('{name}'::bytea), sha256('c{name}'::bytea), u.user_id, u.auth_generation,
+                 now(), now(), now() + interval '1 hour', now() + interval '1 day'
+             FROM console_users u WHERE u.user_id = {who_sql}"
+        );
+        if who == "local" {
+            client.execute(&sql, &[]).await.unwrap();
+        } else {
+            client.execute(&sql, &[&who]).await.unwrap();
+        }
+    }
+    set_sso(&mut client, true).await;
+    assert_eq!(live_sessions(&client).await, 2);
+    set_sso(&mut client, false).await;
+    assert_eq!(live_sessions(&client).await, 1);
+    drop(client);
+    db.drop().await;
+}
+
+async fn set_sso(client: &mut platform_store::Client, on: bool) {
+    platform_store::console_settings::set(
+        client,
+        "sso.enabled",
+        &serde_json::json!(on),
+        "t",
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+}
+
+async fn live_sessions(client: &platform_store::Client) -> i64 {
+    client
+        .query_one(
+            "SELECT count(*) FROM console_sessions WHERE revoked_at IS NULL",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}

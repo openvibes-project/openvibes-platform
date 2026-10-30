@@ -16853,6 +16853,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description managed_by_sso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description invalid_user or invalid_email */
             422: {
                 headers: {
@@ -17145,6 +17154,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description managed_by_sso: they have no password */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     give_user_role: {
@@ -17177,6 +17195,15 @@ export interface operations {
             };
             /** @description No such person inside your access, or no such role */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description managed_by_sso: roles are given by their groups */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17223,7 +17250,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description last_administrator */
+            /** @description last_administrator, or managed_by_sso */
             409: {
                 headers: {
                     [name: string]: unknown;

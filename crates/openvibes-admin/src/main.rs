@@ -26,6 +26,7 @@ mod rules_store;
 #[cfg(unix)]
 mod run_as;
 mod setup;
+mod sso;
 mod token;
 mod tui;
 mod tune;
@@ -104,6 +105,11 @@ enum Command {
     User {
         #[command(subcommand)]
         command: user::UserCommand,
+    },
+    /// Single sign-on: its state, and turning it off.
+    Sso {
+        #[command(subcommand)]
+        command: sso::SsoCommand,
     },
     /// Vulnerability feeds: import (offline) and status.
     Feeds {
@@ -222,6 +228,7 @@ impl Command {
             Self::Agent { command } => command.name(),
             Self::Rules { command } => command.name(),
             Self::User { command } => command.name(),
+            Self::Sso { command } => command.name(),
             Self::Feeds { command } => command.name(),
             Self::Vulns { command } => command.name(),
             Self::Import { .. } => "import",
@@ -412,6 +419,10 @@ async fn main() -> ExitCode {
             Ok(()) => user::run(command, &mut client, &actor).await,
             Err(error) => (Err(error), None),
         },
+        Command::Sso { command } => match require_current_schema(&client).await {
+            Ok(()) => sso::run(command, &mut client, &actor).await,
+            Err(error) => (Err(error), None),
+        },
         Command::Feeds { command } => match require_current_schema(&client).await {
             Ok(()) => vulns::run_feeds(command, &mut client).await,
             Err(error) => (Err(error), None),
@@ -510,6 +521,17 @@ async fn stored_retention_days(client: &platform_store::Client) -> u32 {
         .unwrap_or(90)
 }
 
+/// The console's "Remove inactive single sign-on users" setting, else 90.
+async fn stored_sso_inactive_days(client: &platform_store::Client) -> i64 {
+    let stored = platform_store::console_settings::all(client).await;
+    let days = stored.ok().and_then(|rows| {
+        rows.into_iter()
+            .find(|row| row.key == platform_settings::sso_keys::REMOVE_INACTIVE_DAYS)
+            .and_then(|row| row.value.as_i64())
+    });
+    days.filter(|days| (1..=3650).contains(days)).unwrap_or(90)
+}
+
 /// Refuses to act on a database that is not at this build's schema.
 async fn require_current_schema(client: &platform_store::Client) -> Result<(), String> {
     match platform_store::schema_version(client)
@@ -540,6 +562,7 @@ const STATUS_READS: &[&str] = &[
     "rules show",
     "rules trust list",
     "agent list",
+    "sso status",
 ];
 
 async fn run(command: &Command, client: &mut platform_store::Client) -> Result<String, String> {
@@ -567,6 +590,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Agent { .. }
         | Command::Rules { .. }
         | Command::User { .. }
+        | Command::Sso { .. }
         | Command::Feeds { .. }
         | Command::Vulns { .. }
         | Command::Import { .. }
@@ -640,9 +664,15 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             let pruned = platform_store::history::delete_before(client, history_cutoff)
                 .await
                 .map_err(fail)?;
+            let inactive_days = stored_sso_inactive_days(client).await;
+            let sso = platform_store::console_sso::clean(client, inactive_days, Utc::now())
+                .await
+                .map_err(fail)?;
             Ok(format!(
                 "created {created} partitions, dropped {dropped}, deleted {audit_deleted} expired audit events\n\
-                 recorded history for {recorded} hosts, deleted {pruned} old rows\n"
+                 recorded history for {recorded} hosts, deleted {pruned} old rows\n\
+                 single sign-on: removed {} inactive people, took access from {}, forgot {} expired sign-in records\n",
+                sso.removed, sso.access_removed, sso.expired
             ))
         }
     }

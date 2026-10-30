@@ -295,6 +295,7 @@ pub(crate) async fn create_person(
     responses((status = 204, description = "Saved"),
         (status = 403, description = "Needs access.users", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 404, description = "No such person inside your access", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "managed_by_sso", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 422, description = "invalid_user or invalid_email", body = ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn update_person(
     State(state): State<AuthHttpState>,
@@ -337,6 +338,9 @@ pub(crate) async fn update_person(
         Ok((person, _)) => person,
         Err(response) => return response,
     };
+    if person.auth_source == "sso" {
+        return crate::sso::managed_by_sso();
+    }
     let saved = console_people::set_details(
         &mut client,
         &person.user_id,

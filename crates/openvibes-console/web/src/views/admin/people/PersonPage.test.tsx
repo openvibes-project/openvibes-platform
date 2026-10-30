@@ -85,4 +85,13 @@ describe("person page", () => {
     expect(own).not.toContain(">Remove<");
     expect(own).toContain("Edit details");
   });
+
+  it("locks name, email and roles for someone who signs in through the identity provider", () => {
+    const html = render({ ...wendy, auth_source: "sso" });
+    expect(html).toContain("come from single sign-on");
+    expect(html).not.toContain("Edit details");
+    expect(html).not.toContain("Add role");
+    expect(html).not.toContain(">Remove<");
+    expect(render(wendy)).toContain("Edit details");
+  });
 });
