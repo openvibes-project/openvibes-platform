@@ -160,7 +160,7 @@ impl<H: Host> App<H> {
             match (self.nav.row, appliance) {
                 (0, _) => self.open_status(),
                 (1, _) => self.nav.go(Screen::Maintenance),
-                (2, true) => self.nav.go(Screen::System),
+                (2, true) => self.open_system(),
                 _ => self.quit_or_ask(),
             }
         }

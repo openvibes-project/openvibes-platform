@@ -15,6 +15,7 @@ use super::{
     app::{App, Key, Question},
     kind::OsAction,
     maint::{Then, busy, failure},
+    nav::Screen,
     run::{Call, Kind, Run, Work},
     ui::{
         bar::{Bar, SPINNER},
@@ -77,6 +78,14 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
 }
 
 impl<H: Host> App<H> {
+    /// Opens the page; a finished power run is not news the next time.
+    pub(super) fn open_system(&mut self) {
+        if power_run(self).is_some_and(|r| !r.running()) {
+            self.run = None;
+        }
+        self.nav.go(Screen::System);
+    }
+
     pub(super) fn system_key(&mut self, key: Key) {
         if let Some((running, ok, work, at)) =
             power_run(self).map(|r| (r.running(), r.ok(), r.work.clone(), r.stopped_at()))

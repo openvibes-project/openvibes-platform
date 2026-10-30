@@ -43,7 +43,7 @@ enum Choice {
 fn os_run<H: Host>(app: &App<H>) -> Option<&Run> {
     app.run
         .as_ref()
-        .filter(|r| matches!(r.work.kind, Kind::Os(_)))
+        .filter(|r| matches!(r.work.kind, Kind::Os(a) if a != OsAction::PowerOff))
 }
 
 fn now() -> i64 {

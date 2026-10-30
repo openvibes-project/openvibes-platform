@@ -129,3 +129,48 @@ fn a_failed_shut_down_says_why_and_can_be_tried_again() {
     password(&mut app);
     assert_eq!(calls(&app), ["os-power-off", "os-power-off"]);
 }
+
+#[test]
+fn a_failed_restart_does_not_hide_the_entries_when_the_page_is_opened_again() {
+    let mut app = appliance(vec![Err(HostError::Failed(
+        "An update is running; restart when it is done".into(),
+    ))]);
+    app.key(Key::Down);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    app.key(Key::Left);
+    app.key(Key::Enter);
+    password(&mut app);
+    assert!(screen(&app).contains("An update is running"));
+    app.key(Key::Esc);
+    app.key(Key::Enter);
+    let text = screen(&app);
+    assert!(
+        text.contains("Restart") && text.contains("Shut down"),
+        "{text}"
+    );
+    assert!(!text.contains("An update is running"), "{text}");
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    assert!(screen(&app).contains("Shut the appliance down?"));
+}
+
+#[test]
+fn a_failed_shut_down_does_not_show_on_the_operating_system_page() {
+    let mut app = appliance(vec![Err(HostError::Failed("no".into()))]);
+    app.nav.go(Screen::System);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    app.key(Key::Left);
+    app.key(Key::Enter);
+    password(&mut app);
+    app.key(Key::Esc);
+    app.nav.go(Screen::Maintenance);
+    app.open_page(crate::tui::maint::Page::Os);
+    let text = screen(&app);
+    assert!(
+        !text.contains("The shutdown failed") && !text.contains("Try again"),
+        "{text}"
+    );
+}
