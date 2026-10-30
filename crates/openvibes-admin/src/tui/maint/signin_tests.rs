@@ -157,3 +157,71 @@ fn the_menu_lists_console_sign_in_after_database() {
     let at = names.iter().position(|n| *n == "Database").unwrap();
     assert_eq!(names[at + 1], "Console sign-in");
 }
+
+fn with_sso(state: &str, answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
+    let mut app = set_up(answers);
+    *app.host.sso.borrow_mut() = Some(state.into());
+    app.nav.go(Screen::Maintenance);
+    app.open_page(Page::SignIn);
+    app
+}
+
+#[test]
+fn the_page_says_whether_single_sign_on_is_on() {
+    for (state, want) in [
+        ("on", "Single sign-on: on"),
+        ("off", "Single sign-on: off"),
+        ("not set up", "Single sign-on: not set up"),
+    ] {
+        let text = screen(&with_sso(state, vec![]));
+        assert!(text.contains(want), "{state}: {text}");
+        assert!(text.contains("Turn single sign-on off"), "{text}");
+    }
+    assert!(screen(&page(vec![])).contains("Single sign-on: unknown"));
+}
+
+#[test]
+fn the_second_row_turns_it_off_after_a_question() {
+    let mut app = with_sso("on", vec![Ok("done\toff\n".into())]);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    let text = screen(&app);
+    assert!(text.contains("Turn single sign-on off?"), "{text}");
+    assert!(text.contains("passwords only"), "{text}");
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    assert!(
+        text.contains("Single sign-on is off. People sign in with their passwords."),
+        "{text}"
+    );
+    assert_eq!(app.host.calls.borrow()[0].0, "sso-off");
+    // Enter again clears the result and stays on the page
+    *app.host.sso.borrow_mut() = Some("off".into());
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::SignIn));
+    assert!(screen(&app).contains("Single sign-on: off"));
+}
+
+#[test]
+fn nothing_is_asked_when_it_is_not_on() {
+    let mut app = with_sso("off", vec![]);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    assert!(app.question.is_none());
+    assert!(app.host.calls.borrow().is_empty());
+}
+
+#[test]
+fn a_failed_turn_off_says_so_and_can_be_tried_again() {
+    let mut app = with_sso("on", vec![Ok("failed\tDatabase is down.\n".into())]);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    assert!(text.contains("✗ Database is down."), "{text}");
+    assert!(text.contains("Try again"), "{text}");
+}

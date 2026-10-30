@@ -49,7 +49,9 @@ impl Page {
     pub fn help(self) -> &'static str {
         match self {
             Page::Database => "A report: the clean-up runs by itself every night.",
-            Page::SignIn => "Enter resets the admin password; the new one is shown once.",
+            Page::SignIn => {
+                "Enter on the first row resets the admin password (shown once); the second turns single sign-on off."
+            }
             Page::Backup => {
                 "Enter on Save in folder types or browses a folder; Back up now writes a new file there."
             }

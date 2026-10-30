@@ -371,6 +371,46 @@ async fn a_good_response_signs_in_with_roles_from_groups() {
         .get(0);
     assert_eq!(method, "saml");
 
+    // an administrator cannot edit what the next sign-in would overwrite
+    let user_id: String = client
+        .query_one("SELECT user_id::text FROM console_sso_users", &[])
+        .await
+        .unwrap()
+        .get(0);
+    let (status, body) = fx
+        .call(
+            &fx.admin,
+            "PATCH",
+            &format!("/api/v1/users/{user_id}"),
+            Some(json!({"display_name": "Other"})),
+        )
+        .await;
+    assert_eq!(
+        (status, &body["code"]),
+        (StatusCode::CONFLICT, &json!("managed_by_sso"))
+    );
+    let (status, body) = fx
+        .call(
+            &fx.admin,
+            "PUT",
+            &format!("/api/v1/users/{user_id}/roles/admin"),
+            None,
+        )
+        .await;
+    assert_eq!(
+        (status, &body["code"]),
+        (StatusCode::CONFLICT, &json!("managed_by_sso"))
+    );
+    let (status, _) = fx
+        .call(
+            &fx.admin,
+            "DELETE",
+            &format!("/api/v1/users/{user_id}/roles/admin"),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
     // the same response again: the request was used up
     let again = post(&fx, &xml, &started.relay, Some(&started.cookie)).await;
     assert!(refused(&again));

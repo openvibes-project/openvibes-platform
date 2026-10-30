@@ -39,7 +39,9 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
   // After Escape in Add role, focus goes back to the "Add role" button once it is shown again.
   const refocusAdd = useRef(false);
   const closeAdd = (refocus: boolean) => { refocusAdd.current = refocus; setAdding(false); };
-  const grant = can("access.grant") && !self;
+  // Someone who signs in through the identity provider has name, email and roles set again at each sign-in.
+  const sso = person.auth_source === "sso";
+  const grant = can("access.grant") && !self && !sso;
   const permissions = new Set(person.access.map((a) => a.permission)).size;
   const role = (roleId: string, give: boolean) => {
     onError(undefined);
@@ -56,7 +58,7 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
         </div>
         <div className="row person-page__actions">
           {(self || can("access.users")) && <button type="button" className="button" onClick={() => setPicturing(true)}>Change picture</button>}
-          {(self || can("access.users")) && <button type="button" className="button" onClick={() => setEditing(!editing)}>{editing ? "Stop editing" : "Edit details"}</button>}
+          {!sso && (self || can("access.users")) && <button type="button" className="button" onClick={() => setEditing(!editing)}>{editing ? "Stop editing" : "Edit details"}</button>}
           <PersonMenu person={person} actions={personActions(person, self, can("access.users"))} onError={onError} />
         </div>
       </header>
@@ -73,7 +75,7 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
               <dt>Last sign-in</dt><dd>{person.last_sign_in_at ? <Ago value={person.last_sign_in_at} /> : "Never"}</dd>
               <dt>Created</dt><dd>{date(person.created_at)}</dd>
             </dl>
-          )}</Card>
+          )}{sso && <p className="subtle person-page__none">Name, email and roles come from single sign-on and are set again at each sign-in.</p>}</Card>
           <Card title="Recent activity" aside={<a {...link("/audit", { q: person.username })}>Audit log</a>}>
             {person.recent.length === 0 ? <p className="subtle person-page__none">Nothing recorded yet.</p> : (
               <ul className="person-page__activity">
@@ -103,6 +105,7 @@ export function PersonBody({ person, error, onError }: { person: PersonView; err
                   </div>
                 </div>
               ))}
+              {sso && <p className="subtle person-page__none">Roles follow this person's groups in the identity provider.</p>}
               {self && person.roles.length > 0 && <p className="subtle person-page__none">Nobody can change their own roles.</p>}
             </div>
           </Card>

@@ -22,6 +22,17 @@ pub(crate) use certificates::{IdpCertificateView, summaries};
 pub(crate) use change::check_change;
 pub(crate) use service_provider::ServiceProviderView;
 
+/// The answer to editing the name, email or roles of someone who signs in
+/// through the identity provider: the next sign-in would overwrite them.
+pub(crate) fn managed_by_sso() -> axum::response::Response {
+    use crate::http::problem::{ProblemDetails, problem_response};
+    problem_response(ProblemDetails::new(
+        axum::http::StatusCode::CONFLICT,
+        "managed_by_sso",
+        "Their name, email and roles come from single sign-on and are set again at each sign-in",
+    ))
+}
+
 /// The console's API paths.
 pub(crate) fn api_routes() -> Router<AuthHttpState> {
     Router::new().route(

@@ -144,6 +144,7 @@ impl Host for FakeHost {
                 platform_store::SCHEMA_VERSION
             )),
             Database::RulesList => Ok("baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n".into()),
+            Database::SsoStatus => Ok("on\n".into()),
             Database::FeedsStatus => {
                 Ok("osv-rocky 10 advisories checked 2026-09-28 changed never \
                                          error: HTTP 503\n"

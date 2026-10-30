@@ -62,7 +62,7 @@ pub fn admin_reset<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 /// The CLI's own words, short enough for the page: without the command line
 /// (`/usr/sbin/runuser … --must-change: `) and the `openvibes-admin: `
 /// prefix; a database problem says what to do.
-fn reason(error: &str) -> String {
+pub(super) fn reason(error: &str) -> String {
     let why = match error.rsplit_once("openvibes-admin: ") {
         Some((_, why)) => why,
         None => error.split_once(": ").map_or(error, |(_, why)| why),

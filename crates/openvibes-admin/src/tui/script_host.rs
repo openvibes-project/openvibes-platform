@@ -48,6 +48,8 @@ pub(super) struct SetupHost {
     pub(super) os: RefCell<Option<OsInfo>>,
     /// `os_update_running()` calls made.
     pub(super) os_reads: Cell<usize>,
+    /// `database(SsoStatus)`: what single sign-on reads as; none: cannot be read.
+    pub(super) sso: RefCell<Option<String>>,
 }
 
 impl Host for SetupHost {
@@ -121,6 +123,12 @@ impl Host for SetupHost {
             Ok(())
         }
     }
+    fn database(&self, command: platform_host::Database) -> Result<String, HostError> {
+        match (command, self.sso.borrow().clone()) {
+            (platform_host::Database::SsoStatus, Some(state)) => Ok(format!("{state}\n")),
+            _ => Err(HostError::Failed("not supported on this host".into())),
+        }
+    }
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
         self.calls
             .borrow_mut()
@@ -179,6 +187,7 @@ fn built(
         cert_reads: Cell::new(0),
         os: RefCell::new(None),
         os_reads: Cell::new(0),
+        sso: RefCell::new(None),
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

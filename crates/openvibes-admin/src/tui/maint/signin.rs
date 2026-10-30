@@ -3,7 +3,7 @@
 //! `Zeroizing<String>` that is taken out of the run's result as soon as
 //! the run ends and dropped when the page is left; it is never journalled.
 
-use platform_host::{Host, StepState};
+use platform_host::{Database, Host, StepState};
 use ratatui::{
     Frame,
     text::{Line, Span},
@@ -36,6 +36,24 @@ pub fn work() -> Work {
     Work::new(Kind::SignIn, vec![Call::AdminReset])
 }
 
+fn sso_work() -> Work {
+    Work::new(Kind::SsoOff, vec![Call::SsoOff])
+}
+
+fn sso_run<H: Host>(app: &App<H>) -> Option<&Run> {
+    app.run.as_ref().filter(|r| r.work.kind == Kind::SsoOff)
+}
+
+/// What the page says about single sign-on, and what the second row does.
+fn sso_line(status: Option<&str>) -> (&'static str, &'static str) {
+    match status {
+        Some("on") => ("on", "people sign in through the identity provider"),
+        Some("off") => ("off", "nothing to turn off"),
+        Some("not set up") => ("not set up", "nothing to turn off"),
+        _ => ("unknown", "cannot be read"),
+    }
+}
+
 fn signin_run<H: Host>(app: &App<H>) -> Option<&Run> {
     app.run.as_ref().filter(|r| r.work.kind == Kind::SignIn)
 }
@@ -44,7 +62,17 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let t = &app.theme;
     let run = signin_run(app);
     let shown = app.maint.signin.as_ref();
+    let sso = sso_run(app);
     let bar = match run {
+        _ if sso.is_some_and(Run::running) => Bar::Busy {
+            text: "Turning single sign-on off…".into(),
+            tick: app.tick_count,
+        },
+        _ if sso.is_some_and(Run::ok) => Bar::only(&[("Enter", "Done")]),
+        _ if sso.is_some() => Bar::act(&[("Enter", "Try again")]),
+        None if app.nav.row == 1 && app.maint.sso.as_deref() == Some("on") => {
+            Bar::keys(&[("Enter", "Turn single sign-on off")])
+        }
         Some(r) if r.running() => Bar::Busy {
             text: "Resetting the admin password…".into(),
             tick: app.tick_count,
@@ -63,6 +91,28 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         Line::raw(""),
     ];
     match (run, shown) {
+        _ if sso.is_some() => {
+            let r = sso.expect("checked");
+            if r.running() {
+                lines.push(Line::styled("    Turning single sign-on off…", t.dim()));
+            } else if r.ok() {
+                let said = r.states[0].as_ref().map_or("", StepState::detail);
+                let words = match said {
+                    "off" => "✓ Single sign-on is off. People sign in with their passwords.",
+                    "already off" => "Single sign-on was already off.",
+                    _ => "Single sign-on is not set up, so there is nothing to turn off.",
+                };
+                lines.push(Line::raw(format!("    {words}")));
+            } else {
+                let why = r.states[0].as_ref().map_or("", StepState::detail);
+                let why = why.strip_prefix("failed: ").unwrap_or(why);
+                lines.extend(failure(
+                    t,
+                    &format!("✗ {why}"),
+                    "Single sign-on is as it was. Try again when that is fixed.",
+                ));
+            }
+        }
         (Some(r), Some(password)) if r.ok() => {
             lines.push(info("Sign in as", vec![Span::raw("admin")]));
             // Borrowed: no plain copy of the password is made per frame.
@@ -88,12 +138,20 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             ));
         }
         _ => {
-            let rows = [Row::entry(
-                "Reset the admin password",
-                "a new password, shown once",
-            )];
+            let (state, detail) = sso_line(app.maint.sso.as_deref());
+            lines.insert(
+                lines.len() - 1,
+                Line::styled(format!("    Single sign-on: {state}"), t.dim()),
+            );
+            let rows = [
+                Row::entry("Reset the admin password", "a new password, shown once"),
+                Row::entry("Turn single sign-on off", detail),
+            ];
             let mut scroll = app.nav.scroll.get();
-            lines.extend(list::lines(t, &rows, 0, &mut scroll, 3, 26));
+            let room = area
+                .height
+                .saturating_sub(u16::try_from(lines.len()).unwrap_or(u16::MAX));
+            lines.extend(list::lines(t, &rows, app.nav.row, &mut scroll, room, 26));
             app.nav.scroll.set(scroll);
         }
     }
@@ -103,6 +161,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
 impl<H: Host> App<H> {
     pub(super) fn open_signin(&mut self) {
         self.nav.row = 0;
+        self.sso_status();
         // A password nobody has seen yet (the run ended while the page was
         // off screen) is shown now; a seen result is not news.
         if self.maint.signin.is_none() && signin_run(self).is_some_and(|r| !r.running()) {
@@ -115,8 +174,44 @@ impl<H: Host> App<H> {
         self.maint.signin = None;
     }
 
+    /// Reads whether single sign-on is on (no password; a quick database read).
+    fn sso_status(&mut self) {
+        self.maint.sso = self
+            .host
+            .database(Database::SsoStatus)
+            .ok()
+            .map(|text| text.trim().to_owned());
+    }
+
     pub(super) fn signin_key(&mut self, key: Key) {
+        if let Some((running, ok)) = sso_run(self).map(|r| (r.running(), r.ok())) {
+            if key == Key::Enter && !running {
+                if ok {
+                    self.run = None;
+                    self.sso_status();
+                } else {
+                    self.begin(sso_work(), 0);
+                }
+            }
+            return;
+        }
+        if signin_run(self).is_none() && self.move_row(&key, 2) {
+            return;
+        }
         if key != Key::Enter {
+            return;
+        }
+        if signin_run(self).is_none() && self.nav.row == 1 {
+            if self.maint.sso.as_deref() == Some("on") {
+                self.question = Some((
+                    Question::Maint {
+                        text: "Turn single sign-on off?".into(),
+                        detail: "passwords only".into(),
+                        then: Then::SsoOff,
+                    },
+                    true,
+                ));
+            }
             return;
         }
         match signin_run(self) {
@@ -141,6 +236,10 @@ impl<H: Host> App<H> {
                 ));
             }
         }
+    }
+
+    pub(super) fn sso_off_yes(&mut self) {
+        self.begin(sso_work(), 0);
     }
 
     pub(super) fn signin_yes(&mut self) {

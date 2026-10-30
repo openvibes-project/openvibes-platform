@@ -10897,6 +10897,16 @@
               }
             }
           },
+          "409": {
+            "description": "managed_by_sso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "422": {
             "description": "invalid_user or invalid_email",
             "content": {
@@ -11337,6 +11347,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "managed_by_sso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -11389,7 +11409,7 @@
             }
           },
           "409": {
-            "description": "last_administrator",
+            "description": "last_administrator, or managed_by_sso",
             "content": {
               "application/problem+json": {
                 "schema": {

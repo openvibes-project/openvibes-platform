@@ -327,6 +327,9 @@ pub enum Privileged<'a> {
     /// `admin-reset`: a new one-time password for the console's `admin`,
     /// printed as `done<TAB>PASSWORD` and never journalled.
     AdminReset,
+    /// `sso-off`: turns single sign-on off; prints `done<TAB>off`,
+    /// `done<TAB>already off` or `done<TAB>not set up`.
+    SsoOff,
     /// `shell-open`: does nothing itself; sudo checks the password and the
     /// call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
@@ -385,6 +388,7 @@ impl Privileged<'_> {
             Privileged::UnitEnable(unit) => vec!["unit-enable".into(), unit.name().into()],
             Privileged::UnitDisable(unit) => vec!["unit-disable".into(), unit.name().into()],
             Privileged::AdminReset => vec!["admin-reset".into()],
+            Privileged::SsoOff => vec!["sso-off".into()],
             Privileged::ShellOpen => vec!["shell-open".into()],
             Privileged::CaRequest(copy) => {
                 let mut all = vec!["ca-request".to_owned()];
@@ -446,6 +450,7 @@ impl Privileged<'_> {
             Privileged::Remove(step, _) => format!("remove-step {}", step.name()),
             // Two words: no step detail, so the password stays out (journal.rs).
             Privileged::AdminReset => "admin-reset admin".into(),
+            Privileged::SsoOff => "sso-off".into(),
             Privileged::ShellOpen => format!("shell-open {}", crate::shell::operator()),
             // Two words: the request folder is the audit target, never
             // the copy path or the PEM.
