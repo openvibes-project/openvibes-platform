@@ -221,7 +221,12 @@ pub(super) async fn import_bundle(
     let now = Utc::now();
     let accepted = match feedfmt::verify(&unpacked.envelope, &trusted, &known, now.timestamp()) {
         Ok(accepted) => accepted,
-        Err(refusal) => return (Err(format!("feed refused: {refusal}")), None),
+        Err(refusal) => {
+            return (
+                Err(format!("feed refused: {} ({refusal})", refusal.as_str())),
+                None,
+            );
+        }
     };
     let target = Some(format!(
         "{}/{} #{}",
