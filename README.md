@@ -319,6 +319,8 @@ cargo test --locked --workspace --all-features
   implementation.
 - [`docs/plans/`](docs/plans/): implementation plans with progress.
 - [`docs/sizing.md`](docs/sizing.md): measured and estimated requirements.
+- [`docs/network-destinations.md`](docs/network-destinations.md): every host
+  the platform connects to, for firewall and proxy requests.
 - [`docs/dependencies.md`](docs/dependencies.md): what the builds ship and
   what development needs, with versions and licences.
 - [`docs/dev-setup.md`](docs/dev-setup.md): run the console interface locally
