@@ -7,7 +7,7 @@ use crate::{
     SETUP_FILE, Secret, Service, ServiceAction, ServiceStatus, Unit,
     journal::step_suffix,
     runner::{
-        Program::{Admin, Curl, Df, Dnf, Getent, Ip, Logger, Rpm, Ss, Sudo, Systemctl},
+        Program::{Admin, Curl, Df, Dnf, Getent, Ip, Logger, Nmcli, Rpm, Ss, Sudo, Systemctl},
         Runner,
     },
     stderr::{printable, without_lecture},
@@ -348,6 +348,61 @@ impl<R: Runner> Host for Native<R> {
             updates: read(OS_UPDATES_FILE).and_then(|t| OsUpdates::from_file(&t)),
             running: false,
         })
+    }
+
+    fn network_info(&self) -> Option<crate::network::NetInfo> {
+        use crate::network::{self, NetInfo, PENDING_FILE};
+        let active = self.run(
+            Nmcli,
+            &[
+                "-t",
+                "-f",
+                "NAME,TYPE,DEVICE",
+                "connection",
+                "show",
+                "--active",
+            ],
+        );
+        let (connection, device) = network::wired_connection(&active.ok()?.stdout)?;
+        let mut info = NetInfo {
+            connection,
+            device,
+            ..NetInfo::default()
+        };
+        let config = self.run(
+            Nmcli,
+            &[
+                "-t",
+                "-f",
+                "ipv4.method,ipv4.addresses,ipv4.gateway,ipv4.dns,ipv4.dns-search,ipv4.ignore-auto-dns",
+                "connection",
+                "show",
+                &info.connection,
+            ],
+        );
+        network::read_config(&mut info, &config.ok()?.stdout);
+        if let Ok(now) = self.run(
+            Nmcli,
+            &[
+                "-t",
+                "-f",
+                "IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,IP4.DOMAIN",
+                "device",
+                "show",
+                &info.device,
+            ],
+        ) {
+            network::read_now(&mut info, &now.stdout);
+        }
+        info.hostname = std::fs::read_to_string("/proc/sys/kernel/hostname")
+            .map(|name| name.trim().to_owned())
+            .unwrap_or_default();
+        info.pending_since = std::fs::metadata(format!("/{PENDING_FILE}"))
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+            .and_then(|since| i64::try_from(since.as_secs()).ok());
+        Some(info)
     }
 
     fn os_update_running(&self) -> bool {

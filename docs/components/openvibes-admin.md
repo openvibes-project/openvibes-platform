@@ -1201,6 +1201,34 @@ unit tests.
 
 **Removing one optional part** (`remove-step <step> --components agent|assistant`, used by Optional parts after `setup-plan` has saved the plan without the part): when the components are only Agent and/or Assistant and none is in the plan any more, Purge needs no `--confirm` and removes exactly that part. Agent: `/etc/openvibes-agent`, `/var/lib/openvibes-agent`, the account `openvibes_agent` (user and group). Assistant: `/var/lib/openvibes-llm` (with the model), `/etc/openvibes/llm-api-key`, the account `openvibes-llm`, and the console's `[assistant]` section when it points at the local model (`assistant_setup::unconfigure`; a foreign backend stays), then `systemctl try-restart openvibes-console`. Nothing else goes, and the administration tool stays. A part removal leaves no half-done mark of its own and is refused under any mark (an update's or an uninstall's): it must not finish someone else's job. Any other component list behaves as before (a keep-data uninstall keeps all data). Code: `src/setup/remove_part.rs`; tests: `remove_part_tests.rs`.
 
+## Network verbs (appliance)
+
+`helper net-apply`, `net-keep`, `net-revert` and `hostname-set`
+(`src/setup/net.rs`, `net_tests.rs`; uid 0 only, journalled by sudo with their
+arguments, which hold no secret). `net-apply --mode dhcp|fixed [--address
+A/P --gateway G] [--dns LIST] [--search D]` first checks every value
+(`platform_host::network::change`: IPv4 only, prefix 1-30, a usable address,
+a gateway on the same network, at most 3 DNS servers, a fixed address needs
+one, names of letters, digits and hyphens), finds the active wired
+connection (`nmcli -t -f NAME,TYPE,DEVICE connection show --active`), and
+prints `done<TAB>unchanged` when the settings are already these. Otherwise
+it writes the old settings to `/run/openvibes-admin/net-previous` (0600),
+runs `nmcli connection modify … ipv4.method/addresses/gateway/dns/dns-search/
+ignore-auto-dns` and `connection up`, and starts the transient timer
+`openvibes-net-revert` (`systemd-run --on-active 60`) that runs `helper
+net-revert`; it prints `done<TAB>pending<TAB>60`. A change that fails to come
+up, or a timer that cannot start, puts the old settings back at once and says
+why. While a change is pending a second one is refused. `net-keep` stops the
+timer and forgets the old settings (`done<TAB>kept`, or `nothing pending`);
+if the timer cannot be stopped it says so and the old settings still come
+back. `net-revert` (also what the timer runs) restores the saved settings and
+prints `done<TAB>reverted`; an unreadable file is refused and nothing runs;
+settings that cannot be restored stay on file so it can be tried again.
+`hostname-set NAME` checks the name and runs `hostnamectl set-hostname`.
+The screen (8b-2) reads `Host::network_info()` without a password and checks
+a DNS server with `network::dns_answers` before Apply. Real NetworkManager
+behaviour has not been tried on a host.
+
 ## Operating system verbs
 
 `helper os-check`, `os-update` and `os-restart` (`src/setup/os.rs`, `helper.rs`;

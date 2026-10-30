@@ -362,6 +362,16 @@ pub enum Privileged<'a> {
     OsRestart,
     /// `os-power-off`: shuts the host down.
     OsPowerOff,
+    /// `net-apply --mode M [--address A --gateway G] [--dns LIST] [--search D]`:
+    /// the wired connection's IPv4 settings; the old ones come back after 60
+    /// seconds unless `net-keep` says to keep them.
+    NetApply(&'a [String]),
+    /// `net-keep`: keeps the settings `net-apply` made.
+    NetKeep,
+    /// `net-revert`: puts the old settings back now.
+    NetRevert,
+    /// `hostname-set NAME`: the host name.
+    HostnameSet(&'a str),
 }
 
 impl Privileged<'_> {
@@ -422,6 +432,14 @@ impl Privileged<'_> {
             Privileged::OsUpdate => vec!["os-update".into()],
             Privileged::OsRestart => vec!["os-restart".into()],
             Privileged::OsPowerOff => vec!["os-power-off".into()],
+            Privileged::NetApply(args) => {
+                let mut all = vec!["net-apply".to_owned()];
+                all.extend(args.iter().cloned());
+                all
+            }
+            Privileged::NetKeep => vec!["net-keep".into()],
+            Privileged::NetRevert => vec!["net-revert".into()],
+            Privileged::HostnameSet(name) => vec!["hostname-set".into(), (*name).into()],
         }
     }
 

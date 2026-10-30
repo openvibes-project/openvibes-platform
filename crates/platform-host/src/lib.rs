@@ -5,6 +5,7 @@
 
 mod journal;
 pub mod native;
+pub mod network;
 pub mod os_updates;
 pub mod runner;
 pub mod service;
@@ -262,6 +263,11 @@ pub trait Host {
     /// exists): Home adds System and Quit becomes Log out.
     fn is_appliance(&self) -> bool {
         false
+    }
+    /// The wired connection's IPv4 settings and the host name (System ›
+    /// Network); `None` where NetworkManager is not in use.
+    fn network_info(&self) -> Option<network::NetInfo> {
+        None
     }
     /// The distribution, kernel and last update check; `None` on a host
     /// without dnf (Maintenance › Operating system).
