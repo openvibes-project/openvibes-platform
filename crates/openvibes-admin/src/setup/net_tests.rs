@@ -96,7 +96,7 @@ fn apply_arms_the_timer_before_it_changes_anything_and_rearms_when_up() {
         &[
             "/usr/bin/systemd-run",
             "--unit",
-            "openvibes-net-revert",
+            "openvibes-net-settle",
             "--on-active",
             "150",
         ],
@@ -124,6 +124,12 @@ fn apply_arms_the_timer_before_it_changes_anything_and_rearms_when_up() {
         ],
     );
     assert!(first_timer < modify && modify < up && up < last_timer);
+    // the 60 s timer runs before the settle one is stopped: never none
+    let settle_stop = at(
+        &fake,
+        &["/usr/bin/systemctl", "stop", "openvibes-net-settle.timer"],
+    );
+    assert!(last_timer < settle_stop);
     let saved = std::fs::read_to_string(pending(&fake)).unwrap();
     assert!(
         saved.starts_with(&format!("uuid={UUID}\nmethod=auto\n")),

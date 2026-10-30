@@ -16,7 +16,7 @@ use std::{
 };
 
 use platform_host::{
-    network::{self, KEEP_SECONDS, NetInfo, PENDING_FILE, REVERT_UNIT, Snapshot},
+    network::{self, KEEP_SECONDS, NetInfo, PENDING_FILE, REVERT_UNIT, SETTLE_UNIT, Snapshot},
     runner::{
         Program::{Admin, Hostnamectl, Nmcli, Systemctl, SystemdRun},
         Runner,
@@ -90,10 +90,6 @@ fn lock(root: &Path) -> Result<fs::File, String> {
     Ok(file)
 }
 
-fn timer_name() -> String {
-    format!("{REVERT_UNIT}.timer")
-}
-
 /// The wired connection, its settings as they are now.
 fn current<R: Runner>(runner: &R) -> Result<NetInfo, String> {
     let active = nmcli(
@@ -157,17 +153,15 @@ fn modify<R: Runner>(runner: &R, uuid: &str, values: [&str; 6]) -> Result<(), St
     nmcli(runner, &["connection", "up", "uuid", uuid]).map(|_| ())
 }
 
-/// (Re)starts the rollback timer to fire in `seconds`.
-fn arm<R: Runner>(runner: &R, seconds: u64) -> Result<(), String> {
-    // A timer that is still loaded would make the new one fail.
-    let _ = runner.run(Systemctl, &["stop", &timer_name()]);
+/// Starts the transient timer `unit` to run `net-revert` in `seconds`.
+fn arm<R: Runner>(runner: &R, unit: &str, seconds: u64) -> Result<(), String> {
     let seconds = seconds.to_string();
     let out = runner
         .run(
             SystemdRun,
             &[
                 "--unit",
-                REVERT_UNIT,
+                unit,
                 "--on-active",
                 &seconds,
                 "--collect",
@@ -186,6 +180,15 @@ fn arm<R: Runner>(runner: &R, seconds: u64) -> Result<(), String> {
             tail(&out.stderr)
         ))
     }
+}
+
+fn timer(unit: &str) -> String {
+    format!("{unit}.timer")
+}
+
+/// Stops the settle timer; it has done its part, or the change is over.
+fn disarm_settle<R: Runner>(runner: &R) {
+    let _ = runner.run(Systemctl, &["stop", &timer(SETTLE_UNIT)]);
 }
 
 /// `net-apply`: prints `done<TAB>pending<TAB>SECONDS`, or
@@ -243,7 +246,7 @@ pub(crate) fn run_apply<R: Runner>(
     write_pending(root, &snapshot)?;
     // The way back first: from here on a helper that dies, or a session
     // that closes, still gets the old settings back.
-    if let Err(error) = arm(runner, SETTLE_SECONDS) {
+    if let Err(error) = arm(runner, SETTLE_UNIT, SETTLE_SECONDS) {
         let _ = fs::remove_file(&pending);
         return Err(error);
     }
@@ -263,11 +266,13 @@ pub(crate) fn run_apply<R: Runner>(
         let _ = revert_locked(runner, root);
         return Err(error);
     }
-    // Up: the operator now has KEEP_SECONDS from this moment.
-    if let Err(error) = arm(runner, KEEP_SECONDS) {
+    // Up: the operator now has KEEP_SECONDS from this moment. The new
+    // timer is running before the settle one stops: never none.
+    if let Err(error) = arm(runner, REVERT_UNIT, KEEP_SECONDS) {
         let _ = revert_locked(runner, root);
         return Err(error);
     }
+    disarm_settle(runner);
     write_pending(root, &snapshot)?;
     Ok(format!("done\tpending\t{KEEP_SECONDS}"))
 }
@@ -291,7 +296,8 @@ pub(crate) fn run_keep<R: Runner>(runner: &R, root: &Path) -> Result<String, Str
     if !pending.exists() {
         return Ok("done\tnothing pending".into());
     }
-    let timer = timer_name();
+    let timer = timer(REVERT_UNIT);
+    disarm_settle(runner);
     let out = runner
         .run(Systemctl, &["stop", &timer])
         .map_err(|error| format!("systemctl: {error}"))?;
@@ -332,7 +338,8 @@ fn revert_locked<R: Runner>(runner: &R, root: &Path) -> Result<String, String> {
     let Some(old) = Snapshot::decode(&text) else {
         let aside = pending.with_extension("bad");
         let _ = fs::rename(&pending, &aside);
-        let _ = runner.run(Systemctl, &["stop", &timer_name()]);
+        disarm_settle(runner);
+        let _ = runner.run(Systemctl, &["stop", &timer(REVERT_UNIT)]);
         return Err(
             "the saved settings could not be read, so the current ones stay (the file is kept as net-previous.bad)"
                 .into(),
@@ -351,8 +358,9 @@ fn revert_locked<R: Runner>(runner: &R, root: &Path) -> Result<String, String> {
         ],
     )?;
     fs::remove_file(&pending).map_err(|error| format!("{}: {error}", pending.display()))?;
-    // Harmless when the timer is what called us.
-    let _ = runner.run(Systemctl, &["stop", &timer_name()]);
+    // Harmless when a timer is what called us.
+    disarm_settle(runner);
+    let _ = runner.run(Systemctl, &["stop", &timer(REVERT_UNIT)]);
     Ok("done\treverted".into())
 }
 

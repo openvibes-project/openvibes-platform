@@ -1218,10 +1218,11 @@ everything after that addresses it by UUID, names are not unique) and prints
 and `net-keep` cannot race): it writes everything NetworkManager holds for
 the connection (all addresses, DNS servers and search domains) to
 `/run/openvibes-admin/net-previous` (0600), **arms** the transient timer
-`openvibes-net-revert` (`systemd-run --on-active 150`) that runs `helper
+`openvibes-net-settle` (`systemd-run --on-active 150`) that runs `helper
 net-revert`, then runs `nmcli connection modify uuid … ipv4.method/addresses/
-gateway/dns/dns-search/ignore-auto-dns` and `connection up`, and re-arms the
-timer for 60 seconds once the connection is up. So a helper that dies while
+gateway/dns/dns-search/ignore-auto-dns` and `connection up`, and starts the 60 second timer `openvibes-net-revert` once the
+connection is up, then stops the settle one (two unit names: starting the
+second never waits for the first to unload, and there is no moment without a timer). So a helper that dies while
 the connection comes up, or a session that closes, still gets the old
 settings back. It prints `done<TAB>pending<TAB>60`. A change that fails to
 come up puts the old settings back at once and says why; a timer that cannot

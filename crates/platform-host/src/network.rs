@@ -9,6 +9,10 @@ use std::time::Duration;
 
 /// The transient timer that puts the old settings back unless they are kept.
 pub const REVERT_UNIT: &str = "openvibes-net-revert";
+/// The timer that covers the change itself (the connection can take a
+/// minute and a half to come up); a unit of its own, so starting the
+/// [`REVERT_UNIT`] one never waits for this one to unload.
+pub const SETTLE_UNIT: &str = "openvibes-net-settle";
 /// Seconds the new settings wait to be kept.
 pub const KEEP_SECONDS: u64 = 60;
 /// Under the root, the old settings while a change waits to be kept.
