@@ -180,7 +180,7 @@ answer), `short_kernel` and `os_release` (`PRETTY_NAME`, else `NAME
 VERSION_ID`, else "Linux"). It keeps the last check as `OsUpdates` in
 `OS_UPDATES_FILE` (`/etc/openvibes/os-updates`). `Host::os_info()` returns the
 distribution, kernel, last check and whether the `openvibes-os-update` unit is
-running (`Host::os_update_running()`, read when the page opens or refreshes, never per draw), or `None` without dnf. The password-gated verbs are
+running (`Host::os_update_running()`, read when the page opens or refreshes, never per draw), or `None` without dnf. `APPLIANCE_FILE` (`/etc/openvibes/appliance`, an empty marker the appliance image adds) makes `Host::is_appliance()` true; `os-power-off` joins the `os-*` verbs. The password-gated verbs are
 `Privileged::OsCheck`, `OsUpdate` and `OsRestart` (`os-check`, `os-update`,
 `os-restart`, journalled under their own names); `Program::SystemdRun` runs
 the upgrade.

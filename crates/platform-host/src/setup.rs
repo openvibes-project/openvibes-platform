@@ -7,6 +7,8 @@ use crate::Unit;
 
 /// The plan Setup works from (§6.2).
 pub const SETUP_FILE: &str = "/etc/openvibes/setup.toml";
+/// An empty file the appliance image puts here; its presence turns on System.
+pub const APPLIANCE_FILE: &str = "/etc/openvibes/appliance";
 
 /// One Setup step, in the order Setup runs them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -358,6 +360,8 @@ pub enum Privileged<'a> {
     OsUpdate,
     /// `os-restart`: reboots the host.
     OsRestart,
+    /// `os-power-off`: shuts the host down.
+    OsPowerOff,
 }
 
 impl Privileged<'_> {
@@ -417,6 +421,7 @@ impl Privileged<'_> {
             Privileged::OsCheck => vec!["os-check".into()],
             Privileged::OsUpdate => vec!["os-update".into()],
             Privileged::OsRestart => vec!["os-restart".into()],
+            Privileged::OsPowerOff => vec!["os-power-off".into()],
         }
     }
 

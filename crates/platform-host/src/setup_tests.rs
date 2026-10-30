@@ -83,6 +83,7 @@ fn the_os_verbs_take_no_arguments_and_no_input() {
         (Privileged::OsCheck, "os-check"),
         (Privileged::OsUpdate, "os-update"),
         (Privileged::OsRestart, "os-restart"),
+        (Privileged::OsPowerOff, "os-power-off"),
     ] {
         assert_eq!(verb.args(), [name]);
         assert_eq!(verb.journal(), name);

@@ -3,8 +3,8 @@
 //! helper (`openvibes-admin helper logs`) the RPM installs (admin TUI §3).
 
 use crate::{
-    CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged, SETUP_FILE,
-    Secret, Service, ServiceAction, ServiceStatus, Unit,
+    APPLIANCE_FILE, CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged,
+    SETUP_FILE, Secret, Service, ServiceAction, ServiceStatus, Unit,
     journal::step_suffix,
     runner::{
         Program::{Admin, Curl, Df, Dnf, Getent, Ip, Logger, Rpm, Ss, Sudo, Systemctl},
@@ -194,6 +194,10 @@ impl<R: Runner> Host for Native<R> {
 
     fn is_set_up(&self) -> bool {
         std::path::Path::new(SETUP_FILE).exists()
+    }
+
+    fn is_appliance(&self) -> bool {
+        std::path::Path::new(APPLIANCE_FILE).exists()
     }
 
     fn needs_password(&self) -> bool {

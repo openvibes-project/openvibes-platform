@@ -43,7 +43,7 @@ enum Choice {
 fn os_run<H: Host>(app: &App<H>) -> Option<&Run> {
     app.run
         .as_ref()
-        .filter(|r| matches!(r.work.kind, Kind::Os(_)))
+        .filter(|r| matches!(r.work.kind, Kind::Os(a) if a != OsAction::PowerOff))
 }
 
 fn now() -> i64 {
@@ -259,7 +259,10 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
                 format!("Updating {}…", plural(*packages, "package")),
                 "This takes a few minutes. You can leave this screen: it",
             ),
-            OsAction::Restart => ("Restarting this host…".to_owned(), "The session ends now."),
+            OsAction::Restart | OsAction::PowerOff => (
+                format!("{}…", run.work.kind.doing()),
+                "The session ends now.",
+            ),
         };
         lines.push(Line::from(vec![
             Span::styled(format!("    {spin} "), t.teal()),

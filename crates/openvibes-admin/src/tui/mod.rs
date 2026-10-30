@@ -31,6 +31,9 @@ mod services_text;
 mod status;
 #[cfg(test)]
 mod status_tests;
+mod system;
+#[cfg(test)]
+mod system_tests;
 #[cfg(test)]
 mod tests;
 mod ui;

@@ -12,6 +12,7 @@ pub enum OsAction {
         kernel: bool,
     },
     Restart,
+    PowerOff,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -112,6 +113,7 @@ impl Kind {
                 format!("Updating {packages} packages")
             }
             Kind::Os(OsAction::Restart) => "Restarting".into(),
+            Kind::Os(OsAction::PowerOff) => "Shutting down".into(),
         }
     }
     pub fn done(&self) -> String {
@@ -138,6 +140,7 @@ impl Kind {
             Kind::Os(OsAction::Check) => "Checked".into(),
             Kind::Os(OsAction::Update { packages, .. }) => format!("{packages} packages updated"),
             Kind::Os(OsAction::Restart) => "Restart started".into(),
+            Kind::Os(OsAction::PowerOff) => "Shutting down".into(),
         }
     }
     pub fn stopped(&self) -> String {
@@ -162,6 +165,7 @@ impl Kind {
             Kind::Os(OsAction::Check) => "The check failed".into(),
             Kind::Os(OsAction::Update { .. }) => "The update stopped".into(),
             Kind::Os(OsAction::Restart) => "The restart failed".into(),
+            Kind::Os(OsAction::PowerOff) => "The shutdown failed".into(),
         }
     }
     /// The password bar's label (the bar adds the colon): the shell asks
@@ -194,6 +198,7 @@ impl Kind {
             Kind::Os(OsAction::Check) => "Check",
             Kind::Os(OsAction::Update { .. }) => "Update",
             Kind::Os(OsAction::Restart) => "Restart",
+            Kind::Os(OsAction::PowerOff) => "Shut down",
         }
     }
 }
