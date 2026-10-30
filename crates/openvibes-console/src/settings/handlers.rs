@@ -52,6 +52,12 @@ fn view(
         default: def.default_value(),
         value: stored.map_or_else(|| def.default_value(), |s| s.value.clone()),
         is_set: def.is_secret().then_some(secret.is_some()),
+        certificates: (def.key == platform_settings::sso_keys::IDP_CERTIFICATES).then(|| {
+            stored
+                .and_then(|s| s.value.as_str())
+                .map(|text| crate::sso::summaries(text, Utc::now(), false).unwrap_or_default())
+                .unwrap_or_default()
+        }),
         changed_at,
         changed_by,
     }
@@ -149,6 +155,14 @@ pub(crate) async fn update_setting(
     let reset = request.value.is_null();
     if !reset && let Err(message) = def.check(&request.value) {
         return invalid(&message);
+    }
+    if def.key.starts_with("sso.") {
+        let Ok(stored) = store::values(&client).await else {
+            return unavailable_auth();
+        };
+        if let Err(message) = crate::sso::check_change(&stored, def.key, &request.value) {
+            return invalid(&message);
+        }
     }
     if def.is_secret() {
         let text = request.value.as_str();

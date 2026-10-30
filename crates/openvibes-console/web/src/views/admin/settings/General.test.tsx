@@ -17,6 +17,7 @@ const settings: SettingsView = {
   items: [
     { key: "suppressions.require_approval", section: "Alarm suppressions", label: "Suppressions need approval", help: "A new suppression waits until someone else accepts it.", kind: "bool", applies: "live", default: false, value: true },
     { key: "sso.remove_inactive_days", section: "Single sign-on", label: "Remove inactive single sign-on users", help: "Days without a sign-in.", kind: "int", applies: "live", min: 1, max: 3650, default: 90, value: 90 },
+    { key: "sso.idp_certificates", section: "Single sign-on", label: "Identity provider signing certificates", help: "Public certificates.", kind: "text", applies: "live", default: "", value: "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----", certificates: [{ fingerprint: "AB:CD", not_before: "2026-01-01T00:00:00Z", not_after: "2030-01-02T00:00:00Z", expired: false }] },
     { key: "vulns.proxy_url", section: "Vulnerability feeds", label: "Proxy", help: "Where the feeds are fetched through.", kind: "text", applies: "live", default: "", value: "http://proxy.example:3128", changed_at: "2026-10-16T09:00:00Z", changed_by: "alex" },
     { key: "vulns.nvd_api_key", section: "Vulnerability feeds", label: "NVD API key", help: "Raises the rate limit.", kind: "secret", applies: "live", default: null, value: null, is_set: true },
     { key: "assistant.profile", section: "Assistant", label: "Hardware profile", help: "How much of each question is sent.", kind: "choice", applies: "restart", options: ["small", "medium", "large"], default: "small", value: "medium" },
@@ -34,7 +35,7 @@ describe("General", () => {
     const out = html();
     expect(out).toContain("On this page");
     expect(out).toMatch(/Alarm suppressions<\/a><span[^>]*>1</);
-    expect(out).toMatch(/Single sign-on<\/a><span[^>]*>1</);
+    expect(out).toMatch(/Single sign-on<\/a><span[^>]*>2</);
   });
   it("names the controls and shows the help", () => {
     const out = html();
@@ -81,6 +82,12 @@ describe("General text and secret rows", () => {
     expect(out).toMatch(/<input[^>]*type="password"[^>]*aria-label="NVD API key"/);
     expect(out).toContain("Set. Type to replace");
     expect(out).toContain(">Remove<");
+  });
+  it("shows the certificates as a text box with each one's fingerprint and expiry", () => {
+    const out = html();
+    expect(out).toMatch(/<textarea[^>]*aria-label="Identity provider signing certificates"/);
+    expect(out).toContain("AB:CD");
+    expect(out).toContain("valid until 2030-01-02");
   });
   it("says which settings wait for a restart", () => {
     expect(html().match(/Applies after the service restarts/g)).toHaveLength(2);

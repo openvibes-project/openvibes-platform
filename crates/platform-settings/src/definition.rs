@@ -24,6 +24,8 @@ pub enum Text {
     HttpUrlOrEmpty,
     /// One line of text without spaces; empty means none.
     Plain,
+    /// Up to three PEM certificates (several lines); empty means none.
+    CertificatesOrEmpty,
 }
 
 /// A setting's type and limits.
@@ -159,6 +161,9 @@ impl Definition {
 }
 
 fn check_text(check: Text, text: &str) -> Result<(), String> {
+    if check == Text::CertificatesOrEmpty {
+        return check_certificates(text);
+    }
     if text.len() > MAX_TEXT || text.chars().any(|c| c.is_control() || c == ' ') {
         return Err("Use one line without spaces".into());
     }
@@ -186,6 +191,7 @@ fn check_text(check: Text, text: &str) -> Result<(), String> {
             _ => Err("Use an address like https://llm.example:8443/v1, or leave it empty".into()),
         },
         Text::Plain => Ok(()),
+        Text::CertificatesOrEmpty => Ok(()),
         Text::Arch => {
             if !text.is_empty() && text.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
                 Ok(())
@@ -194,6 +200,44 @@ fn check_text(check: Text, text: &str) -> Result<(), String> {
             }
         }
     }
+}
+
+/// Most certificates a text setting may hold (a rollover needs two).
+pub const MAX_CERTIFICATES: usize = 3;
+const MAX_CERTIFICATES_TEXT: usize = 16 * 1024;
+
+/// PEM `CERTIFICATE` blocks and nothing else; the console parses them.
+fn check_certificates(text: &str) -> Result<(), String> {
+    const BEGIN: &str = "-----BEGIN CERTIFICATE-----";
+    const END: &str = "-----END CERTIFICATE-----";
+    let wrong = || {
+        Err(format!(
+            "Paste up to {MAX_CERTIFICATES} certificates in PEM form (-----BEGIN CERTIFICATE-----)"
+        ))
+    };
+    if text.len() > MAX_CERTIFICATES_TEXT {
+        return wrong();
+    }
+    let mut blocks = 0;
+    let mut inside = false;
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        match (inside, line) {
+            (false, BEGIN) => {
+                inside = true;
+                blocks += 1;
+            }
+            (true, END) => inside = false,
+            (true, body)
+                if body
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=')) => {}
+            _ => return wrong(),
+        }
+    }
+    if inside || blocks > MAX_CERTIFICATES {
+        return wrong();
+    }
+    Ok(())
 }
 
 /// `scheme://user:password@host`: credentials in the address.

@@ -2062,6 +2062,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sso/service-provider": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Our entity ID, response address and metadata address. */
+        get: operations["service_provider"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/triage-history": {
         parameters: {
             query?: never;
@@ -2343,6 +2360,23 @@ export interface paths {
         };
         /** The Vulnerabilities list. */
         get: operations["list_vulnerability_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/saml/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The service provider metadata (SAML 2.0), for the identity provider. */
+        get: operations["metadata"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5535,6 +5569,17 @@ export interface components {
              */
             vulnerabilities?: number | null;
         };
+        /** @description One certificate as shown under the setting. */
+        IdpCertificateView: {
+            /** @description Whether it has expired now. */
+            expired: boolean;
+            /** @description SHA-256 of the certificate, uppercase hex in pairs separated by colons. */
+            fingerprint: string;
+            /** @description End of validity (RFC 3339). */
+            not_after: string;
+            /** @description Start of validity (RFC 3339). */
+            not_before: string;
+        };
         /** @description A recorded input, a scalar or a summarized list. */
         InputView: {
             /** @description Complete source list length, when summarized. */
@@ -6964,6 +7009,15 @@ export interface components {
             /** @description Tiles. */
             tiles: components["schemas"]["ServiceTilesView"];
         };
+        /** @description What to enter in the identity provider. */
+        ServiceProviderView: {
+            /** @description Where the identity provider posts the response. */
+            acs_url: string;
+            /** @description Our entity ID (the audience of the response). */
+            entity_id: string;
+            /** @description The metadata document with both, for importing. */
+            metadata_url: string;
+        };
         /** @description Open alarms from the service's programs. */
         ServiceRelatedAlarmsView: {
             /**
@@ -7267,6 +7321,8 @@ export interface components {
              *     the service's next start).
              */
             applies: string;
+            /** @description Each certificate of a certificate setting, as read from its value. */
+            certificates?: components["schemas"]["IdpCertificateView"][] | null;
             /** @description When it was last changed (RFC 3339), if ever. */
             changed_at?: string | null;
             /** @description Who last changed it, if anyone. */
@@ -16546,6 +16602,44 @@ export interface operations {
             };
         };
     };
+    service_provider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Our side */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceProviderView"];
+                };
+            };
+            /** @description Needs settings.manage */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description public_origin_invalid */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     triage_history: {
         parameters: {
             query: {
@@ -17550,6 +17644,35 @@ export interface operations {
                 };
             };
             /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SAML metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/samlmetadata+xml": unknown;
+                };
+            };
+            /** @description public_origin_invalid */
             503: {
                 headers: {
                     [name: string]: unknown;

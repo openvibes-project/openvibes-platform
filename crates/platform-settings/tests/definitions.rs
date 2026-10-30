@@ -150,3 +150,33 @@ fn the_assistant_key_is_a_secret_and_the_address_may_be_http() {
         assert!(url.check(&json!(bad)).is_err(), "{bad}");
     }
 }
+
+#[test]
+fn certificate_text_holds_up_to_three_pem_blocks_and_nothing_else() {
+    let certificates = find("sso.idp_certificates").unwrap();
+    let block = "-----BEGIN CERTIFICATE-----\nAAAA\nBBBB==\n-----END CERTIFICATE-----";
+    assert!(certificates.check(&json!("")).is_ok());
+    assert!(certificates.check(&json!(block)).is_ok());
+    assert!(
+        certificates
+            .check(&json!(format!("{block}\n{block}\n{block}\n")))
+            .is_ok()
+    );
+    for bad in [
+        format!("{block}\n{block}\n{block}\n{block}"),
+        "-----BEGIN CERTIFICATE-----\nAAAA".to_string(),
+        "hello".to_string(),
+        "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----".to_string(),
+        "-----BEGIN CERTIFICATE-----\nAA AA!\n-----END CERTIFICATE-----".to_string(),
+        "x".repeat(20_000),
+    ] {
+        assert!(certificates.check(&json!(bad)).is_err(), "{bad}");
+    }
+    assert!(find("sso.enabled").unwrap().check(&json!(true)).is_ok());
+    assert!(
+        find("sso.idp_sso_url")
+            .unwrap()
+            .check(&json!("http://idp.example"))
+            .is_err()
+    );
+}

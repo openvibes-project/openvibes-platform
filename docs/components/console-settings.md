@@ -21,13 +21,28 @@ Both need `settings.manage` (Administrator only); the PATCH needs the CSRF
 token. The definitions live in the `platform-settings` crate
 ([platform-settings.md](platform-settings.md)) so the services check the
 same rules; a key with no stored row has its default. Keys: the two general
-ones (`suppressions.require_approval`, `sso.remove_inactive_days`) and the
+one (`suppressions.require_approval`), the eight single sign-on ones
+(`sso.*`: on/off, the identity provider's entity ID, sign-in address and
+signing certificates, three attribute names, and `sso.remove_inactive_days`)
+and the
 twelve `vulns.*` feed settings, which the vulnerability service applies over
 its file within about a minute ([openvibes-vulns.md](openvibes-vulns.md)), the
 ingest and distribution ones (applied at their next restart) and the fifteen
 `assistant.*` ones, which the console reads once at start over `[assistant]`
 of `console.toml`; settings that fail the assistant's own rules together leave
 the assistant off, with a log line ([console-assistant.md](console-assistant.md)).
+
+## Single sign-on settings
+
+Setting `sso.enabled` to true is refused until the entity ID, the sign-in
+address and at least one certificate are stored, and those three cannot be
+removed or emptied while it is on. `sso.idp_certificates` holds up to three
+PEM certificates; each must parse, be valid now and differ from the others,
+and the list shows each one's SHA-256 fingerprint and expiry. Our side is
+`GET /api/v1/sso/service-provider` (needs `settings.manage`: entity ID, reply
+URL, metadata URL) and `GET /auth/saml/metadata`, the SAML 2.0 service
+provider metadata (HTTP-POST binding, persistent NameID), which needs no
+session. Signing in with the identity provider is not part of this slice.
 
 ## Failure behaviour
 

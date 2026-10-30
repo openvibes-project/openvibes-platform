@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, invalidate, request, useResource } from "../../../api/client";
-import type { PersonRow, Role, SettingChangeView, SettingView, SettingsView } from "../../../api/types";
+import type { PersonRow, Role, ServiceProviderView, SettingChangeView, SettingView, SettingsView } from "../../../api/types";
 import { useSession } from "../../../app/session";
 import { auditActionLabel } from "../../../ui/auditActions";
 import { ErrorBox, Loading } from "../../../ui/bits";
@@ -20,10 +20,12 @@ const APPROVE = "alarms.suppressions.approve";
 /** What a section's "default" means, where it is not the built-in value. */
 const SECTION_NOTES: Record<string, string> = {
   "Vulnerability feeds": "Default is what vulns.toml says (the built-in value unless it was edited on the server). A change reaches the service within a minute and restarts its running feed downloads.",
+  "Single sign-on": "Needs an application set up in your identity provider with the values under “Enter this in your identity provider”. People who are in none of the groups that match a role name cannot sign in. The local admin account always signs in with its password. Signing in with the identity provider arrives in a later release; for now this page prepares it.",
   "Assistant": "Default is what the [assistant] part of console.toml says (the built-in value unless it was edited on the server); certificate and key file paths stay in that file. A change applies the next time the console restarts (Maintenance › Service in the admin tool). If the settings are not valid together the assistant stays off and the console logs why.",
   "Agent connections": "Default is what ingest.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool). “Keep findings” also sets how long maintenance keeps them.",
   "Rule distribution": "Default is what distribution.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool).",
 };
+const CERTIFICATES = "sso.idp_certificates";
 const slug = (section: string) => `general-${section.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
 export type Saved = { ok: boolean; message: string };
@@ -64,6 +66,10 @@ function Row({ setting }: { setting: SettingView }) {
           : setting.kind === "choice"
           ? <Select label={setting.label} value={String(setting.value ?? setting.default ?? "")} disabled={off || busy} onChange={(word) => void ed.save(word)}
               options={(setting.options ?? []).map((word) => ({ value: word, label: word }))} />
+          : setting.key === CERTIFICATES
+          ? <textarea className="textarea mono general-row__wide" rows={6} aria-label={setting.label} spellCheck={false} placeholder={"-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----"}
+              value={text ?? String(setting.value ?? "")} disabled={off} readOnly={busy} aria-invalid={result?.ok === false || undefined}
+              onChange={(e) => { if (!busy) ed.type(e.target.value); }} onBlur={() => void ed.commit()} />
           : <input className={`input ${setting.kind === "int" ? "general-row__number" : "general-row__wide"}`}
               type={setting.kind === "int" ? "number" : setting.kind === "secret" ? "password" : "text"} aria-label={setting.label}
               autoComplete={setting.kind === "secret" ? "new-password" : undefined} spellCheck={setting.kind === "int" ? undefined : false}
@@ -96,6 +102,33 @@ function Recent({ lines, settings, names }: { lines: readonly SettingChangeView[
 }
 
 /** The screen from what the server returned; `roles` (undefined without access to read them) names who can approve. */
+/** Each pasted certificate in words, so a wrong or expiring one is seen at once. */
+function Certificates({ setting }: { setting: SettingView }) {
+  const list = setting.certificates ?? [];
+  if (list.length === 0) return null;
+  return (
+    <ul className="stack general-row__certificates">
+      {list.map((c) => (
+        <li key={c.fingerprint} className="subtle">SHA-256 <span className="mono">{c.fingerprint}</span> · valid until {c.not_after.slice(0, 10)}</li>
+      ))}
+    </ul>
+  );
+}
+
+/** Our side of the connection, to copy into the identity provider. */
+function ServiceProvider() {
+  const { data } = useResource<ServiceProviderView>("/api/v1/sso/service-provider");
+  if (!data) return null;
+  return (
+    <div className="stack">
+      <strong>Enter this in your identity provider</strong>
+      <span className="subtle">Entity ID (audience)</span><span className="mono">{data.entity_id}</span>
+      <span className="subtle">Reply URL (assertion consumer service, HTTP POST)</span><span className="mono">{data.acs_url}</span>
+      <span className="subtle">Or import the metadata</span><a href={data.metadata_url} className="mono">{data.metadata_url}</a>
+    </div>
+  );
+}
+
 export function GeneralBody({ settings, roles, names = new Map() }: { settings: SettingsView; roles?: readonly Role[] | undefined; names?: ReadonlyMap<string, string> }) {
   const sections = [...new Set(settings.items.map((s) => s.section))];
   const approvers = roles?.filter((r) => r.permissions.includes(APPROVE)).map((r) => r.name);
@@ -127,11 +160,13 @@ export function GeneralBody({ settings, roles, names = new Map() }: { settings: 
                   {settings.items.filter((i) => i.section === s).map((item) => (
                     <div key={item.key} className="stack">
                       <Row setting={item} />
+                      {item.key === CERTIFICATES && <Certificates setting={item} />}
                       {item.key === "suppressions.require_approval" && item.value === true && approvers && (
                         <p className="subtle">Approvers: people whose role holds Approve suppressions on those hosts — {approvers.length ? approvers.join(", ") : "no role holds it yet"}</p>
                       )}
                     </div>
                   ))}
+                  {s === "Single sign-on" && <ServiceProvider />}
                 </div>
               </Card>
             </div>

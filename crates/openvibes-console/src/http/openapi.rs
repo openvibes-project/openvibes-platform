@@ -79,6 +79,8 @@ use utoipa::OpenApi;
         crate::hosts::groups::preview_new_group,
         crate::settings::handlers::list_settings,
         crate::settings::handlers::update_setting,
+        crate::sso::service_provider::service_provider,
+        crate::sso::service_provider::metadata,
         crate::lists::saved_views::list_views,
         crate::lists::saved_views::create_view,
         crate::lists::saved_views::delete_view,
