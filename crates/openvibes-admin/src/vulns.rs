@@ -15,6 +15,9 @@ use platform_store::{
     vulns::{self, ListFilter, VulnRow},
 };
 
+#[path = "signed_feeds.rs"]
+mod signed;
+
 /// Largest feed file read (compressed or not).
 const MAX_FILE: u64 = 512 << 20;
 
@@ -34,6 +37,51 @@ pub enum FeedsCommand {
     },
     /// Each feed's last check, last change, advisories, and error.
     Status,
+    /// Import a signed feed: a bundle `.tar` or an unpacked mirror tree
+    /// (the directory holding `feed.json` and `blobs/`). Nothing is read
+    /// before its signature verifies against a key from `feeds trust add`.
+    ImportBundle {
+        /// The bundle file, or the directory of a mirror tree.
+        path: PathBuf,
+        /// Apply only these sources (repeatable); default all.
+        #[arg(long = "source")]
+        sources: Vec<String>,
+        /// Directory with room for a private copy of the blobs the feed
+        /// names (default: the system temporary directory).
+        #[arg(long)]
+        work_dir: Option<PathBuf>,
+    },
+    /// Which signed feeds are accepted and the files applied from them.
+    Applied,
+    /// Keys trusted to sign feeds.
+    Trust {
+        #[command(subcommand)]
+        command: TrustCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TrustCommand {
+    /// Trust a feed key. Compare the fingerprint it prints with the one
+    /// shown on the mirror before relying on it.
+    Add {
+        /// Feed id the mirror signs for.
+        feed_id: String,
+        /// Key id named in its feed.json.
+        key_id: String,
+        /// The mirror's public key (32-byte Ed25519, base64url).
+        public_key: String,
+    },
+    /// Trusted keys with their fingerprints.
+    List,
+    /// Stop trusting a key. Do this for the old key once a rotation has
+    /// been applied.
+    Remove {
+        /// Feed id.
+        feed_id: String,
+        /// Key id.
+        key_id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -67,6 +115,13 @@ impl FeedsCommand {
         match self {
             Self::Import { .. } => "feeds import",
             Self::Status => "feeds status",
+            Self::ImportBundle { .. } => "feeds import-bundle",
+            Self::Applied => "feeds applied",
+            Self::Trust { command } => match command {
+                TrustCommand::Add { .. } => "feeds trust add",
+                TrustCommand::List => "feeds trust list",
+                TrustCommand::Remove { .. } => "feeds trust remove",
+            },
         }
     }
 }
@@ -161,6 +216,13 @@ pub async fn run_feeds(
                 .map_err(|error| error.to_string());
             (result, target)
         }
+        FeedsCommand::ImportBundle {
+            path,
+            sources,
+            work_dir,
+        } => signed::import_bundle(client, path, sources, work_dir.as_deref()).await,
+        FeedsCommand::Applied => (signed::applied(client).await, None),
+        FeedsCommand::Trust { command } => signed::trust(client, command).await,
         FeedsCommand::Status => {
             let result = vulns::feeds(client)
                 .await

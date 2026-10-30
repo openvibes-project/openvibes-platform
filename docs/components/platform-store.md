@@ -608,6 +608,22 @@ their `sso` bindings revoked; a disabled person gets `Disabled`. `refuse`
 writes `auth.saml.refused` with a fixed reason code. `clean` (run by `openvibes-admin maintenance`) deletes expired requests and assertions and removes people with no sign-in for N days: a delete that a foreign key blocks (cases, alarms) instead revokes all their roles (however given) and sessions; the two cases are audited `user.removed` and `user.access_removed`. People are walked in pages by id, and each is re-checked as still idle inside its own transaction. Tests:
 `tests/console_sso.rs` (run as the console role).
 
+## Signed vulnerability feeds (`feeds::…`, schema 74)
+
+Tables `feed_trust_keys` (feed id, key id, 32-byte public key, `added_at`,
+`removed_at`; ids are never re-used), `feed_state` (the highest manifest
+accepted per trusted key: sequence, digest of its signature preimage,
+`created_at`, `expires_at`, `applied_at`, origin `mirror` or `bundle`) and
+`feed_applied_files` (the last file applied per source, kind and file name: SHA-256 and
+the builder's `fetched_at`, which keeps an older file from coming back).
+`add_trust_key` returns `Added`, `AlreadyTrusted` or `Conflict`;
+`record_accepted` never lowers a sequence and keeps the stored digest when an equal sequence arrives with another one (`false`); `record_file` replaces the row for
+its source, kind and name unless the stored `fetched_at` is newer (`false`). The vulnerability role has SELECT on the keys and
+SELECT, INSERT and UPDATE on the other two; only the admin tool trusts or
+removes a key. Tests: `tests/feeds.rs`, including one as the vulnerability
+role. The format, the verifier and the importers are in
+[openvibes-vulns.md](openvibes-vulns.md).
+
 ## Saved views and list columns (`saved_views::…`, schema 56)
 
 Tables `console_saved_views` (name unique per person and page regardless of
