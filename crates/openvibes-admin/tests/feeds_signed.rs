@@ -102,7 +102,7 @@ async fn a_signed_feed_is_applied_only_from_a_trusted_key_and_never_replayed() {
     assert!(out.contains("kev kev applied"), "{out}");
     let applied = stdout(&fixture.run(&["feeds", "applied"]));
     assert!(
-        applied.starts_with("site/k1 sequence 5 from mirror"),
+        applied.starts_with("site/k1 sequence 5 from bundle"),
         "{applied}"
     );
 
