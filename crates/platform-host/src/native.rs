@@ -357,15 +357,16 @@ impl<R: Runner> Host for Native<R> {
             &[
                 "-t",
                 "-f",
-                "NAME,TYPE,DEVICE",
+                "NAME,UUID,TYPE,DEVICE",
                 "connection",
                 "show",
                 "--active",
             ],
         );
-        let (connection, device) = network::wired_connection(&active.ok()?.stdout)?;
+        let (connection, uuid, device) = network::wired_connection(&active.ok()?.stdout)?;
         let mut info = NetInfo {
             connection,
+            uuid,
             device,
             ..NetInfo::default()
         };
@@ -377,7 +378,8 @@ impl<R: Runner> Host for Native<R> {
                 "ipv4.method,ipv4.addresses,ipv4.gateway,ipv4.dns,ipv4.dns-search,ipv4.ignore-auto-dns",
                 "connection",
                 "show",
-                &info.connection,
+                "uuid",
+                &info.uuid,
             ],
         );
         network::read_config(&mut info, &config.ok()?.stdout);

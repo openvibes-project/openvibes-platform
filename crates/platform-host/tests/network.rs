@@ -17,12 +17,19 @@ fn terse_fields_unescape_colons() {
 
 #[test]
 fn the_first_active_wired_connection_is_found() {
-    let listing = "lo:loopback:lo\ndocker:bridge:docker0\nWired connection 1:802-3-ethernet:eth0\n";
+    let listing = "lo:00000000-0000-4000-8000-000000000000:loopback:lo\ndocker:11111111-0000-4000-8000-000000000000:bridge:docker0\nWired connection 1:5d1f3a7c-1111-4222-8333-944455556666:802-3-ethernet:eth0\n";
     assert_eq!(
         wired_connection(listing),
-        Some(("Wired connection 1".into(), "eth0".into()))
+        Some((
+            "Wired connection 1".into(),
+            "5d1f3a7c-1111-4222-8333-944455556666".into(),
+            "eth0".into()
+        ))
     );
-    assert_eq!(wired_connection("wifi:802-11-wireless:wlan0\n"), None);
+    assert_eq!(
+        wired_connection("wifi:5d1f3a7c-1111-4222-8333-944455556666:802-11-wireless:wlan0\n"),
+        None
+    );
 }
 
 #[test]
@@ -75,6 +82,7 @@ fn addresses_and_names_are_checked() {
     }
     assert!(host_name("openvibes-va.lime.lab"));
     assert!(!host_name("localhost") && !host_name("va.") && !host_name("--help"));
+    assert!(!host_name(&format!("{}.lab", "a".repeat(62))));
 }
 
 #[test]
@@ -89,6 +97,19 @@ fn a_change_is_checked_as_a_whole() {
     .unwrap();
     assert_eq!(ok.dns, ["192.168.1.1", "9.9.9.9"]);
     assert!(change("dhcp", "", "", "", "").is_ok());
+    // checked values are rebuilt: no "+024" prefix, no padding
+    let odd = change(
+        "fixed",
+        "192.168.1.50/+024",
+        "192.168.1.1",
+        " 9.9.9.9 ,",
+        "",
+    )
+    .unwrap();
+    assert_eq!(
+        (odd.address.as_str(), odd.dns.as_slice()),
+        ("192.168.1.50/24", ["9.9.9.9".to_owned()].as_slice())
+    );
     assert!(change("dhcp", "", "", "192.168.1.10", "").is_ok());
     for (mode, address, gateway, dns, search) in [
         ("static", "", "", "", ""),
@@ -116,7 +137,7 @@ fn a_change_is_checked_as_a_whole() {
 #[test]
 fn a_snapshot_round_trips_and_refuses_anything_else() {
     let snapshot = Snapshot {
-        connection: "Wired connection 1".into(),
+        uuid: "5d1f3a7c-1111-4222-8333-944455556666".into(),
         method: "manual".into(),
         addresses: "192.168.1.50/24".into(),
         gateway: "192.168.1.1".into(),
@@ -125,7 +146,10 @@ fn a_snapshot_round_trips_and_refuses_anything_else() {
         ignore_auto_dns: "yes".into(),
     };
     assert_eq!(Snapshot::decode(&snapshot.encode()), Some(snapshot.clone()));
-    assert_eq!(Snapshot::decode("connection=x\n"), None);
+    assert_eq!(
+        Snapshot::decode("uuid=5d1f3a7c-1111-4222-8333-944455556666\n"),
+        None
+    );
     assert_eq!(
         Snapshot::decode(&snapshot.encode().replace("method", "other")),
         None

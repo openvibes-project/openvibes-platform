@@ -23,8 +23,10 @@ pub enum Method {
 /// The wired connection as configured, and as it is now.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct NetInfo {
-    /// NetworkManager's connection name and its device.
+    /// NetworkManager's connection name, its UUID (what the verbs address it
+    /// by: names are not unique) and its device.
     pub connection: String,
+    pub uuid: String,
     pub device: String,
     /// `None`: a method this screen does not manage (link-local, shared…).
     pub method: Option<Method>,
@@ -33,6 +35,11 @@ pub struct NetInfo {
     pub gateway: String,
     pub dns: Vec<String>,
     pub search: String,
+    /// Everything NetworkManager holds for these (several addresses, DNS
+    /// servers and search domains); what a rollback puts back.
+    pub all_addresses: String,
+    pub all_dns: String,
+    pub all_search: String,
     /// DNS from DHCP is used (`ipv4.ignore-auto-dns` is no).
     pub dns_auto: bool,
     /// What is in use now (from DHCP, or as configured).
@@ -77,14 +84,25 @@ pub fn terse(line: &str) -> Vec<String> {
     fields
 }
 
-/// The first active wired connection of
-/// `nmcli -t -f NAME,TYPE,DEVICE connection show --active`: (name, device).
+/// A connection UUID as NetworkManager writes it.
 #[must_use]
-pub fn wired_connection(listing: &str) -> Option<(String, String)> {
+pub fn uuid(text: &str) -> bool {
+    text.len() == 36 && text.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// The first active wired connection of
+/// `nmcli -t -f NAME,UUID,TYPE,DEVICE connection show --active`:
+/// (name, uuid, device).
+#[must_use]
+pub fn wired_connection(listing: &str) -> Option<(String, String, String)> {
     listing.lines().find_map(|line| {
         let f = terse(line);
-        (f.len() == 3 && f[1] == "802-3-ethernet" && !f[0].is_empty() && !f[2].is_empty())
-            .then(|| (f[0].clone(), f[2].clone()))
+        (f.len() == 4
+            && f[2] == "802-3-ethernet"
+            && !f[0].is_empty()
+            && uuid(&f[1])
+            && !f[3].is_empty())
+        .then(|| (f[0].clone(), f[1].clone(), f[3].clone()))
     })
 }
 
@@ -124,6 +142,9 @@ pub fn read_config(info: &mut NetInfo, text: &str) {
         "manual" => Some(Method::Fixed),
         _ => None,
     };
+    info.all_addresses = first(text, "ipv4.addresses");
+    info.all_dns = first(text, "ipv4.dns");
+    info.all_search = first(text, "ipv4.dns-search");
     info.address = list(&first(text, "ipv4.addresses"))
         .into_iter()
         .next()
@@ -187,7 +208,11 @@ pub fn dns_name(text: &str) -> bool {
 /// A host name `hostnamectl` may be given.
 #[must_use]
 pub fn host_name(text: &str) -> bool {
-    dns_name(text) && !text.eq_ignore_ascii_case("localhost") && !text.ends_with('.')
+    // hostnamectl keeps a static name to 64 characters.
+    dns_name(text)
+        && text.len() <= 64
+        && !text.eq_ignore_ascii_case("localhost")
+        && !text.ends_with('.')
 }
 
 /// Checks the pieces of a request, with the words the screen shows.
@@ -203,23 +228,24 @@ pub fn change(
         "fixed" => Method::Fixed,
         _ => return Err("the mode is dhcp or fixed".into()),
     };
-    let servers: Vec<String> = dns
+    let raw: Vec<&str> = dns
         .split(',')
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(str::to_owned)
         .collect();
-    if servers.len() > 3 {
+    if raw.len() > 3 {
         return Err("at most 3 DNS servers".into());
     }
-    for server in &servers {
-        if host_address(server).is_none() {
-            return Err(format!("{server} is not a DNS server address"));
-        }
+    // Rebuilt from the parsed addresses: only checked values go on.
+    let mut servers = Vec::new();
+    for server in raw {
+        let ip = host_address(server).ok_or(format!("{server} is not a DNS server address"))?;
+        servers.push(ip.to_string());
     }
     if !search.is_empty() && !dns_name(search) {
         return Err(format!("{search} is not a search domain"));
     }
+    let (mut address_out, mut gateway_out) = (String::new(), String::new());
     match method {
         Method::Dhcp if !address.is_empty() || !gateway.is_empty() => {
             return Err("DHCP takes no address or gateway".into());
@@ -234,13 +260,15 @@ pub fn change(
             if servers.is_empty() {
                 return Err("a fixed address needs at least one DNS server".into());
             }
+            address_out = format!("{ip}/{prefix}");
+            gateway_out = gw.to_string();
         }
         Method::Dhcp => {}
     }
     Ok(Change {
         method,
-        address: address.to_owned(),
-        gateway: gateway.to_owned(),
+        address: address_out,
+        gateway: gateway_out,
         dns: servers,
         search: search.to_owned(),
     })
@@ -280,7 +308,7 @@ pub fn dns_answers_at(to: SocketAddr) -> bool {
 /// The old settings while a change waits, one `key=value` per line.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Snapshot {
-    pub connection: String,
+    pub uuid: String,
     pub method: String,
     pub addresses: String,
     pub gateway: String,
@@ -293,8 +321,8 @@ impl Snapshot {
     #[must_use]
     pub fn encode(&self) -> String {
         format!(
-            "connection={}\nmethod={}\naddresses={}\ngateway={}\ndns={}\nsearch={}\nignore_auto_dns={}\n",
-            self.connection,
+            "uuid={}\nmethod={}\naddresses={}\ngateway={}\ndns={}\nsearch={}\nignore_auto_dns={}\n",
+            self.uuid,
             self.method,
             self.addresses,
             self.gateway,
@@ -315,7 +343,7 @@ impl Snapshot {
                 return None;
             }
             let slot = match key {
-                "connection" => &mut snapshot.connection,
+                "uuid" => &mut snapshot.uuid,
                 "method" => &mut snapshot.method,
                 "addresses" => &mut snapshot.addresses,
                 "gateway" => &mut snapshot.gateway,
@@ -327,6 +355,6 @@ impl Snapshot {
             *slot = value.to_owned();
             seen += 1;
         }
-        (seen == 7 && !snapshot.connection.is_empty()).then_some(snapshot)
+        (seen == 7 && uuid(&snapshot.uuid)).then_some(snapshot)
     }
 }

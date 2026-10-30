@@ -1209,25 +1209,37 @@ arguments, which hold no secret). `net-apply --mode dhcp|fixed [--address
 A/P --gateway G] [--dns LIST] [--search D]` first checks every value
 (`platform_host::network::change`: IPv4 only, prefix 1-30, a usable address,
 a gateway on the same network, at most 3 DNS servers, a fixed address needs
-one, names of letters, digits and hyphens), finds the active wired
-connection (`nmcli -t -f NAME,TYPE,DEVICE connection show --active`), and
-prints `done<TAB>unchanged` when the settings are already these. Otherwise
-it writes the old settings to `/run/openvibes-admin/net-previous` (0600),
-runs `nmcli connection modify … ipv4.method/addresses/gateway/dns/dns-search/
-ignore-auto-dns` and `connection up`, and starts the transient timer
-`openvibes-net-revert` (`systemd-run --on-active 60`) that runs `helper
-net-revert`; it prints `done<TAB>pending<TAB>60`. A change that fails to come
-up, or a timer that cannot start, puts the old settings back at once and says
-why. While a change is pending a second one is refused. `net-keep` stops the
-timer and forgets the old settings (`done<TAB>kept`, or `nothing pending`);
-if the timer cannot be stopped it says so and the old settings still come
-back. `net-revert` (also what the timer runs) restores the saved settings and
-prints `done<TAB>reverted`; an unreadable file is refused and nothing runs;
-settings that cannot be restored stay on file so it can be tried again.
-`hostname-set NAME` checks the name and runs `hostnamectl set-hostname`.
-The screen (8b-2) reads `Host::network_info()` without a password and checks
-a DNS server with `network::dns_answers` before Apply. Real NetworkManager
-behaviour has not been tried on a host.
+one, names of letters, digits and hyphens) and rebuilds them from the parsed
+form, so only checked text reaches `nmcli`. It finds the active wired
+connection (`nmcli -t -f NAME,UUID,TYPE,DEVICE connection show --active`;
+everything after that addresses it by UUID, names are not unique) and prints
+`done<TAB>unchanged` when the settings are already these. Otherwise, under
+`/run/openvibes-admin/net.lock` (every net verb takes it, so the firing timer
+and `net-keep` cannot race): it writes everything NetworkManager holds for
+the connection (all addresses, DNS servers and search domains) to
+`/run/openvibes-admin/net-previous` (0600), **arms** the transient timer
+`openvibes-net-revert` (`systemd-run --on-active 150`) that runs `helper
+net-revert`, then runs `nmcli connection modify uuid … ipv4.method/addresses/
+gateway/dns/dns-search/ignore-auto-dns` and `connection up`, and re-arms the
+timer for 60 seconds once the connection is up. So a helper that dies while
+the connection comes up, or a session that closes, still gets the old
+settings back. It prints `done<TAB>pending<TAB>60`. A change that fails to
+come up puts the old settings back at once and says why; a timer that cannot
+start means nothing was changed. While a change is pending a second one is
+refused. `net-keep` stops the timer and forgets the old settings
+(`done<TAB>kept`); a timer that is already gone is fine, one that is running
+and will not stop is an error and the old settings still come back; with
+nothing on file (the timer already put them back) it says `nothing pending`.
+`net-revert` (also what the timer runs) restores the saved settings and
+prints `done<TAB>reverted`; a file that cannot be read is moved aside to
+`net-previous.bad`, nothing is run and it blocks nothing; settings that
+nmcli refuses stay on file so it can be tried again, and `net-keep` clears
+them. `hostname-set NAME` checks the name (at most 64 characters) and runs
+`hostnamectl set-hostname`. Known limit: the saved settings live in `/run`,
+so a reboot inside the 60 seconds keeps the new settings (NetworkManager has
+written them to disk). The screen (8b-2) reads `Host::network_info()` without
+a password and checks a DNS server with `network::dns_answers` before Apply.
+Real NetworkManager behaviour has not been tried on a host.
 
 ## Operating system verbs
 

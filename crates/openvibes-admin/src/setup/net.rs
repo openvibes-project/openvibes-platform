@@ -3,10 +3,17 @@
 //! through `nmcli`; since a wrong address can cut the very session that set
 //! it, `net-apply` first writes the old settings to
 //! [`PENDING_FILE`] and starts a transient timer that puts them back after
-//! [`KEEP_SECONDS`] seconds unless `net-keep` stops it. Every value is
-//! checked by `platform_host::network` before it reaches a command line.
+//! [`KEEP_SECONDS`] seconds unless `net-keep` stops it. The timer is armed
+//! before anything changes and every verb holds one lock, so a helper that
+//! dies half way, or `net-keep` meeting the firing timer, cannot leave a
+//! change nobody will undo. Every value is checked by `platform_host::network`
+//! before it reaches a command line.
 
-use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{
+    fs, io,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    path::{Path, PathBuf},
+};
 
 use platform_host::{
     network::{self, KEEP_SECONDS, NetInfo, PENDING_FILE, REVERT_UNIT, Snapshot},
@@ -56,8 +63,35 @@ fn nmcli<R: Runner>(runner: &R, args: &[&str]) -> Result<String, String> {
     }
 }
 
-fn pending_path(root: &Path) -> std::path::PathBuf {
+/// Seconds the timer waits while the change is being made (bringing a
+/// connection up can take a minute and a half); it is set to
+/// [`KEEP_SECONDS`] once the connection is up.
+const SETTLE_SECONDS: u64 = 150;
+
+fn pending_path(root: &Path) -> PathBuf {
     root.join(PENDING_FILE)
+}
+
+/// Holds `/run/openvibes-admin/net.lock` while a verb works; a second verb
+/// (the firing timer, `net-keep`) waits its turn.
+fn lock(root: &Path) -> Result<fs::File, String> {
+    let dir = root.join("run/openvibes-admin");
+    fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+    let path = dir.join("net.lock");
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    file.lock()
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    Ok(file)
+}
+
+fn timer_name() -> String {
+    format!("{REVERT_UNIT}.timer")
 }
 
 /// The wired connection, its settings as they are now.
@@ -67,16 +101,17 @@ fn current<R: Runner>(runner: &R) -> Result<NetInfo, String> {
         &[
             "-t",
             "-f",
-            "NAME,TYPE,DEVICE",
+            "NAME,UUID,TYPE,DEVICE",
             "connection",
             "show",
             "--active",
         ],
     )?;
-    let (connection, device) = network::wired_connection(&active)
+    let (connection, uuid, device) = network::wired_connection(&active)
         .ok_or("no wired connection is active under NetworkManager")?;
     let mut info = NetInfo {
         connection,
+        uuid,
         device,
         ..NetInfo::default()
     };
@@ -88,21 +123,23 @@ fn current<R: Runner>(runner: &R) -> Result<NetInfo, String> {
             "ipv4.method,ipv4.addresses,ipv4.gateway,ipv4.dns,ipv4.dns-search,ipv4.ignore-auto-dns",
             "connection",
             "show",
-            &info.connection,
+            "uuid",
+            &info.uuid,
         ],
     )?;
     network::read_config(&mut info, &config);
     Ok(info)
 }
 
-fn modify<R: Runner>(runner: &R, connection: &str, values: [&str; 6]) -> Result<(), String> {
+fn modify<R: Runner>(runner: &R, uuid: &str, values: [&str; 6]) -> Result<(), String> {
     let [method, addresses, gateway, dns, search, ignore_auto_dns] = values;
     nmcli(
         runner,
         &[
             "connection",
             "modify",
-            connection,
+            "uuid",
+            uuid,
             "ipv4.method",
             method,
             "ipv4.addresses",
@@ -117,7 +154,38 @@ fn modify<R: Runner>(runner: &R, connection: &str, values: [&str; 6]) -> Result<
             ignore_auto_dns,
         ],
     )?;
-    nmcli(runner, &["connection", "up", connection]).map(|_| ())
+    nmcli(runner, &["connection", "up", "uuid", uuid]).map(|_| ())
+}
+
+/// (Re)starts the rollback timer to fire in `seconds`.
+fn arm<R: Runner>(runner: &R, seconds: u64) -> Result<(), String> {
+    // A timer that is still loaded would make the new one fail.
+    let _ = runner.run(Systemctl, &["stop", &timer_name()]);
+    let seconds = seconds.to_string();
+    let out = runner
+        .run(
+            SystemdRun,
+            &[
+                "--unit",
+                REVERT_UNIT,
+                "--on-active",
+                &seconds,
+                "--collect",
+                "--quiet",
+                Admin.path(),
+                "helper",
+                "net-revert",
+            ],
+        )
+        .map_err(|error| format!("systemd-run: {error}"))?;
+    if out.status == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "could not start the rollback timer: {}",
+            tail(&out.stderr)
+        ))
+    }
 }
 
 /// `net-apply`: prints `done<TAB>pending<TAB>SECONDS`, or
@@ -134,6 +202,7 @@ pub(crate) fn run_apply<R: Runner>(
         &args.dns,
         &args.search,
     )?;
+    let _held = lock(root)?;
     let pending = pending_path(root);
     if pending.exists() {
         return Err("A network change is waiting to be kept or put back; answer it first".into());
@@ -156,7 +225,7 @@ pub(crate) fn run_apply<R: Runner>(
         return Ok("done\tunchanged".into());
     }
     let snapshot = Snapshot {
-        connection: info.connection.clone(),
+        uuid: info.uuid.clone(),
         method: match info.method {
             Some(network::Method::Fixed) => "manual",
             Some(network::Method::Dhcp) => "auto",
@@ -165,16 +234,22 @@ pub(crate) fn run_apply<R: Runner>(
             }
         }
         .into(),
-        addresses: info.address.clone(),
+        addresses: info.all_addresses.clone(),
         gateway: info.gateway.clone(),
-        dns: info.dns.join(","),
-        search: info.search.clone(),
+        dns: info.all_dns.clone(),
+        search: info.all_search.clone(),
         ignore_auto_dns: if info.dns_auto { "no" } else { "yes" }.into(),
     };
     write_pending(root, &snapshot)?;
+    // The way back first: from here on a helper that dies, or a session
+    // that closes, still gets the old settings back.
+    if let Err(error) = arm(runner, SETTLE_SECONDS) {
+        let _ = fs::remove_file(&pending);
+        return Err(error);
+    }
     let applied = modify(
         runner,
-        &info.connection,
+        &info.uuid,
         [
             method,
             &change.address,
@@ -185,38 +260,16 @@ pub(crate) fn run_apply<R: Runner>(
         ],
     );
     if let Err(error) = applied {
-        // Nothing was promised yet: put the old settings back at once.
-        let _ = run_revert(runner, root);
+        let _ = revert_locked(runner, root);
         return Err(error);
     }
-    let seconds = KEEP_SECONDS.to_string();
-    let timer = runner
-        .run(
-            SystemdRun,
-            &[
-                "--unit",
-                REVERT_UNIT,
-                "--on-active",
-                &seconds,
-                "--collect",
-                "--quiet",
-                Admin.path(),
-                "helper",
-                "net-revert",
-            ],
-        )
-        .map_err(|error| format!("systemd-run: {error}"));
-    match timer {
-        Ok(out) if out.status == 0 => Ok(format!("done\tpending\t{KEEP_SECONDS}")),
-        other => {
-            // Without the timer there is no way back: do not leave it changed.
-            let _ = run_revert(runner, root);
-            Err(match other {
-                Ok(out) => format!("could not start the rollback timer: {}", tail(&out.stderr)),
-                Err(error) => error,
-            })
-        }
+    // Up: the operator now has KEEP_SECONDS from this moment.
+    if let Err(error) = arm(runner, KEEP_SECONDS) {
+        let _ = revert_locked(runner, root);
+        return Err(error);
     }
+    write_pending(root, &snapshot)?;
+    Ok(format!("done\tpending\t{KEEP_SECONDS}"))
 }
 
 fn write_pending(root: &Path, snapshot: &Snapshot) -> Result<(), String> {
@@ -230,38 +283,64 @@ fn write_pending(root: &Path, snapshot: &Snapshot) -> Result<(), String> {
 }
 
 /// `net-keep`: stops the timer and forgets the old settings; prints
-/// `done<TAB>kept` or `done<TAB>nothing pending`.
+/// `done<TAB>kept` or `done<TAB>nothing pending` (nothing was waiting, or
+/// the timer already put the old settings back).
 pub(crate) fn run_keep<R: Runner>(runner: &R, root: &Path) -> Result<String, String> {
+    let _held = lock(root)?;
     let pending = pending_path(root);
     if !pending.exists() {
         return Ok("done\tnothing pending".into());
     }
-    let timer = format!("{REVERT_UNIT}.timer");
+    let timer = timer_name();
     let out = runner
         .run(Systemctl, &["stop", &timer])
         .map_err(|error| format!("systemctl: {error}"))?;
     if out.status != 0 {
-        return Err(format!(
-            "could not stop the rollback timer, so the old settings come back: {}",
-            tail(&out.stderr)
-        ));
+        // Gone already is fine; one that is running and will not stop is not.
+        let running = runner
+            .run(Systemctl, &["is-active", "--quiet", &timer])
+            .is_ok_and(|out| out.status == 0);
+        if running {
+            return Err(format!(
+                "could not stop the rollback timer, so the old settings come back: {}",
+                tail(&out.stderr)
+            ));
+        }
     }
     fs::remove_file(&pending).map_err(|error| format!("{}: {error}", pending.display()))?;
     Ok("done\tkept".into())
 }
 
 /// `net-revert` (also run by the timer): puts the old settings back; prints
-/// `done<TAB>reverted` or `done<TAB>nothing pending`. The old settings stay
-/// on file if they cannot be restored, so it can be tried again.
+/// `done<TAB>reverted` or `done<TAB>nothing pending`. Settings that cannot
+/// be restored stay on file so it can be tried again (or `net-keep` clears
+/// them); a file that cannot be read is moved aside so it blocks nothing.
 pub(crate) fn run_revert<R: Runner>(runner: &R, root: &Path) -> Result<String, String> {
+    let _held = lock(root)?;
+    revert_locked(runner, root)
+}
+
+fn revert_locked<R: Runner>(runner: &R, root: &Path) -> Result<String, String> {
     let pending = pending_path(root);
-    let Ok(text) = fs::read_to_string(&pending) else {
-        return Ok("done\tnothing pending".into());
+    let text = match fs::read_to_string(&pending) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok("done\tnothing pending".into());
+        }
+        Err(error) => return Err(format!("{}: {error}", pending.display())),
     };
-    let old = Snapshot::decode(&text).ok_or("the saved settings are unreadable")?;
+    let Some(old) = Snapshot::decode(&text) else {
+        let aside = pending.with_extension("bad");
+        let _ = fs::rename(&pending, &aside);
+        let _ = runner.run(Systemctl, &["stop", &timer_name()]);
+        return Err(
+            "the saved settings could not be read, so the current ones stay (the file is kept as net-previous.bad)"
+                .into(),
+        );
+    };
     modify(
         runner,
-        &old.connection,
+        &old.uuid,
         [
             &old.method,
             &old.addresses,
@@ -273,14 +352,14 @@ pub(crate) fn run_revert<R: Runner>(runner: &R, root: &Path) -> Result<String, S
     )?;
     fs::remove_file(&pending).map_err(|error| format!("{}: {error}", pending.display()))?;
     // Harmless when the timer is what called us.
-    let _ = runner.run(Systemctl, &["stop", &format!("{REVERT_UNIT}.timer")]);
+    let _ = runner.run(Systemctl, &["stop", &timer_name()]);
     Ok("done\treverted".into())
 }
 
 /// `hostname-set NAME`: prints `done<TAB>NAME`.
 pub(crate) fn run_hostname<R: Runner>(runner: &R, name: &str) -> Result<String, String> {
     if !network::host_name(name) {
-        return Err(format!("{name} is not a host name"));
+        return Err(format!("{name} is not a host name (at most 64 characters)"));
     }
     let out = runner
         .run(Hostnamectl, &["set-hostname", "--", name])
