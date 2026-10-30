@@ -57,6 +57,8 @@ pub enum Call {
     OsUpdate,
     /// `os-restart`: reboots the host.
     OsRestart,
+    /// `os-power-off`: shuts the host down.
+    OsPowerOff,
 }
 
 /// `ca-import`'s or `console-cert-set`'s certificates and key; Debug never shows them.
@@ -171,6 +173,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::OsCheck => host.privileged(Privileged::OsCheck, secret),
         Call::OsUpdate => host.privileged(Privileged::OsUpdate, secret),
         Call::OsRestart => host.privileged(Privileged::OsRestart, secret),
+        Call::OsPowerOff => host.privileged(Privileged::OsPowerOff, secret),
     }
 }
 
@@ -188,7 +191,8 @@ pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
             | Call::ShellOpen
             | Call::OsCheck
             | Call::OsUpdate
-            | Call::OsRestart,
+            | Call::OsRestart
+            | Call::OsPowerOff,
             Ok(out),
         ) => StepState::parse(out.trim_end()).unwrap_or_else(|| {
             StepState::Failed(format!("unexpected helper output: {}", out.trim()))

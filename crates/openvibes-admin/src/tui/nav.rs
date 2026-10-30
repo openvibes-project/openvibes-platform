@@ -21,6 +21,8 @@ pub enum Screen {
     Log(Unit),
     Maintenance,
     Maint(super::maint::Page),
+    /// The appliance's System page.
+    System,
     Help(Box<Screen>),
     /// The first install (sub-project 3).
     Install(super::install::Stage),
@@ -71,6 +73,7 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Status => " · Status".into(),
         Screen::Service(unit) | Screen::Log(unit) => format!(" · Status › {}", unit.label()),
         Screen::Maintenance => " · Maintenance".into(),
+        Screen::System => " · System".into(),
         Screen::Maint(page) => format!(" · Maintenance › {}", page.title()),
         Screen::Help(_) => " · Help".into(),
         Screen::Install(stage) => {
@@ -109,6 +112,7 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
         Screen::Home => home::draw(frame, &head, app),
         Screen::Maintenance => super::maint::draw_menu(frame, &head, app),
         Screen::Maint(page) => super::maint::draw(frame, &head, app, *page),
+        Screen::System => super::system::draw(frame, &head, app),
         Screen::Status => status::draw(frame, &head, app),
         Screen::Service(unit) => service::draw(frame, &head, app, *unit),
         Screen::Log(unit) => service::draw_log(frame, &head, app, *unit),

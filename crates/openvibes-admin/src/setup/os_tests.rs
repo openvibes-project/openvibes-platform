@@ -1,7 +1,7 @@
 //! The OS update verbs against a scripted dnf.
 use platform_host::os_updates::OsUpdates;
 
-use super::{check, run_check, run_restart, run_update};
+use super::{check, run_check, run_power_off, run_restart, run_update};
 use crate::setup::fake::Fake;
 
 const WAITING: &str = "\nkernel.x86_64  5.14.0-570  baseos\nvim-minimal.x86_64  2:8.2  baseos\n";
@@ -165,6 +165,21 @@ fn restart_asks_systemd_to_reboot() {
 }
 
 #[test]
+fn power_off_asks_systemd_to_power_off_and_waits_like_restart() {
+    let fake = Fake::new("os-power-off");
+    fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
+    fake.answer(&["/usr/bin/systemctl", "poweroff"], 0, "");
+    assert_eq!(
+        run_power_off(&fake, &fake.root).unwrap(),
+        "done\tshutting down"
+    );
+    let busy = Fake::new("os-power-off-busy");
+    busy.answer(&["/usr/bin/systemctl", "is-active"], 0, "");
+    assert!(run_power_off(&busy, &busy.root).is_err());
+    assert!(!busy.called(&["/usr/bin/systemctl", "poweroff"]));
+}
+
+#[test]
 fn restart_waits_for_a_running_update() {
     let fake = Fake::new("os-restart-busy");
     fake.answer(&["/usr/bin/systemctl", "is-active"], 0, "");
@@ -191,7 +206,7 @@ fn the_os_verbs_take_no_arguments() {
         #[command(subcommand)]
         command: crate::helper::HelperCommand,
     }
-    for verb in ["os-check", "os-update", "os-restart"] {
+    for verb in ["os-check", "os-update", "os-restart", "os-power-off"] {
         assert!(Wrapper::try_parse_from(["helper", verb]).is_ok(), "{verb}");
         assert!(
             Wrapper::try_parse_from(["helper", verb, "extra"]).is_err(),

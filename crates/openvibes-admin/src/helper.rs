@@ -122,6 +122,8 @@ pub enum HelperCommand {
     OsUpdate,
     /// Restarts the host; prints `done<TAB>restarting`.
     OsRestart,
+    /// Shuts the host down; prints `done<TAB>shutting down`.
+    OsPowerOff,
     /// Does nothing and prints `done<TAB>opened`: sudo checks the password
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
@@ -159,6 +161,7 @@ enum Verb {
     OsCheck,
     OsUpdate,
     OsRestart,
+    OsPowerOff,
     Ca(crate::helper_ca::CaVerb),
 }
 
@@ -244,6 +247,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::OsCheck => Verb::OsCheck,
         HelperCommand::OsUpdate => Verb::OsUpdate,
         HelperCommand::OsRestart => Verb::OsRestart,
+        HelperCommand::OsPowerOff => Verb::OsPowerOff,
         HelperCommand::Ca(command) => Verb::Ca(crate::helper_ca::verb(command)?),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
@@ -353,6 +357,10 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::OsCheck => os_result(crate::setup::os::run_check(&SystemRunner, Path::new("/"))),
         Verb::OsUpdate => os_result(crate::setup::os::run_update(&SystemRunner, Path::new("/"))),
         Verb::OsRestart => os_result(crate::setup::os::run_restart(&SystemRunner, Path::new("/"))),
+        Verb::OsPowerOff => os_result(crate::setup::os::run_power_off(
+            &SystemRunner,
+            Path::new("/"),
+        )),
         Verb::ShellOpen => {
             println!("done\topened");
             ExitCode::SUCCESS

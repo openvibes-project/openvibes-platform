@@ -14,7 +14,9 @@ mod stderr;
 pub mod unit;
 
 pub use service::{CONFIG_DIR, Service};
-pub use setup::{Privileged, RemoveStep, SETUP_FILE, Secret, Step, StepState, UpdateStep};
+pub use setup::{
+    APPLIANCE_FILE, Privileged, RemoveStep, SETUP_FILE, Secret, Step, StepState, UpdateStep,
+};
 pub use unit::Unit;
 
 /// A lifecycle action an operator may take without a password.
@@ -255,6 +257,11 @@ pub trait Host {
     fn listeners(&self, port: u16) -> Result<String, HostError> {
         let _ = port;
         Ok(String::new())
+    }
+    /// This host is the OpenVIBES appliance (`/etc/openvibes/appliance`
+    /// exists): Home adds System and Quit becomes Log out.
+    fn is_appliance(&self) -> bool {
+        false
     }
     /// The distribution, kernel and last update check; `None` on a host
     /// without dnf (Maintenance › Operating system).

@@ -153,6 +153,16 @@ pub(crate) fn run_update<R: Runner>(runner: &R, root: &Path) -> Result<String, S
 /// `os-restart`: asks systemd to reboot, unless an update or a Setup run
 /// is half done; prints `done<TAB>restarting`.
 pub(crate) fn run_restart<R: Runner>(runner: &R, root: &Path) -> Result<String, String> {
+    power(runner, root, "reboot", "restarting")
+}
+
+/// `os-power-off`: as `os-restart`, but powers the host off; prints
+/// `done<TAB>shutting down`.
+pub(crate) fn run_power_off<R: Runner>(runner: &R, root: &Path) -> Result<String, String> {
+    power(runner, root, "poweroff", "shutting down")
+}
+
+fn power<R: Runner>(runner: &R, root: &Path, action: &str, said: &str) -> Result<String, String> {
     let updating = runner
         .run(Systemctl, &["is-active", "--quiet", UPDATE_UNIT])
         .is_ok_and(|out| out.status == 0);
@@ -161,12 +171,12 @@ pub(crate) fn run_restart<R: Runner>(runner: &R, root: &Path) -> Result<String, 
     }
     let _setup = crate::setup::system::lock(root)?;
     let out = runner
-        .run(Systemctl, &["reboot"])
+        .run(Systemctl, &[action])
         .map_err(|error| format!("systemctl: {error}"))?;
     if out.status != 0 {
-        return Err(format!("could not restart: {}", tail(&out.stderr)));
+        return Err(format!("could not {said}: {}", tail(&out.stderr)));
     }
-    Ok("done\trestarting".into())
+    Ok(format!("done\t{said}"))
 }
 
 #[cfg(test)]

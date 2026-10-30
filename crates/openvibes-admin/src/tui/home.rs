@@ -19,19 +19,27 @@ use super::{
     },
 };
 
-pub const HOME: [(&str, &str); 3] = [
-    ("Status", "health, services, logs"),
-    ("Maintenance", "updates, repair, database, backup"),
-    ("Quit", ""),
-];
+/// Home's entries; the appliance adds System and ends in Log out (spec §7).
+pub fn items(appliance: bool) -> Vec<(&'static str, &'static str)> {
+    let mut items = vec![
+        ("Status", "health, services, logs"),
+        ("Maintenance", "updates, repair, database, backup"),
+    ];
+    if appliance {
+        items.push(("System", "restart, shut down"));
+    }
+    items.push((if appliance { "Log out" } else { "Quit" }, ""));
+    items
+}
 
 fn rows(items: &[(&str, &str)]) -> Vec<Row> {
     items.iter().map(|(n, v)| Row::entry(n, v)).collect()
 }
 
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
-    let enter = if app.nav.row == HOME.len() - 1 {
-        "Quit"
+    let items = items(app.host.is_appliance());
+    let enter = if app.nav.row == items.len() - 1 {
+        items[app.nav.row].0
     } else {
         "Open"
     };
@@ -54,7 +62,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         .saturating_sub(u16::try_from(lines.len()).unwrap_or(u16::MAX));
     lines.extend(list::lines(
         &app.theme,
-        &rows(&HOME),
+        &rows(&items),
         app.nav.row,
         &mut scroll,
         height,
@@ -110,6 +118,7 @@ fn name(screen: &Screen) -> String {
         Screen::Home => "Home".into(),
         Screen::Maintenance => "Maintenance".into(),
         Screen::Maint(page) => page.title().into(),
+        Screen::System => "System".into(),
         Screen::Status => "Status".into(),
         Screen::Service(unit) => format!("Service: {}", unit.label()),
         Screen::Log(unit) => format!("Log: {}", unit.label()),
@@ -122,6 +131,7 @@ fn here(from: &Screen) -> &'static str {
     match from {
         Screen::Home | Screen::Maintenance => "Enter opens the highlighted entry.",
         Screen::Maint(page) => page.help(),
+        Screen::System => super::system::HELP,
         Screen::Status => "Enter opens a service, or does what a problem's line says.",
         Screen::Service(_) => "Enter does the highlighted action; Full log shows every line.",
         Screen::Log(_) => "⭡⭣ scroll the log.",
@@ -142,13 +152,15 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn home_key(&mut self, key: Key) {
-        if self.move_row(&key, HOME.len()) {
+        let appliance = self.host.is_appliance();
+        if self.move_row(&key, items(appliance).len()) {
             return;
         }
         if key == Key::Enter {
-            match self.nav.row {
-                0 => self.open_status(),
-                1 => self.nav.go(Screen::Maintenance),
+            match (self.nav.row, appliance) {
+                (0, _) => self.open_status(),
+                (1, _) => self.nav.go(Screen::Maintenance),
+                (2, true) => self.nav.go(Screen::System),
                 _ => self.quit_or_ask(),
             }
         }
