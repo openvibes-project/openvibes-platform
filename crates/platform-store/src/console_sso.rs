@@ -376,58 +376,87 @@ pub async fn clean(
         ..Cleaned::default()
     };
     let cutoff = now - Duration::days(inactive_days);
-    let idle = client
-        .query(
-            "SELECT u.user_id::text, u.username
-             FROM console_sso_users s JOIN console_users u USING (user_id)
-             WHERE COALESCE(u.last_sign_in_at, u.created_at) < $1
-             ORDER BY u.created_at LIMIT 1000",
-            &[&cutoff],
-        )
-        .await?;
-    for row in &idle {
-        let (user_id, username): (String, String) = (row.get(0), row.get(1));
-        let detail = |deleted: bool| serde_json::json!({"reason": "inactive", "days": inactive_days, "deleted": deleted});
-        let tx = client.transaction().await?;
-        match tx
-            .execute(
-                "DELETE FROM console_users WHERE user_id = $1::text::uuid",
-                &[&user_id],
+    let mut after = String::from("00000000-0000-0000-0000-000000000000");
+    loop {
+        let idle = client
+            .query(
+                "SELECT u.user_id::text, u.username
+                 FROM console_sso_users s JOIN console_users u USING (user_id)
+                 WHERE COALESCE(u.last_sign_in_at, u.created_at) < $1 AND u.user_id::text > $2
+                 ORDER BY u.user_id LIMIT 500",
+                &[&cutoff, &after],
             )
-            .await
-        {
-            Ok(_) => {
-                audit(&tx, "user.removed", &user_id, &username, detail(true), now).await?;
-                tx.commit().await?;
-                done.removed += 1;
+            .await?;
+        let Some(last) = idle.last() else {
+            break;
+        };
+        after = last.get(0);
+        for row in &idle {
+            let (user_id, username): (String, String) = (row.get(0), row.get(1));
+            let detail = |deleted: bool| serde_json::json!({"reason": "inactive", "days": inactive_days, "deleted": deleted});
+            let tx = client.transaction().await?;
+            // Still idle? Someone may have signed in since the list was read.
+            let still = tx
+                .query_opt(
+                    "SELECT 1 FROM console_users
+                     WHERE user_id = $1::text::uuid AND COALESCE(last_sign_in_at, created_at) < $2
+                     FOR UPDATE",
+                    &[&user_id, &cutoff],
+                )
+                .await?;
+            if still.is_none() {
+                continue;
             }
-            Err(error)
-                if error.code()
-                    == Some(&tokio_postgres::error::SqlState::FOREIGN_KEY_VIOLATION) =>
+            match tx
+                .execute(
+                    "DELETE FROM console_users WHERE user_id = $1::text::uuid",
+                    &[&user_id],
+                )
+                .await
             {
-                drop(tx);
-                let tx = client.transaction().await?;
-                let bindings = tx
-                    .execute(
-                        "UPDATE console_role_bindings SET revoked_at = $2, revoked_by = 'console-sso'
-                         WHERE user_id = $1::text::uuid AND revoked_at IS NULL AND source = 'sso'",
-                        &[&user_id, &now],
-                    )
-                    .await?;
-                let sessions = tx
-                    .execute(
-                        "UPDATE console_sessions SET revoked_at = $2
-                         WHERE user_id = $1::text::uuid AND revoked_at IS NULL",
-                        &[&user_id, &now],
-                    )
-                    .await?;
-                if bindings + sessions > 0 {
-                    audit(&tx, "user.removed", &user_id, &username, detail(false), now).await?;
-                    done.access_removed += 1;
+                Ok(_) => {
+                    audit(&tx, "user.removed", &user_id, &username, detail(true), now).await?;
+                    tx.commit().await?;
+                    done.removed += 1;
                 }
-                tx.commit().await?;
+                Err(error)
+                    if error.code()
+                        == Some(&tokio_postgres::error::SqlState::FOREIGN_KEY_VIOLATION) =>
+                {
+                    drop(tx);
+                    let tx = client.transaction().await?;
+                    // Every role goes, however it was given: with none left
+                    // they cannot sign in until a group gives one again.
+                    let bindings = tx
+                        .execute(
+                            "UPDATE console_role_bindings SET revoked_at = $2, revoked_by = 'console-sso'
+                             WHERE user_id = $1::text::uuid AND revoked_at IS NULL",
+                            &[&user_id, &now],
+                        )
+                        .await?;
+                    let sessions = tx
+                        .execute(
+                            "UPDATE console_sessions SET revoked_at = $2
+                             WHERE user_id = $1::text::uuid AND revoked_at IS NULL",
+                            &[&user_id, &now],
+                        )
+                        .await?;
+                    if bindings + sessions > 0 {
+                        audit(
+                            &tx,
+                            "user.access_removed",
+                            &user_id,
+                            &username,
+                            detail(false),
+                            now,
+                        )
+                        .await?;
+                        done.access_removed += 1;
+                    }
+                    tx.commit().await?;
+                }
+                Err(error) => return Err(error.into()),
             }
-            Err(error) => return Err(error.into()),
         }
     }
     Ok(done)

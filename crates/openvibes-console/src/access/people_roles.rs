@@ -38,7 +38,7 @@ enum Holder {
     responses((status = 204, description = "Held"),
         (status = 403, description = "Needs access.grant; the role is outside your access; or yourself", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 404, description = "No such person inside your access, or no such role", body = ProblemDetails, content_type = "application/problem+json"),
-        (status = 409, description = "managed_by_sso", body = ProblemDetails, content_type = "application/problem+json")))]
+        (status = 409, description = "managed_by_sso: roles are given by their groups", body = ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn give_user_role(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -126,7 +126,7 @@ async fn change(
             Ok((person, _)) if person.user_id == editor.actor => {
                 return forbidden("Nobody can change their own roles");
             }
-            Ok((person, _)) if person.auth_source == "sso" => {
+            Ok((person, _)) if person.auth_source == "sso" && give => {
                 return crate::sso::managed_by_sso();
             }
             Ok((person, _)) => person.user_id,

@@ -11295,6 +11295,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "managed_by_sso: they have no password",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -11349,7 +11359,7 @@
             }
           },
           "409": {
-            "description": "managed_by_sso",
+            "description": "managed_by_sso: roles are given by their groups",
             "content": {
               "application/problem+json": {
                 "schema": {

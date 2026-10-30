@@ -401,15 +401,6 @@ async fn a_good_response_signs_in_with_roles_from_groups() {
         (status, &body["code"]),
         (StatusCode::CONFLICT, &json!("managed_by_sso"))
     );
-    let (status, _) = fx
-        .call(
-            &fx.admin,
-            "DELETE",
-            &format!("/api/v1/users/{user_id}/roles/admin"),
-            None,
-        )
-        .await;
-    assert_eq!(status, StatusCode::CONFLICT);
 
     // the same response again: the request was used up
     let again = post(&fx, &xml, &started.relay, Some(&started.cookie)).await;

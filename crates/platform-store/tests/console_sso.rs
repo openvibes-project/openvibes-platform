@@ -206,6 +206,17 @@ async fn the_cleanup_removes_the_inactive_and_spares_the_busy() {
         )
         .await
         .unwrap();
+    // and holds a role granted by hand, which must go too
+    client
+        .execute(
+            "INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+             SELECT gen_random_uuid(), $1::text::uuid, role_id, now(), 'test' FROM console_roles
+             WHERE role_id NOT IN (SELECT role_id FROM console_role_bindings WHERE user_id = $1::text::uuid)
+             LIMIT 1",
+            &[&ids[1]],
+        )
+        .await
+        .unwrap();
     client
         .execute(
             "INSERT INTO console_saml_seen (assertion_sha256, expires_at) VALUES (sha256('x'::bytea), now() - interval '1 day')",
@@ -248,7 +259,7 @@ async fn the_cleanup_removes_the_inactive_and_spares_the_busy() {
     assert_eq!((again.removed, again.access_removed), (0, 0));
     let actions: Vec<String> = client
         .query(
-            "SELECT action FROM audit_log WHERE action = 'user.removed'",
+            "SELECT action FROM audit_log WHERE action IN ('user.removed', 'user.access_removed') ORDER BY action",
             &[],
         )
         .await
@@ -256,7 +267,7 @@ async fn the_cleanup_removes_the_inactive_and_spares_the_busy() {
         .iter()
         .map(|row| row.get(0))
         .collect();
-    assert_eq!(actions.len(), 2);
+    assert_eq!(actions, ["user.access_removed", "user.removed"]);
     drop(client);
     db.drop().await;
 }

@@ -17154,6 +17154,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description managed_by_sso: they have no password */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     give_user_role: {
@@ -17193,7 +17202,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description managed_by_sso */
+            /** @description managed_by_sso: roles are given by their groups */
             409: {
                 headers: {
                     [name: string]: unknown;

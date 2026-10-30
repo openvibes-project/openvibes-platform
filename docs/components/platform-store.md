@@ -605,7 +605,7 @@ assertion (a repeat is `Replay`), finds or creates the person (username
 the roles whose display name equals one of the groups, case-insensitively.
 Nobody is created without a role; a person left with none gets `NoRole` and
 their `sso` bindings revoked; a disabled person gets `Disabled`. `refuse`
-writes `auth.saml.refused` with a fixed reason code. `clean` (run by `openvibes-admin maintenance`) deletes expired requests and assertions and removes people with no sign-in for N days: a delete that a foreign key blocks (cases, alarms) instead revokes their `sso` roles and sessions; both are audited `user.removed`. Tests:
+writes `auth.saml.refused` with a fixed reason code. `clean` (run by `openvibes-admin maintenance`) deletes expired requests and assertions and removes people with no sign-in for N days: a delete that a foreign key blocks (cases, alarms) instead revokes all their roles (however given) and sessions; the two cases are audited `user.removed` and `user.access_removed`. People are walked in pages by id, and each is re-checked as still idle inside its own transaction. Tests:
 `tests/console_sso.rs` (run as the console role).
 
 ## Saved views and list columns (`saved_views::…`, schema 56)

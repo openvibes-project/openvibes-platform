@@ -81,12 +81,12 @@ made with samael's own identity provider, then broken one way at a time),
   no sign-in for `sso.remove_inactive_days` days (default 90; a person never
   signed in counts from when they were created). A person that cases, alarms
   or triage still point at cannot be deleted: they keep their row but lose
-  their identity-provider roles and sessions (the next sign-in sets the
-  roles again). Each is audited as `user.removed` (actor `console-sso`,
-  `deleted` true or false).
+  every role (however given) and their sessions; the next sign-in sets the
+  group roles again. Deleted people are audited `user.removed`, the others
+  `user.access_removed` (actor `console-sso`).
 - People page: for someone who signs in this way the name, email and roles
-  are locked (409 `managed_by_sso` on `PATCH /api/v1/users/{id}` and the role
-  routes; the page hides Edit details, Add role and Remove). Their picture
+  are locked (409 `managed_by_sso` on `PATCH /api/v1/users/{id}`, adding a
+  role and password reset; removing a role is still allowed; the page hides Edit details, Add role and Remove). Their picture
   and Disable still work.
 - Turning it off without the console: `openvibes-admin sso status` prints
   `on`, `off` or `not set up`; `openvibes-admin sso off` sets the stored
