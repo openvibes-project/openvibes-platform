@@ -26,6 +26,11 @@ fn contract_types_agree_with_every_protocol_fixture() {
     for message in messages {
         let message = message.unwrap().path();
         let name = message.file_name().unwrap().to_str().unwrap().to_owned();
+        // Vulnerability-feed files are not agent messages: the platform's
+        // verifier reads them (openvibes-vulns, `tests/feed_vectors.rs`).
+        if name.starts_with("feed-") {
+            continue;
+        }
         let accepts: fn(&[u8]) -> bool = match name.as_str() {
             "enrollment-request" => accepts::<EnrollmentRequest>,
             "enrollment-response" => accepts::<EnrollmentResponse>,
