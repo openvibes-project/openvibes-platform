@@ -41,6 +41,9 @@ grep -qx "$OLD_MODEL" "$ROOT/packaging/llm/past-models" || fail "the old release
 # network (the test container has none).
 deps=$(rpm -qp --requires "$W"/old/*.rpm "$W"/new/*.rpm 2>/dev/null |
     awk '{print $1}' | grep -E '^[a-z][a-z0-9_.+-]*$' | grep -v '^openvibes' | sort -u | tr '\n' ' ')
+# The filter above drops library (soname) requirements. openvibes-admin links
+# the console's single sign-on, so it needs xmlsec1's libraries in the image.
+deps="$deps xmlsec1-openssl"
 printf 'FROM registry.fedoraproject.org/fedora:44
 RUN dnf -q -y install systemd procps-ng util-linux curl postgresql-server %s && dnf clean all
 ' "$deps" | "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
@@ -82,7 +85,8 @@ for _ in $(seq 120); do
     sleep 1
 done
 LINE=$(in_c 'journalctl -u openvibes-llm-tune --no-pager -o cat | grep "assistant-model:" | tail -1')
-[[ "$LINE" == *"keeps using $OLD_MODEL"* ]] || fail "the switch did not report keeping the old model: $LINE"
+[[ "$LINE" == *"keeps using $OLD_MODEL"* ]] || fail "the switch did not report keeping the old model: $LINE
+$(in_c 'ldd /usr/bin/openvibes-admin | grep "not found"; journalctl -u openvibes-llm-tune --no-pager -o cat | tail -5' 2>&1)"
 in_c 'journalctl -u openvibes-llm-model-fetch --no-pager -o cat | grep -q "cannot download"' ||
     fail "the download did not fail for want of network: $(in_c 'journalctl -u openvibes-llm-model-fetch --no-pager -o cat | tail -3')"
 in_c "test -f /var/lib/openvibes-llm/models/$OLD_MODEL" || fail "the failed switch removed the old model"
