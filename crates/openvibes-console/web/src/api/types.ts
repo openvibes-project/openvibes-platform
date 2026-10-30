@@ -117,6 +117,7 @@ export type AssignableGroup = S["AssignableGroupView"];
 export type HostRuleSetAssignments = S["HostRuleSetAssignmentsView"];
 export type SettingsView = S["SettingsView"];
 export type SettingView = S["SettingView"];
+export type ServiceProviderView = S["ServiceProviderView"];
 export type SettingChangeView = S["SettingChangeView"];
 export type SavedView = S["SavedViewView"];
 export type SavedViewList = S["SavedViewList"];

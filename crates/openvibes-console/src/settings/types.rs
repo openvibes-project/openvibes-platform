@@ -36,6 +36,9 @@ pub(crate) struct SettingView {
     /// Whether a secret is set (`secret` only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_set: Option<bool>,
+    /// Each certificate of a certificate setting, as read from its value.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub certificates: Option<Vec<crate::sso::IdpCertificateView>>,
     /// When it was last changed (RFC 3339), if ever.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub changed_at: Option<String>,

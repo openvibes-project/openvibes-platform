@@ -48,6 +48,8 @@ use crate::{
     crate::settings::SettingChangeView,
     crate::settings::SettingsView,
     crate::settings::UpdateSetting,
+    crate::sso::ServiceProviderView,
+    crate::sso::IdpCertificateView,
     crate::lists::saved_views::SavedViewView,
     crate::lists::saved_views::SavedViewList,
     crate::lists::saved_views::SaveViewRequest,

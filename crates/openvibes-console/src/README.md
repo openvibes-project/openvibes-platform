@@ -26,6 +26,7 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `software_pages/` | Software: the list (`software-list`) and a package's page (summary and hosts). |
 | `rules/` | Rule sets and bundles, assignment, draft rules, rule tests, ATT&CK coverage. |
 | `settings/` | General settings: the typed list and changing one value. |
+| `sso/` | Single sign-on: setting checks, pasted identity provider certificates, our SAML metadata. |
 | `server/` | The listeners: TLS, trusted peers, and serving the routers. |
 | `seeded/` | Fixed demo data for the loopback development listener (`dev-seed`). |
 | `vulnerabilities/` | Vulnerability summary, list and advisory detail. |

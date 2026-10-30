@@ -13,7 +13,7 @@ use crate::access::{
 };
 use crate::{
     about, access, alarms, assistant, audit, cases, compliance, dashboards, hosts, lists, ports,
-    rules, services, settings, software_pages, vulnerabilities,
+    rules, services, settings, software_pages, sso, vulnerabilities,
 };
 
 pub(super) fn api_router() -> Router {
@@ -42,6 +42,7 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         .merge(dashboards::routes())
         .merge(cases::routes())
         .merge(settings::routes())
+        .merge(sso::api_routes())
         .merge(lists::routes())
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
@@ -52,6 +53,7 @@ pub(super) fn authenticated_auth_router() -> Router<AuthHttpState> {
         .route("/v1/preauth", get(preauth))
         .route("/v1/login", axum::routing::post(login))
         .route("/v1/logout", axum::routing::post(logout))
+        .merge(sso::auth_routes())
         .fallback(auth_not_found)
 }
 

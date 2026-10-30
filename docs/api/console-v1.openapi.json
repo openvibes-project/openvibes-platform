@@ -10571,6 +10571,47 @@
         }
       }
     },
+    "/api/v1/sso/service-provider": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Our entity ID, response address and metadata address.",
+        "operationId": "service_provider",
+        "responses": {
+          "200": {
+            "description": "Our side",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceProviderView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs settings.manage",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "public_origin_invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/triage-history": {
       "get": {
         "tags": [
@@ -12016,6 +12057,33 @@
           },
           "503": {
             "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/saml/metadata": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "The service provider metadata (SAML 2.0), for the identity provider.",
+        "operationId": "metadata",
+        "responses": {
+          "200": {
+            "description": "SAML metadata",
+            "content": {
+              "application/samlmetadata+xml": {}
+            }
+          },
+          "503": {
+            "description": "public_origin_invalid",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -19586,6 +19654,34 @@
           }
         }
       },
+      "IdpCertificateView": {
+        "type": "object",
+        "description": "One certificate as shown under the setting.",
+        "required": [
+          "fingerprint",
+          "not_before",
+          "not_after",
+          "expired"
+        ],
+        "properties": {
+          "expired": {
+            "type": "boolean",
+            "description": "Whether it has expired now."
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "SHA-256 of the certificate, uppercase hex in pairs separated by colons."
+          },
+          "not_after": {
+            "type": "string",
+            "description": "End of validity (RFC 3339)."
+          },
+          "not_before": {
+            "type": "string",
+            "description": "Start of validity (RFC 3339)."
+          }
+        }
+      },
       "InputView": {
         "type": "object",
         "description": "A recorded input, a scalar or a summarized list.",
@@ -22972,6 +23068,29 @@
           }
         }
       },
+      "ServiceProviderView": {
+        "type": "object",
+        "description": "What to enter in the identity provider.",
+        "required": [
+          "entity_id",
+          "acs_url",
+          "metadata_url"
+        ],
+        "properties": {
+          "acs_url": {
+            "type": "string",
+            "description": "Where the identity provider posts the response."
+          },
+          "entity_id": {
+            "type": "string",
+            "description": "Our entity ID (the audience of the response)."
+          },
+          "metadata_url": {
+            "type": "string",
+            "description": "The metadata document with both, for importing."
+          }
+        }
+      },
       "ServiceRelatedAlarmsView": {
         "type": "object",
         "description": "Open alarms from the service's programs.",
@@ -23573,6 +23692,16 @@
           "applies": {
             "type": "string",
             "description": "`live` (reaches the service within about a minute) or `restart` (at\nthe service's next start)."
+          },
+          "certificates": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/IdpCertificateView"
+            },
+            "description": "Each certificate of a certificate setting, as read from its value."
           },
           "changed_at": {
             "type": [

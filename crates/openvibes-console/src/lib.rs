@@ -30,6 +30,7 @@ mod server;
 mod services;
 mod settings;
 mod software_pages;
+mod sso;
 mod vulnerabilities;
 
 pub use access::auth::{

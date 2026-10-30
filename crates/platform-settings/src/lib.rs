@@ -11,14 +11,16 @@ mod agent;
 mod assistant;
 mod definition;
 mod general;
+mod sso;
 mod vulns;
 
-pub use definition::{Applies, Definition, Kind, Text};
+pub use definition::{Applies, Definition, Kind, MAX_CERTIFICATES, Text};
 
 /// Every setting, in display order.
 pub fn all() -> impl Iterator<Item = &'static Definition> {
     general::DEFINITIONS
         .iter()
+        .chain(sso::DEFINITIONS.iter())
         .chain(agent::ingest::DEFINITIONS.iter())
         .chain(agent::distribution::DEFINITIONS.iter())
         .chain(vulns::DEFINITIONS.iter())
@@ -61,5 +63,13 @@ pub mod assistant_keys {
         ALLOW_REMOTE, API_KEY, CONCURRENCY, CONVERSATION_RETENTION_DAYS, DATA_LOCATION,
         DEADLINE_SECONDS, ENABLED, LOOKUP_MODE, MAX_LOOKUPS, MODEL, PREFIX, PROFILE, PROXY_URL,
         PSEUDONYMIZE, QUESTIONS_PER_USER_PER_HOUR, URL,
+    };
+}
+
+/// The single sign-on keys.
+pub mod sso_keys {
+    pub use crate::sso::{
+        EMAIL_ATTRIBUTE, ENABLED, GROUP_ATTRIBUTE, IDP_CERTIFICATES, IDP_ENTITY_ID, IDP_SSO_URL,
+        NAME_ATTRIBUTE, REMOVE_INACTIVE_DAYS,
     };
 }

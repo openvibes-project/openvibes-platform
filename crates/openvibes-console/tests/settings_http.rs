@@ -19,7 +19,7 @@ async fn settings_are_typed_guarded_and_audited() {
     let (status, body) = fx.call(a, "GET", "/api/v1/settings", None).await;
     assert_eq!(status, StatusCode::OK);
     let items = body["items"].as_array().unwrap();
-    assert_eq!(items.len(), 39);
+    assert_eq!(items.len(), 46);
     let find = |key: &str| items.iter().find(|i| i["key"] == key).unwrap();
     assert_eq!(find("suppressions.require_approval")["value"], json!(false));
     assert_eq!(find("sso.remove_inactive_days")["value"], json!(90));
@@ -251,4 +251,148 @@ async fn the_assistant_settings_are_checked_and_its_key_is_never_shown() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["is_set"], json!(false));
     fx.db.drop().await;
+}
+
+#[tokio::test]
+async fn single_sign_on_needs_its_settings_and_checks_the_certificates() {
+    let Some(fx) = Fx::new().await else { return };
+    let a = &fx.admin;
+    let patch = |key: &'static str, value: serde_json::Value| {
+        let (fx, a) = (&fx, a);
+        async move {
+            let uri = format!("/api/v1/settings/{key}");
+            fx.call(a, "PATCH", &uri, Some(json!({ "value": value })))
+                .await
+        }
+    };
+
+    // not ready: refused with the reason
+    let (status, body) = patch("sso.enabled", json!(true)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body["field_errors"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("first")
+    );
+
+    // certificates must be certificates
+    let (status, _) = patch("sso.idp_certificates", json!("not a certificate")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    let broken = "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----";
+    let (status, body) = patch("sso.idp_certificates", json!(broken)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body["field_errors"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("cannot be read")
+    );
+
+    let pem = platform_pki::generate_root(chrono::Utc::now())
+        .unwrap()
+        .cert_pem;
+    let (status, body) = patch("sso.idp_certificates", json!(pem)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["certificates"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        patch("sso.idp_entity_id", json!("https://idp.example/entity"))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        patch("sso.idp_sso_url", json!("http://idp.example/sso"))
+            .await
+            .0,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        patch("sso.idp_sso_url", json!("https://idp.example/sso"))
+            .await
+            .0,
+        StatusCode::OK
+    );
+
+    // the list shows the certificate's details
+    let (_, body) = fx.call(a, "GET", "/api/v1/settings", None).await;
+    let item = body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["key"] == "sso.idp_certificates")
+        .unwrap();
+    assert!(
+        item["certificates"][0]["fingerprint"]
+            .as_str()
+            .unwrap()
+            .contains(':')
+    );
+
+    // ready: on; now the three cannot be removed
+    assert_eq!(patch("sso.enabled", json!(true)).await.0, StatusCode::OK);
+    for key in [
+        "sso.idp_entity_id",
+        "sso.idp_sso_url",
+        "sso.idp_certificates",
+    ] {
+        for value in [json!(""), json!(null)] {
+            let (status, body) = patch(key, value).await;
+            assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{key}");
+            assert!(
+                body["field_errors"][0]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("off")
+            );
+        }
+    }
+    assert_eq!(patch("sso.enabled", json!(false)).await.0, StatusCode::OK);
+    assert_eq!(
+        patch("sso.idp_certificates", json!(null)).await.0,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn our_side_is_shown_to_the_administrator_and_served_as_metadata() {
+    let Some(fx) = Fx::new().await else { return };
+    let (status, body) = fx
+        .call(&fx.admin, "GET", "/api/v1/sso/service-provider", None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["acs_url"], "https://console.example/auth/saml/acs");
+
+    let viewer = fx.role("Viewer", &["hosts.read"], Reach::All).await;
+    fx.db.user("vera", &viewer, 3).await;
+    let vera = common::http::sign_in(&fx.router, "vera").await;
+    let (status, _) = fx
+        .call(&vera, "GET", "/api/v1/sso/service-provider", None)
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // the identity provider fetches this with no session
+    let request = axum::http::Request::builder()
+        .uri("/auth/saml/metadata")
+        .header(axum::http::header::HOST, "console.example")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = tower::ServiceExt::oneshot(fx.router.clone(), request)
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["content-type"],
+        "application/samlmetadata+xml"
+    );
+    let bytes = axum::body::to_bytes(response.into_body(), 1 << 16)
+        .await
+        .unwrap();
+    let xml = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(
+        xml.contains("entityID=\"https://console.example/auth/saml/metadata\""),
+        "{xml}"
+    );
+    assert!(xml.contains("Location=\"https://console.example/auth/saml/acs\""));
+    assert!(xml.contains("HTTP-POST"));
 }

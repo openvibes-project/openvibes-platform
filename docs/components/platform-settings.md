@@ -25,7 +25,10 @@ once, inventory deadline and uploads at once, findings kept, request
 deadline, open connections) and Rule distribution (`distribution.*`, 3:
 requests at once, request deadline, open connections) are all `Restart`:
 the service reads them once at start. General (console reads them itself): `suppressions.require_approval`,
-`sso.remove_inactive_days`. Vulnerability feeds (all live): check interval,
+the single sign-on ones (`sso.*`, 8, all `Live`: `enabled`, `idp_entity_id`,
+`idp_sso_url`, `idp_certificates` (PEM text, at most three certificates,
+checked for shape here and parsed by the console), the group, name and email
+attribute names, and `remove_inactive_days`). Vulnerability feeds (all live): check interval,
 metalink URL, architecture, proxy, largest download (MiB), KEV, EPSS, NVD,
 EUVD and OSV addresses, largest OSV download (MiB), and the NVD API key (a
 secret, stored in `service_secrets`, never shown again). Text must be one
