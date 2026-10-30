@@ -271,3 +271,78 @@ async fn the_cleanup_removes_the_inactive_and_spares_the_busy() {
     drop(client);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn turning_single_sign_on_off_ends_its_sessions_only() {
+    let (db, mut client) = common::migrated().await;
+    let role = client
+        .query_one(
+            "SELECT lower(display_name) FROM console_roles ORDER BY role_id LIMIT 1",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get::<_, String>(0);
+    let SignIn::Allowed { user_id, .. } = sign_in(&mut client, &person("u-9", &[role], "a9"))
+        .await
+        .unwrap()
+    else {
+        panic!("signed in")
+    };
+    client
+        .execute(
+            "INSERT INTO console_users (user_id, username, display_name, created_at)
+             VALUES (gen_random_uuid(), 'local-one', 'Local One', now())",
+            &[],
+        )
+        .await
+        .unwrap();
+    for (who, name) in [(user_id.as_str(), "x"), ("local", "y")] {
+        let who_sql = if who == "local" {
+            "(SELECT user_id FROM console_users WHERE user_id NOT IN (SELECT user_id FROM console_sso_users) LIMIT 1)"
+        } else {
+            "$1::text::uuid"
+        };
+        let sql = format!(
+            "INSERT INTO console_sessions (session_sha256, csrf_sha256, user_id, auth_generation,
+                 created_at, last_seen_at, idle_expires_at, absolute_expires_at)
+             SELECT sha256('{name}'::bytea), sha256('c{name}'::bytea), u.user_id, u.auth_generation,
+                 now(), now(), now() + interval '1 hour', now() + interval '1 day'
+             FROM console_users u WHERE u.user_id = {who_sql}"
+        );
+        if who == "local" {
+            client.execute(&sql, &[]).await.unwrap();
+        } else {
+            client.execute(&sql, &[&who]).await.unwrap();
+        }
+    }
+    set_sso(&mut client, true).await;
+    assert_eq!(live_sessions(&client).await, 2);
+    set_sso(&mut client, false).await;
+    assert_eq!(live_sessions(&client).await, 1);
+    drop(client);
+    db.drop().await;
+}
+
+async fn set_sso(client: &mut platform_store::Client, on: bool) {
+    platform_store::console_settings::set(
+        client,
+        "sso.enabled",
+        &serde_json::json!(on),
+        "t",
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+}
+
+async fn live_sessions(client: &platform_store::Client) -> i64 {
+    client
+        .query_one(
+            "SELECT count(*) FROM console_sessions WHERE revoked_at IS NULL",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}

@@ -84,6 +84,10 @@ made with samael's own identity provider, then broken one way at a time),
   every role (however given) and their sessions; the next sign-in sets the
   group roles again. Deleted people are audited `user.removed`, the others
   `user.access_removed` (actor `console-sso`).
+- Switching `sso.enabled` from on to off (console settings, Reset to default
+  or `openvibes-admin sso off`) ends every live session of single sign-on
+  people in the same transaction; the count is in the `settings.changed`
+  audit detail as `sso_sessions_revoked`. Local accounts are untouched.
 - People page: for someone who signs in this way the name, email and roles
   are locked (409 `managed_by_sso` on `PATCH /api/v1/users/{id}`, adding a
   role and password reset; removing a role is still allowed; the page hides Edit details, Add role and Remove). Their picture
