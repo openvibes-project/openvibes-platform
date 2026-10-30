@@ -46,8 +46,8 @@ pub enum FeedsCommand {
         /// Apply only these sources (repeatable); default all.
         #[arg(long = "source")]
         sources: Vec<String>,
-        /// Directory with room for the unpacked bundle (default: the
-        /// system temporary directory). Unused for a directory.
+        /// Directory with room for a private copy of the blobs the feed
+        /// names (default: the system temporary directory).
         #[arg(long)]
         work_dir: Option<PathBuf>,
     },

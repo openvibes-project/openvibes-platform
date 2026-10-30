@@ -35,7 +35,7 @@ fn tree(dir: &Path, seed: u8, key_id: &str, sequence: u64, kev: &[u8]) {
         "created_at": now() - 60,
         "expires_at": now() + 86_400,
         "files": [{
-            "source": "cisa", "kind": "kev", "name": "known_exploited_vulnerabilities.json",
+            "source": "kev", "kind": "kev", "name": "known_exploited_vulnerabilities.json",
             "sha256": sha, "size": kev.len(), "fetched_at": now() - 120,
             "upstream": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
         }],
@@ -99,16 +99,25 @@ async fn a_signed_feed_is_applied_only_from_a_trusted_key_and_never_replayed() {
 
     let out = stdout(&fixture.run(&["feeds", "import-bundle", &path]));
     assert!(out.contains("signed by k1"), "{out}");
-    assert!(out.contains("cisa kev applied"), "{out}");
+    assert!(out.contains("kev kev applied"), "{out}");
     let applied = stdout(&fixture.run(&["feeds", "applied"]));
     assert!(
         applied.starts_with("site/k1 sequence 5 from mirror"),
         "{applied}"
     );
 
+    // A source the feed does not carry is a typo, not a skip.
+    assert!(
+        failure(
+            &fixture,
+            &["feeds", "import-bundle", &path, "--source", "kevv"]
+        )
+        .contains("no source kevv")
+    );
+
     // The same feed again changes nothing.
     let again = stdout(&fixture.run(&["feeds", "import-bundle", &path]));
-    assert!(again.contains("cisa kev unchanged"), "{again}");
+    assert!(again.contains("kev kev unchanged"), "{again}");
 
     // An older one is a replay, a forged one fails its signature.
     let older = dir.join("older");
@@ -143,7 +152,7 @@ async fn a_signed_feed_is_applied_only_from_a_trusted_key_and_never_replayed() {
         &fixture,
         &["feeds", "import-bundle", &changed.to_string_lossy()],
     );
-    assert!(said.contains("cisa kev REFUSED"), "{said}");
+    assert!(said.contains("kev kev REFUSED"), "{said}");
 
     // Removing the key stops the feed.
     stdout(&fixture.run(&["feeds", "trust", "remove", "site", "k1"]));
@@ -155,6 +164,30 @@ async fn a_signed_feed_is_applied_only_from_a_trusted_key_and_never_replayed() {
             .iter()
             .any(|(_, action, result)| action == "feeds import-bundle" && result == "ok"),
         "{audit:?}"
+    );
+    let targets: Vec<String> = fixture
+        .audit_targets()
+        .await
+        .into_iter()
+        .filter_map(|(_, target, _)| target)
+        .collect();
+    for want in [
+        "site/k1 #5 applied 1 refused 0",
+        "refused: unknown_key",
+        "refused: sequence_replay",
+        "refused: bad_signature",
+        "site/k1 #6 applied 0 refused 1",
+    ] {
+        assert!(
+            targets.iter().any(|t| t.contains(want)),
+            "{want}: {targets:?}"
+        );
+    }
+    assert!(
+        targets
+            .iter()
+            .any(|t| t.starts_with("site/k1 ") && t.len() > "site/k1 ".len() + 30),
+        "trust add names the fingerprint: {targets:?}"
     );
     let _ = std::fs::remove_dir_all(dir);
     fixture.drop().await;

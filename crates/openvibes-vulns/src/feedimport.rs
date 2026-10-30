@@ -1,8 +1,10 @@
 //! Applying a verified feed (openvibes-protocol `spec/feed-v1.md`, step 7):
 //! each file is checked against its manifest entry, then read by the importer
 //! its kind names, with that importer's own limits and validation. A file that
-//! fails does not stop the others; the manifest itself is recorded first, so
-//! an older one stays refused whatever happens to a file.
+//! fails does not stop the others; the manifest itself is recorded first, and
+//! an older one (or a different one with the same sequence) is refused before
+//! any file is read. The blobs are the caller's private copies, never the
+//! operator's own tree.
 
 use std::{collections::HashMap, fs::File, io::Read, path::Path};
 
@@ -101,8 +103,14 @@ pub async fn apply(
     origin: &str,
     only: &[String],
     now: DateTime<Utc>,
-) -> Result<Vec<FileReport>, StoreError> {
-    feeds::record_accepted(
+) -> Result<Vec<FileReport>, String> {
+    if let Some(unknown) = only
+        .iter()
+        .find(|name| !accepted.manifest.files.iter().any(|f| &f.source == *name))
+    {
+        return Err(format!("the feed has no source {unknown}"));
+    }
+    let recorded = feeds::record_accepted(
         client,
         &AcceptedRow {
             feed_id: &accepted.feed_id,
@@ -115,18 +123,30 @@ pub async fn apply(
         },
         now,
     )
-    .await?;
-    let known: HashMap<(String, String), AppliedFile> = feeds::applied_files(client)
-        .await?
+    .await
+    .map_err(|e| e.to_string())?;
+    if !recorded {
+        return Err("a newer feed was accepted in the meantime; nothing was applied".into());
+    }
+    let known: HashMap<(String, String, String), AppliedFile> = feeds::applied_files(client)
+        .await
+        .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|file| ((file.source.clone(), file.kind.clone()), file))
+        .map(|file| {
+            (
+                (file.source.clone(), file.kind.clone(), file.name.clone()),
+                file,
+            )
+        })
         .collect();
     let mut reports = Vec::new();
     for entry in &accepted.manifest.files {
         let outcome = if !only.is_empty() && !only.contains(&entry.source) {
             Outcome::Skipped("not selected".into())
         } else {
-            apply_file(client, feed_files, accepted, entry, &known, now).await?
+            apply_file(client, feed_files, accepted, entry, &known, now)
+                .await
+                .map_err(|e| e.to_string())?
         };
         reports.push(FileReport {
             source: entry.source.clone(),
@@ -143,13 +163,17 @@ async fn apply_file(
     feed_files: &Unpacked,
     accepted: &Accepted,
     entry: &FileEntry,
-    known: &HashMap<(String, String), AppliedFile>,
+    known: &HashMap<(String, String, String), AppliedFile>,
     now: DateTime<Utc>,
 ) -> Result<Outcome, StoreError> {
     let Some(path) = feed_files.blob(&entry.sha256) else {
         return Ok(Outcome::Refused("the blob is not in the feed".into()));
     };
-    let previous = known.get(&(entry.source.clone(), entry.kind.as_str().to_owned()));
+    let previous = known.get(&(
+        entry.source.clone(),
+        entry.kind.as_str().to_owned(),
+        entry.name.clone(),
+    ));
     let (length, digest) = match measure(&path) {
         Ok(measured) => measured,
         Err(error) => return Ok(Outcome::Refused(format!("cannot read the blob: {error}"))),
@@ -169,22 +193,24 @@ async fn apply_file(
     if previous.is_some_and(|file| hex_of(&file.sha256) == entry.sha256) {
         return Ok(Outcome::Unchanged);
     }
-    let applied = match entry.kind {
-        Kind::Repomd => Ok(Some("kept for the updateinfo check".into())),
+    let step = match entry.kind {
+        Kind::Repomd => Ok(Step::Done("kept for the updateinfo check".into())),
         Kind::Updateinfo => updateinfo(client, feed_files, accepted, entry, &path, now).await,
         Kind::Osv => osv_file(client, entry, &path, now).await,
         Kind::Kev | Kind::Epss | Kind::Euvd => enrichment(client, entry, &path, now).await,
-        Kind::Nvd => Ok(None),
+        Kind::Nvd => Ok(Step::Skip(
+            "verified, but importing slim NVD is not built yet".into(),
+        )),
     };
-    match applied {
-        Ok(Some(detail)) => {
-            let sha256: [u8; 32] = decode(&entry.sha256);
-            feeds::record_file(
+    match step {
+        Ok(Step::Done(detail)) => {
+            let newest = feeds::record_file(
                 client,
                 &AppliedFile {
                     source: entry.source.clone(),
                     kind: entry.kind.as_str().to_owned(),
-                    sha256,
+                    name: entry.name.clone(),
+                    sha256: decode(&entry.sha256),
                     fetched_at: time(entry.fetched_at),
                 },
                 &accepted.feed_id,
@@ -193,13 +219,21 @@ async fn apply_file(
                 now,
             )
             .await?;
-            Ok(Outcome::Applied(detail))
+            Ok(if newest {
+                Outcome::Applied(detail)
+            } else {
+                Outcome::Refused("a newer file was applied in the meantime".into())
+            })
         }
-        Ok(None) => Ok(Outcome::Skipped(
-            "verified, but importing slim NVD is not built yet".into(),
-        )),
+        Ok(Step::Skip(why)) => Ok(Outcome::Skipped(why)),
         Err(message) => Ok(Outcome::Refused(message)),
     }
+}
+
+/// How an importer left a file: read and to be recorded, or left alone.
+enum Step {
+    Done(String),
+    Skip(String),
 }
 
 fn hex_of(bytes: &[u8; 32]) -> String {
@@ -221,35 +255,32 @@ async fn updateinfo(
     entry: &FileEntry,
     path: &Path,
     now: DateTime<Utc>,
-) -> Result<Option<String>, String> {
+) -> Result<Step, String> {
     let source: feed::SourceId = entry.source.parse()?;
     // The repository index in the same feed must name this very file.
-    if let Some(index) = accepted
+    let index = accepted
         .manifest
         .files
         .iter()
         .find(|f| f.kind == Kind::Repomd && f.source == entry.source)
-    {
-        let repomd = feed_files
-            .blob(&index.sha256)
-            .ok_or("the repomd.xml blob is not in the feed")
-            .and_then(|p| {
-                read_all(&p, Kind::Repomd.max_size()).map_err(|_| "repomd.xml unreadable")
-            })?;
-        if feedfmt::hex(&Sha256::digest(&repomd)) != index.sha256 {
-            return Err("repomd.xml does not match its manifest entry".into());
-        }
-        let location = repodata::updateinfo_location(&repomd)
-            .map_err(|_| "repomd.xml does not name an updateinfo file".to_owned())?;
-        if feedfmt::hex(&location.sha256) != entry.sha256 {
-            return Err("updateinfo does not match repomd.xml".into());
-        }
+        .ok_or("no repomd.xml for this source in the feed")?;
+    let repomd = feed_files
+        .blob(&index.sha256)
+        .ok_or("the repomd.xml blob is not in the feed")
+        .and_then(|p| read_all(&p, Kind::Repomd.max_size()).map_err(|_| "repomd.xml unreadable"))?;
+    if feedfmt::hex(&Sha256::digest(&repomd)) != index.sha256 {
+        return Err("repomd.xml does not match its manifest entry".into());
+    }
+    let location = repodata::updateinfo_location(&repomd)
+        .map_err(|_| "repomd.xml does not name an updateinfo file".to_owned())?;
+    if feedfmt::hex(&location.sha256) != entry.sha256 {
+        return Err("updateinfo does not match repomd.xml".into());
     }
     let content = read_all(path, Kind::Updateinfo.max_size())?;
     let report = feed::import(client, &source, &content, now)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(Some(format!(
+    Ok(Step::Done(format!(
         "{} advisories into {}; {} open",
         report.advisories,
         source.name(),
@@ -262,7 +293,7 @@ async fn osv_file(
     entry: &FileEntry,
     path: &Path,
     now: DateTime<Utc>,
-) -> Result<Option<String>, String> {
+) -> Result<Step, String> {
     let ecosystem = ecosystem(&entry.source).ok_or("unknown ecosystem")?;
     let named: Vec<osv::Release> = entry
         .releases
@@ -283,7 +314,7 @@ async fn osv_file(
         .filter(|release| named.contains(release))
         .collect();
     if wanted.is_empty() {
-        return Ok(Some(
+        return Ok(Step::Skip(
             "no host runs a release in this file; nothing read".into(),
         ));
     }
@@ -310,7 +341,7 @@ async fn osv_file(
         advisories += report.advisories;
         open += report.open;
     }
-    Ok(Some(format!(
+    Ok(Step::Done(format!(
         "{advisories} advisories into {} release(s); {open} open",
         wanted.len()
     )))
@@ -321,7 +352,7 @@ async fn enrichment(
     entry: &FileEntry,
     path: &Path,
     now: DateTime<Utc>,
-) -> Result<Option<String>, String> {
+) -> Result<Step, String> {
     let source = match entry.kind {
         Kind::Kev => enrich::Source::Kev,
         Kind::Epss => enrich::Source::Epss,
@@ -331,5 +362,5 @@ async fn enrichment(
     let count = enrich::import(client, source, &content, now)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(Some(format!("{count} CVEs from {source}")))
+    Ok(Step::Done(format!("{count} CVEs from {source}")))
 }

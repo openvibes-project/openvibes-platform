@@ -196,8 +196,9 @@ pub struct Accepted<'a> {
     pub origin: &'a str,
 }
 
-/// Records a manifest as accepted. A lower sequence than the stored one
-/// changes nothing (`false`); an equal one only refreshes the time.
+/// Records a manifest as accepted. A lower sequence than the stored one, or
+/// an equal one with a different digest, changes nothing (`false`); the same
+/// manifest again only refreshes the time.
 pub async fn record_accepted(
     client: &Client,
     accepted: &Accepted<'_>,
@@ -213,7 +214,9 @@ pub async fn record_accepted(
                  sequence = EXCLUDED.sequence, manifest_digest = EXCLUDED.manifest_digest, \
                  created_at = EXCLUDED.created_at, expires_at = EXCLUDED.expires_at, \
                  applied_at = EXCLUDED.applied_at, origin = EXCLUDED.origin \
-             WHERE feed_state.sequence <= EXCLUDED.sequence",
+             WHERE feed_state.sequence < EXCLUDED.sequence \
+                OR (feed_state.sequence = EXCLUDED.sequence \
+                    AND feed_state.manifest_digest = EXCLUDED.manifest_digest)",
             &[
                 &accepted.feed_id,
                 &accepted.key_id,
@@ -229,13 +232,15 @@ pub async fn record_accepted(
     Ok(changed == 1)
 }
 
-/// The last file applied for a source and kind.
+/// The last file applied for a source, kind and name.
 #[derive(Clone, Debug)]
 pub struct AppliedFile {
     /// The source (`kev`, `fedora-44-x86_64`, ...).
     pub source: String,
     /// The file kind.
     pub kind: String,
+    /// The file's name in the manifest.
+    pub name: String,
     /// Its SHA-256.
     pub sha256: [u8; 32],
     /// When the builder fetched it.
@@ -246,7 +251,8 @@ pub struct AppliedFile {
 pub async fn applied_files(client: &Client) -> Result<Vec<AppliedFile>, StoreError> {
     let rows = client
         .query(
-            "SELECT source, kind, sha256, fetched_at FROM feed_applied_files ORDER BY source, kind",
+            "SELECT source, kind, name, sha256, fetched_at FROM feed_applied_files \
+             ORDER BY source, kind, name",
             &[],
         )
         .await?;
@@ -255,14 +261,16 @@ pub async fn applied_files(client: &Client) -> Result<Vec<AppliedFile>, StoreErr
             Ok(AppliedFile {
                 source: row.get(0),
                 kind: row.get(1),
-                sha256: key32(row.get(2))?,
-                fetched_at: row.get(3),
+                name: row.get(2),
+                sha256: key32(row.get(3))?,
+                fetched_at: row.get(4),
             })
         })
         .collect()
 }
 
-/// Records a file as applied, from the manifest that carried it.
+/// Records a file as applied, from the manifest that carried it. An older
+/// `fetched_at` than the stored one changes nothing (`false`).
 pub async fn record_file(
     client: &Client,
     file: &AppliedFile,
@@ -270,20 +278,22 @@ pub async fn record_file(
     key_id: &str,
     sequence: u64,
     now: DateTime<Utc>,
-) -> Result<(), StoreError> {
+) -> Result<bool, StoreError> {
     let sequence = i64::try_from(sequence).map_err(|_| StoreError::Query)?;
-    client
+    let changed = client
         .execute(
-            "INSERT INTO feed_applied_files (source, kind, sha256, fetched_at, feed_id, key_id, \
+            "INSERT INTO feed_applied_files (source, kind, name, sha256, fetched_at, feed_id, key_id, \
                                              sequence, applied_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
-             ON CONFLICT (source, kind) DO UPDATE SET \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+             ON CONFLICT (source, kind, name) DO UPDATE SET \
                  sha256 = EXCLUDED.sha256, fetched_at = EXCLUDED.fetched_at, \
                  feed_id = EXCLUDED.feed_id, key_id = EXCLUDED.key_id, \
-                 sequence = EXCLUDED.sequence, applied_at = EXCLUDED.applied_at",
+                 sequence = EXCLUDED.sequence, applied_at = EXCLUDED.applied_at \
+             WHERE feed_applied_files.fetched_at <= EXCLUDED.fetched_at",
             &[
                 &file.source,
                 &file.kind,
+                &file.name,
                 &file.sha256.as_slice(),
                 &file.fetched_at,
                 &feed_id,
@@ -293,5 +303,5 @@ pub async fn record_file(
             ],
         )
         .await?;
-    Ok(())
+    Ok(changed == 1)
 }

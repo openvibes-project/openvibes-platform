@@ -24,15 +24,19 @@ the offline core used by `openvibes-admin feeds import` and the
   are `bad_format`, `unknown_key`, `bad_signature`, `bad_manifest`,
   `not_yet_valid`, `expired`, `sequence_replay`, `sequence_conflict`.
   `bundle` reads a plain tar (`feed.json` first, then regular `blobs/<sha256>`
-  files whose content hashes to their name) or an unpacked tree. `feedimport`
+  files whose content hashes to their name) or an unpacked tree; `feed.json` goes to a
+  verify callback first, and only the blobs it names are copied, no larger than their
+  entries, into the caller's private directory (a tree's blobs are hashed as they are
+  copied; a bad one is left out). `feedimport`
   then applies each file by kind, after `check_file` (size, hash, kind cap,
-  not older than the file applied before): `updateinfo` (and its `repomd`, which
+  not older than the file applied before): `updateinfo` (its `repomd` in the same feed is required and
   must name the same digest) through `feed::import`, `osv` through the
   `osv::read_zip` path for the releases hosts run, `kev`, `epss` and `euvd`
   through `enrich::import`. A refused file does not stop the others; slim
   NVD files are verified and reported `skipped` until their importer exists.
   Tests: `tests/feed_vectors.rs` runs the shared vectors from the protocol
-  repository, `tests/bundle_tar.rs` the tar rules.
+  repository, `tests/feed_raw.rs` raw-byte cases (duplicate keys, `412.0`, byte limit),
+  `tests/bundle_tar.rs` the tar and tree rules.
 - `rpmver::{rpmvercmp, compare_evr}` — RPM version order, exactly: RPM's own
   test vectors pass, and the `vercmp` example agrees with `rpm.vercmp` on
   4,000 real version and release pairs.

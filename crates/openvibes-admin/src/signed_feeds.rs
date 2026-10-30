@@ -5,16 +5,13 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use openvibes_vulns::{
-    bundle::{self, Unpacked},
+    bundle,
     feedfmt::{self, Applied, TrustedKey},
     feedimport::{self, FileReport, Outcome},
 };
 use platform_store::feeds::{self, TrustAdded};
 
 use super::TrustCommand;
-
-/// Largest bundle unpacked, all blobs together.
-const MAX_BUNDLE: u64 = 16 << 30;
 
 fn store(error: platform_store::StoreError) -> String {
     error.to_string()
@@ -40,7 +37,11 @@ pub(super) async fn trust(
             key_id,
             public_key,
         } => {
-            let target = Some(format!("{feed_id}/{key_id}"));
+            // The trust anchor changes: the audit row names the key's fingerprint.
+            let target = Some(match feedfmt::parse_public_key(public_key) {
+                Some(key) => format!("{feed_id}/{key_id} {}", feedfmt::fingerprint(&key)),
+                None => format!("{feed_id}/{key_id}"),
+            });
             let result = async {
                 identifier(feed_id, "feed id")?;
                 identifier(key_id, "key id")?;
@@ -180,22 +181,10 @@ pub(super) async fn import_bundle(
     sources: &[String],
     work_dir: Option<&Path>,
 ) -> (Result<String, String>, Option<String>) {
-    let (unpacked, _work): (Unpacked, Option<Work>) = if path.is_dir() {
-        match bundle::open_dir(path) {
-            Ok(unpacked) => (unpacked, None),
-            Err(error) => return (Err(error.to_string()), None),
-        }
-    } else {
-        let work = match Work::new(work_dir) {
-            Ok(work) => work,
-            Err(_) => return (Err("cannot make a work directory".into()), None),
-        };
-        match bundle::unpack_tar(path, &work.0, MAX_BUNDLE) {
-            Ok(unpacked) => (unpacked, Some(work)),
-            Err(error) => return (Err(error.to_string()), None),
-        }
-    };
-    let trusted = match feeds::active_trust_keys(client).await {
+    let name = path
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    let trusted: Vec<TrustedKey> = match feeds::active_trust_keys(client).await {
         Ok(keys) => keys
             .into_iter()
             .map(|(feed_id, key_id, public_key)| TrustedKey {
@@ -203,7 +192,7 @@ pub(super) async fn import_bundle(
                 key_id,
                 public_key,
             })
-            .collect::<Vec<_>>(),
+            .collect(),
         Err(error) => return (Err(store(error)), None),
     };
     let known: Vec<Applied> = match feeds::feed_states(client).await {
@@ -219,25 +208,66 @@ pub(super) async fn import_bundle(
         Err(error) => return (Err(store(error)), None),
     };
     let now = Utc::now();
-    let accepted = match feedfmt::verify(&unpacked.envelope, &trusted, &known, now.timestamp()) {
-        Ok(accepted) => accepted,
-        Err(refusal) => {
-            return (
-                Err(format!("feed refused: {} ({refusal})", refusal.as_str())),
-                None,
-            );
+    // `feed.json` is verified before any blob is copied; only the blobs its
+    // manifest names are taken, into a private directory.
+    let accepted = std::cell::RefCell::new(None);
+    let refusal = std::cell::Cell::new(None);
+    let verify = |bytes: &[u8]| -> Result<bundle::Allowed, String> {
+        match feedfmt::verify(bytes, &trusted, &known, now.timestamp()) {
+            Ok(ok) => {
+                let allowed = ok
+                    .manifest
+                    .files
+                    .iter()
+                    .map(|file| (file.sha256.clone(), file.size))
+                    .collect();
+                *accepted.borrow_mut() = Some(ok);
+                Ok(allowed)
+            }
+            Err(why) => {
+                refusal.set(Some(why));
+                Err(format!("feed refused: {} ({why})", why.as_str()))
+            }
         }
     };
-    let target = Some(format!(
+    let work = match Work::new(work_dir) {
+        Ok(work) => work,
+        Err(_) => return (Err("cannot make a work directory".into()), None),
+    };
+    let unpacked = if path.is_dir() {
+        bundle::open_dir(path, &work.0, verify)
+    } else {
+        bundle::unpack_tar(path, &work.0, verify)
+    };
+    let unpacked = match unpacked {
+        Ok(unpacked) => unpacked,
+        Err(error) => {
+            let target = refusal
+                .get()
+                .map(|why| format!("{name} refused: {}", why.as_str()));
+            return (Err(error.to_string()), target);
+        }
+    };
+    let Some(accepted) = accepted.into_inner() else {
+        return (Err("feed refused".into()), None);
+    };
+    let label = format!(
         "{}/{} #{}",
         accepted.feed_id, accepted.key_id, accepted.manifest.sequence
-    ));
-    let origin = if path.is_dir() { "mirror" } else { "bundle" };
-    let reports = match feedimport::apply(client, &unpacked, &accepted, origin, sources, now).await
-    {
-        Ok(reports) => reports,
-        Err(error) => return (Err(store(error)), target),
-    };
+    );
+    let reports =
+        match feedimport::apply(client, &unpacked, &accepted, "bundle", sources, now).await {
+            Ok(reports) => reports,
+            Err(error) => {
+                let target = Some(format!("{label} refused: {error}"));
+                return (Err(error), target);
+            }
+        };
+    let count =
+        |wanted: fn(&Outcome) -> bool| reports.iter().filter(|r| wanted(&r.outcome)).count();
+    let applied = count(|o| matches!(o, Outcome::Applied(_) | Outcome::Unchanged));
+    let refused = count(|o| matches!(o, Outcome::Refused(_)));
+    let target = Some(format!("{label} applied {applied} refused {refused}"));
     let mut out = format!(
         "feed {} sequence {} signed by {}, made {}\n",
         accepted.feed_id,
@@ -246,10 +276,6 @@ pub(super) async fn import_bundle(
         time(DateTime::from_timestamp(accepted.manifest.created_at, 0).unwrap_or_default())
     );
     out.extend(reports.iter().map(line));
-    let refused = reports
-        .iter()
-        .filter(|r| matches!(r.outcome, Outcome::Refused(_)))
-        .count();
     if refused > 0 {
         out.push_str(&format!("{refused} file(s) refused\n"));
         return (Err(out), target);

@@ -2,7 +2,7 @@
 -- A site trusts the Ed25519 key of its own mirror (or bundle builder) per
 -- (feed id, key id); the highest accepted sequence and manifest digest are
 -- kept per key so an older or altered feed cannot be applied; the last file
--- applied per source and kind keeps a stale file from coming back in.
+-- applied per source, kind and file name (slim NVD has one file a year) keeps a stale file from coming back in.
 CREATE TABLE feed_trust_keys (
     feed_id text NOT NULL CHECK (feed_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
     key_id text NOT NULL CHECK (key_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
@@ -28,13 +28,14 @@ CREATE TABLE feed_state (
 CREATE TABLE feed_applied_files (
     source text NOT NULL,
     kind text NOT NULL,
+    name text NOT NULL,
     sha256 bytea NOT NULL CHECK (length(sha256) = 32),
     fetched_at timestamptz NOT NULL,
     feed_id text NOT NULL,
     key_id text NOT NULL,
     sequence bigint NOT NULL,
     applied_at timestamptz NOT NULL,
-    PRIMARY KEY (source, kind)
+    PRIMARY KEY (source, kind, name)
 );
 
 -- The vulnerability service reads the trusted keys and, in mirror mode,

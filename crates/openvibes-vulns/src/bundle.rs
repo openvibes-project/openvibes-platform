@@ -5,6 +5,7 @@
 //! path read from the archive.
 
 use std::{
+    collections::HashMap,
     fmt,
     fs::{File, OpenOptions},
     io::{self, Read, Write},
@@ -14,6 +15,10 @@ use std::{
 use sha2::{Digest, Sha256};
 
 use crate::feedfmt::{self, MAX_ENVELOPE, MAX_FILES};
+
+/// The blobs a verified feed names, by lowercase hex SHA-256, with the most
+/// bytes each may have.
+pub type Allowed = HashMap<String, u64>;
 
 const BLOCK: usize = 512;
 
@@ -47,6 +52,8 @@ pub enum BundleError {
     Format(&'static str),
     /// More data than the limits allow.
     TooLarge,
+    /// The feed was refused before any blob was taken; the text says why.
+    Refused(String),
 }
 
 impl fmt::Display for BundleError {
@@ -55,6 +62,7 @@ impl fmt::Display for BundleError {
             Self::Io(message) => f.write_str(message),
             Self::Format(message) => write!(f, "not a valid bundle: {message}"),
             Self::TooLarge => f.write_str("the bundle is larger than the limits allow"),
+            Self::Refused(message) => f.write_str(message),
         }
     }
 }
@@ -98,15 +106,23 @@ fn read_exact_or_end(reader: &mut impl Read, block: &mut [u8; BLOCK]) -> Result<
 }
 
 /// Reads `file` (a plain tar) into `work`, an existing empty directory the
-/// caller owns: `feed.json` is returned, every blob is copied to
-/// `work/<sha256>`. `max_total` bounds all blob bytes together.
+/// caller owns. `feed.json` is read first and handed to `verify`, which
+/// returns the blobs it names (or refuses the feed); no blob is written
+/// before that. Only the blobs it names are copied, each to `work/<sha256>`
+/// and no larger than its limit.
 ///
 /// # Errors
-/// Any rule of the format broken, a limit passed, or an I/O failure.
-pub fn unpack_tar(file: &Path, work: &Path, max_total: u64) -> Result<Unpacked, BundleError> {
+/// Any rule of the format broken, a limit passed, the feed refused by
+/// `verify`, or an I/O failure.
+pub fn unpack_tar(
+    file: &Path,
+    work: &Path,
+    verify: impl FnOnce(&[u8]) -> Result<Allowed, String>,
+) -> Result<Unpacked, BundleError> {
     let mut reader = File::open(file).map_err(|e| io_error("cannot open the bundle", &e))?;
     let mut envelope = None;
-    let mut total = 0u64;
+    let mut verify = Some(verify);
+    let mut allowed = Allowed::new();
     let mut entries = 0usize;
     let mut block = [0u8; BLOCK];
     loop {
@@ -181,13 +197,18 @@ pub fn unpack_tar(file: &Path, work: &Path, max_total: u64) -> Result<Unpacked, 
                     padded - size
                 },
             )?;
+            if let (Some(verify), Some(bytes)) = (verify.take(), envelope.as_deref()) {
+                allowed = verify(bytes).map_err(BundleError::Refused)?;
+            }
             continue;
         }
         let hex = blob_name(&name).ok_or(BundleError::Format(
             "an entry is neither feed.json nor blobs/<sha256>",
         ))?;
-        total = total.checked_add(size).ok_or(BundleError::TooLarge)?;
-        if total > max_total {
+        let limit = allowed.get(hex).ok_or(BundleError::Format(
+            "an entry is a blob the manifest does not name",
+        ))?;
+        if size > *limit {
             return Err(BundleError::TooLarge);
         }
         let path = work.join(hex);
@@ -240,11 +261,21 @@ fn skip(reader: &mut impl Read, count: u64) -> Result<(), BundleError> {
     }
 }
 
-/// Reads an unpacked tree: `dir/feed.json` and `dir/blobs/<sha256>`.
+/// Reads an unpacked tree, `dir/feed.json` and `dir/blobs/<sha256>`, the
+/// way a tar is read: `feed.json` goes to `verify`, then each blob it names
+/// is copied into `work` while its SHA-256 is computed, and only that copy is
+/// used afterwards (the tree may be writable by others). A blob that is
+/// missing, is not a regular file, is too large or does not hash to its name
+/// is left out; the importer then reports the file as refused.
 ///
 /// # Errors
-/// `feed.json` cannot be read as a regular file.
-pub fn open_dir(dir: &Path) -> Result<Unpacked, BundleError> {
+/// `feed.json` is not a regular file or cannot be read, the feed is refused
+/// by `verify`, or an I/O failure.
+pub fn open_dir(
+    dir: &Path,
+    work: &Path,
+    verify: impl FnOnce(&[u8]) -> Result<Allowed, String>,
+) -> Result<Unpacked, BundleError> {
     let path = dir.join("feed.json");
     let meta =
         std::fs::symlink_metadata(&path).map_err(|e| io_error("cannot read feed.json", &e))?;
@@ -258,8 +289,46 @@ pub fn open_dir(dir: &Path) -> Result<Unpacked, BundleError> {
                 .read_to_end(&mut envelope)
         })
         .map_err(|e| io_error("cannot read feed.json", &e))?;
+    let allowed = verify(&envelope).map_err(BundleError::Refused)?;
+    let blobs = dir.join("blobs");
+    let tree_ok = std::fs::symlink_metadata(&blobs).is_ok_and(|m| m.is_dir());
+    for (hex, limit) in allowed.iter().filter(|_| tree_ok) {
+        let source = blobs.join(hex);
+        if !std::fs::symlink_metadata(&source).is_ok_and(|m| m.is_file()) {
+            continue;
+        }
+        let Ok(input) = File::open(&source) else {
+            continue;
+        };
+        let target = work.join(hex);
+        let mut out = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+            .map_err(|e| io_error("cannot write a blob", &e))?;
+        let mut hasher = Sha256::new();
+        let mut reader = input.take(limit + 1);
+        let mut buffer = vec![0u8; 1 << 16];
+        let mut length = 0u64;
+        loop {
+            let read = reader
+                .read(&mut buffer)
+                .map_err(|e| io_error("cannot read a blob", &e))?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..read]);
+            out.write_all(&buffer[..read])
+                .map_err(|e| io_error("cannot write a blob", &e))?;
+            length += read as u64;
+        }
+        drop(out);
+        if length > *limit || feedfmt::hex(&hasher.finalize()) != *hex {
+            std::fs::remove_file(&target).map_err(|e| io_error("cannot remove a blob", &e))?;
+        }
+    }
     Ok(Unpacked {
         envelope,
-        blobs: dir.join("blobs"),
+        blobs: work.to_owned(),
     })
 }

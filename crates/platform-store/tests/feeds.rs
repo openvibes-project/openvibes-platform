@@ -87,6 +87,22 @@ async fn a_lower_sequence_never_replaces_the_accepted_one() {
         (states[0].sequence, states[0].manifest_digest),
         (5, [1; 32])
     );
+    // The same sequence with another digest keeps the stored one; the same
+    // manifest again is fine.
+    assert!(
+        !feeds::record_accepted(&client, &accepted(5, 9), now)
+            .await
+            .unwrap()
+    );
+    assert!(
+        feeds::record_accepted(&client, &accepted(5, 1), now)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        feeds::feed_states(&client).await.unwrap()[0].manifest_digest,
+        [1; 32]
+    );
     assert!(
         feeds::record_accepted(&client, &accepted(6, 3), now)
             .await
@@ -108,17 +124,35 @@ async fn applied_files_are_kept_per_source_and_kind() {
     let file = |sha: u8, age: i64| AppliedFile {
         source: "kev".into(),
         kind: "kev".into(),
+        name: "kev.json".into(),
         sha256: [sha; 32],
         fetched_at: now - Duration::hours(age),
     };
-    feeds::record_file(&client, &file(1, 5), "site", "k1", 1, now)
-        .await
-        .unwrap();
-    feeds::record_file(&client, &file(2, 1), "site", "k1", 2, now)
-        .await
-        .unwrap();
+    assert!(
+        feeds::record_file(&client, &file(1, 5), "site", "k1", 1, now)
+            .await
+            .unwrap()
+    );
+    assert!(
+        feeds::record_file(&client, &file(2, 1), "site", "k1", 2, now)
+            .await
+            .unwrap()
+    );
+    // An older fetch never replaces a newer one.
+    assert!(
+        !feeds::record_file(&client, &file(3, 9), "site", "k1", 3, now)
+            .await
+            .unwrap()
+    );
     let files = feeds::applied_files(&client).await.unwrap();
     assert_eq!((files.len(), files[0].sha256), (1, [2; 32]));
+    // Another file name of the same source and kind is its own row.
+    let mut year = file(4, 1);
+    year.name = "kev-2.json".into();
+    feeds::record_file(&client, &year, "site", "k1", 3, now)
+        .await
+        .unwrap();
+    assert_eq!(feeds::applied_files(&client).await.unwrap().len(), 2);
     drop(client);
     db.drop().await;
 }
@@ -150,6 +184,7 @@ async fn the_vulnerability_role_can_do_exactly_what_the_grants_say() {
     let file = AppliedFile {
         source: "kev".into(),
         kind: "kev".into(),
+        name: "kev.json".into(),
         sha256: [1; 32],
         fetched_at: now,
     };

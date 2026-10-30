@@ -614,11 +614,11 @@ Tables `feed_trust_keys` (feed id, key id, 32-byte public key, `added_at`,
 `removed_at`; ids are never re-used), `feed_state` (the highest manifest
 accepted per trusted key: sequence, digest of its signature preimage,
 `created_at`, `expires_at`, `applied_at`, origin `mirror` or `bundle`) and
-`feed_applied_files` (the last file applied per source and kind: SHA-256 and
+`feed_applied_files` (the last file applied per source, kind and file name: SHA-256 and
 the builder's `fetched_at`, which keeps an older file from coming back).
 `add_trust_key` returns `Added`, `AlreadyTrusted` or `Conflict`;
-`record_accepted` never lowers a sequence; `record_file` replaces the row for
-its source and kind. The vulnerability role has SELECT on the keys and
+`record_accepted` never lowers a sequence and keeps the stored digest when an equal sequence arrives with another one (`false`); `record_file` replaces the row for
+its source, kind and name unless the stored `fetched_at` is newer (`false`). The vulnerability role has SELECT on the keys and
 SELECT, INSERT and UPDATE on the other two; only the admin tool trusts or
 removes a key. Tests: `tests/feeds.rs`, including one as the vulnerability
 role. The format, the verifier and the importers are in
