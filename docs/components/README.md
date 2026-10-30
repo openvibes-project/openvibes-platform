@@ -47,6 +47,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-cases` | console module | investigations: items, notes, assignment, closing with evidence; scope-aware visibility (schema 35) | [console-cases.md](console-cases.md) |
 | `count-history` | store module and console endpoint | daily per-host problem counts (schema 44) written by maintenance, served as count history graphs by `/api/v1/metrics/history` | [count-history.md](count-history.md) |
 | `console-settings` | console module | typed general settings: list, change, audited | [console-settings.md](console-settings.md) |
+| `console-sso` | console module | SAML single sign-on: sign-in flow, checks, role mapping | [console-sso.md](console-sso.md) |
 | `saved-views` | store module and console API | saved list views and hidden columns per person and page (schema 56) | [saved-views.md](saved-views.md) |
 | `console-rbac` | console module | permission resolution, the share check, people and role-holder APIs, and asset-group selector APIs | [console-rbac.md](console-rbac.md) |
 | `rule-set-assignment` | store module, console API, distribution and ingest behaviour | per-group switches for the project's assignable rule sets (hardening L1/L2): defaults, overrides, on wins, `410` answers, matches ended when a host stops running a set (schema 49) | [rule-set-assignment.md](rule-set-assignment.md) |

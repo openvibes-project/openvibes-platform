@@ -70,6 +70,7 @@ pub mod console_read;
 pub mod console_roles;
 /// General console settings: typed values, audited changes.
 pub mod console_settings;
+pub mod console_sso;
 /// Versioned analyst workflow state and history for current findings.
 pub mod console_triage;
 /// CPE matching: NVD applicability ranges and lower-confidence findings (schema 39).

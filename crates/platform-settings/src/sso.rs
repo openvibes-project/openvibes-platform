@@ -24,7 +24,7 @@ pub(crate) static DEFINITIONS: [Definition; 8] = [
         key: ENABLED,
         section: SECTION,
         label: "Single sign-on",
-        help: "Needs the entity ID, sign-in address and a current certificate below. Signing in with it arrives in a later release; until then this switch changes nothing. The local admin always signs in with a password.",
+        help: "Needs the entity ID, sign-in address and a current certificate below. The login page then offers single sign-on. The local admin always signs in with a password.",
         kind: Kind::Bool { default: false },
         applies: Applies::Live,
     },

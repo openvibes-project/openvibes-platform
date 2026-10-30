@@ -163,6 +163,8 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .signin__logo { height: 35px; }
 .signin__card h1 { font-size: 20px; }
 .signin__card .link-button { justify-self: center; font-size: 13px; }
+.signin__or { text-align: center; font-size: 13px; color: var(--text-2); }
+.signin__card a.button { text-align: center; text-decoration: none; }
 
 .dropzone {
   display: grid; place-items: center; gap: 8px; padding: 28px 16px; border: 2px dashed var(--line-strong); border-radius: var(--r-3);

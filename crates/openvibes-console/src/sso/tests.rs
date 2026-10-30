@@ -98,3 +98,48 @@ fn the_switch_needs_a_certificate_that_has_not_expired() {
         super::change::check_change_at(&stored, "sso.enabled", &on, later).expect_err("expired");
     assert!(refused.contains("expired"), "{refused}");
 }
+
+fn settings(pem: &str, enabled: bool) -> std::collections::HashMap<String, serde_json::Value> {
+    use serde_json::json;
+    std::collections::HashMap::from([
+        ("sso.enabled".into(), json!(enabled)),
+        ("sso.idp_entity_id".into(), json!("https://idp.example")),
+        ("sso.idp_sso_url".into(), json!("https://idp.example/sso")),
+        ("sso.idp_certificates".into(), json!(pem)),
+    ])
+}
+
+#[test]
+fn sign_in_needs_everything_and_ignores_an_expired_certificate() {
+    use super::provider::config;
+    let pem = certificate();
+    assert!(config(&settings(&pem, true), Utc::now()).is_some());
+    assert!(config(&settings(&pem, false), Utc::now()).is_none());
+    let later = Utc::now() + Duration::days(365 * 100);
+    assert!(config(&settings(&pem, true), later).is_none());
+    for key in [
+        "sso.idp_entity_id",
+        "sso.idp_sso_url",
+        "sso.idp_certificates",
+    ] {
+        let mut stored = settings(&pem, true);
+        stored.remove(key);
+        assert!(config(&stored, Utc::now()).is_none(), "{key}");
+    }
+    // one expired and one current: only the current one counts
+    let two = format!("{pem}\n{}", certificate());
+    let bodies = super::certificates::current_bodies(&two, Utc::now());
+    assert_eq!(bodies.len(), 2);
+    assert!(super::certificates::current_bodies(&two, later).is_empty());
+}
+
+#[test]
+fn indented_certificates_are_trimmed_when_checking_a_response() {
+    let indented: String = certificate()
+        .lines()
+        .map(|l| format!("    {l}\n"))
+        .collect();
+    let bodies = super::certificates::current_bodies(&indented, Utc::now());
+    assert_eq!(bodies.len(), 1);
+    assert!(!bodies[0].contains(char::is_whitespace) && !bodies[0].contains('-'));
+}

@@ -79,3 +79,38 @@ pub(crate) fn summaries(
     }
     Ok(views)
 }
+
+/// The base64 body (one line) of each certificate in `text` that is valid
+/// now, for checking a response. An expired or not yet valid certificate,
+/// or one that cannot be read, is left out: sign-in never trusts it.
+pub(crate) fn current_bodies(text: &str, now: DateTime<Utc>) -> Vec<String> {
+    let mut bodies = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find(BEGIN) {
+        let Some(len) = rest[start..].find(END) else {
+            break;
+        };
+        let block = rest[start..start + len + END.len()]
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join("\n");
+        rest = &rest[start + len + END.len()..];
+        let Ok(pem) = first_certificate(&block) else {
+            continue;
+        };
+        let (Ok(from), Ok(until)) = (not_before(&pem), not_after(&pem)) else {
+            continue;
+        };
+        if until <= now || from > now + Duration::minutes(2) {
+            continue;
+        }
+        let body: String = block
+            .lines()
+            .filter(|line| !line.starts_with("-----"))
+            .flat_map(str::split_whitespace)
+            .collect();
+        bodies.push(body);
+    }
+    bodies
+}

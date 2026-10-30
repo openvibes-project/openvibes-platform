@@ -68,6 +68,8 @@ pub struct NewSession<'a> {
     pub idle_expires_at: DateTime<Utc>,
     /// Absolute expiration.
     pub absolute_expires_at: DateTime<Utc>,
+    /// How the person proved who they are: `local_password` or `saml`.
+    pub authentication_method: &'a str,
     /// Trusted request context included in the login audit event.
     pub audit: AuditContext<'a>,
 }
@@ -118,6 +120,8 @@ pub struct Session {
     /// Every route but the session read, setting a password and sign-out
     /// is refused until the user sets their own password.
     pub password_must_change: bool,
+    /// `password` or `sso`: where the account signs in.
+    pub auth_source: String,
 }
 
 /// Active role binding for a local console user.
@@ -878,7 +882,7 @@ pub async fn create_session(
                 actor_kind: Some("user"),
                 actor_id: Some(session.user_id),
                 actor_display: Some(&display_name),
-                authentication_method: Some("local_password"),
+                authentication_method: Some(session.authentication_method),
                 target_kind: Some("user"),
                 target_id: Some(session.user_id),
                 reason_code: None,
@@ -900,7 +904,7 @@ pub async fn session(
         .query_opt(
             "SELECT u.user_id::text, u.username, u.display_name, s.csrf_sha256,
                     s.last_seen_at, s.idle_expires_at, s.absolute_expires_at,
-                    u.password_must_change
+                    u.password_must_change, u.auth_source
              FROM console_sessions s JOIN console_users u USING (user_id)
              WHERE s.session_sha256 = $1 AND s.revoked_at IS NULL
                AND s.idle_expires_at > $2 AND s.absolute_expires_at > $2
@@ -1545,6 +1549,7 @@ fn session_from_row(row: &Row) -> Session {
         idle_expires_at: row.get(5),
         absolute_expires_at: row.get(6),
         password_must_change: row.get(7),
+        auth_source: row.get(8),
     }
 }
 
