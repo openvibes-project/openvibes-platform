@@ -1,6 +1,6 @@
 //! The identity provider's pasted signing certificates.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use platform_pki::{first_certificate, not_after, not_before, sha256_fingerprint};
 use serde::Serialize;
 use utoipa::ToSchema;
@@ -40,7 +40,13 @@ pub(crate) fn summaries(
         let Some(len) = rest[start..].find(END) else {
             return Err("A certificate is cut off".into());
         };
-        let block = &rest[start..start + len + END.len()];
+        // Pasted text is often indented; the parser wants bare lines.
+        let block = rest[start..start + len + END.len()]
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let block = block.as_str();
         rest = &rest[start + len + END.len()..];
         let number = views.len() + 1;
         let unreadable = || format!("Certificate {number} cannot be read");
@@ -53,7 +59,7 @@ pub(crate) fn summaries(
         if strict && until <= now {
             return Err(format!("Certificate {number} has expired"));
         }
-        if strict && from > now {
+        if strict && from > now + Duration::minutes(2) {
             return Err(format!("Certificate {number} is not valid yet"));
         }
         if seen.contains(&digest) {

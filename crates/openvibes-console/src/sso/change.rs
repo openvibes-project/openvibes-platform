@@ -1,6 +1,6 @@
 //! What a change to a single sign-on setting must also satisfy.
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use platform_settings::sso_keys;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use super::certificates::summaries;
 
 const NOT_READY: &str = "Set the entity ID, the sign-in address and a certificate first";
+const NO_VALID_CERTIFICATE: &str = "Every stored certificate has expired; add a current one first";
 const IS_ON: &str = "Turn single sign-on off before removing this";
 
 /// Whether `key` may take `value` (null puts it back to its default). Only
@@ -21,6 +22,15 @@ pub(crate) fn check_change(
     key: &str,
     value: &Value,
 ) -> Result<(), String> {
+    check_change_at(stored, key, value, Utc::now())
+}
+
+pub(super) fn check_change_at(
+    stored: &HashMap<String, Value>,
+    key: &str,
+    value: &Value,
+    now: DateTime<Utc>,
+) -> Result<(), String> {
     let needed = [
         sso_keys::IDP_ENTITY_ID,
         sso_keys::IDP_SSO_URL,
@@ -28,7 +38,7 @@ pub(crate) fn check_change(
     ];
     if key == sso_keys::IDP_CERTIFICATES
         && let Some(text) = value.as_str()
-        && let Err(message) = summaries(text, Utc::now(), true)
+        && let Err(message) = summaries(text, now, true)
     {
         return Err(message);
     }
@@ -45,6 +55,15 @@ pub(crate) fn check_change(
     };
     if key == sso_keys::ENABLED {
         let ready = needed.iter().all(|name| text(name, &Value::Null));
+        // A certificate that has expired since it was pasted no longer counts.
+        let current = stored
+            .get(sso_keys::IDP_CERTIFICATES)
+            .and_then(Value::as_str)
+            .and_then(|pem| summaries(pem, now, false).ok())
+            .is_some_and(|list| list.iter().any(|c| !c.expired));
+        if value == &Value::Bool(true) && ready && !current {
+            return Err(NO_VALID_CERTIFICATE.into());
+        }
         return if value == &Value::Bool(true) && !ready {
             Err(NOT_READY.into())
         } else {

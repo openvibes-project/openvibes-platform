@@ -66,3 +66,35 @@ fn our_addresses_come_from_the_public_origin() {
 fn xml_attributes_are_escaped() {
     assert_eq!(xml_attribute("a&b\"<>"), "a&amp;b&quot;&lt;&gt;");
 }
+
+#[test]
+fn indented_pasted_lines_are_read() {
+    let indented: String = certificate()
+        .lines()
+        .map(|l| format!("    {l}\n"))
+        .collect();
+    assert_eq!(
+        summaries(&indented, Utc::now(), true)
+            .expect("indented")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn the_switch_needs_a_certificate_that_has_not_expired() {
+    use serde_json::json;
+    use std::collections::HashMap;
+    let pem = certificate();
+    let stored: HashMap<String, serde_json::Value> = HashMap::from([
+        ("sso.idp_entity_id".into(), json!("https://idp.example")),
+        ("sso.idp_sso_url".into(), json!("https://idp.example/sso")),
+        ("sso.idp_certificates".into(), json!(pem)),
+    ]);
+    let on = json!(true);
+    assert!(super::change::check_change_at(&stored, "sso.enabled", &on, Utc::now()).is_ok());
+    let later = Utc::now() + Duration::days(365 * 100);
+    let refused =
+        super::change::check_change_at(&stored, "sso.enabled", &on, later).expect_err("expired");
+    assert!(refused.contains("expired"), "{refused}");
+}

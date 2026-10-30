@@ -24,7 +24,7 @@ pub(crate) static DEFINITIONS: [Definition; 8] = [
         key: ENABLED,
         section: SECTION,
         label: "Single sign-on",
-        help: "People sign in with the company identity provider. Needs the entity ID, sign-in address and a certificate below. The local admin keeps signing in with a password.",
+        help: "Needs the entity ID, sign-in address and a current certificate below. Signing in with it arrives in a later release; until then this switch changes nothing. The local admin always signs in with a password.",
         kind: Kind::Bool { default: false },
         applies: Applies::Live,
     },
@@ -43,7 +43,7 @@ pub(crate) static DEFINITIONS: [Definition; 8] = [
         key: IDP_SSO_URL,
         section: SECTION,
         label: "Sign-in address",
-        help: "The identity provider's single sign-on address (https).",
+        help: "The identity provider's single sign-on address (https; plain http only for this machine, for testing).",
         kind: Kind::Text {
             check: Text::HttpsUrlOrEmpty,
             default: "",
