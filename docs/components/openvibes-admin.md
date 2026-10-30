@@ -38,15 +38,14 @@ They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. A set-up host opens on Home (Status, Maintenance,
 Quit); `Enter` opens the highlighted entry, `Esc` goes back one screen, `?`
-shows the keys, and `q` quits from Home. Maintenance lists, in this order, Update OpenVIBES, Repair, Optional parts, Ports and addresses, Certificates, Database, Console sign-in, Back up, Settings files (today's Configuration screen, until the console's admin pages hold its fields, spec §12 step 6), Shell and Uninstall; later entries are added by their pages. Today's screens keep their own keys, and `Esc` leaves them only when nothing is being typed or asked (unsaved settings ask first). A host not set up
+shows the keys, and `q` quits from Home. Maintenance lists, in this order, Update OpenVIBES, Repair, Optional parts, Ports and addresses, Certificates, Database, Console sign-in, Back up, Shell and Uninstall; later entries are added by their pages. A host not set up
 opens on the install form, which `Esc` does not leave. In any field being
 edited, `Ctrl+U` empties it (other Ctrl chords are ignored, never typed as
 letters). Every new screen (Home, Status, Service, the full log,
 Maintenance and Help) shows the block logo ("OPEN" in white, "VIBES" in the
 brand teal `#36b9e0`), a location line (host, where you are, the version
 and any available update; a long host name is cut with `…` first), and a
-key bar; today's screens (Settings files) show only the
-location line and have no Help. With `NO_COLOR` set there is no
+key bar. With `NO_COLOR` set there is no
 colour. The code is in `src/tui/` (`nav.rs` the screen stack, `home.rs`
 Home, Maintenance and Help, `status.rs` Status, `ui/` the shared frame).
 
@@ -217,28 +216,27 @@ since each read goes through sudo and the auth log. `llm` is
 `openvibes-llm.socket`: it has no readiness probe, and the model server is
 inactive whenever the assistant is idle (see [openvibes-llm.md](openvibes-llm.md)).
 
-**Configuration**: one form per file, `/etc/openvibes/ingest.toml`,
-`distribution.toml`, `vulns.toml`, `console.toml` (with the assistant's
-`[assistant]` section) and `admin.toml` (`llm.conf` is an environment file
-and is edited by hand). Only the fields listed for the service in
-`src/fields.rs` can be set; clearing a value (Enter on an empty value)
-removes the key, so the service default applies (shown as `(default)`).
-Fields Setup owns (ingest's and distribution's `listen`, the console's
-`development_listen` with direct TLS, and `public_origin`) are shown `(set by Setup)` and do
-not open (#78): Setup checks those ports, opens the firewall and keeps the
-origin in step, so they change in Maintenance › Ports and addresses.
-Every change is checked at once by the service's own configuration type,
-the same check the service runs at start, and the result is shown as
-`valid` or `invalid: REASON`; the help line under the form gives each
-field's range. Comments and layout in the file are kept. Keys: `h`/`l`
-file, `j`/`k` field, `Enter` edit (`Enter` sets, `Esc` cancels), `u` puts
-the file's value back, `w` save, `R` reload, `q` quit; leaving a file with
-unsaved changes asks first. Save lists each change as `field: before →
-after` and asks `y/n`; it refuses when the file was changed on disk since it
-was opened, writes through `helper config-write` (checked again as root; the
-file keeps its owner, group and mode, and the old one is kept as
-`NAME.toml.bak`), then offers to restart the service. Each save is written
-to the journal (`config-write SERVICE ok|failed`, never the content).
+**Configuration**: there is no settings editor in the TUI any more (the old
+Maintenance › Settings files screen went with TUI rework step 6d). The limits,
+timeouts, feed addresses, proxy and assistant options are changed in the
+console, Settings › General ([platform-settings.md](platform-settings.md)).
+Setup and Repair write what they own: the listen ports (Maintenance › Ports
+and addresses, which also keeps the console's public address in step) and the
+certificate files they issue. Maintenance › Database only reports. Everything
+else in `/etc/openvibes/` (`ingest.toml`, `distribution.toml`, `vulns.toml`,
+`console.toml` with the assistant's `[assistant]` section, `admin.toml`;
+`llm.conf` is an environment file) is changed by hand with an editor, as
+root: `database_url` (in all five files) and `database_pool_size`, the
+certificate, key and CA file paths (`server_certificate_file`,
+`server_key_file`, `client_ca_file`, `issuing_certificate_file`,
+`issuing_key_file`), each `health_listen`, the console's `transport_mode`,
+`development_listen`, `unix_socket_file`, `trusted_proxy_addresses` and
+`trusted_proxy_uids`, `osv_dir`, and the assistant's file paths
+(`api_key_file`, `ca_file`, `client_certificate_file`, `client_key_file`). A
+service reads its file at start, so restart it afterwards (Status › the
+service). There is no helper verb that writes a service file any more
+(`config-write` was removed with the screen); `config-read` stays for
+Certificates › Replace.
 
 **Database** (Maintenance › Database): a report only (spec §6). It shows the schema ("N · up to date", or "migration pending"), the database size with its disk's size and use ("3.1 GB on a 120 GB disk (41% used)"), the data kept (90 days, set in the console), and the automatic nightly clean-up with the date of its last run ("ran today") and what it removed. The timer's time of day is not shown: no host call reads it. These are read on another thread (the disk too) from `status` (run as `openvibes-admin`) and from the maintenance service's journal (`helper logs` now reads `openvibes-maintenance.service` along with the timer). Migrations run in Update; the clean-up has no button.
 
@@ -329,10 +327,6 @@ sudo; it checks its arguments first and refuses unless run as root:
 - `logs UNIT LINES`: the unit must be one of the six, LINES 1 to 500;
 - `config-read SERVICE`: prints `/etc/openvibes/SERVICE.toml` (`ingest`,
   `distribution`, `vulns`, `console`, `admin`; regular files only);
-- `config-write SERVICE`: replaces that file with standard input (at most
-  64 KiB of UTF-8) once the service's type accepts it: a temp file in
-  `/etc/openvibes`, the original owner, group and mode, `SERVICE.toml.bak`,
-  then an atomic rename. A refused or failed write leaves the old file.
 
 ## Configuration
 

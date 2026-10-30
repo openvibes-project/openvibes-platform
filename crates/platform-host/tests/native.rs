@@ -277,97 +277,39 @@ fn only_the_four_programs_exist() {
 }
 
 #[test]
-fn config_is_read_and_written_through_the_helper() {
-    let host = fake(vec![
-        (
-            vec![
-                "/usr/bin/sudo",
-                "-n",
-                "/usr/bin/openvibes-admin",
-                "helper",
-                "config-read",
-                "ingest",
-            ],
-            out(0, "listen = \"0.0.0.0:18423\"\n", ""),
-        ),
-        (
-            vec![
-                "/usr/bin/sudo",
-                "-n",
-                "/usr/bin/openvibes-admin",
-                "helper",
-                "config-write",
-                "ingest",
-            ],
-            out(0, "", ""),
-        ),
-        (vec!["/usr/bin/logger"], out(0, "", "")),
-    ]);
+fn config_is_read_through_the_helper() {
+    let host = fake(vec![(
+        vec![
+            "/usr/bin/sudo",
+            "-n",
+            "/usr/bin/openvibes-admin",
+            "helper",
+            "config-read",
+            "ingest",
+        ],
+        out(0, "listen = \"0.0.0.0:18423\"\n", ""),
+    )]);
     assert_eq!(
         host.read_config(Service::Ingest).unwrap(),
         "listen = \"0.0.0.0:18423\"\n"
     );
-    host.write_config(Service::Ingest, "listen = \"0.0.0.0:443\"\n")
-        .unwrap();
-    assert_eq!(*host.runner.inputs.borrow(), ["listen = \"0.0.0.0:443\"\n"]);
-    let calls = host.runner.calls.borrow();
-    let journal = calls
-        .iter()
-        .find(|call| call[0] == "/usr/bin/logger")
-        .unwrap();
-    assert_eq!(journal[1..3], ["-t", "openvibes-admin"]);
-    assert!(
-        journal[3].ends_with(" config-write ingest ok"),
-        "{journal:?}"
-    );
 }
 
 #[test]
-fn config_refusals_are_reported() {
-    let host = fake(vec![
-        (
-            vec![
-                "/usr/bin/sudo",
-                "-n",
-                "/usr/bin/openvibes-admin",
-                "helper",
-                "config-read",
-            ],
-            out(1, "", "sudo: a password is required\n"),
-        ),
-        (
-            vec![
-                "/usr/bin/sudo",
-                "-n",
-                "/usr/bin/openvibes-admin",
-                "helper",
-                "config-write",
-            ],
-            out(
-                1,
-                "",
-                "openvibes-admin helper: not saved: invalid ingest configuration\n",
-            ),
-        ),
-        (vec!["/usr/bin/logger"], out(0, "", "")),
-    ]);
+fn a_refused_config_read_is_reported() {
+    let host = fake(vec![(
+        vec![
+            "/usr/bin/sudo",
+            "-n",
+            "/usr/bin/openvibes-admin",
+            "helper",
+            "config-read",
+        ],
+        out(1, "", "sudo: a password is required\n"),
+    )]);
     assert_eq!(
         host.read_config(Service::Vulns),
         Err(HostError::NotOperator)
-    );
-    assert_eq!(
-        host.write_config(Service::Ingest, "x = 1\n"),
-        Err(HostError::Failed(
-            "openvibes-admin helper: not saved: invalid ingest configuration".into()
-        ))
-    );
-    let calls = host.runner.calls.borrow();
-    assert!(
-        calls
-            .iter()
-            .any(|call| call[0] == "/usr/bin/logger"
-                && call[3].ends_with(" config-write ingest failed")),
-        "{calls:?}"
     );
 }
 

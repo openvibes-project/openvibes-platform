@@ -20,7 +20,7 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   names, so no path ever comes from input.
 - `Host`: `services()` (installed, enabled, active state, readiness, since),
   `service_action(unit, Start | Stop | Restart)`, `logs(unit, lines)`,
-  `read_config(service)`, `write_config(service, text)`; for the Database
+  `read_config(service)`; for the Database
   and Health screens `database(Status | Migrate | Maintenance |
   FeedsStatus)`, `certificates()` and `disk()`. These three have defaults
   (not supported, none, none) for hosts without a local database or files
@@ -41,11 +41,9 @@ themselves and other deployments (pods, Kubernetes) can plug in later
     outcome);
   - logs: `sudo -n /usr/bin/openvibes-admin helper logs UNIT N` (the RPM's
     sudoers drop-in allows it to operators);
-  - config: `sudo -n /usr/bin/openvibes-admin helper config-read SERVICE`,
-    and `config-write SERVICE` with the file on stdin (the helper checks it
-    again as root); each save is journalled as `config-write SERVICE
-    ok|failed`, never with the file's content;
-  - audit: every journalled action (service action, config save,
+  - config: `sudo -n /usr/bin/openvibes-admin helper config-read SERVICE`
+    (there is no write verb: service files are changed by Setup or by hand);
+  - audit: every journalled action (service action,
     privileged verb) is also sent to `sudo -n -u openvibes-admin
     /usr/bin/openvibes-admin audit note ACTION TARGET OUTCOME`, best effort
     (no database or operator group yet during Setup);
@@ -64,8 +62,7 @@ themselves and other deployments (pods, Kubernetes) can plug in later
     other users are rarely named).
 - `runner::Runner` / `SystemRunner`: every command is one of a closed set of
   `Program`s (`/usr/bin/systemctl`, `sudo`, `logger`, `curl`) with an
-  argument vector, never a shell; `run_with_input` also writes stdin (the
-  config save). `SystemRunner` is one of the two places this
+  argument vector, never a shell; `run_with_input` also writes stdin. `SystemRunner` is one of the two places this
   crate starts processes (the workspace's clippy rule forbids
   `std::process::Command` elsewhere); because `Program` is closed, the
   exception cannot be used to run anything else.

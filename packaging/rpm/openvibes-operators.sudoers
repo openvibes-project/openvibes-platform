@@ -5,7 +5,6 @@
 %openvibes-operators ALL=(openvibes-admin) NOPASSWD: /usr/bin/openvibes-admin
 %openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper logs *
 %openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper config-read *
-%openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper config-write *
 %openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper assistant-setup
 %openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper assistant-setup --force
 %openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper assistant-tune

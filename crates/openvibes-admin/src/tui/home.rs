@@ -113,7 +113,7 @@ fn name(screen: &Screen) -> String {
         Screen::Status => "Status".into(),
         Screen::Service(unit) => format!("Service: {}", unit.label()),
         Screen::Log(unit) => format!("Log: {}", unit.label()),
-        Screen::Help(_) | Screen::Legacy | Screen::Install(_) => String::new(),
+        Screen::Help(_) | Screen::Install(_) => String::new(),
     }
 }
 
@@ -125,7 +125,7 @@ fn here(from: &Screen) -> &'static str {
         Screen::Status => "Enter opens a service, or does what a problem's line says.",
         Screen::Service(_) => "Enter does the highlighted action; Full log shows every line.",
         Screen::Log(_) => "⭡⭣ scroll the log.",
-        Screen::Help(_) | Screen::Legacy | Screen::Install(_) => "",
+        Screen::Help(_) | Screen::Install(_) => "",
     }
 }
 

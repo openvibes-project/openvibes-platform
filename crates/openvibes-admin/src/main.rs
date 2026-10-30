@@ -11,7 +11,6 @@ mod ca;
 mod config_file;
 mod configs;
 mod device;
-mod fields;
 mod files;
 mod helper;
 mod helper_ca;

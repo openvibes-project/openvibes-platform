@@ -2,7 +2,7 @@
 //! empty line, an optional title rule, the content, and the bar. The
 //! content starts on the line right after the rule (or the gap): a list's
 //! top line is the one empty line (or its scroll hint); screens that start
-//! with anything else add their own blank first. Legacy screens get only the location line.
+//! with anything else add their own blank first.
 
 use ratatui::{
     Frame,
@@ -75,13 +75,6 @@ pub fn draw(
         bottom,
     );
     content
-}
-
-pub fn legacy(frame: &mut Frame, theme: &Theme, header: &Header) -> Rect {
-    let area = frame.area();
-    let [top, rest] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
-    frame.render_widget(Paragraph::new(logo::location_line(theme, header)), top);
-    rest
 }
 
 #[cfg(test)]

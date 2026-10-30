@@ -1,5 +1,5 @@
 //! `openvibes-admin helper VERB …`: the root helper of the administration
-//! TUI (admin TUI spec §3): `logs`, `config-read`, `config-write` (through
+//! TUI (admin TUI spec §3): `logs`, `config-read` (through
 //! the RPM's sudoers drop-in), and Setup's `setup-plan`, `setup-status`,
 //! `setup-step`, `update-step`, `remove-step`, `admin-reset`, `shell-open`,
 //! `ca-request`, `ca-accept`, `ca-replace`, `ca-import`, `console-cert-set`,
@@ -10,7 +10,7 @@
 //! Operators reach it through the RPM's sudoers drop-in. No shell, no
 //! paths, no free unit names.
 
-use std::{io::Read, path::Path, process::ExitCode};
+use std::{path::Path, process::ExitCode};
 
 use clap::Subcommand;
 use platform_host::{
@@ -18,7 +18,7 @@ use platform_host::{
     runner::{Runner, SystemRunner},
 };
 
-use crate::{config_file, configs::MAX_BYTES};
+use crate::config_file;
 
 #[derive(Subcommand)]
 pub enum HelperCommand {
@@ -31,12 +31,6 @@ pub enum HelperCommand {
     },
     /// Prints a service's configuration file.
     ConfigRead {
-        /// ingest, distribution, vulns, console or admin.
-        service: String,
-    },
-    /// Replaces a service's configuration file with standard input, checked
-    /// as the service checks it; keeps owner, group, mode and a .bak copy.
-    ConfigWrite {
         /// ingest, distribution, vulns, console or admin.
         service: String,
     },
@@ -140,7 +134,6 @@ pub enum HelperCommand {
 enum Verb {
     Logs(Unit, u16),
     ConfigRead(Service),
-    ConfigWrite(Service),
     SetupPlan(Box<crate::setup::plan::Plan>),
     SetupStatus,
     SetupStep(Step, bool),
@@ -177,7 +170,6 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
             }
         }
         HelperCommand::ConfigRead { service: name } => Verb::ConfigRead(service(name)?),
-        HelperCommand::ConfigWrite { service: name } => Verb::ConfigWrite(service(name)?),
         HelperCommand::SetupPlan { args } => {
             // The plan's own checks; SUDO_USER is set by sudo, not the caller.
             match args.plan(crate::setup::plan::operator_from_env()) {
@@ -386,12 +378,6 @@ pub fn run(command: &HelperCommand) -> ExitCode {
             }
             Err(error) => failed(&error),
         },
-        Verb::ConfigWrite(service) => {
-            match stdin_text().and_then(|text| config_file::replace(dir, service, &text)) {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(error) => failed(&format!("not saved: {error}")),
-            }
-        }
     }
 }
 
@@ -408,19 +394,6 @@ fn os_result(result: Result<String, String>) -> ExitCode {
 fn failed(error: &str) -> ExitCode {
     eprintln!("openvibes-admin helper: {error}");
     ExitCode::FAILURE
-}
-
-/// Standard input: at most 64 KiB of UTF-8.
-fn stdin_text() -> Result<String, String> {
-    let mut bytes = Vec::new();
-    std::io::stdin()
-        .take(u64::try_from(MAX_BYTES + 1).unwrap_or(u64::MAX))
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("reading standard input: {error}"))?;
-    if bytes.len() > MAX_BYTES {
-        return Err("the file would exceed 64 KiB".into());
-    }
-    String::from_utf8(bytes).map_err(|_| "not UTF-8".to_owned())
 }
 
 /// The journal units of `unit`: the socket and the timer say little;

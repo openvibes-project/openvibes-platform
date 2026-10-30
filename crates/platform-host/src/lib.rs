@@ -190,9 +190,6 @@ pub trait Host {
     fn logs(&self, unit: Unit, lines: u16) -> Result<Vec<String>, HostError>;
     /// The service's configuration file, as text.
     fn read_config(&self, service: Service) -> Result<String, HostError>;
-    /// Replaces the service's configuration file with `toml` (checked again
-    /// by the helper; the old file is kept as `NAME.toml.bak`).
-    fn write_config(&self, service: Service, toml: &str) -> Result<(), HostError>;
     /// Whether Setup has run on this host (`/etc/openvibes/setup.toml`).
     fn is_set_up(&self) -> bool;
     /// Whether [`Host::privileged`] needs the user's password. Root runs

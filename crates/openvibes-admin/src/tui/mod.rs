@@ -4,13 +4,10 @@
 
 pub mod app;
 mod ca_request;
-mod config_view;
-mod configuration;
 mod console_cert_check;
 mod database;
 #[cfg(test)]
 mod database_tests;
-pub mod form;
 mod home;
 #[cfg(test)]
 mod home_tests;
@@ -45,7 +42,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use app::{App, Key, Tab};
+use app::{App, Key};
 use nav::Screen;
 use platform_host::{Host, native::Native, runner::SystemRunner};
 use ratatui::{
@@ -57,18 +54,10 @@ use ratatui::{
         },
         execute,
     },
-    layout::Rect,
 };
 
 pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
     nav::render(frame, app);
-}
-
-/// The Settings files screen (legacy), under the location line.
-pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
-    match app.tab {
-        Tab::Configuration => config_view::draw(frame, area, app),
-    }
 }
 
 /// How often the unit states are reloaded while the screen is open.

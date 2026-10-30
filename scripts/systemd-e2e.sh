@@ -504,10 +504,8 @@ allowed bob '-u openvibes-admin /usr/bin/openvibes-admin status' &&
     fail "a non-operator may run openvibes-admin as openvibes-admin"
 allowed alice '/usr/bin/openvibes-admin helper config-read vulns' ||
     fail "operators may not read configs through the helper"
-allowed alice '/usr/bin/openvibes-admin helper config-write vulns' ||
-    fail "operators may not save configs through the helper"
-allowed bob '/usr/bin/openvibes-admin helper config-write vulns' &&
-    fail "a non-operator may save configs"
+allowed alice '/usr/bin/openvibes-admin helper config-write vulns' &&
+    fail "operators may save configs through the helper (the verb is gone)"
 allowed alice '/usr/bin/openvibes-admin helper enable openvibes-llm.service' &&
     fail "operators may run helper verbs beyond logs and configs"
 in_c '/usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' | grep -q . ||
@@ -516,22 +514,10 @@ in_c '/usr/bin/openvibes-admin helper logs systemd-journald.service 5' >/dev/nul
     fail "the helper read a unit outside the allow-list"
 in_c 'runuser -u openvibes-admin -- /usr/bin/openvibes-admin status' >/dev/null ||
     fail "openvibes-admin status as openvibes-admin"
-# A config save through the helper, as root as sudo runs it: checked by the
-# service's type, owner, group and mode kept, the old file kept as .bak; an
-# invalid file is refused and changes nothing.
-in_c 'openvibes-admin helper config-read vulns | sed "s/^check_interval_minutes = 60 /check_interval_minutes = 30 /" |
-      openvibes-admin helper config-write vulns' || fail "config-write through the helper"
-[[ $(in_c 'stat -c "%U:%G %a" /etc/openvibes/vulns.toml') == "root:openvibes-vulns 640" ]] ||
-    fail "config-write kept owner, group and mode"
-in_c 'grep -q "^check_interval_minutes = 30 " /etc/openvibes/vulns.toml && test -f /etc/openvibes/vulns.toml.bak' ||
-    fail "config-write content and backup"
-in_c 'sed "s/^check_interval_minutes = 30 /check_interval_minutes = 5 /" /etc/openvibes/vulns.toml |
-      openvibes-admin helper config-write vulns' >/dev/null 2>&1 && fail "config-write accepted an invalid file"
-in_c 'grep -q "^check_interval_minutes = 30 " /etc/openvibes/vulns.toml' || fail "a refused write changed the file"
 in_c 'runuser -u alice -- systemctl --no-ask-password restart openvibes-vulns.service' ||
-    fail "restart after a config save"
-wait_for "vulns ready with the saved config" 30 'curl -fsS http://127.0.0.1:18483/ready'
-ok "operators restart units through polkit; sudo lets them read logs, read and save configs, and use the admin CLI; others cannot"
+    fail "an operator may restart a unit"
+wait_for "vulns ready after the restart" 30 'curl -fsS http://127.0.0.1:18483/ready'
+ok "operators restart units through polkit; sudo lets them read logs and configs and use the admin CLI; others cannot"
 
 # 8. openvibes-llm (assistant AS5): refuses to start without a verified
 # model, serves the tiny test model on loopback behind its API key, runs
