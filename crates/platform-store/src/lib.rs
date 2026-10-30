@@ -83,6 +83,8 @@ pub mod device_alarms;
 pub mod devices;
 /// CVE enrichment: KEV and EPSS (vulnerability management).
 pub mod enrichment;
+/// Signed vulnerability-data feeds: trusted keys, accepted state, applied files.
+pub mod feeds;
 pub mod finding_changes;
 pub mod health;
 /// Daily per-host problem counts for history graphs.

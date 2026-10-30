@@ -558,6 +558,8 @@ async fn require_current_schema(client: &platform_store::Client) -> Result<(), S
 const STATUS_READS: &[&str] = &[
     "status",
     "feeds status",
+    "feeds applied",
+    "feeds trust list",
     "rules list",
     "rules show",
     "rules trust list",

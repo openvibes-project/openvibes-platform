@@ -12,6 +12,27 @@ the offline core used by `openvibes-admin feeds import` and the
 
 ## Interfaces
 
+- `feedfmt::{verify, check_file, fingerprint, parse_public_key}`,
+  `bundle::{unpack_tar, open_dir}` and `feedimport::apply` (air-gap feed spec,
+  openvibes-protocol `spec/feed-v1.md`) — a signed feed: `feed.json` (format 1,
+  feed id, key id, Ed25519 signature, manifest as a string) plus blobs named
+  by their SHA-256. `verify` takes the bytes of `feed.json`, the trusted keys,
+  the highest sequence accepted per key and the time, and checks in the
+  spec's order: size, format, trusted key, signature (`verify_strict`, weak
+  keys refused, canonical base64url), manifest rules, `created_at`, expiry,
+  sequence; the manifest is parsed only after its signature verifies. Reasons
+  are `bad_format`, `unknown_key`, `bad_signature`, `bad_manifest`,
+  `not_yet_valid`, `expired`, `sequence_replay`, `sequence_conflict`.
+  `bundle` reads a plain tar (`feed.json` first, then regular `blobs/<sha256>`
+  files whose content hashes to their name) or an unpacked tree. `feedimport`
+  then applies each file by kind, after `check_file` (size, hash, kind cap,
+  not older than the file applied before): `updateinfo` (and its `repomd`, which
+  must name the same digest) through `feed::import`, `osv` through the
+  `osv::read_zip` path for the releases hosts run, `kev`, `epss` and `euvd`
+  through `enrich::import`. A refused file does not stop the others; slim
+  NVD files are verified and reported `skipped` until their importer exists.
+  Tests: `tests/feed_vectors.rs` runs the shared vectors from the protocol
+  repository, `tests/bundle_tar.rs` the tar rules.
 - `rpmver::{rpmvercmp, compare_evr}` — RPM version order, exactly: RPM's own
   test vectors pass, and the `vercmp` example agrees with `rpm.vercmp` on
   4,000 real version and release pairs.

@@ -2531,8 +2531,10 @@ name = "openvibes-vulns"
 version = "0.2.9"
 dependencies = [
  "axum",
+ "base64 0.23.1",
  "chrono",
  "deadpool-postgres",
+ "ed25519-dalek",
  "flate2",
  "platform-config",
  "platform-settings",

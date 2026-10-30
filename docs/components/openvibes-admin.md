@@ -475,6 +475,11 @@ an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 | `feeds import FILE --source fedora-<rel>-<arch>` | imports a downloaded `updateinfo.xml` or `.xml.zst` (offline platforms), re-matches that release: `imported N advisories into SOURCE; M open on fedora REL` |
 | `feeds import FILE --source rocky-N\|almalinux-N\|debian-N\|ubuntu-YY.MM` | imports an OSV `all.zip` (the ecosystem's, from `osv-vulnerabilities.storage.googleapis.com/<Ecosystem>/all.zip`) for that release and re-matches it: `imported N advisories into debian-12; M open` (unreadable records are counted and skipped) |
 | `feeds import FILE --source kev\|epss\|nvd\|euvd` | imports a CISA KEV JSON, an EPSS CSV (`.gz` or plain), an NVD API response page (only CVEs advisories name are kept), or an EUVD exploited list (the whole list: CVEs missing from it lose the mark): `imported N CVEs from kev` |
+| `feeds trust add FEED_ID KEY_ID PUBLIC_KEY` | trusts a mirror's or builder's Ed25519 key (32 bytes, canonical base64url) for that feed; prints the key's fingerprint (8 groups of 4 hex), to compare with the one on the mirror. An id is never re-used for another key; a weak key is refused |
+| `feeds trust list` | each key as `FEED/KEY fingerprint trusted\|removed TIME` |
+| `feeds trust remove FEED_ID KEY_ID` | stops trusting a key (remove the old key once a rotation is applied) |
+| `feeds import-bundle PATH [--source S]… [--work-dir DIR]` | imports a signed feed from a bundle `.tar` or an unpacked mirror tree (`feed.json` and `blobs/`; spec in openvibes-protocol `spec/feed-v1.md`). The signature, then sequence and expiry, are checked before anything is read; each file is then checked against its manifest entry and read by the importer for its kind with that importer's limits. Prints one line per file (`applied`, `unchanged`, `skipped`, `REFUSED`) and exits non-zero if any file was refused. `--source` limits it to those sources. A tar is unpacked under `--work-dir` (default the temporary directory; mode 0700, removed afterwards) and may need as much space as its blobs. Slim NVD files are verified but not applied yet |
+| `feeds applied` | per key the accepted sequence, origin (`bundle` or `mirror`), made, expires and applied times, then the last file applied per source and kind |
 | `feeds status` | per source: advisories (or CVEs for `kev`, `epss`, `nvd`, `euvd`), last check, last change, last error |
 | `vulns summary` | open count by severity and host count; open ones exploited in the wild (CISA KEV or EUVD), and open ones with no fix available yet, when any; hosts with a kernel fix installed but not booted (a separate state, not counted as open); the ten most affected hosts |
 | `vulns list [--host H] [--severity S] [--cve ID] [--fixed]` | (vulnerabilities without a fix appear with `--host`, not fleet-wide, where they would repeat on every host) one line per vulnerability by priority (exploited first, then EPSS percentile, then severity, then CVSS, then oldest): severity, advisory, host, since, packages `installed -> fixed`, or `installed (no fix available)` (with `(running …)` for a kernel), CVEs, `exploited (KEV, due DATE, ransomware; EUVD)`, `EPSS 94.0% (top 1%)`, `CVSS 9.8`, and `(fix installed, reboot needed)` when only a reboot is missing |
@@ -487,7 +492,7 @@ or a hostname only one host has: a shared hostname is refused with the
 matching ids (`web-01 matches 2 hosts: agent.…, import.… (imported); give
 the id`) rather than merging their vulnerabilities.
 
-All are audited; `feeds import` with the source as target.
+All are audited; `feeds import` with the source as target, `feeds import-bundle` with `FEED/KEY #SEQUENCE` once the signature verified, `feeds trust …` with `FEED/KEY`. `feeds applied` and `feeds trust list` are status reads and are not audited when they succeed.
 
 ## Import command (protocol P3b)
 

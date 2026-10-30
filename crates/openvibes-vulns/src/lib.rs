@@ -4,11 +4,14 @@
 //! Vulnerability management: Fedora security advisories matched against
 //! stored package inventories (VM spec 2026-09-25).
 
+pub mod bundle;
 pub mod config;
 pub mod cpe;
 pub mod dpkgver;
 pub mod enrich;
 pub mod feed;
+pub mod feedfmt;
+pub mod feedimport;
 pub mod fetch;
 pub mod matching;
 pub mod osv;
