@@ -332,6 +332,11 @@ fn verify(
     request_id: &str,
 ) -> Result<Assertion, &'static str> {
     let sp = provider::provider(config, public_origin);
+    // samael skips the signature check when it has no certificate to check
+    // against; never let a response reach it in that state.
+    if !matches!(sp.idp_signing_certs(), Ok(Some(certs)) if !certs.is_empty()) {
+        return Err("sso_off");
+    }
     let guard = XMLSEC
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -377,11 +382,12 @@ fn facts(
     if conditions.not_on_or_after.is_none() {
         return Err("invalid_response");
     }
-    let audience = conditions
-        .audience_restrictions
-        .iter()
-        .flatten()
-        .any(|restriction| restriction.audience.contains(&ours.entity_id));
+    // Every restriction must name us.
+    let restrictions = conditions.audience_restrictions.as_deref().unwrap_or(&[]);
+    let audience = !restrictions.is_empty()
+        && restrictions
+            .iter()
+            .all(|restriction| restriction.audience.contains(&ours.entity_id));
     if !audience {
         return Err("wrong_audience");
     }

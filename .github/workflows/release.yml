@@ -21,7 +21,7 @@ jobs:
         run: >-
           dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build rpm-sign gnupg2
           systemd-rpm-macros ImageMagick gh jq
-          xmlsec1-devel xmlsec1-openssl-devel libxml2-devel clang pkgconf-pkg-config
+          xmlsec1-devel xmlsec1-openssl-devel libxml2-devel libtool-ltdl-devel clang pkgconf-pkg-config
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

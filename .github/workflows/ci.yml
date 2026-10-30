@@ -293,7 +293,7 @@ jobs:
     steps:
       # git first, so checkout makes a real repository (submodules need it).
       - name: Install build packages
-        run: dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build systemd-rpm-macros ImageMagick rpm-sign gnupg2 cpio xmlsec1-devel xmlsec1-openssl-devel libxml2-devel clang pkgconf-pkg-config
+        run: dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build systemd-rpm-macros ImageMagick rpm-sign gnupg2 cpio xmlsec1-devel xmlsec1-openssl-devel libxml2-devel libtool-ltdl-devel clang pkgconf-pkg-config
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

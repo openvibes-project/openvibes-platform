@@ -39,8 +39,9 @@ renaming or reusing an email cannot take over an account. Roles come from the
 group attribute (`sso.group_attribute`): a group whose name equals a role's
 display name (case-insensitive) gives that role, and the roles are set again
 at every sign-in (roles added by hand are kept). Someone in no matching group
-is refused and not created; an existing person left with none is refused and
-their identity-provider roles are revoked. A disabled person is refused.
+is refused and not created. An existing person whose groups no longer match
+loses their identity-provider roles and can still sign in while they hold a
+role granted by hand; with none left they are refused. A disabled person is refused.
 New people get the username `sso.` plus 16 hex digits, the display name from
 `sso.name_attribute` (fallback email, then NameID) and the email from
 `sso.email_attribute` when it looks like an address. Audit: `user.created`,
@@ -72,3 +73,14 @@ made with samael's own identity provider, then broken one way at a time),
 `cargo test -p openvibes-console sso` and
 `cargo test -p platform-store --test console_sso` (need
 `OPENVIBES_TEST_DATABASE_URL`), `npx vitest run src/shell/SignIn.test.tsx`.
+
+## Known limits
+
+- `GET /auth/saml/start` needs no sign-in; at most 2,000 sign-ins can wait at
+  once (5 minutes each), so someone who can reach the console could keep the
+  table full and make single sign-on answer 503. The local `admin` password
+  still works. A per-source rate limit is a later hardening.
+- Group names match role display names case-insensitively; display names are
+  not unique, so two roles named alike would both be granted. A group named
+  like the Administrator role gives that role, as the spec says.
+- Every `AudienceRestriction` must name our entity ID.

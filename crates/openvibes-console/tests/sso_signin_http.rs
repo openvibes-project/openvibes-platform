@@ -75,6 +75,9 @@ struct Answer<'a> {
     request_id: Option<&'a str>,
     issued: chrono::DateTime<Utc>,
     sha1: bool,
+    unsigned: bool,
+    no_end: bool,
+    no_audience: bool,
 }
 
 impl<'a> Answer<'a> {
@@ -89,6 +92,9 @@ impl<'a> Answer<'a> {
             request_id: None,
             issued: Utc::now(),
             sha1: false,
+            unsigned: false,
+            no_end: false,
+            no_audience: false,
         }
     }
 }
@@ -128,7 +134,10 @@ fn signed(idp: &Idp, answer: &Answer<'_>, request_id: &str) -> String {
     let assertion = response.assertion.as_mut().unwrap();
     assertion.issue_instant = answer.issued;
     let end = Some(answer.issued + Duration::minutes(5));
-    assertion.conditions.as_mut().unwrap().not_on_or_after = end;
+    assertion.conditions.as_mut().unwrap().not_on_or_after = if answer.no_end { None } else { end };
+    if answer.no_audience {
+        assertion.conditions.as_mut().unwrap().audience_restrictions = None;
+    }
     let confirmation = &mut assertion
         .subject
         .as_mut()
@@ -150,6 +159,10 @@ fn signed(idp: &Idp, answer: &Answer<'_>, request_id: &str) -> String {
                 value: Some((*group).into()),
             }],
         });
+    }
+    if answer.unsigned {
+        response.signature = None;
+        return response.to_string().unwrap();
     }
     Crypto::sign_xml(
         response.to_string().unwrap(),
@@ -546,5 +559,65 @@ async fn every_bad_response_is_refused_alike_and_creates_nobody() {
         .unwrap();
     assert_eq!(response.headers()[header::LOCATION], "/login?sso=failed");
     let _ = ORIGIN;
+    fx.db.drop().await;
+}
+
+#[tokio::test]
+async fn roles_follow_the_groups_and_manual_roles_survive() {
+    let Some(fx) = Fx::new().await else { return };
+    let analyst = fx.role("Analyst", &["hosts.read"], Reach::All).await;
+    let viewer = fx.role("Viewer", &["hosts.read"], Reach::All).await;
+    let idp = Idp::new(30);
+    configure(&fx, &idp).await;
+    let client = fx.db.pool.get().await.unwrap();
+    let active = || async {
+        let rows = client
+            .query(
+                "SELECT b.role_id, b.source FROM console_role_bindings b
+                 JOIN console_sso_users s USING (user_id) WHERE b.revoked_at IS NULL ORDER BY 1",
+                &[],
+            )
+            .await
+            .unwrap();
+        rows.iter()
+            .map(|r| (r.get::<_, String>(0), r.get::<_, String>(1)))
+            .collect::<Vec<_>>()
+    };
+    let attempt = |groups: &'static [&'static str]| {
+        let fx = &fx;
+        let idp = &idp;
+        async move {
+            let started = start(fx).await;
+            let xml = signed(idp, &Answer::good("pat-7", groups), &started.request_id);
+            post(fx, &xml, &started.relay, Some(&started.cookie)).await
+        }
+    };
+
+    assert!(!refused(&attempt(&["Analyst"]).await));
+    assert_eq!(active().await, [(analyst.clone(), "sso".to_owned())]);
+
+    // a role granted by hand
+    client
+        .execute(
+            "INSERT INTO console_role_bindings (binding_id, user_id, role_id, created_at, created_by)
+             SELECT gen_random_uuid(), user_id, $1, now(), 'test' FROM console_sso_users",
+            &[&viewer],
+        )
+        .await
+        .unwrap();
+    // dropped from the group: the identity provider's role goes, the manual one stays and they get in
+    assert!(!refused(&attempt(&["Unrelated"]).await));
+    assert_eq!(active().await, [(viewer.clone(), "manual".to_owned())]);
+
+    // with no role left at all they are refused
+    client.execute("UPDATE console_role_bindings SET revoked_at = now(), revoked_by = 'test' WHERE revoked_at IS NULL AND role_id = $1", &[&viewer]).await.unwrap();
+    assert!(refused(&attempt(&["Unrelated"]).await));
+    assert_eq!(reasons(&fx).await, ["no_role"]);
+
+    // an administrator disables them: refused even in a matching group
+    client.execute("UPDATE console_users SET enabled = false, disabled_at = now() WHERE user_id IN (SELECT user_id FROM console_sso_users)", &[]).await.unwrap();
+    assert!(refused(&attempt(&["Analyst"]).await));
+    assert_eq!(reasons(&fx).await, ["no_role", "disabled"]);
+    drop(client);
     fx.db.drop().await;
 }

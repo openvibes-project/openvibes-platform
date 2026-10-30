@@ -284,7 +284,16 @@ pub async fn sign_in(client: &mut Client, person: &Person<'_>) -> Result<SignIn,
             .await?;
         }
     }
-    let outcome = if wanted.is_empty() {
+    // A person who still holds a role (even one granted by hand) may sign in.
+    let remaining: i64 = tx
+        .query_one(
+            "SELECT count(*) FROM console_role_bindings
+             WHERE user_id = $1::text::uuid AND revoked_at IS NULL",
+            &[&user_id],
+        )
+        .await?
+        .get(0);
+    let outcome = if remaining == 0 {
         SignIn::NoRole
     } else {
         SignIn::Allowed {
