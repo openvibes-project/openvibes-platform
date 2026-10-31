@@ -146,7 +146,7 @@ fn a_gateway_off_the_network_is_refused_as_typed() {
 }
 
 #[test]
-fn a_dns_server_that_does_not_answer_stops_apply() {
+fn a_dns_server_that_does_not_answer_is_a_warning_not_a_stop() {
     let mut app = app_with(vec![]);
     *app.host.silent.borrow_mut() = vec!["9.9.9.9".into()];
     open(&mut app);
@@ -155,8 +155,13 @@ fn a_dns_server_that_does_not_answer_stops_apply() {
     let apply = row_of(&app, At::Apply);
     down(&mut app, apply);
     app.key(Key::Enter);
-    assert!(app.question.is_none());
-    assert!(screen(&app).contains("9.9.9.9 does not answer"));
+    let Some((crate::tui::app::Question::Maint { detail, .. }, _)) = &app.question else {
+        panic!("no question");
+    };
+    assert!(
+        detail.contains("9.9.9.9 does not answer from here"),
+        "{detail}"
+    );
 }
 
 #[test]

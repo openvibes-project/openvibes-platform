@@ -193,6 +193,7 @@ impl<H: Host> App<H> {
             return;
         }
         let net = &self.maint.net;
+        let mut silent = Vec::new();
         if net.net_changed() {
             let servers = match self.net_args() {
                 Ok((_, servers)) => servers,
@@ -201,33 +202,36 @@ impl<H: Host> App<H> {
                     return;
                 }
             };
-            // Each own DNS server is asked first; the first silent one stops it.
-            let silent: Vec<&String> = servers
-                .iter()
+            // Each own DNS server is asked first. One that is silent is a
+            // warning, not a stop: DNS matters less than the rest, and a new
+            // network's server is often out of reach until the change is made.
+            silent = servers
+                .into_iter()
                 .filter(|s| !self.host.dns_answers(s))
-                .take(1)
                 .collect();
-            if let Some(first) = silent.first() {
-                self.outcome = Some((false, format!("✗ {first} does not answer.")));
-                return;
-            }
         }
         let (text, detail) = if net.net_changed() {
-            (
-                "Apply the network settings?",
-                if net.host_changed() {
-                    "undone in a minute unless kept; the host name stays"
-                } else {
-                    "undone in a minute unless kept"
-                },
-            )
+            let mut detail = String::from("undone in a minute unless kept");
+            if net.host_changed() {
+                detail.push_str("; the host name stays");
+            }
+            if !silent.is_empty() {
+                detail = format!(
+                    "{} does not answer from here, so feeds may fail; {detail}",
+                    silent.join(", ")
+                );
+            }
+            ("Apply the network settings?", detail)
         } else {
-            ("Change the host name?", "agents need the new install line")
+            (
+                "Change the host name?",
+                "agents need the new install line".to_owned(),
+            )
         };
         self.question = Some((
             Question::Maint {
                 text: text.into(),
-                detail: detail.into(),
+                detail,
                 then: Then::NetApply,
             },
             true,
