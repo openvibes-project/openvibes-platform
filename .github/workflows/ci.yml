@@ -66,14 +66,14 @@ jobs:
           # (security review). A base without them runs everything.
           if [ "$EVENT" = pull_request ]; then
             if git show "$BASE_SHA:scripts/ci-tiers.sh" > "$RUNNER_TEMP/ci-tiers.sh" 2>/dev/null; then
-              git diff --name-only "$BASE_SHA...$HEAD_SHA" | bash "$RUNNER_TEMP/ci-tiers.sh"
+              git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA" | bash "$RUNNER_TEMP/ci-tiers.sh"
             else
               printf 'heavy=true\nkit=true\ndocs=false\n'
             fi
           elif [ "$EVENT" = push ]; then
             # A push to main skips only for docs; a diff that cannot be made
             # (first push, forced push) lists nothing and runs everything.
-            { git diff --name-only "$BEFORE_SHA" "$PUSH_SHA" 2>/dev/null || true; } | bash scripts/ci-tiers.sh
+            { git diff --no-renames --name-only "$BEFORE_SHA" "$PUSH_SHA" 2>/dev/null || true; } | bash scripts/ci-tiers.sh
           else
             bash scripts/ci-tiers.sh < /dev/null
           fi | tee -a "$GITHUB_OUTPUT"

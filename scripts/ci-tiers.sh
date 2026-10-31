@@ -18,11 +18,11 @@
 # everything. Skipped jobs count as passing for required checks.
 set -euo pipefail
 heavy=true kit=true docs=false
+docs_re='^docs/|\.md$'
 changed=$(cat)
 # No changed files listed (a failed diff): run everything.
 if [[ ${EVENT:-} == pull_request && -n $changed && ",${LABELS:-}," != *,full-ci,* ]]; then
     grep -qE '^(packaging/offline/|packaging/llm/model\.pin$|scripts/[^/]*offline[^/]*$|scripts/sign-rpms\.sh$|packaging/rpm/openvibes-platform\.spec$|crates/openvibes-admin/src/(setup/assistant|model_fetch)\.rs$|\.github/workflows/ci\.yml$|scripts/(test-)?ci-tiers\.sh$)' <<<"$changed" || kit=false
-    docs_re='^docs/|\.md$'
     front_re='^crates/openvibes-console/web/(src|tests|e2e|public)/'
     # Every file docs or frontend (and none of it docs/api/).
     # Frontend source and docs: no RPM or end to end job reads them.
@@ -32,7 +32,7 @@ if [[ ${EVENT:-} == pull_request && -n $changed && ",${LABELS:-}," != *,full-ci,
     fi
 fi
 # A push to main: only the docs rule; an empty diff (no usable previous commit) runs everything.
-if [[ ${EVENT:-} == push && -n $changed ]] && ! grep -qvE '^docs/|\.md$' <<<"$changed" && ! grep -q '^docs/api/' <<<"$changed"; then
-    docs=true
+if [[ ${EVENT:-} == push && -n $changed ]] && ! grep -qvE "$docs_re" <<<"$changed" && ! grep -q '^docs/api/' <<<"$changed"; then
+    heavy=false kit=false docs=true
 fi
 printf 'heavy=%s\nkit=%s\ndocs=%s\n' "$heavy" "$kit" "$docs"
