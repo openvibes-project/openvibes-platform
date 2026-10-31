@@ -13,6 +13,9 @@ mod home;
 mod home_tests;
 mod install;
 mod kind;
+mod login_password;
+#[cfg(test)]
+mod login_password_tests;
 mod maint;
 mod nav;
 #[cfg(test)]

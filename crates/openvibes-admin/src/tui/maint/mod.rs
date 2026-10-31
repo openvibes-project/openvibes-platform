@@ -125,6 +125,8 @@ pub struct Maint {
     pub time: super::time::TimePage,
     /// System › SSH: who may sign in, as read and as chosen.
     pub ssh: super::ssh::SshPage,
+    /// System › Login password: the two typed fields.
+    pub login: super::login_password::LoginPage,
 }
 
 impl Maint {
@@ -136,6 +138,7 @@ impl Maint {
             || self.names.typing()
             || self.net.typing()
             || self.time.typing()
+            || self.login.typing()
             || self.replace.picking()
     }
 }
@@ -155,6 +158,7 @@ pub enum Then {
     TimeApply,
     SshApply,
     SshLockOut,
+    LoginPassword,
     Replace,
     ConsoleCertSet,
     ConsoleCertReset,
@@ -453,6 +457,7 @@ impl<H: Host> App<H> {
             Then::TimeApply => self.time_apply_yes(),
             Then::SshApply => self.ssh_apply_yes(),
             Then::SshLockOut => self.ask_ssh_really(),
+            Then::LoginPassword => self.login_password_yes(),
             Then::Parts => self.parts_yes(),
             Then::Ports => self.ports_yes(),
             Then::Names => self.names_yes(),

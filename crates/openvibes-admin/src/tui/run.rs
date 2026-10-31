@@ -71,6 +71,8 @@ pub enum Call {
     TimeSet(Vec<String>),
     /// `ssh-set ARGS`.
     SshSet(Vec<String>),
+    /// `login-password`; the new password goes on stdin.
+    LoginPassword(Bundle),
 }
 
 /// `ca-import`'s or `console-cert-set`'s certificates and key; Debug never shows them.
@@ -192,6 +194,10 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::HostnameSet(name) => host.privileged(Privileged::HostnameSet(name), secret),
         Call::TimeSet(args) => host.privileged(Privileged::TimeSet(args), secret),
         Call::SshSet(args) => host.privileged(Privileged::SshSet(args), secret),
+        Call::LoginPassword(new) => {
+            let new = Secret::new(String::clone(&new.0));
+            host.privileged(Privileged::LoginPassword(&new), secret)
+        }
     }
 }
 
@@ -216,7 +222,8 @@ pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
             | Call::NetRevert
             | Call::HostnameSet(_)
             | Call::TimeSet(_)
-            | Call::SshSet(_),
+            | Call::SshSet(_)
+            | Call::LoginPassword(_),
             Ok(out),
         ) => StepState::parse(out.trim_end()).unwrap_or_else(|| {
             StepState::Failed(format!("unexpected helper output: {}", out.trim()))

@@ -30,6 +30,7 @@ enum Entry {
     Network,
     Time,
     Ssh,
+    LoginPassword,
     Restart,
     PowerOff,
 }
@@ -46,6 +47,9 @@ fn entries<H: Host>(app: &App<H>) -> Vec<(Entry, &'static str, String)> {
     }
     if let Some(line) = &app.maint.ssh.menu {
         all.push((Entry::Ssh, "SSH", line.clone()));
+    }
+    if app.host.is_appliance() {
+        all.push((Entry::LoginPassword, "Login password", String::new()));
     }
     all.push((Entry::Restart, "Restart", String::new()));
     all.push((Entry::PowerOff, "Shut down", String::new()));
@@ -143,6 +147,11 @@ impl<H: Host> App<H> {
         if *entry == Entry::Network {
             self.nav.go(Screen::Network);
             self.open_network();
+            return;
+        }
+        if *entry == Entry::LoginPassword {
+            self.nav.go(Screen::LoginPassword);
+            self.open_login_password();
             return;
         }
         if *entry == Entry::Ssh {
