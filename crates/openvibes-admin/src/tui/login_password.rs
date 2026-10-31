@@ -3,27 +3,17 @@
 //! is typed twice, masked, and goes to the helper on standard input only.
 
 use platform_host::Host;
-use ratatui::{
-    Frame,
-    text::{Line, Span},
-    widgets::Paragraph,
-};
+use ratatui::{Frame, text::Span};
 use zeroize::Zeroizing;
 
 use super::{
     app::{App, Key, Question},
     kind::Kind,
     maint::Then,
-    network::draw_run,
+    network::{draw_page, draw_run},
     password::{PasswordPrompt, Typed},
     run::{Bundle, Call, Run, Work},
-    status::wrap,
-    ui::{
-        bar::Bar,
-        frame,
-        list::{self, Row},
-        logo::Header,
-    },
+    ui::{bar::Bar, list::Row, logo::Header},
 };
 use crate::setup::login::check;
 
@@ -123,9 +113,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     } else {
         Bar::keys(&[("Enter", "Type it / Apply")])
     };
-    let area = frame::draw(frame, t, head, Some(title), &app.bar(bar));
-    let mut lines = Vec::new();
-    let (text, style) = match (&page.said, at) {
+    let note = match (&page.said, at) {
         (Some(said), _) => (said.as_str(), t.yellow()),
         (None, Some(At::Apply)) => ("Changes the password you signed in with.", t.dim()),
         _ => (
@@ -133,27 +121,8 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             t.dim(),
         ),
     };
-    lines.extend(
-        wrap(text, 72, 2)
-            .into_iter()
-            .map(|l| Line::styled(format!("    {l}"), style)),
-    );
-    lines.push(Line::raw(""));
     let list_rows: Vec<Row> = rows.iter().map(|r| row(app, page, *r)).collect();
-    let height = area
-        .height
-        .saturating_sub(u16::try_from(lines.len()).unwrap_or(u16::MAX));
-    let mut scroll = app.nav.scroll.get();
-    lines.extend(list::lines(
-        t,
-        &list_rows,
-        app.nav.row,
-        &mut scroll,
-        height,
-        30,
-    ));
-    app.nav.scroll.set(scroll);
-    frame.render_widget(Paragraph::new(lines), area);
+    draw_page(frame, head, app, (title, bar), note, &list_rows);
 }
 
 impl<H: Host> App<H> {
@@ -167,17 +136,10 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn login_password_key(&mut self, key: Key) {
-        if let Some(run) = login_run(self) {
-            if run.running() || key != Key::Enter {
-                return;
-            }
-            if run.ok() {
-                self.open_login_password();
-            } else if let Some(at) = run.stopped_at() {
-                let work = run.work.clone();
-                self.begin(work, at);
-            }
-            return;
+        match self.run_key(&key, |k| matches!(k, Kind::LoginPassword)) {
+            Some(true) => return self.open_login_password(),
+            Some(false) => return,
+            None => {}
         }
         if let Some((field, prompt)) = &mut self.maint.login.typing {
             let field = *field;
