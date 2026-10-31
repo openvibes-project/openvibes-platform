@@ -29,6 +29,7 @@ use super::{
 enum Entry {
     Network,
     Time,
+    Ssh,
     Restart,
     PowerOff,
 }
@@ -42,6 +43,9 @@ fn entries<H: Host>(app: &App<H>) -> Vec<(Entry, &'static str, String)> {
     }
     if let Some(line) = &app.maint.time.menu {
         all.push((Entry::Time, "Time", line.clone()));
+    }
+    if let Some(line) = &app.maint.ssh.menu {
+        all.push((Entry::Ssh, "SSH", line.clone()));
     }
     all.push((Entry::Restart, "Restart", String::new()));
     all.push((Entry::PowerOff, "Shut down", String::new()));
@@ -113,6 +117,10 @@ impl<H: Host> App<H> {
             .host
             .time_info()
             .map(|info| super::time::menu_line(&info));
+        self.maint.ssh.menu = self
+            .host
+            .ssh_info()
+            .map(|info| platform_host::ssh::menu_line(&info));
         self.nav.go(Screen::System);
     }
 
@@ -135,6 +143,11 @@ impl<H: Host> App<H> {
         if *entry == Entry::Network {
             self.nav.go(Screen::Network);
             self.open_network();
+            return;
+        }
+        if *entry == Entry::Ssh {
+            self.nav.go(Screen::Ssh);
+            self.open_ssh();
             return;
         }
         if *entry == Entry::Time {

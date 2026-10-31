@@ -123,6 +123,8 @@ pub struct Maint {
     pub net: super::network::Net,
     /// System › Time: the clock settings, the edits, the value being typed.
     pub time: super::time::TimePage,
+    /// System › SSH: who may sign in, as read and as chosen.
+    pub ssh: super::ssh::SshPage,
 }
 
 impl Maint {
@@ -151,6 +153,8 @@ pub enum Then {
     OsPowerOff,
     NetApply,
     TimeApply,
+    SshApply,
+    SshLockOut,
     Replace,
     ConsoleCertSet,
     ConsoleCertReset,
@@ -447,6 +451,8 @@ impl<H: Host> App<H> {
             Then::OsPowerOff => self.os_power_off_yes(),
             Then::NetApply => self.net_apply_yes(),
             Then::TimeApply => self.time_apply_yes(),
+            Then::SshApply => self.ssh_apply_yes(),
+            Then::SshLockOut => self.ask_ssh_really(),
             Then::Parts => self.parts_yes(),
             Then::Ports => self.ports_yes(),
             Then::Names => self.names_yes(),

@@ -29,6 +29,9 @@ mod service;
 #[cfg(test)]
 mod service_tests;
 mod services_text;
+mod ssh;
+#[cfg(test)]
+mod ssh_tests;
 mod status;
 #[cfg(test)]
 mod status_tests;

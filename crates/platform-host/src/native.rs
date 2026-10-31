@@ -407,6 +407,29 @@ impl<R: Runner> Host for Native<R> {
         Some(info)
     }
 
+    fn ssh_info(&self) -> Option<crate::ssh::SshInfo> {
+        use crate::{runner::Program::Sshd, ssh};
+        // No sshd, nothing to manage.
+        std::fs::metadata(Sshd.path()).ok()?;
+        let (keys, passwords) = std::fs::read_to_string(format!("/{}", ssh::DROP_IN))
+            .ok()
+            .and_then(|text| ssh::read_drop_in(&text))
+            .unwrap_or((true, true));
+        let has_keys = std::env::var_os("HOME")
+            .map(|home| std::path::Path::new(&home).join(".ssh/authorized_keys"))
+            .and_then(|path| match std::fs::read_to_string(path) {
+                Ok(text) => Some(ssh::has_key_line(&text)),
+                // No file (or no folder) at all: no key.
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some(false),
+                Err(_) => None,
+            });
+        Some(ssh::SshInfo {
+            keys,
+            passwords,
+            has_keys,
+        })
+    }
+
     fn time_info(&self) -> Option<crate::timesync::TimeInfo> {
         use crate::{runner::Program::Timedatectl, timesync};
         let zone = self
