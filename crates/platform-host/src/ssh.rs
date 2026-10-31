@@ -62,39 +62,29 @@ pub fn parse_word(text: &str) -> Result<bool, String> {
     }
 }
 
+/// The `yes`/`no` after the two option names in `text`, if both are there.
+fn options(text: &str, keys: &str, passwords: &str) -> Option<(bool, bool)> {
+    let value = |name: &str| {
+        text.lines().find_map(|line| {
+            let mut words = line.split_whitespace();
+            (words.next() == Some(name))
+                .then(|| words.next().and_then(|w| parse_word(w).ok()))
+                .flatten()
+        })
+    };
+    Some((value(keys)?, value(passwords)?))
+}
+
 /// The choice a drop-in written by [`drop_in`] holds.
 #[must_use]
 pub fn read_drop_in(text: &str) -> Option<(bool, bool)> {
-    let value = |name: &str| {
-        text.lines().find_map(|line| {
-            let mut words = line.split_whitespace();
-            (words.next() == Some(name))
-                .then(|| words.next().and_then(|w| parse_word(w).ok()))
-                .flatten()
-        })
-    };
-    Some((
-        value("PubkeyAuthentication")?,
-        value("PasswordAuthentication")?,
-    ))
+    options(text, "PubkeyAuthentication", "PasswordAuthentication")
 }
 
-/// The choice `sshd -T` reports as in force: the values of
-/// `pubkeyauthentication` and `passwordauthentication`.
+/// The choice `sshd -T` reports as in force.
 #[must_use]
 pub fn read_effective(text: &str) -> Option<(bool, bool)> {
-    let value = |name: &str| {
-        text.lines().find_map(|line| {
-            let mut words = line.split_whitespace();
-            (words.next() == Some(name))
-                .then(|| words.next().and_then(|w| parse_word(w).ok()))
-                .flatten()
-        })
-    };
-    Some((
-        value("pubkeyauthentication")?,
-        value("passwordauthentication")?,
-    ))
+    options(text, "pubkeyauthentication", "passwordauthentication")
 }
 
 /// Does an `authorized_keys` text hold a key (a line that is not blank or a
