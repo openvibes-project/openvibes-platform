@@ -31,7 +31,7 @@ wait_for() {
 cleanup() {
     local status=$?
     if ((status != 0)); then
-        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm openvibes-llm-proxy openvibes-signer openvibes-fetch.socket "openvibes-fetch@*" openvibes-picture.socket "openvibes-picture@*"; do
+        for unit in openvibes-feed openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm openvibes-llm-proxy openvibes-signer openvibes-fetch.socket "openvibes-fetch@*" openvibes-picture.socket "openvibes-picture@*"; do
             echo "--- $unit"
             "$PODMAN" exec "$C" journalctl -u "$unit" --no-pager -n 15 2>/dev/null || true
         done
@@ -42,7 +42,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf "$W"; mkdir -p "$W"
-cp "$1"/openvibes-{ingest,distribution,vulns,admin,llm,agent,signer,fetch}-*.rpm "$W/"
+cp "$1"/openvibes-{ingest,distribution,vulns,admin,llm,agent,signer,fetch,feed}-*.rpm "$W/"
 (($(ls "$W"/openvibes-agent-*.rpm | wc -l) == 1)) || fail "want exactly one agent RPM in $1"
 cp "$2" "$W/sign_bundle"
 KEY=$("$W/sign_bundle" keygen "$W/signing.key" | tail -1)
@@ -60,7 +60,7 @@ sed -e 's/"version":1/"version":2/' -e "s/>= 1/< 0/" "$W/rules.json" > "$W/rules
 python3 "$ROOT/scripts/tiny-gguf.py" "$W/tiny.gguf"
 
 printf 'FROM registry.fedoraproject.org/fedora:44
-RUN dnf -q -y install systemd postgresql-server procps-ng util-linux util-linux-script curl openssl polkit sudo socat && dnf clean all
+RUN dnf -q -y install systemd postgresql-server procps-ng util-linux util-linux-script curl openssl polkit sudo socat python3 && dnf clean all
 ' |
     "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
 "$PODMAN" rm -f "$C" >/dev/null 2>&1 || true
@@ -328,6 +328,51 @@ printf '{"vulnerabilities":[{"cveID":"CVE-2026-99999","dateAdded":"2026-09-25","
 in_c 'runuser -u openvibes-admin -- openvibes-admin feeds import /test/kev-test.json --source kev' >/dev/null ||
     fail "kev import"
 ok "offline feed and KEV imported"
+
+# The mirror (openvibes-feed): its daily timer is on after install but idle
+# until a signing key exists; with one, the sandboxed service builds a signed
+# feed from a local "upstream", and the platform verifies and imports it from
+# the tree a web server would serve.
+in_c 'dnf -q -y install /test/openvibes-feed-*.rpm' >/dev/null 2>&1 || fail "install openvibes-feed"
+in_c 'systemctl is-enabled --quiet openvibes-feed.timer && systemctl is-active --quiet openvibes-feed.timer' ||
+    fail "the feed timer is not enabled and waiting after install"
+in_c 'systemctl start openvibes-feed.service' || fail "the feed service failed without a key (it should be skipped)"
+[[ $(in_c 'systemctl show -p ConditionResult --value openvibes-feed.service') == no ]] ||
+    fail "the feed service ran without a key"
+in_c '! test -e /var/lib/openvibes-feed/site/feed.json' || fail "a feed was built without a key"
+# Both CVEs: a KEV import replaces the exploited marks, and the checks below
+# need the first one still marked.
+printf '{"vulnerabilities":[{"cveID":"CVE-2026-99999","dateAdded":"2026-09-25","knownRansomwareCampaignUse":"Known"},{"cveID":"CVE-2026-99998","dateAdded":"2026-09-25","knownRansomwareCampaignUse":"Unknown"}]}' \
+    > "$W/kev-mirror.json"
+in_c 'mkdir -p /srv/upstream && cp /test/kev-mirror.json /srv/upstream/kev.json &&
+      systemd-run -q --unit=feed-upstream python3 -m http.server 18999 --bind 127.0.0.1 --directory /srv/upstream' ||
+    fail "start the local upstream"
+in_c 'for i in $(seq 20); do curl -fsS http://127.0.0.1:18999/kev.json >/dev/null && exit 0; sleep 1; done; exit 1' ||
+    fail "the local upstream does not answer"
+in_c "printf '%s\\n' 'kev_url = \"http://127.0.0.1:18999/kev.json\"' 'epss_url = \"\"' 'euvd_url = \"\"' 'nvd_url = \"\"' 'osv_url = \"\"' >> /etc/openvibes/feed.toml" ||
+    fail "configure the feed builder"
+pub=$(in_c 'runuser -u openvibes-feed -- openvibes-feed keygen /var/lib/openvibes-feed/feed.key --feed-id e2e --key-id k1' |
+    awk '/^public key/ {print $3}')
+[[ -n $pub ]] || fail "keygen printed no public key"
+in_c 'systemctl start openvibes-feed.service' || fail "the feed service failed to build"
+in_c 'test -f /var/lib/openvibes-feed/site/feed.json && ls /var/lib/openvibes-feed/site/blobs | grep -q .' ||
+    fail "the feed service wrote no feed"
+# What a web server running as another user would read.
+in_c 'runuser -u openvibes-admin -- test -r /var/lib/openvibes-feed/site/feed.json' ||
+    fail "the feed tree is not readable by other accounts"
+in_c "runuser -u openvibes-admin -- openvibes-admin feeds trust add e2e k1 '$pub'" >/dev/null ||
+    fail "feeds trust add"
+out=$(in_c 'runuser -u openvibes-admin -- openvibes-admin feeds import-bundle /var/lib/openvibes-feed/site') ||
+    fail "feeds import-bundle from the mirror tree"
+[[ $out == *"kev kev applied"* ]] || fail "the mirror's KEV file was not applied: $out"
+# A bundle packs the same tree (the build lock itself is tested in Rust).
+in_c 'runuser -u openvibes-feed -- openvibes-feed bundle /var/lib/openvibes-feed/site --out /var/lib/openvibes-feed/mirror.tar' >/dev/null ||
+    fail "openvibes-feed bundle"
+out=$(in_c 'runuser -u openvibes-admin -- openvibes-admin feeds import-bundle /var/lib/openvibes-feed/mirror.tar') ||
+    fail "feeds import-bundle from the bundle"
+[[ $out == *"kev kev unchanged"* ]] || fail "the same feed from a bundle was not seen as unchanged: $out"
+in_c 'systemctl stop feed-upstream' >/dev/null 2>&1 || true
+ok "the feed timer is idle without a key; the sandboxed service builds a signed feed the platform imports (tree and bundle)"
 
 # Rules: trust the signing key and publish the signed bundle.
 in_c "set -e
