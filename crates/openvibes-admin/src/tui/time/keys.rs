@@ -7,6 +7,7 @@ use crate::tui::{
     app::{App, Key, Question},
     kind::Kind,
     maint::Then,
+    network::{Edited, edit_key},
     run::{Call, Work},
 };
 
@@ -30,14 +31,18 @@ impl<H: Host> App<H> {
         let Some(text) = page.typing.as_mut() else {
             return;
         };
-        match key {
-            Key::Char(c) if !c.is_control() && text.len() < 253 => text.push(c),
-            Key::Backspace => {
-                text.pop();
+        match edit_key(text, &key) {
+            Edited::Typed => {
+                if let (Some(at), Some(typed)) = (at, &page.typing) {
+                    page.note = TimePage::note_for(at, typed);
+                }
             }
-            Key::ClearLine => text.clear(),
-            Key::Enter => {
-                let typed = std::mem::take(text).trim().to_owned();
+            Edited::Cancel => {
+                page.typing = None;
+                page.note = None;
+            }
+            Edited::Ignored => {}
+            Edited::Enter(typed) => {
                 let ok = at.is_some_and(|a| matches!(TimePage::note_for(a, &typed), Some(Ok(_))));
                 if !ok {
                     page.typing = Some(typed);
@@ -52,17 +57,7 @@ impl<H: Host> App<H> {
                 page.note = None;
                 let last = page.rows().len().saturating_sub(1);
                 self.nav.row = self.nav.row.min(last);
-                return;
             }
-            Key::Esc => {
-                page.typing = None;
-                page.note = None;
-                return;
-            }
-            _ => return,
-        }
-        if let (Some(at), Some(typed)) = (at, &self.maint.time.typing) {
-            self.maint.time.note = TimePage::note_for(at, typed);
         }
     }
 

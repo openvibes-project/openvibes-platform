@@ -1,6 +1,6 @@
 //! The Time page's screens: the list and a run's progress or failure.
 
-use platform_host::{Host, StepState};
+use platform_host::Host;
 use ratatui::{
     Frame,
     text::{Line, Span},
@@ -15,7 +15,7 @@ use crate::tui::{
     run::Run,
     status::wrap,
     ui::{
-        bar::{Bar, SPINNER},
+        bar::Bar,
         frame,
         list::{self, Row},
         logo::Header,
@@ -70,38 +70,16 @@ fn help<H: Host>(app: &App<H>, page: &TimePage, at: Option<At>) -> Vec<Line<'sta
         .collect()
 }
 
-fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) {
-    let t = &app.theme;
-    let mut lines = vec![Line::raw("")];
-    let bar = if run.running() {
-        let spin = SPINNER[app.tick_count % SPINNER.len()];
-        lines.push(Line::from(vec![
-            Span::styled(format!("    {spin} "), t.teal()),
-            Span::raw(format!("{}…", run.work.kind.doing())),
-        ]));
-        Bar::Busy {
-            text: run.work.kind.doing(),
-            tick: app.tick_count,
-        }
-    } else if run.ok() {
-        lines.push(Line::styled(
-            format!("    ✓ {}{}", run.work.kind.done(), run.took()),
-            t.green(),
-        ));
-        Bar::keys(&[("Enter", "Back")])
-    } else {
-        let at = run.stopped_at().unwrap_or(0);
-        let why = run.states[at].as_ref().map_or("", StepState::detail);
-        lines.extend(failure(t, why, "Try again runs it once more."));
-        Bar::act(&[("Enter", "Try again")])
-    };
-    let area = frame::draw(frame, t, head, Some("Time"), &app.bar(bar));
-    frame.render_widget(Paragraph::new(lines), area);
-}
-
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     if let Some(run) = time_run(app) {
-        return draw_run(frame, head, app, run);
+        return crate::tui::network::draw_run(
+            frame,
+            head,
+            app,
+            run,
+            "Time",
+            "Try again runs it once more.",
+        );
     }
     let t = &app.theme;
     let page = &app.maint.time;

@@ -43,7 +43,7 @@ pub struct ApplyArgs {
     pub search: String,
 }
 
-fn tail(text: &str) -> String {
+pub(super) fn tail(text: &str) -> String {
     let lines: Vec<&str> = text
         .lines()
         .map(str::trim)

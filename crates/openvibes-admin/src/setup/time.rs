@@ -19,6 +19,8 @@ use platform_host::{
     timesync,
 };
 
+use super::net::tail;
+
 /// What `time-set` takes, all text until it is checked.
 #[derive(clap::Args, Clone, Debug)]
 pub struct SetArgs {
@@ -34,15 +36,6 @@ pub struct SetArgs {
 const MARK: &str = "#openvibes# ";
 const CONF: &str = "etc/chrony.conf";
 const CONFDIR: &str = "confdir /etc/chrony.d";
-
-fn tail(text: &str) -> String {
-    let lines: Vec<&str> = text
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .collect();
-    lines[lines.len().saturating_sub(3)..].join(" / ")
-}
 
 fn run<R: Runner>(
     runner: &R,
