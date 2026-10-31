@@ -178,3 +178,33 @@ fn the_protocol_vectors_are_read_as_they_say() {
         );
     }
 }
+
+/// More operating systems than the file may carry: the Fedora releases the
+/// platform reads survive the cut, and the API path never cuts.
+#[test]
+fn a_long_os_list_keeps_the_fedora_releases() {
+    let mut configs = Vec::new();
+    for n in 0..300 {
+        configs.push(serde_json::json!({"vulnerable": true, "criteria": format!("cpe:2.3:o:cisco:ios:{n}:*:*:*:*:*:*:*")}));
+    }
+    configs.push(serde_json::json!({"vulnerable": true, "criteria": "cpe:2.3:o:fedoraproject:fedora:40:*:*:*:*:*:*:*"}));
+    configs.push(serde_json::json!({"vulnerable": true, "criteria": "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*", "versionEndExcluding": "2.0"}));
+    let cve = serde_json::json!({
+        "id": "CVE-2024-9999", "lastModified": "2026-01-01T00:00:00.000",
+        "descriptions": [{"lang": "en", "value": "x"}],
+        "configurations": [{"nodes": [{"operator": "OR", "negate": false, "cpeMatch": configs}]}]
+    });
+    let api = enrich::parse_nvd(
+        &serde_json::to_vec(&serde_json::json!({"totalResults": 1, "startIndex": 0, "vulnerabilities": [{"cve": cve}]})).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(api.applicability[0].fedora, ["40"]);
+    let record = enrich::slim_record(&cve).unwrap();
+    assert_eq!(record.os.len(), 256);
+    assert!(record.os.iter().any(|o| o == "fedoraproject:fedora:40"));
+    let mut sorted = record.os.clone();
+    sorted.sort();
+    assert_eq!(record.os, sorted);
+    let page = enrich::parse_slim(&file(2024, vec![record]), SLIM_NVD_MAX_OPEN).unwrap();
+    assert_eq!(page.applicability[0].fedora, ["40"]);
+}

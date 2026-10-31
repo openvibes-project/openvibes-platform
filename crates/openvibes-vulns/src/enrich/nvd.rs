@@ -284,7 +284,6 @@ pub(super) fn kept_matches(cve: &Value) -> (Vec<RawMatch>, Vec<String>) {
     }
     systems.sort();
     systems.dedup();
-    systems.truncate(MAX_OS);
     (kept, systems)
 }
 

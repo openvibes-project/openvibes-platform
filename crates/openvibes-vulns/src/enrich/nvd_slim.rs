@@ -148,6 +148,30 @@ fn severity(cve: &Value, score: f32) -> String {
     )
 }
 
+/// At most [`MAX_OS`] operating systems for the file: the Fedora entries the
+/// platform reads are kept first, the rest fill the room in sorted order.
+fn cap_os(os: Vec<String>) -> Vec<String> {
+    if os.len() <= MAX_OS {
+        return os;
+    }
+    let is_fedora = |o: &String| o.starts_with("fedoraproject:fedora:");
+    let fedora = os.iter().filter(|o| is_fedora(o)).count();
+    let mut room = MAX_OS.saturating_sub(fedora);
+    let mut kept: Vec<String> = os
+        .into_iter()
+        .filter(|o| {
+            is_fedora(o) || {
+                let fits = room > 0;
+                room = room.saturating_sub(1);
+                fits
+            }
+        })
+        .collect();
+    // Even the Fedora entries alone may pass the cap; the file never does.
+    kept.truncate(MAX_OS);
+    kept
+}
+
 /// The slim record of one NVD API record: what [`super::parse_nvd`] keeps,
 /// plus the ranges it reads. `None` for a record without a valid CVE id.
 /// Rejected records keep their score and text but no ranges.
@@ -156,6 +180,7 @@ pub fn slim_record(cve: &Value) -> Option<SlimRecord> {
     let kept: Nvd = record(cve)?;
     let scored = cvss(&cve["metrics"]);
     let (matches, os) = kept_matches(cve);
+    let os = cap_os(os);
     // Bounds are cut to 64 bytes as the API sync cuts them, and a range the
     // reader would refuse is left out, so the file is never refused.
     let cut = |bound: Option<String>| bound.map(|b| truncate(&b, MAX_BOUND));
