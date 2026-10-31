@@ -50,6 +50,10 @@ pub(super) struct SetupHost {
     pub(super) os_reads: Cell<usize>,
     /// `database(SsoStatus)`: what single sign-on reads as; none: cannot be read.
     pub(super) sso: RefCell<Option<String>>,
+    /// `network_info()`: the wired connection; none: no NetworkManager.
+    pub(super) net: RefCell<Option<platform_host::network::NetInfo>>,
+    /// DNS servers that do not answer.
+    pub(super) silent: RefCell<Vec<String>>,
     /// `is_appliance()`: Home adds System and Log out.
     pub(super) appliance: Cell<bool>,
 }
@@ -88,6 +92,12 @@ impl Host for SetupHost {
     }
     fn own_console_cert(&self) -> Option<String> {
         self.own.clone()
+    }
+    fn network_info(&self) -> Option<platform_host::network::NetInfo> {
+        self.net.borrow().clone()
+    }
+    fn dns_answers(&self, server: &str) -> bool {
+        !self.silent.borrow().iter().any(|s| s == server)
     }
     fn is_appliance(&self) -> bool {
         self.appliance.get()
@@ -194,6 +204,8 @@ fn built(
         os_reads: Cell::new(0),
         sso: RefCell::new(None),
         appliance: Cell::new(false),
+        net: RefCell::new(None),
+        silent: RefCell::new(Vec::new()),
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

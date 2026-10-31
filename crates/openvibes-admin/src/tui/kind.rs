@@ -15,6 +15,17 @@ pub enum OsAction {
     PowerOff,
 }
 
+/// System › Network.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NetAction {
+    /// The new settings; `host` says the host name is part of it.
+    Apply { host: bool },
+    /// Keep the new settings.
+    Keep,
+    /// Put the old settings back now.
+    Revert,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Kind {
     Update {
@@ -76,6 +87,8 @@ pub enum Kind {
     },
     /// Maintenance › Operating system.
     Os(OsAction),
+    /// System › Network.
+    Net(NetAction),
 }
 
 impl Kind {
@@ -114,6 +127,9 @@ impl Kind {
             }
             Kind::Os(OsAction::Restart) => "Restarting".into(),
             Kind::Os(OsAction::PowerOff) => "Shutting down".into(),
+            Kind::Net(NetAction::Apply { .. }) => "Applying the network settings".into(),
+            Kind::Net(NetAction::Keep) => "Keeping the settings".into(),
+            Kind::Net(NetAction::Revert) => "Putting the old settings back".into(),
         }
     }
     pub fn done(&self) -> String {
@@ -141,6 +157,12 @@ impl Kind {
             Kind::Os(OsAction::Update { packages, .. }) => format!("{packages} packages updated"),
             Kind::Os(OsAction::Restart) => "Restart started".into(),
             Kind::Os(OsAction::PowerOff) => "Shutting down".into(),
+            Kind::Net(NetAction::Apply { host: true }) => {
+                "Network settings and host name applied".into()
+            }
+            Kind::Net(NetAction::Apply { host: false }) => "Network settings applied".into(),
+            Kind::Net(NetAction::Keep) => "Settings kept".into(),
+            Kind::Net(NetAction::Revert) => "The old settings are back".into(),
         }
     }
     pub fn stopped(&self) -> String {
@@ -166,6 +188,9 @@ impl Kind {
             Kind::Os(OsAction::Update { .. }) => "The update stopped".into(),
             Kind::Os(OsAction::Restart) => "The restart failed".into(),
             Kind::Os(OsAction::PowerOff) => "The shutdown failed".into(),
+            Kind::Net(NetAction::Apply { .. }) => "The change stopped".into(),
+            Kind::Net(NetAction::Keep) => "The settings could not be kept".into(),
+            Kind::Net(NetAction::Revert) => "The old settings could not be put back".into(),
         }
     }
     /// The password bar's label (the bar adds the colon): the shell asks
@@ -199,6 +224,9 @@ impl Kind {
             Kind::Os(OsAction::Update { .. }) => "Update",
             Kind::Os(OsAction::Restart) => "Restart",
             Kind::Os(OsAction::PowerOff) => "Shut down",
+            Kind::Net(NetAction::Apply { .. }) => "Apply",
+            Kind::Net(NetAction::Keep) => "Keep",
+            Kind::Net(NetAction::Revert) => "Put back",
         }
     }
 }

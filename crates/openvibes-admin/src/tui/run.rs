@@ -59,6 +59,14 @@ pub enum Call {
     OsRestart,
     /// `os-power-off`: shuts the host down.
     OsPowerOff,
+    /// `net-apply ARGS`.
+    NetApply(Vec<String>),
+    /// `net-keep`.
+    NetKeep,
+    /// `net-revert`.
+    NetRevert,
+    /// `hostname-set NAME`.
+    HostnameSet(String),
 }
 
 /// `ca-import`'s or `console-cert-set`'s certificates and key; Debug never shows them.
@@ -174,6 +182,10 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::OsUpdate => host.privileged(Privileged::OsUpdate, secret),
         Call::OsRestart => host.privileged(Privileged::OsRestart, secret),
         Call::OsPowerOff => host.privileged(Privileged::OsPowerOff, secret),
+        Call::NetApply(args) => host.privileged(Privileged::NetApply(args), secret),
+        Call::NetKeep => host.privileged(Privileged::NetKeep, secret),
+        Call::NetRevert => host.privileged(Privileged::NetRevert, secret),
+        Call::HostnameSet(name) => host.privileged(Privileged::HostnameSet(name), secret),
     }
 }
 
@@ -192,7 +204,11 @@ pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
             | Call::OsCheck
             | Call::OsUpdate
             | Call::OsRestart
-            | Call::OsPowerOff,
+            | Call::OsPowerOff
+            | Call::NetApply(_)
+            | Call::NetKeep
+            | Call::NetRevert
+            | Call::HostnameSet(_),
             Ok(out),
         ) => StepState::parse(out.trim_end()).unwrap_or_else(|| {
             StepState::Failed(format!("unexpected helper output: {}", out.trim()))
