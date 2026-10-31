@@ -20,7 +20,7 @@ toml.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
 [lints]
 workspace = true

@@ -518,7 +518,7 @@ async fn nvd_is_read_by_windows_and_only_changed_years_are_rewritten() {
 
     // One record changes: only its year is rewritten.
     let changed = cves[0]["id"].as_str().unwrap().to_owned();
-    std::thread::sleep(std::time::Duration::from_millis(1100));
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     {
         let mut all = up.nvd.lock().unwrap();
         let cve = all
@@ -531,7 +531,7 @@ async fn nvd_is_read_by_windows_and_only_changed_years_are_rewritten() {
             .into();
         cve["descriptions"] = serde_json::json!([{ "lang": "en", "value": "changed text" }]);
     }
-    std::thread::sleep(std::time::Duration::from_millis(1100));
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     let third = tokio::task::spawn_blocking({
         let (cfg, out, key) = (
             cfg.clone(),
@@ -551,7 +551,7 @@ async fn nvd_is_read_by_windows_and_only_changed_years_are_rewritten() {
     assert_eq!(read(&out), cves.len());
 
     // NVD down and nothing else wanted: nothing is signed.
-    std::thread::sleep(std::time::Duration::from_millis(1100));
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     let before = std::fs::read(out.join("feed.json")).unwrap();
     let down = Config {
         nvd_url: "http://127.0.0.1:9/nvd".into(),
