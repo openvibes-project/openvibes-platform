@@ -64,6 +64,31 @@ impl LoginPage {
         self.rows().len()
     }
 
+    /// A key while a field is typed; true when the field was just set.
+    fn typed_key(&mut self, key: Key) -> bool {
+        let Some((field, prompt)) = &mut self.typing else {
+            return false;
+        };
+        let field = *field;
+        match prompt.key(key) {
+            Typed::Pending => false,
+            Typed::Cancelled => {
+                self.typing = None;
+                false
+            }
+            Typed::Entered(secret) => {
+                let text = Zeroizing::new(secret.expose().to_owned());
+                self.typing = None;
+                self.said = None;
+                match field {
+                    At::New => self.new = text,
+                    _ => self.again = text,
+                }
+                true
+            }
+        }
+    }
+
     /// Typing a field.
     pub fn typing(&self) -> bool {
         self.typing.is_some()
@@ -141,23 +166,10 @@ impl<H: Host> App<H> {
             Some(false) => return,
             None => {}
         }
-        if let Some((field, prompt)) = &mut self.maint.login.typing {
-            let field = *field;
-            match prompt.key(key) {
-                Typed::Pending => {}
-                Typed::Cancelled => self.maint.login.typing = None,
-                Typed::Entered(secret) => {
-                    let text = Zeroizing::new(secret.expose().to_owned());
-                    let page = &mut self.maint.login;
-                    page.typing = None;
-                    page.said = None;
-                    match field {
-                        At::New => page.new = text,
-                        _ => page.again = text,
-                    }
-                    let last = page.rows().len().saturating_sub(1);
-                    self.nav.row = (self.nav.row + 1).min(last);
-                }
+        if self.maint.login.typing() {
+            if self.maint.login.typed_key(key) {
+                let last = self.maint.login.rows().len().saturating_sub(1);
+                self.nav.row = (self.nav.row + 1).min(last);
             }
             return;
         }
@@ -193,6 +205,8 @@ impl<H: Host> App<H> {
 
     pub(super) fn login_password_yes(&mut self) {
         let bundle = Bundle(Zeroizing::new(self.maint.login.new.to_string()));
+        // The run's copy covers Try again; the page keeps nothing.
+        self.maint.login = LoginPage::default();
         self.begin(
             Work::new(Kind::LoginPassword, vec![Call::LoginPassword(bundle)]),
             0,
