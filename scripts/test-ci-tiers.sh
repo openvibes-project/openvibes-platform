@@ -22,8 +22,17 @@ check "false false false" pull_request "" docs/api/console-v1.openapi.json
 check "true false false"  pull_request "" crates/openvibes-netlog/src/cef.rs docs/x.md
 check "true true false"   pull_request "" packaging/rpm/openvibes-platform.spec
 check "true true false"   pull_request "full-ci" docs/x.md
-check "true true false"   push "" docs/x.md
+check "true true true"   push "" docs/x.md
 check "true true false"   schedule "" docs/x.md
 check "true true false"   pull_request "" scripts/ci-tiers.sh
+# Any *.md is docs, even in a code folder (folder READMEs); the tiers still hold with code beside it.
+check "false false true"   pull_request "" crates/openvibes-console/src/cases/README.md docs/x.md .github/pull_request_template.md
+check "true false false"   pull_request "" crates/openvibes-console/src/cases/README.md crates/openvibes-netlog/src/cef.rs
+# A push to main skips only for docs; nothing listed or any code runs everything.
+check "true true true"     push "" docs/x.md crates/openvibes-console/src/cases/README.md
+check "true true false"    push "" crates/openvibes-netlog/src/cef.rs docs/x.md
+check "true true false"    push "" docs/api/console-v1.openapi.json
+check "true true false"    pull_request ""
+check "true true false"    push ""
 [[ $fail == 0 ]] && echo "ci-tiers: ok"
 exit $fail

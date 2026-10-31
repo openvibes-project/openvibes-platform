@@ -12,14 +12,17 @@
 #   frontend is not either: Rust compiles web/public in (router.rs) and
 #   checks the built frontend (build.rs, embedded-ui), so a frontend
 #   change runs Rust (security review, 2026-10-10).
-# Pushes to main, the nightly run, manual runs and the full-ci label run
+# Any *.md counts as docs (folder READMEs, .github, planning). A push to main
+# skips only for docs (the previous commit's diff on stdin; nothing on stdin
+# runs everything). The nightly run, manual runs and the full-ci label run
 # everything. Skipped jobs count as passing for required checks.
 set -euo pipefail
 heavy=true kit=true docs=false
 changed=$(cat)
-if [[ ${EVENT:-} == pull_request && ",${LABELS:-}," != *,full-ci,* ]]; then
+# No changed files listed (a failed diff): run everything.
+if [[ ${EVENT:-} == pull_request && -n $changed && ",${LABELS:-}," != *,full-ci,* ]]; then
     grep -qE '^(packaging/offline/|packaging/llm/model\.pin$|scripts/[^/]*offline[^/]*$|scripts/sign-rpms\.sh$|packaging/rpm/openvibes-platform\.spec$|crates/openvibes-admin/src/(setup/assistant|model_fetch)\.rs$|\.github/workflows/ci\.yml$|scripts/(test-)?ci-tiers\.sh$)' <<<"$changed" || kit=false
-    docs_re='^(docs/|[^/]+\.md$)'
+    docs_re='^docs/|\.md$'
     front_re='^crates/openvibes-console/web/(src|tests|e2e|public)/'
     # Every file docs or frontend (and none of it docs/api/).
     # Frontend source and docs: no RPM or end to end job reads them.
@@ -27,5 +30,9 @@ if [[ ${EVENT:-} == pull_request && ",${LABELS:-}," != *,full-ci,* ]]; then
     if ! grep -qvE "$docs_re" <<<"$changed" && ! grep -q '^docs/api/' <<<"$changed"; then
         docs=true
     fi
+fi
+# A push to main: only the docs rule; an empty diff (no usable previous commit) runs everything.
+if [[ ${EVENT:-} == push && -n $changed ]] && ! grep -qvE '^docs/|\.md$' <<<"$changed" && ! grep -q '^docs/api/' <<<"$changed"; then
+    docs=true
 fi
 printf 'heavy=%s\nkit=%s\ndocs=%s\n' "$heavy" "$kit" "$docs"

@@ -298,7 +298,8 @@ test("rule-set switches: a group is added, a failed change keeps the switch and 
   await signIn(page, "alex");
   await page.goto("/settings?tab=host-groups");
   await page.getByRole("button", { name: "New group" }).click();
-  const group = `Lab ${info.project.name}`;
+  // A retry after a failed attempt finds that attempt's group, so each attempt names its own.
+  const group = `Lab ${info.project.name} try ${info.retry}`;
   await page.getByRole("textbox", { name: "Name" }).fill(group);
   await page.getByRole("combobox", { name: "Field of condition 1" }).click();
   await page.getByRole("option", { name: "Hostname", exact: true }).click();
@@ -309,8 +310,11 @@ test("rule-set switches: a group is added, a failed change keeps the switch and 
   await expect(page.getByRole("heading", { level: 1, name: group })).toBeVisible();
 
   await page.goto("/settings?tab=rule-sets");
-  const l2 = page.getByRole("table", { name: "Rule sets" }).locator("tbody tr").filter({ hasText: "hardening-linux-l2" });
-  await expect(l2).toContainText("Not published");
+  // The list waits for two requests (sets, then where they run); a cold console can take longer than the 5 s default.
+  const table = page.getByRole("table", { name: "Rule sets" });
+  await expect(table).toBeVisible({ timeout: 30_000 });
+  const l2 = table.locator("tbody tr").filter({ hasText: "hardening-linux-l2" });
+  await expect(l2).toContainText("Not published", { timeout: 30_000 });
   await l2.click();
   const inspector = page.locator(".inspector");
   await inspector.getByRole("button", { name: "+ Add group" }).click();
