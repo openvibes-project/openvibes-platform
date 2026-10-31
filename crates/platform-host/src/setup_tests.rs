@@ -114,5 +114,15 @@ fn the_network_verbs_carry_their_arguments_and_nothing_else() {
         Privileged::TimeSet(&time).args(),
         ["time-set", "--servers", "ntp.lab", "--zone", "UTC"]
     );
+    let ssh = [
+        "--keys".to_owned(),
+        "yes".to_owned(),
+        "--passwords".to_owned(),
+        "no".to_owned(),
+    ];
+    assert_eq!(
+        Privileged::SshSet(&ssh).args(),
+        ["ssh-set", "--keys", "yes", "--passwords", "no"]
+    );
     assert!(Privileged::NetKeep.stdin(None).is_none());
 }

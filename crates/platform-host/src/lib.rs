@@ -11,6 +11,7 @@ pub mod runner;
 pub mod service;
 pub mod setup;
 pub mod shell;
+pub mod ssh;
 mod stderr;
 pub mod timesync;
 pub mod unit;
@@ -277,6 +278,11 @@ pub trait Host {
     /// The time zone and NTP servers (System › Time); `None` where there
     /// is no `timedatectl`.
     fn time_info(&self) -> Option<timesync::TimeInfo> {
+        None
+    }
+    /// Who may sign in over SSH (System › SSH); `None` where there is no
+    /// `sshd` to manage.
+    fn ssh_info(&self) -> Option<ssh::SshInfo> {
         None
     }
     /// The distribution, kernel and last update check; `None` on a host

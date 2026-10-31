@@ -50,6 +50,8 @@ pub enum Program {
     Hostnamectl,
     /// The time zone and clock state (the appliance's System › Time).
     Timedatectl,
+    /// Checks the SSH daemon's configuration (the appliance's System › SSH).
+    Sshd,
 }
 
 impl Program {
@@ -79,6 +81,7 @@ impl Program {
             Program::Nmcli => "/usr/bin/nmcli",
             Program::Hostnamectl => "/usr/bin/hostnamectl",
             Program::Timedatectl => "/usr/bin/timedatectl",
+            Program::Sshd => "/usr/sbin/sshd",
         }
     }
 }

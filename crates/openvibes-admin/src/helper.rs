@@ -144,6 +144,11 @@ pub enum HelperCommand {
         #[command(flatten)]
         args: crate::setup::time::SetArgs,
     },
+    /// Chooses whether keys, passwords or both may sign in over SSH.
+    SshSet {
+        #[command(flatten)]
+        args: crate::setup::ssh::SetArgs,
+    },
     /// Does nothing and prints `done<TAB>opened`: sudo checks the password
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
@@ -187,6 +192,7 @@ enum Verb {
     NetRevert,
     HostnameSet(String),
     TimeSet(crate::setup::time::SetArgs),
+    SshSet(crate::setup::ssh::SetArgs),
     Ca(crate::helper_ca::CaVerb),
 }
 
@@ -278,6 +284,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::NetRevert => Verb::NetRevert,
         HelperCommand::HostnameSet { name } => Verb::HostnameSet(name.clone()),
         HelperCommand::TimeSet { args } => Verb::TimeSet(args.clone()),
+        HelperCommand::SshSet { args } => Verb::SshSet(args.clone()),
         HelperCommand::Ca(command) => Verb::Ca(crate::helper_ca::verb(command)?),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
@@ -395,6 +402,11 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::NetKeep => os_result(crate::setup::net::run_keep(&SystemRunner, Path::new("/"))),
         Verb::NetRevert => os_result(crate::setup::net::run_revert(&SystemRunner, Path::new("/"))),
         Verb::HostnameSet(name) => os_result(crate::setup::net::run_hostname(&SystemRunner, &name)),
+        Verb::SshSet(args) => os_result(crate::setup::ssh::run_set(
+            &SystemRunner,
+            Path::new("/"),
+            &args,
+        )),
         Verb::TimeSet(args) => os_result(crate::setup::time::run_set(
             &SystemRunner,
             Path::new("/"),
