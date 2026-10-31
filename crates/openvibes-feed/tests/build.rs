@@ -550,6 +550,33 @@ async fn nvd_is_read_by_windows_and_only_changed_years_are_rewritten() {
     }
     assert_eq!(read(&out), cves.len());
 
+    // A year file gone from blobs/ is an error, not a year started over.
+    let gone = nvd_hashes(&out, &key).remove(0).1;
+    let kept = std::fs::read(out.join("blobs").join(&gone)).unwrap();
+    std::fs::remove_file(out.join("blobs").join(&gone)).unwrap();
+    {
+        let mut all = up.nvd.lock().unwrap();
+        for cve in all.iter_mut() {
+            cve["lastModified"] = chrono::Utc::now()
+                .format("%Y-%m-%dT%H:%M:%S%.3f")
+                .to_string()
+                .into();
+        }
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    let broken = build::run(
+        &cfg,
+        &key,
+        &build::Options {
+            out: &out,
+            only: &[],
+            valid_days: 7,
+        },
+    )
+    .unwrap_err();
+    assert!(broken.contains("missing from blobs/"), "{broken}");
+    std::fs::write(out.join("blobs").join(&gone), kept).unwrap();
+
     // NVD down and nothing else wanted: nothing is signed.
     tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     let before = std::fs::read(out.join("feed.json")).unwrap();

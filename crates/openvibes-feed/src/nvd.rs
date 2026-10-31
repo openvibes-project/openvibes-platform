@@ -125,12 +125,14 @@ fn flush(
     upstream: &str,
 ) -> Result<(), String> {
     for (year, fresh) in found {
-        let mut records = match state
-            .years
-            .get(&year)
-            .filter(|h| blob_exists(out, &h.sha256))
-        {
-            Some(held) => read_year(out, held)?,
+        let mut records = match state.years.get(&year) {
+            Some(held) if blob_exists(out, &held.sha256) => read_year(out, held)?,
+            // Starting the year over would publish it with only recent records.
+            Some(_) => {
+                return Err(format!(
+                    "the file for {year} is missing from blobs/; remove {FILE} to read NVD again"
+                ));
+            }
             None => BTreeMap::new(),
         };
         records.extend(fresh);
