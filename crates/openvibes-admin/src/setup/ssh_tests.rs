@@ -25,6 +25,16 @@ fn host(test: &str) -> Fake {
     fake
 }
 
+/// A host with a previous drop-in whose `sshd -t` passes and whose `sshd -T`
+/// reports `in_force`.
+fn with_previous(test: &str, in_force: &str) -> Fake {
+    let fake = Fake::new(test);
+    fake.file(DROP_IN, "previous\n");
+    fake.answer(&[SSHD, "-t"], 0, "");
+    fake.answer(&[SSHD, "-T"], 0, in_force);
+    fake
+}
+
 #[test]
 fn keys_only_is_written_checked_and_reloaded() {
     let fake = host("ssh-set");
@@ -84,13 +94,9 @@ fn a_config_sshd_refuses_is_taken_back() {
 
 #[test]
 fn another_file_that_overrides_the_choice_is_refused_and_taken_back() {
-    let fake = Fake::new("ssh-overridden");
-    fake.file(DROP_IN, "previous\n");
-    fake.answer(&[SSHD, "-t"], 0, "");
     // cloud-init's file sorts first and says no to passwords.
-    fake.answer(
-        &[SSHD, "-T"],
-        0,
+    let fake = with_previous(
+        "ssh-overridden",
         "pubkeyauthentication no\npasswordauthentication no\n",
     );
     let error = run_set(&fake, &fake.root, &args("no", "yes")).unwrap_err();
@@ -112,12 +118,8 @@ fn another_file_that_overrides_the_choice_is_refused_and_taken_back() {
 
 #[test]
 fn a_failed_reload_takes_the_file_back() {
-    let fake = Fake::new("ssh-noreload");
-    fake.file(DROP_IN, "previous\n");
-    fake.answer(&[SSHD, "-t"], 0, "");
-    fake.answer(
-        &[SSHD, "-T"],
-        0,
+    let fake = with_previous(
+        "ssh-noreload",
         "pubkeyauthentication yes\npasswordauthentication no\n",
     );
     fake.fail(&["/usr/bin/systemctl", "reload"], "not running");

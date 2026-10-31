@@ -41,6 +41,11 @@ fn put_back(path: &Path, previous: Option<&str>) -> io::Result<()> {
     }
 }
 
+/// Puts the previous drop-in back, naming the file if that fails.
+fn undo(path: &Path, previous: Option<&str>) -> Result<(), String> {
+    put_back(path, previous).map_err(|error| format!("{}: {error}", path.display()))
+}
+
 /// `ssh-set --keys yes|no --passwords yes|no`: prints `done<TAB>set`.
 pub(crate) fn run_set<R: Runner>(
     runner: &R,
@@ -61,8 +66,7 @@ pub(crate) fn run_set<R: Runner>(
         .run(Sshd, &["-t"])
         .map_err(|error| format!("{}: {error}", Sshd.path()))?;
     if checked.status != 0 {
-        put_back(&path, previous.as_deref())
-            .map_err(|error| format!("{}: {error}", path.display()))?;
+        undo(&path, previous.as_deref())?;
         return Err(format!(
             "sshd would not accept it, so nothing changed: {}",
             tail(&checked.stderr)
@@ -77,8 +81,7 @@ pub(crate) fn run_set<R: Runner>(
         .then(|| ssh::read_effective(&in_force.stdout))
         .flatten();
     if effective != Some((keys, passwords)) {
-        put_back(&path, previous.as_deref())
-            .map_err(|error| format!("{}: {error}", path.display()))?;
+        undo(&path, previous.as_deref())?;
         return Err(if effective.is_some() {
             "another file in /etc/ssh/sshd_config.d overrides this, so nothing changed".into()
         } else {
@@ -92,8 +95,7 @@ pub(crate) fn run_set<R: Runner>(
         .run(Systemctl, &["reload", "sshd.service"])
         .map_err(|error| format!("{}: {error}", Systemctl.path()))?;
     if reloaded.status != 0 {
-        put_back(&path, previous.as_deref())
-            .map_err(|error| format!("{}: {error}", path.display()))?;
+        undo(&path, previous.as_deref())?;
         return Err(format!(
             "sshd did not reload, so nothing changed: {}",
             tail(&reloaded.stderr)
