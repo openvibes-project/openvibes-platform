@@ -110,10 +110,30 @@ while one runs stops with "another build or bundle is running" and writes
 nothing, so the timer and a hand-run build never race. The lock file is not
 part of the feed.
 
+## Serving the tree
+
+The tree is plain files; any static web server works. Its root must be
+`/var/lib/openvibes-feed/site` and never `/var/lib/openvibes-feed`, which also
+holds the signing key. The files in `site/` are world-readable; the key sits
+in the parent directory with mode 0600, so keep the root exactly `site/`.
+Two examples:
+
+```sh
+# nginx: root /var/lib/openvibes-feed/site; autoindex off;
+# On an SELinux host, label the tree for the web server first:
+sudo semanage fcontext -a -t httpd_sys_content_t '/var/lib/openvibes-feed/site(/.*)?'
+sudo restorecon -R /var/lib/openvibes-feed/site
+# any host, for a quick test:
+python3 -m http.server 8080 --directory /var/lib/openvibes-feed/site
+```
+
+Platforms read the tree through the mirror URL once step 4 lands; until then,
+`openvibes-admin feeds import-bundle` takes either the tree directory or a
+bundle `.tar`.
+
 ## Not here yet
 
-The platform's own mirror sync and console views (steps 4 and 5), and the
-live build-serve-import test.
+The platform's own mirror sync and console views (steps 4 and 5).
 
 ## Test
 
@@ -122,3 +142,9 @@ reuse by 304, a failing source, a subset tree; NVD read by windows from a fake
 API, only the changed year rewritten), the result verified as a
 platform verifies it, a bundle unpacked by the platform's reader, and a second build
 or bundle refused while the tree's lock is held.
+
+`scripts/systemd-e2e.sh` (the "End to end under systemd" CI job) installs the
+RPM next to a running platform: the timer is enabled and waiting, the service
+is skipped without a key, and with one the sandboxed service builds a feed from
+a local upstream that the platform verifies and imports from the tree and from
+a bundle.

@@ -333,6 +333,9 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 
 %post -n openvibes-feed
 %systemd_post openvibes-feed.timer
+# The preset enables the timer, but enabling does not start it: a first install
+# starts it now (idle until the key exists) instead of waiting for a reboot.
+if [ "$1" -eq 1 ] && [ -d /run/systemd/system ]; then systemctl start openvibes-feed.timer >/dev/null 2>&1 || :; fi
 %preun -n openvibes-feed
 %systemd_preun openvibes-feed.timer openvibes-feed.service
 %postun -n openvibes-feed
