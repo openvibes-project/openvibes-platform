@@ -124,3 +124,21 @@ fn the_verb_takes_servers_and_a_zone() {
     );
     assert!(Wrapper::try_parse_from(["helper", "time-set"]).is_err());
 }
+
+#[test]
+fn chosen_servers_also_leave_out_the_dhcp_ones_and_clearing_brings_them_back() {
+    let conf = format!("{CONF}sourcedir /run/chrony-dhcp\nsourcedir /etc/chrony.d\n");
+    let fake = host("time-dhcp", &conf);
+    run_set(&fake, &fake.root, &args("ntp.lime.lab", "UTC")).unwrap();
+    let marked = fake.text("/etc/chrony.conf");
+    assert!(
+        marked.contains("#openvibes# sourcedir /run/chrony-dhcp\n"),
+        "{marked}"
+    );
+    assert!(
+        marked.contains("\nsourcedir /etc/chrony.d\n"),
+        "other sourcedirs stay"
+    );
+    run_set(&fake, &fake.root, &args("", "UTC")).unwrap();
+    assert_eq!(fake.text("/etc/chrony.conf"), conf);
+}

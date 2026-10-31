@@ -16,6 +16,9 @@ pub struct TimeInfo {
     pub zone: String,
     /// The servers chosen here, empty when the distribution's own are used.
     pub servers: Vec<String>,
+    /// The server actually in use, with where it comes from: the chosen
+    /// ones, `10.0.0.1 (from DHCP)` or `2.fedora.pool.ntp.org (default)`.
+    pub in_use: String,
     /// `Some(true)` when the clock follows its servers.
     pub synced: Option<bool>,
 }
@@ -91,6 +94,36 @@ pub fn read_drop_in(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Where NetworkManager's DHCP hook puts the servers it was handed.
+pub const DHCP_DIR: &str = "run/chrony-dhcp";
+
+/// The first `server` or `pool` host of a chrony config text.
+fn first_source(text: &str) -> Option<&str> {
+    text.lines().find_map(|line| {
+        let mut words = line.split_whitespace();
+        matches!(words.next(), Some("server" | "pool"))
+            .then(|| words.next())
+            .flatten()
+    })
+}
+
+/// The server in use, for the page and System's line: the chosen ones, else
+/// the first one DHCP handed out (`dhcp` holds the texts of the files in
+/// [`DHCP_DIR`]), else the distribution's first (`conf`, the `chrony.conf`).
+#[must_use]
+pub fn in_use(chosen: &[String], dhcp: &[String], conf: &str) -> String {
+    if !chosen.is_empty() {
+        return chosen.join(", ");
+    }
+    if let Some(host) = dhcp.iter().find_map(|text| first_source(text)) {
+        return format!("{host} (from DHCP)");
+    }
+    match first_source(conf) {
+        Some(host) => format!("{host} (default)"),
+        None => "none found".to_owned(),
+    }
+}
+
 /// `timedatectl show -p NTPSynchronized --value`.
 #[must_use]
 pub fn read_synced(text: &str) -> Option<bool> {
@@ -154,6 +187,25 @@ mod tests {
         assert!(text.contains("server ntp.lime.lab iburst\n"));
         assert_eq!(read_drop_in(&text), list);
         assert!(read_drop_in("").is_empty());
+    }
+
+    #[test]
+    fn the_server_in_use_is_chosen_then_dhcp_then_the_default() {
+        let conf = "# c\npool 2.fedora.pool.ntp.org iburst\nserver 10.9.9.9\n";
+        let dhcp = vec!["server 10.0.0.1 iburst\n".to_owned()];
+        let chosen = vec!["ntp.lab".to_owned(), "10.1.1.1".to_owned()];
+        assert_eq!(in_use(&chosen, &dhcp, conf), "ntp.lab, 10.1.1.1");
+        assert_eq!(in_use(&[], &dhcp, conf), "10.0.0.1 (from DHCP)");
+        assert_eq!(
+            in_use(&[], &["\n".to_owned()], conf),
+            "2.fedora.pool.ntp.org (default)"
+        );
+        // Marked-out lines are not the default.
+        assert_eq!(
+            in_use(&[], &[], "#openvibes# pool a.b\nserver c.d\n"),
+            "c.d (default)"
+        );
+        assert_eq!(in_use(&[], &[], "driftfile /x\n"), "none found");
     }
 
     #[test]

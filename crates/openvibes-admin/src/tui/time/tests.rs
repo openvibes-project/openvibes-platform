@@ -13,6 +13,7 @@ fn info() -> TimeInfo {
     TimeInfo {
         zone: "Europe/Stockholm".into(),
         servers: vec!["ntp.lime.lab".into()],
+        in_use: "ntp.lime.lab".into(),
         synced: Some(true),
     }
 }
@@ -115,4 +116,25 @@ fn clearing_the_servers_is_a_change() {
     assert!(app.maint.time.servers.is_empty());
     assert_eq!(app.maint.time.args().unwrap()[1], "");
     assert!(app.maint.time.rows().contains(&At::Apply));
+}
+
+#[test]
+fn no_chosen_servers_reads_automatic_with_the_server_in_use() {
+    let mut app = set_up(vec![]);
+    app.host.appliance.set(true);
+    *app.host.time.borrow_mut() = Some(TimeInfo {
+        zone: "UTC".into(),
+        servers: vec![],
+        in_use: "10.0.0.1 (from DHCP)".into(),
+        synced: Some(true),
+    });
+    app.open_system();
+    assert!(
+        body(&app).contains("in sync · 10.0.0.1 (from DHCP) · UTC"),
+        "{}",
+        body(&app)
+    );
+    app.key(Key::Enter);
+    let text = screen(&app);
+    assert!(text.contains("automatic · 10.0.0.1 (from DHCP)"), "{text}");
 }

@@ -41,7 +41,13 @@ fn row<H: Host>(app: &App<H>, page: &TimePage, at: At, selected: bool) -> Row {
         None => plain(name, shown.to_owned()),
     };
     match at {
-        At::Servers => field("NTP servers", &page.servers, "the distribution's own"),
+        At::Servers => {
+            let auto = match page.info.as_ref().filter(|i| i.servers.is_empty()) {
+                Some(info) => format!("automatic · {}", info.in_use),
+                None => "automatic".to_owned(),
+            };
+            field("NTP servers", &page.servers, &auto)
+        }
         At::Zone => field("Time zone", &page.zone, "not set"),
         At::Apply => plain("Apply", "restarts the time service".into()),
     }
@@ -58,7 +64,7 @@ fn help<H: Host>(app: &App<H>, page: &TimePage, at: Option<At>) -> Vec<Line<'sta
     }
     let text = match at {
         Some(At::Servers) => {
-            "Servers this appliance gets the time from. Agents' clocks matter to alarms."
+            "Servers this appliance gets the time from; empty is automatic. Agents' clocks matter to alarms."
         }
         Some(At::Zone) => "Used for the times the console shows.",
         Some(At::Apply) => "The time zone is set and chrony restarts.",
