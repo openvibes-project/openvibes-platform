@@ -79,6 +79,32 @@ pub fn read_drop_in(text: &str) -> Option<(bool, bool)> {
     ))
 }
 
+/// The choice `sshd -T` reports as in force: the values of
+/// `pubkeyauthentication` and `passwordauthentication`.
+#[must_use]
+pub fn read_effective(text: &str) -> Option<(bool, bool)> {
+    let value = |name: &str| {
+        text.lines().find_map(|line| {
+            let mut words = line.split_whitespace();
+            (words.next() == Some(name))
+                .then(|| words.next().and_then(|w| parse_word(w).ok()))
+                .flatten()
+        })
+    };
+    Some((
+        value("pubkeyauthentication")?,
+        value("passwordauthentication")?,
+    ))
+}
+
+/// Does an `authorized_keys` text hold a key (a line that is not blank or a
+/// comment)?
+#[must_use]
+pub fn has_key_line(text: &str) -> bool {
+    text.lines()
+        .any(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
+}
+
 /// What System shows for the page.
 #[must_use]
 pub fn menu_line(info: &SshInfo) -> String {
@@ -110,6 +136,13 @@ mod tests {
             assert_eq!(read_drop_in(&text), Some((keys, passwords)), "{text}");
         }
         assert_eq!(read_drop_in("PubkeyAuthentication yes\n"), None);
+        assert_eq!(
+            read_effective("port 22\npubkeyauthentication no\npasswordauthentication yes\n"),
+            Some((false, true))
+        );
+        assert_eq!(read_effective("port 22\n"), None);
+        assert!(has_key_line("# c\n\nssh-ed25519 AAAA x\n"));
+        assert!(!has_key_line("# c\n  \n"));
         assert!(parse_word("maybe").is_err());
     }
 

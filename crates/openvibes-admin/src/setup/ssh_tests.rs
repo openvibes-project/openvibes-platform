@@ -16,6 +16,11 @@ fn args(keys: &str, passwords: &str) -> SetArgs {
 fn host(test: &str) -> Fake {
     let fake = Fake::new(test);
     fake.answer(&[SSHD, "-t"], 0, "");
+    fake.answer(
+        &[SSHD, "-T"],
+        0,
+        "pubkeyauthentication yes\npasswordauthentication no\n",
+    );
     fake.answer(&["/usr/bin/systemctl", "reload"], 0, "");
     fake
 }
@@ -75,6 +80,49 @@ fn a_config_sshd_refuses_is_taken_back() {
             .join("etc/ssh/sshd_config.d/50-openvibes.conf")
             .exists()
     );
+}
+
+#[test]
+fn another_file_that_overrides_the_choice_is_refused_and_taken_back() {
+    let fake = Fake::new("ssh-overridden");
+    fake.file(DROP_IN, "previous\n");
+    fake.answer(&[SSHD, "-t"], 0, "");
+    // cloud-init's file sorts first and says no to passwords.
+    fake.answer(
+        &[SSHD, "-T"],
+        0,
+        "pubkeyauthentication no\npasswordauthentication no\n",
+    );
+    let error = run_set(&fake, &fake.root, &args("no", "yes")).unwrap_err();
+    assert!(error.contains("overrides"), "{error}");
+    assert_eq!(fake.text(DROP_IN), "previous\n");
+    assert!(!fake.called(&["/usr/bin/systemctl"]));
+
+    let blind = Fake::new("ssh-blind");
+    blind.answer(&[SSHD, "-t"], 0, "");
+    blind.fail(&[SSHD, "-T"], "no host key");
+    assert!(run_set(&blind, &blind.root, &args("yes", "no")).is_err());
+    assert!(
+        !blind
+            .root
+            .join("etc/ssh/sshd_config.d/50-openvibes.conf")
+            .exists()
+    );
+}
+
+#[test]
+fn a_failed_reload_takes_the_file_back() {
+    let fake = Fake::new("ssh-noreload");
+    fake.file(DROP_IN, "previous\n");
+    fake.answer(&[SSHD, "-t"], 0, "");
+    fake.answer(
+        &[SSHD, "-T"],
+        0,
+        "pubkeyauthentication yes\npasswordauthentication no\n",
+    );
+    fake.fail(&["/usr/bin/systemctl", "reload"], "not running");
+    assert!(run_set(&fake, &fake.root, &args("yes", "no")).is_err());
+    assert_eq!(fake.text(DROP_IN), "previous\n");
 }
 
 #[test]

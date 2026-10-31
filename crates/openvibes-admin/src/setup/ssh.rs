@@ -1,8 +1,9 @@
 //! The appliance's SSH verb (TUI rework §7): `ssh-set` chooses whether keys,
 //! passwords or both may sign in. The choice is an `Include` drop-in of
 //! `sshd_config`; it is checked with `sshd -t` before `sshd` reloads, and
-//! the previous drop-in comes back if the check fails, so a bad file never
-//! stands. Keys and passwords cannot both be off.
+//! the previous drop-in comes back if the check fails, if `sshd -T` shows
+//! another file overriding the choice, or if the reload fails, so a bad file
+//! never stands. Keys and passwords cannot both be off.
 
 use std::{
     fs, io,
@@ -67,11 +68,36 @@ pub(crate) fn run_set<R: Runner>(
             tail(&checked.stderr)
         ));
     }
+    // sshd takes the first value it reads, so another file in the folder
+    // can override ours: ask what is really in force.
+    let in_force = runner
+        .run(Sshd, &["-T"])
+        .map_err(|error| format!("{}: {error}", Sshd.path()))?;
+    let effective = (in_force.status == 0)
+        .then(|| ssh::read_effective(&in_force.stdout))
+        .flatten();
+    if effective != Some((keys, passwords)) {
+        put_back(&path, previous.as_deref())
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        return Err(if effective.is_some() {
+            "another file in /etc/ssh/sshd_config.d overrides this, so nothing changed".into()
+        } else {
+            format!(
+                "could not read what sshd uses, so nothing changed: {}",
+                tail(&in_force.stderr)
+            )
+        });
+    }
     let reloaded = runner
         .run(Systemctl, &["reload", "sshd.service"])
         .map_err(|error| format!("{}: {error}", Systemctl.path()))?;
     if reloaded.status != 0 {
-        return Err(format!("sshd did not reload: {}", tail(&reloaded.stderr)));
+        put_back(&path, previous.as_deref())
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        return Err(format!(
+            "sshd did not reload, so nothing changed: {}",
+            tail(&reloaded.stderr)
+        ));
     }
     Ok("done\tset".into())
 }

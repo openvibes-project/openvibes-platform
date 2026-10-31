@@ -417,10 +417,11 @@ impl<R: Runner> Host for Native<R> {
             .unwrap_or((true, true));
         let has_keys = std::env::var_os("HOME")
             .map(|home| std::path::Path::new(&home).join(".ssh/authorized_keys"))
-            .and_then(|path| std::fs::read_to_string(path).ok())
-            .map(|text| {
-                text.lines()
-                    .any(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
+            .and_then(|path| match std::fs::read_to_string(path) {
+                Ok(text) => Some(ssh::has_key_line(&text)),
+                // No file (or no folder) at all: no key.
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some(false),
+                Err(_) => None,
             });
         Some(ssh::SshInfo {
             keys,
