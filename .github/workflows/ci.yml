@@ -28,10 +28,11 @@ env:
 
 jobs:
   # Decides which tiers run: scripts/ci-tiers.sh (rules there, cases in
-  # scripts/test-ci-tiers.sh). Main, nightly, manual runs and the full-ci
-  # label run everything; a pull request of only docs skips Rust and the
-  # console job, and one of only docs and frontend sources skips the heavy
-  # tier. Skipped jobs count as passing for required checks.
+  # scripts/test-ci-tiers.sh). Nightly, manual runs and the full-ci label
+  # run everything; a pull request or push to main of only docs (any *.md)
+  # skips Rust and the console job, and a pull request of only docs and
+  # frontend sources skips the heavy tier. Skipped jobs count as passing for
+  # required checks.
   changes:
     name: Choose test tiers
     runs-on: ubuntu-24.04
@@ -54,6 +55,8 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
         shell: bash
         run: |
           bash scripts/test-ci-tiers.sh
@@ -63,10 +66,14 @@ jobs:
           # (security review). A base without them runs everything.
           if [ "$EVENT" = pull_request ]; then
             if git show "$BASE_SHA:scripts/ci-tiers.sh" > "$RUNNER_TEMP/ci-tiers.sh" 2>/dev/null; then
-              git diff --name-only "$BASE_SHA...$HEAD_SHA" | bash "$RUNNER_TEMP/ci-tiers.sh"
+              git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA" | bash "$RUNNER_TEMP/ci-tiers.sh"
             else
               printf 'heavy=true\nkit=true\ndocs=false\n'
             fi
+          elif [ "$EVENT" = push ]; then
+            # A push to main skips only for docs; a diff that cannot be made
+            # (first push, forced push) lists nothing and runs everything.
+            { git diff --no-renames --name-only "$BEFORE_SHA" "$PUSH_SHA" 2>/dev/null || true; } | bash scripts/ci-tiers.sh
           else
             bash scripts/ci-tiers.sh < /dev/null
           fi | tee -a "$GITHUB_OUTPUT"
