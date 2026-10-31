@@ -235,10 +235,14 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             Span::raw("The new settings are in use."),
         ]));
         lines.push(Line::styled(
-            format!(
-                "    Keep them? The old ones come back in {} s.",
-                net.seconds_left()
-            ),
+            if net.lapsed {
+                "    The old ones did not come back by themselves.".to_owned()
+            } else {
+                format!(
+                    "    Keep them? The old ones come back in {} s.",
+                    net.seconds_left()
+                )
+            },
             t.dim(),
         ));
         lines.push(Line::raw(""));

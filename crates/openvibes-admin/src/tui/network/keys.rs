@@ -23,13 +23,16 @@ impl<H: Host> App<H> {
         if net_run(self).is_some_and(|r| !r.running()) {
             self.run = None;
         }
-        let keep = self.maint.net.keep;
         self.maint.net = Net::from_info(self.host.network_info());
-        // A change still waiting to be kept stays on offer.
-        if let Some(at) = self.maint.net.info.as_ref().and_then(|i| i.pending_since) {
-            let _ = at;
-            self.maint.net.keep = keep.or_else(|| Some(Instant::now()));
-        }
+        // A change still waiting to be kept stays on offer, with the time
+        // that is really left on the helper's clock.
+        self.maint.net.keep = self
+            .maint
+            .net
+            .info
+            .as_ref()
+            .and_then(|i| i.pending_since)
+            .map(Net::pending_instant);
     }
 
     fn net_at(&self) -> Option<At> {
@@ -149,7 +152,7 @@ impl<H: Host> App<H> {
     }
 
     /// The `net-apply` arguments for the page, or why they will not do.
-    fn net_args(&self) -> Result<Vec<String>, String> {
+    fn net_args(&self) -> Result<(Vec<String>, Vec<String>), String> {
         let net = &self.maint.net;
         let fixed = net.mode == Some(Method::Fixed);
         let dns = if fixed || net.own_dns {
@@ -164,7 +167,12 @@ impl<H: Host> App<H> {
         };
         let mode = if fixed { "fixed" } else { "dhcp" };
         network::change(mode, address, gateway, &dns, &net.search)?;
-        Ok(vec![
+        let servers = dns
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .collect();
+        let args = vec![
             "--mode".into(),
             mode.into(),
             "--address".into(),
@@ -175,7 +183,8 @@ impl<H: Host> App<H> {
             dns,
             "--search".into(),
             net.search.clone(),
-        ])
+        ];
+        Ok((args, servers))
     }
 
     fn ask_net_apply(&mut self) {
@@ -185,18 +194,13 @@ impl<H: Host> App<H> {
         }
         let net = &self.maint.net;
         if net.net_changed() {
-            let args = match self.net_args() {
-                Ok(args) => args,
+            let servers = match self.net_args() {
+                Ok((_, servers)) => servers,
                 Err(why) => {
                     self.outcome = Some((false, format!("✗ {why}")));
                     return;
                 }
             };
-            let servers: Vec<String> = args[7]
-                .split(',')
-                .filter(|s| !s.is_empty())
-                .map(str::to_owned)
-                .collect();
             // Each own DNS server is asked first; the first silent one stops it.
             let silent: Vec<&String> = servers
                 .iter()
@@ -211,7 +215,11 @@ impl<H: Host> App<H> {
         let (text, detail) = if net.net_changed() {
             (
                 "Apply the network settings?",
-                "undone in a minute unless kept",
+                if net.host_changed() {
+                    "undone in a minute unless kept; the host name stays"
+                } else {
+                    "undone in a minute unless kept"
+                },
             )
         } else {
             ("Change the host name?", "agents need the new install line")
@@ -235,7 +243,7 @@ impl<H: Host> App<H> {
         }
         if net.net_changed() {
             match self.net_args() {
-                Ok(args) => calls.push(Call::NetApply(args)),
+                Ok((args, _)) => calls.push(Call::NetApply(args)),
                 Err(why) => {
                     self.outcome = Some((false, format!("✗ {why}")));
                     return;
@@ -267,13 +275,30 @@ impl<H: Host> App<H> {
                 let host = self.maint.net.host.clone();
                 self.maint.net = Net::from_info(self.host.network_info());
                 self.maint.net.host = host;
-                self.maint.net.keep = Some(Instant::now());
+                self.maint.net.keep = Some(
+                    self.maint
+                        .net
+                        .info
+                        .as_ref()
+                        .and_then(|i| i.pending_since)
+                        .map_or_else(Instant::now, Net::pending_instant),
+                );
                 self.nav.row = 0;
             }
             Kind::Net(NetAction::Keep) => {
+                // `nothing pending`: the timer got there first.
+                let late = run
+                    .states
+                    .iter()
+                    .flatten()
+                    .any(|s| s.detail().starts_with("nothing pending"));
                 self.run = None;
                 self.maint.net = Net::from_info(self.host.network_info());
-                self.maint.net.said = Some(Ok("The new settings are kept.".into()));
+                self.maint.net.said = Some(if late {
+                    Err("Too late: the old settings came back by themselves.".into())
+                } else {
+                    Ok("The new settings are kept.".into())
+                });
                 self.nav.row = 0;
             }
             Kind::Net(NetAction::Revert) => {
@@ -293,11 +318,27 @@ impl<H: Host> App<H> {
             return;
         };
         let idle = net_run(self).is_none() && self.asking.is_none() && self.question.is_none();
-        if idle && since.elapsed().as_secs() > network::KEEP_SECONDS + 6 {
+        if idle && !self.maint.net.lapsed && since.elapsed().as_secs() > network::KEEP_SECONDS + 6 {
             self.maint.net = Net::from_info(self.host.network_info());
-            self.maint.net.said =
-                Some(Err("Nobody answered, so the old settings are back.".into()));
             self.nav.row = 0;
+            if self
+                .maint
+                .net
+                .info
+                .as_ref()
+                .is_some_and(|i| i.pending_since.is_some())
+            {
+                // The helper's revert did not take: still waiting on an answer.
+                self.maint.net.keep = Some(since);
+                self.maint.net.lapsed = true;
+                self.maint.net.said = Some(Err(
+                    "The old settings could not be put back by themselves. Keep the new ones or put the old ones back."
+                        .into(),
+                ));
+            } else {
+                self.maint.net.said =
+                    Some(Err("Nobody answered, so the old settings are back.".into()));
+            }
         }
     }
 }

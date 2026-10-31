@@ -239,3 +239,60 @@ fn only_the_host_name_runs_hostname_set() {
     assert_eq!(calls(&app), ["hostname-set va.lab"]);
     assert!(app.maint.net.keep.is_none());
 }
+
+#[test]
+fn keep_after_the_timer_fired_says_it_came_too_late() {
+    let mut app = app_with(vec![Ok("done\tnothing pending\n".into())]);
+    open(&mut app);
+    app.maint.net.keep = Some(Instant::now());
+    app.key(Key::Enter);
+    password(&mut app);
+    let text = screen(&app);
+    assert!(text.contains("Too late"), "{text}");
+    assert!(!text.contains("settings are kept"), "{text}");
+}
+
+#[test]
+fn a_pending_change_opens_with_the_time_really_left() {
+    let mut app = app_with(vec![]);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let mut pending = info();
+    pending.pending_since = Some(now - 40);
+    *app.host.net.borrow_mut() = Some(pending);
+    app.open_system();
+    app.key(Key::Enter);
+    let left = app.maint.net.seconds_left();
+    assert!((18..=20).contains(&left), "{left}");
+}
+
+#[test]
+fn an_untouched_fixed_connection_offers_no_apply() {
+    let mut app = app_with(vec![]);
+    let mut fixed = info();
+    fixed.method = Some(Method::Fixed);
+    fixed.dns_auto = true;
+    fixed.address = "192.168.1.50/24".into();
+    fixed.gateway = "192.168.1.1".into();
+    fixed.dns = vec!["192.168.1.1".into()];
+    fixed.search = "lime.lab".into();
+    *app.host.net.borrow_mut() = Some(fixed);
+    open(&mut app);
+    assert!(!app.maint.net.rows().contains(&At::Apply));
+}
+
+#[test]
+fn a_lapsed_minute_with_the_change_still_pending_offers_keep_again() {
+    let mut app = app_with(vec![]);
+    let mut pending = info();
+    pending.pending_since = Some(1);
+    *app.host.net.borrow_mut() = Some(pending);
+    open(&mut app);
+    app.maint.net.keep = Instant::now().checked_sub(Duration::from_secs(75));
+    app.tick(Instant::now());
+    assert!(app.maint.net.lapsed);
+    assert_eq!(app.maint.net.rows(), [At::Keep, At::Revert]);
+    assert!(screen(&app).contains("could not be put back"));
+}

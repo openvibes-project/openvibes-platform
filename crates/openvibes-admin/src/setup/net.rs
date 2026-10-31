@@ -223,7 +223,9 @@ pub(crate) fn run_apply<R: Runner>(
         && info.gateway == change.gateway
         && info.dns == change.dns
         && info.search == change.search
-        && info.dns_auto != own_dns;
+        // `ignore-auto-dns` only matters with DHCP; NetworkManager leaves it
+        // off on a fixed address too.
+        && (change.method == network::Method::Fixed || info.dns_auto != own_dns);
     if same {
         return Ok("done\tunchanged".into());
     }

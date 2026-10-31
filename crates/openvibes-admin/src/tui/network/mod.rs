@@ -52,6 +52,8 @@ pub struct Net {
     pub note: Option<Result<String, String>>,
     /// When the new settings came up and wait to be kept.
     pub keep: Option<Instant>,
+    /// The minute passed and the helper had not put the old settings back.
+    pub lapsed: bool,
     /// Said under the list after a keep, a put back or a lapse.
     pub said: Option<Result<String, String>>,
 }
@@ -133,7 +135,9 @@ impl Net {
         let dns = self.dns_text();
         let was = info.dns.join(", ");
         let dns_changed = if mode == Method::Fixed || self.own_dns {
-            dns != was || info.dns_auto
+            // NetworkManager's own default leaves `ignore-auto-dns` off for a
+            // fixed address too, where it does nothing: not a change.
+            dns != was || (mode == Method::Dhcp && info.dns_auto)
         } else {
             !info.dns_auto
         };
@@ -238,6 +242,20 @@ impl Net {
             }),
             _ => None,
         }
+    }
+
+    /// The instant a change made at Unix second `at` came up (the helper's
+    /// pending file is written right after its timer is armed).
+    pub fn pending_instant(at: i64) -> Instant {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
+        let age = u64::try_from(now.saturating_sub(at)).unwrap_or(0);
+        // Far enough back to read as lapsed, never so far it cannot be built.
+        let age = age.min(KEEP_SECONDS + 600);
+        Instant::now()
+            .checked_sub(std::time::Duration::from_secs(age))
+            .unwrap_or_else(Instant::now)
     }
 
     /// Seconds left to keep the new settings.
