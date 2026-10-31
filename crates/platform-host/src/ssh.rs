@@ -4,7 +4,7 @@
 
 /// Where the helper writes the choice (an `Include` drop-in of
 /// `sshd_config`).
-pub const DROP_IN: &str = "etc/ssh/sshd_config.d/50-openvibes.conf";
+pub const DROP_IN: &str = "etc/ssh/sshd_config.d/00-openvibes.conf";
 
 /// What the host allows now.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

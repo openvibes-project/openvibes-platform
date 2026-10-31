@@ -4,7 +4,7 @@ use super::{SetArgs, run_set};
 use crate::setup::fake::Fake;
 
 const SSHD: &str = "/usr/sbin/sshd";
-const DROP_IN: &str = "/etc/ssh/sshd_config.d/50-openvibes.conf";
+const DROP_IN: &str = "/etc/ssh/sshd_config.d/00-openvibes.conf";
 
 fn args(keys: &str, passwords: &str) -> SetArgs {
     SetArgs {
@@ -65,7 +65,7 @@ fn both_off_and_bad_words_change_nothing() {
     assert!(
         !fake
             .root
-            .join("etc/ssh/sshd_config.d/50-openvibes.conf")
+            .join("etc/ssh/sshd_config.d/00-openvibes.conf")
             .exists()
     );
     assert!(!fake.called(&[SSHD]));
@@ -87,7 +87,7 @@ fn a_config_sshd_refuses_is_taken_back() {
     assert!(
         !fresh
             .root
-            .join("etc/ssh/sshd_config.d/50-openvibes.conf")
+            .join("etc/ssh/sshd_config.d/00-openvibes.conf")
             .exists()
     );
 }
@@ -111,7 +111,7 @@ fn another_file_that_overrides_the_choice_is_refused_and_taken_back() {
     assert!(
         !blind
             .root
-            .join("etc/ssh/sshd_config.d/50-openvibes.conf")
+            .join("etc/ssh/sshd_config.d/00-openvibes.conf")
             .exists()
     );
 }

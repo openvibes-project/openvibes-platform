@@ -72,8 +72,17 @@ fn turning_passwords_off_with_no_key_warns_and_defaults_to_no() {
     let Some((Question::Maint { detail, .. }, yes_first)) = &app.question else {
         panic!("no question");
     };
-    assert!(detail.contains("lock yourself out"), "{detail}");
+    assert!(
+        detail.contains("console still takes the password"),
+        "{detail}"
+    );
     assert!(!yes_first);
+    // A second, separate yes is needed before anything runs.
+    app.key(Key::Left);
+    app.key(Key::Enter);
+    assert!(screen(&app).contains("Lock SSH sign-in until a key is added?"));
+    assert!(matches!(app.question, Some((_, false))));
+    assert!(app.host.calls.borrow().is_empty());
 }
 
 #[test]

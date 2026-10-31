@@ -168,7 +168,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     } else {
         let help = match at {
             Some(At::Apply) if page.locks_out() => {
-                "This account has no authorized key. With passwords off you could not sign in."
+                "This account has no authorized key. With passwords off nobody could sign in over SSH; the console still takes the password."
             }
             Some(At::Apply) => "Open sessions stay; new ones follow the new choice.",
             _ => "At least one of the two stays on.",
@@ -244,18 +244,40 @@ impl<H: Host> App<H> {
             self.outcome = Some((false, why));
             return;
         }
-        let detail = if self.maint.ssh.locks_out() {
-            "this account has no authorized key: you could lock yourself out"
+        let (text, detail, then, yes_first) = if self.maint.ssh.locks_out() {
+            (
+                "This account has no authorized key. Turn passwords off anyway?",
+                "nobody could sign in over SSH; the console still takes the password",
+                Then::SshLockOut,
+                false,
+            )
         } else {
-            "sshd is checked first; open sessions stay"
+            (
+                "Change how people sign in over SSH?",
+                "sshd is checked first; open sessions stay",
+                Then::SshApply,
+                true,
+            )
         };
         self.question = Some((
             Question::Maint {
-                text: "Change how people sign in over SSH?".into(),
+                text: text.into(),
                 detail: detail.into(),
+                then,
+            },
+            yes_first,
+        ));
+    }
+
+    /// The second, deliberate yes that lock-out needs.
+    pub(super) fn ask_ssh_really(&mut self) {
+        self.question = Some((
+            Question::Maint {
+                text: "Lock SSH sign-in until a key is added?".into(),
+                detail: "add a key at the console, or turn passwords on again here".into(),
                 then: Then::SshApply,
             },
-            !self.maint.ssh.locks_out(),
+            false,
         ));
     }
 
