@@ -37,6 +37,9 @@ the offline core used by `openvibes-admin feeds import` and the
   Tests: `tests/feed_vectors.rs` runs the shared vectors from the protocol
   repository, `tests/feed_raw.rs` raw-byte cases (duplicate keys, `412.0`, byte limit),
   `tests/bundle_tar.rs` the tar and tree rules.
+- `fetch::Fetcher::{fedora_files, download_if_changed}` and `sources::fetch_euvd_list` — the
+  same downloads as the service, public so `openvibes-feed` builds a feed with them
+  (see [openvibes-feed.md](openvibes-feed.md)).
 - `rpmver::{rpmvercmp, compare_evr}` — RPM version order, exactly: RPM's own
   test vectors pass, and the `vercmp` example agrees with `rpm.vercmp` on
   4,000 real version and release pairs.
