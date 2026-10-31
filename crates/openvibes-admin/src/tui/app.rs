@@ -310,6 +310,10 @@ impl<H: Host> App<H> {
         if let Screen::Install(stage) = self.nav.screen {
             return self.install_key(stage, key);
         }
+        // Typing a new password: Esc drops the field, not the screen.
+        if self.nav.screen == Screen::LoginPassword && self.maint.login.typing() {
+            return self.login_password_key(key);
+        }
         match key {
             Key::Char('?') if !matches!(self.nav.screen, Screen::Help(_)) => {
                 self.hold_status_item();
@@ -317,6 +321,10 @@ impl<H: Host> App<H> {
                 self.nav.go(Screen::Help(from));
             }
             Key::Esc => {
+                if self.nav.screen == Screen::LoginPassword {
+                    // Nothing typed here outlives the page.
+                    self.maint.login = super::login_password::LoginPage::default();
+                }
                 if self.nav.screen == Screen::Maint(super::maint::Page::SignIn) {
                     self.signin_left();
                 }
@@ -352,6 +360,7 @@ impl<H: Host> App<H> {
                 Screen::Network => self.network_key(key),
                 Screen::Time => self.time_key(key),
                 Screen::Ssh => self.ssh_key(key),
+                Screen::LoginPassword => self.login_password_key(key),
                 Screen::Status => self.status_key(key),
                 Screen::Service(unit) => self.service_key(unit, key),
                 Screen::Log(_) => self.log_key(key),

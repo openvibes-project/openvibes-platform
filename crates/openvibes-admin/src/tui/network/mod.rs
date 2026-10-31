@@ -14,7 +14,7 @@ use std::time::Instant;
 use platform_host::network::{self, KEEP_SECONDS, Method, NetInfo};
 
 pub use draw::draw;
-pub(in crate::tui) use draw::draw_run;
+pub(in crate::tui) use draw::{draw_page, draw_run};
 pub(in crate::tui) use keys::{Edited, edit_key};
 
 /// A page row.

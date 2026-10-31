@@ -144,6 +144,8 @@ pub enum HelperCommand {
         #[command(flatten)]
         args: crate::setup::time::SetArgs,
     },
+    /// Sets the password of the account that ran sudo, from standard input.
+    LoginPassword,
     /// Chooses whether keys, passwords or both may sign in over SSH.
     SshSet {
         #[command(flatten)]
@@ -193,6 +195,7 @@ enum Verb {
     HostnameSet(String),
     TimeSet(crate::setup::time::SetArgs),
     SshSet(crate::setup::ssh::SetArgs),
+    LoginPassword,
     Ca(crate::helper_ca::CaVerb),
 }
 
@@ -285,6 +288,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::HostnameSet { name } => Verb::HostnameSet(name.clone()),
         HelperCommand::TimeSet { args } => Verb::TimeSet(args.clone()),
         HelperCommand::SshSet { args } => Verb::SshSet(args.clone()),
+        HelperCommand::LoginPassword => Verb::LoginPassword,
         HelperCommand::Ca(command) => Verb::Ca(crate::helper_ca::verb(command)?),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
@@ -402,6 +406,12 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::NetKeep => os_result(crate::setup::net::run_keep(&SystemRunner, Path::new("/"))),
         Verb::NetRevert => os_result(crate::setup::net::run_revert(&SystemRunner, Path::new("/"))),
         Verb::HostnameSet(name) => os_result(crate::setup::net::run_hostname(&SystemRunner, &name)),
+        Verb::LoginPassword => os_result(
+            crate::setup::login::read_password(&mut std::io::stdin()).and_then(|password| {
+                let user = std::env::var("SUDO_USER").ok();
+                crate::setup::login::run_password(&SystemRunner, user.as_deref(), &password)
+            }),
+        ),
         Verb::SshSet(args) => os_result(crate::setup::ssh::run_set(
             &SystemRunner,
             Path::new("/"),

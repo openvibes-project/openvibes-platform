@@ -194,6 +194,32 @@ pub(in crate::tui) fn draw_run<H: Host>(
     frame.render_widget(Paragraph::new(lines), area);
 }
 
+/// A page of rows under `title`: a note first (its style says how loud),
+/// then the list.
+pub(in crate::tui) fn draw_page<H: Host>(
+    frame: &mut Frame,
+    head: &Header,
+    app: &App<H>,
+    (title, bar): (&str, Bar),
+    (note, style): (&str, ratatui::style::Style),
+    rows: &[Row],
+) {
+    let t = &app.theme;
+    let area = frame::draw(frame, t, head, Some(title), &app.bar(bar));
+    let mut lines: Vec<Line> = wrap(note, 72, 2)
+        .into_iter()
+        .map(|l| Line::styled(format!("    {l}"), style))
+        .collect();
+    lines.push(Line::raw(""));
+    let height = area
+        .height
+        .saturating_sub(u16::try_from(lines.len()).unwrap_or(u16::MAX));
+    let mut scroll = app.nav.scroll.get();
+    lines.extend(list::lines(t, rows, app.nav.row, &mut scroll, height, 30));
+    app.nav.scroll.set(scroll);
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     if let Some(run) = net_run(app) {
         let todo = match run.work.kind {

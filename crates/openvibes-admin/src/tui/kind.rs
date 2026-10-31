@@ -93,6 +93,8 @@ pub enum Kind {
     Time,
     /// System › SSH.
     Ssh,
+    /// System › Login password.
+    LoginPassword,
 }
 
 impl Kind {
@@ -136,6 +138,7 @@ impl Kind {
             Kind::Net(NetAction::Revert) => "Putting the old settings back".into(),
             Kind::Time => "Setting the time".into(),
             Kind::Ssh => "Changing how people sign in".into(),
+            Kind::LoginPassword => "Changing the login password".into(),
         }
     }
     pub fn done(&self) -> String {
@@ -171,6 +174,7 @@ impl Kind {
             Kind::Net(NetAction::Revert) => "The old settings are back".into(),
             Kind::Time => "Time settings applied".into(),
             Kind::Ssh => "SSH sign-in changed".into(),
+            Kind::LoginPassword => "Login password changed".into(),
         }
     }
     pub fn stopped(&self) -> String {
@@ -201,6 +205,7 @@ impl Kind {
             Kind::Net(NetAction::Revert) => "The old settings could not be put back".into(),
             Kind::Time => "The time settings were not applied".into(),
             Kind::Ssh => "The SSH change was not applied".into(),
+            Kind::LoginPassword => "The password was not changed".into(),
         }
     }
     /// The password bar's label (the bar adds the colon): the shell asks
@@ -237,7 +242,7 @@ impl Kind {
             Kind::Net(NetAction::Apply { .. }) => "Apply",
             Kind::Net(NetAction::Keep) => "Keep",
             Kind::Net(NetAction::Revert) => "Put back",
-            Kind::Time | Kind::Ssh => "Apply",
+            Kind::Time | Kind::Ssh | Kind::LoginPassword => "Apply",
         }
     }
 }

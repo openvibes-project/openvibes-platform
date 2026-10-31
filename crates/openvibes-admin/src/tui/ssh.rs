@@ -3,25 +3,15 @@
 //! checks the file with `sshd -t` before `sshd` reloads. Open sessions stay.
 
 use platform_host::{Host, ssh::SshInfo};
-use ratatui::{
-    Frame,
-    text::{Line, Span},
-    widgets::Paragraph,
-};
+use ratatui::{Frame, text::Span, widgets::Paragraph};
 
 use super::{
     app::{App, Key, Question},
     kind::Kind,
     maint::{Then, failure},
-    network::draw_run,
+    network::{draw_page, draw_run},
     run::{Call, Run, Work},
-    status::wrap,
-    ui::{
-        bar::Bar,
-        frame,
-        list::{self, Row},
-        logo::Header,
-    },
+    ui::{bar::Bar, frame, list::Row, logo::Header},
 };
 
 /// A page row.
@@ -157,44 +147,20 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         Some(At::Apply) => Bar::keys(&[("Enter", "Apply")]),
         _ => Bar::keys(&[("Space", "Select/deselect")]),
     };
-    let area = frame::draw(frame, t, head, Some("SSH"), &app.bar(bar));
-    let mut lines = Vec::new();
-    if let Some(said) = &page.said {
-        lines.extend(
-            wrap(said, 72, 2)
-                .into_iter()
-                .map(|l| Line::styled(format!("    {l}"), t.yellow())),
-        );
-    } else {
-        let help = match at {
-            Some(At::Apply) if page.locks_out() => {
-                "This account has no authorized key. With passwords off nobody could sign in over SSH; the console still takes the password."
-            }
-            Some(At::Apply) => "Open sessions stay; new ones follow the new choice.",
-            _ => "At least one of the two stays on.",
-        };
-        lines.extend(
-            wrap(help, 72, 2)
-                .into_iter()
-                .map(|l| Line::styled(format!("    {l}"), t.dim())),
-        );
-    }
-    lines.push(Line::raw(""));
+    let note = match (&page.said, at) {
+        (Some(said), _) => (said.as_str(), t.yellow()),
+        (None, Some(At::Apply)) if page.locks_out() => (
+            "This account has no authorized key. With passwords off nobody could sign in over SSH; the console still takes the password.",
+            t.dim(),
+        ),
+        (None, Some(At::Apply)) => (
+            "Open sessions stay; new ones follow the new choice.",
+            t.dim(),
+        ),
+        _ => ("At least one of the two stays on.", t.dim()),
+    };
     let list_rows: Vec<Row> = rows.iter().map(|r| row(app, page, *r)).collect();
-    let height = area
-        .height
-        .saturating_sub(u16::try_from(lines.len()).unwrap_or(u16::MAX));
-    let mut scroll = app.nav.scroll.get();
-    lines.extend(list::lines(
-        t,
-        &list_rows,
-        app.nav.row,
-        &mut scroll,
-        height,
-        30,
-    ));
-    app.nav.scroll.set(scroll);
-    frame.render_widget(Paragraph::new(lines), area);
+    draw_page(frame, head, app, ("SSH", bar), note, &list_rows);
 }
 
 impl<H: Host> App<H> {
@@ -208,17 +174,10 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn ssh_key(&mut self, key: Key) {
-        if let Some(run) = ssh_run(self) {
-            if run.running() || key != Key::Enter {
-                return;
-            }
-            if run.ok() {
-                self.open_ssh();
-            } else if let Some(at) = run.stopped_at() {
-                let work = run.work.clone();
-                self.begin(work, at);
-            }
-            return;
+        match self.run_key(&key, |k| matches!(k, Kind::Ssh)) {
+            Some(true) => return self.open_ssh(),
+            Some(false) => return,
+            None => {}
         }
         let count = self.maint.ssh.rows().len();
         let space = key == Key::Char(' ');

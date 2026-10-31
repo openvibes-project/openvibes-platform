@@ -363,3 +363,28 @@ impl<H: Host> App<H> {
         }
     }
 }
+
+impl<H: platform_host::Host> App<H> {
+    /// A finished or running run of this page's kind takes the key: Enter
+    /// on a failure tries again. `None`: no such run (the page takes the
+    /// key); `Some(true)`: it ended well and Enter was pressed (the page
+    /// starts over); `Some(false)`: handled.
+    pub(in crate::tui) fn run_key(
+        &mut self,
+        key: &Key,
+        mine: impl Fn(&crate::tui::kind::Kind) -> bool,
+    ) -> Option<bool> {
+        let run = self.run.as_ref().filter(|r| mine(&r.work.kind))?;
+        if run.running() || *key != Key::Enter {
+            return Some(false);
+        }
+        if run.ok() {
+            return Some(true);
+        }
+        if let Some(at) = run.stopped_at() {
+            let work = run.work.clone();
+            self.begin(work, at);
+        }
+        Some(false)
+    }
+}
