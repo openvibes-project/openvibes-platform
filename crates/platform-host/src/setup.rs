@@ -376,6 +376,9 @@ pub enum Privileged<'a> {
     TimeSet(&'a [String]),
     /// `ssh-set --keys yes|no --passwords yes|no`: how people may sign in over SSH.
     SshSet(&'a [String]),
+    /// `login-password`: the new password of the account that ran sudo, on
+    /// stdin (never argv); journalled as `login-password`.
+    LoginPassword(&'a Secret),
 }
 
 impl Privileged<'_> {
@@ -449,6 +452,7 @@ impl Privileged<'_> {
                 all.extend(args.iter().cloned());
                 all
             }
+            Privileged::LoginPassword(_) => vec!["login-password".into()],
             Privileged::SshSet(args) => {
                 let mut all = vec!["ssh-set".to_owned()];
                 all.extend(args.iter().cloned());
@@ -462,7 +466,9 @@ impl Privileged<'_> {
     #[must_use]
     pub fn stdin(&self, password: Option<&Secret>) -> Option<Zeroizing<Vec<u8>>> {
         let input = match self {
-            Privileged::CaImport(bundle) | Privileged::ConsoleCertSet(bundle) => bundle.expose(),
+            Privileged::CaImport(bundle)
+            | Privileged::ConsoleCertSet(bundle)
+            | Privileged::LoginPassword(bundle) => bundle.expose(),
             _ => "",
         };
         if password.is_none() && input.is_empty() {

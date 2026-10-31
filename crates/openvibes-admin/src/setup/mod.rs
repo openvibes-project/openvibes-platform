@@ -19,6 +19,7 @@ mod fake;
 mod fetch_domain;
 mod fleet;
 pub(crate) mod import;
+pub(crate) mod login;
 pub(crate) mod net;
 pub(crate) mod os;
 mod pg_health;

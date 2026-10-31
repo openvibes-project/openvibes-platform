@@ -52,6 +52,8 @@ pub enum Program {
     Timedatectl,
     /// Checks the SSH daemon's configuration (the appliance's System › SSH).
     Sshd,
+    /// Sets a login password from standard input (the appliance's System › Login password).
+    Chpasswd,
 }
 
 impl Program {
@@ -82,6 +84,7 @@ impl Program {
             Program::Hostnamectl => "/usr/bin/hostnamectl",
             Program::Timedatectl => "/usr/bin/timedatectl",
             Program::Sshd => "/usr/sbin/sshd",
+            Program::Chpasswd => "/usr/sbin/chpasswd",
         }
     }
 }

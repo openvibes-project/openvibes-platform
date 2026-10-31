@@ -124,5 +124,12 @@ fn the_network_verbs_carry_their_arguments_and_nothing_else() {
         Privileged::SshSet(&ssh).args(),
         ["ssh-set", "--keys", "yes", "--passwords", "no"]
     );
+    let secret = crate::Secret::new("a new password".into());
+    assert_eq!(
+        Privileged::LoginPassword(&secret).args(),
+        ["login-password"]
+    );
+    let stdin = Privileged::LoginPassword(&secret).stdin(None).unwrap();
+    assert_eq!(&**stdin, b"a new password");
     assert!(Privileged::NetKeep.stdin(None).is_none());
 }
