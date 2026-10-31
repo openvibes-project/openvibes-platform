@@ -56,6 +56,8 @@ pub(super) struct SetupHost {
     pub(super) silent: RefCell<Vec<String>>,
     /// `time_info()`: the clock settings; none: no timedatectl.
     pub(super) time: RefCell<Option<platform_host::timesync::TimeInfo>>,
+    /// `ssh_info()`: who may sign in; none: no sshd.
+    pub(super) ssh: RefCell<Option<platform_host::ssh::SshInfo>>,
     /// `is_appliance()`: Home adds System and Log out.
     pub(super) appliance: Cell<bool>,
 }
@@ -97,6 +99,9 @@ impl Host for SetupHost {
     }
     fn network_info(&self) -> Option<platform_host::network::NetInfo> {
         self.net.borrow().clone()
+    }
+    fn ssh_info(&self) -> Option<platform_host::ssh::SshInfo> {
+        *self.ssh.borrow()
     }
     fn time_info(&self) -> Option<platform_host::timesync::TimeInfo> {
         self.time.borrow().clone()
@@ -212,6 +217,7 @@ fn built(
         net: RefCell::new(None),
         silent: RefCell::new(Vec::new()),
         time: RefCell::new(None),
+        ssh: RefCell::new(None),
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

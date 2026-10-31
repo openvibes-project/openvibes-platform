@@ -374,6 +374,8 @@ pub enum Privileged<'a> {
     HostnameSet(&'a str),
     /// `time-set --servers LIST --zone ZONE`: the NTP servers and the time zone.
     TimeSet(&'a [String]),
+    /// `ssh-set --keys yes|no --passwords yes|no`: how people may sign in over SSH.
+    SshSet(&'a [String]),
 }
 
 impl Privileged<'_> {
@@ -444,6 +446,11 @@ impl Privileged<'_> {
             Privileged::HostnameSet(name) => vec!["hostname-set".into(), (*name).into()],
             Privileged::TimeSet(args) => {
                 let mut all = vec!["time-set".to_owned()];
+                all.extend(args.iter().cloned());
+                all
+            }
+            Privileged::SshSet(args) => {
+                let mut all = vec!["ssh-set".to_owned()];
                 all.extend(args.iter().cloned());
                 all
             }
