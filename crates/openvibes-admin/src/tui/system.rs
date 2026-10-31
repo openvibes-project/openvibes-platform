@@ -25,8 +25,24 @@ use super::{
     },
 };
 
-/// The page's entries: (name, what it does).
-const ENTRIES: [(&str, &str); 2] = [("Restart", ""), ("Shut down", "")];
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Entry {
+    Network,
+    Restart,
+    PowerOff,
+}
+
+/// The page's entries: (entry, name, value). Network only where
+/// NetworkManager has a wired connection (read when the page opens).
+fn entries<H: Host>(app: &App<H>) -> Vec<(Entry, &'static str, String)> {
+    let mut all = Vec::new();
+    if let Some(line) = &app.maint.net.menu {
+        all.push((Entry::Network, "Network", line.clone()));
+    }
+    all.push((Entry::Restart, "Restart", String::new()));
+    all.push((Entry::PowerOff, "Shut down", String::new()));
+    all
+}
 
 fn power_run<H: Host>(app: &App<H>) -> Option<&Run> {
     app.run.as_ref().filter(|r| {
@@ -68,9 +84,11 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         frame.render_widget(Paragraph::new(lines), area);
         return;
     }
-    let bar = app.bar(Bar::keys(&[("Enter", ENTRIES[app.nav.row].0)]));
+    let all = entries(app);
+    let label = all.get(app.nav.row).map_or("Open", |e| e.1);
+    let bar = app.bar(Bar::keys(&[("Enter", label)]));
     let area = frame::draw(frame, t, head, Some("System"), &bar);
-    let rows: Vec<Row> = ENTRIES.iter().map(|(n, v)| Row::entry(n, v)).collect();
+    let rows: Vec<Row> = all.iter().map(|(_, n, v)| Row::entry(n, v)).collect();
     let mut scroll = app.nav.scroll.get();
     let lines = list::lines(t, &rows, app.nav.row, &mut scroll, area.height, 18);
     app.nav.scroll.set(scroll);
@@ -83,6 +101,10 @@ impl<H: Host> App<H> {
         if power_run(self).is_some_and(|r| !r.running()) {
             self.run = None;
         }
+        self.maint.net.menu = self
+            .host
+            .network_info()
+            .map(|info| super::network::menu_line(&info));
         self.nav.go(Screen::System);
     }
 
@@ -95,14 +117,23 @@ impl<H: Host> App<H> {
             }
             return;
         }
-        if self.move_row(&key, ENTRIES.len()) || key != Key::Enter {
+        let all = entries(self);
+        if self.move_row(&key, all.len()) || key != Key::Enter {
+            return;
+        }
+        let Some((entry, ..)) = all.get(self.nav.row) else {
+            return;
+        };
+        if *entry == Entry::Network {
+            self.nav.go(Screen::Network);
+            self.open_network();
             return;
         }
         if let Some(why) = busy(self) {
             self.outcome = Some((false, why));
             return;
         }
-        let (text, detail, then) = if self.nav.row == 0 {
+        let (text, detail, then) = if *entry == Entry::Restart {
             ("Restart the appliance?", "about 1 minute", Then::OsRestart)
         } else {
             (

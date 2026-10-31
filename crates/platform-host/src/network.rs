@@ -191,7 +191,8 @@ pub fn cidr(text: &str) -> Option<(Ipv4Addr, u8)> {
     Some((host_address(address)?, prefix))
 }
 
-fn same_subnet(a: Ipv4Addr, b: Ipv4Addr, prefix: u8) -> bool {
+#[must_use]
+pub fn same_subnet(a: Ipv4Addr, b: Ipv4Addr, prefix: u8) -> bool {
     let mask = u32::MAX << (32 - u32::from(prefix));
     u32::from(a) & mask == u32::from(b) & mask
 }

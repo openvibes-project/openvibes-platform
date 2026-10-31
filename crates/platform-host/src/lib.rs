@@ -264,6 +264,10 @@ pub trait Host {
     fn is_appliance(&self) -> bool {
         false
     }
+    /// Does the DNS server at `server` answer a query?
+    fn dns_answers(&self, server: &str) -> bool {
+        network::dns_answers(server)
+    }
     /// The wired connection's IPv4 settings and the host name (System ›
     /// Network); `None` where NetworkManager is not in use.
     fn network_info(&self) -> Option<network::NetInfo> {

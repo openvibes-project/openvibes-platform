@@ -119,6 +119,8 @@ pub struct Maint {
     pub sso: Option<String>,
     /// Operating system: the distribution and last check, read when the page opens.
     pub os: Option<platform_host::os_updates::OsInfo>,
+    /// System › Network: the connection, the edits, the value being typed.
+    pub net: super::network::Net,
 }
 
 impl Maint {
@@ -128,6 +130,7 @@ impl Maint {
             || self.typing
             || self.ports.typing()
             || self.names.typing()
+            || self.net.typing()
             || self.replace.picking()
     }
 }
@@ -143,6 +146,7 @@ pub enum Then {
     OsUpdate,
     OsRestart,
     OsPowerOff,
+    NetApply,
     Replace,
     ConsoleCertSet,
     ConsoleCertReset,
@@ -437,6 +441,7 @@ impl<H: Host> App<H> {
             Then::OsUpdate => self.os_update_yes(),
             Then::OsRestart => self.os_restart_yes(),
             Then::OsPowerOff => self.os_power_off_yes(),
+            Then::NetApply => self.net_apply_yes(),
             Then::Parts => self.parts_yes(),
             Then::Ports => self.ports_yes(),
             Then::Names => self.names_yes(),
@@ -465,6 +470,7 @@ impl<H: Host> App<H> {
             self.replace_ended();
             self.console_cert_ended();
             self.os_ended();
+            self.net_ended();
         }
     }
 }

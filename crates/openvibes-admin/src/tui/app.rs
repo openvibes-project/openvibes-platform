@@ -349,6 +349,7 @@ impl<H: Host> App<H> {
                 Screen::Maintenance => self.menu_key(key),
                 Screen::Maint(page) => self.maint_key(page, key),
                 Screen::System => self.system_key(key),
+                Screen::Network => self.network_key(key),
                 Screen::Status => self.status_key(key),
                 Screen::Service(unit) => self.service_key(unit, key),
                 Screen::Log(_) => self.log_key(key),
@@ -408,6 +409,7 @@ impl<H: Host> App<H> {
         }
         self.poll(now);
         self.poll_runs(now);
+        self.net_tick();
         self.poll_folder(now);
     }
 

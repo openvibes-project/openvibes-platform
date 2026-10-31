@@ -17,6 +17,7 @@ mod maint;
 mod nav;
 #[cfg(test)]
 mod nav_tests;
+mod network;
 mod password;
 mod run;
 mod run_app;
