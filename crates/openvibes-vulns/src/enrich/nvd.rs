@@ -208,16 +208,42 @@ pub struct RawMatch {
     pub end_including: Option<String>,
 }
 
+/// Most operating systems one record lists.
+pub(super) const MAX_OS: usize = 256;
+
+/// Whether `entry` is a well-formed operating-system name of a slim NVD
+/// record: `vendor:product:version`, each part 1 to 64 characters from
+/// `a-z 0-9 . _ ~ + -`.
+pub(super) fn os_ok(entry: &str) -> bool {
+    let parts: Vec<&str> = entry.split(':').collect();
+    parts.len() == 3
+        && parts.iter().all(|p| {
+            (1..=64).contains(&p.len())
+                && p.bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._~+-".contains(&b))
+        })
+}
+
+/// The Fedora releases among operating-system names: what the platform uses
+/// of the list today.
+pub(super) fn fedora_releases(os: &[String]) -> Vec<String> {
+    os.iter()
+        .filter_map(|o| o.strip_prefix("fedoraproject:fedora:"))
+        .map(str::to_owned)
+        .collect()
+}
+
 /// What the platform keeps of one NVD record's configurations: the
 /// `vulnerable` application matches of single `OR` nodes (`AND`
 /// configurations pair a product with a platform and are skipped, as are
-/// negated nodes and exclusive starts, which are rare), and the Fedora
-/// releases NVD lists as affected. Rejected records give nothing.
+/// negated nodes and exclusive starts, which are rare), and every operating
+/// system NVD lists as affected, as sorted `vendor:product:version` names.
+/// Rejected records give nothing.
 pub(super) fn kept_matches(cve: &Value) -> (Vec<RawMatch>, Vec<String>) {
-    let mut fedora = Vec::new();
+    let mut systems = Vec::new();
     let mut kept = Vec::new();
     if cve["vulnStatus"] == "Rejected" {
-        return (kept, fedora);
+        return (kept, systems);
     }
     for config in cve["configurations"].as_array().into_iter().flatten() {
         let and = config["operator"] == "AND";
@@ -230,8 +256,14 @@ pub(super) fn kept_matches(cve: &Value) -> (Vec<RawMatch>, Vec<String>) {
                 if parts.len() < 7 || found["vulnerable"] != true {
                     continue;
                 }
-                if parts[2] == "o" && parts[3] == "fedoraproject" && parts[4] == "fedora" {
-                    fedora.extend(cpe_version(parts[5], parts[6]));
+                if parts[2] == "o" {
+                    if let Some(version) = cpe_version(parts[5], parts[6]) {
+                        let name =
+                            format!("{}:{}:{version}", parts[3], parts[4]).to_ascii_lowercase();
+                        if os_ok(&name) {
+                            systems.push(name);
+                        }
+                    }
                     continue;
                 }
                 if parts[2] != "a" || and || node["operator"] != "OR" || node["negate"] == true {
@@ -250,9 +282,10 @@ pub(super) fn kept_matches(cve: &Value) -> (Vec<RawMatch>, Vec<String>) {
             }
         }
     }
-    fedora.sort();
-    fedora.dedup();
-    (kept, fedora)
+    systems.sort();
+    systems.dedup();
+    systems.truncate(MAX_OS);
+    (kept, systems)
 }
 
 /// The affected application ranges of one NVD record, with the Fedora
@@ -262,7 +295,8 @@ fn applicability(cve: &Value) -> Vec<Applicability> {
         return Vec::new();
     };
     let cvss = cvss(&cve["metrics"]).map(|s| s.0);
-    let (kept, fedora) = kept_matches(cve);
+    let (kept, systems) = kept_matches(cve);
+    let fedora = fedora_releases(&systems);
     kept.iter()
         .filter_map(|m| {
             let mut row = range_row(

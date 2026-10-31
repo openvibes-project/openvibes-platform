@@ -11,7 +11,10 @@ use serde_json::Value;
 
 use super::{
     is_cve,
-    nvd::{Applicability, Nvd, RawMatch, cvss, kept_matches, range_row, record, truncate},
+    nvd::{
+        Applicability, MAX_OS, Nvd, RawMatch, cvss, fedora_releases, kept_matches, os_ok,
+        range_row, record, truncate,
+    },
 };
 use crate::updateinfo::ParseError;
 
@@ -56,6 +59,10 @@ pub struct SlimRecord {
     /// Affected application ranges.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ranges: Vec<SlimRange>,
+    /// Every operating system NVD lists as affected, as sorted
+    /// `vendor:product:version` names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub os: Vec<String>,
 }
 
 /// A CVSS score.
@@ -148,7 +155,7 @@ fn severity(cve: &Value, score: f32) -> String {
 pub fn slim_record(cve: &Value) -> Option<SlimRecord> {
     let kept: Nvd = record(cve)?;
     let scored = cvss(&cve["metrics"]);
-    let (matches, _) = kept_matches(cve);
+    let (matches, os) = kept_matches(cve);
     // Bounds are cut to 64 bytes as the API sync cuts them, and a range the
     // reader would refuse is left out, so the file is never refused.
     let cut = |bound: Option<String>| bound.map(|b| truncate(&b, MAX_BOUND));
@@ -178,6 +185,7 @@ pub fn slim_record(cve: &Value) -> Option<SlimRecord> {
         cwe: kept.cwe,
         description: kept.description,
         ranges,
+        os,
     })
 }
 
@@ -253,7 +261,9 @@ pub fn parse_slim(content: &[u8], max_open: u64) -> Result<SlimPage, ParseError>
                 c.vector.len() > MAX_VECTOR
                     || !["4.0", "3.1", "3.0", "2.0"].contains(&c.version.as_str())
             })
-            || !record.ranges.iter().all(range_ok);
+            || !record.ranges.iter().all(range_ok)
+            || record.os.len() > MAX_OS
+            || !record.os.iter().all(|o| os_ok(o));
         if bad {
             return Err(ParseError::Malformed);
         }
@@ -263,19 +273,27 @@ pub fn parse_slim(content: &[u8], max_open: u64) -> Result<SlimPage, ParseError>
             .as_deref()
             .and_then(|t| chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%S%.f").ok())
             .map(|t| t.and_utc());
+        // The platform uses the Fedora releases among them, as the API sync does.
+        let fedora = fedora_releases(&record.os);
         for range in &record.ranges {
             // An exclusive start is skipped, as the API sync does.
             if range.start_excluding.is_some() {
                 continue;
             }
-            applicability.extend(range_row(
-                &record.id,
-                score,
-                &range.cpe,
-                range.start_including.as_deref(),
-                range.end_excluding.as_deref(),
-                range.end_including.as_deref(),
-            ));
+            applicability.extend(
+                range_row(
+                    &record.id,
+                    score,
+                    &range.cpe,
+                    range.start_including.as_deref(),
+                    range.end_excluding.as_deref(),
+                    range.end_including.as_deref(),
+                )
+                .map(|mut row| {
+                    row.fedora.clone_from(&fedora);
+                    row
+                }),
+            );
         }
         entries.push(Nvd {
             cve_id: record.id,

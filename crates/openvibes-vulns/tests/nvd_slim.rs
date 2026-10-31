@@ -54,11 +54,9 @@ fn a_slim_file_gives_the_rows_the_api_gives() {
     want.sort_by(by_id);
     entries.sort_by(by_id);
     assert_eq!(entries, want);
-    // The same ranges; the Fedora releases NVD lists are not in the slim form.
+    // The same ranges, with the same Fedora releases.
     let mut want = api.applicability.clone();
-    for range in &mut want {
-        range.fedora.clear();
-    }
+    assert!(want.iter().any(|r| !r.fedora.is_empty()));
     let key = |r: &platform_store::cpe::Applicability| {
         (
             r.cve_id.clone(),
@@ -162,4 +160,21 @@ fn the_builder_writes_only_what_the_reader_accepts() {
     };
     assert_eq!(long(&page.applicability), long(&api.applicability));
     assert_eq!(page.applicability.len(), 2);
+}
+
+/// The protocol's vectors: every case says whether a reader accepts the file.
+#[test]
+fn the_protocol_vectors_are_read_as_they_say() {
+    let vectors: Value =
+        serde_json::from_str(include_str!("../../../protocol/vectors/feed-slim-nvd.json")).unwrap();
+    for case in vectors["cases"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let bytes = gz(&serde_json::to_vec(&case["file"]).unwrap());
+        let read = enrich::parse_slim(&bytes, SLIM_NVD_MAX_OPEN);
+        assert_eq!(
+            read.is_ok(),
+            case["valid"].as_bool().unwrap(),
+            "{name}: {read:?}"
+        );
+    }
 }

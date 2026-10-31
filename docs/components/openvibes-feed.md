@@ -49,7 +49,9 @@ Serving `DIR` is the site's job (any static web server).
   and keeps one gzip file per CVE year (`nvd-2024.json.gz`): per CVE the newest CVSS,
   weakness ids, the English description (4 KiB) and the application ranges the
   platform matches (single `OR` nodes, `vulnerable` only; `AND` pairs, negated nodes
-  and exclusive starts are left out, as the platform leaves them out today). The
+  and exclusive starts are left out, as the platform leaves them out today) and an
+  `os` list of every operating system NVD marks affected (`vendor:product:version`,
+  at most 256, sorted; the platform uses the Fedora entries today). The
   first read is about 210 requests, so roughly 20 minutes unkeyed (6 s apart, 0.6 s
   with a key) and about 45 MB gzipped in all; later builds read only what NVD changed
   since and rewrite only the years that changed. Progress is saved after every

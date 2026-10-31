@@ -42,9 +42,11 @@ the offline core used by `openvibes-admin feeds import` and the
   survives a failed file, `--source` leaving NVD out, and a crash; in practice the
   "unchanged" skip rarely applies to NVD, and each such run parses all of it and
   rewrites the ranges of every CVE. CPE
-  findings are then recomputed (`cpe::refresh_all`). A feed's slim form does not
-  carry the Fedora releases NVD lists as affected, so those findings lack the
-  small confidence bonus the API gives them. A refused file does not stop the others.
+  findings are then recomputed (`cpe::refresh_all`). The slim
+  form's optional `os` list (every operating system NVD lists as affected,
+  `vendor:product:version`) gives the Fedora releases the same way the API sync
+  does, so feed and API installs score alike; other systems are kept for later.
+  A refused file does not stop the others.
   Tests: `tests/feed_vectors.rs` runs the shared vectors from the protocol
   repository, `tests/feed_raw.rs` raw-byte cases (duplicate keys, `412.0`, byte limit),
   `tests/bundle_tar.rs` the tar and tree rules.
