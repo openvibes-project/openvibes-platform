@@ -38,12 +38,7 @@ pub fn menu_line(info: &TimeInfo) -> String {
         Some(false) => "not in sync",
         None => "unknown",
     };
-    let servers = if info.servers.is_empty() {
-        "default servers".to_owned()
-    } else {
-        info.servers.join(", ")
-    };
-    format!("{state} · {servers} · {}", info.zone)
+    format!("{state} · {} · {}", info.in_use, info.zone)
 }
 
 impl TimePage {
@@ -83,7 +78,9 @@ impl TimePage {
         let t = typed.trim();
         match at {
             At::Servers => Some(match timesync::servers(t) {
-                Ok(list) if list.is_empty() => Ok("None: the distribution's own servers.".into()),
+                Ok(list) if list.is_empty() => {
+                    Ok("Empty: automatic. The DHCP server if there is one, else the distribution's pool.".into())
+                }
                 Ok(_) => Ok("Separate several with commas.".into()),
                 Err(why) => Err(format!("✗ {why}")),
             }),

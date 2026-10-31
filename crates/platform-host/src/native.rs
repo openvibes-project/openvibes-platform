@@ -446,8 +446,21 @@ impl<R: Runner> Host for Native<R> {
         let servers = std::fs::read_to_string(format!("/{}", timesync::DROP_IN))
             .map(|text| timesync::read_drop_in(&text))
             .unwrap_or_default();
+        let mut dhcp: Vec<_> = std::fs::read_dir(format!("/{}", timesync::DHCP_DIR))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| entry.path())
+            .collect();
+        dhcp.sort();
+        let dhcp: Vec<String> = dhcp
+            .iter()
+            .filter_map(|path| std::fs::read_to_string(path).ok())
+            .collect();
+        let conf = std::fs::read_to_string("/etc/chrony.conf").unwrap_or_default();
         Some(timesync::TimeInfo {
             zone,
+            in_use: timesync::in_use(&servers, &dhcp, &conf),
             servers,
             synced,
         })

@@ -1,8 +1,9 @@
 //! The appliance's time verb (TUI rework §7): `time-set` chooses the NTP
 //! servers `chrony` asks and the time zone. Chosen servers go in a
 //! `confdir` drop-in; since a drop-in can only add sources, the `pool` and
-//! `server` lines of the distribution's own `chrony.conf` are commented out
-//! (marked, so clearing the list puts them back). Every value is checked by
+//! `server` lines and the `sourcedir /run/chrony-dhcp` line (the servers
+//! DHCP hands out) of the distribution's own `chrony.conf` are commented
+//! out (marked, so clearing the list puts them back). Every value is checked by
 //! `platform_host::timesync` before it reaches a file or a command line.
 
 use std::{
@@ -52,11 +53,15 @@ fn run<R: Runner>(
     }
 }
 
-/// `conf` with its active `pool` and `server` lines commented out.
+/// `conf` with its active `pool`, `server` and DHCP `sourcedir` lines
+/// commented out.
 fn mark_sources(conf: &str) -> String {
     map_lines(conf, |line| {
-        let word = line.split_whitespace().next();
-        if matches!(word, Some("pool" | "server")) {
+        let mut words = line.split_whitespace();
+        let word = words.next();
+        // The DHCP-provided servers go too: only the chosen ones are asked.
+        let dhcp = word == Some("sourcedir") && words.next() == Some("/run/chrony-dhcp");
+        if matches!(word, Some("pool" | "server")) || dhcp {
             format!("{MARK}{line}")
         } else {
             line.to_owned()
