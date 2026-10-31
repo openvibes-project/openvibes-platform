@@ -596,3 +596,35 @@ async fn nvd_is_read_by_windows_and_only_changed_years_are_rewritten() {
     assert!(failed.unwrap_err().contains("nothing published"));
     assert_eq!(std::fs::read(out.join("feed.json")).unwrap(), before);
 }
+
+/// The timer and an operator must not build into one tree at the same time.
+#[test]
+fn a_second_build_or_bundle_in_the_same_tree_stops() {
+    let dir = Dir::new("lock");
+    let key = key::generate(&dir.0.join("feed.key"), "site", "k1").unwrap();
+    let out = dir.0.join("site");
+    let held = openvibes_feed::lock::hold(&out).unwrap();
+    let options = build::Options {
+        out: &out,
+        only: &[],
+        valid_days: 7,
+    };
+    let error = build::run(&Config::default(), &key, &options).unwrap_err();
+    assert!(
+        error.contains("another build or bundle is running"),
+        "{error}"
+    );
+    let error = pack::bundle(&out, &dir.0.join("x.tar")).unwrap_err();
+    assert!(
+        error.contains("another build or bundle is running"),
+        "{error}"
+    );
+    assert!(!dir.0.join("x.tar").exists());
+    assert!(
+        !out.join("feed.json").exists(),
+        "the second build wrote nothing"
+    );
+    drop(held);
+    // Free again: the lock is released when its holder ends.
+    drop(openvibes_feed::lock::hold(&out).unwrap());
+}

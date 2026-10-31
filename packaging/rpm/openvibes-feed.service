@@ -1,0 +1,42 @@
+[Unit]
+Description=Build the signed OpenVIBES data feed
+Documentation=https://github.com/openvibes-project/openvibes-platform
+After=network-online.target
+Wants=network-online.target
+# Installed on, but idle until `sudo -u openvibes-feed openvibes-feed keygen
+# /var/lib/openvibes-feed/feed.key ...` makes the signing key.
+ConditionPathExists=/var/lib/openvibes-feed/feed.key
+
+[Service]
+Type=oneshot
+User=openvibes-feed
+Group=openvibes-feed
+ExecStart=/usr/bin/openvibes-feed --config /etc/openvibes/feed.toml build --out /var/lib/openvibes-feed/site --key /var/lib/openvibes-feed/feed.key
+# The first NVD read takes about 20 minutes unkeyed; later builds are short.
+TimeoutStartSec=6h
+# The tree under site/ is public data a web server may read; the signing key
+# in the same directory is its own file, mode 0600.
+StateDirectory=openvibes-feed
+StateDirectoryMode=0755
+UMask=0022
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=

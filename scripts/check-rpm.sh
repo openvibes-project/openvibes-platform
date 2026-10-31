@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifies installed openvibes-ingest, -distribution, -vulns, -admin, -signer, -fetch and -llm (run as root).
+# Verifies installed openvibes-ingest, -distribution, -vulns, -admin, -signer, -fetch, -feed and -llm (run as root).
 set -euo pipefail
 fail() { echo "FAIL: $*" >&2; exit 1; }
 expect_stat() { # PATH MODE OWNER:GROUP
@@ -106,6 +106,18 @@ out=$(/usr/bin/openvibes-distribution --config /nonexistent 2>&1) && fail "distr
 [[ "$out" == *"invalid distribution configuration"* ]] || fail "distribution error: $out"
 out=$(/usr/bin/openvibes-vulns --config /nonexistent 2>&1) && fail "vulns started without config"
 [[ "$out" == *"invalid vulns configuration"* ]] || fail "vulns error: $out"
+# The feed builder (the mirror): its own account, an idle-until-keyed daily timer.
+getent passwd openvibes-feed >/dev/null || fail "no user openvibes-feed"
+expect_stat /etc/openvibes/feed.toml 640 root:openvibes-feed
+expect_stat /var/lib/openvibes-feed 755 openvibes-feed:openvibes-feed
+rpm -qc openvibes-feed | grep -qx /etc/openvibes/feed.toml || fail "feed.toml not %config"
+systemd-analyze verify /usr/lib/systemd/system/openvibes-feed.service \
+    /usr/lib/systemd/system/openvibes-feed.timer || fail "feed unit verification"
+grep -qx 'enable openvibes-feed.timer' /usr/lib/systemd/system-preset/80-openvibes-feed.preset || fail "feed timer is not enabled by preset"
+grep -qx 'ConditionPathExists=/var/lib/openvibes-feed/feed.key' /usr/lib/systemd/system/openvibes-feed.service \
+    || fail "feed service runs without a key"
+out=$(/usr/bin/openvibes-feed --config /nonexistent build --out /tmp/feed-check --key /nonexistent 2>&1) && fail "feed built without a key"
+[[ "$out" == *"feed.key"* || "$out" == *"nonexistent"* ]] || fail "feed error: $out"
 getent passwd openvibes-netlog >/dev/null || fail "no user openvibes-netlog"
 expect_stat /etc/openvibes/netlog.toml 640 root:openvibes-netlog
 rpm -qc openvibes-ingest | grep -qx /etc/openvibes/netlog.toml || fail "netlog.toml not %config"

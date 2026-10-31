@@ -320,6 +320,7 @@ pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Repo
     if !(1..=30).contains(&options.valid_days) {
         return Err("valid days is 1 to 30".into());
     }
+    let _lock = crate::lock::hold(out)?;
     fs::create_dir_all(blobs(out)).map_err(|e| format!("cannot create {}: {e}", out.display()))?;
     let state: State = match fs::read_to_string(out.join("state.json")) {
         Ok(text) => serde_json::from_str(&text).map_err(|_| "state.json is damaged; remove it")?,
