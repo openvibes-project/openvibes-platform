@@ -104,5 +104,15 @@ fn the_network_verbs_carry_their_arguments_and_nothing_else() {
         Privileged::HostnameSet("va.lab").args(),
         ["hostname-set", "va.lab"]
     );
+    let time = [
+        "--servers".to_owned(),
+        "ntp.lab".to_owned(),
+        "--zone".to_owned(),
+        "UTC".to_owned(),
+    ];
+    assert_eq!(
+        Privileged::TimeSet(&time).args(),
+        ["time-set", "--servers", "ntp.lab", "--zone", "UTC"]
+    );
     assert!(Privileged::NetKeep.stdin(None).is_none());
 }

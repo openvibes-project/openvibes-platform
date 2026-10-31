@@ -48,6 +48,8 @@ pub enum Program {
     Nmcli,
     /// The host name (the appliance's System › Network).
     Hostnamectl,
+    /// The time zone and clock state (the appliance's System › Time).
+    Timedatectl,
 }
 
 impl Program {
@@ -76,6 +78,7 @@ impl Program {
             Program::Getent => "/usr/bin/getent",
             Program::Nmcli => "/usr/bin/nmcli",
             Program::Hostnamectl => "/usr/bin/hostnamectl",
+            Program::Timedatectl => "/usr/bin/timedatectl",
         }
     }
 }

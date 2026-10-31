@@ -12,6 +12,7 @@ pub mod service;
 pub mod setup;
 pub mod shell;
 mod stderr;
+pub mod timesync;
 pub mod unit;
 
 pub use service::{CONFIG_DIR, Service};
@@ -271,6 +272,11 @@ pub trait Host {
     /// The wired connection's IPv4 settings and the host name (System ›
     /// Network); `None` where NetworkManager is not in use.
     fn network_info(&self) -> Option<network::NetInfo> {
+        None
+    }
+    /// The time zone and NTP servers (System › Time); `None` where there
+    /// is no `timedatectl`.
+    fn time_info(&self) -> Option<timesync::TimeInfo> {
         None
     }
     /// The distribution, kernel and last update check; `None` on a host

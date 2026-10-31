@@ -407,6 +407,29 @@ impl<R: Runner> Host for Native<R> {
         Some(info)
     }
 
+    fn time_info(&self) -> Option<crate::timesync::TimeInfo> {
+        use crate::{runner::Program::Timedatectl, timesync};
+        let zone = self
+            .run(Timedatectl, &["show", "-p", "Timezone", "--value"])
+            .ok()
+            .filter(|out| out.status == 0)?
+            .stdout
+            .trim()
+            .to_owned();
+        let synced = self
+            .run(Timedatectl, &["show", "-p", "NTPSynchronized", "--value"])
+            .ok()
+            .and_then(|out| timesync::read_synced(&out.stdout));
+        let servers = std::fs::read_to_string(format!("/{}", timesync::DROP_IN))
+            .map(|text| timesync::read_drop_in(&text))
+            .unwrap_or_default();
+        Some(timesync::TimeInfo {
+            zone,
+            servers,
+            synced,
+        })
+    }
+
     fn os_update_running(&self) -> bool {
         self.run(
             Systemctl,

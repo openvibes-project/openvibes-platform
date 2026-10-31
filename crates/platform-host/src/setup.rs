@@ -372,6 +372,8 @@ pub enum Privileged<'a> {
     NetRevert,
     /// `hostname-set NAME`: the host name.
     HostnameSet(&'a str),
+    /// `time-set --servers LIST --zone ZONE`: the NTP servers and the time zone.
+    TimeSet(&'a [String]),
 }
 
 impl Privileged<'_> {
@@ -440,6 +442,11 @@ impl Privileged<'_> {
             Privileged::NetKeep => vec!["net-keep".into()],
             Privileged::NetRevert => vec!["net-revert".into()],
             Privileged::HostnameSet(name) => vec!["hostname-set".into(), (*name).into()],
+            Privileged::TimeSet(args) => {
+                let mut all = vec!["time-set".to_owned()];
+                all.extend(args.iter().cloned());
+                all
+            }
         }
     }
 
