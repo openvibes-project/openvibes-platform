@@ -124,6 +124,21 @@ pub enum HelperCommand {
     OsRestart,
     /// Shuts the host down; prints `done<TAB>shutting down`.
     OsPowerOff,
+    /// Sets the wired connection's IPv4 settings; the old ones come back
+    /// after 60 seconds unless `net-keep` is run.
+    NetApply {
+        #[command(flatten)]
+        args: crate::setup::net::ApplyArgs,
+    },
+    /// Keeps the settings `net-apply` made.
+    NetKeep,
+    /// Puts the settings from before `net-apply` back.
+    NetRevert,
+    /// Sets the host name.
+    HostnameSet {
+        /// A valid host name.
+        name: String,
+    },
     /// Does nothing and prints `done<TAB>opened`: sudo checks the password
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
@@ -162,6 +177,10 @@ enum Verb {
     OsUpdate,
     OsRestart,
     OsPowerOff,
+    NetApply(crate::setup::net::ApplyArgs),
+    NetKeep,
+    NetRevert,
+    HostnameSet(String),
     Ca(crate::helper_ca::CaVerb),
 }
 
@@ -248,6 +267,10 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::OsUpdate => Verb::OsUpdate,
         HelperCommand::OsRestart => Verb::OsRestart,
         HelperCommand::OsPowerOff => Verb::OsPowerOff,
+        HelperCommand::NetApply { args } => Verb::NetApply(args.clone()),
+        HelperCommand::NetKeep => Verb::NetKeep,
+        HelperCommand::NetRevert => Verb::NetRevert,
+        HelperCommand::HostnameSet { name } => Verb::HostnameSet(name.clone()),
         HelperCommand::Ca(command) => Verb::Ca(crate::helper_ca::verb(command)?),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
@@ -357,6 +380,14 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::OsCheck => os_result(crate::setup::os::run_check(&SystemRunner, Path::new("/"))),
         Verb::OsUpdate => os_result(crate::setup::os::run_update(&SystemRunner, Path::new("/"))),
         Verb::OsRestart => os_result(crate::setup::os::run_restart(&SystemRunner, Path::new("/"))),
+        Verb::NetApply(args) => os_result(crate::setup::net::run_apply(
+            &SystemRunner,
+            Path::new("/"),
+            &args,
+        )),
+        Verb::NetKeep => os_result(crate::setup::net::run_keep(&SystemRunner, Path::new("/"))),
+        Verb::NetRevert => os_result(crate::setup::net::run_revert(&SystemRunner, Path::new("/"))),
+        Verb::HostnameSet(name) => os_result(crate::setup::net::run_hostname(&SystemRunner, &name)),
         Verb::OsPowerOff => os_result(crate::setup::os::run_power_off(
             &SystemRunner,
             Path::new("/"),

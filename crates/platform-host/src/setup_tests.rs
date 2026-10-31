@@ -90,3 +90,19 @@ fn the_os_verbs_take_no_arguments_and_no_input() {
         assert!(verb.stdin(None).is_none());
     }
 }
+
+#[test]
+fn the_network_verbs_carry_their_arguments_and_nothing_else() {
+    let args = vec!["--mode".to_owned(), "dhcp".to_owned()];
+    assert_eq!(
+        Privileged::NetApply(&args).args(),
+        ["net-apply", "--mode", "dhcp"]
+    );
+    assert_eq!(Privileged::NetKeep.args(), ["net-keep"]);
+    assert_eq!(Privileged::NetRevert.args(), ["net-revert"]);
+    assert_eq!(
+        Privileged::HostnameSet("va.lab").args(),
+        ["hostname-set", "va.lab"]
+    );
+    assert!(Privileged::NetKeep.stdin(None).is_none());
+}

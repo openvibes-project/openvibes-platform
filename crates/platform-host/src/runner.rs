@@ -44,6 +44,10 @@ pub enum Program {
     Ip,
     /// User accounts, directory users (SSSD, FreeIPA, LDAP) included.
     Getent,
+    /// NetworkManager (the appliance's System › Network).
+    Nmcli,
+    /// The host name (the appliance's System › Network).
+    Hostnamectl,
 }
 
 impl Program {
@@ -70,6 +74,8 @@ impl Program {
             Program::Journalctl => "/usr/bin/journalctl",
             Program::Ip => "/usr/sbin/ip",
             Program::Getent => "/usr/bin/getent",
+            Program::Nmcli => "/usr/bin/nmcli",
+            Program::Hostnamectl => "/usr/bin/hostnamectl",
         }
     }
 }
