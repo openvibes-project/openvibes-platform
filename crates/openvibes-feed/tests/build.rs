@@ -295,13 +295,65 @@ async fn a_build_verifies_reuses_unchanged_files_and_packs() {
             .any(|f| f.source == "kev")
     );
 
+    // When every source fails, nothing is signed: the old feed keeps ageing.
+    let before = std::fs::read(out.join("feed.json")).unwrap();
+    up.files.lock().unwrap().clear();
+    let (c, k, o) = (
+        cfg.clone(),
+        key::load(&dir.0.join("k")).unwrap(),
+        out.clone(),
+    );
+    let down = tokio::task::spawn_blocking(move || {
+        build::run(
+            &c,
+            &k,
+            &build::Options {
+                out: &o,
+                only: &[],
+                valid_days: 7,
+            },
+        )
+    })
+    .await
+    .unwrap();
+    assert!(down.unwrap_err().contains("nothing published"));
+    assert_eq!(std::fs::read(out.join("feed.json")).unwrap(), before);
+    publish(&up, addr);
+    up.files.lock().unwrap().remove("kev");
+
     // A subset build into its own tree carries only those sources.
     let small = dir.0.join("small");
-    let (c, k, o) = (cfg, key::load(&dir.0.join("k")).unwrap(), small.clone());
+    let (c, k, o) = (
+        cfg.clone(),
+        key::load(&dir.0.join("k")).unwrap(),
+        small.clone(),
+    );
     let only = vec!["fedora-44-x86_64".to_owned()];
     let subset = tokio::task::spawn_blocking(move || run(&c, &k, &o, &only))
         .await
         .unwrap();
+    // A subset build into the existing tree leaves the other sources as they were.
+    let (c, k, o) = (
+        cfg.clone(),
+        key::load(&dir.0.join("k")).unwrap(),
+        out.clone(),
+    );
+    let only = vec!["epss".to_owned()];
+    tokio::task::spawn_blocking(move || run(&c, &k, &o, &only))
+        .await
+        .unwrap();
+    assert_eq!(verified(&out, &key).manifest.files.len(), 6);
+    // Valid days outside 1 to 30 are refused.
+    let bad = build::run(
+        &cfg,
+        &key,
+        &build::Options {
+            out: &out,
+            only: &[],
+            valid_days: 99,
+        },
+    );
+    assert!(bad.is_err());
     // The sequence is at least the Unix time, so a second tree built later
     // with the same key still sorts after the first (builds are hours apart).
     assert!(subset.sequence >= first.sequence);

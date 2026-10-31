@@ -317,6 +317,9 @@ fn osv(
 /// [`Report::failed`].
 pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Report, String> {
     let out = options.out;
+    if !(1..=30).contains(&options.valid_days) {
+        return Err("valid days is 1 to 30".into());
+    }
     fs::create_dir_all(blobs(out)).map_err(|e| format!("cannot create {}: {e}", out.display()))?;
     let state: State = match fs::read_to_string(out.join("state.json")) {
         Ok(text) => serde_json::from_str(&text).map_err(|_| "state.json is damaged; remove it")?,
@@ -340,7 +343,10 @@ pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Repo
         config.max_file_bytes,
     )?;
 
-    let mut got = Collected::default();
+    let mut got = Collected {
+        out: out.to_owned(),
+        ..Collected::default()
+    };
     let prev = |key: &str| state.files.get(key);
 
     if wants(options.only, "kev") && !config.kev_url.is_empty() {
@@ -419,8 +425,25 @@ pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Repo
         got.one(&source, &key, result, prev(&key));
     }
 
-    if got.current.is_empty() {
-        return Err(format!("nothing to publish\n{}", got.lines.join("\n")));
+    // Nothing fetched or confirmed unchanged in this run: signing earlier
+    // copies with a new `created_at` would make an outage look fresh, so the
+    // old feed is left to expire.
+    if got.fetched == 0 {
+        return Err(format!(
+            "no source could be fetched; nothing published\n{}",
+            got.lines.join("\n")
+        ));
+    }
+    // Sources this run did not ask for stay as the last build had them.
+    if !options.only.is_empty() {
+        for (key, held) in &state.files {
+            let source = key.rsplit_once('/').map_or("", |(s, _)| s);
+            if !wants(options.only, source) && blob_exists(out, &held.sha256) {
+                got.current
+                    .entry(key.clone())
+                    .or_insert_with(|| held.clone());
+            }
+        }
     }
     let created = now;
     let expires = now + i64::from(options.valid_days) * 86_400;
@@ -495,6 +518,9 @@ pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Repo
 /// Files gathered during a build, with the lines that describe them.
 #[derive(Default)]
 struct Collected {
+    out: PathBuf,
+    /// Files fetched, or confirmed unchanged, in this run.
+    fetched: usize,
     current: BTreeMap<String, Held>,
     lines: Vec<String>,
     failed: usize,
@@ -512,6 +538,7 @@ impl Collected {
                     "new"
                 };
                 self.lines.push(format!("{key} {how} {} bytes", held.size));
+                self.fetched += 1;
                 self.current.insert(key.to_owned(), held);
             }
             Err(error) => {
@@ -523,7 +550,7 @@ impl Collected {
     }
 
     fn keep(&mut self, key: &str, earlier: Option<&Held>) {
-        if let Some(held) = earlier {
+        if let Some(held) = earlier.filter(|h| blob_exists(&self.out, &h.sha256)) {
             self.lines.push(format!("{key} kept from an earlier build"));
             self.current.insert(key.to_owned(), held.clone());
         }
