@@ -10,6 +10,7 @@ base64.workspace = true
 chrono.workspace = true
 clap.workspace = true
 ed25519-dalek.workspace = true
+flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 openvibes-vulns = { path = "../openvibes-vulns" }
 ring.workspace = true
 serde.workspace = true

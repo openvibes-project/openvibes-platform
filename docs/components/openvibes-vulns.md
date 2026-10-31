@@ -32,8 +32,15 @@ the offline core used by `openvibes-admin feeds import` and the
   not older than the file applied before): `updateinfo` (its `repomd` in the same feed is required and
   must name the same digest) through `feed::import`, `osv` through the
   `osv::read_zip` path for the releases hosts run, `kev`, `epss` and `euvd`
-  through `enrich::import`. A refused file does not stop the others; slim
-  NVD files are verified and reported `skipped` until their importer exists.
+  through `enrich::import`. Slim NVD year files (`enrich::parse_slim`, gzip JSON) go
+  through the same rows the API sync stores: the enrichment of CVEs advisories name
+  (`upsert_nvd`) and the ranges of installed products (`replace_applicability`, one
+  shared `range_row` for both paths). NVD files are applied last, and read again
+  even when unchanged if the run applied advisories or a new installed product
+  appeared (the files keep only what advisories and products asked for); CPE
+  findings are then recomputed (`cpe::refresh_all`). A feed's slim form does not
+  carry the Fedora releases NVD lists as affected, so those findings lack the
+  small confidence bonus the API gives them. A refused file does not stop the others.
   Tests: `tests/feed_vectors.rs` runs the shared vectors from the protocol
   repository, `tests/feed_raw.rs` raw-byte cases (duplicate keys, `412.0`, byte limit),
   `tests/bundle_tar.rs` the tar and tree rules.

@@ -25,7 +25,7 @@ vulnerability service's.)
 | `openvibes-feed bundle DIR --out FILE.tar` | packs a built tree (`feed.json` first, then its blobs) into a new tar for carrying across an air gap |
 
 `--sources` takes `fedora-<release>-<arch>`, `debian`, `ubuntu`, `rocky-linux`,
-`almalinux`, `kev`, `epss`, `euvd`. A smaller bundle is a smaller feed: build
+`almalinux`, `kev`, `epss`, `euvd`, `nvd`. A smaller bundle is a smaller feed: build
 the sources an air-gapped site runs into their own directory, then bundle it.
 Serving `DIR` is the site's job (any static web server).
 
@@ -44,6 +44,19 @@ Serving `DIR` is the site's job (any static web server).
   verifier before `feed.json` is renamed into place.
 - **Blobs of the last two manifests are kept** so a reader that fetched the
   previous `feed.json` can still finish; older ones are removed.
+- **NVD is carried in full, as slim year files.** The builder reads NVD's API by
+  last-modified windows of up to 120 days, exactly as the platform's own sync does,
+  and keeps one gzip file per CVE year (`nvd-2024.json.gz`): per CVE the newest CVSS,
+  weakness ids, the English description (4 KiB) and the application ranges the
+  platform matches (single `OR` nodes, `vulnerable` only; `AND` pairs, negated nodes
+  and exclusive starts are left out, as the platform leaves them out today). The
+  first read is about 210 requests, so roughly 20 minutes unkeyed (6 s apart, 0.6 s
+  with a key) and about 45 MB gzipped in all; later builds read only what NVD changed
+  since and rewrite only the years that changed. Progress is saved after every
+  window in `DIR/nvd-state.json`, so an interrupted first read resumes. **NVD joins the
+  feed only once a first read has reached the present**, so a platform never imports half
+  of it; until then the build says so and the other sources publish as usual. If NVD is
+  unreachable later, the files from the last finished read stay in the feed.
 - State between builds is `DIR/state.json` (ETags and the files last
   published); remove it to start over.
 
@@ -58,17 +71,19 @@ fedora = ["fedora-44-x86_64"]               # empty: no Fedora
 osv_releases = ["debian-12", "ubuntu-24.04", "rocky-9", "almalinux-9"]
 # proxy_url = "http://proxy.example:3128"
 # valid_days = 7                            # 1 to 30
-# metalink_url, osv_url, kev_url, epss_url, euvd_url: as in vulns.toml;
+# metalink_url, osv_url, kev_url, epss_url, euvd_url, nvd_url: as in vulns.toml;
 # "" leaves a source out
+# nvd_api_key_file = "/etc/openvibes/nvd.key"   # asks NVD every 0.6 s, not 6 s
 ```
 
 ## Not here yet
 
-Slim NVD files (step 3b), the RPM, user and daily timer (step 3c), and the
+The RPM, user and daily timer (step 3c), and the
 platform's own mirror sync and console views (steps 4 and 5).
 
 ## Test
 
 `cargo test -p openvibes-feed`: a build against a local upstream (first build,
-reuse by 304, a failing source, a subset tree), the result verified as a
+reuse by 304, a failing source, a subset tree; NVD read by windows from a fake
+API, only the changed year rewritten), the result verified as a
 platform verifies it, and a bundle unpacked by the platform's reader.

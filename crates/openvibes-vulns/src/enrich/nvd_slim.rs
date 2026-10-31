@@ -28,7 +28,7 @@ const MAX_BOUND: usize = 64;
 /// A slim year file.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SlimFile {
-    /// Always [`FORMAT`].
+    /// Always 1.
     pub format: u32,
     /// The year in the CVE ids of every record.
     pub year: u32,

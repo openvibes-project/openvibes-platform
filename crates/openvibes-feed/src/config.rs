@@ -23,6 +23,13 @@ pub struct Config {
     pub epss_url: String,
     /// ENISA EUVD search API; `""` leaves it out.
     pub euvd_url: String,
+    /// NVD CVE API 2.0; `""` leaves NVD (and CPE findings from a feed) out.
+    pub nvd_url: String,
+    /// A file holding an NVD API key (as in `vulns.toml`): with one the builder
+    /// asks NVD every 0.6 s instead of every 6 s.
+    pub nvd_api_key_file: Option<String>,
+    /// Pause between NVD requests, in milliseconds (default: NVD's published limit).
+    pub nvd_pause_ms: Option<u64>,
     /// HTTP proxy for every download.
     pub proxy_url: Option<String>,
     /// Days a feed stays valid.
@@ -43,6 +50,9 @@ impl Default for Config {
             kev_url: openvibes_vulns::fetch::KEV_URL.to_owned(),
             epss_url: openvibes_vulns::fetch::EPSS_URL.to_owned(),
             euvd_url: openvibes_vulns::sources::EUVD_URL.to_owned(),
+            nvd_url: openvibes_vulns::sources::NVD_URL.to_owned(),
+            nvd_api_key_file: None,
+            nvd_pause_ms: None,
             proxy_url: None,
             valid_days: 7,
             max_file_bytes: 512 << 20,
