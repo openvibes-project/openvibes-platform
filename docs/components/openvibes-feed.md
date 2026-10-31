@@ -80,17 +80,45 @@ osv_releases = ["debian-12", "ubuntu-24.04", "rocky-9", "almalinux-9"]
 # valid_days = 7                            # 1 to 30
 # metalink_url, osv_url, kev_url, epss_url, euvd_url, nvd_url: as in vulns.toml;
 # "" leaves a source out
-# nvd_api_key_file = "/etc/openvibes/nvd.key"   # asks NVD every 0.6 s, not 6 s
+# nvd_api_key_file = "/var/lib/openvibes-feed/nvd.key"   # asks NVD every 0.6 s, not 6 s
 ```
+
+## The package (the mirror)
+
+The `openvibes-feed` RPM is only for the mirror machine; no other package
+needs it and the platform never creates a key. It installs its own account
+`openvibes-feed`, the config above, and a **daily timer that is enabled at
+install** (by preset) but idle: the service only runs once the signing key
+exists. State is `/var/lib/openvibes-feed/` (mode 0755; the key in it is
+0600): `feed.key` and the tree `site/` for a web server to serve.
+
+```sh
+sudo -u openvibes-feed openvibes-feed keygen /var/lib/openvibes-feed/feed.key \
+    --feed-id mysite --key-id k1      # prints what each platform must trust
+sudoedit /etc/openvibes/feed.toml     # list the releases the site runs
+sudo systemctl start --no-block openvibes-feed   # first build now; later ones run daily
+journalctl -fu openvibes-feed         # follow it (the first NVD read takes about 20 minutes)
+```
+
+Run `build` and `bundle` by hand as `sudo -u openvibes-feed openvibes-feed ...`:
+run as root they leave root-owned files and lock in the tree, and the next
+timer run then fails. **Remove everything** in Setup also stops, disables and
+removes this package when it is installed, and deletes its signing key.
+
+`build` and `bundle` take a lock on `site/.build.lock`: a second one started
+while one runs stops with "another build or bundle is running" and writes
+nothing, so the timer and a hand-run build never race. The lock file is not
+part of the feed.
 
 ## Not here yet
 
-The RPM, user and daily timer (step 3c), and the
-platform's own mirror sync and console views (steps 4 and 5).
+The platform's own mirror sync and console views (steps 4 and 5), and the
+live build-serve-import test.
 
 ## Test
 
 `cargo test -p openvibes-feed`: a build against a local upstream (first build,
 reuse by 304, a failing source, a subset tree; NVD read by windows from a fake
 API, only the changed year rewritten), the result verified as a
-platform verifies it, and a bundle unpacked by the platform's reader.
+platform verifies it, a bundle unpacked by the platform's reader, and a second build
+or bundle refused while the tree's lock is held.

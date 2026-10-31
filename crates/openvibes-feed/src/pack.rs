@@ -65,6 +65,7 @@ fn named_blobs(envelope: &[u8]) -> Result<BTreeSet<String>, String> {
 /// # Errors
 /// The tree is incomplete or damaged, or `out` exists or cannot be written.
 pub fn bundle(dir: &Path, out: &Path) -> Result<usize, String> {
+    let _lock = crate::lock::hold(dir)?;
     let path = dir.join("feed.json");
     if !fs::symlink_metadata(&path).is_ok_and(|m| m.is_file()) {
         return Err(format!("{} is not a regular file", path.display()));

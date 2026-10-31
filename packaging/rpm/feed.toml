@@ -1,0 +1,14 @@
+# openvibes-feed: builds the signed data feed that air-gapped platforms
+# import; see docs/components/openvibes-feed.md. Every key is optional.
+# The daily timer builds into /var/lib/openvibes-feed/site once the signing
+# key /var/lib/openvibes-feed/feed.key exists (made with `openvibes-feed keygen`).
+#
+# Which releases the feed carries advisories for:
+# fedora = ["fedora-44-x86_64"]
+# osv_releases = ["debian-12", "ubuntu-24.04", "rocky-9", "almalinux-9"]
+# proxy_url = "http://proxy.example:3128"
+# A free NVD key (file mode 0600, owned by openvibes-feed) makes the first
+# NVD read about ten times faster.
+# nvd_api_key_file = "/var/lib/openvibes-feed/nvd.key"
+# Days a feed stays valid; platforms warn as it nears its end.
+valid_days = 7

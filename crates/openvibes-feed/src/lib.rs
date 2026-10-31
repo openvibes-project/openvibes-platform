@@ -9,5 +9,6 @@
 pub mod build;
 pub mod config;
 pub mod key;
+pub mod lock;
 mod nvd;
 pub mod pack;

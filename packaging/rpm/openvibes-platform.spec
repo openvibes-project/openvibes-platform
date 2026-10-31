@@ -84,6 +84,19 @@ Summary:        OpenVIBES vulnerability feeds and matching
 Fetches Fedora security advisories and matches them against the package
 inventories OpenVIBES agents report.
 
+%package -n openvibes-feed
+License:        Apache-2.0 AND BSD-3-Clause AND CDLA-Permissive-2.0 AND ISC AND MIT AND Unicode-3.0
+Requires(pre):  shadow-utils
+Summary:        OpenVIBES signed data feed builder for air-gapped sites
+%{?systemd_requires}
+
+%description -n openvibes-feed
+Runs on an internet-connected machine (the mirror): fetches the vulnerability
+data the platform uses, signs it and writes a tree of plain files that
+air-gapped platforms read from the mirror or from a carried bundle. It needs
+no database and is not required by any other package. A daily timer builds
+once the signing key exists.
+
 %package -n openvibes-admin
 License:        Apache-2.0 AND BSD-3-Clause AND CDLA-Permissive-2.0 AND ISC AND MIT AND Unicode-3.0 AND Zlib
 Requires(pre):  shadow-utils procps-ng systemd
@@ -204,6 +217,15 @@ install -D -m 0644 $S/packaging/rpm/openvibes-fetch.sysusers %{buildroot}%{_sysu
 install -D -m 0640 $S/packaging/rpm/fetch.toml %{buildroot}%{_sysconfdir}/openvibes/fetch.toml
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-fetch/LICENSE
 install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-fetch/NOTICE
+install -D -m 0755 $S/target/release/openvibes-feed %{buildroot}%{_bindir}/openvibes-feed
+install -D -m 0644 $S/packaging/rpm/openvibes-feed.service %{buildroot}%{_unitdir}/openvibes-feed.service
+install -D -m 0644 $S/packaging/rpm/openvibes-feed.timer %{buildroot}%{_unitdir}/openvibes-feed.timer
+install -D -m 0644 $S/packaging/rpm/openvibes-feed.preset %{buildroot}%{_prefix}/lib/systemd/system-preset/80-openvibes-feed.preset
+install -D -m 0644 $S/packaging/rpm/openvibes-feed.sysusers %{buildroot}%{_sysusersdir}/openvibes-feed.conf
+install -D -m 0640 $S/packaging/rpm/feed.toml %{buildroot}%{_sysconfdir}/openvibes/feed.toml
+install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-feed
+install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-feed/LICENSE
+install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-feed/NOTICE
 install -D -m 0755 $S/target/release/openvibes-vulns %{buildroot}%{_bindir}/openvibes-vulns
 install -D -m 0644 $S/packaging/rpm/openvibes-vulns.service %{buildroot}%{_unitdir}/openvibes-vulns.service
 install -D -m 0644 $S/packaging/rpm/openvibes-vulns.sysusers %{buildroot}%{_sysusersdir}/openvibes-vulns.conf
@@ -308,6 +330,13 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %systemd_preun openvibes-fetch.socket
 %postun -n openvibes-fetch
 %systemd_postun_with_restart openvibes-fetch.socket
+
+%post -n openvibes-feed
+%systemd_post openvibes-feed.timer
+%preun -n openvibes-feed
+%systemd_preun openvibes-feed.timer openvibes-feed.service
+%postun -n openvibes-feed
+%systemd_postun openvibes-feed.timer openvibes-feed.service
 
 %pre -n openvibes-vulns
 %rename_pre vulns openvibes-vulns.service
@@ -494,6 +523,19 @@ fi
 %{_sysusersdir}/openvibes-fetch.conf
 %dir %{_sysconfdir}/openvibes
 %config(noreplace) %attr(0640, root, openvibes-fetch) %{_sysconfdir}/openvibes/fetch.toml
+
+%files -n openvibes-feed
+%dir %{_licensedir}/openvibes-feed
+%license %{_licensedir}/openvibes-feed/LICENSE
+%license %{_licensedir}/openvibes-feed/NOTICE
+%{_bindir}/openvibes-feed
+%{_unitdir}/openvibes-feed.service
+%{_unitdir}/openvibes-feed.timer
+%{_prefix}/lib/systemd/system-preset/80-openvibes-feed.preset
+%{_sysusersdir}/openvibes-feed.conf
+%dir %{_sysconfdir}/openvibes
+%config(noreplace) %attr(0640, root, openvibes-feed) %{_sysconfdir}/openvibes/feed.toml
+%dir %attr(0755, openvibes-feed, openvibes-feed) %{_sharedstatedir}/openvibes-feed
 
 %files -n openvibes-vulns
 %dir %{_licensedir}/openvibes-vulns
