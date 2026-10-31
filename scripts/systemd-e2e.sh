@@ -365,7 +365,7 @@ in_c "runuser -u openvibes-admin -- openvibes-admin feeds trust add e2e k1 '$pub
 out=$(in_c 'runuser -u openvibes-admin -- openvibes-admin feeds import-bundle /var/lib/openvibes-feed/site') ||
     fail "feeds import-bundle from the mirror tree"
 [[ $out == *"kev kev applied"* ]] || fail "the mirror's KEV file was not applied: $out"
-# A second build while one holds the lock stops; a bundle packs the same tree.
+# A bundle packs the same tree (the build lock itself is tested in Rust).
 in_c 'runuser -u openvibes-feed -- openvibes-feed bundle /var/lib/openvibes-feed/site --out /var/lib/openvibes-feed/mirror.tar' >/dev/null ||
     fail "openvibes-feed bundle"
 out=$(in_c 'runuser -u openvibes-admin -- openvibes-admin feeds import-bundle /var/lib/openvibes-feed/mirror.tar') ||

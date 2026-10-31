@@ -120,7 +120,8 @@ Two examples:
 
 ```sh
 # nginx: root /var/lib/openvibes-feed/site; autoindex off;
-# On an SELinux host, label the tree for the web server first:
+# On an SELinux host, label the tree for the web server first
+# (semanage is in policycoreutils-python-utils):
 sudo semanage fcontext -a -t httpd_sys_content_t '/var/lib/openvibes-feed/site(/.*)?'
 sudo restorecon -R /var/lib/openvibes-feed/site
 # any host, for a quick test:
