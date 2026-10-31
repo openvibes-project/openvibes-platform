@@ -52,7 +52,7 @@ const CVSS: [(&str, &str); 4] = [
     ("cvssMetricV2", "2.0"),
 ];
 
-fn truncate(text: &str, max: usize) -> String {
+pub(super) fn truncate(text: &str, max: usize) -> String {
     let mut end = text.len().min(max);
     while !text.is_char_boundary(end) {
         end -= 1;
@@ -61,7 +61,7 @@ fn truncate(text: &str, max: usize) -> String {
 }
 
 /// The newest CVSS version scored; within it NVD's own (`Primary`) first.
-fn cvss(metrics: &Value) -> Option<(f32, &'static str, String)> {
+pub(super) fn cvss(metrics: &Value) -> Option<(f32, &'static str, String)> {
     CVSS.iter().find_map(|(key, version)| {
         let list = metrics.get(key)?.as_array()?;
         let metric = list
@@ -79,7 +79,7 @@ fn cvss(metrics: &Value) -> Option<(f32, &'static str, String)> {
     })
 }
 
-fn record(cve: &Value) -> Option<Nvd> {
+pub(super) fn record(cve: &Value) -> Option<Nvd> {
     let cve_id = cve["id"].as_str().filter(|id| is_cve(id))?.to_owned();
     let scored = cvss(&cve["metrics"]);
     let mut cwe: Vec<String> = cve["weaknesses"]
@@ -144,7 +144,7 @@ pub fn parse_nvd(content: &[u8]) -> Result<NvdPage, ParseError> {
 /// Version text of a `cpe:2.3:a:vendor:product:version:update:...` name:
 /// `None` for "any" (`*`) and "not applicable" (`-`) versions; an update
 /// such as `p1` joins the version (`8.5p1`).
-fn cpe_version(version: &str, update: &str) -> Option<String> {
+pub(super) fn cpe_version(version: &str, update: &str) -> Option<String> {
     if version == "*" || version == "-" || version.is_empty() {
         return None;
     }
@@ -154,21 +154,97 @@ fn cpe_version(version: &str, update: &str) -> Option<String> {
     })
 }
 
-/// The affected application ranges of one NVD record: `vulnerable` matches
-/// of single `OR` nodes (`AND` configurations pair a product with a platform
-/// and are skipped), as ranges. A start that is exclusive is skipped (rare).
-/// Rejected records give none. Fedora releases NVD lists as affected ride
-/// along on every range of the CVE.
-fn applicability(cve: &Value) -> Vec<Applicability> {
-    let Some(cve_id) = cve["id"].as_str().filter(|id| is_cve(id)) else {
-        return Vec::new();
-    };
-    if cve["vulnStatus"] == "Rejected" {
-        return Vec::new();
+/// One affected application range from a `cpe:2.3:a:` name and its version
+/// bounds; `None` for another part, a malformed name, or "any version".
+/// With no bounds, the name's own version is an exact one. Shared by the API
+/// sync and the slim feed files, so both give the same rows.
+pub(super) fn range_row(
+    cve_id: &str,
+    cvss: Option<f32>,
+    criteria: &str,
+    start_including: Option<&str>,
+    end_excluding: Option<&str>,
+    end_including: Option<&str>,
+) -> Option<Applicability> {
+    let parts: Vec<&str> = criteria.split(':').collect();
+    if parts.len() < 7 || parts[2] != "a" {
+        return None;
     }
-    let cvss = cvss(&cve["metrics"]).map(|s| s.0);
-    let mut fedora = Vec::new();
-    let mut rows = Vec::new();
+    let text = |value: Option<&str>| value.map(|v| truncate(v, 64));
+    let (mut introduced, fixed, mut last) = (
+        text(start_including),
+        text(end_excluding),
+        text(end_including),
+    );
+    if introduced.is_none() && fixed.is_none() && last.is_none() {
+        // An exact version.
+        let version = cpe_version(parts[5], parts[6])?;
+        introduced = Some(version.clone());
+        last = Some(version);
+    }
+    Some(Applicability {
+        cve_id: cve_id.to_owned(),
+        vendor: truncate(&parts[3].to_ascii_lowercase(), 64),
+        product: truncate(&parts[4].to_ascii_lowercase(), 64),
+        introduced,
+        fixed,
+        last_affected: last,
+        cvss,
+        fedora: Vec::new(),
+    })
+}
+
+/// One `cpeMatch` entry the platform keeps: an application name and its
+/// version bounds as NVD gives them.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RawMatch {
+    /// The `cpe:2.3:a:...` name.
+    pub criteria: String,
+    /// `versionStartIncluding`.
+    pub start_including: Option<String>,
+    /// `versionEndExcluding`.
+    pub end_excluding: Option<String>,
+    /// `versionEndIncluding`.
+    pub end_including: Option<String>,
+}
+
+/// Most operating systems one record lists.
+pub(super) const MAX_OS: usize = 256;
+
+/// Whether `entry` is a well-formed operating-system name of a slim NVD
+/// record: `vendor:product:version`, each part 1 to 64 characters from
+/// `a-z 0-9 . _ ~ + -`.
+pub(super) fn os_ok(entry: &str) -> bool {
+    let parts: Vec<&str> = entry.split(':').collect();
+    parts.len() == 3
+        && parts.iter().all(|p| {
+            (1..=64).contains(&p.len())
+                && p.bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._~+-".contains(&b))
+        })
+}
+
+/// The Fedora releases among operating-system names: what the platform uses
+/// of the list today.
+pub(super) fn fedora_releases(os: &[String]) -> Vec<String> {
+    os.iter()
+        .filter_map(|o| o.strip_prefix("fedoraproject:fedora:"))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// What the platform keeps of one NVD record's configurations: the
+/// `vulnerable` application matches of single `OR` nodes (`AND`
+/// configurations pair a product with a platform and are skipped, as are
+/// negated nodes and exclusive starts, which are rare), and every operating
+/// system NVD lists as affected, as sorted `vendor:product:version` names.
+/// Rejected records give nothing.
+pub(super) fn kept_matches(cve: &Value) -> (Vec<RawMatch>, Vec<String>) {
+    let mut systems = Vec::new();
+    let mut kept = Vec::new();
+    if cve["vulnStatus"] == "Rejected" {
+        return (kept, systems);
+    }
     for config in cve["configurations"].as_array().into_iter().flatten() {
         let and = config["operator"] == "AND";
         for node in config["nodes"].as_array().into_iter().flatten() {
@@ -180,8 +256,14 @@ fn applicability(cve: &Value) -> Vec<Applicability> {
                 if parts.len() < 7 || found["vulnerable"] != true {
                     continue;
                 }
-                if parts[2] == "o" && parts[3] == "fedoraproject" && parts[4] == "fedora" {
-                    fedora.extend(cpe_version(parts[5], parts[6]));
+                if parts[2] == "o" {
+                    if let Some(version) = cpe_version(parts[5], parts[6]) {
+                        let name =
+                            format!("{}:{}:{version}", parts[3], parts[4]).to_ascii_lowercase();
+                        if os_ok(&name) {
+                            systems.push(name);
+                        }
+                    }
                     continue;
                 }
                 if parts[2] != "a" || and || node["operator"] != "OR" || node["negate"] == true {
@@ -190,39 +272,44 @@ fn applicability(cve: &Value) -> Vec<Applicability> {
                 if found["versionStartExcluding"].is_string() {
                     continue;
                 }
-                let text = |key: &str| found[key].as_str().map(|v| truncate(v, 64));
-                let (mut introduced, fixed, mut last) = (
-                    text("versionStartIncluding"),
-                    text("versionEndExcluding"),
-                    text("versionEndIncluding"),
-                );
-                if introduced.is_none() && fixed.is_none() && last.is_none() {
-                    // An exact version.
-                    let Some(version) = cpe_version(parts[5], parts[6]) else {
-                        continue;
-                    };
-                    introduced = Some(version.clone());
-                    last = Some(version);
-                }
-                rows.push(Applicability {
-                    cve_id: cve_id.to_owned(),
-                    vendor: truncate(&parts[3].to_ascii_lowercase(), 64),
-                    product: truncate(&parts[4].to_ascii_lowercase(), 64),
-                    introduced,
-                    fixed,
-                    last_affected: last,
-                    cvss,
-                    fedora: Vec::new(),
+                let text = |key: &str| found[key].as_str().map(str::to_owned);
+                kept.push(RawMatch {
+                    criteria: criteria.to_owned(),
+                    start_including: text("versionStartIncluding"),
+                    end_excluding: text("versionEndExcluding"),
+                    end_including: text("versionEndIncluding"),
                 });
             }
         }
     }
-    fedora.sort();
-    fedora.dedup();
-    for row in &mut rows {
-        row.fedora.clone_from(&fedora);
-    }
-    rows
+    systems.sort();
+    systems.dedup();
+    (kept, systems)
+}
+
+/// The affected application ranges of one NVD record, with the Fedora
+/// releases NVD lists as affected on every range of the CVE.
+fn applicability(cve: &Value) -> Vec<Applicability> {
+    let Some(cve_id) = cve["id"].as_str().filter(|id| is_cve(id)) else {
+        return Vec::new();
+    };
+    let cvss = cvss(&cve["metrics"]).map(|s| s.0);
+    let (kept, systems) = kept_matches(cve);
+    let fedora = fedora_releases(&systems);
+    kept.iter()
+        .filter_map(|m| {
+            let mut row = range_row(
+                cve_id,
+                cvss,
+                &m.criteria,
+                m.start_including.as_deref(),
+                m.end_excluding.as_deref(),
+                m.end_including.as_deref(),
+            )?;
+            row.fedora.clone_from(&fedora);
+            Some(row)
+        })
+        .collect()
 }
 
 /// One page of EUVD's exploited list.

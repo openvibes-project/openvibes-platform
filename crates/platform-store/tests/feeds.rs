@@ -195,6 +195,11 @@ async fn the_vulnerability_role_can_do_exactly_what_the_grants_say() {
         .await
         .unwrap();
     assert_eq!(feeds::feed_states(&client).await.unwrap().len(), 1);
+    // Marking a kind stale changes its hashes only; the record stays.
+    assert_eq!(feeds::mark_stale(&client, "kev").await.unwrap(), 1);
+    assert_eq!(feeds::mark_stale(&client, "nvd").await.unwrap(), 0);
+    let applied = feeds::applied_files(&client).await.unwrap();
+    assert_eq!((applied.len(), applied[0].sha256), (1, [0; 32]));
     assert!(
         feeds::add_trust_key(&client, "site", "k2", KEY, now)
             .await

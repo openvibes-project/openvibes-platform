@@ -305,3 +305,16 @@ pub async fn record_file(
         .await?;
     Ok(changed == 1)
 }
+
+/// Forgets which version of the files of `kind` was applied (their hashes
+/// stop matching), so the next import reads each of them again, whatever it
+/// carries. Kept in the database, so the need survives a failed or interrupted
+/// import. Returns the files marked.
+pub async fn mark_stale(client: &Client, kind: &str) -> Result<u64, StoreError> {
+    Ok(client
+        .execute(
+            "UPDATE feed_applied_files SET sha256 = $2 WHERE kind = $1",
+            &[&kind, &[0u8; 32].as_slice()],
+        )
+        .await?)
+}

@@ -34,6 +34,48 @@ use sha2::{Digest, Sha256};
 struct Upstream {
     files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     not_modified: Arc<AtomicUsize>,
+    /// NVD API records, as `cves/2.0` gives them.
+    nvd: Arc<Mutex<Vec<serde_json::Value>>>,
+}
+
+/// NVD's `cves/2.0`: the records last modified inside the window, two to a page.
+async fn nvd(State(up): State<Upstream>, uri: Uri) -> Response {
+    let query: HashMap<String, String> = uri
+        .query()
+        .unwrap_or("")
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+        .collect();
+    let bound = |name: &str| query[name].trim_end_matches('Z').to_owned();
+    let (from, to) = (bound("lastModStartDate"), bound("lastModEndDate"));
+    let index: usize = query["startIndex"].parse().unwrap();
+    let inside: Vec<serde_json::Value> = up
+        .nvd
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|cve| {
+            let at = cve["lastModified"].as_str().unwrap();
+            from.as_str() <= at && at <= to.as_str()
+        })
+        .cloned()
+        .collect();
+    let page: Vec<serde_json::Value> = inside
+        .iter()
+        .skip(index)
+        .take(2)
+        .map(|cve| serde_json::json!({ "cve": cve }))
+        .collect();
+    let body = serde_json::json!({
+        "totalResults": inside.len(), "startIndex": index,
+        "resultsPerPage": page.len(), "vulnerabilities": page,
+    });
+    (
+        [(header::CONTENT_TYPE, "application/json")],
+        body.to_string(),
+    )
+        .into_response()
 }
 
 fn etag(bytes: &[u8]) -> String {
@@ -66,6 +108,7 @@ async fn serve(State(up): State<Upstream>, uri: Uri, headers: HeaderMap) -> Resp
 async fn start() -> (Upstream, SocketAddr) {
     let up = Upstream::default();
     let app = Router::new()
+        .route("/nvd", get(nvd))
         .route("/{*path}", get(serve))
         .with_state(up.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -127,6 +170,7 @@ fn config(addr: SocketAddr) -> Config {
         kev_url: format!("http://{addr}/kev"),
         epss_url: format!("http://{addr}/epss"),
         euvd_url: format!("http://{addr}/euvd"),
+        nvd_url: String::new(),
         ..Config::default()
     }
 }
@@ -385,4 +429,170 @@ async fn a_build_verifies_reuses_unchanged_files_and_packs() {
     for file in &accepted.manifest.files {
         assert!(unpacked.blob(&file.sha256).is_some(), "{}", file.name);
     }
+}
+
+/// Only NVD, against the local API: no other source, no pause.
+fn nvd_config(addr: SocketAddr) -> Config {
+    Config {
+        osv_url: String::new(),
+        kev_url: String::new(),
+        epss_url: String::new(),
+        euvd_url: String::new(),
+        nvd_url: format!("http://{addr}/nvd"),
+        nvd_pause_ms: Some(0),
+        ..Config::default()
+    }
+}
+
+fn nvd_hashes(out: &Path, key: &key::FeedKey) -> Vec<(String, String)> {
+    let mut files: Vec<(String, String)> = verified(out, key)
+        .manifest
+        .files
+        .into_iter()
+        .filter(|f| f.kind == feedfmt::Kind::Nvd)
+        .map(|f| (f.name, f.sha256))
+        .collect();
+    files.sort();
+    files
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn nvd_is_read_by_windows_and_only_changed_years_are_rewritten() {
+    let (up, addr) = start().await;
+    let page: serde_json::Value = serde_json::from_slice(&fixture("nvd-cpe.json")).unwrap();
+    let cves: Vec<serde_json::Value> = page["vulnerabilities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["cve"].clone())
+        .collect();
+    *up.nvd.lock().unwrap() = cves.clone();
+    let dir = Dir::new("nvd");
+    let key = key::generate(&dir.0.join("k"), "site", "k1").unwrap();
+    let (cfg, out) = (nvd_config(addr), dir.0.join("tree"));
+
+    // The first read covers every window, and every record is in a year file.
+    let first = tokio::task::spawn_blocking({
+        let (cfg, out, key) = (
+            cfg.clone(),
+            out.clone(),
+            key::load(&dir.0.join("k")).unwrap(),
+        );
+        move || run(&cfg, &key, &out, &[])
+    })
+    .await
+    .unwrap();
+    assert_eq!(first.failed, 0, "{:?}", first.lines);
+    let years = nvd_hashes(&out, &key);
+    assert!(years.len() >= 2, "{years:?}");
+    let read = |out: &Path| -> usize {
+        verified(out, &key)
+            .manifest
+            .files
+            .iter()
+            .filter(|f| f.kind == feedfmt::Kind::Nvd)
+            .map(|f| {
+                let bytes = std::fs::read(out.join("blobs").join(&f.sha256)).unwrap();
+                openvibes_vulns::enrich::parse_slim(&bytes, 1 << 30)
+                    .unwrap()
+                    .entries
+                    .len()
+            })
+            .sum()
+    };
+    assert_eq!(read(&out), cves.len());
+
+    // Nothing changed: the same files.
+    let again = tokio::task::spawn_blocking({
+        let (cfg, out, key) = (
+            cfg.clone(),
+            out.clone(),
+            key::load(&dir.0.join("k")).unwrap(),
+        );
+        move || run(&cfg, &key, &out, &[])
+    })
+    .await
+    .unwrap();
+    assert_eq!(nvd_hashes(&out, &key), years);
+    assert!(again.sequence > first.sequence);
+
+    // One record changes: only its year is rewritten.
+    let changed = cves[0]["id"].as_str().unwrap().to_owned();
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    {
+        let mut all = up.nvd.lock().unwrap();
+        let cve = all
+            .iter_mut()
+            .find(|c| c["id"] == changed.as_str())
+            .unwrap();
+        cve["lastModified"] = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.3f")
+            .to_string()
+            .into();
+        cve["descriptions"] = serde_json::json!([{ "lang": "en", "value": "changed text" }]);
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    let third = tokio::task::spawn_blocking({
+        let (cfg, out, key) = (
+            cfg.clone(),
+            out.clone(),
+            key::load(&dir.0.join("k")).unwrap(),
+        );
+        move || run(&cfg, &key, &out, &[])
+    })
+    .await
+    .unwrap();
+    assert_eq!(third.failed, 0, "{:?}", third.lines);
+    let now = nvd_hashes(&out, &key);
+    let year = format!("nvd-{}.json.gz", &changed[4..8]);
+    for ((name, before), (_, after)) in years.iter().zip(&now) {
+        assert_eq!(*name == year, before != after, "{name}");
+    }
+    assert_eq!(read(&out), cves.len());
+
+    // A year file gone from blobs/ is an error, not a year started over.
+    let gone = nvd_hashes(&out, &key).remove(0).1;
+    let kept = std::fs::read(out.join("blobs").join(&gone)).unwrap();
+    std::fs::remove_file(out.join("blobs").join(&gone)).unwrap();
+    {
+        let mut all = up.nvd.lock().unwrap();
+        for cve in all.iter_mut() {
+            cve["lastModified"] = chrono::Utc::now()
+                .format("%Y-%m-%dT%H:%M:%S%.3f")
+                .to_string()
+                .into();
+        }
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    let broken = build::run(
+        &cfg,
+        &key,
+        &build::Options {
+            out: &out,
+            only: &[],
+            valid_days: 7,
+        },
+    )
+    .unwrap_err();
+    assert!(broken.contains("missing from blobs/"), "{broken}");
+    std::fs::write(out.join("blobs").join(&gone), kept).unwrap();
+
+    // NVD down and nothing else wanted: nothing is signed.
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    let before = std::fs::read(out.join("feed.json")).unwrap();
+    let down = Config {
+        nvd_url: "http://127.0.0.1:9/nvd".into(),
+        ..cfg
+    };
+    let failed = build::run(
+        &down,
+        &key,
+        &build::Options {
+            out: &out,
+            only: &[],
+            valid_days: 7,
+        },
+    );
+    assert!(failed.unwrap_err().contains("nothing published"));
+    assert_eq!(std::fs::read(out.join("feed.json")).unwrap(), before);
 }
