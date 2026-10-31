@@ -53,6 +53,82 @@ fn tree(dir: &Path, seed: u8, key_id: &str, sequence: u64, kev: &[u8]) {
     std::fs::write(dir.join("blobs").join(&sha), kev).unwrap();
 }
 
+/// An unpacked mirror tree signed by `seed`'s key, holding `files`
+/// (source, kind, name, bytes), all fetched at `fetched`.
+fn tree_of(
+    dir: &Path,
+    seed: u8,
+    key_id: &str,
+    sequence: u64,
+    fetched: i64,
+    files: &[(&str, &str, String, Vec<u8>)],
+) {
+    let entries: Vec<_> = files
+        .iter()
+        .map(|(source, kind, name, bytes)| {
+            json!({
+                "source": source, "kind": kind, "name": name,
+                "sha256": hex(&Sha256::digest(bytes)), "size": bytes.len(),
+                "fetched_at": fetched, "upstream": "https://example.test/upstream",
+            })
+        })
+        .collect();
+    let manifest = json!({
+        "sequence": sequence, "created_at": now() - 60, "expires_at": now() + 86_400,
+        "files": entries,
+    })
+    .to_string();
+    let key = SigningKey::from_bytes(&[seed; 32]);
+    let signature = key.sign(&preimage("site", key_id, &manifest));
+    let envelope = json!({
+        "format": 1, "feed_id": "site", "key_id": key_id,
+        "signature": URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+        "manifest": manifest,
+    });
+    std::fs::create_dir_all(dir.join("blobs")).unwrap();
+    std::fs::write(dir.join("feed.json"), envelope.to_string()).unwrap();
+    for (_, _, _, bytes) in files {
+        std::fs::write(dir.join("blobs").join(hex(&Sha256::digest(bytes))), bytes).unwrap();
+    }
+}
+
+/// The CPE fixture of `openvibes-vulns`, as slim gzip year files.
+fn slim_years() -> Vec<(u32, Vec<u8>)> {
+    use std::io::Write;
+
+    let page: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../openvibes-vulns/tests/fixtures/nvd-cpe.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut years: Vec<(u32, Vec<openvibes_vulns::enrich::SlimRecord>)> = Vec::new();
+    for item in page["vulnerabilities"].as_array().unwrap() {
+        let record = openvibes_vulns::enrich::slim_record(&item["cve"]).unwrap();
+        let year: u32 = record.id[4..8].parse().unwrap();
+        match years.iter_mut().find(|(y, _)| *y == year) {
+            Some((_, records)) => records.push(record),
+            None => years.push((year, vec![record])),
+        }
+    }
+    years
+        .into_iter()
+        .map(|(year, records)| {
+            let json = serde_json::to_vec(&openvibes_vulns::enrich::SlimFile {
+                format: 1,
+                year,
+                records,
+            })
+            .unwrap();
+            let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            gz.write_all(&json).unwrap();
+            (year, gz.finish().unwrap())
+        })
+        .collect()
+}
+
 fn public(seed: u8) -> String {
     URL_SAFE_NO_PAD.encode(
         SigningKey::from_bytes(&[seed; 32])
@@ -188,6 +264,124 @@ async fn a_signed_feed_is_applied_only_from_a_trusted_key_and_never_replayed() {
             .iter()
             .any(|t| t.starts_with("site/k1 ") && t.len() > "site/k1 ".len() + 30),
         "trust add names the fingerprint: {targets:?}"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+    fixture.drop().await;
+}
+
+const HOST: &str = "agent.00000000-0000-4000-8000-00000000000a";
+
+fn pkg(name: &str, version: &str, source: Option<&str>) -> platform_store::inventory::PackageRow {
+    platform_store::inventory::PackageRow {
+        manager: "rpm".into(),
+        name: name.into(),
+        epoch: 0,
+        version: version.into(),
+        release: "1.fc44".into(),
+        arch: "x86_64".into(),
+        source: source.map(Into::into),
+        source_version: None,
+    }
+}
+
+/// Replaces what the test host reports installed.
+async fn installed(url: &str, packages: &[platform_store::inventory::PackageRow], digest: u8) {
+    let pool = platform_store::connect(url).await.unwrap();
+    let mut client = pool.get().await.unwrap();
+    platform_store::inventory::replace(
+        &mut client,
+        HOST,
+        "fedora",
+        "44",
+        None,
+        packages,
+        [digest; 32],
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn slim_nvd_in_a_signed_feed_feeds_cpe_findings() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let pool = platform_store::connect(&fixture.url).await.unwrap();
+    pool.get()
+        .await
+        .unwrap()
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ($1, 'active', now())",
+            &[&HOST],
+        )
+        .await
+        .unwrap();
+    let base = [
+        pkg("libcurl", "8.3.0", Some("curl")),
+        pkg("xz", "5.4.0", None),
+    ];
+    installed(&fixture.url, &base, 1).await;
+
+    let dir = scratch_dir("feeds-slim-nvd");
+    let mut files: Vec<(&str, &str, String, Vec<u8>)> = slim_years()
+        .into_iter()
+        .map(|(year, bytes)| ("nvd", "nvd", format!("nvd-{year}.json.gz"), bytes))
+        .collect();
+    files.push((
+        "kev",
+        "kev",
+        "known_exploited_vulnerabilities.json".into(),
+        kev(),
+    ));
+    let fetched = now() - 120;
+    tree_of(&dir.join("one"), 1, "k1", 1, fetched, &files);
+    stdout(&fixture.run(&["feeds", "trust", "add", "site", "k1", &public(1)]));
+    let path = dir.join("one").to_string_lossy().into_owned();
+    let said = stdout(&fixture.run(&["feeds", "import-bundle", &path]));
+    assert!(said.contains("nvd nvd applied"), "{said}");
+    // libcurl and xz are installed; OpenSSH is not.
+    assert_eq!(
+        fixture
+            .count("SELECT count(*) FROM cve_applicability")
+            .await,
+        3
+    );
+    assert_eq!(fixture.count("SELECT count(*) FROM cpe_findings").await, 1);
+
+    // The same files again change nothing.
+    tree_of(&dir.join("two"), 1, "k1", 2, fetched, &files);
+    let path = dir.join("two").to_string_lossy().into_owned();
+    let said = stdout(&fixture.run(&["feeds", "import-bundle", &path]));
+    assert!(said.contains("nvd nvd unchanged"), "{said}");
+
+    // A newly installed product needs its ranges from the unchanged files,
+    // also when the import that notices it leaves NVD out.
+    let more = [
+        pkg("libcurl", "8.3.0", Some("curl")),
+        pkg("xz", "5.4.0", None),
+        pkg("openssh", "9.0p1", None),
+    ];
+    installed(&fixture.url, &more, 2).await;
+    tree_of(&dir.join("three"), 1, "k1", 3, fetched, &files);
+    let path = dir.join("three").to_string_lossy().into_owned();
+    let said = stdout(&fixture.run(&["feeds", "import-bundle", &path, "--source", "kev"]));
+    assert!(said.contains("nvd nvd skipped"), "{said}");
+    assert_eq!(
+        fixture
+            .count("SELECT count(*) FROM cve_applicability")
+            .await,
+        3
+    );
+    tree_of(&dir.join("four"), 1, "k1", 4, fetched, &files);
+    let path = dir.join("four").to_string_lossy().into_owned();
+    let said = stdout(&fixture.run(&["feeds", "import-bundle", &path]));
+    assert!(said.contains("nvd nvd applied"), "{said}");
+    assert!(
+        fixture
+            .count("SELECT count(*) FROM cve_applicability")
+            .await
+            > 3,
+        "openssh ranges are kept now"
     );
     let _ = std::fs::remove_dir_all(dir);
     fixture.drop().await;

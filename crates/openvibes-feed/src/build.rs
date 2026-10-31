@@ -24,20 +24,20 @@ use openvibes_vulns::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{config::Config, key::FeedKey};
+use crate::{config::Config, key::FeedKey, nvd};
 
 /// One file the last build held: enough to reuse it without fetching.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct Held {
-    name: String,
-    sha256: String,
-    size: u64,
-    fetched_at: i64,
-    upstream: String,
+pub(crate) struct Held {
+    pub(crate) name: String,
+    pub(crate) sha256: String,
+    pub(crate) size: u64,
+    pub(crate) fetched_at: i64,
+    pub(crate) upstream: String,
     #[serde(default)]
-    etag: Option<String>,
+    pub(crate) etag: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    releases: Option<Vec<String>>,
+    pub(crate) releases: Option<Vec<String>>,
 }
 
 /// What `state.json` keeps between builds.
@@ -102,11 +102,11 @@ pub struct Options<'a> {
     pub valid_days: u32,
 }
 
-fn blobs(out: &Path) -> PathBuf {
+pub(crate) fn blobs(out: &Path) -> PathBuf {
     out.join("blobs")
 }
 
-fn blob_exists(out: &Path, sha: &str) -> bool {
+pub(crate) fn blob_exists(out: &Path, sha: &str) -> bool {
     fs::symlink_metadata(blobs(out).join(sha)).is_ok_and(|m| m.is_file())
 }
 
@@ -115,7 +115,7 @@ fn temp_path(out: &Path, tag: &str) -> PathBuf {
 }
 
 /// Writes `bytes` as the blob named by its hash; returns that hash.
-fn store(out: &Path, bytes: &[u8]) -> Result<String, String> {
+pub(crate) fn store(out: &Path, bytes: &[u8]) -> Result<String, String> {
     let sha = hex(&Sha256::digest(bytes));
     if !blob_exists(out, &sha) {
         let tmp = temp_path(out, "bytes");
@@ -332,6 +332,7 @@ pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Repo
         &config.epss_url,
         &config.euvd_url,
         &config.osv_url,
+        &config.nvd_url,
     ] {
         if !url.is_empty() {
             fetch::check_source_url(url)?;
@@ -398,6 +399,19 @@ pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Repo
             }
         }
     }
+    if wants(options.only, "nvd") && !config.nvd_url.is_empty() {
+        let synced = nvd::sync(&fetcher, config, out, now)?;
+        got.lines.push(synced.line);
+        if let Some(error) = synced.error {
+            got.failed += 1;
+            got.lines.push(format!("nvd FAILED: {error}"));
+        }
+        if synced.fresh {
+            got.fetched += 1;
+        }
+        // Files stand either way: what NVD held when the last pass finished.
+        got.current.extend(synced.files);
+    }
     let mut groups: BTreeMap<&'static str, Vec<String>> = BTreeMap::new();
     for name in &config.osv_releases {
         let release: Release = name.parse()?;
@@ -453,6 +467,8 @@ pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Repo
         .iter()
         .filter_map(|(key, held)| {
             let (source, kind) = key.rsplit_once('/')?;
+            // Several files of one kind (NVD years) carry `#<name>` after it.
+            let kind = kind.split('#').next()?;
             Some(OutFile {
                 source,
                 kind,
@@ -498,7 +514,12 @@ pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Repo
     write_atomic(&out.join("feed.json"), &envelope)?;
 
     let published: BTreeSet<String> = got.current.values().map(|h| h.sha256.clone()).collect();
-    let keep: BTreeSet<&String> = published.iter().chain(state.previous.iter()).collect();
+    let nvd_held = nvd::held_hashes(out);
+    let keep: BTreeSet<&String> = published
+        .iter()
+        .chain(state.previous.iter())
+        .chain(nvd_held.iter())
+        .collect();
     prune(out, &keep);
     let state = State {
         sequence,
@@ -557,7 +578,7 @@ impl Collected {
     }
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, bytes).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
     fs::rename(&tmp, path).map_err(|e| format!("cannot write {}: {e}", path.display()))

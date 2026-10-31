@@ -20,9 +20,9 @@ pub const NVD_URL: &str = "https://services.nvd.nist.gov/rest/json/cves/2.0";
 /// ENISA EUVD search API.
 pub const EUVD_URL: &str = "https://euvdservices.enisa.europa.eu/api/search";
 /// NVD's longest last-modified window.
-const MAX_WINDOW_DAYS: i64 = 120;
+pub const MAX_WINDOW_DAYS: i64 = 120;
 /// NVD's largest page.
-const PAGE: u32 = 2000;
+pub const PAGE: u32 = 2000;
 /// Named CVEs asked about one by one per run.
 const BACKFILL_PER_RUN: i64 = 1000;
 /// EUVD pages read at most (100 entries each).
@@ -93,7 +93,9 @@ impl NvdClient {
     }
 }
 
-fn nvd_time(at: DateTime<Utc>) -> String {
+/// A time as NVD's date parameters spell it.
+#[must_use]
+pub fn nvd_time(at: DateTime<Utc>) -> String {
     at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
 }
 
@@ -186,7 +188,8 @@ pub async fn sync_nvd(
 
 /// Where the first read of NVD for applicability ranges starts (NVD's
 /// oldest records were modified well after this).
-fn applicability_start() -> DateTime<Utc> {
+#[must_use]
+pub fn applicability_start() -> DateTime<Utc> {
     DateTime::from_timestamp(1_262_304_000, 0).unwrap_or_default() // 2010-01-01
 }
 

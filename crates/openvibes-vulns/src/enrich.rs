@@ -12,7 +12,10 @@ use sha2::{Digest, Sha256};
 use crate::updateinfo::ParseError;
 
 mod nvd;
+mod nvd_slim;
 pub use nvd::{Euvd, EuvdPage, Nvd, NvdPage, parse_euvd, parse_nvd};
+pub use nvd_slim::MAX_OPEN_BYTES as SLIM_NVD_MAX_OPEN;
+pub use nvd_slim::{SlimFile, SlimPage, SlimRecord, parse_slim, slim_record};
 
 /// Largest EPSS file read once decompressed (the full file is 11 MB).
 pub const MAX_EPSS_OPEN: u64 = 128 << 20;
