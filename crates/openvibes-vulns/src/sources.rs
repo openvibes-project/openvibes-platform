@@ -343,6 +343,32 @@ pub async fn check_euvd(
     Ok(Some(entries.len()))
 }
 
+/// Every page of EUVD's exploited list as one response (`items`, `total`),
+/// the form `feeds import --source euvd` and the feed's `euvd` file take.
+///
+/// # Errors
+/// A page could not be fetched or read.
+pub fn fetch_euvd_list(fetcher: &Fetcher, base: &str, page_size: u32) -> Result<Vec<u8>, String> {
+    let mut items: Vec<serde_json::Value> = Vec::new();
+    for number in 0..MAX_EUVD_PAGES {
+        let body = fetcher.get_with(
+            &format!("{base}?exploited=true&size={page_size}&page={number}"),
+            &[],
+        )?;
+        let page =
+            enrich::parse_euvd(&body).map_err(|_| "not a readable euvd response".to_owned())?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&body).map_err(|_| "not a readable euvd response".to_owned())?;
+        let list = value["items"].as_array().cloned().unwrap_or_default();
+        items.extend(list);
+        if page.items == 0 || items.len() as u64 >= page.total {
+            break;
+        }
+    }
+    serde_json::to_vec(&serde_json::json!({ "items": items, "total": items.len() }))
+        .map_err(|_| "cannot write the euvd list".to_owned())
+}
+
 /// Reads an NVD API key from a file that group and others cannot read.
 pub fn read_api_key(path: &Path) -> Result<String, String> {
     let metadata =

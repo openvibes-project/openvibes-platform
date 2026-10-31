@@ -104,7 +104,7 @@ impl Fetcher {
 impl Fetcher {
     /// GETs `url` unless its ETag still equals `etag` (`None` for a 304),
     /// with the ETag served.
-    pub(crate) fn get_if_changed(
+    pub fn get_if_changed(
         &self,
         url: &str,
         etag: Option<&str>,
@@ -137,7 +137,7 @@ impl Fetcher {
 
 impl Fetcher {
     /// GETs `url` with extra request headers, up to the download cap.
-    pub(crate) fn get_with(&self, url: &str, headers: &[(&str, &str)]) -> Result<Vec<u8>, String> {
+    pub fn get_with(&self, url: &str, headers: &[(&str, &str)]) -> Result<Vec<u8>, String> {
         let mut request = self.agent.get(url);
         for (name, value) in headers {
             request = request.header(*name, *value);
@@ -157,7 +157,7 @@ impl Fetcher {
 impl Fetcher {
     /// Streams `url` into the file at `path`, at most `limit` bytes, and
     /// returns its SHA-256.
-    pub(crate) fn download_to(
+    pub fn download_to(
         &self,
         url: &str,
         path: &std::path::Path,
@@ -267,7 +267,93 @@ fn digest(bytes: &[u8]) -> [u8; 32] {
 /// What the network side found: new content, or the digest it already has.
 enum Found {
     Same,
-    New(Vec<u8>),
+    New(Box<FedoraFiles>),
+}
+
+/// A Fedora repository's index and its updateinfo, as fetched and verified.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FedoraFiles {
+    /// `repomd.xml`, whose digest the mirror list vouches for.
+    pub repomd: Vec<u8>,
+    /// File name of the updateinfo in the repository (its last path part).
+    pub name: String,
+    /// The updateinfo file (compressed as the repository serves it).
+    pub updateinfo: Vec<u8>,
+    /// The mirror list URL it was found through.
+    pub upstream: String,
+}
+
+impl Fetcher {
+    /// The updateinfo of `source` found through the mirror list and verified
+    /// against it, or `None` when its digest equals `known`.
+    ///
+    /// # Errors
+    /// No mirror served a repository index matching the mirror list, or a
+    /// download failed.
+    pub fn fedora_files(
+        &self,
+        source: &SourceId,
+        known: Option<[u8; 32]>,
+    ) -> Result<Option<FedoraFiles>, String> {
+        match download(self, source, known)? {
+            Found::Same => Ok(None),
+            Found::New(files) => Ok(Some(*files)),
+        }
+    }
+}
+
+/// A file streamed to disk: its SHA-256 and the ETag it was served with.
+pub type Fetched = ([u8; 32], Option<String>);
+
+impl Fetcher {
+    /// Streams `url` into the file at `path` unless its ETag still equals
+    /// `etag`, at most `limit` bytes. `None` is a 304; otherwise the file's
+    /// SHA-256 and the ETag served.
+    ///
+    /// # Errors
+    /// The download or the write failed, or the body passed `limit`.
+    pub fn download_if_changed(
+        &self,
+        url: &str,
+        path: &std::path::Path,
+        limit: u64,
+        etag: Option<&str>,
+    ) -> Result<Option<Fetched>, String> {
+        use std::io::{Read, Write};
+        let mut request = self.agent.get(url);
+        if let Some(etag) = etag {
+            request = request.header("If-None-Match", etag);
+        }
+        let mut response = request
+            .call()
+            .map_err(|error| format!("{}: {error}", host_of(url)))?;
+        if response.status() == 304 {
+            return Ok(None);
+        }
+        let served = response
+            .headers()
+            .get("etag")
+            .and_then(|value| value.to_str().ok())
+            .filter(|tag| tag.len() <= MAX_ETAG && tag.bytes().all(|b| (0x21..=0x7e).contains(&b)))
+            .map(str::to_owned);
+        let mut body = response.body_mut().with_config().limit(limit).reader();
+        let mut file = std::fs::File::create(path)
+            .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+        let mut hasher = Sha256::new();
+        let mut buffer = vec![0u8; 1 << 16];
+        loop {
+            let read = body
+                .read(&mut buffer)
+                .map_err(|error| format!("{}: {error}", host_of(url)))?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..read]);
+            file.write_all(&buffer[..read])
+                .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+        }
+        Ok(Some((hasher.finalize().into(), served)))
+    }
 }
 
 /// The blocking network part: metalink → a mirror with a matching index →
@@ -335,7 +421,18 @@ fn download(
             );
             continue;
         }
-        return Ok(Found::New(content));
+        let name = location
+            .href
+            .rsplit('/')
+            .next()
+            .unwrap_or("updateinfo")
+            .to_owned();
+        return Ok(Found::New(Box::new(FedoraFiles {
+            repomd,
+            name,
+            updateinfo: content,
+            upstream: url,
+        })));
     }
     Err(last)
 }
@@ -364,7 +461,7 @@ pub async fn check(
                 .map_err(|e| e.to_string())?;
             Ok(Checked::Unchanged)
         }
-        Ok(Found::New(content)) => feed::import(client, source, &content, now)
+        Ok(Found::New(files)) => feed::import(client, source, &files.updateinfo, now)
             .await
             .map(Checked::Imported)
             .map_err(|e| e.to_string()),

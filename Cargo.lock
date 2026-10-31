@@ -2388,6 +2388,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvibes-feed"
+version = "0.2.9"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "clap",
+ "ed25519-dalek",
+ "openvibes-vulns",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tokio",
+ "toml",
+]
+
+[[package]]
 name = "openvibes-fetch"
 version = "0.2.9"
 dependencies = [
