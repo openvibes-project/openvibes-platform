@@ -68,7 +68,7 @@ pub(crate) fn removed_by_everything(path: &Path) -> Option<&'static str> {
 }
 
 /// Data directories Remove everything deletes (fixed; never from input).
-const DATA: [&str; 11] = [
+const DATA: [&str; 12] = [
     "/etc/openvibes",
     // An import staged but not installed (its key included).
     "/run/openvibes-import",
@@ -77,6 +77,7 @@ const DATA: [&str; 11] = [
     "/var/lib/openvibes-ingest",
     "/var/lib/openvibes-distribution",
     "/var/lib/openvibes-vulns",
+    "/var/lib/openvibes-feed",
     "/var/lib/openvibes-console",
     "/var/lib/openvibes-llm",
     "/var/lib/openvibes-agent",
@@ -84,7 +85,7 @@ const DATA: [&str; 11] = [
     "/var/lib/openvibes-signer",
 ];
 /// Service accounts (user and group of the same name) it deletes.
-const ACCOUNTS: [&str; 10] = [
+const ACCOUNTS: [&str; 11] = [
     "openvibes-ingest",
     "openvibes-netlog",
     "openvibes-distribution",
@@ -93,6 +94,7 @@ const ACCOUNTS: [&str; 10] = [
     "openvibes-llm",
     "openvibes-signer",
     "openvibes-fetch",
+    "openvibes-feed",
     "openvibes_agent",
     "openvibes-admin",
 ];
