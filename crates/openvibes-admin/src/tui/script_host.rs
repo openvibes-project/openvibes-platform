@@ -54,6 +54,8 @@ pub(super) struct SetupHost {
     pub(super) net: RefCell<Option<platform_host::network::NetInfo>>,
     /// DNS servers that do not answer.
     pub(super) silent: RefCell<Vec<String>>,
+    /// `time_info()`: the clock settings; none: no timedatectl.
+    pub(super) time: RefCell<Option<platform_host::timesync::TimeInfo>>,
     /// `is_appliance()`: Home adds System and Log out.
     pub(super) appliance: Cell<bool>,
 }
@@ -95,6 +97,9 @@ impl Host for SetupHost {
     }
     fn network_info(&self) -> Option<platform_host::network::NetInfo> {
         self.net.borrow().clone()
+    }
+    fn time_info(&self) -> Option<platform_host::timesync::TimeInfo> {
+        self.time.borrow().clone()
     }
     fn dns_answers(&self, server: &str) -> bool {
         !self.silent.borrow().iter().any(|s| s == server)
@@ -206,6 +211,7 @@ fn built(
         appliance: Cell::new(false),
         net: RefCell::new(None),
         silent: RefCell::new(Vec::new()),
+        time: RefCell::new(None),
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

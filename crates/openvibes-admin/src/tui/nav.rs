@@ -25,6 +25,8 @@ pub enum Screen {
     System,
     /// System › Network.
     Network,
+    /// System › Time.
+    Time,
     Help(Box<Screen>),
     /// The first install (sub-project 3).
     Install(super::install::Stage),
@@ -77,6 +79,7 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Maintenance => " · Maintenance".into(),
         Screen::System => " · System".into(),
         Screen::Network => " · System › Network".into(),
+        Screen::Time => " · System › Time".into(),
         Screen::Maint(page) => format!(" · Maintenance › {}", page.title()),
         Screen::Help(_) => " · Help".into(),
         Screen::Install(stage) => {
@@ -117,6 +120,7 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
         Screen::Maint(page) => super::maint::draw(frame, &head, app, *page),
         Screen::System => super::system::draw(frame, &head, app),
         Screen::Network => super::network::draw(frame, &head, app),
+        Screen::Time => super::time::draw(frame, &head, app),
         Screen::Status => status::draw(frame, &head, app),
         Screen::Service(unit) => service::draw(frame, &head, app, *unit),
         Screen::Log(unit) => service::draw_log(frame, &head, app, *unit),

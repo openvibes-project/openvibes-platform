@@ -15,6 +15,31 @@ use crate::tui::{
     run::{Call, Work},
 };
 
+/// What a key did to a value being typed.
+pub(in crate::tui) enum Edited {
+    /// The text changed.
+    Typed,
+    /// Enter: the text, trimmed.
+    Enter(String),
+    Cancel,
+    Ignored,
+}
+
+/// Applies `key` to the text being typed (shared by System's pages).
+pub(in crate::tui) fn edit_key(text: &mut String, key: &Key) -> Edited {
+    match key {
+        Key::Char(c) if !c.is_control() && text.len() < 253 => text.push(*c),
+        Key::Backspace => {
+            text.pop();
+        }
+        Key::ClearLine => text.clear(),
+        Key::Enter => return Edited::Enter(std::mem::take(text).trim().to_owned()),
+        Key::Esc => return Edited::Cancel,
+        _ => return Edited::Ignored,
+    }
+    Edited::Typed
+}
+
 impl<H: Host> App<H> {
     /// Opens the page: reads the connection again.
     pub(in crate::tui) fn open_network(&mut self) {
@@ -53,14 +78,14 @@ impl<H: Host> App<H> {
         let Some(text) = net.typing.as_mut() else {
             return;
         };
-        match key {
-            Key::Char(c) if !c.is_control() && text.len() < 253 => text.push(c),
-            Key::Backspace => {
-                text.pop();
+        match edit_key(text, &key) {
+            Edited::Typed => self.net_check(),
+            Edited::Cancel => {
+                net.typing = None;
+                net.note = None;
             }
-            Key::ClearLine => text.clear(),
-            Key::Enter => {
-                let typed = std::mem::take(text).trim().to_owned();
+            Edited::Ignored => {}
+            Edited::Enter(typed) => {
                 let ok = matches!(net.note, Some(Ok(_)))
                     || (typed.is_empty() && matches!(at, Some(At::Search | At::Dns)));
                 if !ok {
@@ -79,16 +104,8 @@ impl<H: Host> App<H> {
                 net.note = None;
                 let last = net.rows().len().saturating_sub(1);
                 self.nav.row = self.nav.row.min(last);
-                return;
             }
-            Key::Esc => {
-                net.typing = None;
-                net.note = None;
-                return;
-            }
-            _ => return,
         }
-        self.net_check();
     }
 
     pub(in crate::tui) fn network_key(&mut self, key: Key) {

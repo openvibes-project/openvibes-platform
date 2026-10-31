@@ -350,6 +350,7 @@ impl<H: Host> App<H> {
                 Screen::Maint(page) => self.maint_key(page, key),
                 Screen::System => self.system_key(key),
                 Screen::Network => self.network_key(key),
+                Screen::Time => self.time_key(key),
                 Screen::Status => self.status_key(key),
                 Screen::Service(unit) => self.service_key(unit, key),
                 Screen::Log(_) => self.log_key(key),

@@ -156,7 +156,16 @@ fn header<H: Host>(app: &App<H>, net: &Net) -> Vec<Line<'static>> {
     )]
 }
 
-fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) {
+/// A run's progress, success or failure under `title`; `todo` says what
+/// Try again does after a failure.
+pub(in crate::tui) fn draw_run<H: Host>(
+    frame: &mut Frame,
+    head: &Header,
+    app: &App<H>,
+    run: &Run,
+    title: &str,
+    todo: &str,
+) {
     let t = &app.theme;
     let mut lines = vec![Line::raw("")];
     let bar = if run.running() {
@@ -178,22 +187,22 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
     } else {
         let at = run.stopped_at().unwrap_or(0);
         let why = run.states[at].as_ref().map_or("", StepState::detail);
+        lines.extend(failure(t, why, todo));
+        Bar::act(&[("Enter", "Try again")])
+    };
+    let area = frame::draw(frame, t, head, Some(title), &app.bar(bar));
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
+pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
+    if let Some(run) = net_run(app) {
         let todo = match run.work.kind {
             Kind::Net(NetAction::Apply { .. }) => {
                 "The old settings are back. Try again runs it once more."
             }
             _ => "Try again runs it once more.",
         };
-        lines.extend(failure(t, why, todo));
-        Bar::act(&[("Enter", "Try again")])
-    };
-    let area = frame::draw(frame, t, head, Some("Network"), &app.bar(bar));
-    frame.render_widget(Paragraph::new(lines), area);
-}
-
-pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
-    if let Some(run) = net_run(app) {
-        return draw_run(frame, head, app, run);
+        return draw_run(frame, head, app, run, "Network", todo);
     }
     let t = &app.theme;
     let net = &app.maint.net;

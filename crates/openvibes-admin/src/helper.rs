@@ -139,6 +139,11 @@ pub enum HelperCommand {
         /// A valid host name.
         name: String,
     },
+    /// Sets the NTP servers and the time zone.
+    TimeSet {
+        #[command(flatten)]
+        args: crate::setup::time::SetArgs,
+    },
     /// Does nothing and prints `done<TAB>opened`: sudo checks the password
     /// and the call is journalled before Maintenance › Shell opens a shell.
     ShellOpen,
@@ -181,6 +186,7 @@ enum Verb {
     NetKeep,
     NetRevert,
     HostnameSet(String),
+    TimeSet(crate::setup::time::SetArgs),
     Ca(crate::helper_ca::CaVerb),
 }
 
@@ -271,6 +277,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::NetKeep => Verb::NetKeep,
         HelperCommand::NetRevert => Verb::NetRevert,
         HelperCommand::HostnameSet { name } => Verb::HostnameSet(name.clone()),
+        HelperCommand::TimeSet { args } => Verb::TimeSet(args.clone()),
         HelperCommand::Ca(command) => Verb::Ca(crate::helper_ca::verb(command)?),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
@@ -388,6 +395,11 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::NetKeep => os_result(crate::setup::net::run_keep(&SystemRunner, Path::new("/"))),
         Verb::NetRevert => os_result(crate::setup::net::run_revert(&SystemRunner, Path::new("/"))),
         Verb::HostnameSet(name) => os_result(crate::setup::net::run_hostname(&SystemRunner, &name)),
+        Verb::TimeSet(args) => os_result(crate::setup::time::run_set(
+            &SystemRunner,
+            Path::new("/"),
+            &args,
+        )),
         Verb::OsPowerOff => os_result(crate::setup::os::run_power_off(
             &SystemRunner,
             Path::new("/"),

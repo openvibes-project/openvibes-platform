@@ -67,6 +67,8 @@ pub enum Call {
     NetRevert,
     /// `hostname-set NAME`.
     HostnameSet(String),
+    /// `time-set ARGS`.
+    TimeSet(Vec<String>),
 }
 
 /// `ca-import`'s or `console-cert-set`'s certificates and key; Debug never shows them.
@@ -186,6 +188,7 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::NetKeep => host.privileged(Privileged::NetKeep, secret),
         Call::NetRevert => host.privileged(Privileged::NetRevert, secret),
         Call::HostnameSet(name) => host.privileged(Privileged::HostnameSet(name), secret),
+        Call::TimeSet(args) => host.privileged(Privileged::TimeSet(args), secret),
     }
 }
 
@@ -208,7 +211,8 @@ pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
             | Call::NetApply(_)
             | Call::NetKeep
             | Call::NetRevert
-            | Call::HostnameSet(_),
+            | Call::HostnameSet(_)
+            | Call::TimeSet(_),
             Ok(out),
         ) => StepState::parse(out.trim_end()).unwrap_or_else(|| {
             StepState::Failed(format!("unexpected helper output: {}", out.trim()))

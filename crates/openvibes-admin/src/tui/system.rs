@@ -28,6 +28,7 @@ use super::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Entry {
     Network,
+    Time,
     Restart,
     PowerOff,
 }
@@ -38,6 +39,9 @@ fn entries<H: Host>(app: &App<H>) -> Vec<(Entry, &'static str, String)> {
     let mut all = Vec::new();
     if let Some(line) = &app.maint.net.menu {
         all.push((Entry::Network, "Network", line.clone()));
+    }
+    if let Some(line) = &app.maint.time.menu {
+        all.push((Entry::Time, "Time", line.clone()));
     }
     all.push((Entry::Restart, "Restart", String::new()));
     all.push((Entry::PowerOff, "Shut down", String::new()));
@@ -105,6 +109,10 @@ impl<H: Host> App<H> {
             .host
             .network_info()
             .map(|info| super::network::menu_line(&info));
+        self.maint.time.menu = self
+            .host
+            .time_info()
+            .map(|info| super::time::menu_line(&info));
         self.nav.go(Screen::System);
     }
 
@@ -127,6 +135,11 @@ impl<H: Host> App<H> {
         if *entry == Entry::Network {
             self.nav.go(Screen::Network);
             self.open_network();
+            return;
+        }
+        if *entry == Entry::Time {
+            self.nav.go(Screen::Time);
+            self.open_time();
             return;
         }
         if let Some(why) = busy(self) {

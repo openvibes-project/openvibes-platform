@@ -23,6 +23,7 @@ pub(crate) mod net;
 pub(crate) mod os;
 mod pg_health;
 pub(crate) mod sso_off;
+pub(crate) mod time;
 pub use fleet::AGENT_AUDIT_RULE;
 pub(crate) mod pki;
 pub(crate) mod pki_console;

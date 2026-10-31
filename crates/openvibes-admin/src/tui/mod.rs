@@ -37,6 +37,7 @@ mod system;
 mod system_tests;
 #[cfg(test)]
 mod tests;
+mod time;
 mod ui;
 mod work;
 

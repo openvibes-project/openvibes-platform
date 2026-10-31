@@ -121,6 +121,8 @@ pub struct Maint {
     pub os: Option<platform_host::os_updates::OsInfo>,
     /// System › Network: the connection, the edits, the value being typed.
     pub net: super::network::Net,
+    /// System › Time: the clock settings, the edits, the value being typed.
+    pub time: super::time::TimePage,
 }
 
 impl Maint {
@@ -131,6 +133,7 @@ impl Maint {
             || self.ports.typing()
             || self.names.typing()
             || self.net.typing()
+            || self.time.typing()
             || self.replace.picking()
     }
 }
@@ -147,6 +150,7 @@ pub enum Then {
     OsRestart,
     OsPowerOff,
     NetApply,
+    TimeApply,
     Replace,
     ConsoleCertSet,
     ConsoleCertReset,
@@ -442,6 +446,7 @@ impl<H: Host> App<H> {
             Then::OsRestart => self.os_restart_yes(),
             Then::OsPowerOff => self.os_power_off_yes(),
             Then::NetApply => self.net_apply_yes(),
+            Then::TimeApply => self.time_apply_yes(),
             Then::Parts => self.parts_yes(),
             Then::Ports => self.ports_yes(),
             Then::Names => self.names_yes(),
