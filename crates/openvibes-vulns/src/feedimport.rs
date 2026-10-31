@@ -139,21 +139,45 @@ pub async fn apply(
             )
         })
         .collect();
+    // NVD last: it keeps only CVEs the advisories above name. Its files are
+    // read again, even unchanged, when this run added advisories or a new
+    // installed product needs its ranges (the API sync does the same by
+    // reading further back).
+    let mut ordered: Vec<&FileEntry> = accepted.manifest.files.iter().collect();
+    ordered.sort_by_key(|entry| entry.kind == Kind::Nvd);
+    let mut reread = if ordered.iter().any(|e| e.kind == Kind::Nvd) {
+        crate::cpe::ensure_products(client, "fedora")
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        false
+    };
     let mut reports = Vec::new();
-    for entry in &accepted.manifest.files {
+    for entry in ordered {
         let outcome = if !only.is_empty() && !only.contains(&entry.source) {
             Outcome::Skipped("not selected".into())
         } else {
-            apply_file(client, feed_files, accepted, entry, &known, now)
+            apply_file(client, feed_files, accepted, entry, &known, now, reread)
                 .await
                 .map_err(|e| e.to_string())?
         };
+        if matches!(entry.kind, Kind::Updateinfo | Kind::Osv)
+            && matches!(outcome, Outcome::Applied(_))
+        {
+            reread = true;
+        }
         reports.push(FileReport {
             source: entry.source.clone(),
             kind: entry.kind,
             name: entry.name.clone(),
             outcome,
         });
+    }
+    // CPE findings follow the stored ranges and the Fedora advisories.
+    if reports.iter().any(|r| {
+        matches!(r.kind, Kind::Nvd | Kind::Updateinfo) && matches!(r.outcome, Outcome::Applied(_))
+    }) {
+        crate::cpe::refresh_all(client, now).await;
     }
     Ok(reports)
 }
@@ -165,6 +189,7 @@ async fn apply_file(
     entry: &FileEntry,
     known: &HashMap<(String, String, String), AppliedFile>,
     now: DateTime<Utc>,
+    reread: bool,
 ) -> Result<Outcome, StoreError> {
     let Some(path) = feed_files.blob(&entry.sha256) else {
         return Ok(Outcome::Refused("the blob is not in the feed".into()));
@@ -190,7 +215,9 @@ async fn apply_file(
             other => format!("{} ", other.as_str()).trim().replace('_', " "),
         }));
     }
-    if previous.is_some_and(|file| hex_of(&file.sha256) == entry.sha256) {
+    if previous.is_some_and(|file| hex_of(&file.sha256) == entry.sha256)
+        && !(reread && entry.kind == Kind::Nvd)
+    {
         return Ok(Outcome::Unchanged);
     }
     let step = match entry.kind {
@@ -198,9 +225,7 @@ async fn apply_file(
         Kind::Updateinfo => updateinfo(client, feed_files, accepted, entry, &path, now).await,
         Kind::Osv => osv_file(client, entry, &path, now).await,
         Kind::Kev | Kind::Epss | Kind::Euvd => enrichment(client, entry, &path, now).await,
-        Kind::Nvd => Ok(Step::Skip(
-            "verified, but importing slim NVD is not built yet".into(),
-        )),
+        Kind::Nvd => nvd_file(client, &path, now).await,
     };
     match step {
         Ok(Step::Done(detail)) => {
@@ -363,4 +388,25 @@ async fn enrichment(
         .await
         .map_err(|e| e.to_string())?;
     Ok(Step::Done(format!("{count} CVEs from {source}")))
+}
+
+async fn nvd_file(client: &mut Client, path: &Path, now: DateTime<Utc>) -> Result<Step, String> {
+    let content = read_all(path, Kind::Nvd.max_size())?;
+    let page = enrich::parse_slim(&content, enrich::SLIM_NVD_MAX_OPEN)
+        .map_err(|_| "not a readable slim NVD file".to_owned())?;
+    let store = |e: StoreError| e.to_string();
+    // The enrichment of CVEs advisories name, and the ranges of products
+    // installed packages could be: what the API sync keeps.
+    let named = platform_store::enrichment::upsert_nvd(client, &page.entries, now)
+        .await
+        .map_err(store)?;
+    let ids: Vec<String> = page.entries.iter().map(|e| e.cve_id.clone()).collect();
+    let ranges = platform_store::cpe::replace_applicability(client, &ids, &page.applicability)
+        .await
+        .map_err(store)?;
+    Ok(Step::Done(format!(
+        "{} CVEs of {}: {named} named by advisories, {ranges} ranges kept",
+        page.entries.len(),
+        page.year
+    )))
 }

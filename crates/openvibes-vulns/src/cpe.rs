@@ -247,6 +247,26 @@ pub async fn refresh(
     cpe::replace_findings(client, os_version, &findings, now).await
 }
 
+/// Recomputes CPE findings of every Fedora release hosts report. They
+/// follow the stored NVD ranges and the Fedora advisories, so this runs
+/// after either changes. A failure is logged and leaves the findings as
+/// they were.
+pub async fn refresh_all(client: &mut Client, now: DateTime<Utc>) {
+    let releases = match platform_store::vulns::fedora_releases(client).await {
+        Ok(releases) => releases,
+        Err(error) => {
+            tracing::warn!(%error, "cannot list releases");
+            return;
+        }
+    };
+    for release in releases {
+        match refresh(client, "fedora", &release, now).await {
+            Ok(findings) => tracing::info!(%release, findings, "cpe findings refreshed"),
+            Err(error) => tracing::warn!(%release, %error, "cpe refresh failed"),
+        }
+    }
+}
+
 /// Makes sure NVD ranges are kept for every product an installed package
 /// could be. Returns whether a product is new, in which case NVD has to be
 /// read again from the start (older CVEs of it were dropped when read).

@@ -344,23 +344,9 @@ async fn nvd_loop(pool: Pool, nvd: NvdClient, every: Duration) {
     }
 }
 
-/// Recomputes CPE findings of every Fedora release hosts report. They
-/// follow the stored NVD ranges and the Fedora advisories, so this runs
-/// after either changes.
+/// Recomputes CPE findings of every Fedora release hosts report.
 async fn refresh_cpe(client: &mut platform_store::Client) {
-    let releases = match vulns::fedora_releases(client).await {
-        Ok(releases) => releases,
-        Err(error) => {
-            tracing::warn!(%error, "cannot list releases");
-            return;
-        }
-    };
-    for release in releases {
-        match crate::cpe::refresh(client, "fedora", &release, Utc::now()).await {
-            Ok(findings) => tracing::info!(release, findings, "cpe findings refreshed"),
-            Err(error) => tracing::warn!(release, %error, "cpe refresh failed"),
-        }
-    }
+    crate::cpe::refresh_all(client, Utc::now()).await;
 }
 
 /// Checks each enabled enrichment source; priority is computed when read,
