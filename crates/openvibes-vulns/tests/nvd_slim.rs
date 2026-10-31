@@ -124,3 +124,42 @@ fn a_slimmed_record_keeps_only_what_the_platform_reads() {
             .all(|r| r.cpe.starts_with("cpe:2.3:a:openbsd:openssh"))
     );
 }
+
+#[test]
+fn the_builder_writes_only_what_the_reader_accepts() {
+    let cve = serde_json::json!({
+        "id": "CVE-2024-0001", "lastModified": "2024-01-01T00:00:00.000",
+        "descriptions": [{ "lang": "en", "value": "text" }],
+        "configurations": [{ "nodes": [{ "operator": "OR", "cpeMatch": [
+            { "vulnerable": true, "criteria": "cpe:2.3:a:v:long:*:*:*:*:*:*:*:*",
+              "versionEndExcluding": "9".repeat(80) },
+            { "vulnerable": true, "criteria": "cpe:2.3:a:v:odd:*:*:*:*:*:*:*:*",
+              "versionEndExcluding": "1\u{7}" },
+            { "vulnerable": true, "criteria": "cpe:2.3:a:v:fine:*:*:*:*:*:*:*:*",
+              "versionEndExcluding": "2.0" },
+        ] }] }],
+    });
+    let record = enrich::slim_record(&cve).unwrap();
+    // The over-long bound is cut to 64 bytes, the one with a control
+    // character is left out, and the file is accepted.
+    assert_eq!(record.ranges.len(), 2);
+    assert_eq!(record.ranges[0].end_excluding.as_deref().unwrap().len(), 64);
+    let page = enrich::parse_slim(&file(2024, vec![record]), SLIM_NVD_MAX_OPEN).unwrap();
+    // The same rows the API sync stores for the records it keeps.
+    let api = enrich::parse_nvd(
+        serde_json::json!({
+            "totalResults": 1, "startIndex": 0,
+            "vulnerabilities": [{ "cve": cve }],
+        })
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap();
+    let long = |rows: &[platform_store::cpe::Applicability]| {
+        rows.iter()
+            .find(|r| r.product == "long")
+            .and_then(|r| r.fixed.clone())
+    };
+    assert_eq!(long(&page.applicability), long(&api.applicability));
+    assert_eq!(page.applicability.len(), 2);
+}

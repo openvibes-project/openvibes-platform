@@ -152,6 +152,10 @@ fn flush(
                 "the NVD file for {year} is larger than the format allows"
             ));
         }
+        // What is published must be what a platform accepts.
+        enrich::parse_slim(&bytes, enrich::SLIM_NVD_MAX_OPEN).map_err(|_| {
+            format!("the NVD file for {year} is not accepted by the platform's reader")
+        })?;
         let sha256 = store(out, &bytes)?;
         if state.years.get(&year).is_some_and(|h| h.sha256 == sha256) {
             continue;

@@ -56,7 +56,12 @@ Serving `DIR` is the site's job (any static web server).
   window in `DIR/nvd-state.json`, so an interrupted first read resumes. **NVD joins the
   feed only once a first read has reached the present**, so a platform never imports half
   of it; until then the build says so and the other sources publish as usual. If NVD is
-  unreachable later, the files from the last finished read stay in the feed.
+  unreachable later, the files from the last finished read stay in the feed. Version
+  bounds are cut to 64 bytes as the API sync cuts them, a range the platform's reader
+  would refuse is left out, and every year file is read back with the platform's own
+  parser before it is kept, so a file the platform refuses is never published. During
+  a first read, superseded year blobs pile up (a few GB) until the build ends and
+  prunes them.
 - State between builds is `DIR/state.json` (ETags and the files last
   published); remove it to start over.
 

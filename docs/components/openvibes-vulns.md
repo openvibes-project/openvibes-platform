@@ -35,9 +35,13 @@ the offline core used by `openvibes-admin feeds import` and the
   through `enrich::import`. Slim NVD year files (`enrich::parse_slim`, gzip JSON) go
   through the same rows the API sync stores: the enrichment of CVEs advisories name
   (`upsert_nvd`) and the ranges of installed products (`replace_applicability`, one
-  shared `range_row` for both paths). NVD files are applied last, and read again
+  shared `range_row` for both paths). NVD files are applied last, and are read again
   even when unchanged if the run applied advisories or a new installed product
-  appeared (the files keep only what advisories and products asked for); CPE
+  appeared (the files keep only what advisories and products asked for). That need is
+  saved in the database (the NVD files' applied hashes are forgotten), so it
+  survives a failed file, `--source` leaving NVD out, and a crash; in practice the
+  "unchanged" skip rarely applies to NVD, and each such run parses all of it and
+  rewrites the ranges of every CVE. CPE
   findings are then recomputed (`cpe::refresh_all`). A feed's slim form does not
   carry the Fedora releases NVD lists as affected, so those findings lack the
   small confidence bonus the API gives them. A refused file does not stop the others.

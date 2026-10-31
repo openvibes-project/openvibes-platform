@@ -20,7 +20,7 @@ pub const FORMAT: u32 = 1;
 /// Most ranges one record may carry.
 pub const MAX_RANGES: usize = 5000;
 /// Largest a year file may be once decompressed.
-pub const MAX_OPEN_BYTES: u64 = 2 << 30;
+pub const MAX_OPEN_BYTES: u64 = 256 << 20;
 const MAX_DESCRIPTION: usize = 4096;
 const MAX_VECTOR: usize = 512;
 const MAX_BOUND: usize = 64;
@@ -149,15 +149,19 @@ pub fn slim_record(cve: &Value) -> Option<SlimRecord> {
     let kept: Nvd = record(cve)?;
     let scored = cvss(&cve["metrics"]);
     let (matches, _) = kept_matches(cve);
+    // Bounds are cut to 64 bytes as the API sync cuts them, and a range the
+    // reader would refuse is left out, so the file is never refused.
+    let cut = |bound: Option<String>| bound.map(|b| truncate(&b, MAX_BOUND));
     let mut ranges: Vec<SlimRange> = matches
         .into_iter()
         .map(|m: RawMatch| SlimRange {
             cpe: m.criteria,
-            start_including: m.start_including,
+            start_including: cut(m.start_including),
             start_excluding: None,
-            end_including: m.end_including,
-            end_excluding: m.end_excluding,
+            end_including: cut(m.end_including),
+            end_excluding: cut(m.end_excluding),
         })
+        .filter(range_ok)
         .collect();
     ranges.truncate(MAX_RANGES);
     Some(SlimRecord {
@@ -195,6 +199,19 @@ fn valid_cwe(cwe: &str) -> bool {
 
 fn valid_bound(bound: Option<&String>) -> bool {
     bound.is_none_or(|b| b.len() <= MAX_BOUND && !b.chars().any(char::is_control))
+}
+
+/// Whether a range is one the reader accepts: an application name of at most
+/// 512 bytes and bounds of at most 64, none with control characters. The
+/// builder writes only such ranges, so a file it makes is never refused.
+fn range_ok(range: &SlimRange) -> bool {
+    range.cpe.starts_with("cpe:2.3:a:")
+        && range.cpe.len() <= 512
+        && !range.cpe.chars().any(char::is_control)
+        && valid_bound(range.start_including.as_ref())
+        && valid_bound(range.end_including.as_ref())
+        && valid_bound(range.end_excluding.as_ref())
+        && valid_bound(range.start_excluding.as_ref())
 }
 
 /// Reads a slim NVD year file (gzip, at most `max_open` bytes once
@@ -236,14 +253,7 @@ pub fn parse_slim(content: &[u8], max_open: u64) -> Result<SlimPage, ParseError>
                 c.vector.len() > MAX_VECTOR
                     || !["4.0", "3.1", "3.0", "2.0"].contains(&c.version.as_str())
             })
-            || record.ranges.iter().any(|r| {
-                !r.cpe.starts_with("cpe:2.3:a:")
-                    || r.cpe.len() > 512
-                    || !valid_bound(r.start_including.as_ref())
-                    || !valid_bound(r.end_including.as_ref())
-                    || !valid_bound(r.end_excluding.as_ref())
-                    || !valid_bound(r.start_excluding.as_ref())
-            });
+            || !record.ranges.iter().all(range_ok);
         if bad {
             return Err(ParseError::Malformed);
         }

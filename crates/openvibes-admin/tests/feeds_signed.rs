@@ -323,10 +323,16 @@ async fn slim_nvd_in_a_signed_feed_feeds_cpe_findings() {
     installed(&fixture.url, &base, 1).await;
 
     let dir = scratch_dir("feeds-slim-nvd");
-    let files: Vec<(&str, &str, String, Vec<u8>)> = slim_years()
+    let mut files: Vec<(&str, &str, String, Vec<u8>)> = slim_years()
         .into_iter()
         .map(|(year, bytes)| ("nvd", "nvd", format!("nvd-{year}.json.gz"), bytes))
         .collect();
+    files.push((
+        "kev",
+        "kev",
+        "known_exploited_vulnerabilities.json".into(),
+        kev(),
+    ));
     let fetched = now() - 120;
     tree_of(&dir.join("one"), 1, "k1", 1, fetched, &files);
     stdout(&fixture.run(&["feeds", "trust", "add", "site", "k1", &public(1)]));
@@ -348,7 +354,8 @@ async fn slim_nvd_in_a_signed_feed_feeds_cpe_findings() {
     let said = stdout(&fixture.run(&["feeds", "import-bundle", &path]));
     assert!(said.contains("nvd nvd unchanged"), "{said}");
 
-    // A newly installed product needs its ranges from the unchanged files.
+    // A newly installed product needs its ranges from the unchanged files,
+    // also when the import that notices it leaves NVD out.
     let more = [
         pkg("libcurl", "8.3.0", Some("curl")),
         pkg("xz", "5.4.0", None),
@@ -357,6 +364,16 @@ async fn slim_nvd_in_a_signed_feed_feeds_cpe_findings() {
     installed(&fixture.url, &more, 2).await;
     tree_of(&dir.join("three"), 1, "k1", 3, fetched, &files);
     let path = dir.join("three").to_string_lossy().into_owned();
+    let said = stdout(&fixture.run(&["feeds", "import-bundle", &path, "--source", "kev"]));
+    assert!(said.contains("nvd nvd skipped"), "{said}");
+    assert_eq!(
+        fixture
+            .count("SELECT count(*) FROM cve_applicability")
+            .await,
+        3
+    );
+    tree_of(&dir.join("four"), 1, "k1", 4, fetched, &files);
+    let path = dir.join("four").to_string_lossy().into_owned();
     let said = stdout(&fixture.run(&["feeds", "import-bundle", &path]));
     assert!(said.contains("nvd nvd applied"), "{said}");
     assert!(

@@ -128,7 +128,7 @@ pub async fn apply(
     if !recorded {
         return Err("a newer feed was accepted in the meantime; nothing was applied".into());
     }
-    let known: HashMap<(String, String, String), AppliedFile> = feeds::applied_files(client)
+    let mut known: HashMap<(String, String, String), AppliedFile> = feeds::applied_files(client)
         .await
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -139,32 +139,36 @@ pub async fn apply(
             )
         })
         .collect();
-    // NVD last: it keeps only CVEs the advisories above name. Its files are
-    // read again, even unchanged, when this run added advisories or a new
-    // installed product needs its ranges (the API sync does the same by
-    // reading further back).
+    // NVD last: it keeps only CVEs the advisories above name. Its files must
+    // be read again, even if unchanged, when this run added advisories or a
+    // new installed product needs its ranges (the API sync does the same by
+    // reading further back). That need is saved in the database as the NVD
+    // files' hashes being forgotten, so it survives a failed file, a
+    // `--source` that leaves NVD out, and a crash.
     let mut ordered: Vec<&FileEntry> = accepted.manifest.files.iter().collect();
     ordered.sort_by_key(|entry| entry.kind == Kind::Nvd);
-    let mut reread = if ordered.iter().any(|e| e.kind == Kind::Nvd) {
-        crate::cpe::ensure_products(client, "fedora")
+    let has_nvd = ordered.iter().any(|e| e.kind == Kind::Nvd);
+    if has_nvd
+        && crate::cpe::ensure_products(client, "fedora")
             .await
             .map_err(|e| e.to_string())?
-    } else {
-        false
-    };
+    {
+        mark_nvd_stale(client, &mut known).await?;
+    }
     let mut reports = Vec::new();
     for entry in ordered {
         let outcome = if !only.is_empty() && !only.contains(&entry.source) {
             Outcome::Skipped("not selected".into())
         } else {
-            apply_file(client, feed_files, accepted, entry, &known, now, reread)
+            apply_file(client, feed_files, accepted, entry, &known, now)
                 .await
                 .map_err(|e| e.to_string())?
         };
-        if matches!(entry.kind, Kind::Updateinfo | Kind::Osv)
+        if has_nvd
+            && matches!(entry.kind, Kind::Updateinfo | Kind::Osv)
             && matches!(outcome, Outcome::Applied(_))
         {
-            reread = true;
+            mark_nvd_stale(client, &mut known).await?;
         }
         reports.push(FileReport {
             source: entry.source.clone(),
@@ -189,7 +193,6 @@ async fn apply_file(
     entry: &FileEntry,
     known: &HashMap<(String, String, String), AppliedFile>,
     now: DateTime<Utc>,
-    reread: bool,
 ) -> Result<Outcome, StoreError> {
     let Some(path) = feed_files.blob(&entry.sha256) else {
         return Ok(Outcome::Refused("the blob is not in the feed".into()));
@@ -215,9 +218,7 @@ async fn apply_file(
             other => format!("{} ", other.as_str()).trim().replace('_', " "),
         }));
     }
-    if previous.is_some_and(|file| hex_of(&file.sha256) == entry.sha256)
-        && !(reread && entry.kind == Kind::Nvd)
-    {
+    if previous.is_some_and(|file| hex_of(&file.sha256) == entry.sha256) {
         return Ok(Outcome::Unchanged);
     }
     let step = match entry.kind {
@@ -388,6 +389,20 @@ async fn enrichment(
         .await
         .map_err(|e| e.to_string())?;
     Ok(Step::Done(format!("{count} CVEs from {source}")))
+}
+
+/// Makes every NVD file count as changed until it is applied again.
+async fn mark_nvd_stale(
+    client: &Client,
+    known: &mut HashMap<(String, String, String), AppliedFile>,
+) -> Result<(), String> {
+    feeds::mark_stale(client, Kind::Nvd.as_str())
+        .await
+        .map_err(|e| e.to_string())?;
+    for file in known.values_mut().filter(|f| f.kind == Kind::Nvd.as_str()) {
+        file.sha256 = [0; 32];
+    }
+    Ok(())
 }
 
 async fn nvd_file(client: &mut Client, path: &Path, now: DateTime<Utc>) -> Result<Step, String> {
