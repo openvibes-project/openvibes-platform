@@ -103,13 +103,24 @@ pub(super) fn installed<R: Runner>(ctx: &Ctx<R>, package: &str) -> bool {
     ctx.succeeds(Rpm, &["-q", "--quiet", package])
 }
 
+/// The mirror's feed builder is no Setup component, but Remove everything
+/// deletes its account and signing key, so it goes too when it is installed.
+fn feed_goes<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> bool {
+    args.confirm.is_some() && installed(ctx, "openvibes-feed")
+}
+
 fn packages<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Vec<&'static str> {
-    args.components
+    let mut packages: Vec<&'static str> = args
+        .components
         .iter()
         .flat_map(|c| c.packages())
         .copied()
         .filter(|package| *package != "openvibes-admin" && installed(ctx, package))
-        .collect()
+        .collect();
+    if feed_goes(ctx, args) {
+        packages.push("openvibes-feed");
+    }
+    packages
 }
 
 fn stop<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String> {
@@ -135,6 +146,9 @@ fn stop<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String>
                 ]);
             }
         }
+    }
+    if feed_goes(ctx, args) {
+        units.extend(["openvibes-feed.timer", "openvibes-feed.service"]);
     }
     if units.is_empty() {
         return Ok(StepState::Skipped("nothing installed to stop".into()));
@@ -258,6 +272,7 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     kept.push(PG_RECORD);
     kept.push(PG_MARK);
     let site_key = ctx.exists("/var/lib/openvibes-signer/site.key");
+    let feed_key = ctx.exists("/var/lib/openvibes-feed/feed.key");
     // An install stopped before the CA step: the request's copy in the
     // operator's home goes too, before its record under /etc/openvibes.
     super::request::remove_copy(ctx);
@@ -321,9 +336,15 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     } else {
         ""
     };
+    // Platforms that trusted this mirror must trust its next key.
+    let feed_key = if feed_key {
+        "; the feed signing key is gone: platforms must trust the new key after a reinstall"
+    } else {
+        ""
+    };
     let dropped = if server { "database, roles, " } else { "" };
     Ok(StepState::Done(format!(
-        "{dropped}configuration, data and service accounts removed; {postgresql}{site_key}"
+        "{dropped}configuration, data and service accounts removed; {postgresql}{site_key}{feed_key}"
     )))
 }
 

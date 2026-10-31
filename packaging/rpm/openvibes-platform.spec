@@ -334,9 +334,9 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %post -n openvibes-feed
 %systemd_post openvibes-feed.timer
 %preun -n openvibes-feed
-%systemd_preun openvibes-feed.timer
+%systemd_preun openvibes-feed.timer openvibes-feed.service
 %postun -n openvibes-feed
-%systemd_postun openvibes-feed.timer
+%systemd_postun openvibes-feed.timer openvibes-feed.service
 
 %pre -n openvibes-vulns
 %rename_pre vulns openvibes-vulns.service

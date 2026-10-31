@@ -119,6 +119,49 @@ fn removing_the_console_also_stops_the_fetch_socket_when_installed() {
 }
 
 #[test]
+fn remove_everything_also_stops_and_removes_the_feed_builder_when_installed() {
+    // Only a whole uninstall (a typed host name) takes the mirror's package,
+    // because it also deletes the account and the signing key.
+    for (feed, confirm) in [(true, true), (true, false), (false, true)] {
+        let fake = Fake::new(&format!("remove-feed-{feed}-{confirm}"));
+        let mut installed = vec!["openvibes-ingest"];
+        if feed {
+            installed.push("openvibes-feed");
+        }
+        for package in installed {
+            fake.answer(&["/usr/bin/rpm", "-q", "--quiet", package], 0, "");
+        }
+        fake.answer(&["/usr/bin/systemctl", "disable", "--now"], 0, "");
+        fake.answer(&["/usr/bin/dnf", "remove"], 0, "");
+        let plan = plan(&[Ingest]);
+        let confirm = confirm.then(|| plan.hostname.clone());
+        let args = args(&[Ingest], confirm.as_deref());
+        let taken = feed && confirm.is_some();
+        let state = run(&fake.ctx(&plan), RemoveStep::Stop, &args);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        let call = fake.call(&["/usr/bin/systemctl", "disable"]);
+        assert_eq!(
+            call.contains(&"openvibes-feed.timer".to_owned()),
+            taken,
+            "{call:?}"
+        );
+        assert_eq!(
+            call.contains(&"openvibes-feed.service".to_owned()),
+            taken,
+            "{call:?}"
+        );
+        let state = run(&fake.ctx(&plan), RemoveStep::Packages, &args);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        let call = fake.call(&["/usr/bin/dnf", "remove"]);
+        assert_eq!(
+            call.contains(&"openvibes-feed".to_owned()),
+            taken,
+            "{call:?}"
+        );
+    }
+}
+
+#[test]
 fn the_admin_package_is_left_for_last() {
     let fake = Fake::new("remove-admin");
     fake.answer(&["/usr/bin/rpm", "-q", "--quiet"], 0, "");
