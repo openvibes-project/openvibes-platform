@@ -11,12 +11,14 @@ on:
     branches: [main]
     paths:
       - crates/openvibes-console/web/**
+      - '!crates/openvibes-console/web/**/*.md'
       - .github/workflows/console-demo-pages.yml
       - .github/actions/console-browsers/**
   pull_request:
     branches: [main]
     paths:
       - crates/openvibes-console/web/**
+      - '!crates/openvibes-console/web/**/*.md'
       - .github/workflows/console-demo-pages.yml
       - .github/actions/console-browsers/**
 
