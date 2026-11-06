@@ -106,8 +106,9 @@ fn plan(peek: Option<&Peek>, keys: &[(TrustedKey, bool)]) -> Result<Plan, String
     {
         return match peek.public_key {
             Some(offered) if offered != known.public_key => Err(format!(
-                "the mirror now offers another key for {name} (fingerprint {}), but this site \\
-                 trusts {}; the feed is refused",
+                "the mirror now offers another key for {name} (fingerprint {}), but this site \
+                 trusts {}; the feed is refused. If the key was changed on purpose, remove the pinned key \
+with `openvibes-admin feeds trust remove` and give the mirror's new key a new key id",
                 fingerprint(&offered),
                 fingerprint(&known.public_key)
             )),
@@ -116,7 +117,7 @@ fn plan(peek: Option<&Peek>, keys: &[(TrustedKey, bool)]) -> Result<Plan, String
     }
     if let Some((pinned, _)) = keys.iter().find(|(_, pinned)| *pinned) {
         return Err(format!(
-            "the mirror signs as {name}, but this site pinned {}/{} (fingerprint {}); the feed \\
+            "the mirror signs as {name}, but this site pinned {}/{} (fingerprint {}); the feed \
              is refused",
             pinned.feed_id,
             pinned.key_id,
@@ -143,7 +144,7 @@ fn plan(peek: Option<&Peek>, keys: &[(TrustedKey, bool)]) -> Result<Plan, String
             })
         }
         None => Err(format!(
-            "the mirror's feed.json carries no public key and none is trusted for {name}: \\
+            "the mirror's feed.json carries no public key and none is trusted for {name}: \
              update the mirror, or run `openvibes-admin feeds trust add`"
         )),
     }
@@ -154,7 +155,10 @@ fn plan(peek: Option<&Peek>, keys: &[(TrustedKey, bool)]) -> Result<Plan, String
 async fn idle_osv(client: &Client, accepted: &Accepted) -> Vec<(String, String)> {
     let hosts: Vec<crate::osv::Release> = crate::osv_fetch::releases_by_ecosystem(client)
         .await
-        .unwrap_or_default()
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "cannot list OSV releases; their files are not downloaded");
+            Vec::new()
+        })
         .into_iter()
         .flat_map(|(_, releases)| releases)
         .collect();
@@ -401,6 +405,21 @@ async fn check(
         .into_iter()
         .filter(|entry| !is_idle(entry))
         .collect();
+    // An updateinfo is checked against its repomd.xml, which is applied on
+    // its own: fetch the pair, so one failed updateinfo can be retried.
+    let pairs: Vec<&FileEntry> = accepted
+        .manifest
+        .files
+        .iter()
+        .filter(|f| {
+            f.kind == feedfmt::Kind::Repomd
+                && wanted
+                    .iter()
+                    .any(|w| w.kind == feedfmt::Kind::Updateinfo && w.source == f.source)
+                && !wanted.iter().any(|w| std::ptr::eq(*w, *f))
+        })
+        .collect();
+    let wanted: Vec<&FileEntry> = wanted.into_iter().chain(pairs).collect();
     let label = format!(
         "{}/{} #{}",
         accepted.feed_id, accepted.key_id, accepted.manifest.sequence
@@ -491,21 +510,29 @@ async fn unchanged(
     mirror: &mut Mirror,
     now: DateTime<Utc>,
 ) -> Result<Synced, String> {
-    if mirror.digest != [0; 32] {
-        vulns::record_feed(client, STATUS, Ok((mirror.digest, mirror.files)), now)
-            .await
-            .map_err(|e| e.to_string())?;
-    } else if let Some(state) = feeds::feed_states(client)
+    let Some(state) = feeds::feed_states(client)
         .await
         .map_err(|e| e.to_string())?
         .into_iter()
         .find(|state| state.origin == "mirror")
-    {
-        mirror.digest = state.manifest_digest;
-        vulns::record_feed(client, STATUS, Ok((mirror.digest, mirror.files)), now)
-            .await
-            .map_err(|e| e.to_string())?;
+    else {
+        return Ok(Synced::Unchanged);
+    };
+    // The same feed.json served again does not make old data fresh.
+    if state.expires_at <= now {
+        return Err(format!(
+            "the mirror's feed expired at {}; the data is from {}. The mirror's build has \
+             stopped, or its clock is wrong",
+            state.expires_at.format("%Y-%m-%d %H:%M UTC"),
+            state.created_at.format("%Y-%m-%d %H:%M UTC")
+        ));
     }
+    if mirror.digest == [0; 32] {
+        mirror.digest = state.manifest_digest;
+    }
+    vulns::record_feed(client, STATUS, Ok((mirror.digest, mirror.files)), now)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(Synced::Unchanged)
 }
 

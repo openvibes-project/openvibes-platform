@@ -135,8 +135,11 @@ Nothing else is needed on the platform: the first time it reads `feed.json` it
 pins the key the feed carries (`public_key`, written by `build`), so the
 address is the trust. `openvibes-admin feeds status` shows the `mirror`
 row, and `feeds trust list` marks the pinned key; compare its fingerprint with
-`keygen`'s if you want to be sure. A new key id on the mirror (a rotation) is
-refused until the pinned key is removed with `feeds trust remove`.
+`keygen`'s if you want to be sure. A new key on the mirror (a rotation) is
+refused until the pinned key is removed with `feeds trust remove`, and it must
+have a new key id: ids are never re-used, so rebuilding with the old id cannot
+be accepted. A feed served again after its 7 days are over shows as an error
+on the `mirror` status row.
 `openvibes-admin feeds import-bundle` still takes either the tree directory or
 a bundle `.tar` for sites that move files by hand.
 

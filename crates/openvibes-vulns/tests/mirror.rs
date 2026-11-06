@@ -92,8 +92,26 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Publishes a feed with a KEV and an EPSS file on `site`.
 fn publish(site: &Site, built: &Built<'_>, kev: &[u8], epss: &[u8], fetched_ago: i64) {
+    publish_files(
+        site,
+        built,
+        &[
+            ("kev", "kev", "kev.json", kev),
+            ("epss", "epss", "epss.csv.gz", epss),
+        ],
+        fetched_ago,
+    );
+}
+
+/// Publishes a feed of `(source, kind, name, bytes)` files on `site`.
+fn publish_files(
+    site: &Site,
+    built: &Built<'_>,
+    list: &[(&str, &str, &str, &[u8])],
+    fetched_ago: i64,
+) {
     let now = Utc::now().timestamp();
-    let entry = |source: &str, kind: &str, name: &str, bytes: &[u8]| {
+    let entry = |(source, kind, name, bytes): &(&str, &str, &str, &[u8])| {
         format!(
             r#"{{"source":"{source}","kind":"{kind}","name":"{name}","sha256":"{}","size":{},"fetched_at":{},"upstream":"https://example.org/{name}"}}"#,
             hex(bytes),
@@ -101,13 +119,13 @@ fn publish(site: &Site, built: &Built<'_>, kev: &[u8], epss: &[u8], fetched_ago:
             now - fetched_ago
         )
     };
+    let entries: Vec<String> = list.iter().map(entry).collect();
     let manifest = format!(
-        r#"{{"sequence":{},"created_at":{},"expires_at":{},"files":[{},{}]}}"#,
+        r#"{{"sequence":{},"created_at":{},"expires_at":{},"files":[{}]}}"#,
         built.sequence,
         now - 30,
         now + built.expires_in,
-        entry("kev", "kev", "kev.json", kev),
-        entry("epss", "epss", "epss.csv.gz", epss),
+        entries.join(",")
     );
     let signature = built
         .signer
@@ -128,8 +146,9 @@ fn publish(site: &Site, built: &Built<'_>, kev: &[u8], epss: &[u8], fetched_ago:
     );
     let mut files = site.files.lock().unwrap();
     files.insert("feed.json".into(), envelope.into_bytes());
-    files.insert(format!("blobs/{}", hex(kev)), kev.to_vec());
-    files.insert(format!("blobs/{}", hex(epss)), epss.to_vec());
+    for (_, _, _, bytes) in list {
+        files.insert(format!("blobs/{}", hex(bytes)), bytes.to_vec());
+    }
 }
 
 fn blob_hits(site: &Site) -> usize {
@@ -447,5 +466,74 @@ async fn a_feed_without_a_public_key_cannot_be_pinned() {
     );
     let error = env.sync().await.unwrap_err();
     assert!(error.contains("no public key"), "{error}");
+    env.finish().await;
+}
+
+#[tokio::test]
+async fn an_old_feed_served_again_is_an_error_once_it_has_expired() {
+    let mut env = setup().await;
+    let signer = first();
+    let mut short = built(&signer, 1);
+    short.expires_in = 3600;
+    publish(
+        &env.site,
+        &short,
+        &fixture("kev.json"),
+        &fixture("epss.csv.gz"),
+        120,
+    );
+    env.sync().await.unwrap();
+    // The same bytes, an hour and a minute later.
+    let later = Utc::now() + chrono::Duration::seconds(3660);
+    let error = mirror::sync(&mut env.client, &mut env.mirror, later)
+        .await
+        .unwrap_err();
+    assert!(error.contains("expired"), "{error}");
+    assert_eq!(env.status_error().await.as_deref(), Some(error.as_str()));
+    assert_eq!(env.count(KEVS).await, 5, "the old data keeps serving");
+    env.finish().await;
+}
+
+#[tokio::test]
+async fn a_failed_updateinfo_is_retried_with_its_repomd() {
+    let mut env = setup().await;
+    let signer = first();
+    let updateinfo = fixture("updateinfo-f44.xml.zst");
+    let repomd = format!(
+        "<repomd><data type=\"updateinfo\"><checksum type=\"sha256\">{}</checksum>\
+         <location href=\"repodata/{}-updateinfo.xml.zst\"/><size>{}</size></data></repomd>",
+        hex(&updateinfo),
+        hex(&updateinfo),
+        updateinfo.len()
+    )
+    .into_bytes();
+    let list: [(&str, &str, &str, &[u8]); 2] = [
+        ("fedora-44-x86_64", "repomd", "repomd.xml", &repomd),
+        (
+            "fedora-44-x86_64",
+            "updateinfo",
+            "updateinfo.xml.zst",
+            &updateinfo,
+        ),
+    ];
+    publish_files(&env.site, &built(&signer, 1), &list, 120);
+    // The updateinfo cannot be downloaded the first time.
+    let name = format!("blobs/{}", hex(&updateinfo));
+    let held = env.site.files.lock().unwrap().remove(&name).unwrap();
+    assert!(env.sync().await.is_err());
+    assert_eq!(
+        env.count("SELECT count(*) FROM feed_applied_files WHERE kind = 'repomd'")
+            .await,
+        1,
+        "the repomd.xml is applied on its own"
+    );
+    env.site.files.lock().unwrap().insert(name, held);
+    env.sync().await.unwrap();
+    assert_eq!(env.status_error().await, None);
+    assert_eq!(
+        env.count("SELECT count(*) FROM feed_applied_files WHERE kind = 'updateinfo'")
+            .await,
+        1
+    );
     env.finish().await;
 }
