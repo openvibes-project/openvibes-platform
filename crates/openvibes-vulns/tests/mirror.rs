@@ -537,3 +537,38 @@ async fn a_failed_updateinfo_is_retried_with_its_repomd() {
     );
     env.finish().await;
 }
+
+#[tokio::test]
+async fn expiry_follows_the_feed_applied_last_not_an_older_key() {
+    let mut env = setup().await;
+    let (kev, epss) = (fixture("kev.json"), fixture("epss.csv.gz"));
+    let first_key = first();
+    let mut short = built(&first_key, 1);
+    short.expires_in = 3600;
+    publish(&env.site, &short, &kev, &epss, 120);
+    env.sync().await.unwrap();
+    // The administrator trusts a second key and the mirror switches to it.
+    let second = SigningKey::from_bytes(&[8; 32]);
+    let admin = env.db.pool.get().await.unwrap();
+    admin
+        .execute(
+            "INSERT INTO feed_trust_keys (feed_id, key_id, public_key, added_at) \
+             VALUES ('site', 'k2', $1, now())",
+            &[&second.verifying_key().to_bytes().as_slice()],
+        )
+        .await
+        .unwrap();
+    let mut next = built(&second, 1);
+    next.key_id = "k2";
+    next.expires_in = 7 * 86_400;
+    publish(&env.site, &next, &kev, &epss_changed(), 60);
+    env.sync().await.unwrap();
+    // After the first key's feed has expired, the current one is fresh.
+    let later = Utc::now() + chrono::Duration::seconds(2 * 86_400);
+    assert_eq!(
+        mirror::sync(&mut env.client, &mut env.mirror, later).await,
+        Ok(Synced::Unchanged)
+    );
+    assert_eq!(env.status_error().await, None);
+    env.finish().await;
+}

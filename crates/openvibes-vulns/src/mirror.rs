@@ -515,7 +515,8 @@ async fn unchanged(
         .await
         .map_err(|e| e.to_string())?
         .into_iter()
-        .find(|state| state.origin == "mirror")
+        .filter(|state| state.origin == "mirror")
+        .max_by_key(|state| state.applied_at)
     else {
         return Ok(Synced::Unchanged);
     };
