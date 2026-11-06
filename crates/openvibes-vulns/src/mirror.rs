@@ -434,6 +434,7 @@ async fn check(
     let unpacked = Unpacked {
         envelope: body.clone(),
         blobs: work.0.clone(),
+        partial: true,
     };
     let mut reports = feedimport::apply(client, &unpacked, &accepted, "mirror", &[], now).await?;
     // A file whose hash did not change can still need reading (the NVD files

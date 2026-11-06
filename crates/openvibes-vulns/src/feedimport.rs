@@ -203,9 +203,12 @@ async fn apply_file(
         entry.name.clone(),
     ));
     let Some(path) = feed_files.blob(&entry.sha256) else {
-        // A reader that fetches only what changed leaves the rest out.
+        // A mirror read fetches only what changed and leaves the rest out; a
+        // bundle is whole, so a blob missing from it is always refused.
         return Ok(
-            if previous.is_some_and(|file| hex_of(&file.sha256) == entry.sha256) {
+            if feed_files.partial
+                && previous.is_some_and(|file| hex_of(&file.sha256) == entry.sha256)
+            {
                 Outcome::Unchanged
             } else {
                 Outcome::Refused(BLOB_MISSING.into())
