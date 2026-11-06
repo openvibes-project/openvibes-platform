@@ -109,6 +109,16 @@ impl Fetcher {
         url: &str,
         etag: Option<&str>,
     ) -> Result<Option<Download>, String> {
+        self.get_if_changed_up_to(url, etag, self.max_bytes)
+    }
+
+    /// [`Self::get_if_changed`] with its own, smaller body limit.
+    pub fn get_if_changed_up_to(
+        &self,
+        url: &str,
+        etag: Option<&str>,
+        limit: u64,
+    ) -> Result<Option<Download>, String> {
         let mut request = self.agent.get(url);
         if let Some(etag) = etag {
             request = request.header("If-None-Match", etag);
@@ -128,7 +138,7 @@ impl Fetcher {
         let body = response
             .body_mut()
             .with_config()
-            .limit(self.max_bytes)
+            .limit(limit)
             .read_to_vec()
             .map_err(|error| format!("{}: {error}", host_of(url)))?;
         Ok(Some((body, etag)))

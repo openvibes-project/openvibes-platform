@@ -28,7 +28,8 @@ the service reads them once at start. General (console reads them itself): `supp
 the single sign-on ones (`sso.*`, 8, all `Live`: `enabled`, `idp_entity_id`,
 `idp_sso_url`, `idp_certificates` (PEM text, at most three certificates,
 checked for shape here and parsed by the console), the group, name and email
-attribute names, and `remove_inactive_days`). Vulnerability feeds (all live): check interval,
+attribute names, and `remove_inactive_days`). Vulnerability feeds (all live): feed mirror address
+(`vulns.feed_mirror_url`, empty by default), check interval,
 metalink URL, architecture, proxy, largest download (MiB), KEV, EPSS, NVD,
 EUVD and OSV addresses, largest OSV download (MiB), and the NVD API key (a
 secret, stored in `service_secrets`, never shown again). Text must be one

@@ -78,6 +78,8 @@ struct OutEnvelope<'a> {
     feed_id: &'a str,
     key_id: &'a str,
     signature: String,
+    /// Not signed: lets a platform that pins keys learn this one.
+    public_key: String,
     manifest: &'a str,
 }
 
@@ -497,6 +499,7 @@ pub fn run(config: &Config, key: &FeedKey, options: &Options<'_>) -> Result<Repo
         feed_id: &key.feed_id,
         key_id: &key.key_id,
         signature: URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+        public_key: key.public(),
         manifest: &manifest,
     })
     .map_err(|_| "cannot write feed.json".to_owned())?;

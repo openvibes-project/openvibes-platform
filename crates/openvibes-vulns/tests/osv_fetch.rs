@@ -191,6 +191,7 @@ async fn first_debian_inventory_wakes_osv_sync() {
         arch: "x86_64".into(),
         proxy_url: None,
         max_download_bytes: 64 << 20,
+        feed_mirror_url: String::new(),
         kev_url: String::new(),
         epss_url: String::new(),
         nvd_url: String::new(),

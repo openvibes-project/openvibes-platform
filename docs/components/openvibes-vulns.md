@@ -233,17 +233,65 @@ advisories alone name tens of thousands). The NVD
 key file must not be readable by group or others, holds one key, and the
 key is sent only in the `apiKey` header, never logged.
 
+### Reading a feed mirror
+
+With `feed_mirror_url` set the service downloads nothing from the sources
+themselves (Fedora, OSV, KEV, EPSS, EUVD, NVD): `mirror.rs` reads the mirror
+at start and every check interval, and clearing the address brings the direct
+tasks back, live like any `vulns.*` setting. There is no fallback from the
+mirror to the internet.
+
+A check fetches `<address>/feed.json` (`If-None-Match`; a 304 or a body
+identical to the last one is "unchanged"), verifies it with `feedfmt::verify`,
+downloads only the blobs whose SHA-256 differs from what is applied into a
+private folder under `<osv_dir>/feed-mirror` (size and hash checked as they
+stream; deleted afterwards), and hands the result to `feedimport::apply` with
+origin `mirror`. A file that did not change but must be read again (the NVD
+files after new advisories) is fetched in a second pass. OSV files for
+releases no host runs are not downloaded, and are read when a host first
+reports such a release.
+
+**Trust is the address.** There is no key to add: on first contact the
+service pins the key in the feed's `public_key` (spec "Pinning") once the
+signature verifies with it, as `feed_trust_keys.pinned`, and audits
+`feeds.mirror_pin` with the fingerprint. Afterwards a different key under the
+pinned ids, or a different key id, is refused and shown on the status. Only
+one key is ever pinned, and none when an administrator trusts a key for that
+feed id (`feeds trust add` still works for bundles and for a mirror whose feed
+carries no `public_key`). To accept a new key on purpose,
+`openvibes-admin feeds trust remove FEED KEY` the pinned one; the new key
+needs a new key id (ids are not re-used).
+
+**Errors never change data.** An unreachable mirror, a bad signature, an
+unknown or changed key, an expired feed or a file that does not match its hash
+is recorded on the `mirror` row of the feed status
+(`openvibes-admin feeds status`) and in the audit log
+(`feeds.mirror_refused`, once per distinct reason); the data already applied
+keeps serving and new inventories are still matched against it. A Fedora
+release hosts run that the mirror does not carry is flagged on that release's
+row: "no data from the mirror for Fedora N; add it on the mirror". Each
+applied sequence is audited as `feeds.mirror_apply`.
+
+Migration 0075 adds the `pinned` marker and lets this role insert trust keys
+and audit rows (it could only read the keys before). Tests:
+`tests/mirror.rs` (a real HTTP server, run as the `openvibes-vulns` role),
+`tests/service.rs::a_mirror_address_stops_direct_downloads_and_clearing_it_resumes_them`.
+
 ### Settings from the console
 
-The same values (check interval, metalink, architecture, proxy, download
-limits, the KEV, EPSS, NVD, EUVD and OSV addresses) and the NVD API key can
+The same values (feed mirror address, check interval, metalink, architecture,
+proxy, download limits, the KEV, EPSS, NVD, EUVD and OSV addresses) and the NVD API key can
 be set in the console under Settings › General › Vulnerability feeds
 (`vulns.*` rows of `console_settings`, the key in `service_secrets`; see
 [platform-settings.md](platform-settings.md)). The service reads them at
 start and then every minute (`settings::POLL`); a change rebuilds the feed
 tasks with the new values, no restart. The file stays the base: it still
 decides the database, the health listener and the OSV directory, and it is
-what applies for every setting nobody changed. Stored values go through the
+what applies for every setting nobody changed.
+
+`feed_mirror_url` (file or console, empty by default) names a signed feed
+mirror (`openvibes-feed`, HTTPS, or HTTP on loopback) and is covered under
+"Reading a feed mirror" below. Stored values go through the
 same `validate()`; a value that cannot be applied logs a warning and the
 service carries on with the file; if the file alone cannot run either
 (for example `nvd_api_key_file` became unreadable) it waits one poll, or a
