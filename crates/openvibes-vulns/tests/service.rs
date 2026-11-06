@@ -319,6 +319,96 @@ async fn a_changed_console_setting_reaches_the_running_service() {
     db.drop().await;
 }
 
+#[tokio::test]
+async fn a_mirror_address_stops_direct_downloads_and_clearing_it_resumes_them() {
+    let db = TestDb::create().await;
+    let mut admin = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut admin).await.unwrap();
+    let content = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/updateinfo-f44.xml.zst"),
+    )
+    .unwrap();
+    let (template, kev_url) = mirror(content).await;
+    let health = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let health_addr = health.local_addr().unwrap();
+    // A mirror that has no feed.json: it is down as far as the service sees.
+    let mut with_mirror = config(&db, health_addr, template, kev_url.clone());
+    with_mirror.feed_mirror_url = kev_url.replace("/kev.json", "/no-mirror-here");
+    let agent = "agent.00000000-0000-4000-8000-0000000000d4";
+    admin
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ($1, 'active', now())",
+            &[&agent],
+        )
+        .await
+        .unwrap();
+    inventory::replace(
+        &mut admin,
+        agent,
+        "fedora",
+        "44",
+        None,
+        &[wordpress()],
+        [4; 32],
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let task = tokio::spawn(service::run_polling(
+        with_mirror,
+        health,
+        async {
+            let _ = stopped.await;
+        },
+        Duration::from_millis(200),
+    ));
+    wait_for(
+        &db,
+        "SELECT count(*) FROM feed_sources WHERE source = 'mirror' AND last_error IS NOT NULL",
+        1,
+    )
+    .await;
+    wait_for(
+        &db,
+        "SELECT count(*) FROM feed_sources WHERE source = 'fedora-44-x86_64' \
+         AND last_error LIKE 'no data from the mirror for Fedora 44%'",
+        1,
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    wait_for(
+        &db,
+        "SELECT count(*) FROM cve_enrichment WHERE kev_added IS NOT NULL",
+        0,
+    )
+    .await;
+    // The console clears the address: the service downloads directly again.
+    admin
+        .execute(
+            "INSERT INTO console_settings (key, value, changed_at, changed_by)
+             VALUES ('vulns.feed_mirror_url', to_jsonb(''::text), now(), 'test')",
+            &[],
+        )
+        .await
+        .unwrap();
+    wait_for(
+        &db,
+        "SELECT count(*) FROM cve_enrichment WHERE kev_added IS NOT NULL",
+        5,
+    )
+    .await;
+    wait_for(
+        &db,
+        "SELECT coalesce(max(advisories), 0)::bigint FROM feed_sources WHERE source = 'fedora-44-x86_64'",
+        3,
+    )
+    .await;
+    let _ = stop.send(());
+    task.await.unwrap().unwrap();
+    db.drop().await;
+}
+
 /// Minimal HTTP GET returning the status code.
 async fn reqwest_like(addr: SocketAddr, path: &str) -> u16 {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};

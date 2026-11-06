@@ -14,6 +14,7 @@ pub mod feedfmt;
 pub mod feedimport;
 pub mod fetch;
 pub mod matching;
+pub mod mirror;
 pub mod osv;
 pub mod osv_fetch;
 pub mod repodata;

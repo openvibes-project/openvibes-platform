@@ -137,7 +137,7 @@ pub(crate) static DEFINITIONS: [Definition; 13] = [
         key: NVD_API_KEY,
         section: SECTION,
         label: "NVD API key",
-        help: "Raises the NVD rate limit tenfold. Stored apart; it is never shown again.",
+        help: "Raises the NVD rate limit tenfold. Stored apart; it is never shown again. Not used while a feed mirror address is set.",
         kind: Kind::Secret,
         applies: Applies::Live,
     },
@@ -156,7 +156,7 @@ pub(crate) static DEFINITIONS: [Definition; 13] = [
         key: OSV_URL,
         section: SECTION,
         label: "OSV.dev",
-        help: "Advisories for Debian, Ubuntu, Rocky Linux and AlmaLinux.",
+        help: "Advisories for Debian, Ubuntu, Rocky Linux and AlmaLinux. Not used while a feed mirror address is set.",
         kind: Kind::Text {
             check: Text::HttpsUrlOrEmpty,
             default: "https://osv-vulnerabilities.storage.googleapis.com",

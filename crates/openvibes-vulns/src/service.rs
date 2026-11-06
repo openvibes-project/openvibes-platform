@@ -16,6 +16,7 @@ use crate::{
     feed::SourceId,
     fetch::{self, Checked, Fetcher},
     matching,
+    mirror::{self, Mirror},
     osv::Release,
     osv_fetch::{self, OsvSync},
     settings::{self, Stored},
@@ -140,8 +141,11 @@ async fn serve<T>(
         config.max_download_bytes,
     )?;
     let every = Duration::from_secs(config.check_interval_minutes * 60);
+    // With a mirror address set nothing is downloaded from the sources
+    // themselves: one task reads the mirror instead.
+    let mirrored = !config.feed_mirror_url.is_empty();
     // NVD is paced to its rate limit, so it runs apart from the main loop.
-    let nvd_task = if config.nvd_url.is_empty() {
+    let nvd_task = if config.nvd_url.is_empty() || mirrored {
         None
     } else {
         // The key set in the console wins over the file's.
@@ -155,8 +159,22 @@ async fn serve<T>(
     };
     // OSV's first imports are large downloads: apart from the main loop.
     let (osv_changed, osv_notifications) = mpsc::unbounded_channel();
-    let osv_task = if config.osv_url.is_empty() {
-        None
+    let (mirror_task, osv_task) = if mirrored {
+        let mirror = Mirror::new(
+            fetcher.clone(),
+            &config.feed_mirror_url,
+            &config.osv_dir.join("feed-mirror"),
+        );
+        let task = mirror_loop(
+            pool.clone(),
+            mirror,
+            every,
+            config.arch.clone(),
+            osv_notifications,
+        );
+        (Some(tokio::spawn(task)), None)
+    } else if config.osv_url.is_empty() {
+        (None, None)
     } else {
         let osv = OsvSync::new(
             &fetcher,
@@ -165,20 +183,19 @@ async fn serve<T>(
             config.osv_max_download_bytes,
             osv_fetch::MAX_CHANGES,
         )?;
-        Some(tokio::spawn(osv_loop(
-            pool.clone(),
-            osv,
-            every,
-            osv_notifications,
-        )))
+        let task = osv_loop(pool.clone(), osv, every, osv_notifications);
+        (None, Some(tokio::spawn(task)))
     };
+    // New releases ask for their OSV data from whichever task reads it.
+    let wants_releases = osv_task.is_some() || mirror_task.is_some();
     let (changed, mut notifications) = mpsc::unbounded_channel();
     let listener = tokio::spawn(listen(config.database_url.clone(), changed));
     let rematch_retry = tokio::spawn(rematch_pending_loop(
         pool.clone(),
         fetcher.clone(),
         config.arch.clone(),
-        osv_task.as_ref().map(|_| osv_changed.clone()),
+        mirrored,
+        wants_releases.then(|| osv_changed.clone()),
     ));
     let mut interval = tokio::time::interval(every);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -186,7 +203,7 @@ async fn serve<T>(
     let stopped = loop {
         tokio::select! {
             stopped = &mut stop => break stopped,
-            _ = interval.tick() => {
+            _ = interval.tick(), if !mirrored => {
                 check_all(&pool, &fetcher, &config.arch).await;
                 enrich_all(&pool, &fetcher, &config).await;
             }
@@ -194,14 +211,15 @@ async fn serve<T>(
                 &pool,
                 &fetcher,
                 &config.arch,
-                osv_task.as_ref().map(|_| &osv_changed),
+                mirrored,
+                wants_releases.then_some(&osv_changed),
                 &agent,
             ).await,
         }
     };
     listener.abort();
     rematch_retry.abort();
-    for task in [nvd_task, osv_task].into_iter().flatten() {
+    for task in [nvd_task, osv_task, mirror_task].into_iter().flatten() {
         task.abort();
     }
     Ok(stopped)
@@ -309,6 +327,45 @@ async fn osv_loop(
     }
 }
 
+/// Reads the mirror at start and every interval, and again when a host
+/// first reports an OSV release (its files are then read for that release).
+async fn mirror_loop(
+    pool: Pool,
+    mut mirror: Mirror,
+    every: Duration,
+    arch: String,
+    mut new_releases: mpsc::UnboundedReceiver<Release>,
+) {
+    let mut interval = tokio::time::interval(every);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut attempted = HashSet::new();
+    loop {
+        tokio::select! {
+            _ = interval.tick() => attempted.clear(),
+            Some(release) = new_releases.recv() => {
+                if !attempted.insert(release.name()) {
+                    continue;
+                }
+                // The mirror's OSV files were skipped while no host ran
+                // this release: read them again.
+                if let Ok(client) = pool.get().await {
+                    let _ = platform_store::feeds::mark_stale(&client, "osv").await;
+                }
+                mirror.forget();
+            }
+        }
+        let Ok(mut client) = pool.get().await else {
+            tracing::warn!("database unavailable; mirror check skipped");
+            continue;
+        };
+        match mirror::sync(&mut client, &mut mirror, Utc::now()).await {
+            Ok(synced) => tracing::info!(?synced, "mirror checked"),
+            Err(error) => tracing::warn!(%error, "mirror check failed"),
+        }
+        mirror::flag_missing_releases(&client, &arch, Utc::now()).await;
+    }
+}
+
 /// Runs NVD sync every interval (first at start).
 async fn nvd_loop(pool: Pool, nvd: NvdClient, every: Duration) {
     let mut interval = tokio::time::interval(every);
@@ -382,6 +439,7 @@ async fn rematch(
     pool: &Pool,
     fetcher: &Fetcher,
     arch: &str,
+    mirrored: bool,
     osv_changed: Option<&mpsc::UnboundedSender<Release>>,
     agent: &str,
 ) {
@@ -403,6 +461,12 @@ async fn rematch(
             let name = source.name();
             match vulns::feed_digest(&client, &name).await {
                 Ok(Some(_)) => {}
+                // A mirror never sends the service to the internet: the
+                // status row names the release the mirror lacks.
+                Ok(None) if mirrored => {
+                    tracing::info!(agent_id = %agent, source = %name, "host awaiting the mirror's Fedora data");
+                    return;
+                }
                 Ok(None) => {
                     let checked = match vulns::feeds(&client).await {
                         Ok(feeds) => feeds
@@ -474,6 +538,7 @@ async fn rematch_pending_loop(
     pool: Pool,
     fetcher: Fetcher,
     arch: String,
+    mirrored: bool,
     osv_changed: Option<mpsc::UnboundedSender<Release>>,
 ) {
     loop {
@@ -485,7 +550,15 @@ async fn rematch_pending_loop(
             Ok(hosts) => {
                 let mut processed = 0;
                 for (index, agent) in hosts.iter().enumerate() {
-                    rematch(&pool, &fetcher, &arch, osv_changed.as_ref(), agent).await;
+                    rematch(
+                        &pool,
+                        &fetcher,
+                        &arch,
+                        mirrored,
+                        osv_changed.as_ref(),
+                        agent,
+                    )
+                    .await;
                     processed += 1;
                     if index % 25 == 24 {
                         tokio::task::yield_now().await;

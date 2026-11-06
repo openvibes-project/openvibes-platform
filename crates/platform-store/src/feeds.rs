@@ -24,6 +24,8 @@ pub struct TrustKey {
     pub added_at: DateTime<Utc>,
     /// When it stopped being trusted, if it has.
     pub removed_at: Option<DateTime<Utc>>,
+    /// Taken from a mirror on first contact, not added by an administrator.
+    pub pinned: bool,
 }
 
 /// Outcome of [`add_trust_key`].
@@ -71,6 +73,29 @@ pub async fn add_trust_key(
     })
 }
 
+/// Pins `key` as `key_id` for `feed_id`, taken from a mirror on first
+/// contact. Only one key is ever pinned: this does nothing (`false`) when a
+/// pinned key is already trusted, or when any key is trusted for the feed.
+pub async fn pin_trust_key(
+    client: &Client,
+    feed_id: &str,
+    key_id: &str,
+    key: [u8; 32],
+    now: DateTime<Utc>,
+) -> Result<bool, StoreError> {
+    let inserted = client
+        .execute(
+            "INSERT INTO feed_trust_keys (feed_id, key_id, public_key, added_at, pinned) \
+             SELECT $1, $2, $3, $4, true \
+             WHERE NOT EXISTS (SELECT 1 FROM feed_trust_keys \
+                               WHERE removed_at IS NULL AND (pinned OR feed_id = $1)) \
+             ON CONFLICT DO NOTHING",
+            &[&feed_id, &key_id, &key.as_slice(), &now],
+        )
+        .await?;
+    Ok(inserted == 1)
+}
+
 /// Every trust key, or those of one feed, removed ones included.
 pub async fn trust_keys(
     client: &Client,
@@ -78,7 +103,7 @@ pub async fn trust_keys(
 ) -> Result<Vec<TrustKey>, StoreError> {
     let rows = client
         .query(
-            "SELECT feed_id, key_id, public_key, added_at, removed_at \
+            "SELECT feed_id, key_id, public_key, added_at, removed_at, pinned \
              FROM feed_trust_keys WHERE $1::text IS NULL OR feed_id = $1 \
              ORDER BY feed_id, key_id",
             &[&feed_id],
@@ -92,6 +117,7 @@ pub async fn trust_keys(
                 public_key: key32(row.get(2))?,
                 added_at: row.get(3),
                 removed_at: row.get(4),
+                pinned: row.get(5),
             })
         })
         .collect()

@@ -242,6 +242,8 @@ pub async fn run_feeds(
                                 .map_or_else(String::new, |e| format!(" error: {e}"));
                             let unit = if f.os_id == "cve" {
                                 "cves"
+                            } else if f.os_id == "mirror" {
+                                "files"
                             } else {
                                 "advisories"
                             };

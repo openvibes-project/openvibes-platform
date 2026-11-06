@@ -106,3 +106,30 @@ fn nothing_is_parsed_before_the_signature() {
     bytes[at] = if bytes[at] == b'A' { b'B' } else { b'A' };
     assert_eq!(verify(&bytes), Err(Refusal::BadSignature));
 }
+
+#[test]
+fn an_optional_public_key_is_read_but_never_used_to_verify() {
+    let good = manifest("7");
+    let key = URL_SAFE_NO_PAD.encode(SigningKey::from_bytes(&[3; 32]).verifying_key().to_bytes());
+    let with = |text: &str| envelope(&good, "1", &format!(r#","public_key":"{text}""#));
+    assert_eq!(verify(&with(&key)), Ok(()));
+    // Not 32 bytes, not canonical, not base64url: a malformed envelope.
+    assert_eq!(verify(&with(&key[..42])), Err(Refusal::BadFormat));
+    assert_eq!(verify(&with(&format!("{key}="))), Err(Refusal::BadFormat));
+    // A key that is not the trusted one does not replace it.
+    let other = URL_SAFE_NO_PAD.encode(SigningKey::from_bytes(&[9; 32]).verifying_key().to_bytes());
+    assert_eq!(verify(&with(&other)), Ok(()));
+    let peeked = feedfmt::peek(&with(&other)).unwrap();
+    assert_eq!(peeked.key_id, "k1");
+    assert_eq!(
+        peeked.public_key,
+        Some(SigningKey::from_bytes(&[9; 32]).verifying_key().to_bytes())
+    );
+    assert!(
+        feedfmt::peek(&envelope(&good, "1", ""))
+            .unwrap()
+            .public_key
+            .is_none()
+    );
+    assert!(feedfmt::peek(&with(&key[..42])).is_none());
+}
