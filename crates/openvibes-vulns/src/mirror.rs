@@ -240,19 +240,26 @@ async fn download(
             entry.sha256.clone(),
             entry.size,
         );
-        let target = path.clone();
+        let target = path;
         let got = tokio::task::spawn_blocking(move || {
-            let digest = fetcher.download_to(&url, &target, limit)?;
-            let length = std::fs::metadata(&target).map_or(0, |m| m.len());
-            if feedfmt::hex(&digest) != want || length != size {
-                return Err("the file does not match the feed".to_owned());
+            // A failed or wrong file is removed here, on the blocking thread.
+            let result = fetcher
+                .download_to(&url, &target, limit)
+                .and_then(|digest| {
+                    let length = std::fs::metadata(&target).map_or(0, |m| m.len());
+                    if feedfmt::hex(&digest) != want || length != size {
+                        return Err("the file does not match the feed".to_owned());
+                    }
+                    Ok(())
+                });
+            if result.is_err() {
+                let _ = std::fs::remove_file(&target);
             }
-            Ok(())
+            result
         })
         .await
         .unwrap_or_else(|_| Err("download task failed".to_owned()));
         if let Err(error) = got {
-            let _ = std::fs::remove_file(&path);
             failures.push(format!("{} {}: {error}", entry.source, entry.name));
         }
     }
