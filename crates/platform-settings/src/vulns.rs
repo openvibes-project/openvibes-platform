@@ -2,6 +2,8 @@ use crate::{Applies, Definition, Kind, Text};
 
 /// Every vulnerability-service key starts with this.
 pub const PREFIX: &str = "vulns.";
+/// A signed-feed mirror; when set, the direct downloads below are not used.
+pub const FEED_MIRROR_URL: &str = "vulns.feed_mirror_url";
 /// Minutes between feed checks.
 pub const CHECK_INTERVAL_MINUTES: &str = "vulns.check_interval_minutes";
 /// Fedora mirror list template.
@@ -29,7 +31,18 @@ pub const NVD_API_KEY: &str = "vulns.nvd_api_key";
 
 const SECTION: &str = "Vulnerability feeds";
 
-pub(crate) static DEFINITIONS: [Definition; 12] = [
+pub(crate) static DEFINITIONS: [Definition; 13] = [
+    Definition {
+        key: FEED_MIRROR_URL,
+        section: SECTION,
+        label: "Feed mirror address",
+        help: "Where a signed feed mirror (openvibes-feed) is served, for sites that cannot reach the internet. When set, the advisories, scores and lists below are read from the mirror and the addresses below are not used. Empty means the service downloads them directly.",
+        kind: Kind::Text {
+            check: Text::HttpsUrlOrEmpty,
+            default: "",
+        },
+        applies: Applies::Live,
+    },
     Definition {
         key: CHECK_INTERVAL_MINUTES,
         section: SECTION,
@@ -46,7 +59,7 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         key: METALINK_URL,
         section: SECTION,
         label: "Fedora mirror list",
-        help: "Where Fedora's advisories come from. {release} and {arch} are filled in.",
+        help: "Where Fedora's advisories come from. {release} and {arch} are filled in. Not used while a feed mirror address is set.",
         kind: Kind::Text {
             check: Text::HttpsUrl,
             default: "https://mirrors.fedoraproject.org/metalink?repo=updates-released-f{release}&arch={arch}",
@@ -91,7 +104,7 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         key: KEV_URL,
         section: SECTION,
         label: "CISA known exploited list",
-        help: "Marks CVEs that attackers are using.",
+        help: "Marks CVEs that attackers are using. Not used while a feed mirror address is set.",
         kind: Kind::Text {
             check: Text::HttpsUrlOrEmpty,
             default: "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
@@ -102,7 +115,7 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         key: EPSS_URL,
         section: SECTION,
         label: "EPSS scores",
-        help: "FIRST's likelihood that a CVE is exploited.",
+        help: "FIRST's likelihood that a CVE is exploited. Not used while a feed mirror address is set.",
         kind: Kind::Text {
             check: Text::HttpsUrlOrEmpty,
             default: "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz",
@@ -113,7 +126,7 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         key: NVD_URL,
         section: SECTION,
         label: "NVD CVE API",
-        help: "Scores and affected products for CVEs.",
+        help: "Scores and affected products for CVEs. Not used while a feed mirror address is set.",
         kind: Kind::Text {
             check: Text::HttpsUrlOrEmpty,
             default: "https://services.nvd.nist.gov/rest/json/cves/2.0",
@@ -132,7 +145,7 @@ pub(crate) static DEFINITIONS: [Definition; 12] = [
         key: EUVD_URL,
         section: SECTION,
         label: "ENISA EUVD",
-        help: "The European vulnerability database.",
+        help: "The European vulnerability database. Not used while a feed mirror address is set.",
         kind: Kind::Text {
             check: Text::HttpsUrlOrEmpty,
             default: "https://euvdservices.enisa.europa.eu/api/search",

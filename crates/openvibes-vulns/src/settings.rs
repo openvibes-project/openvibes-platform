@@ -90,6 +90,9 @@ pub fn overlay(base: &VulnsConfig, stored: &Stored) -> VulnsConfig {
     if let Some(mib) = number(key::MAX_DOWNLOAD_MIB) {
         config.max_download_bytes = mib.saturating_mul(1 << 20);
     }
+    if let Some(url) = text(key::FEED_MIRROR_URL) {
+        config.feed_mirror_url = url.to_owned();
+    }
     if let Some(url) = text(key::KEV_URL) {
         config.kev_url = url.to_owned();
     }

@@ -235,15 +235,20 @@ key is sent only in the `apiKey` header, never logged.
 
 ### Settings from the console
 
-The same values (check interval, metalink, architecture, proxy, download
-limits, the KEV, EPSS, NVD, EUVD and OSV addresses) and the NVD API key can
+The same values (feed mirror address, check interval, metalink, architecture,
+proxy, download limits, the KEV, EPSS, NVD, EUVD and OSV addresses) and the NVD API key can
 be set in the console under Settings › General › Vulnerability feeds
 (`vulns.*` rows of `console_settings`, the key in `service_secrets`; see
 [platform-settings.md](platform-settings.md)). The service reads them at
 start and then every minute (`settings::POLL`); a change rebuilds the feed
 tasks with the new values, no restart. The file stays the base: it still
 decides the database, the health listener and the OSV directory, and it is
-what applies for every setting nobody changed. Stored values go through the
+what applies for every setting nobody changed.
+
+`feed_mirror_url` (file or console, empty by default) names a signed feed
+mirror (`openvibes-feed`, HTTPS, or HTTP on loopback). The setting is stored
+and validated here; reading the mirror instead of the direct sources comes
+with step 4b, so until then it has no effect on what the service fetches. Stored values go through the
 same `validate()`; a value that cannot be applied logs a warning and the
 service carries on with the file; if the file alone cannot run either
 (for example `nvd_api_key_file` became unreadable) it waits one poll, or a
