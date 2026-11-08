@@ -150,3 +150,31 @@ async fn the_agent_version_fills_in_the_background_and_is_never_blanked() {
     let _held = checker.agent.cache.lock().await;
     assert_eq!(checker.agent_version_now().as_deref(), Some("0.2.7"));
 }
+
+#[test]
+fn freshness_changes_at_three_days_and_at_expiry() {
+    let made: DateTime<Utc> = "2026-11-01T00:00:00Z".parse().unwrap();
+    let expires = made + chrono::Duration::days(7);
+    let at = |d: chrono::Duration| freshness(made, expires, made + d);
+    assert_eq!(at(chrono::Duration::hours(71)), FeedFreshness::Current);
+    assert_eq!(at(chrono::Duration::days(3)), FeedFreshness::Aging);
+    assert_eq!(
+        at(chrono::Duration::days(7) - chrono::Duration::seconds(1)),
+        FeedFreshness::Aging
+    );
+    assert_eq!(at(chrono::Duration::days(7)), FeedFreshness::Expired);
+    // A short-lived feed is expired before it is old.
+    let short = made + chrono::Duration::days(2);
+    assert_eq!(
+        freshness(made, short, made + chrono::Duration::days(2)),
+        FeedFreshness::Expired
+    );
+}
+
+#[test]
+fn key_fingerprint_is_eight_groups_of_four() {
+    let fingerprint = key_fingerprint(&[7u8; 32]);
+    let groups: Vec<_> = fingerprint.split(' ').collect();
+    assert_eq!(groups.len(), 8);
+    assert!(groups.iter().all(|g| g.len() == 4));
+}

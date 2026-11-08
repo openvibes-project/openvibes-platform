@@ -236,3 +236,49 @@ async fn the_vulnerability_role_can_do_exactly_what_the_grants_say() {
     drop(client);
     db.drop().await;
 }
+
+/// The console shows how old the feed is (migration 0076): it reads the
+/// state and the key's public bytes, and can change neither.
+#[tokio::test]
+async fn the_console_role_reads_the_latest_feed_and_cannot_write() {
+    let (db, client) = common::migrated().await;
+    let now = Utc::now();
+    feeds::add_trust_key(&client, "site", "k1", KEY, now)
+        .await
+        .unwrap();
+    assert!(
+        feeds::record_accepted(&client, &accepted(1, 1), now)
+            .await
+            .unwrap()
+    );
+    client
+        .batch_execute("SET ROLE \"openvibes-console\"")
+        .await
+        .unwrap();
+    let latest = feeds::latest_feed(&client).await.unwrap().unwrap();
+    assert_eq!(
+        (
+            latest.feed_id.as_str(),
+            latest.key_id.as_str(),
+            latest.public_key,
+            latest.pinned
+        ),
+        ("site", "k1", KEY, false)
+    );
+    assert_eq!((latest.sequence, latest.origin.as_str()), (1, "bundle"));
+    assert!(client.execute("DELETE FROM feed_state", &[]).await.is_err());
+    assert!(
+        feeds::add_trust_key(&client, "site", "k2", KEY, now)
+            .await
+            .is_err()
+    );
+    client.batch_execute("RESET ROLE").await.unwrap();
+    // No feed applied: nothing to show.
+    client
+        .batch_execute("DELETE FROM feed_state")
+        .await
+        .unwrap();
+    assert!(feeds::latest_feed(&client).await.unwrap().is_none());
+    drop(client);
+    db.drop().await;
+}

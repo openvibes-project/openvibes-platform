@@ -285,3 +285,57 @@ async fn about_is_for_any_signed_in_user_and_the_update_check_is_opt_out() {
     assert_eq!(body["state"], "disabled");
     db.drop().await;
 }
+
+#[tokio::test]
+async fn about_reports_the_signed_feed_only_when_one_was_applied() {
+    let (db, router) = setup().await;
+    let (cookie, csrf) = login(&router, "bob").await;
+    let (_, body, _) = call(&router, "GET", "/api/v1/about", &cookie, &csrf, None, None).await;
+    assert!(
+        body.get("signed_feed").is_none(),
+        "direct-fetch sites see no change"
+    );
+
+    let now = chrono::Utc::now();
+    let client = db.pool.get().await.unwrap();
+    platform_store::feeds::add_trust_key(&client, "site", "k1", [7; 32], now)
+        .await
+        .unwrap();
+    let accepted = platform_store::feeds::Accepted {
+        feed_id: "site",
+        key_id: "k1",
+        sequence: 4,
+        manifest_digest: [1; 32],
+        created_at: now - chrono::Duration::days(4),
+        expires_at: now + chrono::Duration::days(3),
+        origin: "mirror",
+    };
+    assert!(
+        platform_store::feeds::record_accepted(&client, &accepted, now)
+            .await
+            .unwrap()
+    );
+    platform_store::vulns::record_feed(
+        &client,
+        ("mirror", "mirror", "", ""),
+        Err("kev.json: sha-256 does not match"),
+        now,
+    )
+    .await
+    .unwrap();
+    drop(client);
+    let (status, body, _) = call(&router, "GET", "/api/v1/about", &cookie, &csrf, None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let feed = &body["signed_feed"];
+    assert_eq!(feed["origin"], "mirror");
+    assert_eq!(feed["state"], "aging");
+    assert_eq!(feed["age_days"], 4);
+    assert_eq!(feed["key_id"], "k1");
+    assert_eq!(feed["pinned"], false);
+    assert_eq!(feed["mirror_error"], "kev.json: sha-256 does not match");
+    assert_eq!(
+        feed["key_fingerprint"].as_str().unwrap().split(' ').count(),
+        8
+    );
+    db.drop().await;
+}

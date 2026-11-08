@@ -203,6 +203,57 @@ pub async fn feed_states(client: &Client) -> Result<Vec<FeedState>, StoreError> 
         .collect()
 }
 
+/// The signed feed applied most recently, with the key that signed it.
+#[derive(Clone, Debug)]
+pub struct FeedSummary {
+    /// The feed.
+    pub feed_id: String,
+    /// The key that signed it.
+    pub key_id: String,
+    /// That key's 32 public-key bytes.
+    pub public_key: [u8; 32],
+    /// The key was pinned from a mirror, not added by an administrator.
+    pub pinned: bool,
+    /// The accepted sequence.
+    pub sequence: u64,
+    /// When the builder made it.
+    pub created_at: DateTime<Utc>,
+    /// When it stops being valid.
+    pub expires_at: DateTime<Utc>,
+    /// When it was accepted here.
+    pub applied_at: DateTime<Utc>,
+    /// `mirror` or `bundle`.
+    pub origin: String,
+}
+
+/// The feed applied last, if any feed was ever applied.
+pub async fn latest_feed(client: &Client) -> Result<Option<FeedSummary>, StoreError> {
+    let row = client
+        .query_opt(
+            "SELECT s.feed_id, s.key_id, k.public_key, k.pinned, s.sequence, s.created_at, \
+                    s.expires_at, s.applied_at, s.origin \
+             FROM feed_state s JOIN feed_trust_keys k USING (feed_id, key_id) \
+             ORDER BY s.applied_at DESC LIMIT 1",
+            &[],
+        )
+        .await?;
+    row.map(|row| {
+        let sequence: i64 = row.get(4);
+        Ok(FeedSummary {
+            feed_id: row.get(0),
+            key_id: row.get(1),
+            public_key: key32(row.get(2))?,
+            pinned: row.get(3),
+            sequence: u64::try_from(sequence).map_err(|_| StoreError::Query)?,
+            created_at: row.get(5),
+            expires_at: row.get(6),
+            applied_at: row.get(7),
+            origin: row.get(8),
+        })
+    })
+    .transpose()
+}
+
 /// A manifest to record as accepted.
 #[derive(Clone, Debug)]
 pub struct Accepted<'a> {

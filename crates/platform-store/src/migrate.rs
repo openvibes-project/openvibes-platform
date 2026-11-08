@@ -3,7 +3,7 @@ use deadpool_postgres::Client;
 use crate::StoreError;
 
 /// Schema version this build expects. Services refuse any other version.
-pub const SCHEMA_VERSION: i32 = 75;
+pub const SCHEMA_VERSION: i32 = 76;
 
 /// Every migration, in order, embedded at build time.
 const MIGRATIONS: &[(i32, &str)] = &[
@@ -262,6 +262,10 @@ const MIGRATIONS: &[(i32, &str)] = &[
         include_str!("../../../migrations/0074_signed_feeds.sql"),
     ),
     (75, include_str!("../../../migrations/0075_feed_mirror.sql")),
+    (
+        76,
+        include_str!("../../../migrations/0076_console_feed_state.sql"),
+    ),
 ];
 
 // The build fails if a migration is added without bumping SCHEMA_VERSION or

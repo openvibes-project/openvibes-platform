@@ -66,6 +66,7 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .callout { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--r-2); font-size: 13px; }
 .callout--bad { background: var(--crit-soft); color: var(--crit); }
 .callout--warn { background: var(--warn-soft); color: var(--warn); }
+.callout a { color: inherit; text-decoration: underline; }
 .cve { display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--r-2); border: 1px solid var(--line); background: var(--surface-2); }
 .cve__scores { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-size: 12.5px; }
 .cve__scores > div { display: grid; gap: 4px; justify-items: start; }

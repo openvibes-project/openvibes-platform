@@ -68,6 +68,107 @@ pub(crate) struct AboutResponse {
     pub certificates: Vec<AboutCertificate>,
     /// Vulnerability feeds and when they last updated.
     pub feeds: Vec<AboutFeed>,
+    /// The signed feed applied last; absent when none was ever applied
+    /// (sites that download directly see no change).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signed_feed: Option<AboutSignedFeed>,
+}
+
+/// How old the signed feed's data is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum FeedFreshness {
+    /// Made less than three days ago.
+    Current,
+    /// Made three days ago or more.
+    Aging,
+    /// Past its expiry; the old data keeps serving.
+    Expired,
+}
+
+/// The signed vulnerability feed behind the data, for air-gapped sites.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub(crate) struct AboutSignedFeed {
+    /// `mirror` or `bundle`.
+    pub origin: String,
+    /// The feed's id.
+    pub feed_id: String,
+    /// The key that signed it.
+    pub key_id: String,
+    /// SHA-256 fingerprint of that key.
+    pub key_fingerprint: String,
+    /// The key was pinned from the mirror, not added by an administrator.
+    pub pinned: bool,
+    /// The accepted sequence number.
+    pub sequence: i64,
+    /// When the data was made ("data as of").
+    pub created_at: String,
+    /// When the feed stops being valid.
+    pub expires_at: String,
+    /// When it was applied here.
+    pub applied_at: String,
+    /// Whole days since the data was made.
+    pub age_days: i64,
+    /// `current`, `aging` or `expired`.
+    pub state: FeedFreshness,
+    /// The mirror's last read time, when a mirror address is set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mirror_checked_at: Option<String>,
+    /// Why the mirror's last read failed, when it did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mirror_error: Option<String>,
+}
+
+/// Days after which the data counts as old.
+const AGING_AFTER_DAYS: i64 = 3;
+
+/// Current until three days old, aging after, expired once past `expires_at`.
+fn freshness(
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> FeedFreshness {
+    if now >= expires_at {
+        FeedFreshness::Expired
+    } else if now - created_at >= chrono::Duration::days(AGING_AFTER_DAYS) {
+        FeedFreshness::Aging
+    } else {
+        FeedFreshness::Current
+    }
+}
+
+/// 8 groups of 4 hex characters, as `feeds trust` prints.
+fn key_fingerprint(key: &[u8; 32]) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(key);
+    let hex: String = digest[..16].iter().map(|b| format!("{b:02x}")).collect();
+    hex.as_bytes()
+        .chunks(4)
+        .map(|chunk| std::str::from_utf8(chunk).unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn signed_feed(
+    feed: platform_store::feeds::FeedSummary,
+    mirror: Option<&platform_store::vulns::FeedState>,
+    now: DateTime<Utc>,
+) -> AboutSignedFeed {
+    AboutSignedFeed {
+        state: freshness(feed.created_at, feed.expires_at, now),
+        age_days: (now - feed.created_at).num_days().max(0),
+        key_fingerprint: key_fingerprint(&feed.public_key),
+        origin: feed.origin,
+        feed_id: feed.feed_id,
+        key_id: feed.key_id,
+        pinned: feed.pinned,
+        sequence: i64::try_from(feed.sequence).unwrap_or(i64::MAX),
+        created_at: time(feed.created_at),
+        expires_at: time(feed.expires_at),
+        applied_at: time(feed.applied_at),
+        mirror_checked_at: mirror.and_then(|m| m.last_checked_at).map(time),
+        mirror_error: mirror.and_then(|m| m.last_error.clone()),
+    }
 }
 
 /// Agent counts for the About page.
@@ -409,9 +510,18 @@ pub(crate) async fn about(State(state): State<AuthHttpState>, headers: HeaderMap
             not_after: time(c.not_after),
         })
         .collect();
-    let feeds = platform_store::vulns::feeds(&client)
+    let states = platform_store::vulns::feeds(&client)
         .await
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let signed_feed = platform_store::feeds::latest_feed(&client)
+        .await
+        .ok()
+        .flatten()
+        .map(|feed| {
+            let mirror = states.iter().find(|f| f.os_id == "mirror");
+            signed_feed(feed, mirror, now)
+        });
+    let feeds = states
         .into_iter()
         .map(|f| AboutFeed {
             source: f.source,
@@ -432,6 +542,7 @@ pub(crate) async fn about(State(state): State<AuthHttpState>, headers: HeaderMap
         fleet,
         certificates,
         feeds,
+        signed_feed,
     }))
 }
 

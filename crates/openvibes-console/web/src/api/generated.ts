@@ -2504,10 +2504,46 @@ export interface components {
              * @description Database schema version the platform requires.
              */
             schema_version: number;
+            signed_feed?: null | components["schemas"]["AboutSignedFeed"];
             /** @description When this console process started. */
             started_at: string;
             /** @description Whether this console serves its web UI from the same build. */
             web_ui_embedded: boolean;
+        };
+        /** @description The signed vulnerability feed behind the data, for air-gapped sites. */
+        AboutSignedFeed: {
+            /**
+             * Format: int64
+             * @description Whole days since the data was made.
+             */
+            age_days: number;
+            /** @description When it was applied here. */
+            applied_at: string;
+            /** @description When the data was made ("data as of"). */
+            created_at: string;
+            /** @description When the feed stops being valid. */
+            expires_at: string;
+            /** @description The feed's id. */
+            feed_id: string;
+            /** @description SHA-256 fingerprint of that key. */
+            key_fingerprint: string;
+            /** @description The key that signed it. */
+            key_id: string;
+            /** @description The mirror's last read time, when a mirror address is set. */
+            mirror_checked_at?: string | null;
+            /** @description Why the mirror's last read failed, when it did. */
+            mirror_error?: string | null;
+            /** @description `mirror` or `bundle`. */
+            origin: string;
+            /** @description The key was pinned from the mirror, not added by an administrator. */
+            pinned: boolean;
+            /**
+             * Format: int64
+             * @description The accepted sequence number.
+             */
+            sequence: number;
+            /** @description `current`, `aging` or `expired`. */
+            state: components["schemas"]["FeedFreshness"];
         };
         /** @description One permission a person holds through one role. */
         AccessLine: {
@@ -4729,6 +4765,11 @@ export interface components {
              */
             uses: number;
         };
+        /**
+         * @description How old the signed feed's data is.
+         * @enum {string}
+         */
+        FeedFreshness: "current" | "aging" | "expired";
         /** @description Safe validation detail for one request field. */
         FieldError: {
             /** @description Stable machine-readable validation code. */
