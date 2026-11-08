@@ -85,9 +85,13 @@ createrepo_c --quiet "$kit/packages"
 # which an offline host could not do.
 names=(postgresql-server)
 for f in "${rpms[@]}"; do names+=("$(rpm -qp --nosignature --qf '%{NAME}' "$f")"); done
+# Downloaded apart, because dnf 4 (AlmaLinux) also "downloads" the local
+# packages and fails copying a file onto itself.
+dl=$kit/.download
 dnf -y --repofrompath=ovlocal,"$kit/packages" --setopt=ovlocal.gpgcheck=0 download --resolve --alldeps \
-    --exclude='*.i686' --destdir "$kit/packages" --setopt=install_weak_deps=False "${names[@]}"
-rm -rf "$kit/packages/repodata"
+    --exclude='*.i686' --destdir "$dl" --setopt=install_weak_deps=False "${names[@]}"
+mv -n "$dl"/*.rpm "$kit/packages/"
+rm -rf "$dl" "$kit/packages/repodata"
 
 # 3. The whole closure stays, base-image packages included: a host on an
 # older Fedora point release gets the newer libraries it needs from the kit.
