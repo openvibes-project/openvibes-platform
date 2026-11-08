@@ -66,7 +66,7 @@ const columns: Column<PortListRow>[] = [
       {r.owners_missing && <span className="subtle">Owner not collected</span>}
     </div>
   ) },
-  { key: "groups", header: header("groups"), hideBelow: 900, render: (r) => (
+  { key: "groups", header: header("groups"), width: "300px", hideBelow: 900, render: (r) => (
     <span className="row">
       {r.groups.map((g) => <span key={g.id} className="badge badge--plain">{g.name}</span>)}
       {r.groups_total > r.groups.length && <span className="subtle" title={`${r.groups_total} groups`}>+{r.groups_total - r.groups.length}</span>}
