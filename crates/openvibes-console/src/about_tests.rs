@@ -178,3 +178,33 @@ fn key_fingerprint_is_eight_groups_of_four() {
     assert_eq!(groups.len(), 8);
     assert!(groups.iter().all(|g| g.len() == 4));
 }
+
+fn source(
+    os_id: &str,
+    checked: Option<&str>,
+    error: Option<&str>,
+) -> platform_store::vulns::FeedState {
+    platform_store::vulns::FeedState {
+        source: os_id.to_owned(),
+        os_id: os_id.to_owned(),
+        os_version: String::new(),
+        arch: String::new(),
+        last_checked_at: checked.map(|t| t.parse().unwrap()),
+        last_changed_at: None,
+        advisories: 0,
+        last_error: error.map(str::to_owned),
+    }
+}
+
+#[test]
+fn the_mirror_setting_decides_whether_a_mirror_is_in_use() {
+    let now: DateTime<Utc> = "2026-11-08T12:00:00Z".parse().unwrap();
+    let recent = source("mirror", Some("2026-11-08T11:00:00Z"), None);
+    let old = source("mirror", Some("2026-11-01T11:00:00Z"), None);
+    assert!(mirror_in_use(Some("https://m.example/"), None, now));
+    assert!(!mirror_in_use(Some(""), Some(&recent), now));
+    // No setting: the file's address is in use while the mirror is being read.
+    assert!(mirror_in_use(None, Some(&recent), now));
+    assert!(!mirror_in_use(None, Some(&old), now));
+    assert!(!mirror_in_use(None, None, now));
+}

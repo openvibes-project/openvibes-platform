@@ -339,3 +339,80 @@ async fn about_reports_the_signed_feed_only_when_one_was_applied() {
     );
     db.drop().await;
 }
+
+async fn apply_feed(db: &TestDb, applied: chrono::DateTime<chrono::Utc>) {
+    let client = db.pool.get().await.unwrap();
+    platform_store::feeds::add_trust_key(&client, "site", "k1", [7; 32], applied)
+        .await
+        .unwrap();
+    let accepted = platform_store::feeds::Accepted {
+        feed_id: "site",
+        key_id: "k1",
+        sequence: 4,
+        manifest_digest: [1; 32],
+        created_at: applied - chrono::Duration::days(1),
+        expires_at: applied + chrono::Duration::days(6),
+        origin: "mirror",
+    };
+    assert!(
+        platform_store::feeds::record_accepted(&client, &accepted, applied)
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn a_mirror_that_is_no_longer_read_shows_no_mirror_problem() {
+    let (db, router) = setup().await;
+    let (cookie, csrf) = login(&router, "bob").await;
+    let now = chrono::Utc::now();
+    apply_feed(&db, now - chrono::Duration::days(3)).await;
+    let client = db.pool.get().await.unwrap();
+    platform_store::vulns::record_feed(
+        &client,
+        ("mirror", "mirror", "", ""),
+        Err("no route to the mirror"),
+        now - chrono::Duration::days(2),
+    )
+    .await
+    .unwrap();
+    drop(client);
+    let (_, body, _) = call(&router, "GET", "/api/v1/about", &cookie, &csrf, None, None).await;
+    let feed = &body["signed_feed"];
+    assert_eq!(feed["origin"], "mirror");
+    assert!(feed.get("mirror_error").is_none() && feed.get("mirror_checked_at").is_none());
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_site_back_on_direct_fetching_no_longer_shows_the_old_signed_feed() {
+    let (db, router) = setup().await;
+    let (cookie, csrf) = login(&router, "bob").await;
+    let now = chrono::Utc::now();
+    apply_feed(&db, now - chrono::Duration::days(3)).await;
+    let client = db.pool.get().await.unwrap();
+    // A direct feed that failed does not hide it ...
+    platform_store::vulns::record_feed(
+        &client,
+        ("fedora-44-x86_64", "fedora", "44", "x86_64"),
+        Err("offline"),
+        now,
+    )
+    .await
+    .unwrap();
+    let (_, body, _) = call(&router, "GET", "/api/v1/about", &cookie, &csrf, None, None).await;
+    assert!(body.get("signed_feed").is_some());
+    // ... one that read fine after the signed feed was applied does.
+    platform_store::vulns::record_feed(
+        &client,
+        ("fedora-44-x86_64", "fedora", "44", "x86_64"),
+        Ok(([2; 32], 10)),
+        now,
+    )
+    .await
+    .unwrap();
+    drop(client);
+    let (_, body, _) = call(&router, "GET", "/api/v1/about", &cookie, &csrf, None, None).await;
+    assert!(body.get("signed_feed").is_none());
+    db.drop().await;
+}

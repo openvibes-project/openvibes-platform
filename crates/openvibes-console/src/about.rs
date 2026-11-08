@@ -149,6 +149,37 @@ fn key_fingerprint(key: &[u8; 32]) -> String {
         .join(" ")
 }
 
+/// Whether the site reads a mirror: the console setting decides (an empty
+/// one turns it off even if `vulns.toml` has an address); with no setting
+/// stored, a mirror row checked in the last day means the file's address is
+/// in use.
+fn mirror_in_use(
+    address: Option<&str>,
+    mirror: Option<&platform_store::vulns::FeedState>,
+    now: DateTime<Utc>,
+) -> bool {
+    match address {
+        Some(address) => !address.is_empty(),
+        None => mirror
+            .and_then(|m| m.last_checked_at)
+            .is_some_and(|at| now - at < chrono::Duration::days(1)),
+    }
+}
+
+/// With no mirror, a direct feed that read fine after the signed feed was
+/// applied means the site is back to fetching directly: the old signed
+/// feed's age no longer says how old the data is.
+fn superseded(
+    feed: &platform_store::feeds::FeedSummary,
+    states: &[platform_store::vulns::FeedState],
+) -> bool {
+    states.iter().any(|f| {
+        f.os_id != "mirror"
+            && f.last_error.is_none()
+            && f.last_checked_at.is_some_and(|at| at > feed.applied_at)
+    })
+}
+
 fn signed_feed(
     feed: platform_store::feeds::FeedSummary,
     mirror: Option<&platform_store::vulns::FeedState>,
@@ -513,14 +544,26 @@ pub(crate) async fn about(State(state): State<AuthHttpState>, headers: HeaderMap
     let states = platform_store::vulns::feeds(&client)
         .await
         .unwrap_or_default();
-    let signed_feed = platform_store::feeds::latest_feed(&client)
+    let address = platform_store::console_settings::values(&client)
         .await
         .ok()
-        .flatten()
-        .map(|feed| {
-            let mirror = states.iter().find(|f| f.os_id == "mirror");
-            signed_feed(feed, mirror, now)
+        .and_then(|values| {
+            values
+                .get(platform_settings::vulns_keys::FEED_MIRROR_URL)
+                .and_then(|v| v.as_str().map(str::to_owned))
         });
+    let mirror = states.iter().find(|f| f.os_id == "mirror");
+    let mirrored = mirror_in_use(address.as_deref(), mirror, now);
+    let latest = match platform_store::feeds::latest_feed(&client).await {
+        Ok(latest) => latest,
+        Err(error) => {
+            tracing::warn!(%error, "cannot read the signed feed state");
+            None
+        }
+    };
+    let signed_feed = latest
+        .filter(|feed| mirrored || !superseded(feed, &states))
+        .map(|feed| signed_feed(feed, mirrored.then_some(mirror).flatten(), now));
     let feeds = states
         .into_iter()
         .map(|f| AboutFeed {
