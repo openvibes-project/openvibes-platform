@@ -139,7 +139,7 @@ Weak dependency: openvibes-console recommends openvibes-fetch.
 
 | What | Why |
 |---|---|
-| PostgreSQL 17 or later (`postgresql-server`, `postgresql`, `postgresql-private-libs`) | The database; Setup installs it with dnf unless it is already there |
+| PostgreSQL 17 or later (`postgresql-server`, `postgresql`, `postgresql-private-libs`; on AlmaLinux, which carries 16, the PostgreSQL project's `postgresql17-server`, `postgresql17`, `postgresql17-libs` from its PGDG repository) | The database; Setup installs it with dnf unless it is already there |
 | firewalld (`firewall-cmd`) | Opening and closing the platform's ports; if it is not running, Setup says which ports to open by hand |
 | dnf, rpm | Installing and updating parts, and the optional agent |
 | systemd, journalctl, logger | Running the services; logs and the admin audit lines |

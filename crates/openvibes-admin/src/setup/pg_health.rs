@@ -9,11 +9,17 @@ use platform_host::runner::{
 
 use super::{
     Ctx,
-    base::{PG_RECORD, PG_VERSION, postgres_apply},
+    base::{PG_RECORD, postgres_apply},
+    pg::flavour,
 };
 
-const NOT_INSTALLED: &str = "PostgreSQL is not installed (postgresql-server is missing)";
-const GONE: &str = "the PostgreSQL data folder /var/lib/pgsql/data is gone";
+fn not_installed(server: &str) -> String {
+    format!("PostgreSQL is not installed ({server} is missing)")
+}
+fn gone(version_file: &str) -> String {
+    let folder = version_file.trim_end_matches("/PG_VERSION");
+    format!("the PostgreSQL data folder {folder} is gone")
+}
 
 /// The text before the first `.`, trimmed.
 fn major(version: &str) -> &str {
@@ -22,10 +28,11 @@ fn major(version: &str) -> &str {
 
 /// The data and server majors when they differ (server installed, cluster present).
 fn mismatch<R: Runner>(ctx: &Ctx<R>) -> Option<String> {
+    let pg = flavour(ctx);
     let server = ctx
-        .stdout(Rpm, &["-q", "--qf", "%{VERSION}", "postgresql-server"])
+        .stdout(Rpm, &["-q", "--qf", "%{VERSION}", pg.server])
         .ok()?;
-    let data = ctx.read(PG_VERSION).ok()?;
+    let data = ctx.read(pg.version_file).ok()?;
     let (data, server) = (data.trim(), major(&server));
     (data != server).then(|| {
         format!(
@@ -36,24 +43,26 @@ fn mismatch<R: Runner>(ctx: &Ctx<R>) -> Option<String> {
 
 /// Why PostgreSQL is not healthy, or `None`.
 pub(super) fn problem<R: Runner>(ctx: &Ctx<R>) -> Option<String> {
-    if !ctx.succeeds(Rpm, &["-q", "--quiet", "postgresql-server"]) {
-        return Some(NOT_INSTALLED.into());
+    let pg = flavour(ctx);
+    if !ctx.succeeds(Rpm, &["-q", "--quiet", pg.server]) {
+        return Some(not_installed(pg.server));
     }
-    if !ctx.exists(PG_VERSION) {
-        return Some(GONE.into());
+    if !ctx.exists(pg.version_file) {
+        return Some(gone(pg.version_file));
     }
     if let Some(text) = mismatch(ctx) {
         return Some(text);
     }
-    (!ctx.succeeds(Systemctl, &["is-active", "--quiet", "postgresql"]))
+    (!ctx.succeeds(Systemctl, &["is-active", "--quiet", pg.service]))
         .then(|| "PostgreSQL is not running".into())
 }
 
 /// Puts back a removed or stopped server. A gone cluster or a version
 /// difference is an `Err`: initialising would hide the lost data.
 pub(super) fn ensure<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {
-    if !ctx.exists(PG_VERSION) {
-        return Err(GONE.into());
+    let pg = flavour(ctx);
+    if !ctx.exists(pg.version_file) {
+        return Err(gone(pg.version_file));
     }
     let Some(found) = problem(ctx) else {
         return Ok(None);
@@ -94,6 +103,7 @@ pub(super) fn ensure<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::setup::base::PG_VERSION;
     use crate::setup::fake::{Fake, plan};
 
     const RPM_Q: &[&str] = &["/usr/bin/rpm", "-q", "--quiet", "postgresql-server"];
@@ -135,7 +145,10 @@ mod tests {
         rest(&fake);
         let plan = plan(&[]);
         let ctx = fake.ctx(&plan);
-        assert_eq!(problem(&ctx).as_deref(), Some(NOT_INSTALLED));
+        assert_eq!(
+            problem(&ctx).as_deref(),
+            Some("PostgreSQL is not installed (postgresql-server is missing)")
+        );
         assert!(matches!(ensure(&ctx), Ok(Some(_))));
         fake.call(&["/usr/bin/dnf", "install", "-y", "postgresql-server"]);
         fake.call(&["/usr/bin/systemctl", "enable", "--now", "postgresql"]);
