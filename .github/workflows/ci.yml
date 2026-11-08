@@ -435,6 +435,54 @@ jobs:
           path: tools/
           if-no-files-found: error
 
+  # The appliance is AlmaLinux 10 (issue #529): the platform RPMs must build
+  # there too. Build only; the Fedora job above feeds the end to end jobs.
+  almalinux:
+    name: RPMs (almalinux:10)
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container: almalinux:10
+    steps:
+      - name: Install build packages
+        run: |
+          dnf -q -y install dnf-plugins-core epel-release
+          dnf -q -y config-manager --set-enabled crb
+          dnf -q -y install git gcc gcc-c++ cmake make rpm-build systemd-rpm-macros ImageMagick curl xz \
+            xmlsec1-devel xmlsec1-openssl-devel libxml2-devel libtool-ltdl-devel clang pkgconf-pkg-config
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The workspace needs the pinned Rust (rust-toolchain.toml); EL10's own
+      # is older. Fetch the official rustup-init and check its published sum.
+      - name: Install pinned Rust
+        run: |
+          base=https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu
+          curl -sSfO "$base/rustup-init" && curl -sSf "$base/rustup-init.sha256" | sed 's| .*|  rustup-init|' | sha256sum -c -
+          chmod +x rustup-init && ./rustup-init -y -q --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
+
+      - name: Install pinned Node.js for console RPM
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+
+      - name: Build RPMs
+        env:
+          OV_LLM: "0"
+          OV_RELEASE: 1.1.ci${{ github.run_number }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule update --init
+          bash scripts/build-rpm.sh
+          archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)
+          bash scripts/build-console-rpm.sh "$archive" "$(sha256sum "$archive" | cut -d ' ' -f1)"
+
   # The installed platform and agent RPMs against each other: renewal,
   # revocation, expiry re-enrollment, distribution outage, then load smokes.
   integration:
