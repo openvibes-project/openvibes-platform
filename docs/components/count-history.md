@@ -40,8 +40,9 @@ Response: `{metric, points: [{day, value}]}`, oldest first. The window is
 
 - Stored days in the window come from `host_daily_counts`; the last point is
   today, computed live. Stored rows dated today or later are not served.
-- A day with no stored row (missed maintenance run, or no visible host) is
-  absent from `points`: a gap, not a zero.
+- A day after the first stored day with no stored row (host or platform off,
+  missed maintenance run) repeats the previous day's value, so charts stay
+  continuous; days before the first stored day are absent, never zero.
 - Demo divergence: the console demo counts compliance findings whose triage state is open, while the real platform counts every current finding.
 - Sums cover only the hosts in the caller's scope, filtered in SQL.
 - Permissions: every permission listed for the metric is required (403
@@ -77,8 +78,8 @@ share one scope).
 
 ## Failure behaviour
 
-A missed maintenance day leaves a gap; history is not backfilled, because the
-past state cannot be recomputed. A failed run keeps earlier days and the same day's previous rows. Database
+A missed maintenance day is not backfilled in the table, because the
+past state cannot be recomputed; the reader repeats the last known value. A failed run keeps earlier days and the same day's previous rows. Database
 errors on the endpoint answer 503 without partial data. Metrics are a fixed
 catalogue; request input never reaches SQL.
 

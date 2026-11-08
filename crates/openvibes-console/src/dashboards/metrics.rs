@@ -9,7 +9,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use chrono::{Duration, Utc};
+use chrono::{Duration, NaiveDate, Utc};
 use platform_store::{
     console_read::{AgentScope, agent_ids_in_scope},
     history::{self, Expr},
@@ -205,7 +205,7 @@ pub struct MetricPoint {
     pub value: u64,
 }
 
-/// A metric's daily values, oldest first; days with no data are absent.
+/// A metric's daily values, oldest first; days after the first stored day repeat the last known value.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct MetricHistory {
     /// The requested catalogue id.
@@ -402,14 +402,7 @@ pub(crate) async fn history(
     let (Ok(stored), Ok(live)) = tokio::join!(stored, live) else {
         return unavailable_auth();
     };
-    let mut points: Vec<MetricPoint> = stored
-        .into_iter()
-        .filter(|(day, _)| *day < today)
-        .map(|(day, value)| MetricPoint {
-            day: day.to_string(),
-            value: value.max(0) as u64,
-        })
-        .collect();
+    let mut points = carry_forward(stored, today);
     points.push(MetricPoint {
         day: today.to_string(),
         value: live.max(0) as u64,
@@ -421,9 +414,55 @@ pub(crate) async fn history(
     .into_response()
 }
 
+/// Stored days before `today`, with each missing day after the first stored
+/// one repeating the last known value (the platform was off, so nothing
+/// changed that it could see). Days before the first stored day stay absent.
+fn carry_forward(stored: Vec<(NaiveDate, i64)>, today: NaiveDate) -> Vec<MetricPoint> {
+    let mut points: Vec<MetricPoint> = Vec::new();
+    let mut last: Option<(NaiveDate, u64)> = None;
+    let mut push = |day: NaiveDate, value: u64| {
+        points.push(MetricPoint {
+            day: day.to_string(),
+            value,
+        });
+    };
+    for (day, value) in stored.into_iter().filter(|(day, _)| *day < today) {
+        if let Some((prev, v)) = last {
+            let mut gap = prev + Duration::days(1);
+            while gap < day {
+                push(gap, v);
+                gap += Duration::days(1);
+            }
+        }
+        let value = value.max(0) as u64;
+        push(day, value);
+        last = Some((day, value));
+    }
+    if let Some((prev, v)) = last {
+        let mut gap = prev + Duration::days(1);
+        while gap < today {
+            push(gap, v);
+            gap += Duration::days(1);
+        }
+    }
+    points
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_days_repeat_the_last_value_but_never_precede_the_first() {
+        let d = |n: u32| NaiveDate::from_ymd_opt(2026, 11, n).unwrap();
+        let got: Vec<_> = carry_forward(vec![(d(3), 4), (d(6), 2)], d(9))
+            .into_iter()
+            .map(|p| (p.day, p.value))
+            .collect();
+        let want =
+            [(3, 4), (4, 4), (5, 4), (6, 2), (7, 2), (8, 2)].map(|(n, v)| (d(n).to_string(), v));
+        assert_eq!(got, want);
+    }
 
     #[test]
     fn catalogue_uses_only_known_columns_and_conditions() {
