@@ -5702,7 +5702,7 @@ export interface components {
             /** @description Always true for the successful response; the session cookie is set separately. */
             authenticated: boolean;
         };
-        /** @description A metric's daily values, oldest first; days with no data are absent. */
+        /** @description A metric's daily values, oldest first; days after the first stored day repeat the last known value. */
         MetricHistory: {
             /** @description The requested catalogue id. */
             metric: string;
