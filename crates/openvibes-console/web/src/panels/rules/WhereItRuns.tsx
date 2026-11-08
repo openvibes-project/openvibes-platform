@@ -108,7 +108,7 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
         {assignment.published && <p className="subtle">Runs on <b>{assignment.hosts_on}</b> Linux hosts · off on <b>{assignment.hosts_off}</b>.</p>}
         {assignment.groups.length === 0 && !adding ? <p className="subtle">No group differs from the default.</p> : (
           <table className="table table--compact" aria-label="Group overrides">
-            <thead><tr><th>Group</th><th>Matches</th><th className="num">Hosts</th><th className="num">Runs</th></tr></thead>
+            <thead><tr><th style={{ width: "34%" }}>Group</th><th style={{ width: "30%" }}>Matches</th><th className="num" style={{ width: "16%" }}>Hosts</th><th className="num" style={{ width: "20%" }}>Runs</th></tr></thead>
             <tbody>
               {assignment.groups.map((o) => (
                 <tr key={o.asset_group_id}>

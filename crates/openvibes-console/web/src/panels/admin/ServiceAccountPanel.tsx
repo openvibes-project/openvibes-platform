@@ -42,7 +42,7 @@ function ExistingServiceAccount({ id }: { id: string }) {
       <Section title="Tokens" flush>
         {!tokens.data ? <Loading rows={2} /> : tokens.data.items.length === 0 ? <Empty title="No tokens" /> : (
           <table className="table table--compact">
-            <thead><tr><th>Label</th><th>Expires</th><th>State</th>{can("service_accounts.tokens") && <th />}</tr></thead>
+            <thead><tr><th>Label</th><th style={{ width: "28%" }}>Expires</th><th style={{ width: "22%" }}>State</th>{can("service_accounts.tokens") && <th />}</tr></thead>
             <tbody>
               {tokens.data.items.map((token) => (
                 <tr key={token.token_id}>

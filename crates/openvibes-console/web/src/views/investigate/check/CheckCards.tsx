@@ -179,7 +179,7 @@ export function HostsTable({ rows, selected, onSelect, triage, addToCase = false
         <thead><tr>
           {triage && <th style={{ width: 36 }}><input type="checkbox" className="checkbox" aria-label="Select the failing hosts on screen" checked={all} disabled={tickable.length === 0}
             onChange={() => onSelect(all ? new Set() : new Set(tickable.map((r) => r.agent_id)))} /></th>}
-          <th>Host</th><th>State</th><th>Evidence</th><th>Assignee</th><th className="hide-narrow">Checked</th>
+          <th style={{ width: "24%" }}>Host</th><th style={{ width: "16%" }}>State</th><th style={{ width: "30%" }}>Evidence</th><th style={{ width: "16%" }}>Assignee</th><th className="hide-narrow" style={{ width: "14%" }}>Checked</th>
           {perRow && <th style={{ width: 44 }}><span className="sr-only">Add to case</span></th>}
         </tr></thead>
         <tbody>

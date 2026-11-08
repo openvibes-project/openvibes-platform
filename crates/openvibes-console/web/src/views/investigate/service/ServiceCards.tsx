@@ -101,7 +101,7 @@ export function HostsTable({ rows }: { rows: readonly HostRow[] }) {
   return (
     <div className="table-wrap">
       <table className="table table--compact" aria-label="Hosts">
-        <thead><tr><th>Host</th><th>Version</th><th>Processes</th><th>Ports</th><th>Problems</th><th>Last report</th></tr></thead>
+        <thead><tr><th style={{ width: "22%" }}>Host</th><th style={{ width: "16%" }}>Version</th><th style={{ width: "12%" }}>Processes</th><th style={{ width: "18%" }}>Ports</th><th style={{ width: "16%" }}>Problems</th><th style={{ width: "16%" }}>Last report</th></tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.agent_id}>
