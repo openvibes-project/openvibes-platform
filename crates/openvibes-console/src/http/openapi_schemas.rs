@@ -390,6 +390,8 @@ use crate::{
     crate::about::AboutFleet,
     crate::about::AboutCertificate,
     crate::about::AboutFeed,
+    crate::about::AboutSignedFeed,
+    crate::about::FeedFreshness,
     crate::about::UpdateResponse,
     crate::about::UpdateState,
     Permission,

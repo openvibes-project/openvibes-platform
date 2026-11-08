@@ -150,3 +150,61 @@ async fn the_agent_version_fills_in_the_background_and_is_never_blanked() {
     let _held = checker.agent.cache.lock().await;
     assert_eq!(checker.agent_version_now().as_deref(), Some("0.2.7"));
 }
+
+#[test]
+fn freshness_changes_at_three_days_and_at_expiry() {
+    let made: DateTime<Utc> = "2026-11-01T00:00:00Z".parse().unwrap();
+    let expires = made + chrono::Duration::days(7);
+    let at = |d: chrono::Duration| freshness(made, expires, made + d);
+    assert_eq!(at(chrono::Duration::hours(71)), FeedFreshness::Current);
+    assert_eq!(at(chrono::Duration::days(3)), FeedFreshness::Aging);
+    assert_eq!(
+        at(chrono::Duration::days(7) - chrono::Duration::seconds(1)),
+        FeedFreshness::Aging
+    );
+    assert_eq!(at(chrono::Duration::days(7)), FeedFreshness::Expired);
+    // A short-lived feed is expired before it is old.
+    let short = made + chrono::Duration::days(2);
+    assert_eq!(
+        freshness(made, short, made + chrono::Duration::days(2)),
+        FeedFreshness::Expired
+    );
+}
+
+#[test]
+fn key_fingerprint_is_eight_groups_of_four() {
+    let fingerprint = key_fingerprint(&[7u8; 32]);
+    let groups: Vec<_> = fingerprint.split(' ').collect();
+    assert_eq!(groups.len(), 8);
+    assert!(groups.iter().all(|g| g.len() == 4));
+}
+
+fn source(
+    os_id: &str,
+    checked: Option<&str>,
+    error: Option<&str>,
+) -> platform_store::vulns::FeedState {
+    platform_store::vulns::FeedState {
+        source: os_id.to_owned(),
+        os_id: os_id.to_owned(),
+        os_version: String::new(),
+        arch: String::new(),
+        last_checked_at: checked.map(|t| t.parse().unwrap()),
+        last_changed_at: None,
+        advisories: 0,
+        last_error: error.map(str::to_owned),
+    }
+}
+
+#[test]
+fn the_mirror_setting_decides_whether_a_mirror_is_in_use() {
+    let now: DateTime<Utc> = "2026-11-08T12:00:00Z".parse().unwrap();
+    let recent = source("mirror", Some("2026-11-08T11:00:00Z"), None);
+    let old = source("mirror", Some("2026-11-01T11:00:00Z"), None);
+    assert!(mirror_in_use(Some("https://m.example/"), None, now));
+    assert!(!mirror_in_use(Some(""), Some(&recent), now));
+    // No setting: the file's address is in use while the mirror is being read.
+    assert!(mirror_in_use(None, Some(&recent), now));
+    assert!(!mirror_in_use(None, Some(&old), now));
+    assert!(!mirror_in_use(None, None, now));
+}

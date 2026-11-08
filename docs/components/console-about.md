@@ -9,16 +9,34 @@ The About page (`/about`) and its two read endpoints in `openvibes-console`.
   whether the web UI is embedded in this build, the host OS and architecture,
   the process start time (for uptime), agent counts (active, reporting now,
   revoked, newest agent version), the CA certificates with their expiry, and
-  each vulnerability feed's advisory count, last check and last change. No
-  migration; everything comes from tables the platform already keeps.
+  each vulnerability feed's advisory count, last check and last change. On a
+  site that applied a signed feed (a mirror or an imported bundle, see
+  [openvibes-vulns](openvibes-vulns.md)) it also carries `signed_feed`: the
+  feed and key ids, the key's fingerprint and whether it was pinned from the
+  mirror, the sequence, `created_at` ("data as of"), `expires_at`,
+  `age_days`, and a `state` the server works out so every place agrees:
+  `current` (made under 3 days ago), `aging` (3 days or more) or `expired`
+  (now is past `expires_at`; the old data keeps serving). With a mirror
+  address set it adds the mirror's last read time and `mirror_error`, which
+  names the files the mirror read refused; both are left out when no mirror
+  is in use (the console setting is empty, or no setting is stored and the
+  mirror was not read in the last day). `signed_feed` is absent when no
+  signed feed was ever applied, and also once a site is back on direct
+  fetching with no mirror (a direct feed read fine after the signed feed was
+  applied), so direct-fetch sites see no change. It reads
+  `feed_state` and `feed_trust_keys` (migration 0076 grants the console role
+  SELECT; ids, dates and public keys only).
 - `GET /api/v1/about/update`: whether a newer release is published.
   `state` is `disabled`, `unavailable`, `up_to_date` or `available`, with
   `latest_version` and `release_url` when known. Network problems are never an
   error response; they are `unavailable`.
 
 The page shows a header card with the version and update status, then cards
-for platform, database, fleet and certificate authority, a feeds table and
-project links. Certificates expiring within 30 days are flagged.
+for platform, database, fleet and certificate authority, a feeds table (with
+a "Signed feed" block above it when `signed_feed` is present: badge Current,
+Getting old, Expired or Mirror problem, data date, expiry, origin and key)
+and project links. The Vulnerabilities page shows a warning line when the data
+is aging or expired or the mirror could not be read. Certificates expiring within 30 days are flagged.
 
 Both need a signed-in browser session and no particular permission. Bearer
 tokens are refused, as for dashboards.

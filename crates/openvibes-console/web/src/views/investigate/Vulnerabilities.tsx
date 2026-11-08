@@ -24,6 +24,7 @@ import { SummaryLine } from "../../ui/list/SummaryLine";
 import { useSelection } from "../../ui/selection";
 import { useHostName } from "../lists/HostChip";
 import { Pager } from "./Hosts";
+import { FeedWarningLoader } from "../help/SignedFeed";
 import { Reach } from "./vulnerability/Reach";
 import { NoSuchVuln, VulnPage } from "./vulnerability/VulnPage";
 
@@ -201,6 +202,7 @@ function VulnListView() {
         <FilterBar page="vulnerabilities" label="Search vulnerabilities" placeholder="Search CVE, advisory or package…"
           filters={vulnFilters(data, { host, hostName, advisory: params.get("advisory") })} columns={COLUMNS} />
       </header>
+      <FeedWarningLoader />
       {list.error ? <div className="view-pad"><ErrorBox error={list.error} /></div> : !data ? <Loading /> : data.total === 0 ? (
         hasFilters(params)
           ? <Empty icon="vulnerabilities" title="No advisory matches these filters">Mitigated, accepted, false-positive and fixed ones are hidden unless State says otherwise; clear a filter to see more.</Empty>

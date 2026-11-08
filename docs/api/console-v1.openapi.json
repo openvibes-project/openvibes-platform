@@ -12478,6 +12478,17 @@
             "format": "int32",
             "description": "Database schema version the platform requires."
           },
+          "signed_feed": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AboutSignedFeed",
+                "description": "The signed feed applied last; absent when none was ever applied\n(sites that download directly see no change)."
+              }
+            ]
+          },
           "started_at": {
             "type": "string",
             "description": "When this console process started."
@@ -12485,6 +12496,85 @@
           "web_ui_embedded": {
             "type": "boolean",
             "description": "Whether this console serves its web UI from the same build."
+          }
+        }
+      },
+      "AboutSignedFeed": {
+        "type": "object",
+        "description": "The signed vulnerability feed behind the data, for air-gapped sites.",
+        "required": [
+          "origin",
+          "feed_id",
+          "key_id",
+          "key_fingerprint",
+          "pinned",
+          "sequence",
+          "created_at",
+          "expires_at",
+          "applied_at",
+          "age_days",
+          "state"
+        ],
+        "properties": {
+          "age_days": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Whole days since the data was made."
+          },
+          "applied_at": {
+            "type": "string",
+            "description": "When it was applied here."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "When the data was made (\"data as of\")."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "When the feed stops being valid."
+          },
+          "feed_id": {
+            "type": "string",
+            "description": "The feed's id."
+          },
+          "key_fingerprint": {
+            "type": "string",
+            "description": "SHA-256 fingerprint of that key."
+          },
+          "key_id": {
+            "type": "string",
+            "description": "The key that signed it."
+          },
+          "mirror_checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The mirror's last read time, when a mirror address is set."
+          },
+          "mirror_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the mirror's last read failed, when it did."
+          },
+          "origin": {
+            "type": "string",
+            "description": "`mirror` or `bundle`."
+          },
+          "pinned": {
+            "type": "boolean",
+            "description": "The key was pinned from the mirror, not added by an administrator."
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The accepted sequence number."
+          },
+          "state": {
+            "$ref": "#/components/schemas/FeedFreshness",
+            "description": "`current`, `aging` or `expired`."
           }
         }
       },
@@ -17702,6 +17792,15 @@
             "description": "Completed enrollments."
           }
         }
+      },
+      "FeedFreshness": {
+        "type": "string",
+        "description": "How old the signed feed's data is.",
+        "enum": [
+          "current",
+          "aging",
+          "expired"
+        ]
       },
       "FieldError": {
         "type": "object",

@@ -6,6 +6,7 @@ import { ago, date, count, plural } from "../../ui/format";
 import { ErrorBox, Loading } from "../../ui/bits";
 import { Icon, type IconName } from "../../ui/Icon";
 import { ViewHeader } from "../../ui/ViewHeader";
+import { SignedFeedBlock } from "./SignedFeed";
 
 /** One sentence for the newer-version check; it never reads as an error. */
 function UpdateLine({ update }: { update: AboutUpdate | undefined }) {
@@ -122,6 +123,7 @@ export function About() {
             </div>
 
             <Card icon="vulnerabilities" title="Vulnerability feeds">
+              {info.signed_feed && <SignedFeedBlock feed={info.signed_feed} now={now} />}
               {info.feeds.length === 0 ? <p className="subtle">No feed has been fetched yet.</p> : (
                 <table className="table about-feeds">
                   <thead><tr><th>Feed</th><th className="num">Advisories</th><th>Last checked</th><th>Last changed</th><th>Status</th></tr></thead>
