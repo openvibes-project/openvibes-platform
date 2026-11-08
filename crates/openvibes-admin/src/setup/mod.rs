@@ -22,6 +22,7 @@ pub(crate) mod import;
 pub(crate) mod login;
 pub(crate) mod net;
 pub(crate) mod os;
+mod pg;
 mod pg_health;
 pub(crate) mod ssh;
 pub(crate) mod sso_off;

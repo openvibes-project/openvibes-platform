@@ -3,7 +3,7 @@
 use platform_host::{
     StepState,
     runner::{
-        Program::{Dnf, PostgresqlSetup, Rpm, Systemctl, Usermod},
+        Program::{Dnf, Rpm, Systemctl, Usermod},
         Runner,
     },
 };
@@ -153,19 +153,18 @@ fn missing_config<'n, R: Runner>(ctx: &Ctx<R>, names: &[&'n str]) -> Vec<&'n str
 /// The PostgreSQL packages Setup itself installed, one per line (absent
 /// when PostgreSQL was already there).
 pub const PG_RECORD: &str = "/etc/openvibes/setup-installed-postgresql";
-/// What Setup may record in it, and Remove everything may remove, in the
-/// order rpm needs nothing of (one transaction).
-pub const PG_PACKAGES: [&str; 3] = ["postgresql-server", "postgresql", "postgresql-private-libs"];
 /// Set once PostgreSQL's removal has begun (the other-databases check has
 /// passed): a retry then skips the database queries (the service may be
 /// stopped or gone) and goes on removing.
 pub const PG_MARK: &str = "/etc/openvibes/postgresql-removing";
-pub(super) const PG_VERSION: &str = "/var/lib/pgsql/data/PG_VERSION";
+#[cfg(test)]
+pub(super) const PG_VERSION: &str = super::pg::DISTRO.version_file;
 
 pub fn postgres_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    let done = ctx.succeeds(Rpm, &["-q", "--quiet", "postgresql-server"])
-        && ctx.exists(PG_VERSION)
-        && ctx.succeeds(Systemctl, &["is-active", "--quiet", "postgresql"]);
+    let pg = super::pg::flavour(ctx);
+    let done = ctx.succeeds(Rpm, &["-q", "--quiet", pg.server])
+        && ctx.exists(pg.version_file)
+        && ctx.succeeds(Systemctl, &["is-active", "--quiet", pg.service]);
     Ok(if done {
         StepState::Done("PostgreSQL installed and running".into())
     } else {
@@ -174,13 +173,15 @@ pub fn postgres_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 }
 
 pub fn postgres_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    if !ctx.succeeds(Rpm, &["-q", "--quiet", "postgresql-server"]) {
+    let pg = super::pg::flavour(ctx);
+    if !ctx.succeeds(Rpm, &["-q", "--quiet", pg.server]) {
         // Recorded first, like setup-opened-ports: only what Setup
         // installed is Remove everything's to remove (a program that was
         // already there stays).
         // Also the client and its private libraries, when they were not
         // there (dnf pulls them in, and rpm -e leaves a dependency behind).
-        let record: String = PG_PACKAGES
+        let record: String = pg
+            .packages
             .iter()
             .filter(|p| !ctx.succeeds(Rpm, &["-q", "--quiet", p]))
             .map(|p| format!("{p}\n"))
@@ -188,12 +189,17 @@ pub fn postgres_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         ctx.put(PG_RECORD, record.as_bytes(), None, 0o644)?;
         // A mark left by a failed removal belongs to the old cluster.
         let _ = std::fs::remove_file(ctx.path(PG_MARK));
-        ctx.ok(Dnf, &["install", "-y", "postgresql-server"])?;
+        if pg == super::pg::PGDG && !ctx.exists("/etc/yum.repos.d/pgdg-redhat-all.repo") {
+            // The PostgreSQL project's repository (its documented install);
+            // the offline kit carries the packages and needs no repository.
+            ctx.ok(Dnf, &["install", "-y", &super::pg::repo_package(ctx)])?;
+        }
+        ctx.ok(Dnf, &["install", "-y", pg.server])?;
     }
-    if !ctx.exists(PG_VERSION) {
-        ctx.ok(PostgresqlSetup, &["--initdb"])?;
+    if !ctx.exists(pg.version_file) {
+        ctx.ok(pg.setup, pg.setup_args)?;
     }
-    ctx.ok(Systemctl, &["enable", "--now", "postgresql"])?;
+    ctx.ok(Systemctl, &["enable", "--now", pg.service])?;
     Ok(StepState::Done("PostgreSQL installed and running".into()))
 }
 
@@ -539,6 +545,38 @@ mod tests {
         );
         assert!(fake.root.join("var/lib/pgsql/data/PG_VERSION").exists());
     }
+    #[test]
+    fn almalinux_gets_the_postgresql_projects_packages() {
+        let fake = Fake::new("postgres-pgdg");
+        fake.file("/etc/os-release", "ID=\"almalinux\"\nVERSION_ID=\"10.2\"\n");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet"], 1, "");
+        fake.answer(&["/usr/bin/dnf", "install"], 0, "");
+        fake.effect(
+            &["/usr/pgsql-17/bin/postgresql-17-setup", "initdb"],
+            |root| {
+                std::fs::create_dir_all(root.join("var/lib/pgsql/17/data")).unwrap();
+                std::fs::write(root.join("var/lib/pgsql/17/data/PG_VERSION"), "17\n").unwrap();
+            },
+        );
+        fake.answer(
+            &["/usr/bin/systemctl", "enable", "--now", "postgresql-17"],
+            0,
+            "",
+        );
+        run_step(&fake.ctx(&plan(&[Ingest])), Step::Postgres);
+        assert!(fake.called(&[
+            "/usr/bin/dnf",
+            "install",
+            "-y",
+            "https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+        ]));
+        assert!(fake.called(&["/usr/bin/dnf", "install", "-y", "postgresql17-server"]));
+        assert_eq!(
+            fake.text("/etc/openvibes/setup-installed-postgresql"),
+            "postgresql17-server\npostgresql17\npostgresql17-libs\n"
+        );
+    }
+
     #[test]
     fn installing_postgresql_clears_a_leftover_removal_mark() {
         let fake = Fake::new("postgres-mark");
