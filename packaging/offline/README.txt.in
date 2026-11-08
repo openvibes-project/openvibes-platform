@@ -1,16 +1,16 @@
-OpenVIBES platform @VERSION@, offline kit for Fedora @FEDORA@ (x86_64)
+OpenVIBES platform @VERSION@, offline kit for @OS@ (x86_64)
 
 This kit installs the OpenVIBES platform on a server with no network access:
-the platform packages, the rule sets, and every Fedora package they need
+the platform packages, the rule sets, and every @OS@ package they need
 (including PostgreSQL).
 
 Install
 
-  1. Download openvibes-platform-@VERSION@-offline-fedora@FEDORA@.tar, and optionally the model from the Hugging Face link (below), in any browser.
+  1. Download openvibes-platform-@VERSION@-offline-@LABEL@.tar, and optionally the model from the Hugging Face link (below), in any browser.
   2. Copy both to the server, into the same folder.
-  3. Run `tar xf openvibes-platform-@VERSION@-offline-fedora@FEDORA@.tar && sudo ./openvibes-offline/install`.
+  3. Run `tar xf openvibes-platform-@VERSION@-offline-@LABEL@.tar && sudo ./openvibes-offline/install`.
 
-The installer first checks that the host is Fedora @FEDORA@ on x86_64 and that
+The installer first checks that the host is @OS@ on x86_64 and that
 the kit is genuine, then installs from the kit only. Nothing changes if a
 check fails. The OpenVIBES package key is added to the host's rpm keys, as
 with an online install. Run it again with a newer kit to update. It then opens
@@ -36,10 +36,10 @@ Checking the kit by hand
   (openvibes.gpg). SHA256SUMS lists every file and SHA256SUMS.asc is its
   signature; the installer checks both (and only does so; --check stops there).
 
-Fedora sources
+Distribution sources
 
-  packages/ holds unmodified Fedora packages, signed by Fedora. LICENSES/
-  fedora-packages.txt lists each package with its licence and source RPM;
-  sources for any of them are at https://src.fedoraproject.org/rpms/<name>
-  and in Fedora's source repositories. The OpenVIBES packages are Apache-2.0
+  packages/ holds unmodified @OS@ packages, signed by the distribution. LICENSES/
+  distribution-packages.txt lists each package with its licence and source RPM;
+  sources for any of them are at @SOURCES_URL@/<name>
+  and in the distribution's source repositories. The OpenVIBES packages are Apache-2.0
   licensed (openvibes-llm also carries llama.cpp, MIT); their sources are at https://github.com/openvibes-project.
