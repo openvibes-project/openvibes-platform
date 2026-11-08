@@ -195,6 +195,16 @@ pub fn slim_record(cve: &Value) -> Option<SlimRecord> {
         })
         .filter(range_ok)
         .collect();
+    if ranges.len() > MAX_RANGES {
+        // A site reading this file matches fewer packages for this CVE than
+        // one fetching from NVD directly, so the cut is never silent.
+        tracing::warn!(
+            cve = %kept.cve_id,
+            ranges = ranges.len(),
+            kept = MAX_RANGES,
+            "slim NVD record cut to the range limit; the rest are left out of the feed"
+        );
+    }
     ranges.truncate(MAX_RANGES);
     Some(SlimRecord {
         id: kept.cve_id,

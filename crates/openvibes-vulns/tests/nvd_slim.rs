@@ -208,3 +208,22 @@ fn a_long_os_list_keeps_the_fedora_releases() {
     let page = enrich::parse_slim(&file(2024, vec![record]), SLIM_NVD_MAX_OPEN).unwrap();
     assert_eq!(page.applicability[0].fedora, ["40"]);
 }
+
+#[test]
+fn a_record_with_too_many_ranges_is_cut_to_the_limit() {
+    let matches: Vec<_> = (0..=enrich::SLIM_NVD_MAX_RANGES)
+        .map(|n| {
+            serde_json::json!({ "vulnerable": true, "criteria": format!("cpe:2.3:a:v:p{n}:*:*:*:*:*:*:*:*"),
+                "versionEndExcluding": "2.0" })
+        })
+        .collect();
+    let cve = serde_json::json!({
+        "id": "CVE-2024-0002", "lastModified": "2024-01-01T00:00:00.000",
+        "descriptions": [{ "lang": "en", "value": "text" }],
+        "configurations": [{ "nodes": [{ "operator": "OR", "cpeMatch": matches }] }],
+    });
+    let record = enrich::slim_record(&cve).unwrap();
+    assert_eq!(record.ranges.len(), enrich::SLIM_NVD_MAX_RANGES);
+    // The cut file is still one the reader accepts.
+    enrich::parse_slim(&file(2024, vec![record]), SLIM_NVD_MAX_OPEN).unwrap();
+}

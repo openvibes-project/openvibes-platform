@@ -120,6 +120,11 @@ fn run(cli: &Cli) -> Result<(), String> {
 }
 
 fn main() -> ExitCode {
+    // Warnings from the build (a record cut at its limit) go to stderr and so
+    // to the journal on timer runs; the report on stdout is unchanged.
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .init();
     match run(&Cli::parse()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
