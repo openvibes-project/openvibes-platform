@@ -46,10 +46,15 @@ rpm_dir=$(realpath "$1") out=$(realpath -m "$2") target=$3
 if [[ $target =~ ^[0-9]+$ ]]; then
     [[ $(. /etc/os-release && echo "$VERSION_ID") == "$target" ]] || { echo "this is not a fedora:$target container" >&2; exit 1; }
     os_name="Fedora $target" sources_url=https://src.fedoraproject.org/rpms
+    pg_server=postgresql-server
 elif [[ $target == el10 ]]; then
     [[ $(. /etc/os-release && echo "$ID:${VERSION_ID%%.*}") == almalinux:10 ]] || { echo "this is not an almalinux:10 container" >&2; exit 1; }
     os_name="AlmaLinux 10" sources_url=https://git.almalinux.org/rpms
-    dnf -y install dnf-plugins-core >/dev/null
+    # AlmaLinux 10 carries PostgreSQL 16; the migrations need 17, so the
+    # PostgreSQL project's repository (PGDG) supplies it, as in Setup.
+    dnf -y install dnf-plugins-core \
+        https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm >/dev/null
+    pg_server=postgresql17-server
 else
     echo "TARGET must be a Fedora number or el10" >&2; exit 2
 fi
@@ -83,7 +88,7 @@ dnf -y install createrepo_c >/dev/null
 createrepo_c --quiet "$kit/packages"
 # PostgreSQL is not a dependency of the packages: Setup installs it on demand,
 # which an offline host could not do.
-names=(postgresql-server)
+names=("$pg_server")
 for f in "${rpms[@]}"; do names+=("$(rpm -qp --nosignature --qf '%{NAME}' "$f")"); done
 # Downloaded apart, because dnf 4 (AlmaLinux) also "downloads" the local
 # packages and fails copying a file onto itself.
@@ -95,11 +100,11 @@ rm -rf "$dl" "$kit/packages/repodata"
 
 # 3. The whole closure stays, base-image packages included: a host on an
 # older Fedora point release gets the newer libraries it needs from the kit.
-for p in postgresql-server openvibes-admin; do
+for p in "$pg_server" openvibes-admin; do
     ls "$kit"/packages/"$p"-[0-9]*.rpm >/dev/null || { echo "build-offline-kit: $p is not in the kit" >&2; exit 1; }
 done
 # The migrations need PostgreSQL 17 or later.
-pg=$(rpm -qp --nosignature --qf '%{VERSION}' "$(ls "$kit"/packages/postgresql-server-[0-9]*.rpm | head -n 1)")
+pg=$(rpm -qp --nosignature --qf '%{VERSION}' "$(ls "$kit"/packages/"$pg_server"-[0-9]*.rpm | head -n 1)")
 ((${pg%%.*} >= 17)) || { echo "build-offline-kit: $os_name carries PostgreSQL $pg; 17 or later is needed" >&2; exit 1; }
 
 # 4. The repository, now with the closure.
@@ -116,6 +121,9 @@ sed -e "s/@VERSION@/$version/g" -e "s/@OS@/$os_name/g" -e "s/@LABEL@/$(label "$t
     -e "s|@MODEL_SHA256@|$LLM_MODEL_SHA256|g" -e "s|@MODEL_LICENSE_URL@|$LLM_MODEL_LICENSE_URL|g" \
     -e "s|@KEY_FINGERPRINT@|$fingerprint|g" "$ROOT/packaging/offline/README.txt.in" > "$kit/README.txt"
 cp "${OPENVIBES_KIT_PUBKEY:-$ROOT/packaging/rpm/openvibes-packages.gpg}" "$kit/openvibes.gpg"
+if [[ $target == el10 ]]; then # PGDG's key, covered by the signed checksums like the rest
+    cp "$(rpm -ql pgdg-redhat-repo | grep -m1 'GPG-KEY')" "$kit/pgdg.gpg"
+fi
 {
     printf '%s\n' "$os_name packages in this kit: name, licence, source RPM, where to get the sources."
     for f in "$kit"/packages/*.rpm; do

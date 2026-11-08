@@ -63,10 +63,12 @@ arch=$(uname -m)
 case $KIT_TARGET in
     el10)
         kit_os='AlmaLinux 10' host_ok=0 distro_key=/etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-10
+        pg_server=postgresql17-server pg_keys=" file://$kit/pgdg.gpg"
         [ "$os_id" = almalinux ] && [ "${os_version%%.*}" = 10 ] && host_ok=1
         ;;
     *)
         kit_os="Fedora $KIT_TARGET" host_ok=0 distro_key=/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-$KIT_TARGET-primary
+        pg_server=postgresql-server pg_keys=
         [ "$os_id" = fedora ] && [ "$os_version" = "$KIT_TARGET" ] && host_ok=1
         ;;
 esac
@@ -117,12 +119,12 @@ gpg --batch --export --export-options export-minimal "$KEY_FINGERPRINT" > "$tmp/
 kit_dnf() {
     dnf -y --disablerepo='*' --repofrompath=openvibes-offline,"$kit/packages" \
         --enablerepo=openvibes-offline --setopt=openvibes-offline.gpgcheck=1 \
-        --setopt=openvibes-offline.gpgkey="file://$tmp/dnf-openvibes.gpg file://$distro_key" \
+        --setopt=openvibes-offline.gpgkey="file://$tmp/dnf-openvibes.gpg file://$distro_key$pg_keys" \
         --setopt=install_weak_deps=False "$@"
 }
 say "installing the platform from the kit (a few minutes, no network)"
 set -f   # the rules pattern is for dnf, not for this shell
-set -- openvibes-admin openvibes-console openvibes-ingest openvibes-distribution openvibes-vulns openvibes-signer openvibes-llm openvibes-llm-model openvibes-rules-* postgresql-server
+set -- openvibes-admin openvibes-console openvibes-ingest openvibes-distribution openvibes-vulns openvibes-signer openvibes-llm openvibes-llm-model openvibes-rules-* "$pg_server"
 kit_dnf install "$@" >"$tmp/dnf.log" 2>&1 || {
     tail -n 25 "$tmp/dnf.log" >&2
     die "dnf could not install the packages from the kit"
