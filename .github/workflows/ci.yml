@@ -300,7 +300,7 @@ jobs:
     steps:
       # git first, so checkout makes a real repository (submodules need it).
       - name: Install build packages
-        run: dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build systemd-rpm-macros ImageMagick rpm-sign gnupg2 cpio xmlsec1-devel xmlsec1-openssl-devel libxml2-devel libtool-ltdl-devel clang pkgconf-pkg-config
+        run: dnf -q -y install git gcc gcc-c++ cmake rpm-build systemd-rpm-macros ImageMagick rpm-sign gnupg2 cpio xmlsec1-devel xmlsec1-openssl-devel libxml2-devel libtool-ltdl-devel clang pkgconf-pkg-config
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -449,13 +449,23 @@ jobs:
         run: |
           dnf -q -y install dnf-plugins-core epel-release
           dnf -q -y config-manager --set-enabled crb
-          dnf -q -y install git gcc gcc-c++ cmake make cargo rust rpm-build systemd-rpm-macros ImageMagick curl xz \
+          dnf -q -y install git gcc gcc-c++ cmake make rpm-build systemd-rpm-macros ImageMagick curl xz \
             xmlsec1-devel xmlsec1-openssl-devel libxml2-devel libtool-ltdl-devel clang pkgconf-pkg-config
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # The workspace needs the pinned Rust (rust-toolchain.toml); EL10's own
+      # is older. Fetch the official rustup-init and check its published sum.
+      - name: Install pinned Rust
+        run: |
+          base=https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu
+          curl -sSfO "$base/rustup-init" && curl -sSf "$base/rustup-init.sha256" | sed 's| .*|  rustup-init|' | sha256sum -c -
+          chmod +x rustup-init && ./rustup-init -y -q --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
 
       - name: Install pinned Node.js for console RPM
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
