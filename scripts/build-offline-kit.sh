@@ -121,8 +121,18 @@ sed -e "s/@VERSION@/$version/g" -e "s/@OS@/$os_name/g" -e "s/@LABEL@/$(label "$t
     -e "s|@MODEL_SHA256@|$LLM_MODEL_SHA256|g" -e "s|@MODEL_LICENSE_URL@|$LLM_MODEL_LICENSE_URL|g" \
     -e "s|@KEY_FINGERPRINT@|$fingerprint|g" "$ROOT/packaging/offline/README.txt.in" > "$kit/README.txt"
 cp "${OPENVIBES_KIT_PUBKEY:-$ROOT/packaging/rpm/openvibes-packages.gpg}" "$kit/openvibes.gpg"
-if [[ $target == el10 ]]; then # PGDG's key, covered by the signed checksums like the rest
-    cp "$(rpm -ql pgdg-redhat-repo | grep -m1 'GPG-KEY')" "$kit/pgdg.gpg"
+if [[ $target == el10 ]]; then
+    # PGDG's key, covered by the signed checksums like the rest: the one the
+    # repository itself names (the package ships more than one), checked
+    # against the server package before it goes into the kit.
+    key=$(sed -n '/^\[pgdg17\]/,/^\[/s|^gpgkey=file://||p' /etc/yum.repos.d/pgdg-redhat-all.repo | head -n 1)
+    [[ -f $key ]] || { echo "build-offline-kit: PGDG's key $key is missing" >&2; exit 1; }
+    cp "$key" "$kit/pgdg.gpg"
+    rpmdb=$(mktemp -d)
+    rpmkeys --dbpath "$rpmdb" --import "$kit/pgdg.gpg"
+    rpmkeys --dbpath "$rpmdb" --checksig "$kit"/packages/postgresql17-server-[0-9]*.rpm >/dev/null ||
+        { echo "build-offline-kit: PGDG's key does not verify postgresql17-server" >&2; exit 1; }
+    rm -rf "$rpmdb"
 fi
 {
     printf '%s\n' "$os_name packages in this kit: name, licence, source RPM, where to get the sources."

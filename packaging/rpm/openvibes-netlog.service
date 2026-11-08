@@ -1,7 +1,7 @@
 [Unit]
 Description=OpenVIBES network device events (UniFi IPS/IDS over syslog)
 Documentation=https://github.com/openvibes-project/openvibes-platform/blob/main/docs/components/openvibes-netlog.md
-After=network-online.target postgresql.service openvibes-migrate.service
+After=network-online.target postgresql.service postgresql-17.service openvibes-migrate.service
 Wants=network-online.target openvibes-migrate.service
 
 [Service]

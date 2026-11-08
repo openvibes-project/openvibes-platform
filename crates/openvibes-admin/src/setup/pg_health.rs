@@ -35,8 +35,13 @@ fn mismatch<R: Runner>(ctx: &Ctx<R>) -> Option<String> {
     let data = ctx.read(pg.version_file).ok()?;
     let (data, server) = (data.trim(), major(&server));
     (data != server).then(|| {
+        let upgrade = if pg == crate::setup::pg::PGDG {
+            "postgresql-17-setup upgrade"
+        } else {
+            "postgresql-setup --upgrade"
+        };
         format!(
-            "the database was made by PostgreSQL {data} and the installed server is {server}: upgrade the data with postgresql-setup --upgrade"
+            "the database was made by PostgreSQL {data} and the installed server is {server}: upgrade the data with {upgrade}"
         )
     })
 }
