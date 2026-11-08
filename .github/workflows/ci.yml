@@ -449,19 +449,13 @@ jobs:
         run: |
           dnf -q -y install dnf-plugins-core epel-release
           dnf -q -y config-manager --set-enabled crb
-          dnf -q -y install git gcc gcc-c++ cmake make rpm-build systemd-rpm-macros ImageMagick curl xz \
+          dnf -q -y install git gcc gcc-c++ cmake make cargo rust rpm-build systemd-rpm-macros ImageMagick curl xz \
             xmlsec1-devel xmlsec1-openssl-devel libxml2-devel libtool-ltdl-devel clang pkgconf-pkg-config
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Install pinned Rust and Node.js
-        shell: bash
-        run: |
-          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Install pinned Node.js for console RPM
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
