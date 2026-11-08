@@ -75,6 +75,10 @@ pub struct VulnsConfig {
     /// Largest feed download (compressed), in bytes.
     #[serde(default = "default_download")]
     pub max_download_bytes: u64,
+    /// A signed feed mirror (`openvibes-feed`), HTTPS; when set, the direct
+    /// sources below are not used. Empty (the default): fetch directly.
+    #[serde(default)]
+    pub feed_mirror_url: String,
     /// CISA KEV catalog URL (HTTPS); empty turns it off.
     #[serde(default = "default_kev")]
     pub kev_url: String,
@@ -131,6 +135,7 @@ impl VulnsConfig {
             return Err("osv_dir must be an absolute path".into());
         }
         for url in [
+            &self.feed_mirror_url,
             &self.kev_url,
             &self.epss_url,
             &self.nvd_url,

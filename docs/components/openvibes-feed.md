@@ -128,13 +128,24 @@ sudo restorecon -R /var/lib/openvibes-feed/site
 python3 -m http.server 8080 --directory /var/lib/openvibes-feed/site
 ```
 
-Platforms read the tree through the mirror URL once step 4 lands; until then,
-`openvibes-admin feeds import-bundle` takes either the tree directory or a
-bundle `.tar`.
+A platform reads the tree when its **Feed mirror address**
+(Settings › General › Vulnerability feeds, `vulns.feed_mirror_url`) is set to
+the URL the tree is served at, for example `https://mirror.example/feed`.
+Nothing else is needed on the platform: the first time it reads `feed.json` it
+pins the key the feed carries (`public_key`, written by `build`), so the
+address is the trust. `openvibes-admin feeds status` shows the `mirror`
+row, and `feeds trust list` marks the pinned key; compare its fingerprint with
+`keygen`'s if you want to be sure. A new key on the mirror (a rotation) is
+refused until the pinned key is removed with `feeds trust remove`, and it must
+have a new key id: ids are never re-used, so rebuilding with the old id cannot
+be accepted. A feed served again after its 7 days are over shows as an error
+on the `mirror` status row.
+`openvibes-admin feeds import-bundle` still takes either the tree directory or
+a bundle `.tar` for sites that move files by hand.
 
 ## Not here yet
 
-The platform's own mirror sync and console views (steps 4 and 5).
+The console's "data as of" view and stale warning (step 5).
 
 ## Test
 

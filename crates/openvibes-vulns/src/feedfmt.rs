@@ -193,7 +193,43 @@ struct Envelope {
     feed_id: String,
     key_id: String,
     signature: String,
+    #[serde(default)]
+    public_key: Option<String>,
     manifest: String,
+}
+
+/// What `feed.json` says about itself before anything is verified: enough
+/// for a reader that pins keys to decide whether it may.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Peek {
+    /// The feed id it names.
+    pub feed_id: String,
+    /// The key id it names.
+    pub key_id: String,
+    /// The public key it carries, if any (canonical, 32 bytes).
+    pub public_key: Option<[u8; 32]>,
+}
+
+/// Reads the ids and the optional public key of an envelope. Nothing here is
+/// trusted; a pinning reader must still verify the signature with the key.
+#[must_use]
+pub fn peek(bytes: &[u8]) -> Option<Peek> {
+    if bytes.len() > MAX_ENVELOPE {
+        return None;
+    }
+    let envelope: Envelope = serde_json::from_slice(bytes).ok()?;
+    if !identifier(&envelope.feed_id) || !identifier(&envelope.key_id) {
+        return None;
+    }
+    let public_key = match envelope.public_key.as_deref() {
+        None => None,
+        Some(text) => Some(parse_public_key(text)?),
+    };
+    Some(Peek {
+        feed_id: envelope.feed_id,
+        key_id: envelope.key_id,
+        public_key,
+    })
 }
 
 /// A feed that passed every check up to the sequence.
@@ -362,6 +398,12 @@ pub fn verify(
     let signature = canonical_b64(&envelope.signature)
         .and_then(|raw| <[u8; 64]>::try_from(raw).ok())
         .ok_or(Refusal::BadFormat)?;
+    if let Some(text) = &envelope.public_key {
+        // Never used to verify, but a malformed one is a malformed envelope.
+        canonical_b64(text)
+            .filter(|raw| raw.len() == 32)
+            .ok_or(Refusal::BadFormat)?;
+    }
     if envelope.format != 1
         || !identifier(&envelope.feed_id)
         || !identifier(&envelope.key_id)

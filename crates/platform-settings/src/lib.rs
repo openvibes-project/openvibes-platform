@@ -36,8 +36,9 @@ pub fn find(key: &str) -> Option<&'static Definition> {
 /// The vulnerability service's keys; the service reads them under this prefix.
 pub mod vulns_keys {
     pub use crate::vulns::{
-        ARCH, CHECK_INTERVAL_MINUTES, EPSS_URL, EUVD_URL, KEV_URL, MAX_DOWNLOAD_MIB, METALINK_URL,
-        NVD_API_KEY, NVD_URL, OSV_MAX_DOWNLOAD_MIB, OSV_URL, PREFIX, PROXY_URL,
+        ARCH, CHECK_INTERVAL_MINUTES, EPSS_URL, EUVD_URL, FEED_MIRROR_URL, KEV_URL,
+        MAX_DOWNLOAD_MIB, METALINK_URL, NVD_API_KEY, NVD_URL, OSV_MAX_DOWNLOAD_MIB, OSV_URL,
+        PREFIX, PROXY_URL,
     };
 }
 

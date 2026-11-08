@@ -11,6 +11,7 @@ fn base() -> VulnsConfig {
         arch: "x86_64".into(),
         proxy_url: Some("http://file-proxy:3128".into()),
         max_download_bytes: 64 << 20,
+        feed_mirror_url: String::new(),
         kev_url: crate::fetch::KEV_URL.into(),
         epss_url: crate::fetch::EPSS_URL.into(),
         nvd_url: crate::sources::NVD_URL.into(),
@@ -95,4 +96,30 @@ fn only_the_vulns_prefix_and_the_key_are_kept() {
     };
     assert_eq!(with_key.nvd_key(), Some("k"));
     assert_ne!(with_key, Stored::default());
+}
+
+#[test]
+fn the_mirror_address_is_empty_until_set_and_must_be_a_safe_address() {
+    assert_eq!(overlay(&base(), &Stored::default()).feed_mirror_url, "");
+    let config = overlay(
+        &base(),
+        &stored(&[(
+            "vulns.feed_mirror_url",
+            json!("https://mirror.example/feed"),
+        )]),
+    );
+    assert_eq!(config.feed_mirror_url, "https://mirror.example/feed");
+    assert!(config.validate().is_ok());
+    // Plain HTTP only on loopback; a bad stored row never stops the service.
+    let mut bad = base();
+    bad.feed_mirror_url = "http://mirror.example/feed".into();
+    assert!(bad.validate().is_err());
+    bad.feed_mirror_url = "http://127.0.0.1:8080/feed".into();
+    assert!(bad.validate().is_ok());
+    assert!(
+        platform_settings::find("vulns.feed_mirror_url")
+            .unwrap()
+            .check(&json!("http://mirror.example/feed"))
+            .is_err()
+    );
 }

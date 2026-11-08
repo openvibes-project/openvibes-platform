@@ -22,6 +22,9 @@ use crate::{
     osv, osv_fetch, repodata,
 };
 
+/// The refusal for a file whose blob was not given and is not already applied.
+pub const BLOB_MISSING: &str = "the blob is not in the feed";
+
 /// What happened to one file.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Outcome {
@@ -194,14 +197,24 @@ async fn apply_file(
     known: &HashMap<(String, String, String), AppliedFile>,
     now: DateTime<Utc>,
 ) -> Result<Outcome, StoreError> {
-    let Some(path) = feed_files.blob(&entry.sha256) else {
-        return Ok(Outcome::Refused("the blob is not in the feed".into()));
-    };
     let previous = known.get(&(
         entry.source.clone(),
         entry.kind.as_str().to_owned(),
         entry.name.clone(),
     ));
+    let Some(path) = feed_files.blob(&entry.sha256) else {
+        // A mirror read fetches only what changed and leaves the rest out; a
+        // bundle is whole, so a blob missing from it is always refused.
+        return Ok(
+            if feed_files.partial
+                && previous.is_some_and(|file| hex_of(&file.sha256) == entry.sha256)
+            {
+                Outcome::Unchanged
+            } else {
+                Outcome::Refused(BLOB_MISSING.into())
+            },
+        );
+    };
     let (length, digest) = match measure(&path) {
         Ok(measured) => measured,
         Err(error) => return Ok(Outcome::Refused(format!("cannot read the blob: {error}"))),

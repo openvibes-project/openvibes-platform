@@ -78,7 +78,13 @@ pub(super) async fn trust(
                     keys.iter()
                         .map(|key| {
                             let state = key.removed_at.map_or_else(
-                                || "trusted".to_owned(),
+                                || {
+                                    if key.pinned {
+                                        "trusted (pinned from the mirror)".to_owned()
+                                    } else {
+                                        "trusted".to_owned()
+                                    }
+                                },
                                 |at| format!("removed {}", time(at)),
                             );
                             format!(

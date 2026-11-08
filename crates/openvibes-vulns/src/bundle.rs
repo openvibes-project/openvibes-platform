@@ -30,6 +30,10 @@ pub struct Unpacked {
     pub envelope: Vec<u8>,
     /// Directory with one regular file per blob, named by its SHA-256.
     pub blobs: PathBuf,
+    /// Only the blobs that changed are present (a mirror read): a file
+    /// already applied with the same hash then needs no blob. A bundle is
+    /// whole, so a missing blob there is an error.
+    pub partial: bool,
 }
 
 impl Unpacked {
@@ -246,6 +250,7 @@ pub fn unpack_tar(
         skip(&mut reader, padded - size)?;
     }
     Ok(Unpacked {
+        partial: false,
         envelope: envelope.ok_or(BundleError::Format("feed.json is missing"))?,
         blobs: work.to_owned(),
     })
@@ -328,6 +333,7 @@ pub fn open_dir(
         }
     }
     Ok(Unpacked {
+        partial: false,
         envelope,
         blobs: work.to_owned(),
     })

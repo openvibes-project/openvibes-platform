@@ -158,7 +158,8 @@ async fn applied_files_are_kept_per_source_and_kind() {
 }
 
 /// The real role, not the superuser: the vulnerability service reads the
-/// keys and keeps the state and applied files current, but cannot trust a key.
+/// keys and keeps the state and applied files current; it may pin one key on
+/// first contact with a mirror and write audit rows, but not remove a key.
 #[tokio::test]
 async fn the_vulnerability_role_can_do_exactly_what_the_grants_say() {
     let (db, client) = common::migrated().await;
@@ -200,10 +201,31 @@ async fn the_vulnerability_role_can_do_exactly_what_the_grants_say() {
     assert_eq!(feeds::mark_stale(&client, "nvd").await.unwrap(), 0);
     let applied = feeds::applied_files(&client).await.unwrap();
     assert_eq!((applied.len(), applied[0].sha256), (1, [0; 32]));
+    client
+        .execute(
+            "INSERT INTO audit_log (actor, action, target, result) \
+             VALUES ('openvibes-vulns', 'feeds.mirror_apply', 't', 'ok')",
+            &[],
+        )
+        .await
+        .unwrap();
+    // It can pin a key (migration 0075) but not remove one, and a key is
+    // never pinned in a feed that already has one.
     assert!(
-        feeds::add_trust_key(&client, "site", "k2", KEY, now)
+        !feeds::pin_trust_key(&client, "site", "k2", KEY, now)
             .await
-            .is_err()
+            .unwrap()
+    );
+    assert!(
+        feeds::pin_trust_key(&client, "other", "k1", KEY, now)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !feeds::pin_trust_key(&client, "third", "k1", KEY, now)
+            .await
+            .unwrap(),
+        "only one key is pinned"
     );
     assert!(
         feeds::remove_trust_key(&client, "site", "k1", now)
