@@ -525,6 +525,46 @@ jobs:
           rm -f kit-rpms/openvibes-agent-*
           gh release download --repo openvibes-project/openvibes-rules --pattern 'openvibes-rules-*.rpm' --dir kit-rpms
           bash scripts/offline-kit-test-kit.sh kit-rpms target/offline-el10 el10
+      - name: Upload the kit for the appliance ISO
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kit-el10
+          path: |
+            target/offline-el10/openvibes-platform-*-offline-el10.tar
+            target/offline-el10/fingerprint
+          if-no-files-found: error
+
+  # The appliance installer ISO (issue #529): AlmaLinux 10's minimal ISO with
+  # the OpenVIBES kickstart and the kit above. Build only for now.
+  appliance-iso:
+    name: Appliance ISO (almalinux:10, build only)
+    needs: [changes, offline-kit-el10]
+    if: needs.changes.outputs.heavy == 'true' && needs.changes.outputs.kit == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the kit
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: kit-el10
+          path: kit
+      - name: Build the ISO
+        run: |
+          mkdir out
+          docker run --rm --privileged -e OPENVIBES_KEY_FINGERPRINT="$(cat kit/fingerprint)" -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
+            bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance.iso'
+      - name: Keep the ISO for a day (to boot by hand)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: appliance-iso
+          path: out/openvibes-appliance.iso
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
 
   # The installed platform and agent RPMs against each other: renewal,
   # revocation, expiry re-enrollment, distribution outage, then load smokes.
