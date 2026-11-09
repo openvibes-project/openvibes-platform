@@ -52,7 +52,7 @@ export function RuleSetPanel({ id }: { id: string }) {
         <Section title="Published versions" flush>
           {!bundles.data ? <Loading rows={3} /> : (
             <table className="table table--compact">
-              <thead><tr><th>Version</th><th>Published</th><th>By</th><th className="num">Size</th></tr></thead>
+              <thead><tr><th style={{ width: "18%" }}>Version</th><th style={{ width: "32%" }}>Published</th><th style={{ width: "30%" }}>By</th><th className="num" style={{ width: "20%" }}>Size</th></tr></thead>
               <tbody>
                 {bundles.data.items.map((bundle) => (
                   <tr key={bundle.version}>

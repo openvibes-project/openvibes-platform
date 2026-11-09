@@ -126,7 +126,7 @@ export function About() {
               {info.signed_feed && <SignedFeedBlock feed={info.signed_feed} now={now} />}
               {info.feeds.length === 0 ? <p className="subtle">No feed has been fetched yet.</p> : (
                 <table className="table about-feeds">
-                  <thead><tr><th>Feed</th><th className="num">Advisories</th><th>Last checked</th><th>Last changed</th><th>Status</th></tr></thead>
+                  <thead><tr><th style={{ width: "28%" }}>Feed</th><th className="num" style={{ width: "14%" }}>Advisories</th><th style={{ width: "20%" }}>Last checked</th><th style={{ width: "20%" }}>Last changed</th><th style={{ width: "18%" }}>Status</th></tr></thead>
                   <tbody>
                     {info.feeds.map((f) => (
                       <tr key={f.source}>

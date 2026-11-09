@@ -35,7 +35,7 @@ export function HostServicesTab({ id, show }: { id: string; show: "ports" | "ser
       {show === "ports" ? (
         data.listeners.length === 0 ? <Empty title="No open ports" /> : (
           <div className="table-wrap"><table className="table table--compact" aria-label="Open ports">
-            <thead><tr><th>Port</th><th className="hide-narrow">Address</th><th>Service</th><th className="hide-narrow">Program</th></tr></thead>
+            <thead><tr><th style={{ width: "15%" }}>Port</th><th className="hide-narrow" style={{ width: "25%" }}>Address</th><th style={{ width: "30%" }}>Service</th><th className="hide-narrow" style={{ width: "30%" }}>Program</th></tr></thead>
             <tbody>
               {data.listeners.map((l) => (
                 <tr key={`${l.protocol}/${l.address}/${l.port}`}>
@@ -51,7 +51,7 @@ export function HostServicesTab({ id, show }: { id: string; show: "ports" | "ser
       ) : (
         data.services.length === 0 ? <Empty title="No services reported" /> : (
           <div className="table-wrap"><table className="table table--compact" aria-label="Running services">
-            <thead><tr><th>Service</th><th className="hide-narrow">Programs</th><th>Processes</th><th>Runs as</th></tr></thead>
+            <thead><tr><th style={{ width: "30%" }}>Service</th><th className="hide-narrow" style={{ width: "30%" }}>Programs</th><th style={{ width: "20%" }}>Processes</th><th style={{ width: "20%" }}>Runs as</th></tr></thead>
             <tbody>
               {data.services.map((s) => (
                 <tr key={s.unit}>

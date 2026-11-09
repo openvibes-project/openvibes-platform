@@ -157,7 +157,7 @@ export function CommandsCard({ page }: { page: Page }) {
   return (
     <Card flush id="commands" title={<>Commands seen <span className="subtle num">{commands.length.toLocaleString()}</span></>}>
       <div className="table-wrap"><table className="table table--compact" aria-label="Commands seen">
-        <thead><tr><th>Command</th><th className="num">Count</th><th>Last seen</th><th>State</th><th><span className="sr-only">Actions</span></th></tr></thead>
+        <thead><tr><th>Command</th><th className="num" style={{ width: 80 }}>Count</th><th style={{ width: 130 }}>Last seen</th><th style={{ width: 130 }}>State</th><th style={{ width: 190 }}><span className="sr-only">Actions</span></th></tr></thead>
         <tbody>
           {commands.map((c, index) => {
             const once = c.count === 1;
