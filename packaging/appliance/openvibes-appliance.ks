@@ -2,7 +2,7 @@
 #
 # Asks only for what is yours: the disk (Installation Destination, with
 # automatic partitioning offered as LVM; nothing is erased until the
-# administrator has chosen the disk), the language and keyboard, the network,
+# administrator has chosen the disk), the network,
 # and the administrator's name and password (root stays locked). The
 # administrator must tick "Make this user administrator": the install stops
 # at the end otherwise, because that user could not open the admin TUI.

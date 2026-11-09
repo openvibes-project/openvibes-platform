@@ -78,5 +78,9 @@ echo "$report" | grep -E "El Torito|Boot|efi" || true
 for platform in BIOS UEFI; do
     echo "$report" | grep -q "El Torito boot img .*$platform" || { echo "the ISO has no $platform boot entry" >&2; exit 1; }
 done
+# The kit and the kickstart must really be in the result (a tolerated SORRY
+# could hide a half-added kit).
+xorriso -indev "$out" -find /openvibes-offline/packages/repodata -name repomd.xml 2>&1 | grep -q repomd.xml || { echo "the ISO has no kit repository" >&2; exit 1; }
+xorriso -indev "$out" -find /openvibes-appliance.ks 2>&1 | grep -q openvibes-appliance.ks || { echo "the ISO has no kickstart" >&2; exit 1; }
 implantisomd5 "$out" >/dev/null
 ls -l "$out"
