@@ -22,7 +22,7 @@ docs_re='^docs/|\.md$'
 changed=$(cat)
 # No changed files listed (a failed diff): run everything.
 if [[ ${EVENT:-} == pull_request && -n $changed && ",${LABELS:-}," != *,full-ci,* ]]; then
-    grep -qE '^(packaging/offline/|packaging/appliance/|scripts/build-appliance-iso\.sh$|packaging/llm/model\.pin$|scripts/[^/]*offline[^/]*$|scripts/sign-rpms\.sh$|packaging/rpm/openvibes-platform\.spec$|crates/openvibes-admin/src/(setup/assistant|model_fetch)\.rs$|\.github/workflows/ci\.yml$|scripts/(test-)?ci-tiers\.sh$)' <<<"$changed" || kit=false
+    grep -qE '^(packaging/offline/|packaging/appliance/|scripts/(build-appliance-iso|appliance-boot-test)\.sh$|packaging/llm/model\.pin$|scripts/[^/]*offline[^/]*$|scripts/sign-rpms\.sh$|packaging/rpm/openvibes-platform\.spec$|crates/openvibes-admin/src/(setup/assistant|model_fetch)\.rs$|\.github/workflows/ci\.yml$|scripts/(test-)?ci-tiers\.sh$)' <<<"$changed" || kit=false
     front_re='^crates/openvibes-console/web/(src|tests|e2e|public)/'
     # Every file docs or frontend (and none of it docs/api/).
     # Frontend source and docs: no RPM or end to end job reads them.
