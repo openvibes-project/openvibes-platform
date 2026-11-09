@@ -84,7 +84,7 @@ test("asks before leaving unsaved edits", async ({ page }) => {
   await page.getByLabel("Dashboard name").fill("Changed");
   let asked = false;
   page.once("dialog", (dialog) => { asked = true; void dialog.dismiss(); });
-  await page.getByRole("link", { name: "Compliance", exact: true }).click();
+  await page.getByRole("link", { name: /^(\S+ )?Compliance$/ }).click();
   expect(asked).toBe(true);
   await expect(page.getByLabel("Dashboard name")).toHaveValue("Changed");
 });
@@ -145,7 +145,7 @@ test("New dashboard while editing keeps the draft when you choose to stay", asyn
 });
 
 test("Back with unsaved edits asks first", async ({ page }) => {
-  await page.getByRole("link", { name: "Compliance", exact: true }).click();
+  await page.getByRole("link", { name: /^(\S+ )?Compliance$/ }).click();
   await page.getByRole("link", { name: "Dashboards" }).click();
   await duplicate(page);
   await page.getByLabel("Dashboard name").fill("Changed");
@@ -171,7 +171,7 @@ test("a dashboard with a widget type this console does not know still renders", 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("From a newer console");
   await expect(page.locator(".tile", { hasText: "Unsupported widget" })).toBeVisible();
   await expect(page.locator(".tile", { hasText: "Offline hosts" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Compliance", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^(\S+ )?Compliance$/ })).toBeVisible();
 });
 
 test("a tile deleted from the keyboard comes back with Undo", async ({ page }) => {
