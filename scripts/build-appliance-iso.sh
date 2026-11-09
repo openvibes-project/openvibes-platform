@@ -29,9 +29,11 @@ want=$(sed -n "s/^SHA256 ($iso) = //p" "$work/CHECKSUM")
 [[ -n $want ]] || { echo "no checksum for $iso in AlmaLinux's CHECKSUM" >&2; exit 1; }
 [[ $(sha256sum "$work/$iso" | cut -d ' ' -f1) == "$want" ]] || { echo "$iso does not match its checksum" >&2; exit 1; }
 
-# 2. The kit: checked by its own installer logic later; here just unpacked.
+# 2. The kit, unpacked and checked (signature, checksums) before it goes on
+# the disk: Anaconda installs from it without running the kit's installer.
 mkdir "$work/kit"
 tar -C "$work/kit" -xf "$kit_tar"
+"$work/kit/openvibes-offline/install" --check
 [[ -d $work/kit/openvibes-offline/packages ]] || { echo "$kit_tar has no openvibes-offline/packages" >&2; exit 1; }
 
 # 3. The new ISO. The kickstart is found by its place on the disk; the
@@ -54,10 +56,15 @@ cp "$work/boot/efi-grub.cfg" "$work/boot/efi-image-grub.cfg"
 chmod u+w "$efi"
 mcopy -o -i "$efi" "$work/boot/efi-image-grub.cfg" ::EFI/BOOT/grub.cfg
 
-xorriso -indev "$work/$iso" -outdev "$out" \
-    -boot_image any discard \
+# The original BIOS boot (El Torito image and GRUB2 boot sector) is replayed.
+# Its UEFI entry points at a hidden partition xorriso cannot replay (a SORRY
+# it reports, so exit values below FAILURE are tolerated); the edited EFI
+# image is added again as an appended partition and a new UEFI entry.
+xorriso -return_with FAILURE 32 -indev "$work/$iso" -outdev "$out" \
+    -boot_image any replay \
     -boot_image any appended_part_as=gpt \
     -append_partition 2 C12A7328-F81F-11D2-BA4B-00A0C93EC93B "$efi" \
+    -boot_image any next \
     -boot_image any efi_path=--interval:appended_partition_2:all:: \
     -boot_image any platform_id=0xef \
     -update "$work/boot/efi-grub.cfg" /EFI/BOOT/grub.cfg \
@@ -65,7 +72,11 @@ xorriso -indev "$work/$iso" -outdev "$out" \
     -map "$work/kit/openvibes-offline" openvibes-offline \
     -map "$ROOT/packaging/appliance/openvibes-appliance.ks" openvibes-appliance.ks \
     -commit
-# Show the boot entries of the result (an EFI entry must be there).
-xorriso -indev "$out" -report_el_torito plain 2>&1 | grep -E "El Torito|Boot|efi" || true
+# Show the boot entries of the result: BIOS and UEFI must both be there.
+report=$(xorriso -indev "$out" -report_el_torito plain 2>&1)
+echo "$report" | grep -E "El Torito|Boot|efi" || true
+for platform in BIOS UEFI; do
+    echo "$report" | grep -q "El Torito boot img .*$platform" || { echo "the ISO has no $platform boot entry" >&2; exit 1; }
+done
 implantisomd5 "$out" >/dev/null
 ls -l "$out"

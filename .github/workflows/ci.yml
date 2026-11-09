@@ -529,7 +529,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kit-el10
-          path: target/offline-el10/openvibes-platform-*-offline-el10.tar
+          path: |
+            target/offline-el10/openvibes-platform-*-offline-el10.tar
+            target/offline-el10/fingerprint
           if-no-files-found: error
 
   # The appliance installer ISO (issue #529): AlmaLinux 10's minimal ISO with
@@ -553,8 +555,16 @@ jobs:
       - name: Build the ISO
         run: |
           mkdir out
-          docker run --rm --privileged -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
+          docker run --rm --privileged -e OPENVIBES_KEY_FINGERPRINT="$(cat kit/fingerprint)" -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
             bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance.iso'
+      - name: Keep the ISO for a day (to boot by hand)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: appliance-iso
+          path: out/openvibes-appliance.iso
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
 
   # The installed platform and agent RPMs against each other: renewal,
   # revocation, expiry re-enrollment, distribution outage, then load smokes.

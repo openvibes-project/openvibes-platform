@@ -1,7 +1,11 @@
 # The OpenVIBES appliance installer (AlmaLinux 10).
 #
-# Asks only for what is yours: the disk, the language and keyboard, the
-# network, and the administrator's name and password (root stays locked).
+# Asks only for what is yours: the disk (Installation Destination, with
+# automatic partitioning offered as LVM; nothing is erased until the
+# administrator has chosen the disk), the language and keyboard, the network,
+# and the administrator's name and password (root stays locked). The
+# administrator must tick "Make this user administrator": the install stops
+# at the end otherwise, because that user could not open the admin TUI.
 # Everything else is decided here. The OpenVIBES packages and PostgreSQL 17
 # come from the offline kit on this disk; nothing is downloaded. After the
 # restart the administrator logs in, lands in the admin TUI and finishes with
@@ -15,10 +19,6 @@ rootpw --lock
 selinux --enforcing
 firewall --enabled --ssh
 services --enabled=sshd,chronyd,NetworkManager,firewalld
-zerombr
-clearpart --all --initlabel
-autopart --type=lvm
-bootloader --location=mbr
 reboot --eject
 
 # The kit's package folder, on this disk (the build script adds it).
@@ -43,6 +43,15 @@ postgresql17-server
 %end
 
 %post --erroronfail
+# The login runs the TUI through sudo, so a normal user must be in wheel
+# (root is locked). Fail loudly now rather than leave an unusable box.
+admins=$(getent group wheel | cut -d: -f4)
+ok=
+for u in $(awk -F: '$3 >= 1000 && $3 < 60000 {print $1}' /etc/passwd); do
+    case ",$admins," in *",$u,"*) ok=1 ;; esac
+done
+[ -n "$ok" ] || { echo "No administrator: tick 'Make this user administrator' when creating the user." >&2; exit 1; }
+
 # This host is the appliance: the admin TUI shows System and Log out.
 install -d -m 0755 /etc/openvibes
 : > /etc/openvibes/appliance
