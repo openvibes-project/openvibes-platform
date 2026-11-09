@@ -170,6 +170,9 @@ SHA-256 is pinned. Optional: the platform works without it.
 Summary:        Model selection for the OpenVIBES local model server (no model bytes)
 License:        Apache-2.0
 Requires:       openvibes-llm = %{version}-%{release}
+# %post writes into openvibes-llm's state directory: install after it, also
+# when rpm breaks a dependency loop (the appliance installer did not, #546).
+Requires(post): openvibes-llm = %{version}-%{release}
 Obsoletes:      openvibes-llm-model-part1 < %{version}-%{release}
 Obsoletes:      openvibes-llm-model-part2 < %{version}-%{release}
 
