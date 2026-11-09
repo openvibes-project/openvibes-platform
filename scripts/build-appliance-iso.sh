@@ -56,7 +56,6 @@ mcopy -o -i "$efi" "$work/boot/efi-image-grub.cfg" ::EFI/BOOT/grub.cfg
 
 xorriso -indev "$work/$iso" -outdev "$out" \
     -boot_image any discard \
-    -boot_image grub grub2_mbr="--interval:local_fs:0s-15s:zero_mbrpt,zero_gpt:$work/$iso" \
     -boot_image any appended_part_as=gpt \
     -append_partition 2 C12A7328-F81F-11D2-BA4B-00A0C93EC93B "$efi" \
     -boot_image any efi_path=--interval:appended_partition_2:all:: \
