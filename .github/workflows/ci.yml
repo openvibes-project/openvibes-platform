@@ -557,6 +557,18 @@ jobs:
           mkdir out
           docker run --rm --privileged -e OPENVIBES_KEY_FINGERPRINT="$(cat kit/fingerprint)" -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
             bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance.iso'
+      - name: Build the test ISO (installs by itself, for the boot test)
+        run: |
+          docker run --rm --privileged -e OPENVIBES_ISO_TEST=1 -e OPENVIBES_KEY_FINGERPRINT="$(cat kit/fingerprint)" -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
+            bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance-test.iso'
+      - name: Keep the test ISO (the lab boots it with lab appliance)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: appliance-iso-test
+          path: out/openvibes-appliance-test.iso
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
       - name: Keep the ISO for a day (to boot by hand)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

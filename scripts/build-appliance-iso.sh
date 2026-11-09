@@ -42,6 +42,17 @@ tar -C "$work/kit" -xf "$kit_tar"
 label=$(xorriso -indev "$work/$iso" -pvd_info 2>&1 | sed -n "s/^Volume Id *: *//p")
 [[ -n $label ]] || { echo "no volume id in $iso" >&2; exit 1; }
 ksarg="inst.ks=hd:LABEL=$label:/openvibes-appliance.ks"
+ks=$ROOT/packaging/appliance/openvibes-appliance.ks
+# OPENVIBES_ISO_TEST=1 builds the CI test variant (never released): the same
+# ISO, but the installer runs by itself on a serial console, from the
+# kickstart plus test-install.ks (disk, user, power off, a boot check). The
+# CI kit carries no model package, so that one is left out.
+if [[ -n ${OPENVIBES_ISO_TEST:-} ]]; then
+    ksarg="$ksarg inst.text console=ttyS0,115200n8"
+    ks=$work/test.ks
+    sed -e '/^reboot /d' -e '/^openvibes-llm-model$/d' "$ROOT/packaging/appliance/openvibes-appliance.ks" > "$ks"
+    cat "$ROOT/packaging/appliance/test-install.ks" >> "$ks"
+fi
 mkdir "$work/boot"
 xorriso -osirrox on -indev "$work/$iso" -extract /EFI/BOOT/grub.cfg "$work/boot/efi-grub.cfg" \
     -extract /boot/grub2/grub.cfg "$work/boot/grub.cfg" -extract_boot_images "$work/boot/images" >/dev/null 2>&1
@@ -70,7 +81,7 @@ xorriso -return_with FAILURE 32 -indev "$work/$iso" -outdev "$out" \
     -update "$work/boot/efi-grub.cfg" /EFI/BOOT/grub.cfg \
     -update "$work/boot/grub.cfg" /boot/grub2/grub.cfg \
     -map "$work/kit/openvibes-offline" openvibes-offline \
-    -map "$ROOT/packaging/appliance/openvibes-appliance.ks" openvibes-appliance.ks \
+    -map "$ks" openvibes-appliance.ks \
     -commit
 # Show the boot entries of the result: BIOS and UEFI must both be there.
 report=$(xorriso -indev "$out" -report_el_torito plain 2>&1)
