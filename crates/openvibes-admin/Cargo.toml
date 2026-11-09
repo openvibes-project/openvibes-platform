@@ -25,21 +25,21 @@ sha2.workspace = true
 platform-settings = { path = "../platform-settings" }
 platform-store = { path = "../platform-store" }
 platform-host = { path = "../platform-host" }
-ratatui = "0.30"
+ratatui = "0.30.2"
 openvibes-vulns = { path = "../openvibes-vulns" }
 openvibes-ingest = { path = "../openvibes-ingest" }
 openvibes-distribution = { path = "../openvibes-distribution" }
 toml = { workspace = true, features = ["display"] }
-toml_edit = "0.25.12"
+toml_edit = "0.25.19"
 serde.workspace = true
 rpassword = "=7.5.4"
 tokio.workspace = true
-zeroize = "=1.9.0"
+zeroize = "=1.9.1"
 libc.workspace = true
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
-zip = { version = "9.0.3", default-features = false }
+flate2 = { version = "1.1.11", default-features = false, features = ["rust_backend"] }
+zip = { version = "9.5.0", default-features = false }

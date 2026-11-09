@@ -17,9 +17,9 @@ path = "src/main.rs"
 required-features = ["decode"]
 
 [dependencies]
-gif = { version = "0.14", default-features = false, features = ["std"], optional = true }
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "tiff"], optional = true }
-image-webp = { version = "0.2", default-features = false, optional = true }
+gif = { version = "0.14.2", default-features = false, features = ["std"], optional = true }
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "tiff"], optional = true }
+image-webp = { version = "0.2.4", default-features = false, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 webp-animation = { version = "0.10", features = ["static"], optional = true }

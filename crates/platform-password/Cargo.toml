@@ -7,8 +7,8 @@ license.workspace = true
 
 [dependencies]
 argon2 = { version = "=0.6.0", features = ["zeroize"] }
-unicode-normalization = "=0.1.25"
-zeroize = "=1.9.0"
+unicode-normalization = "=0.1.26"
+zeroize = "=1.9.1"
 
 [lints]
 workspace = true

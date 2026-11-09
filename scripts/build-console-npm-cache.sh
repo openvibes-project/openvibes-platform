@@ -2,7 +2,7 @@
 # Build the checksummed npm cache artefact consumed by offline RPM builds.
 set -euo pipefail
 
-readonly required_node_version="22.23.1"
+readonly required_node_version="22.23.4"
 readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly repository_root="$(cd -- "${script_dir}/.." && pwd -P)"
 readonly web_root="${repository_root}/crates/openvibes-console/web"

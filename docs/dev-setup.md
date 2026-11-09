@@ -17,7 +17,7 @@ never reads `/etc/openvibes`.
 ## Prerequisites
 
 - Node.js 22.12 or newer and npm 10 or newer. (`scripts/build-console.sh`
-  pins Node 22.23.1 exactly, but only the release build needs that.)
+  pins Node 22.23.4 exactly, but only the release build needs that.)
 - For the live backend (below) also: the Rust toolchain from
   `rust-toolchain.toml` (rustup installs it on first `cargo` run) and the
   PostgreSQL server binaries (`initdb`, `pg_ctl`, `psql`).
@@ -158,7 +158,7 @@ Migrations are append-only (see [`AGENTS.md`](../AGENTS.md)).
 ## 4. Building the embedded interface
 
 Only needed for `--all-features` builds (workspace clippy, docs, tests),
-the `embedded-ui` feature, or an RPM. Node must be exactly 22.23.1:
+the `embedded-ui` feature, or an RPM. Node must be exactly 22.23.4:
 
 ```sh
 scripts/build-console.sh

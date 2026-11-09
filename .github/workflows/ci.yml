@@ -103,12 +103,12 @@ jobs:
         run: rustup toolchain install
 
       - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - name: Install pinned Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22.23.1
+          node-version: 22.23.4
           cache: npm
           cache-dependency-path: crates/openvibes-console/web/package-lock.json
 
@@ -173,7 +173,7 @@ jobs:
         run: cargo test --release --locked -p openvibes-ingest --test delivery requests_are_not_delayed_by_nagle
 
       - name: Install cargo-audit
-        uses: taiki-e/install-action@7623a79cdfecb99d681017af368ca353d9f49bb5 # v2.87.19
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-audit@0.22.2
 
@@ -205,12 +205,12 @@ jobs:
         run: rustup toolchain install
 
       - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - name: Install pinned Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22.23.1
+          node-version: 22.23.4
           cache: npm
           cache-dependency-path: crates/openvibes-console/web/package-lock.json
 
@@ -308,9 +308,9 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned Node.js for console RPM
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22.23.1
+          node-version: 22.23.4
 
       # As in the ubuntu job, every fetch happens here and later steps build
       # offline. The agent RPM comes from the pinned revision; its binary is
@@ -338,7 +338,7 @@ jobs:
           rustup run "$nightly" cargo fetch --locked --manifest-path "$lib/Cargo.toml"
 
       - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
             . -> target
@@ -422,14 +422,14 @@ jobs:
           cp target/release/openvibes-load target/release/examples/integration_bundle tools/
 
       - name: Upload RPMs for the end to end jobs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rpms
           path: dist/
           if-no-files-found: error
 
       - name: Upload test tools
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tools
           path: tools/
@@ -468,9 +468,9 @@ jobs:
           "$HOME/.cargo/bin/rustup" toolchain install
 
       - name: Install pinned Node.js for console RPM
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22.23.1
+          node-version: 22.23.4
 
       - name: Cache llama.cpp build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -491,7 +491,7 @@ jobs:
           cp $(ls target/rpm/RPMS/x86_64/openvibes-*.rpm | grep -v -e debuginfo -e debugsource) target/rpm-console/RPMS/x86_64/openvibes-console-*.rpm dist/
 
       - name: Upload RPMs for the EL10 kit
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rpms-el10
           path: dist/
@@ -512,7 +512,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download RPMs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rpms-el10
           path: dist
@@ -526,7 +526,7 @@ jobs:
           gh release download --repo openvibes-project/openvibes-rules --pattern 'openvibes-rules-*.rpm' --dir kit-rpms
           bash scripts/offline-kit-test-kit.sh kit-rpms target/offline-el10 el10
       - name: Upload the kit for the appliance ISO
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kit-el10
           path: |
@@ -548,7 +548,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download the kit
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kit-el10
           path: kit
@@ -562,7 +562,7 @@ jobs:
           docker run --rm --privileged -e OPENVIBES_ISO_TEST=1 -e OPENVIBES_KEY_FINGERPRINT="$(cat kit/fingerprint)" -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
             bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance-test.iso'
       - name: Keep the test ISO (the lab boots it with lab appliance)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: appliance-iso-test
           path: out/openvibes-appliance-test.iso
@@ -570,7 +570,7 @@ jobs:
           compression-level: 0
           if-no-files-found: error
       - name: Keep the ISO for a day (to boot by hand)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: appliance-iso
           path: out/openvibes-appliance.iso
@@ -596,13 +596,13 @@ jobs:
           persist-credentials: false
 
       - name: Download RPMs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rpms
           path: dist
 
       - name: Download test tools
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: tools
           path: tools
@@ -658,7 +658,7 @@ jobs:
           persist-credentials: false
 
       - name: Download RPMs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rpms
           path: dist
@@ -690,7 +690,7 @@ jobs:
           persist-credentials: false
 
       - name: Download RPMs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rpms
           path: dist
@@ -716,7 +716,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download RPMs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rpms
           path: dist
@@ -757,7 +757,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download RPMs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rpms
           path: dist

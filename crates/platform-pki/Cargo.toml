@@ -21,7 +21,7 @@ rustls-pki-types.workspace = true
 rustls-webpki.workspace = true
 time.workspace = true
 x509-parser.workspace = true
-zeroize = "=1.9.0"
+zeroize = "=1.9.1"
 
 [lints]
 workspace = true
