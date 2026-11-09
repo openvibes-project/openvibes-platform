@@ -1,6 +1,6 @@
 // The Software list (approved screen 23; roles spec §10.3, step 5g rulings
-// 1-10): one row per package name over the hosts in the person's reach (rpm
-// and dpkg in one row), search and filter chips whose values and counts come
+// 1-10): one row per package name over the hosts in the person's reach (rpm,
+// dpkg and Windows programs in one row), search and filter chips whose values and counts come
 // from the server, saved views, the person's columns, a summary line and
 // paging by offset (all in the URL). A row opens the package's page at
 // /software/{name} (software/SoftwarePage.tsx).
@@ -31,7 +31,7 @@ export const apiQuery = (params: URLSearchParams) => listApiQuery(params, API_PA
 const VULNS: Record<string, string> = { exploited: "Exploited", critical_high: "Critical or high", any: "Any", none: "None" };
 const FIX: Record<string, string> = { available: "Update available", none: "No fix yet" };
 const VERSIONS: Record<string, string> = { one: "One version", several: "Several versions" };
-const TYPE: Record<string, string> = { rpm: "rpm", dpkg: "dpkg" };
+const TYPE: Record<string, string> = { rpm: "rpm", dpkg: "dpkg", windows: "Windows" };
 const CHANGES: Record<string, string> = { new: "New this week", updated: "Updated this week", removed: "Removed this week" };
 
 /** The filter chips, their values and counts from the list (none until it loads); Host only while set. */
@@ -49,7 +49,8 @@ export function softwareFilters(list: SoftwareList | undefined, set: { host: str
   ];
 }
 
-const managers = (r: { rpm: boolean; dpkg: boolean }) => [r.rpm && "rpm", r.dpkg && "dpkg"].filter(Boolean).join(" + ");
+const managers = (r: { rpm: boolean; dpkg: boolean; windows: boolean }) =>
+  [r.rpm && "rpm", r.dpkg && "dpkg", r.windows && "Windows"].filter(Boolean).join(" + ");
 
 /** "1.0 to 1.3" with the count, or the one version. */
 function VersionRange({ row }: { row: SoftwareListRow }) {

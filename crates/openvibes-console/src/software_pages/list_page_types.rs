@@ -37,6 +37,8 @@ pub(crate) struct SoftwareListRowView {
     pub dpkg: bool,
     /// Reported from rpm.
     pub rpm: bool,
+    /// A Windows program (protocol P22).
+    pub windows: bool,
     /// Open advisories on the hosts in reach.
     pub advisories: i64,
     /// Of those, advisories no update fixes.
@@ -69,7 +71,7 @@ pub(crate) struct SoftwareCountsView {
     pub fix: Vec<CountView>,
     /// `one`, `several`.
     pub versions: Vec<CountView>,
-    /// `dpkg`, `rpm`.
+    /// `dpkg`, `rpm`, `windows`.
     #[serde(rename = "type")]
     pub kind: Vec<CountView>,
     /// `new`, `updated`, `removed`.
@@ -131,6 +133,7 @@ impl From<SoftwareListRow> for SoftwareListRowView {
             newest: r.newest,
             dpkg: r.dpkg,
             rpm: r.rpm,
+            windows: r.windows,
             advisories: r.advisories,
             no_fix: r.no_fix,
             worst_severity: r.worst_severity,

@@ -5,8 +5,9 @@ package's page (`/software/{name}`, for example `/software/openssl`,
 screen 24), from roles step 5g (spec §10.3 and its "Plan rulings,
 2026-10-27 (step 5g)", plan
 `docs/superpowers/plans/2026-10-27-roles-5g-software-pages.md`). One row
-and one page per package name, rpm and dpkg together, however many hosts
-have it. They are built from the shared list and detail pieces in
+and one page per package name, rpm, dpkg and Windows programs (protocol
+P22, `manager` `windows`) together, however many hosts have it; the Type
+filter and column say rpm, dpkg or Windows (#532). They are built from the shared list and detail pieces in
 [console-web.md](console-web.md#shared-list-and-detail-pieces), like the
 [Ports](console-ports.md) and [Services](console-services.md) pages, and
 read the [change log](change-log.md). The page replaces the old package

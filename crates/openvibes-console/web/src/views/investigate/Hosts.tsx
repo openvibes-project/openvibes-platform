@@ -9,6 +9,7 @@ import type { HostList, HostRow } from "../../api/types";
 import { hostPath, hostsQuery } from "../../app/location";
 import { nav, useLocation, viewLink } from "../../app/nav";
 import { Ago, Empty, ErrorBox, Loading, SAVED_HEARTBEAT_HINT, StatusBadge } from "../../ui/bits";
+import { NO_WINDOWS_FEED } from "./host/HostCards";
 import { type Column, DataTable } from "../../ui/DataTable";
 import { Icon } from "../../ui/Icon";
 import { FilterBar } from "../../ui/list/FilterBar";
@@ -102,7 +103,7 @@ function columns(latest: string | null): Column<HostRow>[] {
     { key: "problems", header: header("problems"), width: "210px", hideBelow: 640, sort: (h) => (h.problems.open_alarms ?? 0) + (h.problems.critical ?? 0) + (h.problems.failing ?? 0), render: (h) => (
       <span className="nowrap">
         <Count n={h.problems.open_alarms} what="open alarms" tone="bad-text" /> {h.problems.open_alarms === 1 ? "alarm" : "alarms"} ·{" "}
-        <Count n={h.problems.critical} what="critical vulnerabilities" tone="bad-text" /> critical ·{" "}
+        {h.os.family === "windows" ? <Dash text={NO_WINDOWS_FEED} /> : <Count n={h.problems.critical} what="critical vulnerabilities" tone="bad-text" />} critical ·{" "}
         {h.problems.compliance_stale ? <Dash text="No report in the last day" /> : <Count n={h.problems.failing} what="failing checks" tone="warn-text" />} failing
       </span>
     ) },

@@ -1,5 +1,6 @@
 //! The Software list query (roles spec §10.3; step 5g rulings 1–10): one row
-//! per package name over the hosts in scope, rpm and dpkg together.
+//! per package name over the hosts in scope, rpm, dpkg and Windows programs
+//! together.
 
 mod common;
 
@@ -278,6 +279,31 @@ async fn this_week_reads_the_change_log_per_host() {
         assert_eq!(names(&found), expected);
     }
     assert_eq!(page.summary.new_this_week, 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn windows_programs_are_their_own_type() {
+    // #532 (protocol P22): a Windows host's programs, manager `windows`.
+    let (db, mut c) = common::migrated().await;
+    let (mine, _) = fixture(&c).await;
+    common::software::install(&c, A, "windows", "7-Zip 24.08 (x64)", "24.08").await;
+    let scope = AgentScope::AssetGroups(vec![mine]);
+    let all = run(&mut c, &query(), &scope).await;
+    let zip = row(&all, "7-Zip 24.08 (x64)");
+    assert!(zip.windows && !zip.rpm && !zip.dpkg);
+    assert!(!row(&all, "bash").windows);
+    assert_eq!(count(&all.counts.kind, PackageType::Windows), 1);
+    let only = run(
+        &mut c,
+        &SoftwareQuery {
+            kind: Some(PackageType::Windows),
+            ..query()
+        },
+        &scope,
+    )
+    .await;
+    assert_eq!(names(&only), ["7-Zip 24.08 (x64)"]);
     db.drop().await;
 }
 

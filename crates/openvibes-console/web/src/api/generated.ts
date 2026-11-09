@@ -5405,7 +5405,7 @@ export interface components {
             epoch: number;
             /** @description The host has an open vulnerability with a fix on this package. */
             fixable_vulnerable: boolean;
-            /** @description Package manager (`rpm`, `dpkg`). */
+            /** @description Package manager (`rpm`, `dpkg`, `windows`). */
             manager: string;
             /** @description Package name. */
             name: string;
@@ -7565,7 +7565,7 @@ export interface components {
              *     package of every host).
              */
             group: components["schemas"]["GroupCountView"][];
-            /** @description `dpkg`, `rpm`. */
+            /** @description `dpkg`, `rpm`, `windows`. */
             type: components["schemas"]["CountView"][];
             /** @description `one`, `several`. */
             versions: components["schemas"]["CountView"][];
@@ -7624,7 +7624,7 @@ export interface components {
              * @description Hosts in reach that have it.
              */
             hosts: number;
-            /** @description The package databases it is reported from (`dpkg`, `rpm`), sorted. */
+            /** @description The package databases it is reported from (`dpkg`, `rpm`, `windows`), sorted. */
             managers: string[];
             /** @description The package name. */
             name: string;
@@ -7638,7 +7638,7 @@ export interface components {
         SoftwareHostVersionView: {
             /** @description Architecture. */
             arch: string;
-            /** @description `dpkg` or `rpm`. */
+            /** @description `dpkg`, `rpm` or `windows`. */
             manager: string;
             /** @description `epoch:version-release`, epoch and release only when present. */
             version: string;
@@ -7719,6 +7719,8 @@ export interface components {
              * @description Hosts that changed its version in the last 7 days.
              */
             week_updated: number;
+            /** @description A Windows program (protocol P22). */
+            windows: boolean;
             /** @description The worst severity among them. */
             worst_severity?: string | null;
         };
@@ -7848,7 +7850,7 @@ export interface components {
              * @description Hosts in reach that have it.
              */
             hosts: number;
-            /** @description `dpkg` or `rpm`. */
+            /** @description `dpkg`, `rpm` or `windows`. */
             manager: string;
             /** @description `epoch:version-release`, epoch and release only when present. */
             version: string;
@@ -16375,7 +16377,7 @@ export interface operations {
                 fix?: string;
                 /** @description one or several versions in use. */
                 versions?: string;
-                /** @description dpkg or rpm. */
+                /** @description dpkg, rpm or windows. */
                 type?: string;
                 /** @description A host group id. */
                 group?: string;

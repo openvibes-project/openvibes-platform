@@ -18,7 +18,7 @@ const WEEK = 7 * 86_400_000;
 const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 type Pkg = {
-  name: string; hosts: Set<string>; versions: number; rpm: boolean; dpkg: boolean; oldest: string; newest: string;
+  name: string; hosts: Set<string>; versions: number; rpm: boolean; dpkg: boolean; windows: boolean; oldest: string; newest: string;
   adv: number; noFix: number; sev: number | null; exploited: boolean; update: number; added: number; updated: number; removed: number;
   units: [string, number][]; groups: Set<string>;
 };
@@ -32,7 +32,7 @@ export function registerSoftwareListRoute(ctx: DemoContext) {
       { field_errors: [{ field: "query", code: "invalid", message: "The query parameter is invalid" }] });
     const get = (k: string) => query.get(k) || null;
     const bad = listQueryError(query, "Software query parameters are invalid", [["vulns", ["exploited", "critical_high", "any", "none"]], ["fix", ["available", "none"]],
-      ["versions", ["one", "several"]], ["type", ["dpkg", "rpm"]], ["changes", ["new", "updated", "removed"]], ["sort", SORTS], ["dir", ["asc", "desc"]]], [["q", 200], ["host", 100]]);
+      ["versions", ["one", "several"]], ["type", ["dpkg", "rpm", "windows"]], ["changes", ["new", "updated", "removed"]], ["sort", SORTS], ["dir", ["asc", "desc"]]], [["q", 200], ["host", 100]]);
     if (bad) return bad;
     const chosen = { q: (get("q") ?? "").trim().toLowerCase(), vulns: get("vulns"), fix: get("fix"), versions: get("versions"), type: get("type"), group: get("group"),
       changes: get("changes"), host: get("host") };
@@ -57,7 +57,7 @@ export function registerSoftwareListRoute(ctx: DemoContext) {
       const upgraded = (a: string) => mine.some((c) => c.agent === a && c.change === "appeared" && mine.some((g) => g.agent === a && g.change === "went_away" && g.at === c.at));
       const groups = new Set(hosts.flatMap((h) => groupIdsOf(ctx, h.id, ["automatic", "rule", "manual"])));
       pkgs.push({
-        name, hosts: new Set(hosts.map((h) => h.id)), versions: distinct.length, rpm: distinct.some((v) => v.manager === "rpm"), dpkg: distinct.some((v) => v.manager === "dpkg"),
+        name, hosts: new Set(hosts.map((h) => h.id)), versions: distinct.length, rpm: distinct.some((v) => v.manager === "rpm"), dpkg: distinct.some((v) => v.manager === "dpkg"), windows: distinct.some((v) => v.manager === "windows"),
         oldest: fullVersion(distinct[0] as never), newest: fullVersion(distinct[distinct.length - 1] as never),
         adv: open.length, noFix: open.filter((a) => a.fixed == null).length, sev: open.length ? Math.min(...open.map((a) => severityRank(a.severity))) : null,
         exploited: open.some((a) => a.exploited), update: new Set(open.flatMap((a) => [...a.fixable])).size,
@@ -72,7 +72,7 @@ export function registerSoftwareListRoute(ctx: DemoContext) {
         case "vulns": return chosen.vulns === null || (chosen.vulns === "exploited" ? p.exploited : chosen.vulns === "critical_high" ? p.sev !== null && p.sev <= 1 : chosen.vulns === "any" ? p.adv > 0 : p.adv === 0);
         case "fix": return chosen.fix === null || (chosen.fix === "available" ? p.update > 0 : p.noFix > 0);
         case "versions": return chosen.versions === null || (chosen.versions === "one") === (p.versions === 1);
-        case "type": return chosen.type === null || (chosen.type === "dpkg" ? p.dpkg : p.rpm);
+        case "type": return chosen.type === null || (chosen.type === "dpkg" ? p.dpkg : chosen.type === "windows" ? p.windows : p.rpm);
         case "group": return chosen.group === null || p.groups.has(chosen.group);
         case "changes": return chosen.changes === null || (chosen.changes === "new" ? p.added > 0 : chosen.changes === "updated" ? p.updated > 0 : p.removed > 0);
         case "host": return chosen.host === null || p.hosts.has(chosen.host);
@@ -99,7 +99,7 @@ export function registerSoftwareListRoute(ctx: DemoContext) {
     const reporting = data.agents.filter((a) => isActive(ctx.facts(a)) && ctx.visible(a.id) && reaches("hosts.read", a.id)).length;
 
     const row = (p: Pkg): SoftwareListRow => ({
-      name: p.name, hosts: p.hosts.size, versions: p.versions, rpm: p.rpm, dpkg: p.dpkg, oldest: p.oldest, newest: p.newest, advisories: p.adv, no_fix: p.noFix,
+      name: p.name, hosts: p.hosts.size, versions: p.versions, rpm: p.rpm, dpkg: p.dpkg, windows: p.windows, oldest: p.oldest, newest: p.newest, advisories: p.adv, no_fix: p.noFix,
       ...(p.sev === null ? {} : { worst_severity: ["critical", "important", "moderate", "low", "unrated"][p.sev] as string }), exploited: p.exploited, update_hosts: p.update,
       used_by: p.units.slice(0, 3).map(([unit, hosts]) => ({ unit, hosts })), used_by_total: p.units.length, week_added: p.added, week_updated: p.updated, week_removed: p.removed,
     });
@@ -111,7 +111,7 @@ export function registerSoftwareListRoute(ctx: DemoContext) {
           .map(([value, test]) => ({ value: value as string, count: count(except("vulns"), test as (p: Pkg) => boolean) })),
         fix: [["available", (p: Pkg) => p.update > 0], ["none", (p: Pkg) => p.noFix > 0]].map(([value, test]) => ({ value: value as string, count: count(except("fix"), test as (p: Pkg) => boolean) })),
         versions: [["one", (p: Pkg) => p.versions === 1], ["several", (p: Pkg) => p.versions > 1]].map(([value, test]) => ({ value: value as string, count: count(except("versions"), test as (p: Pkg) => boolean) })),
-        type: [["dpkg", (p: Pkg) => p.dpkg], ["rpm", (p: Pkg) => p.rpm]].map(([value, test]) => ({ value: value as string, count: count(except("type"), test as (p: Pkg) => boolean) })),
+        type: [["dpkg", (p: Pkg) => p.dpkg], ["rpm", (p: Pkg) => p.rpm], ["windows", (p: Pkg) => p.windows]].map(([value, test]) => ({ value: value as string, count: count(except("type"), test as (p: Pkg) => boolean) })),
         changes: [["new", (p: Pkg) => p.added > 0], ["updated", (p: Pkg) => p.updated > 0], ["removed", (p: Pkg) => p.removed > 0]]
           .map(([value, test]) => ({ value: value as string, count: count(except("changes"), test as (p: Pkg) => boolean) })),
         group: groupCounts.map(({ g, count: n }) => ({ value: g, name: groupOf.get(g)?.name ?? g, kind: groupOf.get(g)?.kind ?? "manual", count: n }))

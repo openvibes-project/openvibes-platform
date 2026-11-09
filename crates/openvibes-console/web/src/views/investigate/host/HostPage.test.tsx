@@ -71,6 +71,16 @@ describe("host page", () => {
     expect(text(html)).not.toContain("No failing checks");
   });
 
+  it("says a Windows host has no vulnerability feed instead of a count (#532)", () => {
+    const base = summary();
+    const html = render(summary({
+      host: { ...base.host, os: { id: "windows", version: "10.0.26100.2894", distribution: "Windows 10.0.26100.2894", family: "windows" } },
+      tiles: { ...base.tiles, vulnerabilities: 0 }, top_vulnerabilities: { total: 0, items: [] },
+    }));
+    expect(html).toContain('aria-label="Vulnerabilities: No vulnerability feed for Windows yet"');
+    expect(text(html)).not.toContain("No open vulnerabilities");
+  });
+
   it("leaves out each card and tile whose section is null", () => {
     const html = render(summary({
       tiles: { open_alarms: null, compliance_failing: null, compliance_stale: false, vulnerabilities: null, software: 412 },

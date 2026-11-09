@@ -73,6 +73,7 @@ pub fn distribution_name(distribution: &str) -> String {
         "fedora" => "Fedora",
         "rocky" => "Rocky Linux",
         "almalinux" => "AlmaLinux",
+        "windows" => "Windows",
         // unknown ids stay raw lowercase, e.g. "production 1"
         _ => return distribution.into(),
     };
