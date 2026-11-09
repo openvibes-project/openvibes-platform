@@ -36,6 +36,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent-ca": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Downloads the platform's CA (`openvibes-platform-ca.crt`) for the Windows
+         *     agent MSI, which takes it from its own folder (#540). The certificate is
+         *     public, but it comes from the signed-in console, like the install line.
+         */
+        get: operations["authenticated_agent_ca"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agent-command": {
         parameters: {
             query?: never;
@@ -2612,6 +2633,13 @@ export interface components {
         AgentCommandView: {
             /** @description Run as root on a new host; it carries the standing enrollment token. */
             command: string;
+            /**
+             * @description Windows (agent MSI, preview): PowerShell as administrator in the
+             *     folder holding the MSI and the CA from `/api/v1/agent-ca`. Null when
+             *     the platform's rule distribution port is not 18424 (the MSI has no
+             *     setting for it yet).
+             */
+            windows?: string | null;
         };
         /** @description Agent and current certificate metadata. */
         AgentDetail: components["schemas"]["AgentView"] & {
@@ -9062,6 +9090,35 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_agent_ca: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The platform's root certificate (PEM) as openvibes-platform-ca.crt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-pem-file": unknown;
+                };
+            };
+            /** @description The package is not configured or there is no standing token */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

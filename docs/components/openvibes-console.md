@@ -643,6 +643,21 @@ holds global `tokens.installer`; without `[agent_install]` both routes answer
 404, without a standing token `no_standing_token`. The script file holds the token:
 keep it private, and revoke the standing token to rotate it.
 
+**Windows (agent MSI, preview; #540).** `{command}` also carries `windows`:
+`msiexec /i (Get-Item .\openvibes-agent-*-x64.msi).FullName /qn
+PLATFORM_URL=https://<platform> PLATFORM_CA_SHA256=<fingerprint>
+ENROLLMENT_TOKEN=<token> | Out-Null`, for PowerShell as administrator in the
+folder holding the agent's MSI and the platform's CA. It has no path in it
+(a quoted path breaks `msiexec` from PowerShell when it has a space): the
+MSI takes `openvibes-platform-ca.crt` from beside itself, and only when it
+matches the fingerprint (agent #136). `windows` is null when the rule
+distribution port is not 18424, which the MSI has no setting for yet.
+`GET /api/v1/agent-ca` (same permission and checks, audited as
+`agent_ca.downloaded`, `no-store`) downloads that CA as
+`openvibes-platform-ca.crt`. The "Add a host" section's Windows row has
+"Agent MSI" (the latest agent release), "Download CA" and "Copy Windows
+install" (copied, not shown), or says why Windows is not offered.
+
 A non-loopback address, equal addresses, unpaired auth fields, non-loopback
 origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at startup ("invalid console
 configuration"), and `run` refuses a listener that is not loopback even if

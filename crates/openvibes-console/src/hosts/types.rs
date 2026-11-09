@@ -58,6 +58,11 @@ pub struct AgentView {
 pub struct AgentCommandView {
     /// Run as root on a new host; it carries the standing enrollment token.
     pub command: String,
+    /// Windows (agent MSI, preview): PowerShell as administrator in the
+    /// folder holding the MSI and the CA from `/api/v1/agent-ca`. Null when
+    /// the platform's rule distribution port is not 18424 (the MSI has no
+    /// setting for it yet).
+    pub windows: Option<String>,
 }
 
 /// Threat alarms on one host: on and from which source, or off, why, and the

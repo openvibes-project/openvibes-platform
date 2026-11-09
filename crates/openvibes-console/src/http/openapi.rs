@@ -17,6 +17,7 @@ use utoipa::OpenApi;
         crate::hosts::enrollment::authenticated_enrollment_tokens,
         crate::hosts::install::authenticated_agent_package,
         crate::hosts::install::authenticated_agent_command,
+        crate::hosts::install::authenticated_agent_ca,
         crate::hosts::enrollment::authenticated_enrollment_token,
         crate::hosts::enrollment::create_authenticated_enrollment_token,
         crate::hosts::enrollment::revoke_authenticated_enrollment_token,

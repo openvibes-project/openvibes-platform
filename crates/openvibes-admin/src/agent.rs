@@ -381,8 +381,16 @@ async fn agent_command(
         })
         .unwrap_or_default();
     let output = created.and_then(|out| crate::setup::token_from(&out)).map(|token| {
+        let windows = crate::setup::agent_windows_command(&platform, ports, &token, &fingerprint)
+            .map_or_else(
+                || "\nWindows: not offered, the rule distribution port is not 18424 (the agent MSI has no setting for it yet)\n".to_owned(),
+                |line| format!(
+                    "\nWindows (agent MSI, preview): in PowerShell as administrator, in a folder holding the agent's MSI and this platform's {} saved as openvibes-platform-ca.crt:\n{line}\n",
+                    root_cert.display()
+                ),
+            );
         format!(
-            "{}\nthe standing token never expires and has no use limit (revoke it with `openvibes-admin token revoke` to replace it; enrolled agents keep working); it is visible in the host's process list while the command runs\n{site}",
+            "{}\nthe standing token never expires and has no use limit (revoke it with `openvibes-admin token revoke` to replace it; enrolled agents keep working); it is visible in the host's process list while the command runs\n{windows}{site}",
             crate::setup::agent_install_command(&platform, ports, &token, &fingerprint, rules.as_deref(), alarm_rules.as_deref())
         )
     });

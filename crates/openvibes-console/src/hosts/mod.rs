@@ -50,6 +50,7 @@ pub(crate) fn routes() -> Router<AuthHttpState> {
             "/v1/agent-command",
             get(install::authenticated_agent_command),
         )
+        .route("/v1/agent-ca", get(install::authenticated_agent_ca))
         .route(
             "/v1/agents/summary",
             get(agents::authenticated_agent_summary),

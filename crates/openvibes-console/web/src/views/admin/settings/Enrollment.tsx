@@ -1,5 +1,5 @@
 // Settings › Enrollment: adding hosts, and the enrollment tokens they use.
-import { isDemo, useResource } from "../../../api/client";
+import { type ApiError, isDemo, useResource } from "../../../api/client";
 import type { AgentCommand, EnrollmentToken } from "../../../api/types";
 import { nav, useLocation, useTopPanel } from "../../../app/nav";
 import { useSession } from "../../../app/session";
@@ -11,13 +11,18 @@ import { Ago, Empty, ErrorBox, Loading } from "../../../ui/bits";
 import { matches } from "../../../ui/table";
 import { toast } from "../../../ui/toast";
 
-/** The demo has no platform to build the install package from. */
-function downloadDemoPackage() {
-  const url = URL.createObjectURL(new Blob(["#!/bin/sh\n# Demo: the real package carries the platform's fleet token.\n"], { type: "text/x-shellscript" }));
-  const link = Object.assign(document.createElement("a"), { href: url, download: "openvibes-agent-install.sh" });
+/** The demo has no platform to build the install package (or CA) from. */
+function downloadDemo(name: string, text: string, type: string) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = Object.assign(document.createElement("a"), { href: url, download: name });
   link.click();
   URL.revokeObjectURL(url);
 }
+const downloadDemoPackage = () => downloadDemo("openvibes-agent-install.sh", "#!/bin/sh\n# Demo: the real package carries the platform's fleet token.\n", "text/x-shellscript");
+const downloadDemoCa = () => downloadDemo("openvibes-platform-ca.crt", "# Demo: the real file is the platform's root certificate.\n", "application/x-pem-file");
+
+/** Where the Windows agent's MSI is published (agent releases, #540). */
+export const AGENT_RELEASES = "https://github.com/openvibes-project/openvibes-agent/releases/latest";
 
 export function Enrollment() {
   const { can } = useSession();
@@ -67,12 +72,17 @@ export function Enrollment() {
  * holds the token. */
 function AddHost() {
   const command = useResource<AgentCommand>("/api/v1/agent-command");
-  const text = command.data?.command;
+  return <AddHostBody command={command.data} error={command.error} />;
+}
+
+/** Linux and Windows (preview) ways to add a host, from the API's install lines. */
+export function AddHostBody({ command, error }: { command: AgentCommand | undefined; error?: ApiError | undefined }) {
+  const text = command?.command;
   return (
     <section className="view-pad stack" aria-labelledby="add-host">
       <h2 id="add-host" className="section-title">Add a host</h2>
       <p className="subtle">Run either as root on the new host. Both carry the standing token: anyone with it can enroll a host.</p>
-      {command.error && <ErrorBox error={command.error} />}
+      {error && <ErrorBox error={error} />}
       <div className="row row--wrap">
         {isDemo()
           ? <button type="button" className="button" onClick={downloadDemoPackage} title="A script to copy to the host and run with sudo"><Icon name="download" size={15} /> Install package</button>
@@ -82,6 +92,24 @@ function AddHost() {
           <Icon name="copy" size={15} /> Copy CLI install
         </button>
       </div>
+      <h3 className="section-title">Windows (preview)</h3>
+      {command && !command.windows
+        ? <p className="subtle">Not offered: this platform's rule distribution port is not 18424, and the Windows agent has no setting for it yet.</p>
+        : (
+          <>
+            <p className="subtle">Save the agent's MSI and this platform's CA in one folder, then paste the install line into PowerShell as administrator in that folder. The MSI checks the CA against the fingerprint in the line.</p>
+            <div className="row row--wrap">
+              <a className="button" href={AGENT_RELEASES} target="_blank" rel="noreferrer" title="openvibes-agent-…-x64.msi from the latest agent release"><Icon name="download" size={15} /> Agent MSI</a>
+              {isDemo()
+                ? <button type="button" className="button" onClick={downloadDemoCa} title="openvibes-platform-ca.crt"><Icon name="download" size={15} /> Download CA</button>
+                : <a className="button" href="/api/v1/agent-ca" download title="openvibes-platform-ca.crt"><Icon name="download" size={15} /> Download CA</a>}
+              <button type="button" className="button" disabled={!command?.windows} title="A one-line install to paste into PowerShell as administrator"
+                onClick={() => { const line = command?.windows; if (line) { void navigator.clipboard?.writeText(line); toast("Windows install copied"); } }}>
+                <Icon name="copy" size={15} /> Copy Windows install
+              </button>
+            </div>
+          </>
+        )}
     </section>
   );
 }

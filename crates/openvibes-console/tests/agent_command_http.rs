@@ -271,6 +271,17 @@ async fn admins_get_the_install_command_and_package_viewers_do_not() {
         command.contains(SECRET) && command.contains(" --ca-sha256 "),
         "{command}"
     );
+    // The Windows line (#540): the same token and CA fingerprint, no path.
+    let windows = body["windows"].as_str().unwrap();
+    assert!(
+        windows.starts_with("msiexec /i (Get-Item .\\openvibes-agent-*-x64.msi).FullName /qn PLATFORM_URL=https://platform.example PLATFORM_CA_SHA256=")
+            && windows.contains(&format!("ENROLLMENT_TOKEN={SECRET} ")),
+        "{windows}"
+    );
+    // The CA it is checked against, as the file the MSI looks for.
+    let (status, ca, _) = get(&router, "/api/v1/agent-ca", &admin).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(ca.starts_with("-----BEGIN CERTIFICATE-----"), "{ca}");
 
     // The package carries the same token, read from a variable.
     let (status, script, _) = get(&router, "/api/v1/agent-package", &admin).await;
@@ -278,7 +289,11 @@ async fn admins_get_the_install_command_and_package_viewers_do_not() {
     assert!(script.contains(&format!("TOKEN='{SECRET}'")), "{script}");
 
     // Both carry the standing token: viewers get neither.
-    for uri in ["/api/v1/agent-command", "/api/v1/agent-package"] {
+    for uri in [
+        "/api/v1/agent-command",
+        "/api/v1/agent-package",
+        "/api/v1/agent-ca",
+    ] {
         let (status, _, _) = get(&router, uri, &viewer).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
     }

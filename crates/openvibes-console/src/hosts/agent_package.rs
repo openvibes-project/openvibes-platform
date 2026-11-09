@@ -152,6 +152,50 @@ pub fn command(spec: &PackageSpec<'_>) -> Result<String, PackageError> {
     ))
 }
 
+/// `https://host[:port]`, an IPv6 address in brackets.
+fn platform_url(platform: &str, port: u16) -> String {
+    let host = if platform.contains(':') {
+        format!("[{platform}]")
+    } else {
+        platform.to_owned()
+    };
+    if port == DEFAULT_INGEST_PORT {
+        format!("https://{host}")
+    } else {
+        format!("https://{host}:{port}")
+    }
+}
+
+/// The Windows install line (agent MSI, preview; #540), for PowerShell as
+/// administrator in the folder holding the agent MSI and the CA saved as
+/// `openvibes-platform-ca.crt` (the console's download, `/api/v1/agent-ca`),
+/// which the MSI looks for beside itself:
+/// no path in it, since a quoted path breaks `msiexec` from PowerShell when
+/// it has a space, and the MSI takes the CA from beside itself, only if it
+/// matches `PLATFORM_CA_SHA256` (agent #136), as `--ca-sha256` on Linux. `Out-Null`
+/// makes PowerShell wait for `msiexec`. `None` when the distribution port is
+/// not the default: the MSI has no setting for it yet, and a line without it
+/// would point the agent at the wrong port.
+pub fn windows_command(spec: &PackageSpec<'_>) -> Result<Option<String>, PackageError> {
+    let fingerprint = checked(spec)?;
+    if spec.distribution_port != DEFAULT_DISTRIBUTION_PORT {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "msiexec /i (Get-Item .\\openvibes-agent-*-x64.msi).FullName /qn PLATFORM_URL={} \
+         PLATFORM_CA_SHA256={fingerprint} ENROLLMENT_TOKEN={} | Out-Null",
+        platform_url(spec.platform, spec.ingest_port),
+        spec.token
+    )))
+}
+
+/// The platform's CA for the console's download, checked as for the
+/// installers (one valid certificate).
+pub fn ca(spec: &PackageSpec<'_>) -> Result<String, PackageError> {
+    checked(spec)?;
+    Ok(spec.root_cert_pem.to_owned())
+}
+
 /// Renders the install script.
 pub fn render(spec: &PackageSpec<'_>) -> Result<String, PackageError> {
     let fingerprint = checked(spec)?;
@@ -235,6 +279,50 @@ mod tests {
             ..spec
         };
         assert_eq!(command(&bad), Err(PackageError::Token));
+    }
+
+    #[test]
+    fn windows_line_has_no_path_and_names_the_ports() {
+        let pem = root();
+        let spec = PackageSpec {
+            platform: "h.example",
+            ingest_port: DEFAULT_INGEST_PORT,
+            distribution_port: DEFAULT_DISTRIBUTION_PORT,
+            root_cert_pem: &pem,
+            rules: None,
+            alarm_rules: None,
+            token: "T0k",
+        };
+        let fp = fingerprint(&pem).unwrap();
+        assert_eq!(
+            windows_command(&spec).unwrap().unwrap(),
+            format!(
+                "msiexec /i (Get-Item .\\openvibes-agent-*-x64.msi).FullName /qn \
+                 PLATFORM_URL=https://h.example PLATFORM_CA_SHA256={fp} ENROLLMENT_TOKEN=T0k | Out-Null"
+            )
+        );
+        let v6 = PackageSpec {
+            platform: "fd00::5",
+            ingest_port: 9000,
+            ..spec.clone()
+        };
+        assert!(
+            windows_command(&v6)
+                .unwrap()
+                .unwrap()
+                .contains("PLATFORM_URL=https://[fd00::5]:9000 ")
+        );
+        let other_rules_port = PackageSpec {
+            distribution_port: 9001,
+            ..spec.clone()
+        };
+        assert_eq!(windows_command(&other_rules_port), Ok(None));
+        assert_eq!(ca(&spec).unwrap(), pem);
+        let bad = PackageSpec {
+            token: "x y",
+            ..spec
+        };
+        assert_eq!(windows_command(&bad), Err(PackageError::Token));
     }
 
     #[test]

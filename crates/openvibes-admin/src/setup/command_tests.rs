@@ -120,3 +120,21 @@ fn site_rules_become_agent_toml_lines() {
         None
     );
 }
+
+#[test]
+fn the_windows_line_has_no_path_and_only_default_rules_port() {
+    assert_eq!(
+        super::agent_windows_command("h.example", DEFAULTS, "T", "AB:CD").unwrap(),
+        "msiexec /i (Get-Item .\\openvibes-agent-*-x64.msi).FullName /qn \
+         PLATFORM_URL=https://h.example PLATFORM_CA_SHA256=AB:CD ENROLLMENT_TOKEN=T | Out-Null"
+    );
+    let line = super::agent_windows_command("fd00::5", (18500, 18424), "T", "AB:CD").unwrap();
+    assert!(
+        line.contains(" PLATFORM_URL=https://[fd00::5]:18500 "),
+        "{line}"
+    );
+    assert_eq!(
+        super::agent_windows_command("h.example", (18423, 18501), "T", "AB:CD"),
+        None
+    );
+}
