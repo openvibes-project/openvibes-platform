@@ -110,6 +110,37 @@ pub fn agent_install_command(
     )
 }
 
+/// The Windows install line (agent MSI, preview; #540), as the console's
+/// Enrollment page shows it: PowerShell as administrator in the folder with
+/// the agent MSI and this platform's CA saved as `openvibes-platform-ca.crt`,
+/// which the MSI takes only when it matches `PLATFORM_CA_SHA256`. `None`
+/// when the distribution port is not the default: the MSI has no setting for
+/// it yet, and a line without it would point the agent at the wrong port.
+pub fn agent_windows_command(
+    platform: &str,
+    (ingest, distribution): (u16, u16),
+    token: &str,
+    fingerprint: &str,
+) -> Option<String> {
+    if distribution != ports::DISTRIBUTION_DEFAULT {
+        return None;
+    }
+    let host = if platform.contains(':') {
+        format!("[{platform}]")
+    } else {
+        platform.to_owned()
+    };
+    let url = if ingest == ports::INGEST_DEFAULT {
+        format!("https://{host}")
+    } else {
+        format!("https://{host}:{ingest}")
+    };
+    Some(format!(
+        "msiexec /i (Get-Item .\\openvibes-agent-*-x64.msi).FullName /qn PLATFORM_URL={url} \
+         PLATFORM_CA_SHA256={fingerprint} ENROLLMENT_TOKEN={token} | Out-Null"
+    ))
+}
+
 /// `--rules` for the install line: the package's trust line, only while the
 /// platform serves its set with a bundle signed by that same key, so remote
 /// agents are never told to fetch what they cannot verify.

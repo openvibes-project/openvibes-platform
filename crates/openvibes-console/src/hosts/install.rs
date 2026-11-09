@@ -146,15 +146,49 @@ pub(crate) async fn authenticated_agent_command(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
 ) -> Response {
-    match with_install_spec(
+    match with_install_spec(&state, &headers, "agent_command.viewed", |spec| {
+        Ok((
+            crate::hosts::agent_package::command(spec)?,
+            crate::hosts::agent_package::windows_command(spec)?,
+        ))
+    })
+    .await
+    {
+        Ok((command, windows)) => {
+            no_store(Json(crate::AgentCommandView { command, windows }).into_response())
+        }
+        Err(response) => response,
+    }
+}
+
+/// Downloads the platform's CA (`openvibes-platform-ca.crt`) for the Windows
+/// agent MSI, which takes it from its own folder (#540). The certificate is
+/// public, but it comes from the signed-in console, like the install line.
+#[utoipa::path(get,path="/api/v1/agent-ca",tag="enrollment",responses((status=200,description="The platform's root certificate (PEM) as openvibes-platform-ca.crt",content_type="application/x-pem-file"),(status=404,description="The package is not configured or there is no standing token",body=ProblemDetails)))]
+pub(crate) async fn authenticated_agent_ca(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    let pem = match with_install_spec(
         &state,
         &headers,
-        "agent_command.viewed",
-        crate::hosts::agent_package::command,
+        "agent_ca.downloaded",
+        crate::hosts::agent_package::ca,
     )
     .await
     {
-        Ok(command) => no_store(Json(crate::AgentCommandView { command }).into_response()),
-        Err(response) => response,
-    }
+        Ok(pem) => pem,
+        Err(response) => return response,
+    };
+    let mut response = pem.into_response();
+    let response_headers = response.headers_mut();
+    response_headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/x-pem-file"),
+    );
+    response_headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment; filename=\"openvibes-platform-ca.crt\""),
+    );
+    no_store(response)
 }

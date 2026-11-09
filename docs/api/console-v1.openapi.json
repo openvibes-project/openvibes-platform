@@ -109,6 +109,33 @@
         }
       }
     },
+    "/api/v1/agent-ca": {
+      "get": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Downloads the platform's CA (`openvibes-platform-ca.crt`) for the Windows\nagent MSI, which takes it from its own folder (#540). The certificate is\npublic, but it comes from the signed-in console, like the install line.",
+        "operationId": "authenticated_agent_ca",
+        "responses": {
+          "200": {
+            "description": "The platform's root certificate (PEM) as openvibes-platform-ca.crt",
+            "content": {
+              "application/x-pem-file": {}
+            }
+          },
+          "404": {
+            "description": "The package is not configured or there is no standing token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agent-command": {
       "get": {
         "tags": [
@@ -12752,6 +12779,13 @@
           "command": {
             "type": "string",
             "description": "Run as root on a new host; it carries the standing enrollment token."
+          },
+          "windows": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Windows (agent MSI, preview): PowerShell as administrator in the\nfolder holding the MSI and the CA from `/api/v1/agent-ca`. Null when\nthe platform's rule distribution port is not 18424 (the MSI has no\nsetting for it yet)."
           }
         }
       },
