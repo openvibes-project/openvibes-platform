@@ -15,7 +15,7 @@ and Fedora version, `openvibes-platform-<version>-offline-fedora<N>.tar` (today
 | `openvibes.gpg` | the OpenVIBES package key (`packaging/rpm/openvibes-packages.gpg`) |
 | `packages/` | the signed OpenVIBES packages (admin, console, ingest, distribution, vulns, signer, llm, llm-model), the `openvibes-rules-*` packages, `postgresql-server`, and the full `--alldeps` closure of Fedora packages (base-image packages included, so an older Fedora 44 point release gets the newer libraries it needs); `repodata/` from `createrepo_c` |
 | `SHA256SUMS`, `SHA256SUMS.asc` | every file in the kit; a detached signature by the package key |
-| `LICENSES/fedora-packages.txt` | name, licence, source RPM and `https://src.fedoraproject.org/rpms/<source>` of each bundled Fedora package (GPL source offer) |
+| `LICENSES/distribution-packages.txt` | name, licence, source RPM and the distribution's source address (`https://src.fedoraproject.org/rpms/<source>`, or `https://git.almalinux.org/rpms/<source>` for el10) of each bundled package (GPL source offer) |
 
 The model is not in the kit (2.7 GB, a Hugging Face link in `README.txt`).
 Size: about 95 MB.

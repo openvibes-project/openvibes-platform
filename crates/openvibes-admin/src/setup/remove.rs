@@ -233,7 +233,7 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     // A stale mark with the cluster answering still drops (review I2).
     // No server (removed by hand): nothing to drop, and /var/lib/pgsql stays.
     // Under our own removal mark the retry below still finishes the job.
-    let server = installed(ctx, "postgresql-server") || ctx.exists(PG_MARK);
+    let server = installed(ctx, super::pg::flavour(ctx).server) || ctx.exists(PG_MARK);
     let roles = if !server {
         String::new()
     } else {

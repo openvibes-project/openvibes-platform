@@ -24,6 +24,8 @@ pub enum Program {
     Runuser,
     /// PostgreSQL's first initialisation.
     PostgresqlSetup,
+    /// The same for the PostgreSQL project's packages (AlmaLinux).
+    PostgresqlSetupPgdg,
     /// Operator group membership.
     Usermod,
     /// Firewall ports.
@@ -70,6 +72,7 @@ impl Program {
             Program::Rpm => "/usr/bin/rpm",
             Program::Runuser => "/usr/sbin/runuser",
             Program::PostgresqlSetup => "/usr/bin/postgresql-setup",
+            Program::PostgresqlSetupPgdg => "/usr/pgsql-17/bin/postgresql-17-setup",
             Program::Usermod => "/usr/sbin/usermod",
             Program::FirewallCmd => "/usr/bin/firewall-cmd",
             Program::Admin => "/usr/bin/openvibes-admin",

@@ -7,7 +7,7 @@ use platform_host::runner::{
 };
 
 use super::{
-    super::base::{PG_MARK, PG_PACKAGES, PG_RECORD},
+    super::base::{PG_MARK, PG_RECORD},
     Ctx, installed, remove_file_or_dir,
 };
 
@@ -28,6 +28,7 @@ pub(super) const OBJECTS: &str = "SELECT (SELECT count(*) FROM pg_class c \
 /// mark, each part checks whether it is still to do, so a retry finishes. `/var/lib/pgsql` goes only under
 /// the mark, never on a record alone. The record goes last.
 pub(super) fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
+    let pg = crate::setup::pg::flavour(ctx);
     let Ok(record) = ctx.read(PG_RECORD) else {
         return Ok("Setup has no record of installing PostgreSQL; it stays".into());
     };
@@ -39,7 +40,7 @@ pub(super) fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
     // The mark is trusted only while the cluster does not answer: a stale
     // one (Setup took PostgreSQL back) must never skip the checks (review I2).
     if !ctx.exists(PG_MARK) || others.is_ok() {
-        if !installed(ctx, "postgresql-server") {
+        if !installed(ctx, pg.server) {
             remove_file_or_dir(&ctx.path(PG_RECORD))?;
             return Ok(
                 "the record of Setup installing PostgreSQL was stale, so PostgreSQL is not removed"
@@ -78,8 +79,8 @@ pub(super) fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
         }
         ctx.put(PG_MARK, b"removing\n", None, 0o644)?;
     }
-    if installed(ctx, "postgresql-server") {
-        ctx.ok(Systemctl, &["disable", "--now", "postgresql"])?;
+    if installed(ctx, pg.server) {
+        ctx.ok(Systemctl, &["disable", "--now", pg.service])?;
         let mut argv = vec!["-e"];
         argv.extend(packages_to_remove(ctx, &record));
         ctx.ok(Rpm, &argv)?;
@@ -93,6 +94,6 @@ pub(super) fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
 fn packages_to_remove<'a, R: Runner>(ctx: &Ctx<R>, record: &'a str) -> Vec<&'a str> {
     record
         .lines()
-        .filter(|p| PG_PACKAGES.contains(p) && installed(ctx, p))
+        .filter(|p| crate::setup::pg::flavour(ctx).packages.contains(p) && installed(ctx, p))
         .collect()
 }

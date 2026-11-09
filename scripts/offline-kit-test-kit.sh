@@ -2,7 +2,7 @@
 # Builds an offline kit signed with a throwaway key, for the kit's tests (CI
 # on pull requests, local runs). The RPMs are re-signed with that key, so the
 # installer must be run with OPENVIBES_KEY_FINGERPRINT=$(cat OUT_DIR/fingerprint).
-# Usage: offline-kit-test-kit.sh RPM_DIR OUT_DIR FEDORA
+# Usage: offline-kit-test-kit.sh RPM_DIR OUT_DIR TARGET   (TARGET: 44, or el10)
 #   OUT_DIR gets the kit's tar, `fingerprint`, `test-key.asc` (the throwaway
 #   secret key: OPENVIBES_TEST_KEY=that file makes a second kit with the same
 #   key, for the upgrade test) and bad-signature.tar: the same kit with one
@@ -11,7 +11,7 @@
 #   Needs podman (the build runs in fedora:FEDORA); prints the tar's path.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-[[ $# == 3 ]] || { echo "usage: $0 RPM_DIR OUT_DIR FEDORA" >&2; exit 2; }
+[[ $# == 3 ]] || { echo "usage: $0 RPM_DIR OUT_DIR TARGET" >&2; exit 2; }
 rpm_dir=$(realpath "$1") out=$(realpath -m "$2") fedora=$3
 # Work in a temp directory: the containers mount it relabelled (SELinux),
 # which must not touch the checkout.
@@ -23,7 +23,7 @@ cp "$ROOT/packaging/rpm/openvibes-packages.gpg" "$work/src/packaging/rpm/"
 cp "$ROOT"/scripts/build-offline-kit.sh "$ROOT"/scripts/sign-rpms.sh "$work/src/scripts/"
 cp "$rpm_dir"/openvibes-*.rpm "$work/out/rpms/"
 rm -f "$work"/out/rpms/*-debuginfo-* "$work"/out/rpms/*-debugsource-* "$work"/out/rpms/openvibes-agent-*
-img=registry.fedoraproject.org/fedora:$fedora
+if [[ $fedora == el10 ]]; then img=almalinux:10; else img=registry.fedoraproject.org/fedora:$fedora; fi
 
 export GNUPGHOME=$work/gnupg; mkdir -m 0700 "$GNUPGHOME"
 if [[ -n ${OPENVIBES_TEST_KEY:-} ]]; then

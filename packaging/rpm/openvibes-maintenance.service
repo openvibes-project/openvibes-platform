@@ -1,7 +1,7 @@
 [Unit]
 Description=OpenVIBES finding partition maintenance
 Documentation=https://github.com/openvibes-project/openvibes-platform
-After=postgresql.service openvibes-migrate.service
+After=postgresql.service postgresql-17.service openvibes-migrate.service
 Wants=openvibes-migrate.service
 
 [Service]
