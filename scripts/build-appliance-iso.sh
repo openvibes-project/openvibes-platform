@@ -50,6 +50,11 @@ tar -C "$work/kit" -xf "$kit_tar"
 # has no model package, as below.)
 pkgs=$(sed -n '/^%packages/,/^%end/p' "$ROOT/packaging/appliance/openvibes-appliance.ks" | grep -vE '^(%|#|$)' | sed 's/^@\^/@/')
 [[ -z ${OPENVIBES_ISO_TEST:-} ]] || pkgs=$(grep -vx openvibes-llm-model <<<"$pkgs")
+# Anaconda installs more than %packages: the bootloader, the storage tools
+# and kdump for the disk and machine it finds. Their current versions go in
+# too, or the minimal ISO's older ones clash again (dracut-network, #546).
+pkgs="$pkgs
+kernel grub2-efi-x64 grub2-pc grub2-tools shim-x64 efibootmgr lvm2 xfsprogs dosfstools mdadm cryptsetup device-mapper-multipath kdump-utils kexec-tools makedumpfile dracut-network"
 # shellcheck disable=SC2086  # one word per package or group
 dnf -y -q --installroot="$work/root" --releasever=10 --setopt=reposdir=/etc/yum.repos.d \
     --repofrompath="openvibes-kit,$work/kit/openvibes-offline/packages" --setopt=openvibes-kit.gpgcheck=0 \
