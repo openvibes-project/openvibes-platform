@@ -71,7 +71,7 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
             <div key={group} className={group === "Investigate" ? "rail__group" : "rail__group rail__group--secondary"}>
               <div className="rail__heading">{group}</div>
               {items.map((item) => (
-                <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={counts[item.path] ? `${counts[item.path]} ${item.label}` : item.label} aria-describedby={counts[item.path] ? `count-${item.icon}` : undefined} aria-current={here(item) ? "page" : undefined}
+                <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={item.label} aria-describedby={counts[item.path] ? `count-${item.icon}` : undefined} aria-current={here(item) ? "page" : undefined}
                   onClick={(event) => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
                   <Icon name={item.icon} size={19} />
                   {counts[item.path] && <span className={item.path === "/alarms" ? "rail__count rail__count--bad" : "rail__count"} id={`count-${item.icon}`} title={countTitle(item.path, counts[item.path] ?? "", item.label)} aria-label={countTitle(item.path, counts[item.path] ?? "", item.label)}>{counts[item.path]}</span>}
@@ -137,10 +137,10 @@ export function TopBar({ title, onPalette, onLogout, onChangePassword, persona, 
   return (
     <header className="topbar">
       <div className="topbar__title">{title}</div>
-      <button type="button" className="topbar__search" onClick={onPalette}>
+      <button type="button" className="topbar__search" aria-label="Search or jump to" onClick={onPalette}>
         <Icon name="search" size={15} />
         <span className="grow">Search or jump to…</span>
-        <span className="kbd" aria-hidden="true">Ctrl</span><span className="kbd" aria-hidden="true">K</span>
+        <span className="kbd">Ctrl</span><span className="kbd">K</span>
       </button>
       <div className="topbar__actions">
         {isDemo() && <span className="badge badge--warn demo-badge" title="All data is synthetic and lives in your browser">Demo data</span>}

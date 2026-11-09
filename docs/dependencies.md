@@ -190,7 +190,7 @@ They pull in **237 indirect packages** (250 in all).
 
 | Package | Version | Licence | Used for |
 |---|---|---|---|
-| @axe-core/playwright | 4.14.0 | MPL-2.0 | Accessibility checks in browser tests |
+| @axe-core/playwright | 4.13.0 | MPL-2.0 | Accessibility checks in browser tests. **Stays at 4.13** (4.14 is out): its new label-in-name check fails ~360 console elements, fixed in #547 first |
 | @eslint/js | 10.0.1 | MIT | Lint rules |
 | @playwright/test | 1.65.0 | Apache-2.0 | Browser tests |
 | @types/node | 22.20.5 | MIT | Types for build scripts |

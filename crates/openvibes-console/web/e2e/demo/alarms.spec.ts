@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("an alarm shows its process tree and is triaged and suppressed", async ({ page }) => {
-  await page.getByRole("link", { name: /^(\S+ )?Alarms$/ }).click();
+  await page.getByRole("link", { name: "Alarms", exact: true }).click();
   const badge = page.locator(".rail .rail__item").filter({ hasText: "Alarms" }).first().locator(".rail__count");
   await expect(badge).toHaveText(/\d/);
   const before = Number((await badge.textContent())?.replace("+", ""));
