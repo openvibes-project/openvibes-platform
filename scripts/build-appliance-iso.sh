@@ -42,8 +42,9 @@ label=$(xorriso -indev "$work/$iso" -pvd_info 2>&1 | sed -n "s/^Volume Id *: *//
 ksarg="inst.ks=hd:LABEL=$label:/openvibes-appliance.ks"
 mkdir "$work/boot"
 xorriso -osirrox on -indev "$work/$iso" -extract /EFI/BOOT/grub.cfg "$work/boot/efi-grub.cfg" \
-    -extract /boot/grub2/grub.cfg "$work/boot/grub.cfg" -extract_boot_images "$work/boot/img_" >/dev/null 2>&1
-efi=$(ls "$work"/boot/img_* | head -n 1)
+    -extract /boot/grub2/grub.cfg "$work/boot/grub.cfg" -extract_boot_images "$work/boot/images" >/dev/null 2>&1
+ls -l "$work/boot/images"
+efi=$(find "$work/boot/images" -type f -name '*uefi*' | head -n 1)
 [[ -n $efi ]] || { echo "no EFI boot image found in $iso" >&2; exit 1; }
 for f in efi-grub.cfg grub.cfg; do
     sed -i -E "/^[[:space:]]*linux(efi)?[[:space:]]/ s|\$| $ksarg|" "$work/boot/$f"
