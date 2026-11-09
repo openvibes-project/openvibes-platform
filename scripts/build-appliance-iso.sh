@@ -55,8 +55,12 @@ chmod u+w "$efi"
 mcopy -o -i "$efi" "$work/boot/efi-image-grub.cfg" ::EFI/BOOT/grub.cfg
 
 xorriso -indev "$work/$iso" -outdev "$out" \
+    -boot_image any discard \
+    -boot_image grub grub2_mbr="$work/boot/images/mbr_code_grub2.img" \
+    -boot_image any appended_part_as=gpt \
     -append_partition 2 C12A7328-F81F-11D2-BA4B-00A0C93EC93B "$efi" \
-    -boot_image any replay \
+    -boot_image any efi_path=--interval:appended_partition_2:all:: \
+    -boot_image any platform_id=0xef \
     -update "$work/boot/efi-grub.cfg" /EFI/BOOT/grub.cfg \
     -update "$work/boot/grub.cfg" /boot/grub2/grub.cfg \
     -map "$work/kit/openvibes-offline" openvibes-offline \
