@@ -1,6 +1,6 @@
 //! The Software list (roles spec §10.3; step 5g rulings 1–10): one row per
-//! package name over the hosts in the viewer's scope that have it, rpm and
-//! dpkg together, with search, filters that AND together, the count for
+//! package name over the hosts in the viewer's scope that have it, rpm,
+//! dpkg and Windows programs together, with search, filters that AND together, the count for
 //! every value of every filter with the other filters applied, the summary
 //! line and offset paging. One statement, so rows, total, counts and
 //! summary always agree.
@@ -61,6 +61,8 @@ values!(
         Dpkg = "dpkg",
         /// RPM packages.
         Rpm = "rpm",
+        /// Windows programs (protocol P22).
+        Windows = "windows",
     }
 );
 
@@ -147,6 +149,8 @@ pub struct SoftwareListRow {
     pub dpkg: bool,
     /// Reported from rpm.
     pub rpm: bool,
+    /// A Windows program (P22).
+    pub windows: bool,
     /// Open advisories on the hosts in reach.
     pub advisories: i64,
     /// Of those, advisories no update fixes.
@@ -178,7 +182,7 @@ pub struct SoftwareCounts {
     pub fix: Vec<(Fix, i64)>,
     /// One, several.
     pub versions: Vec<(Versions, i64)>,
-    /// Dpkg, rpm.
+    /// Dpkg, rpm, windows.
     pub kind: Vec<(PackageType, i64)>,
     /// New, updated, removed.
     pub changes: Vec<(Changes, i64)>,
@@ -318,6 +322,7 @@ fn software_row(row: &Row) -> Option<SoftwareListRow> {
         newest,
         dpkg: row.get(4),
         rpm: row.get(5),
+        windows: row.get(16),
         advisories: row.get(6),
         worst_severity: severity
             .and_then(|rank| usize::try_from(rank).ok()?.checked_sub(1))

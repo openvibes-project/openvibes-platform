@@ -19,7 +19,7 @@ import { Icon } from "../../../ui/Icon";
 import { MenuButton } from "../../../ui/Menu";
 import { toast } from "../../../ui/toast";
 import { DialogHead, Modal } from "../../admin/people/NewPersonDialog";
-import { CertificatesCard, DetailsCard, InventoryCard, ProtectionCard, RuleSetsCard, TopCards, systemName } from "./HostCards";
+import { CertificatesCard, DetailsCard, InventoryCard, NO_WINDOWS_FEED, ProtectionCard, RuleSetsCard, TopCards, systemName } from "./HostCards";
 import { HostExport } from "./HostExport";
 import { HostLabels } from "./HostLabels";
 
@@ -75,7 +75,10 @@ export function HostView({ summary, agent, agentError }: { summary: HostSummary;
         tiles.compliance_stale && tiles.compliance_failing != null
           ? <Tile key="Compliance failing" label="Compliance failing" value={null} to={{ view: "/compliance", params: q }} note="No report in the last day" />
           : tile("Compliance failing", tiles.compliance_failing, "/compliance", q),
-        tile("Vulnerabilities", tiles.vulnerabilities, "/vulnerabilities", q),
+        // No feed covers Windows (#532): a 0 would claim the host was checked.
+        host.os.family === "windows"
+          ? <Tile key="Vulnerabilities" label="Vulnerabilities" value={null} to={{ view: "/vulnerabilities", params: q }} note={NO_WINDOWS_FEED} />
+          : tile("Vulnerabilities", tiles.vulnerabilities, "/vulnerabilities", q),
         tile("Software", tiles.software, `${hostPath(host.id)}/software`),
       ]}
       left={<>

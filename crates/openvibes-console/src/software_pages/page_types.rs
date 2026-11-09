@@ -29,7 +29,7 @@ pub(crate) struct SoftwareFirstSeenView {
 pub(crate) struct SoftwareHeaderView {
     /// The package name.
     pub name: String,
-    /// The package databases it is reported from (`dpkg`, `rpm`), sorted.
+    /// The package databases it is reported from (`dpkg`, `rpm`, `windows`), sorted.
     pub managers: Vec<String>,
     /// Hosts in reach that have it.
     pub hosts: i64,
@@ -71,7 +71,7 @@ pub(crate) struct SoftwarePageVersionView {
     pub version: String,
     /// Architecture.
     pub arch: String,
-    /// `dpkg` or `rpm`.
+    /// `dpkg`, `rpm` or `windows`.
     pub manager: String,
     /// Hosts in reach that have it.
     pub hosts: i64,
@@ -176,7 +176,7 @@ pub(crate) struct SoftwarePageSummaryView {
 /// A version of the package on a host.
 #[derive(Serialize, ToSchema)]
 pub(crate) struct SoftwareHostVersionView {
-    /// `dpkg` or `rpm`.
+    /// `dpkg`, `rpm` or `windows`.
     pub manager: String,
     /// `epoch:version-release`, epoch and release only when present.
     pub version: String,

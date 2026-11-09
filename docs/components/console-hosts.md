@@ -92,7 +92,12 @@ the old Agents view and host panel. The shared pieces they are built from
     (`tiles.compliance_stale`: its last contact is older than the
     Compliance list's 24-hour window) shows "—" and "No report in the last
     day" on the Compliance tile, with no link, and the same words in the
-    failing-checks card, instead of a count the list would not show.
+    failing-checks card, instead of a count the list would not show. No
+    vulnerability feed covers Windows yet (#532): a Windows host
+    (`host.os.family` `windows`) shows "—" and "No vulnerability feed for
+    Windows yet" on the Vulnerabilities tile and in its card, and the host
+    list a dash for its critical count, instead of a 0 that would read as
+    checked.
   - **Left column:** Details (host name, agent ID, system, running kernel,
     IP, agent version, software as of, status, enrolled, revoked,
     capabilities); Protection (threat alarms, the hardening row, last

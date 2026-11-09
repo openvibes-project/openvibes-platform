@@ -10168,7 +10168,7 @@
           {
             "name": "type",
             "in": "query",
-            "description": "dpkg or rpm.",
+            "description": "dpkg, rpm or windows.",
             "required": false,
             "schema": {
               "type": "string"
@@ -19336,7 +19336,7 @@
           },
           "manager": {
             "type": "string",
-            "description": "Package manager (`rpm`, `dpkg`)."
+            "description": "Package manager (`rpm`, `dpkg`, `windows`)."
           },
           "name": {
             "type": "string",
@@ -24313,7 +24313,7 @@
             "items": {
               "$ref": "#/components/schemas/CountView"
             },
-            "description": "`dpkg`, `rpm`."
+            "description": "`dpkg`, `rpm`, `windows`."
           },
           "versions": {
             "type": "array",
@@ -24464,7 +24464,7 @@
             "items": {
               "type": "string"
             },
-            "description": "The package databases it is reported from (`dpkg`, `rpm`), sorted."
+            "description": "The package databases it is reported from (`dpkg`, `rpm`, `windows`), sorted."
           },
           "name": {
             "type": "string",
@@ -24492,7 +24492,7 @@
           },
           "manager": {
             "type": "string",
-            "description": "`dpkg` or `rpm`."
+            "description": "`dpkg`, `rpm` or `windows`."
           },
           "version": {
             "type": "string",
@@ -24553,6 +24553,7 @@
           "newest",
           "dpkg",
           "rpm",
+          "windows",
           "advisories",
           "no_fix",
           "exploited",
@@ -24639,6 +24640,10 @@
             "type": "integer",
             "format": "int64",
             "description": "Hosts that changed its version in the last 7 days."
+          },
+          "windows": {
+            "type": "boolean",
+            "description": "A Windows program (protocol P22)."
           },
           "worst_severity": {
             "type": [
@@ -24974,7 +24979,7 @@
           },
           "manager": {
             "type": "string",
-            "description": "`dpkg` or `rpm`."
+            "description": "`dpkg`, `rpm` or `windows`."
           },
           "version": {
             "type": "string",

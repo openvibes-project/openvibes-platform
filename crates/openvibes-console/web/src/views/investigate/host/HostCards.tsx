@@ -27,6 +27,9 @@ const ShowAll = ({ n, what, view, params }: { n: number; what: string; view: str
   <a className="detail-more" {...viewLink(view, params)}>Show all {n.toLocaleString()} {what}</a>;
 
 /** The system as the host reports it: "Debian 12", else its os-release id and version. */
+/** No vulnerability feed covers Windows yet (#532): said instead of a 0. */
+export const NO_WINDOWS_FEED = "No vulnerability feed for Windows yet";
+
 export const systemName = (host: Host) => host.os.distribution ?? ([host.os.id, host.os.version].filter(Boolean).join(" ") || null);
 
 export function DetailsCard({ host }: { host: Host }) {
@@ -199,7 +202,7 @@ export function TopCards({ summary }: { summary: HostSummary }) {
         </TopCard>
       )}
       {vulns && (
-        <TopCard title="Vulnerabilities" total={vulns.total} empty="No open vulnerabilities" head={can.add_to_case ? ["Advisory", "Severity", CASE] : ["Advisory", "Severity"]}
+        <TopCard title="Vulnerabilities" total={vulns.total} empty={summary.host.os.family === "windows" ? NO_WINDOWS_FEED : "No open vulnerabilities"} head={can.add_to_case ? ["Advisory", "Severity", CASE] : ["Advisory", "Severity"]}
           more={<ShowAll n={vulns.total} what="vulnerabilities" view="/vulnerabilities" params={q} />}>
           {vulns.items.map((v) => (
             <tr key={v.advisory}>

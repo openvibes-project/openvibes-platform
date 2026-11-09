@@ -13,7 +13,7 @@ import type { SoftwareList, SoftwareListRow } from "../../api/types";
 import { SoftwareListBody, apiQuery, nameOf, softwareFilters } from "./Software";
 
 const row = (over: Partial<SoftwareListRow> = {}): SoftwareListRow => ({
-  name: "openssl", hosts: 12, versions: 3, rpm: true, dpkg: true, oldest: "3.0.9-2", newest: "3.2.2-6.fc44", advisories: 2, no_fix: 1, exploited: true, worst_severity: "critical",
+  name: "openssl", hosts: 12, versions: 3, rpm: true, dpkg: true, windows: false, oldest: "3.0.9-2", newest: "3.2.2-6.fc44", advisories: 2, no_fix: 1, exploited: true, worst_severity: "critical",
   update_hosts: 5, used_by: [{ unit: "sshd.service", hosts: 12 }, { unit: "nginx.service", hosts: 3 }], used_by_total: 4, week_added: 2, week_updated: 1, week_removed: 0, ...over,
 });
 const list = (over: Partial<SoftwareList> = {}): SoftwareList => ({
@@ -49,6 +49,12 @@ describe("Software list", () => {
     expect(html).toContain('href="/software/openssl"');
     expect(html).toContain('href="/software/bash"');
     expect(text(html)).toContain("rpm + dpkg");
+  });
+
+  it("names Windows programs as their type (#532)", () => {
+    const t = text(render(list({ items: [row({ name: "7-Zip 24.08 (x64)", rpm: false, dpkg: false, windows: true })] })));
+    expect(t).toContain("Windows");
+    expect(t).not.toContain("rpm");
   });
 
   it("says versions, vulnerabilities, fix, used by and this week the way the rulings do", () => {

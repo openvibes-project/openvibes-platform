@@ -65,7 +65,10 @@ fn filter(facet: Facet) -> &'static str {
             "($6::text IS NULL OR ($6 = 'one' AND p.versions = 1)
               OR ($6 = 'several' AND p.versions > 1))"
         }
-        Facet::Kind => "($7::text IS NULL OR ($7 = 'dpkg' AND p.dpkg) OR ($7 = 'rpm' AND p.rpm))",
+        Facet::Kind => {
+            "($7::text IS NULL OR ($7 = 'dpkg' AND p.dpkg) OR ($7 = 'rpm' AND p.rpm)
+              OR ($7 = 'windows' AND p.windows))"
+        }
         Facet::Group => "($8::text IS NULL OR p.name IN (SELECT name FROM gsel))",
         Facet::Changes => {
             "($9::text IS NULL OR ($9 = 'new' AND p.added > 0)
@@ -170,11 +173,12 @@ pub(crate) fn statement(sort: SoftwareSort, descending: bool) -> String {
          pn AS MATERIALIZED (
            SELECT pv.name, count(*) AS n, sum(pc.hosts)::bigint AS hosts,
                   count(DISTINCT (pv.epoch, pv.version, pv.release)) AS versions,
-                  bool_or(pv.manager = 'dpkg') AS dpkg, bool_or(pv.manager = 'rpm') AS rpm
+                  bool_or(pv.manager = 'dpkg') AS dpkg, bool_or(pv.manager = 'rpm') AS rpm,
+                  bool_or(pv.manager = 'windows') AS windows
            FROM pc JOIN package_versions pv ON pv.id = pc.pvid GROUP BY pv.name),
          {hn_all}
          nm AS MATERIALIZED (
-           SELECT pn.name, {hosts} AS hosts, pn.versions, pn.dpkg, pn.rpm
+           SELECT pn.name, {hosts} AS hosts, pn.versions, pn.dpkg, pn.rpm, pn.windows
            FROM pn {join_hn}),
          fx AS MATERIALIZED (
            SELECT e ->> 'name' AS name, v.advisory_id, r.aid, v.reboot_needed
@@ -298,7 +302,8 @@ pub(crate) fn statement(sort: SoftwareSort, descending: bool) -> String {
                  'several', (SELECT count(*) FROM p WHERE {no_versions} AND p.versions > 1)),
                'kind', jsonb_build_object(
                  'dpkg', (SELECT count(*) FROM p WHERE {no_kind} AND p.dpkg),
-                 'rpm', (SELECT count(*) FROM p WHERE {no_kind} AND p.rpm)),
+                 'rpm', (SELECT count(*) FROM p WHERE {no_kind} AND p.rpm),
+                 'windows', (SELECT count(*) FROM p WHERE {no_kind} AND p.windows)),
                'changes', jsonb_build_object(
                  'new', (SELECT count(*) FROM p WHERE {no_changes} AND p.added > 0),
                  'updated', (SELECT count(*) FROM p WHERE {no_changes} AND p.updated > 0),
@@ -321,7 +326,8 @@ pub(crate) fn statement(sort: SoftwareSort, descending: bool) -> String {
                 (SELECT COALESCE(jsonb_agg(jsonb_build_array(u.unit, u.hosts) ORDER BY u.hosts DESC, u.unit), '[]')
                  FROM ubn u WHERE u.name = page.name) AS used_by,
                 (SELECT COALESCE(jsonb_agg(DISTINCT jsonb_build_array(pv.epoch, pv.version, pv.release)), '[]')
-                 FROM vu JOIN package_versions pv ON pv.id = vu.pvid WHERE pv.name = page.name) AS versions_in_use
+                 FROM vu JOIN package_versions pv ON pv.id = vu.pvid WHERE pv.name = page.name) AS versions_in_use,
+                page.windows
          FROM meta LEFT JOIN page ON true {join_page_hn}
          ORDER BY {order_page}",
         order_page = order.replace("m.", "page.")

@@ -36,7 +36,7 @@ pub(crate) struct SoftwareListParams {
     fix: Option<String>,
     /// one or several versions in use.
     versions: Option<String>,
-    /// dpkg or rpm.
+    /// dpkg, rpm or windows.
     #[serde(rename = "type")]
     kind: Option<String>,
     /// A host group id.

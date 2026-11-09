@@ -6,7 +6,7 @@ use utoipa::ToSchema;
 /// One installed package version on a host.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct HostPackageView {
-    /// Package manager (`rpm`, `dpkg`).
+    /// Package manager (`rpm`, `dpkg`, `windows`).
     pub manager: String,
     /// Package name.
     pub name: String,

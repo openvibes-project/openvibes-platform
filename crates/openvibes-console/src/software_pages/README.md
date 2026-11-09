@@ -1,6 +1,6 @@
 # src/software_pages
 
-Software in the console: the Software list (one row per package name, rpm and dpkg together) and a package's page.
+Software in the console: the Software list (one row per package name, rpm, dpkg and Windows programs together) and a package's page.
 
 | File | What it does |
 |---|---|
