@@ -250,7 +250,7 @@ async fn full(
     })
     .await
     .map_err(|_| "download task failed".to_owned());
-    let _ = std::fs::remove_file(&path);
+    let _ = tokio::fs::remove_file(&path).await;
     let (sha256, found) = parsed??;
     let (mut advisories, mut open) = (0, 0);
     for (release, found) in releases.iter().zip(found) {
