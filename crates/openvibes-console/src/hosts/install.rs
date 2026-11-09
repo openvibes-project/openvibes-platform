@@ -73,7 +73,7 @@ async fn with_install_spec<T>(
             "Set agent_install in console.toml to offer the agent install package",
         )));
     };
-    let Ok(root_cert) = std::fs::read_to_string(&config.root_cert_file) else {
+    let Ok(root_cert) = tokio::fs::read_to_string(&config.root_cert_file).await else {
         return Err(unavailable_auth());
     };
     let client = state.pool.get().await.map_err(|_| unavailable_auth())?;

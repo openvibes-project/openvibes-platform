@@ -193,7 +193,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
             <div className="menu">
               <button type="button" className="icon-button" aria-haspopup="menu" aria-expanded={menu} aria-label="Dashboard menu" onClick={() => setMenu((m) => !m)}><Icon name="chevronDown" size={16} /></button>
               {menu && (
-                <div className="menu__pop" role="menu" onClick={(event) => {
+                <div className="menu__pop" role="menu" onKeyDown={(event) => { if (event.key === "Escape") setMenu(false); }} onClick={(event) => {
                   // Close on a chosen item only: Delete's inline confirmation is not one, and
                   // closing on its click unmounted it as it opened (#236).
                   const item = (event.target as Element).closest('[role^="menuitem"]');
@@ -274,7 +274,7 @@ function DashboardSwitcher({ current }: { current: string | null }) {
     <div className="menu">
       <button type="button" className="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}><Icon name="overview" size={15} /> Dashboards <Icon name="chevronDown" size={14} /></button>
       {open && (
-        <div className="menu__pop" role="menu" onClick={() => setOpen(false)}>
+        <div className="menu__pop" role="menu" onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} onClick={() => setOpen(false)}>
           <div className="menu__section"><div className="section-title">Built-in</div>
             <button type="button" role="menuitemradio" aria-checked={current === null} className="menu__item" onClick={() => go(BUILTIN_ID)}>{BUILTIN_NAME}</button></div>
           {group("Mine", items.filter((d) => d.mine))}

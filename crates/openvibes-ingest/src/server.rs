@@ -117,7 +117,8 @@ pub async fn run(
     );
     let inventory_slots = Arc::new(tokio::sync::Semaphore::new(config.max_inventory_in_flight));
     // Read once at start, like the other TLS material; absent → 503.
-    let root_pem = std::fs::read_to_string(&config.root_certificate_file)
+    let root_pem = tokio::fs::read_to_string(&config.root_certificate_file)
+        .await
         .ok()
         .filter(|pem| pem.contains("-----BEGIN CERTIFICATE-----"))
         .map(Arc::<str>::from);
