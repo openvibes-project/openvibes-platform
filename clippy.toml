@@ -16,3 +16,8 @@ disallowed-methods = [
     { path = "sysinfo::Process::kill_and_wait", reason = "security.md 2.2/2.3: read-only; spawns taskkill.exe on Windows" },
     { path = "sysinfo::Process::kill_with_and_wait", reason = "security.md 2.2/2.3: read-only; spawns taskkill.exe on Windows" },
 ]
+
+# axum's Response, which every console guard returns early as its error
+# (Result<_, Response>), is over clippy's default 128 bytes since hyper
+# 1.12; boxing each one gains nothing. The lint stays on for larger errors.
+large-error-threshold = 256

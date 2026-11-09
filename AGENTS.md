@@ -21,7 +21,7 @@ repository; build against its schemas and fixtures.
 `openvibes-console`'s `embedded-ui` feature embeds the built web frontend,
 so any build with `--all-features` (workspace clippy, docs, tests) needs a
 current frontend build first: run `scripts/build-console.sh` (Node.js
-22.23.1 and npm), then the cargo commands. Without it, `build.rs` stops with
+22.23.4 and npm), then the cargo commands. Without it, `build.rs` stops with
 a message saying so. Building without `--all-features` (or with explicit
 features other than `embedded-ui`) needs no Node.js.
 

@@ -7,7 +7,7 @@ chose ourselves; the indirect ones they pull in are counted, not listed.
 `Cargo.lock` and `crates/openvibes-console/web/package-lock.json` hold the
 full, exact sets.
 
-Checked against `main` on 2026-10-23. Update this page in the same change
+Checked against `main` on 2026-11-09. Update this page in the same change
 that adds, removes or bumps a dependency, and update everything before
 each release ([Before each release](#before-each-release)); the commands under
 [Refreshing this page](#refreshing-this-page) print the current state.
@@ -41,28 +41,28 @@ counts and the date.
 
 The programs are `openvibes-ingest`, `-admin`, `-distribution`, `-signer`,
 `-fetch`, `-vulns`, `-netlog`, `-console` and `openvibes-llm-check`. They
-compile in the 49 crates below and **299 indirect crates** (348 in all), plus
+compile in the 49 crates below and **298 indirect crates** (347 in all), plus
 10 crates used only by build scripts (proc-macro and `build.rs` helpers, not
 in the programs).
 
 | Crate | Version | Licence | Used for |
 |---|---|---|---|
-| aes | 0.9.3 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (AES) |
+| aes | 0.9.4 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (AES) |
 | argon2 | 0.6.0 | MIT OR Apache-2.0 | Console password hashes |
 | axum | 0.8.9 | MIT | Console web server and API |
 | base64 | 0.23.1 | MIT OR Apache-2.0 | Encoding keys and signatures |
 | cbc | 0.2.1 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (CBC mode) |
 | chrono | 0.4.45 | MIT OR Apache-2.0 | Dates and times everywhere |
 | clap | 4.6.7 | MIT OR Apache-2.0 | Command lines of every program |
-| der | 0.8.2 | Apache-2.0 OR MIT | Wrapping company keys as PKCS#8 |
+| der | 0.8.3 | Apache-2.0 OR MIT | Wrapping company keys as PKCS#8 |
 | deadpool-postgres | 0.14.2 | MIT OR Apache-2.0 | PostgreSQL connection pool |
 | des | 0.9.0 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (3DES) |
 | ed25519-dalek | 3.0.0 | BSD-3-Clause | Signing and checking rule bundles |
-| flate2 | 1.1.10 | MIT OR Apache-2.0 | gzip (agent uploads, vulnerability feeds) |
+| flate2 | 1.1.11 | MIT OR Apache-2.0 | gzip (agent uploads, vulnerability feeds) |
 | futures-util | 0.3.34 | MIT OR Apache-2.0 | Console streaming responses |
-| hyper | 1.11.1 | MIT | Agent connections (HTTP over mTLS) |
-| hyper-util | 0.1.20 | MIT | Agent connections (server glue) |
-| libc | 0.2.189 | MIT OR Apache-2.0 | Admin TUI: terminal and process calls |
+| hyper | 1.12.0 | MIT | Agent connections (HTTP over mTLS) |
+| hyper-util | 0.1.21 | MIT | Agent connections (server glue) |
+| libc | 0.2.191 | MIT OR Apache-2.0 | Admin TUI: terminal and process calls |
 | md-5 | 0.11.0 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (key derivation) |
 | openvibes-core | 0.2.7 | Apache-2.0 | Our wire types, from openvibes-agent (git, pinned commit) |
 | openvibes-rules | 0.2.7 | Apache-2.0 | Our rule engine, from openvibes-agent (git, pinned commit) |
@@ -81,25 +81,25 @@ in the programs).
 | rustls-webpki | 0.103.16 | ISC | Import self-check: verifying as agents do (also under rustls) |
 | ruzstd | 0.9.1 | MIT | zstd in Fedora repository metadata |
 | serde | 1.0.229 | MIT OR Apache-2.0 | Reading and writing data formats |
-| serde_json | 1.0.151 | MIT OR Apache-2.0 | JSON |
-| sha2 | 0.11.0 | MIT OR Apache-2.0 | Checksums and fingerprints |
+| serde_json | 1.0.154 | MIT OR Apache-2.0 | JSON |
+| sha2 | 0.11.1 | MIT OR Apache-2.0 | Checksums and fingerprints |
 | subtle | 2.6.1 | BSD-3-Clause | Constant-time comparison of secrets |
 | time | 0.3.55 | MIT OR Apache-2.0 | Certificate validity dates (rcgen's type) |
 | tokio | 1.54.1 | MIT | Async runtime of every service |
 | tokio-postgres | 0.7.18 | MIT OR Apache-2.0 | PostgreSQL client |
-| tokio-rustls | 0.26.5 | MIT OR Apache-2.0 | TLS on tokio sockets |
-| toml | 1.1.6 | MIT OR Apache-2.0 | Reading config files |
-| toml_edit | 0.25.15 | MIT OR Apache-2.0 | Changing config files, keeping comments |
+| tokio-rustls | 0.26.6 | MIT OR Apache-2.0 | TLS on tokio sockets |
+| toml | 1.2.1 | MIT OR Apache-2.0 | Reading config files |
+| toml_edit | 0.25.19 | MIT OR Apache-2.0 | Changing config files, keeping comments |
 | tower | 0.5.3 | MIT | Middleware for the console and agent servers |
 | tracing | 0.1.44 | MIT | Logging |
 | tracing-subscriber | 0.3.23 | MIT | Log output to the journal |
-| unicode-normalization | 0.1.25 | MIT OR Apache-2.0 | Normalising passwords before hashing |
-| ureq | 3.4.2 | MIT OR Apache-2.0 | HTTPS client (vulnerability feeds, assistant lookups) |
+| unicode-normalization | 0.1.26 | MIT OR Apache-2.0 | Normalising passwords before hashing |
+| ureq | 3.5.1 | MIT OR Apache-2.0 | HTTPS client (vulnerability feeds, assistant lookups) |
 | webp-animation | 0.10.0 | MIT | Encoding the stored WebP pictures (builds libwebp from source; needs a C compiler to build) |
-| utoipa | 5.5.0 | MIT OR Apache-2.0 | The console API's OpenAPI description |
+| utoipa | 6.0.0 | MIT OR Apache-2.0 | The console API's OpenAPI description |
 | x509-parser | 0.18.1 | MIT OR Apache-2.0 | Reading certificates |
-| zeroize | 1.9.0 | Apache-2.0 OR MIT | Wiping secrets from memory |
-| zip | 9.0.3 | MIT | Reading the OSV data archive |
+| zeroize | 1.9.1 | Apache-2.0 OR MIT | Wiping secrets from memory |
+| zip | 9.5.0 | MIT | Reading the OSV data archive |
 
 The Rust standard library (from the Rust toolchain, MIT OR Apache-2.0) is
 compiled in as well.
@@ -110,8 +110,8 @@ Built into `openvibes-console` as static files.
 
 | Package | Version | Licence | Used for |
 |---|---|---|---|
-| react | 19.2.7 | MIT | The interface |
-| react-dom | 19.2.7 | MIT | Drawing it in the browser |
+| react | 19.3.1 | MIT | The interface |
+| react-dom | 19.3.1 | MIT | Drawing it in the browser |
 
 They pull in 1 indirect package (`scheduler`, MIT).
 
@@ -119,7 +119,7 @@ They pull in 1 indirect package (`scheduler`, MIT).
 
 | What | Version | Licence | Package | Used for |
 |---|---|---|---|---|
-| llama.cpp (`llama-server`) | v0.6.0, pinned by checksum in `packaging/llm/llama-cpp.pin` | MIT | openvibes-llm (CPU), openvibes-llm-vulkan (GPU) | Runs the assistant's model |
+| llama.cpp (`llama-server`) | v0.9.0, pinned by checksum in `packaging/llm/llama-cpp.pin` | MIT | openvibes-llm (CPU), openvibes-llm-vulkan (GPU) | Runs the assistant's model |
 | Qwen3.5-4B, Q4_K_M GGUF | pinned in `packaging/llm/model.pin` | Apache-2.0 | openvibes-llm-model | The assistant's model (2.7 GB) |
 
 ### What the packages require from the operating system
@@ -166,8 +166,8 @@ Nothing below ships.
 
 | Tool | Version | Used for |
 |---|---|---|
-| Rust | 1.95.0 (`rust-toolchain.toml`, with clippy and rustfmt), edition 2024 | Building and checking every crate |
-| Node.js and npm | 22.23.1 (release build); 22.12+ and npm 10+ for development | The console interface |
+| Rust | 1.99.1 (`rust-toolchain.toml`, with clippy and rustfmt), edition 2024 | Building and checking every crate |
+| Node.js and npm | 22.23.4 (release build); 22.12+ and npm 10+ for development | The console interface. **Stays on 22** (26 LTS is out; 22 has maintenance until 2027-04): with TypeScript 7 and Vite 8 after 0.3.0 |
 | PostgreSQL server binaries (`initdb`, `pg_ctl`, `psql`) | 17 or later | The tests' throwaway database (`scripts/test-db.sh`) |
 | gcc, gcc-c++, cmake | Fedora's | Building `llama-server` |
 | glslc and the Vulkan headers | Fedora's | Building the Vulkan `llama-server` |
@@ -190,19 +190,19 @@ They pull in **237 indirect packages** (250 in all).
 
 | Package | Version | Licence | Used for |
 |---|---|---|---|
-| @axe-core/playwright | 4.13.0 | MPL-2.0 | Accessibility checks in browser tests |
+| @axe-core/playwright | 4.13.0 | MPL-2.0 | Accessibility checks in browser tests. **Stays at 4.13** (4.14 is out): its new label-in-name check fails ~360 console elements, fixed in #547 first |
 | @eslint/js | 10.0.1 | MIT | Lint rules |
-| @playwright/test | 1.63.0 | Apache-2.0 | Browser tests |
-| @types/node | 22.20.4 | MIT | Types for build scripts |
-| @types/react | 19.2.17 | MIT | Types |
-| @types/react-dom | 19.2.3 | MIT | Types |
-| eslint | 10.11.0 | MIT | Lint |
+| @playwright/test | 1.65.0 | Apache-2.0 | Browser tests |
+| @types/node | 22.20.5 | MIT | Types for build scripts |
+| @types/react | 19.3.0 | MIT | Types |
+| @types/react-dom | 19.3.0 | MIT | Types |
+| eslint | 10.14.0 | MIT | Lint |
 | eslint-plugin-react-hooks | 7.1.1 | MIT | Lint rules for React hooks |
 | openapi-typescript | 7.13.0 | MIT | Generating the API client types |
-| typescript | 5.8.3 | Apache-2.0 | Type checking |
-| typescript-eslint | 8.70.1 | MIT | Lint for TypeScript |
-| vite | 7.3.7 | MIT | Dev server and bundler |
-| vitest | 5.0.5 | MIT | Unit tests |
+| typescript | 5.8.3 | Apache-2.0 | Type checking. **Stays at 5.8** (7.0 is out): 7 is the native rewrite of the compiler; it moves after 0.3.0 together with Vite 8 and Node.js 26, in a change of its own |
+| typescript-eslint | 8.72.1 | MIT | Lint for TypeScript |
+| vite | 7.3.7 | MIT | Dev server and bundler. **Stays at 7** (8.3 is out): with TypeScript 7 and Node.js 26 after 0.3.0 (see typescript) |
+| vitest | 5.1.0 | MIT | Unit tests |
 
 ### Continuous integration
 

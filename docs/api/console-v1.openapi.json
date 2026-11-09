@@ -12508,11 +12508,11 @@
           "signed_feed": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AboutSignedFeed",
                 "description": "The signed feed applied last; absent when none was ever applied\n(sites that download directly see no change)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -12961,11 +12961,11 @@
           "alarms": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AgentAlarmsView",
                 "description": "Threat alarms on this host, from the same report; absent before one."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -13120,11 +13120,11 @@
           "case": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AlarmListCaseView",
                 "description": "The open case holding it."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -13254,11 +13254,11 @@
               "detection": {
                 "oneOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "$ref": "#/components/schemas/DetectionView",
                     "description": "Original evaluation evidence; absent for legacy observations."
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -13382,22 +13382,22 @@
           "assignee": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AlarmListPersonView",
                 "description": "Assignee."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "case": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AlarmListCaseView",
                 "description": "The open case holding it."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -13599,11 +13599,11 @@
           "host_vulnerabilities": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TopVulnerabilitiesView",
                 "description": "The host's top three open vulnerabilities and the total; absent\nwithout `vulnerabilities.read` on the host."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15178,11 +15178,11 @@
           "actor": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CaseUserView",
                 "description": "Who; absent for the platform itself."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15415,11 +15415,11 @@
           "assignee": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CaseUserView",
                 "description": "Who works on it."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15446,11 +15446,11 @@
           "latest_note": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CaseNoteView",
                 "description": "The newest note."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15704,11 +15704,11 @@
           "assignee": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CaseUserView",
                 "description": "Who works on it."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15982,11 +15982,11 @@
           "assignee": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CaseUserView",
                 "description": "Who works on it."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16492,11 +16492,11 @@
           "assignee": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AlarmListPersonView",
                 "description": "Assignee."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16737,11 +16737,11 @@
           "port": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CheckPortView",
                 "description": "For `port.*` checks whose rule names a port."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16752,11 +16752,11 @@
           "service": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CheckServiceView",
                 "description": "For `harden.services.*` checks whose rule names a unit."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -16999,11 +16999,11 @@
           "first_seen": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CheckFirstSeenView",
                 "description": "The earliest first-seen failing host; absent with none failing."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -17622,11 +17622,11 @@
           "rule": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/HistoricalRuleView",
                 "description": "The rule; absent when original content cannot be resolved safely."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -18407,11 +18407,11 @@
           "detection": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/DetectionView",
                 "description": "Original evaluation evidence; absent for legacy observations."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -19437,11 +19437,11 @@
           "threat_alarms": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AgentAlarmsView",
                 "description": "Threat alarms on or off; absent before the first health report."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -19740,33 +19740,33 @@
           "top_alarms": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TopAlarmsView",
                 "description": "Top three open alarms (`alarms.read`)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "top_failing": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TopFailingListView",
                 "description": "Top three failing checks (`compliance.read`)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "top_vulnerabilities": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TopVulnerabilitiesView",
                 "description": "Top three open vulnerabilities (`vulnerabilities.read`)."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -20654,11 +20654,11 @@
           "first_seen": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/PortFirstSeenView",
                 "description": "First seen."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -21165,22 +21165,22 @@
           "alarms": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/PortRelatedAlarmsView",
                 "description": "With `alarms.read`."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "compliance": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/PortRelatedChecksView",
                 "description": "With `compliance.read`."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -22765,11 +22765,11 @@
           "first_seen": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ServiceFirstSeenView",
                 "description": "First seen."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -23100,11 +23100,11 @@
           "package": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ServiceHostPackageView",
                 "description": "The matched package and its version there."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -23374,33 +23374,33 @@
           "alarms": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ServiceRelatedAlarmsView",
                 "description": "With `alarms.read`."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "compliance": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ServiceRelatedChecksView",
                 "description": "With `compliance.read`."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "vulnerabilities": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ServiceRelatedVulnerabilitiesView",
                 "description": "With `vulnerabilities.read`; no packages for a service with no\nmatched package."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -24480,11 +24480,11 @@
           "first_seen": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SoftwareFirstSeenView",
                 "description": "First seen."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -26588,11 +26588,11 @@
           "assignee": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AlarmListPersonView",
                 "description": "Assignee."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -26818,11 +26818,11 @@
           "alarms": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TopAlarmsView",
                 "description": "Open alarms on the hosts, the top three and the total; absent\nwithout `alarms.read`."
+              },
+              {
+                "type": "null"
               }
             ]
           },

@@ -38,11 +38,11 @@ subtle = "=2.6.1"
 tokio.workspace = true
 tokio-rustls.workspace = true
 tracing.workspace = true
-ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
+ureq = { version = "3.5.1", default-features = false, features = ["rustls"] }
 tracing-subscriber.workspace = true
 x509-parser.workspace = true
-utoipa = { version = "=5.5.0", default-features = false, features = ["macros"] }
-zeroize = "=1.9.0"
+utoipa = { version = "=6.0.0", default-features = false, features = ["macros"] }
+zeroize = "=1.9.1"
 
 [build-dependencies]
 serde_json.workspace = true
@@ -50,7 +50,7 @@ sha2.workspace = true
 
 [dev-dependencies]
 openvibes-picture = { path = "../openvibes-picture" }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 openvibes-signer = { path = "../openvibes-signer" }
 rcgen.workspace = true
 samael = { version = "=0.0.22", default-features = false, features = ["xmlsec"] }

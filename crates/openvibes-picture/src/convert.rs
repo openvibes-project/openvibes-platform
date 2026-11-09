@@ -55,8 +55,7 @@ pub fn convert(data: &[u8], crop: Crop) -> Result<Output, Refusal> {
     let mut large = encoder(LARGE)?;
     let mut small = encoder(SMALL)?;
     let animated = info.format == Format::Gif && info.frames > 1;
-    let finish;
-    if animated {
+    let finish = if animated {
         let decoder = GifDecoder::new(Cursor::new(data)).map_err(|_| Refusal::Decode)?;
         let mut at = 0_i32;
         for frame in decoder.into_frames() {
@@ -72,7 +71,7 @@ pub fn convert(data: &[u8], crop: Crop) -> Result<Output, Refusal> {
                 .map_err(|_| Refusal::Decode)?;
             at = at.saturating_add(delay);
         }
-        finish = at;
+        at
     } else {
         let mut reader = ImageReader::with_format(Cursor::new(data), info.format.image());
         let mut limits = Limits::default();
@@ -100,8 +99,8 @@ pub fn convert(data: &[u8], crop: Crop) -> Result<Output, Refusal> {
         small
             .add_frame(little.as_raw(), 0)
             .map_err(|_| Refusal::Decode)?;
-        finish = 1;
-    }
+        1
+    };
     let large = large
         .finalize(finish)
         .map_err(|_| Refusal::Decode)?

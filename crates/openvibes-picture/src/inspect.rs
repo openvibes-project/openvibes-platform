@@ -90,7 +90,13 @@ fn kind(data: &[u8]) -> Result<Format, Refusal> {
 fn box_brand(data: &[u8]) -> Refusal {
     let size = u32::from_be_bytes([data[0], data[1], data[2], data[3]]) as usize;
     let end = size.clamp(12, data.len().min(256));
-    let brands = std::iter::once(&data[8..12]).chain(data[16.min(end)..end].chunks_exact(4));
+    let brands = std::iter::once(&data[8..12]).chain(
+        data[16.min(end)..end]
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(<[u8; 4]>::as_slice),
+    );
     let mut heic = false;
     for brand in brands {
         match brand {

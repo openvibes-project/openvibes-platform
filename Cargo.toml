@@ -5,47 +5,47 @@ members = ["crates/openvibes-ingest", "crates/platform-agent-server", "crates/pl
 [workspace.package]
 version = "0.2.9"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.99"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-libc = "0.2"
+libc = "0.2.191"
 platform-password = { path = "crates/platform-password" }
 openvibes-core = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "19522c0727efae733bc2cb32cdc54e026685112c" }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
-toml = { version = "1.1.6", default-features = false, features = ["std", "serde", "parse"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync", "io-util", "fs"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+toml = { version = "1.2.1", default-features = false, features = ["std", "serde", "parse"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync", "io-util", "fs"] }
 tokio-postgres = { version = "0.7.18", features = ["with-chrono-0_4", "with-serde_json-1"] }
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 deadpool-postgres = { version = "0.14.2", features = ["rt_tokio_1"] }
 clap = { version = "4.6.7", features = ["derive"] }
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
-x509-parser = { version = "0.18", features = ["verify"] }
+x509-parser = { version = "0.18.1", features = ["verify"] }
 p12-keystore = "0.4.1"
 pkcs5 = { version = "0.8.1", features = ["pbes2", "sha1-insecure", "3des"] }
-aes = "0.9.3"
+aes = "0.9.4"
 cbc = { version = "0.2.1", features = ["alloc"] }
 des = "0.9.0"
 md-5 = "0.11.0"
-der = { version = "0.8.2", features = ["alloc", "derive", "oid"] }
-time = "0.3"
-ring = "0.17"
+der = { version = "0.8.3", features = ["alloc", "derive", "oid"] }
+time = "0.3.55"
+ring = "0.17.14"
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
-hyper = { version = "1.11", features = ["http1", "server"] }
-hyper-util = { version = "0.1.20", features = ["tokio", "service", "server-graceful"] }
-tokio-rustls = { version = "0.26.5", default-features = false, features = ["ring", "tls12"] }
-rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
+hyper = { version = "1.12.0", features = ["http1", "server"] }
+hyper-util = { version = "0.1.21", features = ["tokio", "service", "server-graceful"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-webpki = { version = "0.103.16", default-features = false, features = ["ring", "std"] }
 rustls-pki-types = "1.15.1"
-tower = { version = "0.5", default-features = false, features = ["util"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "std"] }
+tower = { version = "0.5.3", default-features = false, features = ["util"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "json", "std"] }
 openvibes-transport = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "19522c0727efae733bc2cb32cdc54e026685112c" }
 openvibes-rules = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "19522c0727efae733bc2cb32cdc54e026685112c" }
 ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast", "zeroize"] }
-sha2 = { version = "0.11", default-features = false }
+sha2 = { version = "0.11.1", default-features = false }
 include_dir = { version = "0.7.4", default-features = false }
 
 [workspace.lints.rust]

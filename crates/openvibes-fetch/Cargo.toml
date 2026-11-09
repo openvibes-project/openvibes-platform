@@ -11,7 +11,7 @@ platform-store = { path = "../platform-store" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
+ureq = { version = "3.5.1", default-features = false, features = ["rustls"] }
 
 [lints]
 workspace = true

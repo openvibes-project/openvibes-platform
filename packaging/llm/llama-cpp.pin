@@ -1,8 +1,8 @@
 # The llama.cpp source openvibes-llm builds llama-server from (assistant
 # spec §6, §10). Read by scripts/build-llama-server.sh.
 #
-# The source is the upstream release ggml-org/llama.cpp v0.6.0 (tag object
-# 69ecae922d2b, commit below). The release publishes no source tarball asset,
+# The source is the upstream release ggml-org/llama.cpp v0.9.0 (tag object
+# c4261a74a59c, commit below). The release publishes no source tarball asset,
 # so this is GitHub's archive of the tag. GitHub generates archives on demand;
 # their bytes have been stable but are not guaranteed. If the SHA-256 check
 # ever fails, re-verify before re-pinning: download the archive into an empty
@@ -17,6 +17,6 @@
 # keep --sleep-idle-seconds off until an advisory names a fixed release),
 # update all three values, rebuild, check every CMake option the build script
 # passes still exists, and run `openvibes-admin assistant eval`.
-LLAMA_CPP_COMMIT=d81235049384534c167caea52b85a694f6103d14
-LLAMA_SOURCE_URL=https://github.com/ggml-org/llama.cpp/archive/refs/tags/v0.6.0.tar.gz
-LLAMA_SOURCE_SHA256=09b36dba235fcac180efff18514da7038e65d8e5b9e4aefa59238468abfdec12
+LLAMA_CPP_COMMIT=cd959bae99ff4bed22bef2604f45241c09bbb8c8
+LLAMA_SOURCE_URL=https://github.com/ggml-org/llama.cpp/archive/refs/tags/v0.9.0.tar.gz
+LLAMA_SOURCE_SHA256=5d0f1aaf55fd8629c29a55e81b7cb63b80239f83c33a580963071204896836a8

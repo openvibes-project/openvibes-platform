@@ -2525,7 +2525,7 @@ export interface components {
              * @description Database schema version the platform requires.
              */
             schema_version: number;
-            signed_feed?: null | components["schemas"]["AboutSignedFeed"];
+            signed_feed?: components["schemas"]["AboutSignedFeed"] | null;
             /** @description When this console process started. */
             started_at: string;
             /** @description Whether this console serves its web UI from the same build. */
@@ -2722,7 +2722,7 @@ export interface components {
         };
         /** @description Operator-facing agent fields shared by the read API and seeded server. */
         AgentView: {
-            alarms?: null | components["schemas"]["AgentAlarmsView"];
+            alarms?: components["schemas"]["AgentAlarmsView"] | null;
             /** @description Reported agent capabilities. */
             capabilities: string[];
             /** @description RFC 3339 enrollment time. */
@@ -2774,7 +2774,7 @@ export interface components {
         AlarmCommandView: {
             /** @description The command line, masked as stored. */
             args: string[];
-            case?: null | components["schemas"]["AlarmListCaseView"];
+            case?: components["schemas"]["AlarmListCaseView"] | null;
             /**
              * Format: int64
              * @description Starts matched.
@@ -2823,7 +2823,7 @@ export interface components {
              * @description 0 to 100.
              */
             confidence: number;
-            detection?: null | components["schemas"]["DetectionView"];
+            detection?: components["schemas"]["DetectionView"] | null;
             /** @description The process (masked args) as the agent sent it. */
             process: Record<string, never>;
             /** @description When ingest stored it (RFC 3339). */
@@ -2871,8 +2871,8 @@ export interface components {
         };
         /** @description One row of the Alarms list. */
         AlarmListRowView: {
-            assignee?: null | components["schemas"]["AlarmListPersonView"];
-            case?: null | components["schemas"]["AlarmListCaseView"];
+            assignee?: components["schemas"]["AlarmListPersonView"] | null;
+            case?: components["schemas"]["AlarmListCaseView"] | null;
             /**
              * Format: int64
              * @description Starts matched.
@@ -2961,7 +2961,7 @@ export interface components {
         AlarmRelatedView: {
             /** @description Up to five other open alarms on the host, and the total. */
             host_alarms: components["schemas"]["TopAlarmsView"];
-            host_vulnerabilities?: null | components["schemas"]["TopVulnerabilitiesView"];
+            host_vulnerabilities?: components["schemas"]["TopVulnerabilitiesView"] | null;
             /** @description Same rule elsewhere. */
             same_rule_elsewhere: components["schemas"]["SameRuleElsewhereView"];
         };
@@ -3572,7 +3572,7 @@ export interface components {
         };
         /** @description One timeline entry. */
         CaseEventView: {
-            actor?: null | components["schemas"]["CaseUserView"];
+            actor?: components["schemas"]["CaseUserView"] | null;
             /** @description RFC 3339. */
             at: string;
             /**
@@ -3705,7 +3705,7 @@ export interface components {
         };
         /** @description One row: a case. Items, hosts and counts are only those the viewer sees. */
         CaseListRowView: {
-            assignee?: null | components["schemas"]["CaseUserView"];
+            assignee?: components["schemas"]["CaseUserView"] | null;
             /** @description Stable UUID. */
             case_id: string;
             /**
@@ -3717,7 +3717,7 @@ export interface components {
             hosts: components["schemas"]["CaseHostView"][];
             /** @description Visible items per kind. */
             kinds: components["schemas"]["CaseKindsView"];
-            latest_note?: null | components["schemas"]["CaseNoteView"];
+            latest_note?: components["schemas"]["CaseNoteView"] | null;
             /**
              * Format: int64
              * @description Shown as `C-<number>`.
@@ -3829,7 +3829,7 @@ export interface components {
         };
         /** @description The header facts. */
         CasePageHeaderView: {
-            assignee?: null | components["schemas"]["CaseUserView"];
+            assignee?: components["schemas"]["CaseUserView"] | null;
             /** @description Stable UUID. */
             case_id: string;
             /** @description RFC 3339. */
@@ -3982,7 +3982,7 @@ export interface components {
         CaseSummaryView: {
             /** @description For such a case closed as accepted risk: when it reopens (RFC 3339). */
             accepted_until?: string | null;
-            assignee?: null | components["schemas"]["CaseUserView"];
+            assignee?: components["schemas"]["CaseUserView"] | null;
             /** @description Stable UUID. */
             case_id: string;
             /** @description RFC 3339, once closed. */
@@ -4206,7 +4206,7 @@ export interface components {
             address?: string | null;
             /** @description Agent id. */
             agent_id: string;
-            assignee?: null | components["schemas"]["AlarmListPersonView"];
+            assignee?: components["schemas"]["AlarmListPersonView"] | null;
             /** @description RFC 3339: the last observation (failing) or heartbeat (passing). */
             checked_at?: string | null;
             /**
@@ -4326,10 +4326,10 @@ export interface components {
         };
         /** @description The Related card. */
         CheckRelatedView: {
-            port?: null | components["schemas"]["CheckPortView"];
+            port?: components["schemas"]["CheckPortView"] | null;
             /** @description Same area. */
             same_area: components["schemas"]["CheckSameAreaView"];
-            service?: null | components["schemas"]["CheckServiceView"];
+            service?: components["schemas"]["CheckServiceView"] | null;
         };
         /** @description Other failing checks in reach in the same area. */
         CheckSameAreaView: {
@@ -4456,7 +4456,7 @@ export interface components {
              * @description Failing hosts.
              */
             failing: number;
-            first_seen?: null | components["schemas"]["CheckFirstSeenView"];
+            first_seen?: components["schemas"]["CheckFirstSeenView"] | null;
             /**
              * Format: int64
              * @description Inferred passing hosts.
@@ -4705,7 +4705,7 @@ export interface components {
         };
         /** @description Historical rule content for one authorized observation. */
         DetectionRuleView: {
-            rule?: null | components["schemas"]["HistoricalRuleView"];
+            rule?: components["schemas"]["HistoricalRuleView"] | null;
             /** @description Rule set ID. */
             rule_set_id: string;
             /**
@@ -5045,7 +5045,7 @@ export interface components {
              * @description Confidence as a percentage from 0 through 100.
              */
             confidence: number;
-            detection?: null | components["schemas"]["DetectionView"];
+            detection?: components["schemas"]["DetectionView"] | null;
             /** @description Evidence key/value strings from the observation. */
             evidence: string[];
             /** @description RFC 3339 time of the first observation. */
@@ -5470,7 +5470,7 @@ export interface components {
         HostProtectionView: {
             /** @description The latest test alarm and finding. */
             last_test: components["schemas"]["LastTest"];
-            threat_alarms?: null | components["schemas"]["AgentAlarmsView"];
+            threat_alarms?: components["schemas"]["AgentAlarmsView"] | null;
         };
         /** @description One row of the Hosts list. */
         HostRowView: {
@@ -5604,9 +5604,9 @@ export interface components {
             protection: components["schemas"]["HostProtectionView"];
             /** @description Tiles. */
             tiles: components["schemas"]["HostTilesView"];
-            top_alarms?: null | components["schemas"]["TopAlarmsView"];
-            top_failing?: null | components["schemas"]["TopFailingListView"];
-            top_vulnerabilities?: null | components["schemas"]["TopVulnerabilitiesView"];
+            top_alarms?: components["schemas"]["TopAlarmsView"] | null;
+            top_failing?: components["schemas"]["TopFailingListView"] | null;
+            top_vulnerabilities?: components["schemas"]["TopVulnerabilitiesView"] | null;
         };
         /** @description The four tiles; each absent without its permission on this host. */
         HostTilesView: {
@@ -5946,7 +5946,7 @@ export interface components {
              * @description Of the listening hosts, exposed ones.
              */
             exposed: number;
-            first_seen?: null | components["schemas"]["PortFirstSeenView"];
+            first_seen?: components["schemas"]["PortFirstSeenView"] | null;
             /**
              * Format: int64
              * @description Hosts in reach listening on it.
@@ -6186,8 +6186,8 @@ export interface components {
         };
         /** @description The Related card; a section is absent without its permission. */
         PortRelatedView: {
-            alarms?: null | components["schemas"]["PortRelatedAlarmsView"];
-            compliance?: null | components["schemas"]["PortRelatedChecksView"];
+            alarms?: components["schemas"]["PortRelatedAlarmsView"] | null;
+            compliance?: components["schemas"]["PortRelatedChecksView"] | null;
             /** @description With `vulnerabilities.read`; empty for a port with no package in the map. */
             vulnerabilities?: components["schemas"]["PortRelatedPackageView"][] | null;
         };
@@ -6862,7 +6862,7 @@ export interface components {
              * @description Of the running hosts, those where it owns an exposed port.
              */
             exposed: number;
-            first_seen?: null | components["schemas"]["ServiceFirstSeenView"];
+            first_seen?: components["schemas"]["ServiceFirstSeenView"] | null;
             /** @description What it usually is. */
             name?: string | null;
             /**
@@ -7030,7 +7030,7 @@ export interface components {
              *     not be collected.
              */
             owners_partial: boolean;
-            package?: null | components["schemas"]["ServiceHostPackageView"];
+            package?: components["schemas"]["ServiceHostPackageView"] | null;
             /** @description Ports it owns there. */
             ports: components["schemas"]["ServiceHostPortView"][];
             /** @description Open problems. */
@@ -7147,9 +7147,9 @@ export interface components {
         };
         /** @description The Related card; a section is absent without its permission. */
         ServiceRelatedView: {
-            alarms?: null | components["schemas"]["ServiceRelatedAlarmsView"];
-            compliance?: null | components["schemas"]["ServiceRelatedChecksView"];
-            vulnerabilities?: null | components["schemas"]["ServiceRelatedVulnerabilitiesView"];
+            alarms?: components["schemas"]["ServiceRelatedAlarmsView"] | null;
+            compliance?: components["schemas"]["ServiceRelatedChecksView"] | null;
+            vulnerabilities?: components["schemas"]["ServiceRelatedVulnerabilitiesView"] | null;
         };
         /** @description Open advisories of the matched packages. */
         ServiceRelatedVulnerabilitiesView: {
@@ -7646,7 +7646,7 @@ export interface components {
         };
         /** @description The header: the facts line. */
         SoftwareHeaderView: {
-            first_seen?: null | components["schemas"]["SoftwareFirstSeenView"];
+            first_seen?: components["schemas"]["SoftwareFirstSeenView"] | null;
             /**
              * Format: int64
              * @description Hosts in reach that have it.
@@ -8579,7 +8579,7 @@ export interface components {
             advisory_id: string;
             /** @description Agent id. */
             agent_id: string;
-            assignee?: null | components["schemas"]["AlarmListPersonView"];
+            assignee?: components["schemas"]["AlarmListPersonView"] | null;
             /** @description When the pair was first seen (RFC 3339). */
             first_seen: string;
             /** @description Host name. */
@@ -8679,7 +8679,7 @@ export interface components {
         };
         /** @description The Related card. */
         VulnRelatedView: {
-            alarms?: null | components["schemas"]["TopAlarmsView"];
+            alarms?: components["schemas"]["TopAlarmsView"] | null;
             /** @description Open cases holding a pair; absent without `cases.read`. */
             cases?: components["schemas"]["VulnCaseRefView"][] | null;
             /** @description Same package. */
