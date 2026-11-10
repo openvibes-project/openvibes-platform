@@ -50,7 +50,7 @@ postgresql17-server
 if grep -qw openvibes.unattended /proc/cmdline; then
     echo "keyboard --vckeymap=us" > /tmp/openvibes-choice.ks
 else
-    TERM=linux LC_ALL=C.UTF-8 python3 -I /run/install/repo/openvibes-installer.py --console 8 /tmp/openvibes-choice.ks || exit 1
+    TERM=linux LC_ALL=C.UTF-8 python3 -I /run/install/repo/openvibes-installer.py --console 8 3>/tmp/openvibes-choice.ks || exit 1
     chvt 1
 fi
 %end

@@ -37,8 +37,8 @@ separate path and doesn't change.
   /tmp/openvibes-choice.ks` takes the screens' answers (`keyboard`, `ignoredisk`,
   `clearpart`, `autopart`, `bootloader`, and `user` with an SHA-512 hash from
   `openssl passwd -6`). Everything else is fixed here.
-- `openvibes-installer.py [--console N] OUT`: writes those lines to OUT and
-  exits 0. It exits 1 when the person powers off from the first screen.
+- `openvibes-installer.py [--console N] 3>OUT`: writes those lines to file
+  descriptor 3, which the caller opens on OUT. It exits 0. It exits 1 when the person powers off from the first screen.
   `--self-test` checks the name, password and kickstart rules.
 - `scripts/build-appliance-iso.sh KIT_TAR OUT_ISO` (as root in `almalinux:10`):
   - starts from AlmaLinux's minimal ISO, checked against its signed checksums;
