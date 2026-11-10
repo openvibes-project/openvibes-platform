@@ -8,7 +8,6 @@ clearpart --all --initlabel
 autopart --type=lvm
 bootloader --append="console=ttyS0,115200n8"
 user --name=tester --groups=wheel --password=tester --plaintext
-text
 poweroff
 
 %post
