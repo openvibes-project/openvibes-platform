@@ -1,6 +1,7 @@
-//! Step 3, Certificates (ca.py, ca2.py, full_advanced.py): your own CA
-//! (the default), Import from your PKI (`import.rs`) or OpenVIBES makes
-//! one. With your own CA, Next makes the request before anything is
+//! Step 3, Certificates (ca.py, ca2.py, full_advanced.py): your own CA,
+//! Import from your PKI (`import.rs`) or OpenVIBES makes
+//! one; none is chosen until the person picks one (#563). With your own
+//! CA, Next makes the request before anything is
 //! installed (`ca-request`); the request is
 //! shown to copy, and the two certificates are added (`paste.rs`). Once
 //! both are, the helper checks and keeps them (`ca-accept`): only then
@@ -67,6 +68,7 @@ impl Install {
     /// OpenVIBES makes one or the certificate and key for Import, then Next.
     fn choice_rows(&self) -> usize {
         match self.ca {
+            _ if !self.ca_chosen => 4,
             Ca::Own => 4,
             Ca::Import => 6,
             Ca::OpenVibes => 5,
@@ -159,23 +161,24 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     };
     let mut rows = vec![
         radio(
-            install.ca == Ca::Own,
+            install.ca_chosen && install.ca == Ca::Own,
             "Your own CA",
             "your CA signs an intermediate for OpenVIBES",
         ),
         radio(
-            install.ca == Ca::Import,
+            install.ca_chosen && install.ca == Ca::Import,
             "Import from your PKI",
             "a finished intermediate and its key",
         ),
         radio(
-            install.ca == Ca::OpenVibes,
+            install.ca_chosen && install.ca == Ca::OpenVibes,
             "OpenVIBES makes one",
             "a new root CA; its key goes offline after",
         ),
     ];
     let typing = install.editing.is_some();
     match install.ca {
+        _ if !install.ca_chosen => {}
         Ca::OpenVibes => rows.push(Row::entry(
             "Root key file",
             &typed(&install.root_key_out, typing),
@@ -183,21 +186,24 @@ pub(super) fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         Ca::Import => rows.extend(install.import_rows(t)),
         Ca::Own => {}
     }
-    let import = install.ca == Ca::Import;
-    let ports = if import && !install.both_added() {
+    let import = install.ca_chosen && install.ca == Ca::Import;
+    let ports = if !install.ca_chosen {
+        "once you choose"
+    } else if import && !install.both_added() {
         "once both are added"
     } else {
         "ports"
     };
     rows.push(Row::entry("Next", ports));
     let next = install.choice_rows() - 1;
-    let flagged = (install.ca == Ca::OpenVibes)
+    let flagged = (install.ca_chosen && install.ca == Ca::OpenVibes)
         .then(|| fields::check_root_key(install.root_key_out.trim()).err())
         .flatten()
         .map(|why| format!("✗ Root key file: {why}"));
     let help = match row {
         0..=2 => HELP[row].to_owned(),
         r if import => install.import_help(r),
+        r if r == next && !install.ca_chosen => "Choose one of the three first.".to_owned(),
         r if r == next => "Go on to the ports.".to_owned(),
         _ => "The CA's root key: written once here, move it offline.".to_owned(),
     };
@@ -336,6 +342,7 @@ impl<H: Host> App<H> {
             }
             (Key::Char(' ') | Key::Enter, 0..=2) => {
                 self.install.ca = CHOICES[row];
+                self.install.ca_chosen = true;
                 self.install.error = None;
                 // Your own CA's certificates go with your own CA only, and
                 // an import's key with Import only.
@@ -356,6 +363,7 @@ impl<H: Host> App<H> {
             }
             (Key::Enter, 3) if self.install.ca == Ca::OpenVibes => self.edit(2),
             (Key::Enter, 3..) if self.install.ca == Ca::Import => self.import_row_key(row),
+            (Key::Enter, r) if r == count - 1 && !self.install.ca_chosen => {}
             (Key::Enter, r) if r == count - 1 => match self.install.ca {
                 Ca::OpenVibes
                     if fields::check_root_key(self.install.root_key_out.trim()).is_ok() =>

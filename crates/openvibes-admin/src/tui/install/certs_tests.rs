@@ -40,6 +40,7 @@ pub(super) fn pki() -> Pki {
 /// (its copy beside another file the helper found).
 pub(super) fn requested(pki: &Pki) -> App<SetupHost> {
     let mut app = steps(2);
+    app.key(Key::Char(' '));
     let copy = "copy\t/home/u/openvibes-intermediate-2.csr";
     answer(&app, Ok(format!("request\n{copy}\n{}", pki.csr)));
     down(&mut app, 3);
@@ -59,23 +60,32 @@ pub(super) fn paste(app: &mut App<SetupHost>, which: Which, text: &str) {
 }
 
 #[test]
-fn certs_own_ca_is_default_space_chooses() {
+fn certs_nothing_chosen_until_picked_space_chooses() {
     let mut app = steps(2);
-    assert_eq!(app.install.ca, Ca::Own);
+    assert!(!app.install.ca_chosen);
     let text = screen(&app);
     for row in [
-        "(•) Your own CA",
+        "( ) Your own CA",
         "your CA signs an intermediate for OpenVIBES",
+        "( ) Import from your PKI",
         "( ) OpenVIBES makes one",
         "a new root CA; its key goes offline after",
-        "ports",
+        "once you choose",
         "For networks with their own PKI. Your root key never comes near this host.",
         "Space  Choose",
     ] {
         assert!(text.contains(row), "{row}\n{text}");
     }
+    assert!(!text.contains("(•)"), "{text}");
     assert!(!text.contains("Root key file"), "{text}");
-    down(&mut app, 2);
+    // #563: Next without a choice stays here and asks the helper nothing.
+    down(&mut app, 3);
+    assert!(screen(&app).contains("Choose one of the three first."));
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Install(Stage::Step(2)));
+    assert!(calls(&app).is_empty());
+    assert!(!app.install.ca_chosen);
+    app.key(Key::Up);
     app.key(Key::Char(' '));
     assert_eq!(app.install.ca, Ca::OpenVibes);
     let text = screen(&app);
@@ -94,6 +104,7 @@ fn certs_own_ca_is_default_space_chooses() {
 fn certs_openvibes_shows_root_key_file_row() {
     let mut app = steps(2);
     app.install.ca = Ca::OpenVibes;
+    app.install.ca_chosen = true;
     app.install.root_key_out = "openvibes.key".into();
     let text = screen(&app);
     assert!(text.contains("Root key file"), "{text}");
@@ -159,6 +170,7 @@ fn a_refused_request_shows_only_its_sentence() {
                 .into(),
         )),
     );
+    app.key(Key::Char(' '));
     down(&mut app, 3);
     app.key(Key::Enter);
     type_text(&mut app, "pw");
@@ -316,6 +328,7 @@ fn file_pick_lists_files_and_reads_one() {
     let mut app = at(super::super::script_host::fresh_app(), 2);
     answer(&app, Ok(format!("request\n{}", pki.csr)));
     app.install.home = Some(dir.to_string());
+    app.key(Key::Char(' '));
     down(&mut app, 3);
     app.key(Key::Enter);
     type_text(&mut app, "pw");

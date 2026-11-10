@@ -147,6 +147,7 @@ impl Install {
         self.assistant = plan.components.contains(&Component::Assistant);
         self.hostname = plan.hostname;
         self.sans = plan.sans.join(", ");
+        self.ca_chosen = true;
         self.ca = match plan.ca {
             CaMode::Careful => Ca::Own,
             CaMode::Import => Ca::Import,

@@ -89,6 +89,9 @@ pub struct Install {
     /// Other names, comma separated.
     pub sans: String,
     pub ca: Ca,
+    /// Whether the person picked a CA choice (#563): none is pre-selected,
+    /// and Next waits for one. A resumed plan and Quick install count.
+    pub ca_chosen: bool,
     pub root_key_out: String,
     pub console_port: String,
     pub ingest_port: String,
@@ -157,6 +160,7 @@ impl Install {
             hostname,
             sans: String::new(),
             ca: Ca::Own,
+            ca_chosen: false,
             root_key_out: fields::default_root_key(home.as_deref()),
             home,
             origin: Stage::Step(4),
