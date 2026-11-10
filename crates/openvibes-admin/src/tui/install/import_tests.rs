@@ -77,7 +77,7 @@ fn import_is_the_second_choice() {
     let mut app = steps(2);
     let text = screen(&app);
     let at = |s: &str| text.find(s).unwrap_or_else(|| panic!("{s}\n{text}"));
-    assert!(at("(•) Your own CA") < at("( ) Import from your PKI"));
+    assert!(at("( ) Your own CA") < at("( ) Import from your PKI"));
     assert!(at("( ) Import from your PKI") < at("( ) OpenVIBES makes one"));
     assert!(
         text.contains("a finished intermediate and its key"),

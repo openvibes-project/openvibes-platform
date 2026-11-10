@@ -150,6 +150,7 @@ impl<H: Host> App<H> {
             // A flagged field is said under the list: nothing starts.
             (Key::Enter, INSTALL) if self.install.problem().is_none() => {
                 self.install.ca = Ca::OpenVibes;
+                self.install.ca_chosen = true;
                 self.install.assistant = false;
                 self.start_install();
             }
