@@ -86,6 +86,39 @@ COMMON = [("us", "English (US)"), ("gb", "English (UK)"), ("se", "Swedish"),
           ("ca", "Canadian")]
 
 
+MARKER = "openvibes-appliance"  # on /boot, written by the kickstart's %post
+
+
+def installed(boot):
+    """(disk, date) for every disk that holds an installed appliance: its
+    /boot carries MARKER. Each plain file system is mounted read-only for a
+    look; any that will not mount is skipped."""
+    out = subprocess.run(["lsblk", "-J", "-o", "NAME,FSTYPE,PKNAME,TYPE"],
+                         capture_output=True, text=True).stdout
+    found, where = [], "/tmp/openvibes-look"
+    os.makedirs(where, exist_ok=True)
+
+    def walk(devs):
+        for dev in devs:
+            yield dev
+            yield from walk(dev.get("children", []))
+
+    for dev in walk(json.loads(out or '{"blockdevices": []}')["blockdevices"]):
+        if dev.get("type") != "part" or dev.get("fstype") not in ("xfs", "ext4") or dev.get("pkname") == boot:
+            continue
+        opts = "ro,norecovery" if dev["fstype"] == "xfs" else "ro"
+        if subprocess.run(["mount", "-o", opts, f"/dev/{dev['name']}", where], capture_output=True).returncode:
+            continue
+        try:
+            with open(os.path.join(where, MARKER), encoding="utf-8") as f:
+                found.append((dev["pkname"], f.read().strip()))
+        except OSError:
+            pass
+        finally:
+            subprocess.run(["umount", where], capture_output=True)
+    return found
+
+
 def keymaps():
     """(keymap, label) pairs: the common named ones first, then the rest."""
     found = subprocess.run(["localectl", "list-keymaps", "--no-pager"],
@@ -127,11 +160,29 @@ class Screen:
         w.erase()
         h, wd = w.getmaxyx()
         w.addstr(0, 1, "OpenVIBES appliance · Install", curses.A_BOLD)
-        w.addstr(0, wd - 8, f"{step} of {STEPS}")
+        if step:
+            w.addstr(0, wd - 8, f"{step} of {STEPS}")
         w.hline(1, 0, curses.ACS_HLINE, wd)
         w.hline(h - 2, 0, curses.ACS_HLINE, wd)
         w.addstr(h - 1, 1, keys[: wd - 2])
         return h, wd
+
+    def already(self, found):
+        """True: install again. Restarts the machine otherwise."""
+        while True:
+            self.frame(0, "Enter restart   i install again")
+            self.win.addstr(3, 1, "OpenVIBES is already installed here:")
+            for i, (disk, date) in enumerate(found):
+                self.win.addstr(5 + i, 3, f"{disk:<8} installed {date}")
+            y = 6 + len(found)
+            self.win.addstr(y, 1, "If you have just installed it, remove the USB stick and restart: the")
+            self.win.addstr(y + 1, 1, "machine then starts OpenVIBES. Install again only to erase it and start over.")
+            k = self.win.get_wch()
+            if k in ("i", "I"):
+                return True
+            if k in ("\n", "\r", curses.KEY_ENTER):
+                subprocess.run(["systemctl", "reboot"])
+                return False
 
     def keyboard(self, maps, current):
         keys = [m for m, _ in maps]
@@ -255,6 +306,9 @@ class Screen:
 def run(win):
     curses.set_escdelay(25)  # Esc answers at once, not after 1 s
     s = Screen(win)
+    there = installed(medium())
+    if there and not s.already(there):
+        return None
     maps, found = keymaps(), disks()
     keymap, pick, name, step = "us", next((i for i, d in enumerate(found) if not d[3]), 0), "", 1
     while True:

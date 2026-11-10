@@ -77,4 +77,18 @@ if [ -f /etc/openvibes/appliance ] && [ -t 0 ] && [ "$(id -u)" != 0 ] && [ -z "$
 fi
 EOF
 chmod 0644 /etc/profile.d/openvibes-appliance.sh
+
+# The login just asked for the password: the admin TUI opens without a
+# second prompt (lime, 2026-11-10). Only that program with no arguments, only
+# for wheel, only on the appliance; every other sudo still asks.
+cat > /etc/sudoers.d/openvibes-appliance <<'EOF'
+# The appliance's login opens the admin TUI without a second password.
+%wheel ALL=(root) NOPASSWD: /usr/bin/openvibes-admin ""
+EOF
+chmod 0440 /etc/sudoers.d/openvibes-appliance
+visudo -cqf /etc/sudoers.d/openvibes-appliance
+
+# The installer's screens find this on /boot (a plain partition, no LVM) and
+# say OpenVIBES is already installed when the USB stick was left in (#549).
+date -u +%F > /boot/openvibes-appliance
 %end

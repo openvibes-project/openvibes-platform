@@ -9,7 +9,10 @@ separate path and doesn't change.
 
 1. The boot menu starts **Install OpenVIBES (AlmaLinux 10.2)** after 3 seconds.
    Esc shows the menu (media test, basic graphics, rescue).
-2. Four OpenVIBES screens on console 8 (`packaging/appliance/openvibes-installer.py`,
+2. If a disk already holds the appliance (a `/boot/openvibes-appliance`
+   marker, found by mounting plain file systems read-only), a screen says so
+   first. **Enter** restarts, so remove the USB stick first; **i** installs again.
+3. Four OpenVIBES screens on console 8 (`packaging/appliance/openvibes-installer.py`,
    Python curses in the installer image, run from the kickstart's `%pre`):
    - **Keyboard:** the common layouts by name first ("Swedish  se"), then
      every keymap. Type to filter; US is the default. The layout applies at
@@ -19,9 +22,14 @@ separate path and doesn't change.
    - **Administrator:** name and password, typed twice, at least 12
      characters. The account is in `wheel`; root stays locked.
    - **Confirm:** nothing is written until `erase <disk>` is typed.
-3. Anaconda installs unattended in text mode, then restarts. The person
+4. Anaconda installs unattended in text mode, then restarts. The person
    removes the USB stick (the confirm screen says so), signs in, and lands in
-   the admin TUI's Setup.
+   the admin TUI's Setup. There's no second password: on the appliance only,
+   `/etc/sudoers.d/openvibes-appliance` lets `wheel` run
+   `/usr/bin/openvibes-admin`, with no arguments, without one. Every other
+   sudo still asks. The TUI runs as root and has a shell, so a program running
+   as the administrator can reach root through it; that's the trade for one
+   password at the console.
 
 ## Interfaces
 
@@ -53,9 +61,9 @@ separate path and doesn't change.
 - Without a disk of 30 GB or more, the disk screen says so and offers nothing.
 - `%post` refuses a system with no administrator in `wheel`. The screens
   always create one, so this only guards against a broken kickstart.
-- Lab finding: a VM whose boot order puts the CD first starts the installer
-  again after the install. On real UEFI hardware Anaconda puts the installed
-  system first; on BIOS, the person removes the stick.
+- A machine that boots the installer again after the install (the stick
+  left in, or BIOS boot order) gets the "already installed" screen, not the
+  keyboard screen.
 
 ## How to test
 
