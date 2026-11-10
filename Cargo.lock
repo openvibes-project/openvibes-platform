@@ -130,12 +130,11 @@ dependencies = [
 
 [[package]]
 name = "antlr4rust"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "093d520274bfff7278d776f7ea12981a0a0a6f96db90964658e0f38fc6e9a6a6"
+checksum = "003352ee03bab0eea34057cc541fa4362734220ca381343c7e9c35050c1fc942"
 dependencies = [
- "better_any",
- "bit-set 0.8.0",
+ "bit-set 0.11.1",
  "byteorder",
  "lazy_static",
  "murmur3",
@@ -328,12 +327,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
-name = "better_any"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4372b9543397a4b86050cc5e7ee36953edf4bac9518e8a774c2da694977fb6e4"
-
-[[package]]
 name = "bindgen"
 version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -364,11 +357,11 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
-version = "0.8.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
+checksum = "56d87354e4229f54a44f7bf2435906a4656dba36026ab6eaca629a2c436a691c"
 dependencies = [
- "bit-vec 0.8.0",
+ "bit-vec 0.10.2",
 ]
 
 [[package]]
@@ -379,16 +372,20 @@ checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bit-vec"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
-
-[[package]]
-name = "bit-vec"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b71798fca2c1fe1086445a7258a4bc81e6e49dcd24c8d0dd9a1e57395b603f51"
 dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "bit-vec"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72503af1e72be411d74ca45cd6b309878fcb35354e252fc2a3a8bda3a97082a0"
+dependencies = [
+ "borsh",
  "serde",
 ]
 
@@ -438,6 +435,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "710f1dd022ef4e93f8a438b4ba958de7f64308434fa6a87104481645cc30068b"
 dependencies = [
  "hybrid-array",
+]
+
+[[package]]
+name = "borsh"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
+dependencies = [
+ "borsh-derive",
+ "bytes",
+ "cfg_aliases",
+]
+
+[[package]]
+name = "borsh-derive"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12cdfe656708a01f89b451a7d36466e6fe6c414de0aa18fc54f864f6f9ca9f56"
+dependencies = [
+ "once_cell",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -506,9 +527,9 @@ dependencies = [
 
 [[package]]
 name = "cel"
-version = "0.14.5"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ae7daebcd4d032c9a5288790c2facde6fab3f9a9ff8d5028765e8b48a36eeb2"
+checksum = "044e21070125024b84c8058036de182400bd99212cab3faa4f19566f7733b6dc"
 dependencies = [
  "antlr4rust",
  "lazy_static",
@@ -1424,9 +1445,9 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "granit-parser"
-version = "1.3.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e20f99e46474f56bd905c56e817ebddcf377a611f94c53ac4649e4d3fa3c0cd0"
+checksum = "05f05586d4d4df3d47123207826c40b252728b438a1a07bad3c01ee6bea401df"
 dependencies = [
  "arraydeque",
  "smallvec",
@@ -2350,8 +2371,8 @@ dependencies = [
 
 [[package]]
 name = "openvibes-core"
-version = "0.2.7"
-source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=19522c0727efae733bc2cb32cdc54e026685112c#19522c0727efae733bc2cb32cdc54e026685112c"
+version = "0.3.0"
+source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=a73d7399ede7fdd02754da3f74590cb66c719abb#a73d7399ede7fdd02754da3f74590cb66c719abb"
 dependencies = [
  "serde",
  "serde_json",
@@ -2491,8 +2512,8 @@ dependencies = [
 
 [[package]]
 name = "openvibes-rules"
-version = "0.2.7"
-source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=19522c0727efae733bc2cb32cdc54e026685112c#19522c0727efae733bc2cb32cdc54e026685112c"
+version = "0.3.0"
+source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=a73d7399ede7fdd02754da3f74590cb66c719abb#a73d7399ede7fdd02754da3f74590cb66c719abb"
 dependencies = [
  "base64 0.23.1",
  "cel",
@@ -2527,8 +2548,8 @@ dependencies = [
 
 [[package]]
 name = "openvibes-transport"
-version = "0.2.7"
-source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=19522c0727efae733bc2cb32cdc54e026685112c#19522c0727efae733bc2cb32cdc54e026685112c"
+version = "0.3.0"
+source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=a73d7399ede7fdd02754da3f74590cb66c719abb#a73d7399ede7fdd02754da3f74590cb66c719abb"
 dependencies = [
  "flate2",
  "openvibes-core",
@@ -3099,6 +3120,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "proc-macro-crate"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
+dependencies = [
+ "toml_edit",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3593,9 +3623,9 @@ dependencies = [
 
 [[package]]
 name = "serde-saphyr"
-version = "1.3.0"
+version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8050abb251097357e24aff63ba2c52a6309ecb7d23a5474023df960a02694d8"
+checksum = "d43fb82d550b07e6f929a58d7d0935182602f48ddead875f5ee313c41c8f07fe"
 dependencies = [
  "annotate-snippets",
  "encoding_rs_io",

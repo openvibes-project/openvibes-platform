@@ -81,6 +81,8 @@ fn envelope(encoding: PayloadEncoding) -> Vec<u8> {
         rules: ["ssh.exposed", "quiet.rule"]
             .into_iter()
             .map(|id| Rule {
+                explain: None,
+                check: None,
                 id: Identifier::new(id).unwrap(),
                 version: 3,
                 title: "SSH exposed on all interfaces".into(),

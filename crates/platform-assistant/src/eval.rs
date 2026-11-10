@@ -263,6 +263,8 @@ impl Fleet {
             .iter()
             .map(|r| {
                 Ok(Rule {
+                    explain: None,
+                    check: None,
                     id: Identifier::new(r.rule.clone()).map_err(|_| "fleet file: bad rule id")?,
                     version: 1,
                     title: r.title.clone(),
