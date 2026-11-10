@@ -13,7 +13,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 kit_tar=$(realpath "$1") out=$(realpath -m "$2")
 [[ $(. /etc/os-release && echo "$ID:${VERSION_ID%%.*}") == almalinux:10 ]] || { echo "this is not an almalinux:10 container" >&2; exit 1; }
 
-dnf -y install xorriso mtools isomd5sum gnupg2 curl tar >/dev/null
+dnf -y install xorriso mtools isomd5sum gnupg2 curl tar createrepo_c >/dev/null
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
@@ -36,7 +36,33 @@ tar -C "$work/kit" -xf "$kit_tar"
 "$work/kit/openvibes-offline/install" --check
 [[ -d $work/kit/openvibes-offline/packages ]] || { echo "$kit_tar has no openvibes-offline/packages" >&2; exit 1; }
 
-# 3. The new ISO. The kickstart is found by its place on the disk; the
+# 3. The installer's package repository: one consistent, current set of
+# everything the installed system gets (#546). The kit carries only the
+# updates its own packages pulled in (a newer systemd, but not systemd-udev),
+# and the minimal ISO's older companions then conflict with them: Anaconda
+# stopped at "Error checking software selection". Dropping the updates instead
+# would install a known-vulnerable OpenSSL, sudo and glibc on hosts that may
+# never reach a mirror. So the kickstart's %packages are resolved into an
+# empty root against AlmaLinux's current repositories and the kit, and the
+# whole result is the repository: every update comes with its companions,
+# and the appliance starts fully updated.
+# (dnf names an environment @name in an installroot, not @^name; the CI kit
+# has no model package, as below.)
+pkgs=$(sed -n '/^%packages/,/^%end/p' "$ROOT/packaging/appliance/openvibes-appliance.ks" | grep -vE '^(%|#|$)' | sed 's/^@\^/@/')
+[[ -z ${OPENVIBES_ISO_TEST:-} ]] || pkgs=$(grep -vx openvibes-llm-model <<<"$pkgs")
+# Anaconda installs more than %packages: the bootloader, the storage tools
+# and kdump for the disk and machine it finds. Their current versions go in
+# too, or the minimal ISO's older ones clash again (dracut-network, #546).
+pkgs="$pkgs
+kernel grub2-efi-x64 grub2-pc grub2-tools shim-x64 efibootmgr lvm2 xfsprogs dosfstools mdadm cryptsetup device-mapper-multipath kdump-utils kexec-tools makedumpfile dracut-network"
+# shellcheck disable=SC2086  # one word per package or group
+dnf -y -q --installroot="$work/root" --releasever=10 --setopt=reposdir=/etc/yum.repos.d \
+    --repofrompath="openvibes-kit,$work/kit/openvibes-offline/packages" --setopt=openvibes-kit.gpgcheck=0 \
+    install --downloadonly --destdir="$work/repo" $pkgs
+createrepo_c -q "$work/repo"
+echo "installer repository: $(find "$work/repo" -name '*.rpm' | wc -l) packages"
+
+# 4. The new ISO. The kickstart is found by its place on the disk; the
 # kernel lines of both boot menus (and the copy inside the EFI boot image)
 # name it.
 label=$(xorriso -indev "$work/$iso" -pvd_info 2>&1 | sed -n "s/^Volume Id *: *//p")
@@ -60,6 +86,14 @@ ls -l "$work/boot/images"
 efi=$(find "$work/boot/images" -type f -name '*uefi*' | head -n 1)
 [[ -n $efi ]] || { echo "no EFI boot image found in $iso" >&2; exit 1; }
 for f in efi-grub.cfg grub.cfg; do
+    # Straight to the installer: "Install" (entry 0, not the slow media test)
+    # after a 3-second countdown; Esc during it shows the menu (rescue, basic
+    # graphics).
+    sed -i -E -e 's/^set default="[0-9]+"/set default="0"/' -e 's/^set timeout=[0-9]+/set timeout=3\nset timeout_style=countdown/' "$work/boot/$f"
+    grep -q '^set timeout_style=countdown' "$work/boot/$f" || { echo "no timeout to shorten in $f" >&2; exit 1; }
+    # The install entries say what they install: "Install OpenVIBES (AlmaLinux 10.2)".
+    sed -i -E "/^[[:space:]]*menuentry / s/([Ii]nstall) AlmaLinux ([0-9.]+)/\1 OpenVIBES (AlmaLinux \2)/" "$work/boot/$f"
+    grep -q "^menuentry 'Install OpenVIBES (AlmaLinux" "$work/boot/$f" || { echo "no install entry to rename in $f" >&2; exit 1; }
     sed -i -E "/^[[:space:]]*linux(efi)?[[:space:]]/ s|\$| $ksarg|" "$work/boot/$f"
     grep -q "$ksarg" "$work/boot/$f" || { echo "no kernel line to extend in $f" >&2; exit 1; }
 done
@@ -80,7 +114,7 @@ xorriso -return_with FAILURE 32 -indev "$work/$iso" -outdev "$out" \
     -boot_image any platform_id=0xef \
     -update "$work/boot/efi-grub.cfg" /EFI/BOOT/grub.cfg \
     -update "$work/boot/grub.cfg" /boot/grub2/grub.cfg \
-    -map "$work/kit/openvibes-offline" openvibes-offline \
+    -map "$work/repo" openvibes-repo \
     -map "$ks" openvibes-appliance.ks \
     -commit
 # Show the boot entries of the result: BIOS and UEFI must both be there.
@@ -91,7 +125,7 @@ for platform in BIOS UEFI; do
 done
 # The kit and the kickstart must really be in the result (a tolerated SORRY
 # could hide a half-added kit).
-xorriso -indev "$out" -find /openvibes-offline/packages/repodata -name repomd.xml 2>&1 | grep -q repomd.xml || { echo "the ISO has no kit repository" >&2; exit 1; }
+xorriso -indev "$out" -find /openvibes-repo/repodata -name repomd.xml 2>&1 | grep -q repomd.xml || { echo "the ISO has no installer repository" >&2; exit 1; }
 xorriso -indev "$out" -find /openvibes-appliance.ks 2>&1 | grep -q openvibes-appliance.ks || { echo "the ISO has no kickstart" >&2; exit 1; }
 implantisomd5 "$out" >/dev/null
 ls -l "$out"

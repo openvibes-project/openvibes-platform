@@ -21,8 +21,9 @@ firewall --enabled --ssh
 services --enabled=sshd,chronyd,NetworkManager,firewalld
 reboot --eject
 
-# The kit's package folder, on this disk (the build script adds it).
-repo --name=openvibes --baseurl=file:///run/install/repo/openvibes-offline/packages
+# The installer's repository on this disk: every package the system gets,
+# current and consistent (the build script resolves it, #546).
+repo --name=openvibes --baseurl=file:///run/install/repo/openvibes-repo
 
 %packages
 @^minimal-environment
