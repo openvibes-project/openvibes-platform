@@ -1,18 +1,17 @@
-# The OpenVIBES appliance installer (AlmaLinux 10).
+# The OpenVIBES appliance installer (AlmaLinux 10), terminal only (#549).
 #
-# Asks only for what is yours: the disk (Installation Destination, with
-# automatic partitioning offered as LVM; nothing is erased until the
-# administrator has chosen the disk), the network,
-# and the administrator's name and password (root stays locked). The
-# administrator must tick "Make this user administrator": the install stops
-# at the end otherwise, because that user could not open the admin TUI.
-# Everything else is decided here. The OpenVIBES packages and PostgreSQL 17
-# come from the offline kit on this disk; nothing is downloaded. After the
+# Before anything is written, OpenVIBES screens (openvibes-installer.py, from
+# %pre below) ask for what is yours: the keyboard, the disk (erased only after
+# "erase <disk>" is typed) and the administrator (name and password; in wheel,
+# root stays locked). Their answers are %include'd; everything else is decided
+# here and Anaconda installs unattended in text mode. The OpenVIBES packages
+# and PostgreSQL 17 come from this disk; nothing is downloaded. After the
 # restart the administrator logs in, lands in the admin TUI and finishes with
 # Setup.
 
 lang en_US.UTF-8
-keyboard us
+text
+%include /tmp/openvibes-choice.ks
 timezone UTC --utc
 network --bootproto=dhcp --activate --onboot=yes
 rootpw --lock
@@ -41,6 +40,19 @@ openvibes-llm
 openvibes-llm-model
 openvibes-rules-*
 postgresql17-server
+%end
+
+# The screens run on console 8 (TERM=linux: Anaconda's own is tmux's, which
+# the installer image has no description of; LC_ALL=C.UTF-8 for the dots and
+# arrows); their answers go to /tmp/openvibes-choice.ks.
+# The CI test ISO (openvibes.unattended) brings its own disk and user lines.
+%pre --erroronfail
+if grep -qw openvibes.unattended /proc/cmdline; then
+    echo "keyboard --vckeymap=us" > /tmp/openvibes-choice.ks
+else
+    TERM=linux LC_ALL=C.UTF-8 python3 -I /run/install/repo/openvibes-installer.py --console 8 /tmp/openvibes-choice.ks || exit 1
+    chvt 1
+fi
 %end
 
 %post --erroronfail

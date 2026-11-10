@@ -67,14 +67,14 @@ echo "installer repository: $(find "$work/repo" -name '*.rpm' | wc -l) packages"
 # name it.
 label=$(xorriso -indev "$work/$iso" -pvd_info 2>&1 | sed -n "s/^Volume Id *: *//p")
 [[ -n $label ]] || { echo "no volume id in $iso" >&2; exit 1; }
-ksarg="inst.ks=hd:LABEL=$label:/openvibes-appliance.ks"
+ksarg="inst.ks=hd:LABEL=$label:/openvibes-appliance.ks inst.text"
 ks=$ROOT/packaging/appliance/openvibes-appliance.ks
 # OPENVIBES_ISO_TEST=1 builds the CI test variant (never released): the same
 # ISO, but the installer runs by itself on a serial console, from the
 # kickstart plus test-install.ks (disk, user, power off, a boot check). The
 # CI kit carries no model package, so that one is left out.
 if [[ -n ${OPENVIBES_ISO_TEST:-} ]]; then
-    ksarg="$ksarg inst.text console=ttyS0,115200n8"
+    ksarg="$ksarg openvibes.unattended console=ttyS0,115200n8"
     ks=$work/test.ks
     sed -e '/^reboot /d' -e '/^openvibes-llm-model$/d' "$ROOT/packaging/appliance/openvibes-appliance.ks" > "$ks"
     cat "$ROOT/packaging/appliance/test-install.ks" >> "$ks"
@@ -116,6 +116,7 @@ xorriso -return_with FAILURE 32 -indev "$work/$iso" -outdev "$out" \
     -update "$work/boot/grub.cfg" /boot/grub2/grub.cfg \
     -map "$work/repo" openvibes-repo \
     -map "$ks" openvibes-appliance.ks \
+    -map "$ROOT/packaging/appliance/openvibes-installer.py" openvibes-installer.py \
     -commit
 # Show the boot entries of the result: BIOS and UEFI must both be there.
 report=$(xorriso -indev "$out" -report_el_torito plain 2>&1)
