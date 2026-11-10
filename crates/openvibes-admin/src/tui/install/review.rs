@@ -23,7 +23,7 @@ const PORT_HELP: [&str; 5] = [
     "The console's port; the web address follows it.",
     "The port agents send their findings to.",
     "The port agents fetch their rules from.",
-    "Network devices send their logs here; open it in your firewall.",
+    "Network devices send their logs here.",
     "Go on to the review.",
 ];
 
@@ -103,10 +103,7 @@ pub(super) fn draw_ports<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>
             }
         })
         .collect();
-    rows.push(Row::entry(
-        "Network devices",
-        "514/udp · open it in your firewall",
-    ));
+    rows.push(Row::entry("Network devices", "514/udp"));
     rows.push(Row::entry("Next", "review"));
     let (help, red) = match (&install.port_check, row) {
         (Some(Err(why)), _) if install.editing.is_some() => (why.clone(), true),

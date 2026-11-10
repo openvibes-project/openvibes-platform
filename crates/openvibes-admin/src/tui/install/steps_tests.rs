@@ -180,7 +180,7 @@ fn ports_flags_taken_and_proposes() {
         "Rule distribution",
         "18424",
         "Network devices",
-        "514/udp · open it in your firewall",
+        "514/udp",
         "Enter to keep 8443 or type another port.",
         "Enter  Change",
     ] {
