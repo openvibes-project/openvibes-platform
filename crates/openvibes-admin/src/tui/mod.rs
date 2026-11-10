@@ -88,9 +88,13 @@ impl Drop for Restore {
 /// The terminal for the TUI, with bracketed paste on (ruling 9): a paste
 /// arrives whole, so the paste box can check it at once.
 fn init() -> DefaultTerminal {
-    let terminal = ratatui::init();
+    let mut terminal = ratatui::init();
     // A terminal without bracketed paste ignores it: lines arrive as keys.
     let _ = execute!(std::io::stdout(), EnableBracketedPaste);
+    // The Linux console has no alternate screen: without a clear, the first
+    // frame is drawn over the login text (the appliance's console, #549),
+    // and after the shell over what it left.
+    let _ = terminal.clear();
     terminal
 }
 
@@ -240,8 +244,6 @@ pub fn run() -> ExitCode {
             }
             app.run_shell();
             terminal = init();
-            // Whatever the shell left on screen is drawn over in full.
-            let _ = terminal.clear();
         }
         if app.reopen {
             restore();
