@@ -335,9 +335,12 @@ pub async fn vuln_summary(
         .max_by(most);
     let lead = titled.or_else(|| by_id.iter().max_by(most));
     let advisory_id = lead.map(|(id, _, _)| id.clone()).unwrap_or_default();
-    let title = titled
-        .and_then(|(_, _, a)| a.title.clone())
-        .or_else(|| x.description.clone())
+    // The CVE's own summary says what the flaw is; an advisory's title is
+    // often only its package builds (#579), so it is the fallback.
+    let title = x
+        .description
+        .clone()
+        .or_else(|| titled.and_then(|(_, _, a)| a.title.clone()))
         .unwrap_or_else(|| t.key.clone());
     let cvss = x.cvss.or_else(|| {
         raw.advisories

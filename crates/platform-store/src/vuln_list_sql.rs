@@ -249,7 +249,7 @@ knames AS MATERIALIZED (
   WHERE x.name IS NOT NULL GROUP BY x.key, x.lc, x.grp),
 r AS MATERIALIZED (
   SELECT k.*, COALESCE(o.people, 0) AS people, o.person, COALESCE(n.names, '{{}}') AS names, COALESCE(n.fixed, '{{}}') AS fixed,
-         COALESCE(k.title0, x.description, k.key) AS title,
+         COALESCE(x.description, k.title0, k.key) AS title,
          COALESCE(x.kev_added IS NOT NULL OR x.euvd_exploited, false) AS exploited, x.kev_due,
          COALESCE(x.cvss_score, k.cvss0) AS cvss, x.epss, x.epss_percentile AS pct
   FROM (SELECT ka.key, ka.lc, ka.grp, array_agg(ka.advisory_id ORDER BY ka.advisory_id) AS advisories,
