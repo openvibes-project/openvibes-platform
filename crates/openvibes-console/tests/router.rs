@@ -654,6 +654,48 @@ async fn unknown_browser_route_is_not_spa_fallback() {
 
 #[cfg(feature = "embedded-ui")]
 #[tokio::test]
+async fn a_browser_opening_an_unknown_address_gets_the_app_with_404() {
+    for path in ["/not-a-console-route", "/settings/nope", "/hosts/a/b"] {
+        let response = public_router()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header(header::ACCEPT, "text/html,application/xhtml+xml,*/*;q=0.8")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert!(
+            String::from_utf8_lossy(&body).contains("<div id=\"root\""),
+            "{path}: the app's entry document"
+        );
+    }
+    // Not a page load (a script's fetch, a POST): no body, as before.
+    let response = public_router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/not-a-console-route")
+                .header(header::ACCEPT, "text/html")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert!(body.is_empty());
+}
+
+#[cfg(feature = "embedded-ui")]
+#[tokio::test]
 async fn embedded_assets_have_explicit_types_and_cache_policies() {
     let manifest = public_router()
         .oneshot(
