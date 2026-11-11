@@ -17,8 +17,8 @@ describe("menu counts (#117)", () => {
     expect(waitingToDecide([row("waiting", false)])).toBeUndefined();
     expect(waitingToDecide(undefined)).toBeUndefined();
   });
-  it("names what a count counts: Compliance counts failing findings, its list counts checks", () => {
-    expect(countTitle("/compliance", "5", "Compliance")).toBe("5 failing findings");
+  it("names what a count counts: the menu counts failing checks, as its list does", () => {
+    expect(countTitle("/compliance", "5", "Compliance")).toBe("5 failing checks");
     expect(countTitle("/alarms", "3", "Alarms")).toBe("3 alarms");
     expect(unitOf("compliance")).toBe("failing findings");
     expect(unitOf("alarms")).toBe("");

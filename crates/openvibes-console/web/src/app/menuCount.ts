@@ -18,7 +18,8 @@ export function unitOf(source: string): string {
   return source === "compliance" ? "failing findings" : "";
 }
 
-/** The menu count's title and label: "5 failing findings", "3 alarms". */
+/** The menu count's title and label: "5 failing checks", "3 alarms". The
+ * menu counts what the list it opens counts (#580). */
 export function countTitle(path: string, count: string, label: string): string {
-  return `${count} ${unitOf(path.slice(1)) || label.toLowerCase()}`;
+  return `${count} ${path === "/compliance" ? "failing checks" : label.toLowerCase()}`;
 }
