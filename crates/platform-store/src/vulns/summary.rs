@@ -246,3 +246,34 @@ async fn refresh_listed_critical(client: &Client, agents: &[String]) -> Result<(
         .await?;
     Ok(())
 }
+
+/// Rates advisories their distribution left `unrated` from their CVEs'
+/// highest CVSS score, with the bands the Vulnerabilities list uses for
+/// upstream matches: 9 and over critical, 7 important, 4 moderate, above 0
+/// low (#579). Advisories with no score stay `unrated`. Returns the hosts
+/// with an open match of an advisory it rated: their counts are stale.
+// ponytail: a feed import writes `unrated` back until the next run, at most the vulns service's rating interval later.
+pub async fn rate_unrated(client: &Client) -> Result<Vec<String>, StoreError> {
+    let rows = client
+        .query(
+            "WITH rated AS (
+               UPDATE advisories a
+               SET severity = CASE WHEN s.score >= 9 THEN 'critical'
+                                   WHEN s.score >= 7 THEN 'important'
+                                   WHEN s.score >= 4 THEN 'moderate' ELSE 'low' END
+               FROM (SELECT ac.advisory_id, max(x.cvss_score) AS score
+                     FROM advisories u
+                     JOIN advisory_cves ac ON ac.advisory_id = u.advisory_id
+                     JOIN cve_enrichment x ON x.cve_id = ac.cve_id
+                     WHERE u.severity = 'unrated' AND x.cvss_score > 0
+                     GROUP BY ac.advisory_id) s
+               WHERE a.advisory_id = s.advisory_id AND a.severity = 'unrated'
+               RETURNING a.advisory_id)
+             SELECT DISTINCT v.agent_id
+             FROM vulnerabilities v JOIN rated r ON r.advisory_id = v.advisory_id
+             WHERE v.fixed_at IS NULL",
+            &[],
+        )
+        .await?;
+    Ok(rows.iter().map(|row| row.get(0)).collect())
+}

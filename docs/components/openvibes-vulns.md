@@ -138,6 +138,12 @@ the offline core used by `openvibes-admin feeds import` and the
   use the stored feed without downloading it again. Pending host matches are
   reconciled every minute, so transient query or database failures survive a
   process restart and do not leave stale vulnerability states indefinitely.
+  At start and every 5 minutes it rates advisories their distribution left
+  `unrated` from their CVEs' highest CVSS score (9 and over critical, 7
+  important, 4 moderate, above 0 low; `vulns::rate_unrated`) and recounts
+  the hosts that have them, so the list, the dashboard and the per-host
+  counts read one level. A feed import writes `unrated` back until the next
+  run; an advisory with no scored CVE stays `unrated`.
 - `feed::import(client, source, content, now)` — parse (plain or zstd by
   magic bytes), store advisories, record the feed state, re-match the
   release. A failure is recorded on the feed and changes nothing else.
