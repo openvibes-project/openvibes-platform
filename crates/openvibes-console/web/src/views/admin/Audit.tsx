@@ -53,9 +53,9 @@ export function Audit() {
           columns={[
             { key: "at", header: "When", width: "130px", sort: (e) => e.at, render: (e) => <span className="subtle"><Ago value={e.at} /></span> },
             { key: "action", header: "Action", sort: (e) => e.action, render: (e) => <span className="mono">{e.action}</span> },
-            { key: "actor", header: "Who", width: "140px", sort: (e) => e.actor, render: (e) => e.actor },
-            { key: "target", header: "Target", hideBelow: 800, sort: (e) => e.target, render: (e) => <span className="mono subtle truncate">{e.target ?? "—"}</span> },
-            { key: "result", header: "Result", width: "100px", sort: (e) => e.result, render: (e) => <span className={`badge badge--${e.result === "success" ? "ok" : "bad"}`}>{e.result}</span> },
+            { key: "actor", header: "Who", width: "180px", sort: (e) => e.actor_name ?? e.actor, render: (e) => <span className="truncate" title={e.actor}>{e.actor_name ?? e.actor}</span> },
+            { key: "target", header: "Target", hideBelow: 800, sort: (e) => e.target, render: (e) => e.target_name ? <span className="truncate" title={e.target ?? undefined}>{e.target_name}</span> : <span className="mono subtle truncate">{e.target ?? "—"}</span> },
+            { key: "result", header: "Result", width: "100px", sort: (e) => e.result, render: (e) => <span className={`badge badge--${e.result === "success" || e.result === "ok" ? "ok" : "bad"}`}>{e.result}</span> },
           ]} />
       )}
     </div>

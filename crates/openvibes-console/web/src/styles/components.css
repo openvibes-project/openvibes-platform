@@ -105,6 +105,20 @@
 .table td.num, .table th.num { text-align: right; }
 .table .check { width: 36px; padding-right: 0; }
 .table--compact td { height: 36px; }
+/* One look for every table (#577). The row's name, in the first column
+   after any tick box, is the link colour whether it is a link or the row
+   itself opens; second lines keep their own grey. */
+.table tbody td:first-child:not(.check), .table tbody td.check + td { color: var(--accent); }
+.table tbody :is(td:first-child:not(.check), td.check + td) :is(a, .object-link, strong) { color: inherit; }
+.role-matrix .table tbody td:first-child, .table.about-feeds tbody td:first-child { color: inherit; }
+.table.about-feeds tbody tr { cursor: default; }
+.table.about-feeds tbody tr:hover { background: none; }
+/* On a page, a table's rows are one height; panels keep the tighter one. */
+.view .table--compact td { height: 44px; }
+/* Inside a card the card is the frame. */
+.view .card .table-wrap { margin: 0; border: 0; border-radius: 0; box-shadow: none; background: none; }
+.table td > .truncate { display: block; }
+.table td .nowrap, .table td time { white-space: nowrap; }
 
 /* States */
 .empty { display: grid; place-items: center; gap: 8px; padding: 48px 16px; text-align: center; color: var(--text-2); }

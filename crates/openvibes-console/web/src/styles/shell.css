@@ -175,7 +175,8 @@
   .rail__more-pop { top: auto; bottom: 56px; right: 4px; }
   .rail__more-pop .menu__item { text-transform: none; }
   .rail__more-pop .menu__item[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
-  .cell-two .truncate { white-space: normal; overflow-wrap: anywhere; }
+  /* Wrap a long name, but to three lines at most: a narrow column must not make a row a screen tall. */
+  .cell-two .truncate { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
   .rail__item[aria-current="page"]::before { left: 12px; right: 12px; top: auto; bottom: -4px; width: auto; height: 3px; border-radius: 3px 3px 0 0; }
   .topbar { padding: 0 10px; gap: 8px; }
   .topbar__search { flex: 0 0 auto; margin: 0 auto 0 0; }
@@ -223,7 +224,8 @@
 .role-matrix .table tbody tr:hover { background: none; }
 .role-matrix td { height: auto; padding: 10px 12px; vertical-align: top; }
 .role-matrix .role-matrix__area { width: 190px; }
-.role-matrix td.role-matrix__area { padding: 12px; }
+/* Area names stay whole words: the column never shrinks below them. */
+.role-matrix td.role-matrix__area { padding: 12px; min-width: 150px; overflow-wrap: normal; }
 .role-matrix__label { display: grid; gap: 2px; font-size: 12px; }
 .role-matrix__label strong { font-size: 13px; }
 .role-matrix__name { gap: 6px; }

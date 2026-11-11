@@ -135,7 +135,7 @@ function columns(cases: Map<string, number[]>): Column<CheckListRow>[] {
       <span className="num"><b>{r.failing.toLocaleString()}</b> <span className="subtle">of {(r.failing + r.passing).toLocaleString()}</span></span>
     ) },
     { key: "hosts", header: header("hosts"), width: "220px", hideBelow: 640, render: (r) => <HostsBar row={r} /> },
-    { key: "since", header: header("since"), width: "80px", hideBelow: 960, sort: (r) => r.since ?? null, render: (r) => (r.since ? <span className="subtle">{date(r.since)}</span> : none("Not failing")) },
+    { key: "since", header: header("since"), width: "110px", hideBelow: 960, sort: (r) => r.since ?? null, render: (r) => (r.since ? <span className="subtle">{date(r.since)}</span> : none("Not failing")) },
     { key: "assignee", header: header("assignee"), width: "130px", hideBelow: 1000, render: (r) => r.assignee.kind === "one"
       ? <span className="truncate">{r.assignee.name}</span> : r.assignee.kind === "several" ? <span>{r.assignee.count} people</span> : none("Unassigned") },
   ];

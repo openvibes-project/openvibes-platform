@@ -3364,6 +3364,8 @@ export interface components {
             actor_id?: string | null;
             /** @description Actor kind and stable id. */
             actor_kind?: string | null;
+            /** @description The person's name, when the actor is a console user that still exists. */
+            actor_name?: string | null;
             /** @description RFC 3339 event timestamp. */
             at: string;
             /** @description Authentication method, when present. */
@@ -3382,6 +3384,8 @@ export interface components {
             target_id?: string | null;
             /** @description Target kind and stable id. */
             target_kind?: string | null;
+            /** @description The person's name, when the target is a console user that still exists. */
+            target_name?: string | null;
         };
         /** @description Current administrator-controlled audit retention policy. */
         AuditRetentionPolicy: {

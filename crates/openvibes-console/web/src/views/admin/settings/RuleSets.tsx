@@ -43,9 +43,9 @@ export function RuleSets() {
 export function ruleSetColumns(canSeeWhere: boolean): Column<RuleSetRow>[] {
   return [
     { key: "id", header: "Rule set", sort: (r) => r.rule_set_id, render: (r) => <span className="mono nowrap">{r.rule_set_id}</span> },
-    { key: "version", header: "Version", numeric: true, width: "90px", sort: (r) => r.set?.current_version, render: (r) => r.set ? <span className="num">{r.set.current_version ?? "—"}</span> : <span className="subtle">—</span> },
-    { key: "key", header: "Signed by", width: "130px", sort: (r) => r.set?.current_issuer_key_id, render: (r) => <span className={r.set ? "mono subtle" : "subtle"}>{r.set?.current_issuer_key_id ?? "—"}</span> },
-    { key: "expires", header: "Expires", width: "130px", sort: (r) => r.set?.current_expires_at_ms, render: (r) => r.set ? <span className={within(r.set.current_expires_at_ms, 7 * 86_400_000) ? "warn-text" : "subtle"}><Ago value={r.set.current_expires_at_ms} /></span> : <span className="subtle">—</span> },
+    { key: "version", header: "Version", numeric: true, width: "90px", hideBelow: 520, sort: (r) => r.set?.current_version, render: (r) => r.set ? <span className="num">{r.set.current_version ?? "—"}</span> : <span className="subtle">—</span> },
+    { key: "key", header: "Signed by", width: "130px", hideBelow: 760, sort: (r) => r.set?.current_issuer_key_id, render: (r) => <span className={r.set ? "mono subtle" : "subtle"}>{r.set?.current_issuer_key_id ?? "—"}</span> },
+    { key: "expires", header: "Expires", width: "130px", hideBelow: 640, sort: (r) => r.set?.current_expires_at_ms, render: (r) => r.set ? <span className={within(r.set.current_expires_at_ms, 7 * 86_400_000) ? "warn-text" : "subtle"}><Ago value={r.set.current_expires_at_ms} /></span> : <span className="subtle">—</span> },
     ...(canSeeWhere ? [{ key: "runs", header: "Runs on", width: "170px", render: (r: RuleSetRow) => { const where = runsOn(r.rule_set_id, r.assignment); return <span className="nowrap">{where.text}{where.more && <span className="subtle"> {where.more}</span>}</span>; } }] : []),
     { key: "state", header: "State", width: "140px", render: (r) => r.set?.current_signer_removed ? <span className="badge badge--bad">Signer removed</span>
       : r.set?.retired ? <span className="badge">Retired</span>
