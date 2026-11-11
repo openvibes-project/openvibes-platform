@@ -76,11 +76,11 @@ export function ServiceView({ page }: { page: Page }) {
         header.root > 0 && `as root on ${header.root.toLocaleString()}`,
         header.exposed > 0 && `owns an exposed port on ${header.exposed.toLocaleString()}`,
         (week.added > 0 || week.removed > 0) && `this week ${[week.added > 0 && `+${week.added}`, week.removed > 0 && `−${week.removed}`].filter(Boolean).join(" ")}`,
-        first && `${first.before ? "before" : "first seen"} ${date(first.at)}`,
+        first && `${first.before ? "here since before" : "first seen"} ${date(first.at)}`,
       ]}
       actions={<ServiceActions page={page} />}
       tiles={[
-        <Tile key="running" label={`Running on, of ${plural(header.of, "host")}`} value={tiles.running} to="#hosts" />,
+        <Tile key="running" label={`Running, of ${plural(header.of, "host")}`} value={tiles.running} to="#hosts" />,
         tiles.alarms != null && <FactTile key="alarms" label="Open alarms from its programs" value={tiles.alarms.toLocaleString()} />,
         tiles.vulnerabilities != null && (package0
           ? <Tile key="vulnerabilities" label="Vulnerabilities in its package" value={tiles.vulnerabilities} to={{ view: "/vulnerabilities", params: { package: package0 } }} />

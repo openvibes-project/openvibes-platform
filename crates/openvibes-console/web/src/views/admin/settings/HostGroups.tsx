@@ -53,8 +53,8 @@ export function HostGroups() {
             { key: "problems", header: "Open problems", width: "200px", sort: (g) => g.critical * 1e6 + g.open_alarms, render: (g) => <Problems alarms={g.open_alarms} critical={g.critical} /> },
             { key: "reach", header: "Who reaches it", width: "210px", sort: (g) => g.people, render: (g) => (
               <div className="cell-two">
-                <span>{g.roles.length ? g.roles.map((r) => <span key={r.role_id} className="badge badge--accent badge--plain">{r.name}</span>) : <span className="subtle">No role yet</span>}</span>
-                <span className="subtle">{g.people ? `${g.people} ${g.people === 1 ? "person" : "people"}` : "Nobody reaches it"}</span>
+                <span>{g.roles.length ? g.roles.map((r) => <span key={r.role_id} className="badge badge--accent badge--plain">{r.name}</span>) : <span className="subtle">No role names it</span>}</span>
+                <span className="subtle">{g.people ? `${g.people} ${g.people === 1 ? "person" : "people"}` : "All-hosts roles only"}</span>
               </div>
             ) },
           ]} />

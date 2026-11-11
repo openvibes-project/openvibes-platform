@@ -33,13 +33,13 @@ describe("service page", () => {
   it("names the unit and its facts in the header", () => {
     const t = flat(render(<ServiceView page={fixture()} />));
     expect(t).toContain("sshd.service OpenSSH server");
-    expect(t).toContain("Secure remote login · running on 12 of 14 hosts · as root on 12 · owns an exposed port on 3 · this week +2 −1 · before ");
+    expect(t).toContain("Secure remote login · running on 12 of 14 hosts · as root on 12 · owns an exposed port on 3 · this week +2 −1 · here since before ");
     expect(flat(render(<ServiceView page={fixture({ header: { unit: "x.service", running: 1, of: 2, exposed: 0, root: 0 } })} />))).toContain("Not a usual service · running on 1 of 2 hosts");
   });
 
   it("shows the four tiles, the first linking to the Hosts card", () => {
     const html = render(<ServiceView page={fixture()} />);
-    expect(html).toContain('aria-label="Running on, of 14 hosts: 12"');
+    expect(html).toContain('aria-label="Running, of 14 hosts: 12"');
     expect(html).toContain('href="#hosts"');
     const t = text(html);
     expect(t).toContain("Open alarms from its programs");

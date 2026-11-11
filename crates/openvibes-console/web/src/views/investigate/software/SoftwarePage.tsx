@@ -74,7 +74,7 @@ export function SoftwareView({ page }: { page: Page }) {
         header.managers.join(" + "),
         `on ${header.hosts.toLocaleString()} of ${plural(header.of, "host")}`,
         changed.length > 0 && `this week ${changed.join(", ")}`,
-        first && `${first.before ? "before" : "first seen"} ${date(first.at)}`,
+        first && `${first.before ? "here since before" : "first seen"} ${date(first.at)}`,
       ]}
       actions={<SoftwareActions page={page} />}
       tiles={[

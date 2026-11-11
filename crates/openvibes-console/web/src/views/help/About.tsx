@@ -1,3 +1,4 @@
+import { useSession } from "../../app/session";
 import { Fragment, useState, type ReactNode } from "react";
 
 import { useResource } from "../../api/client";
@@ -59,13 +60,14 @@ function Expiry({ at, now }: { at: string; now: number }) {
 }
 
 export function About() {
+  const { canEverywhere } = useSession();
   const about = useResource<AboutInfo>("/api/v1/about");
   const update = useResource<AboutUpdate>("/api/v1/about/update");
   const info = about.data;
   const [now] = useState(() => Date.now());
   return (
     <div className="view">
-      <ViewHeader title="About" />
+      <ViewHeader title="About" search={false} />
       <div className="view-pad stack about">
         {about.error ? <ErrorBox error={about.error} /> : !info ? <Loading rows={4} /> : (
           <>
@@ -103,6 +105,7 @@ export function About() {
                 </dl>
               </Card>
 
+{canEverywhere("hosts.read") && (
               <Card icon="agents" title="Fleet">
                 <dl className="kv">
                   <dt>Agents</dt><dd>{count(info.fleet.active)} active, {count(info.fleet.online)} reporting now</dd>
@@ -110,6 +113,7 @@ export function About() {
                   <dt>Newest agent</dt><dd className="mono">{info.fleet.newest_agent_version ?? "none yet"}</dd>
                 </dl>
               </Card>
+              )}
 
               <Card icon="findings" title="Certificate authority">
                 {info.certificates.length === 0 ? <p className="subtle">No CA certificate recorded yet.</p> : (

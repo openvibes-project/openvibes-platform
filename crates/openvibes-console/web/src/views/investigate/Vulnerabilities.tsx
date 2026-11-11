@@ -95,7 +95,7 @@ export function bulkItems(rows: readonly VulnListRow[], host: string | null, gro
 export function listBulk(chosen: readonly VulnListRow[]) {
   const rows = chosen.filter(canChange);
   const without: BulkAction[] = rows.length === 0 ? ["state", "assign", "case"] : [];
-  return { rows, changes: rows.length, without, note: "Nothing selected can be triaged: no fix is known yet, or it is a lower-confidence match." };
+  return { rows, changes: rows.length, without, note: "Bulk actions cover vulnerabilities with a fix from a distribution advisory, and none of the selected ones has one. Open a vulnerability to set its state." };
 }
 
 const none = (text: string) => <span className="subtle" title={text}><span aria-hidden="true">—</span><span className="sr-only">{text}</span></span>;

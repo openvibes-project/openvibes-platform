@@ -72,7 +72,7 @@ test("the header, tiles and cards say what the check is and where it fails", asy
   await page.goto(PAGE);
   await expect(heading(page)).toHaveText("SSH allows root to log in with a password");
   await expect(page.locator(".detail-page__facts")).toContainText(new RegExp(`${ROOT.replace(/\./g, "\\.")} · hardening-linux-l1 v\\d+ · SSH · failing on 5 of \\d+ hosts checked · assigned to Sam Analyst`));
-  await expect(page.locator(".detail-tiles").getByRole("link", { name: /^Failing on, of \d+ hosts checked: 5$/ })).toBeVisible();
+  await expect(page.locator(".detail-tiles").getByRole("link", { name: /^Failing, of \d+ hosts checked: 5$/ })).toBeVisible();
   await expect(page.locator(".detail-tiles")).toContainText("Last 14 days");
   await expect(card(page, "Why it matters")).toBeVisible();
   await expect(card(page, "How to fix")).toContainText("No fix text yet");

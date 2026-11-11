@@ -31,7 +31,7 @@ describe("port page", () => {
     const t = flat(render(<PortView page={fixture()} />));
     expect(t).toContain("22/tcp SSH");
     expect(t).toContain("TCP");
-    expect(t).toContain("Secure remote login · listening on 12 of 14 hosts · exposed on 3 · 1 service · before ");
+    expect(t).toContain("Secure remote login · listening on 12 of 14 hosts · exposed on 3 · 1 service · here since before ");
   });
 
   it("shows the four tiles, linking Exposed and Local only to the Hosts segments", () => {

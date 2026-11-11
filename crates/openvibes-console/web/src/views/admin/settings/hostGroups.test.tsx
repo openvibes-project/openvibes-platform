@@ -45,7 +45,7 @@ describe("host groups list", () => {
     expect(html).toContain("None open");
     expect(html).toContain("Windows lead");
     expect(html).toContain("2 people");
-    expect(html).toContain("No role yet");
-    expect(html).toContain("Nobody reaches it");
+    expect(html).toContain("No role names it");
+    expect(html).toContain("All-hosts roles only");
   });
 });
