@@ -21,7 +21,7 @@ async fn store(client: &mut Client, version: i64, key: [u8; 32]) {
         "severity":"high","confidence":80,"expression":"event['process.exe'] == '/usr/bin/sh'",
         "finding_message":"A web server started a shell","kind":"process_event",
         "attack":[{"tactic":"TA0002","technique":"T1059.004"},{"tactic":"TA0003"}],
-        "explain":"é".repeat(700),"check":"Look at the parent web server's requests."});
+        "explain":"é".repeat(600),"check":"Look at the parent web server's requests."});
     let plain = json!({"id":"plain","version":1,"title":"Plain rule","severity":"low",
         "confidence":50,"expression":"facts['process.count'] >= 1","finding_message":"Plain",
         "kind":"snapshot"});
@@ -86,7 +86,9 @@ async fn a_verified_bundle_is_indexed_with_explain_and_check() {
         .unwrap();
     assert_eq!(meta.title, "Web server spawns a shell");
     assert_eq!(meta.message, "A web server started a shell");
-    // Capped at 600 characters, on a character boundary.
+    // 600 characters is the protocol's limit (P22), counted in characters:
+    // 1,200 bytes of "é" is still valid. A longer text makes the agent's
+    // parser refuse the whole bundle, so it never reaches the index.
     assert_eq!(meta.explain, Some("é".repeat(600)));
     assert_eq!(
         meta.check.as_deref(),

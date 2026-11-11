@@ -39,6 +39,8 @@ fn sign(version: u64, seed: u8, expires_in_ms: i64) -> Vec<u8> {
     let payload = serde_json::to_string(&RuleSet {
         schema_version: SchemaVersion::V1,
         rules: vec![Rule {
+            explain: None,
+            check: None,
             id: Identifier::new("baseline.rule").unwrap(),
             version: 1,
             title: "Rule".into(),

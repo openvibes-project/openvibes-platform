@@ -26,6 +26,8 @@ const HOUR_MS: i64 = 3_600_000;
 
 fn rule(id: &str, expression: &str) -> Rule {
     Rule {
+        explain: None,
+        check: None,
         id: Identifier::new(id).expect("valid id"),
         version: 1,
         title: "Integration rule".into(),

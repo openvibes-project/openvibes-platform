@@ -35,6 +35,8 @@ fn signed_rule_envelope(version: u64) -> (Vec<u8>, [u8; 32]) {
     let payload = serde_json::to_string(&RuleSet {
         schema_version: SchemaVersion::V1,
         rules: vec![Rule {
+            explain: None,
+            check: None,
             id: Identifier::new("baseline.rule").unwrap(),
             version: 1,
             title: "HTTP integration rule".into(),
