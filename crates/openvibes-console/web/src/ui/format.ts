@@ -86,3 +86,9 @@ export function vulnTitle(packages: readonly string[], title: string): string {
   if (summary.length > 140) summary = `${summary.slice(0, 139).trimEnd()}…`;
   return pkg && !summary.toLowerCase().startsWith(pkg.toLowerCase()) ? `${pkg}: ${summary}` : summary;
 }
+
+/** Package names from a vulnerability row's `packages` (strings or objects with a `name`). */
+export function packageNames(packages: unknown): string[] {
+  if (!Array.isArray(packages)) return [];
+  return packages.map((p: unknown) => (typeof p === "string" ? p : (p as { name?: unknown } | null)?.name)).filter((n): n is string => typeof n === "string" && n !== "");
+}

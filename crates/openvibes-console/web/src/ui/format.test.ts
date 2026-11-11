@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { vulnTitle } from "./format";
+import { packageNames, vulnTitle } from "./format";
 
 describe("vulnTitle", () => {
   it("puts the package before the first sentence of the summary", () => {
@@ -17,5 +17,12 @@ describe("vulnTitle", () => {
     const shown = vulnTitle(["vim"], "x".repeat(300));
     expect(shown).toHaveLength(5 + 140);
     expect(shown.endsWith("…")).toBe(true);
+  });
+});
+
+describe("packageNames", () => {
+  it("reads names from strings or objects, and nothing from anything else", () => {
+    expect(packageNames(["brotli", { name: "libbrotli", fixed: "1" }, { other: 1 }, null])).toEqual(["brotli", "libbrotli"]);
+    expect(packageNames(undefined)).toEqual([]);
   });
 });
