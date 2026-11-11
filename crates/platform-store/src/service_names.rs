@@ -397,6 +397,99 @@ const SERVICES: &[(&[&str], ServiceInfo)] = &[
         &["mdmonitor"],
         info("mdadm monitor", "Software RAID monitor", Other, &["mdadm"]),
     ),
+    // OpenVIBES's own units and the system bus (#581): known, so a fresh
+    // install does not flag the product itself.
+    (
+        &["openvibes-agent", "openvibes-agent-facts"],
+        info(
+            "OpenVIBES agent",
+            "Reports this host to the platform",
+            Other,
+            &["openvibes-agent"],
+        ),
+    ),
+    (
+        &["openvibes-console", "openvibes-picture"],
+        info(
+            "OpenVIBES console",
+            "The web console",
+            Other,
+            &["openvibes-console"],
+        ),
+    ),
+    (
+        &["openvibes-ingest"],
+        info(
+            "OpenVIBES ingest",
+            "Receives agents' reports",
+            Other,
+            &["openvibes-ingest", "openvibes-platform"],
+        ),
+    ),
+    (
+        &["openvibes-distribution"],
+        info(
+            "OpenVIBES rules",
+            "Serves rule sets to agents",
+            Other,
+            &["openvibes-distribution", "openvibes-platform"],
+        ),
+    ),
+    (
+        &["openvibes-vulns"],
+        info(
+            "OpenVIBES vulns",
+            "Matches vulnerabilities",
+            Other,
+            &["openvibes-vulns", "openvibes-platform"],
+        ),
+    ),
+    (
+        &["openvibes-netlog"],
+        info(
+            "OpenVIBES netlog",
+            "Receives network device logs",
+            Other,
+            &["openvibes-netlog", "openvibes-platform"],
+        ),
+    ),
+    (
+        &[
+            "openvibes-signer",
+            "openvibes-fetch",
+            "openvibes-llm",
+            "openvibes-feed",
+        ],
+        info(
+            "OpenVIBES helper",
+            "A platform helper service",
+            Other,
+            &[
+                "openvibes-signer",
+                "openvibes-fetch",
+                "openvibes-llm",
+                "openvibes-feed",
+            ],
+        ),
+    ),
+    (
+        &["dbus", "dbus-broker", "dbus-daemon"],
+        info(
+            "D-Bus",
+            "System message bus",
+            Other,
+            &["dbus", "dbus-broker", "dbus-daemon"],
+        ),
+    ),
+    (
+        &["polkit", "polkitd"],
+        info(
+            "polkit",
+            "Authorises system actions",
+            Other,
+            &["polkit", "polkitd"],
+        ),
+    ),
 ];
 
 /// The base of a unit: lower case, `.service` and any `@instance` removed.

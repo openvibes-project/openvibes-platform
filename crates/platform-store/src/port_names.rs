@@ -171,6 +171,52 @@ const PORTS: &[(&str, u16, PortInfo)] = &[
     ),
     ("tcp", 11211, info("Memcached", "Memcached cache", Database)),
     ("tcp", 27017, info("MongoDB", "MongoDB database", Database)),
+    // What almost every Linux host runs, and OpenVIBES's own ports (#581):
+    // known, so a fresh install does not flag the platform or the basics.
+    (
+        "udp",
+        68,
+        info("DHCP client", "Gets the host's address", Other),
+    ),
+    ("udp", 514, info("Syslog", "Receives logs", Other)),
+    ("udp", 323, info("chrony", "Time sync control", Other)),
+    ("tcp", 5355, info("LLMNR", "Local name lookup", Other)),
+    ("udp", 5355, info("LLMNR", "Local name lookup", Other)),
+    (
+        "tcp",
+        18423,
+        info("OpenVIBES ingest", "Agents report to the platform", Other),
+    ),
+    (
+        "tcp",
+        18424,
+        info("OpenVIBES rules", "Agents fetch rule sets", Other),
+    ),
+    (
+        "tcp",
+        18480,
+        info("OpenVIBES ingest", "Local service port", Other),
+    ),
+    (
+        "tcp",
+        18481,
+        info("OpenVIBES rules", "Local service port", Other),
+    ),
+    (
+        "tcp",
+        18482,
+        info("OpenVIBES console", "Local service port", Other),
+    ),
+    (
+        "tcp",
+        18483,
+        info("OpenVIBES vulns", "Local service port", Other),
+    ),
+    (
+        "tcp",
+        18484,
+        info("OpenVIBES netlog", "Local service port", Other),
+    ),
 ];
 
 /// What the map knows about `protocol`/`port`, if anything.
