@@ -20,7 +20,8 @@ export function SsoOption({ enabled, failed }: { enabled: boolean; failed: boole
   );
 }
 
-export function SignIn({ onDemo }: { onDemo?: (() => void) | undefined }) {
+/** `onSignedIn` gets the password typed, so a one-time password need not be typed again (#576). */
+export function SignIn({ onDemo, onSignedIn }: { onDemo?: (() => void) | undefined; onSignedIn: (password: string) => void }) {
   const [ready, setReady] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -60,7 +61,7 @@ export function SignIn({ onDemo }: { onDemo?: (() => void) | undefined }) {
         headers: { "content-type": "application/json", "x-csrf-token": csrf },
         body: JSON.stringify({ username, password }),
       });
-      if (response.ok) { window.location.reload(); return; }
+      if (response.ok) { onSignedIn(password); return; }
       setError(response.status === 401 ? "Username or password is incorrect." : response.status === 429 ? "Too many attempts. Wait a minute and try again." : "Sign in failed. Reload and try again.");
     } catch {
       setError("The console could not be reached.");

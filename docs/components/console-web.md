@@ -29,6 +29,11 @@ Show everything, without page changes for details:
   autocomplete, generic errors), or home when already signed in. Every other
   route asks `GET /api/v1/session` first and shows sign-in on 401. Sign out
   POSTs `/auth/v1/logout` with the session CSRF token.
+  A sign-in with a one-time password goes straight to Set your password
+  without a reload; the form sends the password just typed (held in memory
+  only) and asks just for the new one. After a reload, in another tab, or
+  when the server refuses it, the form asks for the one-time password
+  again (#576). Any other sign-in reloads into the console.
 - **Views** (the same set v1 had):
   - Compliance (`/compliance`, approved screen 27, roles 5c; overview in
     [console-compliance.md](console-compliance.md)): one row per
