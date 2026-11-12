@@ -85,7 +85,7 @@ export function CheckView({ page }: { page: Page }) {
       ]}
       actions={<CheckActions page={page} />}
       tiles={[
-        <Tile key="failing" label={`Failing on, of ${plural(header.checked, "host")} checked`} value={tiles.failing} to="#hosts" />,
+        <Tile key="failing" label={`Failing, of ${plural(header.checked, "host")} checked`} value={tiles.failing} to="#hosts" />,
         <FactTile key="passing" label="Passing" value={tiles.passing.toLocaleString()} />,
         <FactTile key="first" label={tiles.first_seen?.hostname ? `First seen on ${tiles.first_seen.hostname}` : "First seen"}
           value={tiles.first_seen ? date(tiles.first_seen.at) : "—"} />,

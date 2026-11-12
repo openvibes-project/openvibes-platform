@@ -26,9 +26,14 @@ type Page = CheckSummaryPage;
 type HostRow = CheckHostsPage["rows"][number];
 type Evidence = HostRow["evidence"][number];
 
+/** Rule text with `backticks` around commands and settings: those parts as code, the marks gone. */
+export function withCode(text: string) {
+  return text.split("`").map((part, i) => (i % 2 === 1 ? <code key={i}>{part}</code> : <Fragment key={i}>{part}</Fragment>));
+}
+
 /** Why it matters: the rule's `explain`, else its message (user decision 4). */
 export function WhyCard({ page }: { page: Page }) {
-  return <Card title="Why it matters"><p>{page.text.explain ?? page.text.message}</p></Card>;
+  return <Card title="Why it matters"><p>{withCode(page.text.explain ?? page.text.message)}</p></Card>;
 }
 
 /** Findings from before rule sets: the API's `~unknown`, a rule set no page shows. */
@@ -40,7 +45,7 @@ export function FixCard({ page }: { page: Page }) {
   const set = page.header.rule_set_id;
   return (
     <Card title="How to fix">
-      {fix ? <p style={{ whiteSpace: "pre-wrap" }}>{fix}</p>
+      {fix ? <p style={{ whiteSpace: "pre-wrap" }}>{withCode(fix)}</p>
         : <p className="subtle">No fix text yet.{set !== LEGACY && <> See the rule in <ObjectLink to={{ kind: "rule-set", id: set }}>{set}</ObjectLink>.</>}</p>}
     </Card>
   );

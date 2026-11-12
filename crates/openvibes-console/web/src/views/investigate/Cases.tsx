@@ -184,8 +184,8 @@ function CaseListView() {
         hasFilters(params)
           ? <Empty icon="cases" title="No case matches these filters.">Closed cases are hidden unless Status says otherwise; clear a filter to see more.</Empty>
           : <Empty icon="cases" title="No open cases">
-            A case gathers what belongs to one investigation: hosts, alarms, vulnerabilities and compliance findings, with notes and a timeline.
-            {can("cases.write") ? " Start one with New case, or use Add to case on an alarm, compliance finding or host." : ""}
+            A case gathers what belongs to one investigation: hosts, alarms, vulnerabilities, compliance findings, ports, services and software, with notes and a timeline.
+            {can("cases.write") ? " Start one with New case, or use Add to case on any of them." : ""}
           </Empty>
       ) : (
         <CaseListBody list={data} hidden={hidden ?? []} offset={Math.max(0, Number(params.get(PAGE)) || 0)} status={params.get("status")} />

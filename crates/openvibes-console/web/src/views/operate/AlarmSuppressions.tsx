@@ -54,7 +54,7 @@ export function AlarmSuppressionsBody({ items, recent, names = new Map() }: { it
   return (
     <div className="view person-page">
       <header className="person-page__head">
-        <div className="stack grow person-page__title"><h2>Alarm suppressions</h2><span className="subtle">Alarms that are closed as they arrive, and requests waiting for approval.</span></div>
+        <div className="stack grow person-page__title"><h2>Alarm suppressions</h2><span className="subtle">Alarms that are closed as they arrive, and requests waiting for approval. To make one, open an alarm and choose Suppress…</span></div>
       </header>
       <div className="person-page__cols">
         <div className="stack person-page__col">

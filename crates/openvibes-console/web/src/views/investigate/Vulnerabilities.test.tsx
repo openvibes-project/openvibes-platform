@@ -148,8 +148,8 @@ describe("Vulnerabilities list", () => {
     };
     const [fixable, nofix] = list().items;
     if (!fixable || !nofix) throw new Error("fixture");
-    expect(bar([nofix])).toContain("Nothing selected can be triaged");
-    expect(bar([fixable, nofix])).not.toContain("Nothing selected can be triaged");
+    expect(bar([nofix])).toContain("none of the selected ones has one");
+    expect(bar([fixable, nofix])).not.toContain("none of the selected ones has one");
   });
 
   it("counts the open hosts a change reaches and names the other CVEs those advisories cover", () => {

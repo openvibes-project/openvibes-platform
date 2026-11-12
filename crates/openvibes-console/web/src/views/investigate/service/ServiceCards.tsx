@@ -50,7 +50,7 @@ export function DetailsCard({ page }: { page: Page }) {
 export function PortsCard({ page }: { page: Page }) {
   return (
     <Card title="Ports">
-      {page.ports.length === 0 ? <p className="subtle">It owns no port on a host whose owners were collected.</p> : (
+      {page.ports.length === 0 ? <p className="subtle">No port of its own was found. Port owners are known only for hosts that report them.</p> : (
         <ul className="list list--plain" aria-label="Ports it owns">
           {page.ports.map((p) => (
             <li key={`${p.protocol}/${p.port}`} className="list__row list__row--static">

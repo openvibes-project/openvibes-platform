@@ -53,7 +53,7 @@ export function VersionsCard({ page }: { page: Page }) {
               <span className={`meter meter--wide${bad ? " meter--bad" : ""}`} role="meter" aria-label={`${v.version}: ${v.hosts} of ${total} hosts`} aria-valuemin={0} aria-valuemax={total} aria-valuenow={v.hosts}>
                 <span style={{ width: `${total ? Math.max(2, Math.round((100 * v.hosts) / total)) : 0}%` }} />
               </span>
-              {bad && <span className="text-bad">{plural(v.advisories, "vulnerability")}<span className="subtle mono"> · {v.cves.join(", ")}{v.advisories > v.cves.length ? ", …" : ""}</span></span>}
+              {bad && <span className="text-bad">{plural(v.advisories, "vulnerability")}{v.cves.length > 0 && <span className="subtle mono"> · {v.cves.join(", ")}{v.advisories > v.cves.length ? ", …" : ""}</span>}</span>}
             </li>
           );
         })}
