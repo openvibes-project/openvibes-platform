@@ -11,11 +11,10 @@ export function waitingToDecide(items: readonly { status: string; can_decide: bo
   return menuCount(items?.filter((s) => s.status === "waiting" && s.can_decide).length);
 }
 
-/** What a source's count counts, when its view's name does not say: the
- * Compliance count is failing findings (host and check pairs), while the
- * Compliance list counts checks. */
+/** What a dashboard breakdown counts, when its title does not say:
+ * findings, one per host, where the lists count checks and CVEs (#580). */
 export function unitOf(source: string): string {
-  return source === "compliance" ? "failing findings" : "";
+  return source === "compliance" ? "failing findings" : source === "vulnerabilities" ? "findings on hosts" : "";
 }
 
 /** The menu count's title and label: "5 failing checks", "3 alarms". The

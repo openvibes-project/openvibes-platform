@@ -79,7 +79,7 @@ export function NumberTile({ widget }: WidgetProps) {
 }
 
 export const BREAKDOWN_SOURCES = ["alarms", "vulnerabilities", "compliance", "agents"] as const;
-export const BREAKDOWN_TITLES = { alarms: "Active alarms by severity", vulnerabilities: "Vulnerabilities by severity", compliance: "Compliance findings by severity", agents: "Hosts by status" };
+export const BREAKDOWN_TITLES = { alarms: "Active alarms by severity", vulnerabilities: "Vulnerability findings by severity", compliance: "Compliance findings by severity", agents: "Hosts by status" };
 const ALARM_SEVERITIES = ["critical", "high", "medium", "low"] as const;
 
 export function BreakdownTile({ widget }: WidgetProps) {
