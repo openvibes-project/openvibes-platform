@@ -72,3 +72,23 @@ export function auditSince(params: URLSearchParams): string {
   const days = Number(params.get("range") ?? 30);
   return daysAgo((auditRanges as readonly number[]).includes(days) ? days : 30);
 }
+
+/** A vulnerability's title (#579): its package, then the first sentence
+ * about the flaw, at most 140 characters. A title that already starts
+ * with the package (an advisory's own title) is left as it is. */
+export function vulnTitle(packages: readonly string[], title: string): string {
+  const pkg = packages[0];
+  // Many summaries open by saying what the product is ("Vim is an open
+  // source text editor. Prior to…"): the flaw starts after that sentence.
+  const told = title.replace(/^[^.]{1,80}? is an? [^.]*\.\s+(?=\S)/, "");
+  const end = told.search(/\.(\s|$)/);
+  let summary = end > 20 ? told.slice(0, end) : told;
+  if (summary.length > 140) summary = `${summary.slice(0, 139).trimEnd()}…`;
+  return pkg && !summary.toLowerCase().startsWith(pkg.toLowerCase()) ? `${pkg}: ${summary}` : summary;
+}
+
+/** Package names from a vulnerability row's `packages` (strings or objects with a `name`). */
+export function packageNames(packages: unknown): string[] {
+  if (!Array.isArray(packages)) return [];
+  return packages.map((p: unknown) => (typeof p === "string" ? p : (p as { name?: unknown } | null)?.name)).filter((n): n is string => typeof n === "string" && n !== "");
+}

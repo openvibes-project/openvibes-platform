@@ -109,7 +109,7 @@ describe("Vulnerabilities list", () => {
     expect(filters.find((f) => f.param === "state")?.values.map((v) => v.label)).toEqual(["Open", "Mitigated", "Accepted risk", "False positive", "Resolved", "All states"]);
     expect(filters.find((f) => f.param === "signal")?.values.map((v) => v.label))
       .toEqual(["Known exploited", "Due within 30 days", "No fix yet", "Reboot needed", "Lower confidence"]);
-    expect(filters.find((f) => f.param === "severity")?.values.map((v) => v.label)).toEqual(["Critical", "Important"]);
+    expect(filters.find((f) => f.param === "severity")?.values.map((v) => v.label)).toEqual(["Critical", "High"]);
     expect(filters.find((f) => f.param === "assignee")?.values.map((v) => v.label)).toEqual(["Me", "Unassigned", "Sam Analyst"]);
     const unset = vulnFilters(list(), { host: null, hostName: undefined, advisory: null });
     expect(unset.filter((f) => f.chipOnly).map((f) => [f.param, f.values.length])).toEqual([["host", 0], ["advisory", 0]]);

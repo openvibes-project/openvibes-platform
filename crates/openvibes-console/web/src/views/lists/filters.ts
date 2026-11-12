@@ -10,7 +10,8 @@ type FilterDef =
 const choice = (param: string, label: string, values: [string, string][]): FilterDef => ({
   param, label, kind: "choice", values: values.map(([value, label]) => ({ value, label })),
 });
-const severities = (...names: string[]) => names.map((n): [string, string] => [n, n[0]?.toUpperCase() + n.slice(1)]);
+const SHOWN: Record<string, string> = { important: "High", moderate: "Medium" };
+const severities = (...names: string[]) => names.map((n): [string, string] => [n, SHOWN[n] ?? n[0]?.toUpperCase() + n.slice(1)]);
 
 export const LIST_FILTERS: Record<ListView, FilterDef[]> = {
   // The dashboard List tile's filters over GET /v1/compliance/groups; the

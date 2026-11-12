@@ -1,6 +1,7 @@
 
 // Ctrl+K: jump anywhere. Views, actions, recently opened objects, and a
 // search across hosts, advisories/CVEs and findings in the viewer's scope.
+import { packageNames, vulnTitle } from "../ui/format";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAllPages, useResource } from "../api/client";
@@ -71,7 +72,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
     for (const item of vulns.data?.items ?? []) {
       if (seen.has(item.advisory_id) || !matches([item.title, item.advisory_id, ...item.cves], query)) continue;
       seen.add(item.advisory_id);
-      filtered.push({ id: `d${item.advisory_id}`, group: "Advisories", icon: "vulnerabilities", label: item.title, hint: item.advisory_id, run: openObject({ kind: "advisory", id: item.advisory_id }) });
+      filtered.push({ id: `d${item.advisory_id}`, group: "Advisories", icon: "vulnerabilities", label: vulnTitle(packageNames(item.packages), item.title), hint: item.advisory_id, run: openObject({ kind: "advisory", id: item.advisory_id }) });
       if (seen.size >= 6) break;
     }
     for (const group of (groups.data ?? []).filter((g) => matches([g.latest_message, g.rule_id, g.rule_set_id], query)).slice(0, 6)) {
