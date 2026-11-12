@@ -66,10 +66,10 @@ export function NumberTile({ widget }: WidgetProps) {
   );
   const view = def.view;
   // Reserve the chart's height while history loads so the fine print does not jump.
-  const chart = trend > 0 && !unset && <div style={{ minHeight: 36 }}>{history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />}</div>;
+  const chart = trend > 0 && !unset && <div className="tile-spark" style={{ minHeight: 24 }}>{history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />}</div>;
   const parts = def.parts && <div className="tile-parts">{def.parts.map(([kind, id], i) => <Fragment key={id}>{i > 0 && <span className="tile-parts__sep" aria-hidden="true"> · </span>}<Part kind={kind} id={id} unset={noFeed} /></Fragment>)}</div>;
   return (
-    <div className="stack">
+    <div className="stack stack--tight">
       {view ? <button type="button" className="tile-number" onClick={() => nav.view(view[0], view[1])}>{body}</button>
         : <div className="tile-number tile-number--plain">{body}</div>}
       {chart}

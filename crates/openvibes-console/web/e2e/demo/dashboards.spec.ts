@@ -218,7 +218,7 @@ for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
   test(`a Critical tile at the Overview size keeps its fine print inside (${name})`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => {
-      const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 3, h: 4, config: { metric: "all.open.critical", trend: 30 } }] };
+      const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 3, h: 3, config: { metric: "all.open.critical", trend: 30 } }] };
       const now = new Date().toISOString();
       localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
         { dashboard_id: "d-crit", owner: "u-admin", name: "Critical", visibility: "private", role_ids: [], layout, version: 1, created_at: now, updated_at: now },
@@ -228,7 +228,9 @@ for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
     const tile = page.locator(".tile", { hasText: "alarm" });
     await expect(tile.locator(".tile-parts")).toHaveText("1 alarm · 82 vulnerabilities · 3 compliance");
     await expect(tile.locator(".tile-number .delta")).toBeVisible();
-    await expect(tile.locator(".linechart svg")).toBeVisible();
+    // In a tile narrower than 200 px (a phone's) the trend line gives way to the fine print (#576).
+    if (name === "desktop") await expect(tile.locator(".linechart svg")).toBeVisible();
+    else await expect(tile.locator(".tile-spark")).toBeHidden();
     await expect(tile.getByRole("button")).toHaveCount(3);
     const box = (await tile.boundingBox()) ?? { y: 0, height: 0 };
     const parts = (await tile.locator(".tile-parts").boundingBox()) ?? { y: Infinity, height: 0 };

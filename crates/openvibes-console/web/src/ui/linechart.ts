@@ -84,11 +84,18 @@ type Layout = { W: number; H: number; padL: number; padR: number; padT: number; 
 export function layout(variant: "spark" | "full", W: number, labels = false): Layout {
   return variant === "full"
     ? { W, H: 150, padL: 26, padR: labels ? 32 : 10, padT: 10, padB: 20 }
-    : { W, H: 36, padL: 2, padR: 6, padT: 4, padB: 3 };
+    : { W, H: 24, padL: 2, padR: 6, padT: 3, padB: 2 };
 }
 export const xAt = (i: number, n: number, l: Layout) =>
   n < 2 ? l.W - l.padR : l.padL + ((l.W - l.padL - l.padR) * i) / (n - 1);
-export const yAt = (v: number, max: number, l: Layout) => l.padT + (l.H - l.padT - l.padB) * (1 - v / max);
+/** `min` and `max` are the counts at the bottom and top (the full chart's bottom is 0). */
+export const yAt = (v: number, max: number, l: Layout, min = 0) => l.padT + (l.H - l.padT - l.padB) * (1 - (v - min) / (max - min));
+/** A sparkline's bottom and top (#576): the period's lowest and highest count, so any change uses the full
+ * height; a count that never changed is drawn across the middle. */
+export function sparkRange(values: readonly number[]): [number, number] {
+  const lo = Math.min(...values), hi = Math.max(...values);
+  return lo === hi ? [lo - 1, hi + 1] : [lo, hi];
+}
 export const indexAt = (px: number, n: number, l: Layout) =>
   n < 2 ? 0 : Math.max(0, Math.min(n - 1, Math.round(((px - l.padL) / (l.W - l.padL - l.padR)) * (n - 1))));
 /** Tooltip left edge within its tile: right of the cursor, never past either edge. */
@@ -120,13 +127,13 @@ export function collectingNote(series: Series[]): string | null {
 }
 /** Pixel points of one run of consecutive days. On a single-day axis there is no
  *  width to span, so the one point becomes a flat line across the plot. */
-export function runPoints(run: { day: string; value: number }[], index: Map<string, number>, n: number, max: number, l: Layout): Pt[] {
+export function runPoints(run: { day: string; value: number }[], index: Map<string, number>, n: number, max: number, l: Layout, min = 0): Pt[] {
   const [only] = run;
   if (n < 2 && only) {
-    const y = yAt(only.value, max, l);
+    const y = yAt(only.value, max, l, min);
     return [{ x: l.padL, y }, { x: l.W - l.padR, y }];
   }
-  return run.map((p) => ({ x: xAt(index.get(p.day) ?? 0, n, l), y: yAt(p.value, max, l) }));
+  return run.map((p) => ({ x: xAt(index.get(p.day) ?? 0, n, l), y: yAt(p.value, max, l, min) }));
 }
 /** A hover index that still points at a day after the series shrank. */
 export const clampIndex = (i: number | null, n: number) => (i === null || n === 0 ? null : Math.min(i, n - 1));

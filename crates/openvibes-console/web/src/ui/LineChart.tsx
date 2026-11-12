@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
-import { axisDays, clampIndex, collectingNote, dayLabel, emptyNote, indexAt, runPoints, spansYears, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt, ariaLabel, type Series } from "./linechart";
+import { axisDays, clampIndex, collectingNote, dayLabel, emptyNote, indexAt, runPoints, spansYears, layout, monotonePath, niceMax, sparkRange, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt, ariaLabel, type Series } from "./linechart";
 
 
 type Props = { series: Series[]; variant: "spark" | "full"; smooth: boolean };
@@ -33,11 +33,13 @@ export function LineChart({ series, variant, smooth }: Props) {
   const full = variant === "full";
   const multi = series.length > 1;
   const l = layout(variant, width, multi);
-  const max = niceMax(Math.max(0, ...series.flatMap((s) => s.points.map((p) => p.value))));
+  const values = series.flatMap((s) => s.points.map((p) => p.value));
+  // The full chart's axis runs from 0; a sparkline from the lowest count to the highest (#576).
+  const [min, max] = full ? [0, niceMax(Math.max(0, ...values))] : sparkRange(values.length ? values : [0]);
   const index = new Map(days.map((d, i) => [d, i]));
-  const dots = (s: Series) => s.points.map((p) => ({ x: xAt(index.get(p.day) ?? 0, n, l), y: yAt(p.value, max, l), day: p.day }));
+  const dots = (s: Series) => s.points.map((p) => ({ x: xAt(index.get(p.day) ?? 0, n, l), y: yAt(p.value, max, l, min), day: p.day }));
   const build = smooth ? monotonePath : steppedPath;
-  const lastY = series.map((s) => yAt(s.points.at(-1)?.value ?? 0, max, l));
+  const lastY = series.map((s) => yAt(s.points.at(-1)?.value ?? 0, max, l, min));
   const endY = multi ? spreadLabels(lastY, 11) : lastY;
 
   useLayoutEffect(() => {
@@ -71,24 +73,24 @@ export function LineChart({ series, variant, smooth }: Props) {
         <svg width={width} height={l.H} viewBox={`0 0 ${width} ${l.H}`} role="img" aria-label={label}>
           {full ? ticks(max).map((t) => (
             <g key={t}>
-              <line className="linechart__grid" x1={l.padL} x2={width - l.padR} y1={yAt(t, max, l)} y2={yAt(t, max, l)} />
-              <text className="linechart__ax" x={l.padL - 6} y={yAt(t, max, l) + 3} textAnchor="end">{t}</text>
+              <line className="linechart__grid" x1={l.padL} x2={width - l.padR} y1={yAt(t, max, l, min)} y2={yAt(t, max, l, min)} />
+              <text className="linechart__ax" x={l.padL - 6} y={yAt(t, max, l, min) + 3} textAnchor="end">{t}</text>
             </g>
-          )) : <line className="linechart__grid" x1={l.padL} x2={width - l.padR} y1={yAt(0, max, l) + 0.5} y2={yAt(0, max, l) + 0.5} />}
+          )) : <line className="linechart__grid" x1={l.padL} x2={width - l.padR} y1={yAt(min, max, l, min) + 0.5} y2={yAt(min, max, l, min) + 0.5} />}
           {xLabels.map((i) => (
             <text key={i} className="linechart__ax" x={xAt(i, n, l)} y={l.H - 5} textAnchor={i === 0 && n > 1 ? "start" : i === n - 1 ? "end" : "middle"}>{dayLabel(days[i] ?? "", today, year && i === 0)}</text>
           ))}
           {series.map((s, si) => (
             <g key={s.label} data-s={si}>
               {segments(s.points).map((run) => {
-                const pts = runPoints(run, index, n, max, l);
+                const pts = runPoints(run, index, n, max, l, min);
                 const a = pts[0];
                 const z = pts[pts.length - 1];
                 if (!a || !z) return null;
                 const d = build(pts);
                 return (
                   <g key={run[0]?.day}>
-                    {!multi && pts.length > 1 && <path className="linechart__area" d={`${d}H${z.x}V${yAt(0, max, l)}H${a.x}Z`} />}
+                    {!multi && pts.length > 1 && <path className="linechart__area" d={`${d}H${z.x}V${yAt(min, max, l, min)}H${a.x}Z`} />}
                     {pts.length > 1 ? <path className="linechart__line" d={d} /> : <circle className="linechart__line-dot" cx={a.x} cy={a.y} r={2} />}
                   </g>
                 );
@@ -105,7 +107,7 @@ export function LineChart({ series, variant, smooth }: Props) {
               <line className="linechart__cross" x1={xAt(hover, n, l)} x2={xAt(hover, n, l)} y1={l.padT} y2={l.H - l.padB} />
               {series.map((s, si) => {
                 const p = s.points.find((q) => q.day === hoverDay);
-                return p && <circle key={s.label} data-s={si} className="linechart__dot" cx={xAt(hover, n, l)} cy={yAt(p.value, max, l)} r={4} />;
+                return p && <circle key={s.label} data-s={si} className="linechart__dot" cx={xAt(hover, n, l)} cy={yAt(p.value, max, l, min)} r={4} />;
               })}
             </g>
           )}
