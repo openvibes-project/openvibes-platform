@@ -52,11 +52,11 @@ export function RuleSetPanel({ id }: { id: string }) {
         <Section title="Published versions" flush>
           {!bundles.data ? <Loading rows={3} /> : (
             <table className="table table--compact">
-              <thead><tr><th style={{ width: "18%" }}>Version</th><th style={{ width: "32%" }}>Published</th><th style={{ width: "30%" }}>By</th><th className="num" style={{ width: "20%" }}>Size</th></tr></thead>
+              <thead><tr><th style={{ width: "28%" }}>Version</th><th style={{ width: "24%" }}>Published</th><th style={{ width: "28%" }}>By</th><th className="num" style={{ width: "20%" }}>Size</th></tr></thead>
               <tbody>
                 {bundles.data.items.map((bundle) => (
                   <tr key={bundle.version}>
-                    <td className="num">{bundle.version}{bundle.version === set.current_version && <span className="badge badge--ok" style={{ marginLeft: 8 }}>Current</span>}</td>
+                    <td className="nowrap"><span className="num">{bundle.version}</span>{bundle.version === set.current_version && <span className="badge badge--ok" style={{ marginLeft: 8 }}>Current</span>}</td>
                     <td title={when(bundle.published_at)}><Ago value={bundle.published_at} /></td>
                     <td>{bundle.published_by}</td>
                     <td className="num subtle">{(bundle.bytes / 1024).toFixed(1)} KiB</td>
