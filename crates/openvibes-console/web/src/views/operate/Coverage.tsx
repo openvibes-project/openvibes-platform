@@ -9,7 +9,7 @@ import type { Column } from "./coverage";
 import { nav, useLocation } from "../../app/nav";
 import { Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
 import { DataTable } from "../../ui/DataTable";
-import { severityOrder } from "../../ui/format";
+import { severityRank } from "../../ui/format";
 import { ViewHeader } from "../../ui/ViewHeader";
 import { columns, selectRules } from "./coverage";
 
@@ -88,7 +88,7 @@ function RuleTable({ rows }: Readonly<{ rows: CoverageRule[] }>) {
         { key: "rule", header: "Rule", sort: (r) => r.title, render: (r) => <div className="cell-two"><span>{r.title}{r.draft && <span className="badge badge--plain"> Draft</span>}</span><span className="mono subtle">{r.rule_id}</span></div> },
         { key: "set", header: "Rule set", width: "140px", hideBelow: 900, sort: (r) => r.rule_set_id, render: (r) => <span className="mono">{r.rule_set_id}</span> },
         { key: "kind", header: "Kind", width: "90px", hideBelow: 700, sort: (r) => r.kind, render: (r) => r.kind === "process_event" ? "Alarm" : "Finding" },
-        { key: "severity", header: "Severity", width: "110px", hideBelow: 560, sort: (r) => severityOrder[r.severity] ?? 9, render: (r) => <SeverityBadge severity={r.severity} /> },
+        { key: "severity", header: "Severity", width: "110px", hideBelow: 560, sort: (r) => severityRank(r.severity), render: (r) => <SeverityBadge severity={r.severity} /> },
         { key: "attack", header: "ATT&CK", render: pairs },
       ]} />
   );

@@ -235,7 +235,9 @@ async fn the_hosts_table_has_segments_and_pages() {
         ("offset=100001", "offset"),
         ("limit=0", "limit"),
         ("limit=101", "limit"),
-        ("sort=host", "query"),
+        ("sort=seen", "sort"),
+        ("dir=up", "dir"),
+        ("other=1", "query"),
     ] {
         let (status, body) = fx.call(a, "GET", &hosts("CVE-1", query), None).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{query}");

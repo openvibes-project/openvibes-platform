@@ -21,7 +21,7 @@ use super::{
 use crate::{
     Permission,
     access::guard::{authenticated_capabilities, permission_denied, scope_of, unavailable_auth},
-    host_pages::{holds, hosts_query, related_reach},
+    host_pages::{holds, host_order, hosts_query, related_reach},
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
@@ -114,6 +114,10 @@ pub(crate) async fn port_summary_page(
 pub(crate) struct PortHostsParams {
     /// all (default), exposed or local.
     segment: Option<String>,
+    /// host (default) or date (last report); ties by host.
+    sort: Option<String>,
+    /// asc (default) or desc.
+    dir: Option<String>,
     /// Rows to skip, 0 to 100000.
     offset: Option<String>,
     /// Page size, 1 to 100 (default 50).
@@ -152,14 +156,19 @@ pub(crate) async fn port_hosts_page_route(
         PortSegment::parse,
         PortSegment::All,
     );
-    let (segment, offset, limit) = match parsed {
+    let parsed = parsed.and_then(|v| Ok((v, host_order(&p.sort, &p.dir, false)?)));
+    let ((segment, offset, limit), order) = match parsed {
         Ok(v) => v,
         Err(field) => return invalid_query(field),
     };
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    match port_hosts_page(&client, &read, protocol, port, segment, offset, limit).await {
+    match port_hosts_page(
+        &client, &read, protocol, port, segment, order, offset, limit,
+    )
+    .await
+    {
         Ok(page) => axum::Json(PortPageHostsView::from(page)).into_response(),
         Err(_) => unavailable_auth(),
     }

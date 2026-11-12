@@ -19,7 +19,7 @@ side panel.
 |---|---|---|
 | `GET /api/v1/software-list` | the list: filters with counts, sorts, offset paging (`hosts.read`) | `src/software_pages/list_page.rs`; store `software_list.rs`, `software_list_sql.rs` |
 | `GET /api/v1/software-pages/{name}/summary` | the page above the Hosts card | `src/software_pages/page.rs`; store `software_summary.rs` |
-| `GET /api/v1/software-pages/{name}/hosts?segment=&offset=&limit=` | the Hosts card (All, Need an update, Up to date) | `src/software_pages/page.rs` |
+| `GET /api/v1/software-pages/{name}/hosts?segment=&sort=&dir=&offset=&limit=` | the Hosts card (All, Need an update, Up to date) | `src/software_pages/page.rs` |
 | `GET /api/v1/software`, `/software/{manager}/{name}` | unchanged, for the API | `src/hosts/software.rs` |
 
 Errors: `invalid_package` (400) for an empty or over-long (200) name or one

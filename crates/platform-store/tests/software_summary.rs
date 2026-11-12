@@ -8,6 +8,7 @@ use common::software::{A, B, C, fixture};
 use deadpool_postgres::Client;
 use platform_store::{
     console_read::AgentScope,
+    host_sort::HostOrder,
     software_summary::{SoftwareSegment, SoftwareSummary, software_hosts_page, software_summary},
 };
 
@@ -115,6 +116,7 @@ async fn hosts_table_has_segments_and_the_update_to_version() {
         &scope,
         "openssl",
         SoftwareSegment::All,
+        HostOrder::default(),
         0,
         50,
         Utc::now(),
@@ -145,6 +147,7 @@ async fn hosts_table_has_segments_and_the_update_to_version() {
         &scope,
         "openssl",
         SoftwareSegment::Update,
+        HostOrder::default(),
         0,
         50,
         Utc::now(),
@@ -165,6 +168,7 @@ async fn hosts_table_has_segments_and_the_update_to_version() {
         &scope,
         "openssl",
         SoftwareSegment::Current,
+        HostOrder::default(),
         1,
         1,
         Utc::now(),
@@ -177,6 +181,7 @@ async fn hosts_table_has_segments_and_the_update_to_version() {
         &scope,
         "linux-image",
         SoftwareSegment::All,
+        HostOrder::default(),
         0,
         50,
         Utc::now(),
@@ -197,6 +202,7 @@ async fn hosts_table_has_segments_and_the_update_to_version() {
         &scope,
         "openssh-server",
         SoftwareSegment::All,
+        HostOrder::default(),
         0,
         50,
         Utc::now(),
@@ -209,6 +215,7 @@ async fn hosts_table_has_segments_and_the_update_to_version() {
         &scope,
         "nothing",
         SoftwareSegment::All,
+        HostOrder::default(),
         0,
         50,
         Utc::now(),

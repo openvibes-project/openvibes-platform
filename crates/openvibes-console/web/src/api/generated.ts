@@ -11862,6 +11862,10 @@ export interface operations {
                  *     false_positive (absent: any). Refused with another segment.
                  */
                 state?: string;
+                /** @description host (default), state or date (checked); ties by host. */
+                sort?: string;
+                /** @description asc (default) or desc. */
+                dir?: string;
                 /** @description Rows to skip, 0 to 100000. */
                 offset?: string;
                 /** @description Page size, 1 to 100 (default 50). */
@@ -14316,6 +14320,10 @@ export interface operations {
             query?: {
                 /** @description all (default), exposed or local. */
                 segment?: string;
+                /** @description host (default) or date (last report); ties by host. */
+                sort?: string;
+                /** @description asc (default) or desc. */
+                dir?: string;
                 /** @description Rows to skip, 0 to 100000. */
                 offset?: string;
                 /** @description Page size, 1 to 100 (default 50). */
@@ -16036,6 +16044,10 @@ export interface operations {
             query?: {
                 /** @description all (default), exposed or root. */
                 segment?: string;
+                /** @description host (default) or date (last report); ties by host. */
+                sort?: string;
+                /** @description asc (default) or desc. */
+                dir?: string;
                 /** @description Rows to skip, 0 to 100000. */
                 offset?: string;
                 /** @description Page size, 1 to 100 (default 50). */
@@ -16513,6 +16525,10 @@ export interface operations {
             query?: {
                 /** @description all (default), update or current. */
                 segment?: string;
+                /** @description host (default) or date (last report); ties by host. */
+                sort?: string;
+                /** @description asc (default) or desc. */
+                dir?: string;
                 /** @description Rows to skip, 0 to 100000. */
                 offset?: string;
                 /** @description Page size, 1 to 100 (default 50). */
@@ -17555,6 +17571,10 @@ export interface operations {
             query?: {
                 /** @description all (default), open, mitigated or resolved. */
                 segment?: string;
+                /** @description host (default), state or date (first seen); ties by host. */
+                sort?: string;
+                /** @description asc (default) or desc. */
+                dir?: string;
                 /** @description Rows to skip, 0 to 100000. */
                 offset?: string;
                 /** @description Page size, 1 to 100 (default 50). */

@@ -12,6 +12,7 @@ use common::{
 use platform_store::{
     Client,
     console_read::AgentScope,
+    host_sort::{HostOrder, HostSort},
     vuln_list::{AssigneeSummary, Fixed, VulnSeverity},
     vuln_summary::{
         Fix, HostSegment, Lookup, PageScopes, VulnHostsPage, VulnPageSummary, reaches_any,
@@ -53,6 +54,7 @@ async fn hosts(
         key,
         scope,
         segment,
+        HostOrder::default(),
         offset,
         limit,
         Utc::now().date_naive(),
@@ -147,6 +149,7 @@ async fn cve_summary_stays_inside_the_scope() {
             "CVE-OUT",
             &web,
             HostSegment::All,
+            HostOrder::default(),
             0,
             50,
             Utc::now().date_naive()
@@ -288,6 +291,26 @@ async fn the_four_segments_add_up_and_page() {
     assert_eq!(h1.assignee, Some((ANN.to_owned(), "Ann".to_owned())));
     assert_eq!(h1.triage_version, Some(1));
     assert_eq!(all.rows[0].state, "accepted_risk");
+    let by_state = vuln_hosts(
+        &c,
+        "CVE-A",
+        &web,
+        HostSegment::All,
+        HostOrder {
+            sort: HostSort::State,
+            descending: false,
+        },
+        0,
+        50,
+        Utc::now().date_naive(),
+    )
+    .await
+    .unwrap();
+    let Lookup::Found(by_state) = by_state else {
+        panic!("found")
+    };
+    let states: Vec<_> = by_state.rows.iter().map(|r| r.state.as_str()).collect();
+    assert_eq!(states, ["open", "mitigated", "accepted_risk"], "open first");
     let second = hosts(&c, "CVE-A", &web, HostSegment::All, 1, 1).await;
     assert_eq!(second.total, 3);
     assert_eq!(second.rows.len(), 1);

@@ -3,7 +3,9 @@ import { portPath } from "../../../app/location";
 import { viewLink } from "../../../app/nav";
 import type { HostServices } from "../../../api/types";
 import { Ago, Empty, ErrorBox, Loading } from "../../../ui/bits";
+import { SortHeader, sortBy, useSort } from "../../../ui/DataTable";
 import { Icon } from "../../../ui/Icon";
+import type { SortValue } from "../../../ui/table";
 
 const REFUSED: Record<string, string> = {
   too_large: "over 512 KiB",
@@ -15,9 +17,18 @@ const TRUNCATED_NOTE = "The host has more than one report can carry (4,096 liste
 
 const OWNERS_NOTE = "Some owners are not visible to the agent. Admins can opt in to exact program names on this host (see the agent's owners.conf).";
 
+type Listener = HostServices["listeners"][number];
+type Service = HostServices["services"][number];
+// The report's order (exposed first, then port; by unit) until a header is chosen.
+const PORT_SORTS: Record<string, (l: Listener) => SortValue> = {
+  port: (l) => l.port, address: (l) => l.address, service: (l) => l.service, program: (l) => l.program,
+};
+const SERVICE_SORTS: Record<string, (s: Service) => SortValue> = { service: (s) => s.unit, processes: (s) => s.processes, user: (s) => s.run_as };
+
 /** One host's open ports or running services (Assets v2), from its last report. */
 export function HostServicesTab({ id, show }: { id: string; show: "ports" | "services" }) {
   const report = useResource<HostServices>(`/api/v1/agents/${encodeURIComponent(id)}/services`);
+  const sort = useSort();
   if (report.error) return <div className="panel-body"><ErrorBox error={report.error} /></div>;
   if (report.loading && !report.data) return <div className="panel-body"><Loading rows={4} /></div>;
   const data = report.data;
@@ -35,9 +46,10 @@ export function HostServicesTab({ id, show }: { id: string; show: "ports" | "ser
       {show === "ports" ? (
         data.listeners.length === 0 ? <Empty title="No open ports" /> : (
           <div className="table-wrap"><table className="table table--compact" aria-label="Open ports">
-            <thead><tr><th style={{ width: "15%" }}>Port</th><th className="hide-narrow" style={{ width: "25%" }}>Address</th><th style={{ width: "30%" }}>Service</th><th className="hide-narrow" style={{ width: "30%" }}>Program</th></tr></thead>
+            <thead><tr><SortHeader sort={sort} column="port" style={{ width: "15%" }}>Port</SortHeader><SortHeader sort={sort} column="address" className="hide-narrow" style={{ width: "25%" }}>Address</SortHeader>
+              <SortHeader sort={sort} column="service" style={{ width: "30%" }}>Service</SortHeader><SortHeader sort={sort} column="program" className="hide-narrow" style={{ width: "30%" }}>Program</SortHeader></tr></thead>
             <tbody>
-              {data.listeners.map((l) => (
+              {sortBy(data.listeners, PORT_SORTS, sort).map((l) => (
                 <tr key={`${l.protocol}/${l.address}/${l.port}`}>
                   <td className="mono nowrap"><a {...viewLink(portPath(l.protocol, l.port))}>{l.port}/{l.protocol}</a>{l.exposed && <> <span className="badge badge--warn badge--plain">exposed</span></>}</td>
                   <td className="mono hide-narrow">{l.address}</td>
@@ -51,9 +63,10 @@ export function HostServicesTab({ id, show }: { id: string; show: "ports" | "ser
       ) : (
         data.services.length === 0 ? <Empty title="No services reported" /> : (
           <div className="table-wrap"><table className="table table--compact" aria-label="Running services">
-            <thead><tr><th style={{ width: "30%" }}>Service</th><th className="hide-narrow" style={{ width: "30%" }}>Programs</th><th style={{ width: "20%" }}>Processes</th><th style={{ width: "20%" }}>Runs as</th></tr></thead>
+            <thead><tr><SortHeader sort={sort} column="service" style={{ width: "30%" }}>Service</SortHeader><th className="hide-narrow" style={{ width: "30%" }}>Programs</th>
+              <SortHeader sort={sort} column="processes" style={{ width: "20%" }}>Processes</SortHeader><SortHeader sort={sort} column="user" style={{ width: "20%" }}>Runs as</SortHeader></tr></thead>
             <tbody>
-              {data.services.map((s) => (
+              {sortBy(data.services, SERVICE_SORTS, sort).map((s) => (
                 <tr key={s.unit}>
                   <td className="mono">{s.unit}</td>
                   <td className="mono hide-narrow">{s.programs.join(", ") || "—"}</td>

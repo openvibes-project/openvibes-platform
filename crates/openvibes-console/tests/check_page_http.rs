@@ -286,6 +286,8 @@ async fn the_hosts_table_has_segments_evidence_and_pages() {
         ("segment=passing&state=open", "state"),
         ("offset=-1", "offset"),
         ("limit=101", "limit"),
+        ("sort=bogus", "sort"),
+        ("sort=state&dir=up", "dir"),
         ("other=1", "query"),
     ] {
         let (status, body) = fx.call(&fx.admin, "GET", &hosts(ROOT, query), None).await;

@@ -6,6 +6,7 @@ import type { SoftwarePageHosts, SoftwarePageSummary } from "../../../api/types"
 import { servicePath, vulnPath } from "../../../app/location";
 import { viewLink } from "../../../app/nav";
 import { SeverityBadge } from "../../../ui/bits";
+import { SortHeader, useSort } from "../../../ui/DataTable";
 import { Card } from "../../../ui/detail/DetailPage";
 import { plural } from "../../../ui/format";
 import { Icon } from "../../../ui/Icon";
@@ -132,10 +133,11 @@ export function HostsCard({ page }: { page: Page }) {
 }
 
 export function HostsTable({ rows }: { rows: readonly HostRow[] }) {
+  const sort = useSort();
   return (
     <div className="table-wrap">
       <table className="table table--compact" aria-label="Hosts">
-        <thead><tr><th style={{ width: "26%" }}>Host</th><th style={{ width: "18%" }}>Version</th><th style={{ width: "20%" }}>Update</th><th style={{ width: "20%" }}>Used by</th><th style={{ width: "16%" }}>Last report</th></tr></thead>
+        <thead><tr><SortHeader sort={sort} column="host" style={{ width: "26%" }}>Host</SortHeader><th style={{ width: "18%" }}>Version</th><th style={{ width: "20%" }}>Update</th><th style={{ width: "20%" }}>Used by</th><SortHeader sort={sort} column="date" style={{ width: "16%" }}>Last report</SortHeader></tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.agent_id}>

@@ -15,7 +15,7 @@ like the Alarms pages ([console-alarms.md](console-alarms.md)).
   paged (`crates/openvibes-console/src/vulnerabilities/list_page.rs`, store
   `vuln_list.rs`), with `vulnerabilities.read`.
 - `GET /api/v1/vulnerabilities/{key}/summary`: the page above the Hosts
-  table; `GET /api/v1/vulnerabilities/{key}/hosts?segment=&offset=&limit=`:
+  table; `GET /api/v1/vulnerabilities/{key}/hosts?segment=&sort=&dir=&offset=&limit=`:
   the Hosts table (`src/vulnerabilities/page.rs`, store `vuln_summary.rs`,
   `vuln_hosts.rs`, `vuln_related.rs`), with `vulnerabilities.read`.
 - `POST /api/v1/vulnerabilities/bulk`: Set state, Assign, Reopen and Add to

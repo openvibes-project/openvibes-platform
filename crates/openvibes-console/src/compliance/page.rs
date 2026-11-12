@@ -26,6 +26,7 @@ use crate::{
     Permission,
     access::guard::{authenticated_capabilities, permission_denied, scope_of, unavailable_auth},
     alarms::list::{number, pick},
+    host_pages::host_order,
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
@@ -143,6 +144,10 @@ pub(crate) struct CheckHostsParams {
     /// With `segment=failing`: open, mitigated, accepted_risk or
     /// false_positive (absent: any). Refused with another segment.
     state: Option<String>,
+    /// host (default), state or date (checked); ties by host.
+    sort: Option<String>,
+    /// asc (default) or desc.
+    dir: Option<String>,
     /// Rows to skip, 0 to 100000.
     offset: Option<String>,
     /// Page size, 1 to 100 (default 50).
@@ -192,7 +197,8 @@ pub(crate) async fn check_hosts_page(
             number(limit.as_deref(), 50, 100, "limit")?,
         ))
     })();
-    let (segment, pair_state, offset, limit) = match parsed {
+    let parsed = parsed.and_then(|v| Ok((v, host_order(&p.sort, &p.dir, true)?)));
+    let ((segment, pair_state, offset, limit), order) = match parsed {
         Ok(v) => v,
         Err(field) => return invalid_query(field),
     };
@@ -209,6 +215,7 @@ pub(crate) async fn check_hosts_page(
         &read,
         segment,
         pair_state,
+        order,
         offset,
         limit,
         Utc::now(),

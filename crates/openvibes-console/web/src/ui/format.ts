@@ -49,6 +49,10 @@ export const severityOrder: Record<string, number> = {
   critical: 0, high: 1, important: 1, medium: 2, moderate: 2, low: 3, unrated: 4,
 };
 
+/** A table's severity sort value: larger is more severe, so the first click (descending) starts with Critical; unknown is missing. */
+export const severityRank = (severity: string | null | undefined): number | null =>
+  severity != null && severity in severityOrder ? 4 - (severityOrder[severity] ?? 4) : null;
+
 /** True when the time has passed (kept out of render bodies for the React compiler). */
 export function isPast(value: string | number, now = Date.now()): boolean {
   return (typeof value === "number" ? value : Date.parse(value)) <= now;

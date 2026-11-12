@@ -22,7 +22,7 @@ details live with each part:
 |---|---|---|
 | `GET /api/v1/compliance-list` | the list, filtered, counted, sorted and paged (`compliance.read`) | `src/compliance/list_page.rs`; store `check_list*.rs`, `check_area.rs` |
 | `GET /api/v1/compliance/checks/{set}/{rule}/summary` | the page above the Hosts card | `src/compliance/page.rs`; store `check_summary*.rs`, `check_related.rs` |
-| `GET /api/v1/compliance/checks/{set}/{rule}/hosts?segment=&state=&offset=&limit=` | the Hosts card (All, Failing by triage state, Passing) | `src/compliance/page.rs`; store `check_states.rs` |
+| `GET /api/v1/compliance/checks/{set}/{rule}/hosts?segment=&state=&sort=&dir=&offset=&limit=` | the Hosts card (All, Failing by triage state, Passing) | `src/compliance/page.rs`; store `check_states.rs` |
 | `GET /api/v1/compliance/latest/{agent}/{set}/{rule}` | one host's latest observation, for View evidence | `src/compliance/latest.rs` |
 | `POST /api/v1/compliance/bulk` | Set state, Assign, Reopen, Add to case | `src/compliance/bulk.rs`; store `bulk_triage/compliance.rs` |
 | `GET /api/v1/compliance/*` (summary, groups, latest) | unchanged, for dashboards, the host page, the assistant and cases | `src/compliance/groups.rs`, `latest.rs` |
@@ -118,7 +118,9 @@ comes from the signed rule sets' optional `explain` and `check` fields.
 - The page's routes answer 404 `check_not_found` for a check with no
   failing or passing host in reach (out-of-reach hosts are never counted
   or named), and 400 `invalid_query` naming the parameter for a bad
-  `segment`, `state`, `offset` or `limit`.
+  `segment`, `state`, `sort`, `dir`, `offset` or `limit`. `sort` is `host`
+  (the default), `state` (open first) or `date` (Checked); ties go by host
+  name (#577).
 - Bulk changes skip pairs out of reach and report the rest in `skipped`
   with their reason.
 

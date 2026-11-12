@@ -13,6 +13,7 @@ use platform_store::{
         check_hosts, check_summary, evidence,
     },
     console_read::AgentScope,
+    host_sort::{HostOrder, HostSort},
     vuln_list::AssigneeSummary,
 };
 use serde_json::json;
@@ -67,6 +68,7 @@ async fn hosts_in(
         scope,
         segment,
         state,
+        HostOrder::default(),
         offset,
         limit,
         Utc::now(),
@@ -343,6 +345,49 @@ async fn segments_add_up_and_page() {
         ["open", "passing", "mitigated", "open", "passing"],
         "expired acceptance is open"
     );
+    let (set, rule) = split(SSH);
+    let sorted = |sort, descending| {
+        check_hosts(
+            &c,
+            set,
+            rule,
+            &scope,
+            CheckHostSegment::All,
+            None,
+            HostOrder { sort, descending },
+            0,
+            100,
+            Utc::now(),
+        )
+    };
+    let Lookup::Found(by_state) = sorted(HostSort::State, false).await.unwrap() else {
+        panic!("found")
+    };
+    let pairs: Vec<_> = by_state
+        .rows
+        .iter()
+        .map(|r| (r.state.as_str(), r.hostname.as_deref().unwrap()))
+        .collect();
+    assert_eq!(
+        pairs,
+        [
+            ("open", "host-1"),
+            ("open", "host-3"),
+            ("mitigated", "host-2"),
+            ("passing", "host-11"),
+            ("passing", "host-9")
+        ],
+        "open first, ties by host name"
+    );
+    let Lookup::Found(back) = sorted(HostSort::Host, true).await.unwrap() else {
+        panic!("found")
+    };
+    let names: Vec<_> = back
+        .rows
+        .iter()
+        .map(|r| r.hostname.clone().unwrap())
+        .collect();
+    assert_eq!(names, ["host-9", "host-3", "host-2", "host-11", "host-1"]);
     assert!(all.rows[2].evidence.is_empty(), "no detection");
     assert!(
         all.rows[3].accepted_until.is_some_and(|t| t < Utc::now()),

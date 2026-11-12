@@ -14,6 +14,7 @@ import { CaseBadge, useHostCaseBadges } from "../../../panels/cases/CaseBadge";
 import { findingRef, storedRuleSet } from "../../../panels/cases/cases";
 import { BulkBar } from "../../../panels/triage/BulkBar";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, TriageBadge } from "../../../ui/bits";
+import { SortHeader, sortQuery, useSort } from "../../../ui/DataTable";
 import { Card } from "../../../ui/detail/DetailPage";
 import { RelatedCard } from "../../../ui/detail/RelatedCard";
 import { SegmentChips } from "../../../ui/detail/SegmentChips";
@@ -118,8 +119,9 @@ export function HostsCard({ page }: { page: Page }) {
   const segment = segmentOf(params.get("segment"));
   const state = segment === "failing" ? stateOf(params.get("state")) : null;
   const offset = Math.max(0, Number(params.get(PAGE)) || 0);
-  const hosts = useResource<CheckHostsPage>(`/api/v1/compliance/checks/${encodeURIComponent(set)}/${encodeURIComponent(rule)}/hosts?segment=${segment}${state ? `&state=${state}` : ""}&offset=${offset}&limit=${PAGE_SIZE}`);
-  const [selected, setSelected] = useSelection(`${segment}:${state ?? ""}:${offset}`);
+  const sort = useSort();
+  const hosts = useResource<CheckHostsPage>(`/api/v1/compliance/checks/${encodeURIComponent(set)}/${encodeURIComponent(rule)}/hosts?segment=${segment}${state ? `&state=${state}` : ""}${sortQuery(sort)}&offset=${offset}&limit=${PAGE_SIZE}`);
+  const [selected, setSelected] = useSelection(`${segment}:${state ?? ""}:${offset}${sortQuery(sort)}`);
   const cases = useHostCaseBadges("compliance_finding", `${storedRuleSet(set)}/${rule}`);
   const data = hosts.data;
   const rows = data?.rows ?? [];
@@ -173,13 +175,15 @@ export function HostsTable({ rows, selected, onSelect, triage, addToCase = false
   const all = tickable.length > 0 && tickable.every((r) => selected.has(r.agent_id));
   const flip = (from: ReadonlySet<string>, key: string) => { const next = new Set(from); if (next.has(key)) next.delete(key); else next.add(key); return next; };
   const columns = 5 + (triage ? 1 : 0) + (perRow ? 1 : 0);
+  const sort = useSort();
   return (
     <div className="table-wrap">
       <table className="table table--compact" aria-label="Hosts">
         <thead><tr>
           {triage && <th style={{ width: 36 }}><input type="checkbox" className="checkbox" aria-label="Select the failing hosts on screen" checked={all} disabled={tickable.length === 0}
             onChange={() => onSelect(all ? new Set() : new Set(tickable.map((r) => r.agent_id)))} /></th>}
-          <th style={{ width: "24%" }}>Host</th><th style={{ width: "16%" }}>State</th><th style={{ width: "30%" }}>Evidence</th><th style={{ width: "16%" }}>Assignee</th><th className="hide-narrow" style={{ width: "14%" }}>Checked</th>
+          <SortHeader sort={sort} column="host" style={{ width: "24%" }}>Host</SortHeader><SortHeader sort={sort} column="state" style={{ width: "16%" }}>State</SortHeader>
+          <th style={{ width: "30%" }}>Evidence</th><th style={{ width: "16%" }}>Assignee</th><SortHeader sort={sort} column="date" className="hide-narrow" style={{ width: "14%" }}>Checked</SortHeader>
           {perRow && <th style={{ width: 44 }}><span className="sr-only">Add to case</span></th>}
         </tr></thead>
         <tbody>
