@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 58; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 78; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -351,6 +351,11 @@ Schema 25 grants the console role read-only access to the vulnerability and
 inventory tables and adds the agent-scoped `vulnerabilities.read` permission
 to built-in roles. The role can still change no vulnerability or inventory
 rows; each console query must apply the resolved asset scope.
+
+Schema 78 adds the two reads it was missing (#572): `advisory_packages`
+(the Vulnerabilities list and a vulnerability's page) and `ca_certificates`
+(the About page). `tests/console_role_reads.rs` runs those reads as the
+console role, since the other tests connect as the owner.
 
 Schema 26 adds `console_dashboards` (a layout per dashboard, owner,
 optional shared role, version) and `console_user_home`, and grants the new
