@@ -35,7 +35,6 @@ export async function firstSignIn(browser: Browser, username: string, oneTime: s
   await page.getByLabel("Username").fill(username);
   await page.getByLabel("Password").fill(oneTime);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByLabel("One-time password").fill(oneTime);
   await page.getByLabel("New password (at least 15 characters)").fill(PASSWORD);
   await page.getByLabel("New password again").fill(PASSWORD);
   await page.getByRole("button", { name: "Set password" }).click();

@@ -38,6 +38,8 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  // The one-time password just typed at sign-in, kept in memory only until it is replaced (#576).
+  const [oneTime, setOneTime] = useState<string>();
   const { view, panels } = useLocation();
 
   useEffect(() => {
@@ -105,12 +107,23 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
     setAuth("loading");
     setPersona(next);
   };
+  // Signed in: reload into the console, as before; with a one-time password, go
+  // straight to Set your password, which then need not ask for it again.
+  const signedIn = (password: string) => {
+    request<Session>("GET", "/api/v1/session").then((current) => {
+      if (!current.password_must_change) { window.location.reload(); return; }
+      setOneTime(password);
+      setSession(current);
+      setCsrfToken(current.csrf_token);
+      setAuth("ok");
+    }, () => window.location.reload());
+  };
   const logout = () => {
     // Reload either way: a failed logout leaves a session the reload shows.
     request("POST", "/auth/v1/logout").catch(() => undefined).finally(() => window.location.reload());
   };
 
-  if (auth === "signin") return <SignIn onDemo={demoAllowed ? () => choosePersona("admin") : undefined} />;
+  if (auth === "signin") return <SignIn onDemo={demoAllowed ? () => choosePersona("admin") : undefined} onSignedIn={signedIn} />;
   if (auth === "down") {
     return (
       <main className="signin">
@@ -123,7 +136,7 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
   }
   if (auth === "loading" || !session) return <div className="boot" aria-busy="true"><img src={`${import.meta.env.BASE_URL}brand/openvibes-mark.svg`} alt="" /></div>;
   // A one-time password: nothing else works until the user sets their own (#85).
-  if (session.password_must_change) return <SetPassword required onDone={() => window.location.reload()} onSignOut={logout} />;
+  if (session.password_must_change) return <SetPassword required known={oneTime} onDone={() => window.location.reload()} onSignOut={logout} />;
   if (changingPassword) return <SetPassword required={false} onDone={() => { setChangingPassword(false); toast("Password changed. Your other sessions were signed out."); }} onCancel={() => setChangingPassword(false)} />;
 
   const allowed = current !== undefined && canView(current.path);
