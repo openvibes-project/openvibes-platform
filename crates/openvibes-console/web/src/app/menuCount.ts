@@ -12,9 +12,9 @@ export function waitingToDecide(items: readonly { status: string; can_decide: bo
 }
 
 /** What a dashboard breakdown counts, when its title does not say:
- * findings, one per host, where the lists count checks and CVEs (#580). */
+ * one per host, where the lists count checks and CVEs (#580). */
 export function unitOf(source: string): string {
-  return source === "compliance" ? "failing findings" : source === "vulnerabilities" ? "findings on hosts" : "";
+  return source === "compliance" ? "failing findings" : source === "vulnerabilities" ? "on hosts" : "";
 }
 
 /** The menu count's title and label: "5 failing checks", "3 alarms". The

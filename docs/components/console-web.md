@@ -187,7 +187,7 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   - Active alarms by severity: critical, high, medium, low, and an
     info segment computed as the Active alarms count minus the four
     severities.
-  - Vulnerability findings by severity.
+  - Vulnerabilities on hosts by severity.
   - Compliance findings by severity.
   - Hosts by status.
   - Vulnerabilities say "Vulnerability scanning is not set up" before
@@ -213,7 +213,7 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   - top row, four Number tiles with a 30-day trend: Active alarms,
     Critical (all kinds), High (all kinds), Exploited vulnerabilities;
   - middle: Needs attention (alarms, exploited, serious, compliance,
-    stale; 14 items) beside Vulnerability findings by severity, Compliance
+    stale; 14 items) beside Vulnerabilities on hosts by severity, Compliance
     findings by severity and Most exposed hosts (7, all kinds);
   - bottom row, three Number tiles: Fleet · online, Fleet · stale,
     Fleet · need a reboot.

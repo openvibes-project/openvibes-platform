@@ -33,10 +33,10 @@ describe("catalogue", () => {
   });
   it("words the fine print per count", () => {
     const text = ([["alarm", 0], ["vulnerability", 1], ["compliance", 0]] as const).map(([k, n]) => partText(k, n)).join(" · ");
-    expect(text).toBe("0 alarms · 1 vulnerability finding · 0 compliance findings");
+    expect(text).toBe("0 alarms · 1 vulnerability on hosts · 0 compliance findings");
     expect(partText("alarm", 1)).toBe("1 alarm");
     expect(partText("alarm", 1234)).toBe(`${(1234).toLocaleString()} alarms`);
-    expect(partText("vulnerability", 2)).toBe("2 vulnerability findings");
+    expect(partText("vulnerability", 2)).toBe("2 vulnerabilities on hosts");
   });
   it("every part is itself a catalogue entry", () => {
     for (const m of Object.values(METRICS)) for (const [, id] of "parts" in m ? m.parts : []) { expect(METRICS).toHaveProperty(id); expect(METRICS[id as keyof typeof METRICS].view).toBeDefined(); }
