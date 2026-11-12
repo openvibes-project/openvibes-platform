@@ -181,14 +181,16 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .trend__bar[data-empty] { background: var(--surface-3); }
 .trend figcaption { font-size: 11.5px; }
 .tile-empty { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; padding: 8px 0; }
-.tile-number { all: unset; cursor: pointer; display: block; }
+.tile-number { all: unset; cursor: pointer; display: block; line-height: 1.15; }
 .tile-number:focus-visible { outline: 2px solid var(--focus); border-radius: var(--r-1); }
 .tile-number--plain { cursor: default; }
 .tile-number .delta { margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--text-2); }
 .tile-number .subtle { margin-left: 8px; font-size: 13px; }
 .tile-list { display: grid; gap: 6px; }
 .tile-more { justify-self: start; font-size: 13px; }
-.tile-parts { display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 13px; }
+.tile-parts { display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: 13px; line-height: 1.3; }
+/* A number tile is three rows (#576): in a narrow one the parts take three lines, so the trend line gives way. */
+@container tilebody (max-width: 200px) { .tile-spark:has(+ .tile-parts) { display: none; } }
 /* A wrapped line must not start or end with a dot. */
 @container tilebody (max-width: 290px) { .tile-parts__sep { display: none; } .tile-parts { column-gap: 12px; } }
 .tile-note p { margin: 0 0 6px; overflow-wrap: anywhere; white-space: pre-wrap; }

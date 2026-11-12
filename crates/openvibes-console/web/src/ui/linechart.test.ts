@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ariaLabel, clampIndex, collectingNote, emptyNote, runPoints, spansYears, axisDays, dayLabel, indexAt, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt } from "./linechart";
+import { ariaLabel, clampIndex, collectingNote, emptyNote, runPoints, spansYears, axisDays, dayLabel, indexAt, layout, monotonePath, niceMax, segments, sparkRange, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt } from "./linechart";
 
 const ys = (d: string) => [...d.matchAll(/[ -]?\d+(?:\.\d+)?,(-?\d+(?:\.\d+)?)/g)].map((m) => Number(m[1]));
 
@@ -139,5 +139,23 @@ describe("chart layout helpers", () => {
     expect(clampIndex(3, 10)).toBe(3);
     expect(clampIndex(3, 0)).toBeNull();
     expect(clampIndex(null, 10)).toBeNull();
+  });
+});
+
+describe("sparkline scale (#576)", () => {
+  const l = layout("spark", 100);
+  const plot = l.H - l.padT - l.padB;
+  it("runs from the lowest count to the highest, so 110 down to 86 uses the full height", () => {
+    const [min, max] = sparkRange([110, 98, 86]);
+    expect(yAt(110, max, l, min)).toBe(l.padT);
+    expect(yAt(86, max, l, min)).toBe(l.padT + plot);
+  });
+  it("puts 0, 1 and 2 findings at the bottom, middle and top", () => {
+    const [min, max] = sparkRange([0, 1, 2]);
+    expect([0, 1, 2].map((v) => yAt(v, max, l, min))).toEqual([l.padT + plot, l.padT + plot / 2, l.padT]);
+  });
+  it("draws a count that never changed across the middle", () => {
+    const [min, max] = sparkRange([12, 12]);
+    expect(yAt(12, max, l, min)).toBe(l.padT + plot / 2);
   });
 });

@@ -166,7 +166,14 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   or 90 days) and, with a trend, Line (smooth or stepped).
   - With a trend it shows a sparkline and the change over the period
     ("+3", "−2", "no change"). When the history starts later than the
-    period asks, the change adds "vs N d ago".
+    period asks, the change adds "vs N d ago". The sparkline runs from the
+    period's lowest count at the bottom to its highest at the top, so any
+    change uses the full height (a count that never changed is a line
+    across the middle); the full chart keeps its axis from 0. The
+    sparkline is 24 px high, so a tile with a trend and fine print fits
+    three rows (#576);
+    in a tile narrower than 200 px, where the fine print takes three
+    lines, the sparkline gives way (a container query in `panels.css`).
   - A count that spans kinds (Critical, High: alarms, vulnerabilities and
     compliance) has no tile link, because it has no single list. Fine
     print under the number shows each part ("2 alarms · 1 vulnerability ·
@@ -210,7 +217,7 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
     role — choose Vulnerabilities only".
   - Vulnerabilities only ranks hosts by open vulnerabilities.
 - **The built-in Overview** (read-only; "Duplicate to edit" makes a copy):
-  - top row, four Number tiles with a 30-day trend: Active alarms,
+  - top row, four Number tiles three rows high with a 30-day trend: Active alarms,
     Critical (all kinds), High (all kinds), Exploited vulnerabilities;
   - middle: Needs attention (alarms, exploited, serious, compliance,
     stale; 14 items) beside Vulnerabilities by severity, Compliance
