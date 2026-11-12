@@ -66,7 +66,7 @@ const columns: Column<PortListRow>[] = [
       {r.owners_missing && <span className="subtle">Owner not collected</span>}
     </div>
   ) },
-  { key: "groups", header: header("groups"), width: "300px", hideBelow: 900, render: (r) => (
+  { key: "groups", header: header("groups"), width: "260px", hideBelow: 900, render: (r) => (
     <span className="row">
       {r.groups.map((g) => <span key={g.id} className="badge badge--plain">{g.name}</span>)}
       {r.groups_total > r.groups.length && <span className="subtle" title={`${r.groups_total} groups`}>+{r.groups_total - r.groups.length}</span>}
@@ -74,7 +74,7 @@ const columns: Column<PortListRow>[] = [
     </span>
   ) },
   { key: "week", header: header("week"), width: "150px", hideBelow: 820, sort: (r) => r.week_added, render: (r) => <Week row={r} /> },
-  { key: "look", header: header("look"), width: "260px", hideBelow: 1000, render: (r) => <LookCell look={r.look} labels={LOOK} /> },
+  { key: "look", header: header("look"), width: "220px", hideBelow: 1000, render: (r) => <LookCell look={r.look} labels={LOOK} /> },
 ];
 
 /** The summary line, the table and the pager for one loaded page. */

@@ -194,7 +194,7 @@ export function TopCards({ summary }: { summary: HostSummary }) {
           more={<ShowAll n={failing.total} what="checks" view="/compliance" params={q} />}>
           {failing.items.map((f) => (
             <tr key={`${f.rule_set_id}/${f.rule_id}`}>
-              <td><ObjectLink to={{ kind: "finding", id: `${f.rule_set_id}/${f.rule_id}` }}>{f.message}</ObjectLink></td>
+              <td><div className="cell-two" title={f.message}><ObjectLink to={{ kind: "finding", id: `${f.rule_set_id}/${f.rule_id}` }}>{f.message}</ObjectLink><span className="mono subtle">{f.rule_id}</span></div></td>
               <td className="mono subtle">{f.rule_set_id}</td>
               <td><SeverityBadge severity={f.severity} /></td>
             </tr>
@@ -206,8 +206,8 @@ export function TopCards({ summary }: { summary: HostSummary }) {
           more={<ShowAll n={vulns.total} what="vulnerabilities" view="/vulnerabilities" params={q} />}>
           {vulns.items.map((v) => (
             <tr key={v.advisory}>
-              <td><span className="row" title={v.title}><ObjectLink to={{ kind: "advisory", id: v.advisory }}>{v.advisory}</ObjectLink>
-                {v.exploited && <span className="badge badge--critical badge--plain" title="Known to be exploited"><Icon name="flame" size={12} /> Exploited</span>}</span></td>
+              <td><div className="cell-two" title={v.title}><span className="row"><ObjectLink to={{ kind: "advisory", id: v.advisory }}>{v.title || v.advisory}</ObjectLink>
+                {v.exploited && <span className="badge badge--critical badge--plain" title="Known to be exploited"><Icon name="flame" size={12} /> Exploited</span>}</span><span className="mono subtle">{v.advisory}</span></div></td>
               <td><SeverityBadge severity={v.severity} /></td>
               {can.add_to_case && <td className="num"><AddToCase compact kind="vulnerability" id={vulnerabilityRef(summary.host.id, v.advisory)} label={v.advisory} /></td>}
             </tr>

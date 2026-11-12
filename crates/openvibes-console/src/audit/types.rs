@@ -37,6 +37,10 @@ pub struct AuditEventView {
     pub actor_kind: Option<String>,
     /// Stable actor id.
     pub actor_id: Option<String>,
+    /// The person's name, when the actor is a console user that still exists.
+    pub actor_name: Option<String>,
+    /// The person's name, when the target is a console user that still exists.
+    pub target_name: Option<String>,
     /// Authentication method, when present.
     pub authentication_method: Option<String>,
     /// Target kind and stable id.

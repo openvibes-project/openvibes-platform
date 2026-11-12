@@ -14642,6 +14642,13 @@
             ],
             "description": "Actor kind and stable id."
           },
+          "actor_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The person's name, when the actor is a console user that still exists."
+          },
           "at": {
             "type": "string",
             "description": "RFC 3339 event timestamp."
@@ -14695,6 +14702,13 @@
               "null"
             ],
             "description": "Target kind and stable id."
+          },
+          "target_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The person's name, when the target is a console user that still exists."
           }
         }
       },

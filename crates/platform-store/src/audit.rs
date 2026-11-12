@@ -71,6 +71,10 @@ pub struct AuditEvent {
     pub actor_kind: Option<String>,
     /// Stable actor id.
     pub actor_id: Option<String>,
+    /// The person's name, when the actor is a console user that still exists.
+    pub actor_name: Option<String>,
+    /// The person's name, when the target is a console user that still exists.
+    pub target_name: Option<String>,
     /// Authentication method, if applicable.
     pub authentication_method: Option<String>,
     /// Target category.
@@ -159,7 +163,9 @@ pub async fn export_events(
     let rows = client
         .query(
             "SELECT id, at, actor, action, target, result, request_id, actor_kind,
-                actor_id, authentication_method, target_kind, target_id, reason_code
+                actor_id, authentication_method, target_kind, target_id, reason_code,
+                (SELECT display_name FROM console_users WHERE user_id::text = audit_log.actor),
+                (SELECT display_name FROM console_users WHERE user_id::text = audit_log.target)
          FROM audit_log WHERE at >= $1 AND ($2::timestamptz IS NULL OR at < $2)
            AND ($3::text IS NULL OR actor = $3)
            AND ($4::text IS NULL OR action = $4)
@@ -228,7 +234,9 @@ pub async fn events(client: &Client, query: &AuditQuery) -> Result<AuditPage, St
     let rows = client
         .query(
             "SELECT id, at, actor, action, target, result, request_id, actor_kind,
-                    actor_id, authentication_method, target_kind, target_id, reason_code
+                    actor_id, authentication_method, target_kind, target_id, reason_code,
+                (SELECT display_name FROM console_users WHERE user_id::text = audit_log.actor),
+                (SELECT display_name FROM console_users WHERE user_id::text = audit_log.target)
              FROM audit_log
              WHERE at >= $1 AND ($2::timestamptz IS NULL OR at < $2)
                AND ($3::text IS NULL OR actor = $3)
@@ -279,6 +287,8 @@ fn audit_event_from_row(row: &tokio_postgres::Row) -> AuditEvent {
         target_kind: row.get(10),
         target_id: row.get(11),
         reason_code: row.get(12),
+        actor_name: row.get(13),
+        target_name: row.get(14),
     }
 }
 

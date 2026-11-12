@@ -135,7 +135,7 @@ const columns: Column<VulnListRow>[] = [
   ) },
   { key: "cvss", header: header("cvss"), numeric: true, width: "70px", hideBelow: 760, sort: (r) => r.cvss, render: (r) => <span className="num">{r.cvss?.toFixed(1) ?? "—"}</span> },
   { key: "epss", header: header("epss"), numeric: true, width: "80px", hideBelow: 860, sort: (r) => r.epss, render: (r) => <span className="num subtle">{pct(r.epss)}</span> },
-  { key: "hosts", header: header("hosts"), width: "140px", sort: (r) => r.open, render: (r) => (
+  { key: "hosts", header: header("hosts"), width: "140px", hideBelow: 440, sort: (r) => r.open, render: (r) => (
     <div className="stack hosts-cell">
       <span className="num"><b>{r.open.toLocaleString()}</b> <span className="subtle">open of {r.total.toLocaleString()}</span></span>
       <span className="meter meter--ok" role="progressbar" aria-label={`${r.open} open of ${r.total} hosts`} aria-valuetext={`${r.open} open of ${r.total} hosts`}

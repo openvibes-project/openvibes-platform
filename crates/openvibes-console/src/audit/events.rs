@@ -201,6 +201,8 @@ pub(crate) async fn authenticated_audit_events(
                 request_id: event.request_id,
                 actor_kind: event.actor_kind,
                 actor_id: event.actor_id,
+                actor_name: event.actor_name,
+                target_name: event.target_name,
                 authentication_method: event.authentication_method,
                 target_kind: event.target_kind,
                 target_id: event.target_id,

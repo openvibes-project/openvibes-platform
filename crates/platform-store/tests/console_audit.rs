@@ -221,3 +221,44 @@ async fn audit_export_refuses_row_and_byte_overflows_before_loading_events() {
     drop(client);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn an_event_names_the_person_when_its_actor_or_target_is_a_console_user() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let since = Utc::now() - chrono::Duration::seconds(10);
+    let id = "11111111-1111-4111-8111-111111111111";
+    client
+        .batch_execute(&format!(
+            "INSERT INTO console_users (user_id, username, display_name, created_at)
+             VALUES ('{id}', 'ada', 'Ada Lovelace', now());
+             INSERT INTO audit_log(actor, action, target, result) VALUES
+               ('{id}', 'auth.login.succeeded', '{id}', 'success'),
+               ('openvibes-admin (uid 990)', 'migrate', NULL, 'ok');"
+        ))
+        .await
+        .unwrap();
+    let query = AuditQuery {
+        since,
+        until: None,
+        actor: None,
+        action: None,
+        result: None,
+        action_prefix: None,
+        after: None,
+        limit: PageLimit::new(10).unwrap(),
+    };
+    let page = events(&client, &query).await.unwrap();
+    let login = page
+        .items
+        .iter()
+        .find(|e| e.action == "auth.login.succeeded")
+        .unwrap();
+    assert_eq!(login.actor_name.as_deref(), Some("Ada Lovelace"));
+    assert_eq!(login.target_name.as_deref(), Some("Ada Lovelace"));
+    // The stored actor stays the id: filters and the CSV use it.
+    assert_eq!(login.actor, id);
+    let migrate = page.items.iter().find(|e| e.action == "migrate").unwrap();
+    assert_eq!((&migrate.actor_name, &migrate.target_name), (&None, &None));
+}

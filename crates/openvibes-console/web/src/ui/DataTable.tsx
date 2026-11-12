@@ -66,7 +66,8 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
 
   const visibleColumns = columns.filter((candidate) => !candidate.hideBelow || width >= candidate.hideBelow);
   const setSort = (key: string) => {
-    const nextDirection = key === sortKey ? (direction === "asc" ? "desc" : "asc") : "asc";
+    // Severity starts with the most severe; every other column from A or the smallest.
+    const nextDirection = key === sortKey ? (direction === "asc" ? "desc" : "asc") : key === "severity" ? "desc" : "asc";
     nav.setParams({ sort: key, dir: nextDirection, [PAGE]: null });
   };
   const last = useRef(-1);
