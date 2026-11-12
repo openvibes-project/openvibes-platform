@@ -19,12 +19,14 @@ const SAVED = "Saved · recorded in the audit log";
 const APPROVE = "alarms.suppressions.approve";
 /** What a section's "default" means, where it is not the built-in value. */
 const SECTION_NOTES: Record<string, string> = {
-  "Vulnerability feeds": "Default is what vulns.toml says (the built-in value unless it was edited on the server). A change reaches the service within a minute and restarts its running feed downloads.",
+  "Vulnerability feeds": "Until a value is changed here, the server's own setting applies. A change takes effect within a minute and restarts feed downloads that are running.",
   "Single sign-on": "Needs an application set up in your identity provider with the values under “Enter this in your identity provider”. People who are in none of the groups that match a role name cannot sign in. The local admin account always signs in with its password. Sign-in is offered on the login page once the switch is on. Each time someone signs in, their roles are set again from their groups.",
-  "Assistant": "Default is what the [assistant] part of console.toml says (the built-in value unless it was edited on the server); certificate and key file paths stay in that file. A change applies the next time the console restarts (Maintenance › Service in the admin tool). If the settings are not valid together the assistant stays off and the console logs why.",
-  "Agent connections": "Default is what ingest.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool). “Keep findings” also sets how long maintenance keeps them.",
-  "Rule distribution": "Default is what distribution.toml says (the built-in value unless it was edited on the server). A change applies the next time the service restarts (Maintenance › Service in the admin tool).",
+  "Assistant": "Turns the assistant on and names its model; what it may look up on the internet is under the Assistant tab. Until a value is changed here, the server's own setting applies. A change applies the next time the console restarts (Maintenance › Service in the admin tool). If the settings do not work together, the assistant stays off and the console logs why.",
+  "Agent connections": "Server tuning: the defaults suit most installs. A change applies the next time the service restarts (Maintenance › Service in the admin tool).",
+  "Rule distribution": "Server tuning: the defaults suit most installs. A change applies the next time the service restarts (Maintenance › Service in the admin tool).",
 };
+/** Server tuning (#582): listed last and folded, so the page opens on what people change. */
+const ADVANCED = new Set(["Agent connections", "Rule distribution"]);
 const CERTIFICATES = "sso.idp_certificates";
 const slug = (section: string) => `general-${section.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
@@ -44,7 +46,7 @@ export async function saveValue(key: string, value: unknown, send: (method: stri
 /** A recorded value in words. */
 const show = (value: unknown) => (value === "set" || value === "not set" ? String(value) : value === null || value === undefined ? "default" : value === true ? "on" : value === false ? "off" : String(value));
 
-function Row({ setting }: { setting: SettingView }) {
+function Row({ setting, restartSaid }: { setting: SettingView; restartSaid: boolean }) {
   const [, tick] = useState(0);
   const [ed] = useState(() => createRowEditor(setting.key, setting.value, request, () => tick((n) => n + 1), () => invalidate("/api/v1/settings"), setting.kind));
   useEffect(() => { ed.setValue(setting.value); });
@@ -56,7 +58,7 @@ function Row({ setting }: { setting: SettingView }) {
       <div className="stack general-row__text">
         <strong>{setting.label}</strong>
         <span className="subtle">{setting.help}</span>
-        {setting.applies === "restart" && <span className="subtle">Applies after the service restarts.</span>}
+        {setting.applies === "restart" && !restartSaid && <span className="subtle">Applies after the service restarts.</span>}
         <span className="subtle" role="status">{result?.ok ? result.message : ""}</span>
         {result?.ok === false && <span className="general-row__error" role="alert">{result.message}</span>}
       </div>
@@ -130,8 +132,19 @@ function ServiceProvider() {
 }
 
 export function GeneralBody({ settings, roles, names = new Map() }: { settings: SettingsView; roles?: readonly Role[] | undefined; names?: ReadonlyMap<string, string> }) {
-  const sections = [...new Set(settings.items.map((s) => s.section))];
+  const every = [...new Set(settings.items.map((s) => s.section))];
+  const sections = [...every.filter((s) => !ADVANCED.has(s)), ...every.filter((s) => ADVANCED.has(s))];
   const approvers = roles?.filter((r) => r.permissions.includes(APPROVE)).map((r) => r.name);
+  const rows = (s: string) => settings.items.filter((i) => i.section === s);
+  const list = (s: string) => rows(s).map((item) => (
+                    <div key={item.key} className="stack">
+                      <Row setting={item} restartSaid={(SECTION_NOTES[s] ?? "").includes("applies the next time")} />
+                      {item.key === CERTIFICATES && <Certificates setting={item} />}
+                      {item.key === "suppressions.require_approval" && item.value === true && approvers && (
+                        <p className="subtle">Approvers: people whose role holds Approve suppressions on those hosts — {approvers.length ? approvers.join(", ") : "no role holds it yet"}</p>
+                      )}
+                    </div>
+                  ));
   return (
     <div className="view person-page">
       <header className="person-page__head">
@@ -157,15 +170,9 @@ export function GeneralBody({ settings, roles, names = new Map() }: { settings: 
               <Card title={s}>
                 <div className="stack">
                   {SECTION_NOTES[s] && <p className="subtle">{SECTION_NOTES[s]}</p>}
-                  {settings.items.filter((i) => i.section === s).map((item) => (
-                    <div key={item.key} className="stack">
-                      <Row setting={item} />
-                      {item.key === CERTIFICATES && <Certificates setting={item} />}
-                      {item.key === "suppressions.require_approval" && item.value === true && approvers && (
-                        <p className="subtle">Approvers: people whose role holds Approve suppressions on those hosts — {approvers.length ? approvers.join(", ") : "no role holds it yet"}</p>
-                      )}
-                    </div>
-                  ))}
+                  {ADVANCED.has(s)
+                    ? <details><summary className="link-button">Show the {rows(s).length} settings</summary><div className="stack">{list(s)}</div></details>
+                    : list(s)}
                   {s === "Single sign-on" && <ServiceProvider />}
                 </div>
               </Card>

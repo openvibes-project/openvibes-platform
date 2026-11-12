@@ -66,7 +66,7 @@ describe("General text and secret rows", () => {
     const out = html();
     expect(out).toContain("Hardware profile");
     expect(out).toContain(">medium<");
-    expect(out).toContain("part of console.toml says");
+    expect(out).toContain("the server&#x27;s own setting applies");
   });
   it("offers the way back for any stored row, even one equal to the default, and a bool too", () => {
     const view = (item: SettingsView["items"][number]) => renderToStaticMarkup(
@@ -89,8 +89,9 @@ describe("General text and secret rows", () => {
     expect(out).toContain("AB:CD");
     expect(out).toContain("valid until 2030-01-02");
   });
-  it("says which settings wait for a restart", () => {
-    expect(html().match(/Applies after the service restarts/g)).toHaveLength(2);
+  it("says which settings wait for a restart: on the row, unless its section already says so", () => {
+    expect(html().match(/Applies after the service restarts/g)).toHaveLength(1);
+    expect(html()).toContain("A change applies the next time the console restarts");
   });
   it("sends a typed address as text, and null for a reset", async () => {
     const sent: unknown[] = [];

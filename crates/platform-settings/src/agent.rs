@@ -73,7 +73,7 @@ pub(crate) mod ingest {
             key: FINDING_RETENTION_DAYS,
             section: SECTION,
             label: "Keep findings (days)",
-            help: "Findings older than this are not stored. Keep it equal to the maintenance timer's --retention-days.",
+            help: "Findings older than this are not stored, and maintenance removes them.",
             kind: Kind::Int {
                 min: 1,
                 max: 36500,
