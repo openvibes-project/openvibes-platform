@@ -8,7 +8,7 @@ import { assistant, useAssistant } from "../app/assistant";
 import { useActiveAlarms } from "../app/liveAlarms";
 import { countTitle, menuCount, waitingToDecide } from "../app/menuCount";
 import { useResource } from "../api/client";
-import type { AlarmSuppression, FindingSummary, VulnerabilitySummary } from "../api/types";
+import type { AlarmSuppression } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
 import { useSession } from "../app/session";
@@ -25,15 +25,16 @@ const pinKey = "openvibes.v2.rail.pinned";
 function useMenuCounts(): Partial<Record<string, string>> {
   const { can } = useSession();
   const alarms = useActiveAlarms();
-  const findings = useResource<FindingSummary>(can("compliance.read") ? "/api/v1/compliance/summary" : null);
-  const vulns = useResource<VulnerabilitySummary>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
+  // The lists' own totals (#580): failing checks and open CVEs, so the
+  // menu and the list it opens show the same number.
+  const checks = useResource<{ total: number }>(can("compliance.read") ? "/api/v1/compliance-list?limit=1" : null);
+  const vulns = useResource<{ total: number }>(can("vulnerabilities.read") ? "/api/v1/vulnerability-list?limit=1" : null);
   const waiting = useResource<{ items: AlarmSuppression[] }>(can("alarms.suppressions.approve") ? "/api/v1/alarm-suppressions?state=waiting" : null);
-  const f = findings.data;
   return {
     "/alarm-suppressions": waitingToDecide(waiting.data?.items),
     "/alarms": can("alarms.read") ? menuCount(alarms?.count, alarms?.more) : undefined,
-    "/compliance": f ? menuCount(f.critical + f.high + f.medium + f.low) : undefined,
-    "/vulnerabilities": menuCount(vulns.data?.by_severity.reduce((sum, row) => sum + row.count, 0)),
+    "/compliance": menuCount(checks.data?.total),
+    "/vulnerabilities": menuCount(vulns.data?.total),
   };
 }
 
