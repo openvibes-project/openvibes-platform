@@ -26,7 +26,7 @@ test("the header, tiles and cards say what runs, where and what changed", async 
   await expect(head.locator("h1")).toContainText("sshd.service");
   await expect(head.locator("h1")).toContainText("OpenSSH server");
   await expect(head).toContainText("Secure remote login");
-  await expect(page.locator(".detail-tiles")).toContainText("Running on");
+  await expect(page.locator(".detail-tiles")).toContainText("Running, of");
   await expect(card(page, "Details")).toContainText("Runs as");
   await expect(card(page, "Ports")).toContainText("22/tcp");
   await expect(card(page, "By group")).toBeVisible();
@@ -48,7 +48,7 @@ test("switching the Hosts segments shows only those hosts, and the tile leads th
   for (const text of await hosts(page).allTextContents()) expect(text).toContain("as root");
   await pickSegment(page, /^All/);
   await expect(hosts(page)).toHaveCount(all);
-  await page.locator(".detail-tiles").getByRole("link", { name: /^Running on/ }).click();
+  await page.locator(".detail-tiles").getByRole("link", { name: /^Running, of/ }).click();
   await expect(page).toHaveURL(/#hosts$/);
 });
 
