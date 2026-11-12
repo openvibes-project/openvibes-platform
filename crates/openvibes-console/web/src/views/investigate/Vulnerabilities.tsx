@@ -15,7 +15,7 @@ import type { BulkAction } from "../../panels/triage/bulk";
 import { BulkBar } from "../../panels/triage/BulkBar";
 import { Empty, ErrorBox, Loading, SeverityBadge } from "../../ui/bits";
 import { type Column, DataTable } from "../../ui/DataTable";
-import { date, pct, plural, triageLabel } from "../../ui/format";
+import { date, pct, plural, triageLabel, vulnTitle } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { FilterBar } from "../../ui/list/FilterBar";
 import { type ListFilter, PAGE, hasFilters } from "../../ui/list/filters";
@@ -54,7 +54,7 @@ export function apiQuery(params: URLSearchParams): string {
   return query.toString();
 }
 
-const SEVERITY: Record<string, string> = { critical: "Critical", important: "Important", moderate: "Moderate", low: "Low", unrated: "Unrated" };
+const SEVERITY: Record<string, string> = { critical: "Critical", important: "High", moderate: "Medium", low: "Low", unrated: "Unrated" };
 const STATE: Record<string, string> = { ...triageLabel, resolved: "Resolved", all: "All states" };
 const SIGNAL: Record<string, string> = {
   exploited: "Known exploited", due30: "Due within 30 days", nofix: "No fix yet", reboot: "Reboot needed", lowconf: "Lower confidence",
@@ -95,7 +95,7 @@ export function bulkItems(rows: readonly VulnListRow[], host: string | null, gro
 export function listBulk(chosen: readonly VulnListRow[]) {
   const rows = chosen.filter(canChange);
   const without: BulkAction[] = rows.length === 0 ? ["state", "assign", "case"] : [];
-  return { rows, changes: rows.length, without, note: "Nothing selected can be triaged: no fix is known yet, or it is a lower-confidence match." };
+  return { rows, changes: rows.length, without, note: "Bulk actions cover vulnerabilities with a fix from a distribution advisory, and none of the selected ones has one. Open a vulnerability to set its state." };
 }
 
 const none = (text: string) => <span className="subtle" title={text}><span aria-hidden="true">—</span><span className="sr-only">{text}</span></span>;
@@ -123,7 +123,7 @@ const columns: Column<VulnListRow>[] = [
   { key: "severity", header: header("severity"), width: "110px", sort: (r) => r.severity, render: (r) => <SeverityBadge severity={r.severity} /> },
   { key: "advisory", header: header("advisory"), render: (r) => (
     <div className="cell-two">
-      <span className="row"><a className="truncate" {...viewLink(vulnPath(r.key))}>{r.title}<span className="sr-only"> ({r.key})</span></a>
+      <span className="row"><a className="truncate" title={r.title} {...viewLink(vulnPath(r.key))}>{vulnTitle(r.packages, r.title)}<span className="sr-only"> ({r.key})</span></a>
         {r.exploited && <span className="badge badge--critical badge--plain" title="Known to be exploited"><Icon name="flame" size={12} /> Exploited</span>}
         {r.low_confidence && <span className="badge badge--plain" title="Matched from upstream version ranges, not a distribution advisory">Lower confidence</span>}
       </span>

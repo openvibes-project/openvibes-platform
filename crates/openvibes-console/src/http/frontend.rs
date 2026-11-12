@@ -3,7 +3,7 @@
 
 use axum::{
     Router,
-    http::{HeaderValue, StatusCode, header},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
 #[cfg(feature = "embedded-ui")]
@@ -72,10 +72,29 @@ fn asset_not_found_response() -> Response {
     response
 }
 
-pub(super) async fn browser_not_found() -> Response {
+/// An address no route answers: 404. A browser opening a page (a GET that
+/// accepts HTML) gets the app with that status, so it shows "Page not
+/// found" with the menu instead of a blank page; anything else gets no body.
+pub(super) async fn browser_not_found(method: Method, headers: HeaderMap) -> Response {
+    #[cfg(feature = "embedded-ui")]
+    if method == Method::GET && accepts_html(&headers) {
+        let mut response = spa_index().await;
+        *response.status_mut() = StatusCode::NOT_FOUND;
+        return response;
+    }
+    #[cfg(not(feature = "embedded-ui"))]
+    let _ = (method, headers);
     let mut response = StatusCode::NOT_FOUND.into_response();
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+#[cfg(feature = "embedded-ui")]
+fn accepts_html(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|accept| accept.contains("text/html"))
 }

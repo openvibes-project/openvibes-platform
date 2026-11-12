@@ -7,9 +7,11 @@ import { type PanelRef, pagePath } from "../app/location";
 import { ago, triageLabel, when } from "./format";
 import { Icon, type IconName } from "./Icon";
 
-const severityText: Record<string, string> = {
+/** One severity scale in the interface (#579): a distribution's Important
+ * and Moderate are shown as High and Medium, like alarms and compliance. */
+export const severityText: Record<string, string> = {
   critical: "Critical", high: "High", medium: "Medium", low: "Low",
-  important: "Important", moderate: "Moderate", unrated: "Unrated",
+  important: "High", moderate: "Medium", unrated: "Unrated",
 };
 
 export function SeverityBadge({ severity }: { severity: string }) {

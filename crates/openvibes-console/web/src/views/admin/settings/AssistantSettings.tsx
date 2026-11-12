@@ -1,5 +1,6 @@
 // Admin → Assistant: the two opt-in internet-lookup levels (spec 2026-10-10 §2).
 // Turning a level on asks first, repeating its risk text; turning it off does not.
+import { date } from "../../../ui/format";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { ApiError, apiMessage, invalidate, request, useResource } from "../../../api/client";
@@ -82,7 +83,7 @@ export function AssistantSettings() {
       <ViewHeader title="Assistant" />
       <div className="view-pad stack">
         {off && <div className="callout callout--warn"><Icon name="alert" size={16} /><span>The assistant is off; turn it on in Setup.</span></div>}
-        <p className="subtle">Both levels are off until you switch them on. Changed {current.updated_at.slice(0, 10)} by {current.updated_by}.</p>
+        <p className="subtle">What the assistant may look up on the internet. Turning it on and its model are under General. Both levels are off until you switch them on. Changed {date(current.updated_at)} by {current.updated_by === "migration" ? "the upgrade" : current.updated_by}.</p>
         <section className="stack">
           <Switch label="Look up security references" checked={current.level >= 1} disabled={off || busy}
             onChange={(on) => { if (on) setAsking(1); else void save({ ...base, level: 0 }, "Internet lookups are off"); }} />

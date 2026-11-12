@@ -80,7 +80,7 @@ pub(crate) async fn heartbeat(
         heartbeat.hostname.as_deref(),
         &capabilities,
         health.as_ref(),
-        Some(address),
+        Some(recorded_address(address)),
         now,
     )
     .await?;
@@ -421,4 +421,37 @@ pub(crate) async fn services(
     };
     host_services::replace(&mut client, &agent_id, &stored, now).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The address to record for an agent. An agent on this server connects over
+/// loopback; recorded as such, the server's own host would show `::1`. It
+/// gets the address this server uses on the network instead: the source
+/// address of its default route (connecting a UDP socket sends nothing).
+// ponytail: IPv4 route only; a server with only IPv6 keeps the loopback address.
+fn recorded_address(peer: std::net::IpAddr) -> std::net::IpAddr {
+    if !peer.is_loopback() {
+        return peer;
+    }
+    std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|socket| {
+            socket.connect("192.0.2.1:9")?;
+            socket.local_addr()
+        })
+        .map(|local| local.ip())
+        .ok()
+        .filter(|ip| !ip.is_loopback() && !ip.is_unspecified())
+        .unwrap_or(peer)
+}
+
+#[cfg(test)]
+mod recorded_address_tests {
+    use super::recorded_address;
+
+    #[test]
+    fn a_network_peer_is_recorded_as_it_is_and_loopback_never_becomes_unspecified() {
+        let peer: std::net::IpAddr = "10.1.2.3".parse().unwrap();
+        assert_eq!(recorded_address(peer), peer);
+        let own = recorded_address("::1".parse().unwrap());
+        assert!(!own.is_unspecified());
+    }
 }

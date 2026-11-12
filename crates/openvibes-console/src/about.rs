@@ -518,9 +518,16 @@ fn no_store(response: impl IntoResponse) -> Response {
         (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")
     ))]
 pub(crate) async fn about(State(state): State<AuthHttpState>, headers: HeaderMap) -> Response {
-    if let Err(response) = session_user(&state, &headers, false).await {
-        return response;
-    }
+    let user = match session_user(&state, &headers, false).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    // The fleet's totals are for people who see every host; anyone scoped
+    // to host groups gets none, not the whole fleet's.
+    let sees_every_host = matches!(
+        crate::access::guard::scope_of(&user.capabilities, crate::Permission::HostsRead),
+        Some(platform_store::console_read::AgentScope::Global)
+    );
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
     };
@@ -531,7 +538,11 @@ pub(crate) async fn about(State(state): State<AuthHttpState>, headers: HeaderMap
         .ok()
         .and_then(|row| row.try_get::<_, String>(0).ok());
     let now = Utc::now();
-    let fleet = fleet(&client, now).await;
+    let fleet = if sees_every_host {
+        fleet(&client, now).await
+    } else {
+        AboutFleet::default()
+    };
     let certificates = platform_store::ca::list(&client)
         .await
         .unwrap_or_default()

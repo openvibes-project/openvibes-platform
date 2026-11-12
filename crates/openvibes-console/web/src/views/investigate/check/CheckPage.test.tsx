@@ -50,7 +50,7 @@ describe("check page", () => {
 
   it("has the four tiles; failing on leads to the Hosts card; the bars say where the 14 days went", () => {
     const html = render(<CheckView page={fixture()} />);
-    expect(html).toMatch(/<a [^>]*href="#hosts"[^>]*aria-label="Failing on, of 5 hosts checked: 2"/);
+    expect(html).toMatch(/<a [^>]*href="#hosts"[^>]*aria-label="Failing, of 5 hosts checked: 2"/);
     expect(html).toContain('id="hosts"');
     const t = text(html);
     expect(t).toContain("3Passing");

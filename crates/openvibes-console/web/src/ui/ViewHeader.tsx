@@ -40,9 +40,11 @@ type Props = {
   refresh?: string;
   /** Filters set elsewhere, shown as removable chips (the host filter). */
   filters?: ReactNode;
+  /** False on a page with nothing to filter. */
+  search?: boolean;
 };
 
-export function ViewHeader({ title, count, total, placeholder = "Filter…", chips = [], actions, refresh, filters }: Props) {
+export function ViewHeader({ title, count, total, placeholder = "Filter…", chips = [], actions, refresh, filters, search = true }: Props) {
   const { view, params } = useLocation();
   const [saved, setSaved] = useState(() => readSaved(view));
   const [naming, setNaming] = useState(false);
@@ -101,6 +103,7 @@ export function ViewHeader({ title, count, total, placeholder = "Filter…", chi
         </div>
       </div>
       <div className="view-header__tools">
+{search && (
         <label className="search view-header__search">
           <Icon name="search" size={15} />
           <span className="sr-only">Filter {title.toLowerCase()}</span>
@@ -108,6 +111,7 @@ export function ViewHeader({ title, count, total, placeholder = "Filter…", chi
             onChange={(event) => nav.setParams({ q: event.target.value })} />
           <span className="kbd view-header__kbd" aria-hidden="true">/</span>
         </label>
+        )}
         {filters}
         {chips.length > 0 && (
           <div className="row row--wrap" role="group" aria-label="Quick filters">

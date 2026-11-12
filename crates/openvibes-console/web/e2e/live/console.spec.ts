@@ -280,7 +280,8 @@ test("a new user signs in with a one-time password and must set their own first 
   const secondTab = await context.newPage();
   await secondTab.goto("/");
   await expect(secondTab.getByRole("heading", { name: "Set your password" })).toBeVisible();
-  await other.getByLabel("One-time password").fill(oneTime);
+  // The tab that signed in does not ask for the one-time password again (#576); the second tab does.
+  await expect(other.getByLabel("One-time password")).toHaveCount(0);
   await other.getByLabel("New password (at least 15 characters)").fill("e2e-a-long-new-password-2026");
   await other.getByLabel("New password again").fill("e2e-a-long-new-password-2026");
   await other.getByRole("button", { name: "Set password" }).click();

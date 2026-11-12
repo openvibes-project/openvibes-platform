@@ -42,8 +42,13 @@ export const METRIC_GROUPS: SelectGroup[] = ([["all.", "All kinds"], ["alarms.",
 
 /** Fine print for one part of a cross-kind count: "1 vulnerability", "0 alarms". */
 export function partText(kind: string, n: number): string {
-  const word = kind === "vulnerability" ? (n === 1 ? "vulnerability" : "vulnerabilities") : kind === "alarm" && n !== 1 ? "alarms" : kind;
-  return `${count(n)} ${word}`;
+  // Vulnerabilities and compliance count one per host (#580): a CVE on 40
+  // hosts is 40, where its list counts it once. "Finding" is the compliance
+  // word only (#410), so vulnerabilities say "on hosts".
+  const one = n === 1;
+  if (kind === "alarm") return `${count(n)} ${one ? "alarm" : "alarms"}`;
+  if (kind === "vulnerability") return `${count(n)} ${one ? "vulnerability" : "vulnerabilities"} on hosts`;
+  return `${count(n)} ${kind} ${one ? "finding" : "findings"}`;
 }
 
 /** Change between the first and last point of the shown period; null under two points. */

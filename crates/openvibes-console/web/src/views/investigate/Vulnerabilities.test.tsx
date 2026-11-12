@@ -109,7 +109,7 @@ describe("Vulnerabilities list", () => {
     expect(filters.find((f) => f.param === "state")?.values.map((v) => v.label)).toEqual(["Open", "Mitigated", "Accepted risk", "False positive", "Resolved", "All states"]);
     expect(filters.find((f) => f.param === "signal")?.values.map((v) => v.label))
       .toEqual(["Known exploited", "Due within 30 days", "No fix yet", "Reboot needed", "Lower confidence"]);
-    expect(filters.find((f) => f.param === "severity")?.values.map((v) => v.label)).toEqual(["Critical", "Important"]);
+    expect(filters.find((f) => f.param === "severity")?.values.map((v) => v.label)).toEqual(["Critical", "High"]);
     expect(filters.find((f) => f.param === "assignee")?.values.map((v) => v.label)).toEqual(["Me", "Unassigned", "Sam Analyst"]);
     const unset = vulnFilters(list(), { host: null, hostName: undefined, advisory: null });
     expect(unset.filter((f) => f.chipOnly).map((f) => [f.param, f.values.length])).toEqual([["host", 0], ["advisory", 0]]);
@@ -148,8 +148,8 @@ describe("Vulnerabilities list", () => {
     };
     const [fixable, nofix] = list().items;
     if (!fixable || !nofix) throw new Error("fixture");
-    expect(bar([nofix])).toContain("Nothing selected can be triaged");
-    expect(bar([fixable, nofix])).not.toContain("Nothing selected can be triaged");
+    expect(bar([nofix])).toContain("none of the selected ones has one");
+    expect(bar([fixable, nofix])).not.toContain("none of the selected ones has one");
   });
 
   it("counts the open hosts a change reaches and names the other CVEs those advisories cover", () => {

@@ -15,7 +15,8 @@ pub(crate) use candidates::INSTALLED;
 pub use candidates::*;
 pub use feeds::*;
 pub use summary::{
-    Summary, no_fix_count, no_fix_count_in_scope, refresh_counts, summary, summary_in_scope,
+    Summary, no_fix_count, no_fix_count_in_scope, rate_unrated, refresh_counts, summary,
+    summary_in_scope,
 };
 
 /// A package an advisory affects, and the version range affected.
@@ -379,7 +380,12 @@ pub(crate) async fn list_for_agents(
     // Each advisory's CVEs, enrichment and priority, combined once (a few
     // tens of thousands of advisories), not once per vulnerability.
     let adv = "WITH adv AS (
-         SELECT a.advisory_id, a.severity, a.title, a.url, a.source,
+         SELECT a.advisory_id, a.severity,
+                -- What the flaw is (#579): the summary of its highest-scored
+                -- CVE; an advisory's own title is often only package builds.
+                COALESCE((array_agg(x.description ORDER BY x.cvss_score DESC NULLS LAST, c.cve_id)
+                    FILTER (WHERE x.description IS NOT NULL))[1], a.title) AS title,
+                a.url, a.source,
                 COALESCE(array_agg(DISTINCT c.cve_id)
                     FILTER (WHERE c.cve_id IS NOT NULL), '{}') AS cves,
                 COALESCE(bool_or(x.kev_added IS NOT NULL), false) AS kev,

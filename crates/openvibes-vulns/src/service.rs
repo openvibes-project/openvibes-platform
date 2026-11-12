@@ -197,6 +197,7 @@ async fn serve<T>(
         mirrored,
         wants_releases.then(|| osv_changed.clone()),
     ));
+    let rating = tokio::spawn(rate_loop(pool.clone()));
     let mut interval = tokio::time::interval(every);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     tokio::pin!(stop);
@@ -219,6 +220,7 @@ async fn serve<T>(
     };
     listener.abort();
     rematch_retry.abort();
+    rating.abort();
     for task in [nvd_task, osv_task, mirror_task].into_iter().flatten() {
         task.abort();
     }
@@ -397,6 +399,32 @@ async fn nvd_loop(pool: Pool, nvd: NvdClient, every: Duration) {
                 "nvd synced"
             ),
             Err(error) => tracing::warn!(%error, "nvd sync failed"),
+        }
+    }
+}
+
+/// How often unrated advisories are rated from CVSS.
+const RATE_EVERY: Duration = Duration::from_secs(5 * 60);
+
+/// Rates advisories a distribution left unrated from their CVEs' CVSS score
+/// (first at start, then every [`RATE_EVERY`]), whichever feed or mirror
+/// brought them, and recounts the hosts that have them (#579).
+async fn rate_loop(pool: Pool) {
+    let mut interval = tokio::time::interval(RATE_EVERY);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        interval.tick().await;
+        let Ok(client) = pool.get().await else {
+            tracing::warn!("database unavailable; rating skipped");
+            continue;
+        };
+        match vulns::rate_unrated(&client).await {
+            Ok(hosts) if hosts.is_empty() => {}
+            Ok(hosts) => match vulns::refresh_counts(&client, &hosts, Utc::now()).await {
+                Ok(()) => tracing::info!(hosts = hosts.len(), "rated advisories from cvss"),
+                Err(error) => tracing::warn!(%error, "recount after rating failed"),
+            },
+            Err(error) => tracing::warn!(%error, "rating from cvss failed"),
         }
     }
 }

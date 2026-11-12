@@ -66,10 +66,10 @@ export function NumberTile({ widget }: WidgetProps) {
   );
   const view = def.view;
   // Reserve the chart's height while history loads so the fine print does not jump.
-  const chart = trend > 0 && !unset && <div style={{ minHeight: 36 }}>{history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />}</div>;
+  const chart = trend > 0 && !unset && <div className="tile-spark" style={{ minHeight: 24 }}>{history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />}</div>;
   const parts = def.parts && <div className="tile-parts">{def.parts.map(([kind, id], i) => <Fragment key={id}>{i > 0 && <span className="tile-parts__sep" aria-hidden="true"> · </span>}<Part kind={kind} id={id} unset={noFeed} /></Fragment>)}</div>;
   return (
-    <div className="stack">
+    <div className="stack stack--tight">
       {view ? <button type="button" className="tile-number" onClick={() => nav.view(view[0], view[1])}>{body}</button>
         : <div className="tile-number tile-number--plain">{body}</div>}
       {chart}
@@ -79,7 +79,7 @@ export function NumberTile({ widget }: WidgetProps) {
 }
 
 export const BREAKDOWN_SOURCES = ["alarms", "vulnerabilities", "compliance", "agents"] as const;
-export const BREAKDOWN_TITLES = { alarms: "Active alarms by severity", vulnerabilities: "Vulnerabilities by severity", compliance: "Compliance findings by severity", agents: "Hosts by status" };
+export const BREAKDOWN_TITLES = { alarms: "Active alarms by severity", vulnerabilities: "Vulnerabilities on hosts by severity", compliance: "Compliance findings by severity", agents: "Hosts by status" };
 const ALARM_SEVERITIES = ["critical", "high", "medium", "low"] as const;
 
 export function BreakdownTile({ widget }: WidgetProps) {
@@ -102,7 +102,7 @@ export function BreakdownTile({ widget }: WidgetProps) {
       // Info is what the Active alarms tile counts beyond the four severities.
       { key: "info", label: "info", value: Math.max(0, (alarmCounts[4] ?? 0) - alarmCounts.slice(0, 4).reduce<number>((n, v) => n + (v ?? 0), 0)), tone: "unrated", go: () => nav.view("/alarms", { severity: "info" }) }]
       : source === "compliance" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/compliance", { severity: s }) }))
-      : source === "vulnerabilities" ? (vulns.data?.by_severity ?? []).map((row) => ({ key: row.severity, label: row.severity, value: row.count, tone: row.severity, go: () => nav.view("/vulnerabilities", { severity: row.severity }) }))
+      : source === "vulnerabilities" ? (vulns.data?.by_severity ?? []).map((row) => ({ key: row.severity, label: ({ important: "high", moderate: "medium" } as Record<string, string>)[row.severity] ?? row.severity, value: row.count, tone: row.severity, go: () => nav.view("/vulnerabilities", { severity: row.severity }) }))
         : (["active", "stale", "revoked", "imported"] as const).map((s) => ({ key: s, label: s, value: agents.data?.[s] ?? 0, tone: { active: "low", stale: "medium", revoked: "high", imported: "unrated" }[s], go: () => nav.view("/hosts", { status: { active: "online", stale: "offline", revoked: "revoked", imported: "imported" }[s] }) }));
   // Compliance counts failing findings, while the list it opens counts checks.
   const unit = unitOf(source) && ` ${unitOf(source)}`;

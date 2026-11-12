@@ -78,7 +78,7 @@ export function PortView({ page }: { page: Page }) {
         `listening on ${header.listening.toLocaleString()} of ${plural(header.of, "host")}`,
         header.exposed > 0 ? `exposed on ${header.exposed.toLocaleString()}` : "local only",
         header.services > 0 && plural(header.services, "service"),
-        first && `${first.before ? "before" : "first seen"} ${date(first.at)}`,
+        first && `${first.before ? "here since before" : "first seen"} ${date(first.at)}`,
       ]}
       actions={<PortActions page={page} />}
       tiles={[

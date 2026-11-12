@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useAllPages, useResource } from "../api/client";
 import type { Agent, AlarmPage, FindingGroup, Vulnerability, VulnerabilityPage } from "../api/types";
 import { useSession } from "../app/session";
-import { plural } from "../ui/format";
+import { plural, packageNames, vulnTitle } from "../ui/format";
 import type { IconName } from "../ui/Icon";
 
 /** What "Needs attention" can include, in the settings' order. */
@@ -33,7 +33,7 @@ export function buildAttention({ alarms, exploited, serious, seriousMore = false
   const byAdvisory = (list: Vulnerability[]) => {
     const map = new Map<string, { title: string; severity: string; hosts: number }>();
     for (const item of list) {
-      const entry = map.get(item.advisory_id) ?? { title: item.title, severity: item.severity, hosts: 0 };
+      const entry = map.get(item.advisory_id) ?? { title: vulnTitle(packageNames(item.packages), item.title), severity: item.severity, hosts: 0 };
       entry.hosts += 1;
       map.set(item.advisory_id, entry);
     }

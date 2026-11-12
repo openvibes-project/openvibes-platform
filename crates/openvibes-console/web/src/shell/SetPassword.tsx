@@ -24,13 +24,16 @@ async function stillRequired(): Promise<boolean> {
   }
 }
 
-export function SetPassword({ required, onDone, onCancel, onSignOut }: {
+/** `known`: the one-time password typed at sign-in; the form then does not ask for it, unless the server refuses it. */
+export function SetPassword({ required, known, onDone, onCancel, onSignOut }: {
   required: boolean;
+  known?: string | undefined;
   onDone: () => void;
   onCancel?: () => void;
   onSignOut?: () => void;
 }) {
-  const [current, setCurrent] = useState("");
+  const [current, setCurrent] = useState(known ?? "");
+  const [askCurrent, setAskCurrent] = useState(!known);
   const [next, setNext] = useState("");
   const [again, setAgain] = useState("");
   const [error, setError] = useState<string>();
@@ -54,6 +57,7 @@ export function SetPassword({ required, onDone, onCancel, onSignOut }: {
       onDone();
     } catch (failure: unknown) {
       if (required && failure instanceof ApiError && !(await stillRequired())) { window.location.reload(); return; }
+      if (failure instanceof ApiError && failure.code === "invalid_current_password") { setAskCurrent(true); setCurrent(""); }
       setError(failure instanceof ApiError ? reasons[failure.code] ?? failure.message : "The password was not changed.");
     } finally {
       setBusy(false);
@@ -69,9 +73,9 @@ export function SetPassword({ required, onDone, onCancel, onSignOut }: {
         </picture>
         <h1>{required ? "Set your password" : "Change your password"}</h1>
         {required && <p className="subtle">You signed in with a one-time password. Choose your own to continue.</p>}
-        <label className="field">{required ? "One-time password" : "Current password"}
+        {askCurrent && <label className="field">{required ? "One-time password" : "Current password"}
           <input className="input" type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
-        </label>
+        </label>}
         <label className="field">New password (at least 15 characters)
           <input className="input" type="password" autoComplete="new-password" required minLength={15} value={next} onChange={(e) => setNext(e.target.value)} />
         </label>
