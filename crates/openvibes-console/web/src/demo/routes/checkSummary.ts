@@ -10,6 +10,7 @@
 import type { CheckHostsPage, CheckSummaryPage } from "../../api/types";
 import { EXTRA_META } from "../checkSeed";
 import type { DemoContext } from "../context";
+import { hostSortError, sortHosts } from "../listQuery";
 import { distribution, distributionName, hasControl } from "../hostGroups";
 import { json, problem, severityRank } from "../http";
 import { ASSISTANT_AVAILABLE } from "./assistant";
@@ -131,7 +132,9 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
   });
 
   route("GET", "/api/v1/compliance/checks/{set}/{rule}/hosts", "compliance.read", ({ set = "", rule = "" }, query) => {
-    for (const k of query.keys()) if (!["segment", "state", "offset", "limit"].includes(k)) return invalid("query");
+    for (const k of query.keys()) if (!["segment", "state", "sort", "dir", "offset", "limit"].includes(k)) return invalid("query");
+    const sortError = hostSortError(query, true);
+    if (sortError) return invalid(sortError);
     const segment = query.get("segment") || "all";
     if (!["all", "failing", "passing"].includes(segment)) return invalid("segment");
     // A failing pair's triage state narrows the Failing segment only (page.rs).
@@ -161,7 +164,8 @@ export function registerCheckSummaryRoutes(ctx: DemoContext) {
     const segments = { all: rows.length, failing: p.failing.length, passing: p.passing.length };
     const states = { open: 0, mitigated: 0, accepted_risk: 0, false_positive: 0 };
     for (const x of p.failing) states[x.state as keyof typeof states] += 1;
-    const chosen = rows.filter((r) => (segment === "all" || (segment === "passing") === (r.state === "passing")) && (state === null || r.state === state));
+    const chosen = sortHosts(rows.filter((r) => (segment === "all" || (segment === "passing") === (r.state === "passing")) && (state === null || r.state === state)),
+      query, (r) => r.checked_at, (r) => r.state);
     const body: CheckHostsPage = { rows: chosen.slice(offset, offset + limit), total: chosen.length, segments, states };
     return json(body);
   });

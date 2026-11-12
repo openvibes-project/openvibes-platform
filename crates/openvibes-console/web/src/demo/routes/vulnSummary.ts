@@ -8,6 +8,7 @@
 import type { VulnHostsPage, VulnSummaryPage } from "../../api/types";
 import type { createCaseStore } from "../cases";
 import type { DemoContext } from "../context";
+import { hostSortError, sortHosts } from "../listQuery";
 import { hasControl } from "../hostGroups";
 import { json, problem, severityRank } from "../http";
 import { cveFacts } from "./cveFacts";
@@ -137,7 +138,9 @@ export function registerVulnSummaryRoutes(ctx: DemoContext & { cases: ReturnType
   });
 
   route("GET", "/api/v1/vulnerabilities/{key}/hosts", "vulnerabilities.read", ({ key: asked = "" }, query) => {
-    for (const k of query.keys()) if (!["segment", "offset", "limit"].includes(k)) return invalid("query");
+    for (const k of query.keys()) if (!["segment", "sort", "dir", "offset", "limit"].includes(k)) return invalid("query");
+    const sortError = hostSortError(query, true);
+    if (sortError) return invalid(sortError);
     const segment = query.get("segment") || "all";
     if (!SEGMENTS.includes(segment)) return invalid("segment");
     const offset = Number(query.get("offset") || 0);
@@ -160,7 +163,7 @@ export function registerVulnSummaryRoutes(ctx: DemoContext & { cases: ReturnType
       };
     }).sort((a, b) => byteOrder(a.hostname ?? "￿", b.hostname ?? "￿") || byteOrder(a.agent_id, b.agent_id) || byteOrder(a.advisory_id, b.advisory_id));
     const n = (s: string) => rows.filter((r) => segmentOf(r.state) === s).length;
-    const chosen = rows.filter((r) => segment === "all" || segmentOf(r.state) === segment);
+    const chosen = sortHosts(rows.filter((r) => segment === "all" || segmentOf(r.state) === segment), query, (r) => r.first_seen, (r) => r.state);
     const body: VulnHostsPage = {
       rows: chosen.slice(offset, offset + limit), total: chosen.length,
       segments: { all: rows.length, open: n("open"), mitigated: n("mitigated"), resolved: n("resolved") },

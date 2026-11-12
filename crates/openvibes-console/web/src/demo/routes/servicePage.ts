@@ -6,7 +6,7 @@ import type { ServicePageHosts, ServicePageSummary } from "../../api/types";
 import type { DemoContext } from "../context";
 import { distribution, distributionName, isActive } from "../hostGroups";
 import { json, problem } from "../http";
-import { listQueryError } from "../listQuery";
+import { hostSortError, listQueryError, sortHosts } from "../listQuery";
 import { groupIdsOf } from "../portData";
 import { privileged, serviceChanges, serviceHosts, type ServiceHost } from "../serviceData";
 import { serviceInfo } from "../serviceNames";
@@ -96,8 +96,10 @@ export function registerServicePageRoutes(ctx: DemoContext) {
   route("GET", "/api/v1/services/{unit}/hosts", "hosts.read", ({ unit: raw }, query) => {
     const unit = unitOf(raw);
     if (!unit) return invalid();
-    for (const k of query.keys()) if (!["segment", "offset", "limit"].includes(k)) return problem(400, "invalid_query", "Service host query parameters are invalid",
+    for (const k of query.keys()) if (!["segment", "sort", "dir", "offset", "limit"].includes(k)) return problem(400, "invalid_query", "Service host query parameters are invalid",
       { field_errors: [{ field: "query", code: "invalid", message: "The query parameter is invalid" }] });
+    const sortError = hostSortError(query, false);
+    if (sortError) return problem(400, "invalid_query", "Service host query parameters are invalid", { field_errors: [{ field: sortError, code: "invalid", message: `The ${sortError} parameter is invalid` }] });
     const bad = listQueryError(query, "Service host query parameters are invalid", [["segment", ["all", "exposed", "root"]]], []);
     if (bad) return bad;
     const offset = Number(query.get("offset") || 0);
@@ -105,7 +107,7 @@ export function registerServicePageRoutes(ctx: DemoContext) {
     const all = (serviceHosts(ctx).get(unit) ?? []).slice().sort((a, b) => (a.hostname ?? "").localeCompare(b.hostname ?? "") || byteOrder(a.id, b.id));
     const segment = query.get("segment") || "all";
     const test = (h: ServiceHost) => segment === "all" || (segment === "exposed" ? h.ports.some((p) => p.exposed) : privileged(h.runAs));
-    const chosen = all.filter(test);
+    const chosen = sortHosts(all.filter(test), query, (h) => h.reportedAt);
     const body: ServicePageHosts = {
       items: chosen.slice(offset, offset + limit).map((h) => {
         const agent = ctx.agentById(h.id);

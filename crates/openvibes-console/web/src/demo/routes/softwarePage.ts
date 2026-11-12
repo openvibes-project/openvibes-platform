@@ -7,7 +7,7 @@ import type { SoftwarePageHosts, SoftwarePageSummary } from "../../api/types";
 import type { DemoContext } from "../context";
 import { distribution, distributionName, isActive } from "../hostGroups";
 import { json, problem } from "../http";
-import { listQueryError } from "../listQuery";
+import { hostSortError, listQueryError, sortHosts } from "../listQuery";
 import { groupIdsOf } from "../portData";
 import { byVersion, fullVersion, natural, severityRank, softwareAdvisories, softwareChanges, softwareHosts, softwareUnits, type SoftwareHost } from "../softwareData";
 
@@ -89,8 +89,10 @@ export function registerSoftwarePageRoutes(ctx: DemoContext) {
   route("GET", "/api/v1/software-pages/{name}/hosts", "hosts.read", ({ name: raw }, query) => {
     const name = nameOf(raw);
     if (!name) return invalid();
-    for (const k of query.keys()) if (!["segment", "offset", "limit"].includes(k)) return problem(400, "invalid_query", "Software host query parameters are invalid",
+    for (const k of query.keys()) if (!["segment", "sort", "dir", "offset", "limit"].includes(k)) return problem(400, "invalid_query", "Software host query parameters are invalid",
       { field_errors: [{ field: "query", code: "invalid", message: "The query parameter is invalid" }] });
+    const sortError = hostSortError(query, false);
+    if (sortError) return problem(400, "invalid_query", "Software host query parameters are invalid", { field_errors: [{ field: sortError, code: "invalid", message: `The ${sortError} parameter is invalid` }] });
     const bad = listQueryError(query, "Software host query parameters are invalid", [["segment", ["all", "update", "current"]]], []);
     if (bad) return bad;
     const offset = Number(query.get("offset") || 0);
@@ -100,7 +102,7 @@ export function registerSoftwarePageRoutes(ctx: DemoContext) {
     const rows = (softwareHosts(ctx).get(name) ?? []).slice().sort((a, b) => (a.hostname ?? "").localeCompare(b.hostname ?? "") || byteOrder(a.id, b.id))
       .map((h) => ({ h, to: updateTo(name, h.id, all) }));
     const segment = query.get("segment") || "all";
-    const chosen = rows.filter(({ to }) => segment === "all" || (segment === "update") === (to !== null));
+    const chosen = sortHosts(rows.filter(({ to }) => segment === "all" || (segment === "update") === (to !== null)), query, ({ h }) => h.reportedAt);
     const body: SoftwarePageHosts = {
       items: chosen.slice(offset, offset + limit).map(({ h, to }) => {
         const agent = ctx.agentById(h.id);
