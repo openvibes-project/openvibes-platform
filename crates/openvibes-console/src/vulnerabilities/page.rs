@@ -25,6 +25,7 @@ use crate::{
     Permission,
     access::guard::{authenticated_capabilities, permission_denied, scope_of, unavailable_auth},
     alarms::list::{number, pick},
+    host_pages::host_order,
     http::{
         AuthHttpState,
         problem::{FieldError, ProblemDetails, problem_response},
@@ -142,6 +143,10 @@ pub(crate) async fn vulnerability_summary_page(
 pub(crate) struct VulnHostsParams {
     /// all (default), open, mitigated or resolved.
     segment: Option<String>,
+    /// host (default), state or date (first seen); ties by host.
+    sort: Option<String>,
+    /// asc (default) or desc.
+    dir: Option<String>,
     /// Rows to skip, 0 to 100000.
     offset: Option<String>,
     /// Page size, 1 to 100 (default 50).
@@ -184,7 +189,8 @@ pub(crate) async fn vulnerability_hosts_page(
             number(limit.as_deref(), 50, 100, "limit")?,
         ))
     })();
-    let (segment, offset, limit) = match parsed {
+    let parsed = parsed.and_then(|v| Ok((v, host_order(&p.sort, &p.dir, true)?)));
+    let ((segment, offset, limit), order) = match parsed {
         Ok(v) => v,
         Err(field) => return invalid_query(field),
     };
@@ -199,6 +205,7 @@ pub(crate) async fn vulnerability_hosts_page(
         &key,
         &read,
         segment,
+        order,
         offset,
         limit,
         Utc::now().date_naive(),

@@ -691,6 +691,18 @@ inlinable form of the group rule check. `console_condition_holds` keeps its
 answers and now calls the prepared form. Tests: `tests/host_list.rs`,
 `tests/version_order.rs`; the 20,000-host timing (`tests/host_list_timing.rs`) is in console-read.md.
 
+## A detail page's Hosts sort (`host_sort`)
+
+The Hosts tables of a check, vulnerability, port, service and software page
+take a `HostOrder`: `HostSort::Host` (the default), `State` (open, mitigated,
+accepted risk, false positive, resolved, passing; check and vulnerability
+only) or `Date` (checked, first seen or last report), ascending or
+descending, ties by host name then agent id. `HostOrder::sql` builds the
+`ORDER BY` of each query's `row_number()` from fixed column names only, so
+no text from the request reaches the SQL (#577). Tests: the unit test in
+`host_sort.rs`, and the sort checks in `tests/check_summary.rs`,
+`tests/vuln_summary.rs` and `tests/port_summary.rs`.
+
 ## The Alarms list (`alarm_list::alarm_list`, schema 60)
 
 `alarm_list(client, &AlarmQuery, &AgentScope, hosts_read: Option<&AgentScope>, actor_id, now) -> AlarmListPage`:

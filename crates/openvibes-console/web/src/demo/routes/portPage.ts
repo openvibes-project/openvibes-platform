@@ -8,7 +8,7 @@ import type { PortPageHosts, PortPageSummary } from "../../api/types";
 import type { DemoContext } from "../context";
 import { distribution, distributionName, isActive } from "../hostGroups";
 import { json, problem } from "../http";
-import { listQueryError } from "../listQuery";
+import { hostSortError, listQueryError, sortHosts } from "../listQuery";
 import { groupIdsOf, portChanges, portHosts } from "../portData";
 import { portInfo } from "../portNames";
 
@@ -73,15 +73,17 @@ export function registerPortPageRoutes(ctx: DemoContext) {
   route("GET", "/api/v1/ports/{protocol}/{port}/hosts", "hosts.read", ({ protocol, port }, query) => {
     const key = keyOf(protocol, port);
     if (!key) return invalid();
-    for (const k of query.keys()) if (!["segment", "offset", "limit"].includes(k)) return problem(400, "invalid_query", "Port host query parameters are invalid",
+    for (const k of query.keys()) if (!["segment", "sort", "dir", "offset", "limit"].includes(k)) return problem(400, "invalid_query", "Port host query parameters are invalid",
       { field_errors: [{ field: "query", code: "invalid", message: "The query parameter is invalid" }] });
+    const sortError = hostSortError(query, false);
+    if (sortError) return problem(400, "invalid_query", "Port host query parameters are invalid", { field_errors: [{ field: sortError, code: "invalid", message: `The ${sortError} parameter is invalid` }] });
     const bad = listQueryError(query, "Port host query parameters are invalid", [["segment", ["all", "exposed", "local"]]], []);
     if (bad) return bad;
     const offset = Number(query.get("offset") || 0);
     const limit = Number(query.get("limit") || 50);
     const all = (portHosts(ctx).get(key) ?? []).slice().sort((a, b) => (a.hostname ?? "").localeCompare(b.hostname ?? "") || byteOrder(a.id, b.id));
     const segment = query.get("segment") || "all";
-    const chosen = all.filter((h) => segment === "all" || (segment === "exposed") === h.exposed);
+    const chosen = sortHosts(all.filter((h) => segment === "all" || (segment === "exposed") === h.exposed), query, (h) => h.reportedAt);
     const body: PortPageHosts = {
       items: chosen.slice(offset, offset + limit).map((h) => {
         const agent = ctx.agentById(h.id);

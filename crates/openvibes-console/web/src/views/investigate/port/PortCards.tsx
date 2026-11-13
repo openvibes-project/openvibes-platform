@@ -3,6 +3,7 @@
 // Related on the right. Every card reads the summary but Hosts, which pages
 // its own route.
 import type { PortPageHosts, PortPageSummary } from "../../../api/types";
+import { SortHeader, useSort } from "../../../ui/DataTable";
 import { Card } from "../../../ui/detail/DetailPage";
 import { RelatedCard } from "../../../ui/detail/RelatedCard";
 import { plural } from "../../../ui/format";
@@ -66,10 +67,11 @@ function Owner({ row }: { row: HostRow }) {
 }
 
 export function HostsTable({ rows }: { rows: readonly HostRow[] }) {
+  const sort = useSort();
   return (
     <div className="table-wrap">
       <table className="table table--compact" aria-label="Hosts">
-        <thead><tr><th style={{ width: "30%" }}>Host</th><th style={{ width: "22%" }}>Listening on</th><th style={{ width: "30%" }}>Service · program</th><th style={{ width: "18%" }}>Last report</th></tr></thead>
+        <thead><tr><SortHeader sort={sort} column="host" style={{ width: "30%" }}>Host</SortHeader><th style={{ width: "22%" }}>Listening on</th><th style={{ width: "30%" }}>Service · program</th><SortHeader sort={sort} column="date" style={{ width: "18%" }}>Last report</SortHeader></tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.agent_id}>

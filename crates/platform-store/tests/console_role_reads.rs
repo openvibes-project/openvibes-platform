@@ -8,6 +8,7 @@ use chrono::Utc;
 use common::vulns::{ANN, every, fixture};
 use platform_store::{
     console_read::AgentScope,
+    host_sort::HostOrder,
     vuln_list::vuln_list,
     vuln_summary::{HostSegment, Lookup, PageScopes, vuln_hosts, vuln_summary},
 };
@@ -35,9 +36,18 @@ async fn the_console_role_reads_vulnerabilities_and_ca_certificates() {
     };
     let found = vuln_summary(&c, "CVE-A", &scopes, today).await.unwrap();
     assert!(matches!(found, Lookup::Found(_)));
-    let hosts = vuln_hosts(&c, "CVE-A", &scope, HostSegment::All, 0, 50, today)
-        .await
-        .unwrap();
+    let hosts = vuln_hosts(
+        &c,
+        "CVE-A",
+        &scope,
+        HostSegment::All,
+        HostOrder::default(),
+        0,
+        50,
+        today,
+    )
+    .await
+    .unwrap();
     assert!(matches!(hosts, Lookup::Found(_)));
     assert_eq!(platform_store::ca::list(&c).await.unwrap().len(), 1);
 

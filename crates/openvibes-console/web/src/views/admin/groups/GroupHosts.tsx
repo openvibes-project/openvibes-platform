@@ -5,13 +5,19 @@ import { useState } from "react";
 import type { GroupHost } from "../../../api/types";
 import { Ago, ObjectLink } from "../../../ui/bits";
 import { Icon } from "../../../ui/Icon";
-import { matches } from "../../../ui/table";
+import { SortHeader, sortBy, useSort } from "../../../ui/DataTable";
+import { matches, type SortValue } from "../../../ui/table";
 import { Card } from "../../../ui/detail/DetailPage";
 import { Problems } from "./badges";
 
+const SORTS: Record<string, (h: GroupHost) => SortValue> = {
+  host: (h) => h.hostname ?? h.agent_id, address: (h) => h.last_address, seen: (h) => h.last_seen_at, problems: (h) => h.open_alarms,
+};
+
 export function GroupHosts({ hosts }: { hosts: readonly GroupHost[] }) {
   const [query, setQuery] = useState("");
-  const rows = hosts.filter((h) => matches([h.hostname, h.agent_id, h.distribution, h.last_address, ...h.labels], query));
+  const sort = useSort();
+  const rows = sortBy(hosts.filter((h) => matches([h.hostname, h.agent_id, h.distribution, h.last_address, ...h.labels], query)), SORTS, sort);
   const title = <>Hosts in this group <span className="subtle num group-page__count">{hosts.length}</span></>;
   const filter = (
     <label className="search group-hosts__filter">
@@ -24,7 +30,8 @@ export function GroupHosts({ hosts }: { hosts: readonly GroupHost[] }) {
     <Card title={title} aside={filter} flush>
       <div className="table-wrap group-hosts">
         <table className="table" aria-label="Hosts in this group">
-          <thead><tr><th style={{ width: 220 }}>Host</th><th style={{ width: 130 }}>IP address</th><th>Labels</th><th style={{ width: 110 }}>Last seen</th><th style={{ width: 200 }}>Open problems</th></tr></thead>
+          <thead><tr><SortHeader sort={sort} column="host" style={{ width: 220 }}>Host</SortHeader><SortHeader sort={sort} column="address" style={{ width: 130 }}>IP address</SortHeader>
+            <th>Labels</th><SortHeader sort={sort} column="seen" style={{ width: 110 }}>Last seen</SortHeader><SortHeader sort={sort} column="problems" style={{ width: 200 }}>Open problems</SortHeader></tr></thead>
           <tbody>
             {rows.length === 0 && <tr><td colSpan={5} className="subtle">No host matches yet.</td></tr>}
             {rows.map((h) => (

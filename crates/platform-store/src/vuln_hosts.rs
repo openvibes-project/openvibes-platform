@@ -5,8 +5,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::Deserialize;
 
 use crate::{
-    Client, StoreError, console_read::AgentScope, host_list::values, vuln_summary::Lookup,
-    vuln_summary_sql as sql, vuln_summary_sql::resolve,
+    Client, StoreError, console_read::AgentScope, host_list::values, host_sort::HostOrder,
+    vuln_summary::Lookup, vuln_summary_sql as sql, vuln_summary_sql::resolve,
 };
 
 values!(
@@ -77,11 +77,16 @@ pub struct VulnHostsPage {
 
 /// One page of `key`'s Hosts table within `scope`: `segment`, `offset`
 /// (0–100000) and `limit` (1–100).
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the key, scope, segment, sort and page"
+)]
 pub async fn vuln_hosts(
     client: &Client,
     key: &str,
     scope: &AgentScope,
     segment: HostSegment,
+    order: HostOrder,
     offset: i64,
     limit: i64,
     today: NaiveDate,
@@ -93,7 +98,7 @@ pub async fn vuln_hosts(
     };
     let rows = client
         .query(
-            &sql::hosts(),
+            &sql::hosts(order),
             &[
                 &scope.is_global(),
                 &scope.group_ids(),

@@ -12,6 +12,7 @@ use crate::{
     Client, StoreError,
     console_read::{AgentScope, MAX_PAGE_SIZE, agent_visibility},
     host_list::values,
+    host_sort::HostOrder,
     port_related::scope_params,
     port_summary::{FirstSeen, GroupShare},
     service_names,
@@ -509,15 +510,21 @@ pub struct SoftwareHostsPage {
 }
 
 /// The Hosts table: one row per host in reach that has the package (ruling 12).
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the key, scope, segment, sort and page"
+)]
 pub async fn software_hosts_page(
     client: &Client,
     scope: &AgentScope,
     name: &str,
     segment: SoftwareSegment,
+    order: HostOrder,
     offset: i64,
     limit: i64,
     now: DateTime<Utc>,
 ) -> Result<SoftwareHostsPage, StoreError> {
+    let order = order.sql("h.hostname", "h.agent_id", None, "h.inventory_at");
     let (global, groups) = scope_params(scope);
     let visible = agent_visibility("a.agent_id", "$1", "$2");
     let ids: Vec<String> = client
@@ -548,7 +555,7 @@ pub async fn software_hosts_page(
                  counts AS (SELECT count(*) AS n_all, count(*) FILTER (WHERE needs) AS n_update,
                                    count(*) FILTER (WHERE NOT needs) AS n_current FROM h),
                  page AS (
-                   SELECT h.*, row_number() OVER (ORDER BY h.hostname NULLS LAST, h.agent_id) AS ord
+                   SELECT h.*, row_number() OVER (ORDER BY {order}) AS ord
                    FROM h WHERE $4::text = 'all' OR ($4::text = 'update' AND h.needs)
                                 OR ($4::text = 'current' AND NOT h.needs)
                    ORDER BY ord LIMIT $5 OFFSET $6)

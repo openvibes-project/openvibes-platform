@@ -11,6 +11,7 @@
 use crate::{
     check_list_sql::{PAIR_STATE, SEVERITIES, failing, passing_hosts_sql},
     console_read::agent_visibility,
+    host_sort::HostOrder,
 };
 
 /// CTEs `hosts` (the agents in reach), `k` (the check, when the list knows
@@ -123,7 +124,8 @@ SELECT jsonb_build_object(
 /// offset, `$9` a failing pair's state or empty for any): failing pairs in any triage state and passing hosts, the
 /// segment counts as JSON on every row, then the page by host name and
 /// agent id; an empty page is one row with the counts only.
-pub(crate) fn hosts() -> String {
+pub(crate) fn hosts(order: HostOrder) -> String {
+    let order = order.sql("h.hostname", "p.agent_id", Some("p.state"), "p.checked_at");
     format!(
         "WITH {base},
 pairs AS (
@@ -140,7 +142,7 @@ counts AS (SELECT jsonb_build_object('all', count(*), 'failing', count(*) FILTER
                                        'false_positive', count(*) FILTER (WHERE state = 'false_positive'))) AS c
           FROM pairs),
 page AS (
-  SELECT p.*, h.hostname, h.os, h.address, row_number() OVER (ORDER BY h.hostname NULLS LAST, p.agent_id) AS ord
+  SELECT p.*, h.hostname, h.os, h.address, row_number() OVER (ORDER BY {order}) AS ord
   FROM pairs p JOIN hosts h ON h.agent_id = p.agent_id
   WHERE ($6::text = 'all' OR ($6::text = 'passing') = (p.state = 'passing'))
     AND ($9::text = '' OR p.state = $9::text)

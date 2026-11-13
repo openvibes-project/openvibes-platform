@@ -17,7 +17,7 @@ The page replaces the old unit side panel.
 |---|---|---|
 | `GET /api/v1/service-list` | the list: filters with counts, sorts, offset paging (`hosts.read`) | `src/services/list_page.rs`; store `service_list*.rs` |
 | `GET /api/v1/services/{unit}/summary` | the page above the Hosts card | `src/services/page.rs`; store `service_summary.rs`, `service_related.rs` |
-| `GET /api/v1/services/{unit}/hosts?segment=&offset=&limit=` | the Hosts card (All, Exposed, Runs as root) | `src/services/page.rs` |
+| `GET /api/v1/services/{unit}/hosts?segment=&sort=&dir=&offset=&limit=` | the Hosts card (All, Exposed, Runs as root) | `src/services/page.rs` |
 | `GET /api/v1/services`, `/services/{unit}` | unchanged, for the assistant and the host page | `src/hosts/ports.rs` |
 
 Errors: `invalid_unit` (400) for an empty or over-long (200) unit or one with

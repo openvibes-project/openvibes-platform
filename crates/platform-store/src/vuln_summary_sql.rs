@@ -14,6 +14,7 @@ use chrono::NaiveDate;
 use crate::{
     Client, StoreError,
     console_read::{AgentScope, agent_visibility},
+    host_sort::HostOrder,
     vuln_list_sql::{LOW_CONFIDENCE, PAIR_STATE},
     vuln_summary::Lookup,
     vulns::INSTALLED,
@@ -125,7 +126,8 @@ SELECT jsonb_build_object(
 /// The Hosts table (`$1`–`$5` as [`pairs`], `$6` segment, `$7` limit, `$8`
 /// offset): the segment counts as JSON on every row, then the page by host
 /// name and agent id; an empty page is one row with the counts only.
-pub(crate) fn hosts() -> String {
+pub(crate) fn hosts(order: HostOrder) -> String {
+    let order = order.sql("h.hostname", "s.agent_id", Some("s.state"), "s.first_seen");
     format!(
         "WITH {pairs},
 seg AS (SELECT p.*, CASE p.state WHEN 'open' THEN 'open' WHEN 'mitigated' THEN 'mitigated' ELSE 'resolved' END AS seg
@@ -135,7 +137,7 @@ counts AS (SELECT jsonb_build_object('all', count(*), 'open', count(*) FILTER (W
                     'resolved', count(*) FILTER (WHERE seg = 'resolved')) AS c FROM seg),
 page AS (
   SELECT s.*, h.hostname, h.os, h.address,
-         row_number() OVER (ORDER BY h.hostname, s.agent_id, s.advisory_id, s.state) AS ord
+         row_number() OVER (ORDER BY {order}, s.advisory_id, s.state) AS ord
   FROM seg s JOIN hosts h ON h.agent_id = s.agent_id
   WHERE $6::text = 'all' OR s.seg = $6::text
   ORDER BY ord LIMIT $7 OFFSET $8)

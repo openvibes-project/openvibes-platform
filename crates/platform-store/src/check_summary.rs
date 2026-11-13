@@ -19,6 +19,7 @@ use crate::{
     check_summary_sql as sql,
     console_read::AgentScope,
     host_list::values,
+    host_sort::HostOrder,
     vuln_list::AssigneeSummary,
 };
 
@@ -403,6 +404,7 @@ pub async fn check_hosts(
     scope: &AgentScope,
     segment: CheckHostSegment,
     state: Option<CheckHostState>,
+    order: HostOrder,
     offset: i64,
     limit: i64,
     now: DateTime<Utc>,
@@ -410,7 +412,7 @@ pub async fn check_hosts(
     let state = state.filter(|_| segment == CheckHostSegment::Failing);
     let rows = client
         .query(
-            &sql::hosts(),
+            &sql::hosts(order),
             &[
                 &scope.is_global(),
                 &scope.group_ids(),

@@ -61,7 +61,7 @@ describe("demo vulnerability page", () => {
     // Each call is a new demo server, whose dates move with the clock: compare the pair.
     const pair = (r?: { agent_id: string; advisory_id: string }) => [r?.agent_id, r?.advisory_id];
     expect(pair((await hosts(row.key, "offset=1&limit=1")).body.rows[0])).toEqual(pair(body.rows[1]));
-    for (const [query, field] of [["segment=fixed", "segment"], ["offset=-1", "offset"], ["sort=x", "query"]]) {
+    for (const [query, field] of [["segment=fixed", "segment"], ["offset=-1", "offset"], ["sort=x", "sort"], ["dir=up", "dir"], ["other=1", "query"]]) {
       const r = await hosts(row.key, query);
       expect(r.status).toBe(400);
       expect(r.body.field_errors?.[0]?.field).toBe(field);

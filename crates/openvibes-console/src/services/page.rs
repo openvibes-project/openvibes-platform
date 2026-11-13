@@ -21,7 +21,7 @@ use super::{
 use crate::{
     Permission,
     access::guard::{authenticated_capabilities, permission_denied, scope_of, unavailable_auth},
-    host_pages::{holds, hosts_query, related_reach},
+    host_pages::{holds, host_order, hosts_query, related_reach},
     http::{
         AuthHttpState,
         problem::{ProblemDetails, problem_response},
@@ -104,6 +104,10 @@ pub(crate) async fn service_summary_page(
 pub(crate) struct ServiceHostsParams {
     /// all (default), exposed or root.
     segment: Option<String>,
+    /// host (default) or date (last report); ties by host.
+    sort: Option<String>,
+    /// asc (default) or desc.
+    dir: Option<String>,
     /// Rows to skip, 0 to 100000.
     offset: Option<String>,
     /// Page size, 1 to 100 (default 50).
@@ -142,7 +146,8 @@ pub(crate) async fn service_hosts_page_route(
         ServiceSegment::parse,
         ServiceSegment::All,
     );
-    let (segment, offset, limit) = match parsed {
+    let parsed = parsed.and_then(|v| Ok((v, host_order(&p.sort, &p.dir, false)?)));
+    let ((segment, offset, limit), order) = match parsed {
         Ok(v) => v,
         Err(field) => return invalid_query(field),
     };
@@ -150,7 +155,7 @@ pub(crate) async fn service_hosts_page_route(
         return unavailable_auth();
     };
     let reach = related_reach(&capabilities);
-    match service_hosts_page(&client, &read, &reach, &unit, segment, offset, limit).await {
+    match service_hosts_page(&client, &read, &reach, &unit, segment, order, offset, limit).await {
         Ok(page) => axum::Json(ServicePageHostsView::from(page)).into_response(),
         Err(_) => unavailable_auth(),
     }

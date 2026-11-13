@@ -14,10 +14,12 @@ import {
   outcomeNeedsNote, refHint, refLabel,
 } from "../../../panels/cases/cases";
 import { ObjectLink, SeverityBadge } from "../../../ui/bits";
+import { SortHeader, sortBy, useSort } from "../../../ui/DataTable";
 import { Card } from "../../../ui/detail/DetailPage";
 import { SelectField } from "../../../ui/Field";
-import { when } from "../../../ui/format";
+import { severityRank, when } from "../../../ui/format";
 import { Icon } from "../../../ui/Icon";
+import type { SortValue } from "../../../ui/table";
 import { Select } from "../../../ui/Select";
 import { toast } from "../../../ui/toast";
 import { attempt, caseApi } from "./CaseCards";
@@ -30,6 +32,11 @@ export const ITEM_COLUMNS = [
   { key: "host", label: "Host", width: "120px", hideBelow: 620 },
   { key: "outcome", label: "Outcome", width: "190px" },
 ] as const;
+
+const ITEM_SORTS: Record<string, (item: CaseItem) => SortValue> = {
+  kind: (i) => kindLabel[i.kind as CaseKind] ?? i.kind, item: (i) => i.title ?? refLabel(i.kind, i.ref), severity: (i) => severityRank(i.severity),
+  host: (i) => i.hostname, outcome: (i) => (i.outcome ? outcomeLabel[i.outcome] ?? i.outcome : null),
+};
 
 /** The card's width, for `hideBelow` (as DataTable measures its own). A
  * callback ref, as the table first mounts when a case gets its first item. */
@@ -192,6 +199,7 @@ export function ItemsCard({ detail, editable }: { detail: CaseDetail; editable: 
   const columns = ITEM_COLUMNS.filter((col) => !("hideBelow" in col) || width >= col.hideBelow);
   const shown = (key: string) => columns.some((col) => col.key === key);
   const span = columns.length + (editable ? 1 : 0);
+  const sort = useSort();
   return (
     <Card id="items" flush title={<>Items <span className="subtle num">{detail.items.length.toLocaleString()}</span></>}
       aside={editable && !adding && <button type="button" className="button button--small" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add item</button>}>
@@ -200,11 +208,11 @@ export function ItemsCard({ detail, editable }: { detail: CaseDetail; editable: 
         <div className="table-wrap" ref={wrap}>
           <table className="table table--compact" aria-label="Items">
             <thead><tr>
-              {columns.map((col) => <th key={col.key} style={"width" in col ? { width: col.width } : undefined}>{col.label}</th>)}
+              {columns.map((col) => <SortHeader key={col.key} sort={sort} column={col.key} style={"width" in col ? { width: col.width } : undefined}>{col.label}</SortHeader>)}
               {editable && <th style={{ width: 44 }}><span className="sr-only">Remove</span></th>}
             </tr></thead>
             <tbody>
-              {detail.items.map((item) => <ItemRow key={`${item.item_id}:${item.outcome}:${item.outcome_note}:${item.outcome_until}:${item.evidence_gone}`}
+              {sortBy(detail.items, ITEM_SORTS, sort).map((item) => <ItemRow key={`${item.item_id}:${item.outcome}:${item.outcome_note}:${item.outcome_until}:${item.evidence_gone}`}
                 c={detail} item={item} editable={editable} shown={shown} span={span} />)}
             </tbody>
           </table>

@@ -8,6 +8,7 @@ use common::services::{A, B, C, GONE, OUTSIDE, fixture};
 use deadpool_postgres::Client;
 use platform_store::{
     console_read::AgentScope,
+    host_sort::HostOrder,
     port_related::RelatedReach,
     service_summary::{ServiceSegment, ServiceSummary, service_hosts_page, service_summary},
 };
@@ -181,6 +182,7 @@ async fn hosts_rows_have_versions_ports_and_segments() {
         &nothing(),
         "postgresql.service",
         ServiceSegment::All,
+        HostOrder::default(),
         0,
         50,
     )
@@ -209,6 +211,7 @@ async fn hosts_rows_have_versions_ports_and_segments() {
         &nothing(),
         "postgresql.service",
         ServiceSegment::Exposed,
+        HostOrder::default(),
         0,
         50,
     )
@@ -223,6 +226,7 @@ async fn hosts_rows_have_versions_ports_and_segments() {
         &nothing(),
         "sshd.service",
         ServiceSegment::Root,
+        HostOrder::default(),
         0,
         50,
     )
@@ -236,6 +240,7 @@ async fn hosts_rows_have_versions_ports_and_segments() {
         &nothing(),
         "sshd.service",
         ServiceSegment::All,
+        HostOrder::default(),
         0,
         2,
     )
@@ -247,6 +252,7 @@ async fn hosts_rows_have_versions_ports_and_segments() {
         &nothing(),
         "sshd.service",
         ServiceSegment::All,
+        HostOrder::default(),
         2,
         2,
     )
@@ -265,6 +271,7 @@ async fn hosts_rows_have_versions_ports_and_segments() {
         &nothing(),
         "sshd.service",
         ServiceSegment::All,
+        HostOrder::default(),
         50,
         10,
     )
@@ -363,6 +370,7 @@ async fn related_counts_hosts_running_the_unit_in_reach() {
         &all(&scope),
         "nginx.service",
         ServiceSegment::All,
+        HostOrder::default(),
         0,
         50,
     )
@@ -419,6 +427,7 @@ async fn related_sections_need_their_permission() {
         &only_alarms,
         "nginx.service",
         ServiceSegment::All,
+        HostOrder::default(),
         0,
         50,
     )

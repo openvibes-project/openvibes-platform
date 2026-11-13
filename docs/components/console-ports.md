@@ -16,7 +16,7 @@ Alarms, Vulnerabilities and Compliance pages, and read the
 |---|---|---|
 | `GET /api/v1/port-list` | the list: filters with counts, sorts, offset paging (`hosts.read`) | `src/ports/list_page.rs`; store `port_list*.rs` |
 | `GET /api/v1/ports/{protocol}/{port}/summary` | the page above the Hosts card | `src/ports/page.rs`; store `port_summary.rs` |
-| `GET /api/v1/ports/{protocol}/{port}/hosts?segment=&offset=&limit=` | the Hosts card (All, Exposed, Local only) | `src/ports/page.rs` |
+| `GET /api/v1/ports/{protocol}/{port}/hosts?segment=&sort=&dir=&offset=&limit=` | the Hosts card (All, Exposed, Local only) | `src/ports/page.rs` |
 | `GET /api/v1/ports`, `/ports/{protocol}/{port}` | unchanged, for the assistant and the host page | `src/hosts/ports.rs` |
 
 Errors: `invalid_port` (400) for a bad protocol or port number;

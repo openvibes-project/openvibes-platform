@@ -3974,6 +3974,24 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "description": "host (default), state or date (checked); ties by host.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc (default) or desc.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "offset",
             "in": "query",
             "description": "Rows to skip, 0 to 100000.",
@@ -7370,6 +7388,24 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "description": "host (default) or date (last report); ties by host.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc (default) or desc.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "offset",
             "in": "query",
             "description": "Rows to skip, 0 to 100000.",
@@ -9669,6 +9705,24 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "description": "host (default) or date (last report); ties by host.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc (default) or desc.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "offset",
             "in": "query",
             "description": "Rows to skip, 0 to 100000.",
@@ -10340,6 +10394,24 @@
             "name": "segment",
             "in": "query",
             "description": "all (default), update or current.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "host (default) or date (last report); ties by host.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc (default) or desc.",
             "required": false,
             "schema": {
               "type": "string"
@@ -11765,6 +11837,24 @@
             "name": "segment",
             "in": "query",
             "description": "all (default), open, mitigated or resolved.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "host (default), state or date (first seen); ties by host.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "asc (default) or desc.",
             "required": false,
             "schema": {
               "type": "string"

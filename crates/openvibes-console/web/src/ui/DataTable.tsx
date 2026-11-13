@@ -2,7 +2,7 @@
 // keyboard navigation (j/k or arrows, Enter opens, x selects), the row
 // open in the inspector highlighted, optional selection for bulk actions,
 // and incremental rendering so large lists stay fast.
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { nav, useLocation } from "../app/nav";
 import { Icon } from "./Icon";
@@ -38,10 +38,48 @@ type Props<T> = {
 
 const STEP = 150;
 
-export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSort, selection, label, compact, serverSort, serverPaged }: Props<T>) {
+type SortDefault = { key: string; direction: Direction };
+/** A table's sort as the URL keeps it (one sortable table per page). */
+export type Sort = { key: string | undefined; direction: Direction };
+
+export function useSort(fallback?: SortDefault): Sort {
   const { params } = useLocation();
-  const sortKey = params.get("sort") ?? defaultSort?.key;
-  const direction: Direction = (params.get("dir") as Direction | null) ?? defaultSort?.direction ?? "asc";
+  return { key: params.get("sort") ?? fallback?.key, direction: (params.get("dir") as Direction | null) ?? fallback?.direction ?? "asc" };
+}
+
+/** Sort by `key`: again flips the direction; Severity starts with the most severe, every other column from A or the smallest. */
+export function setSort(sort: Sort, key: string) {
+  const direction = key === sort.key ? (sort.direction === "asc" ? "desc" : "asc") : key === "severity" ? "desc" : "asc";
+  nav.setParams({ sort: key, dir: direction, [PAGE]: null });
+}
+
+/** `rows` in `sort`'s order, by its key in `by`; as they came when no header is chosen. */
+export function sortBy<T>(rows: readonly T[], by: Record<string, (row: T) => SortValue>, sort: Sort): readonly T[] {
+  const key = by[sort.key ?? ""];
+  return key ? sortRows(rows, key, sort.direction) : rows;
+}
+
+/** The query string a server-sorted route takes: `&sort=…&dir=…`, or nothing for its default. */
+export const sortQuery = (sort: Sort) => (sort.key ? `&sort=${encodeURIComponent(sort.key)}&dir=${sort.direction}` : "");
+
+/** A sortable column's header, as every table shows it. */
+export function SortHeader({ sort, column, children, className, style }: {
+  sort: Sort; column: string; children: ReactNode; className?: string | undefined; style?: CSSProperties | undefined;
+}) {
+  const on = sort.key === column;
+  return (
+    <th className={className} style={style} aria-sort={on ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
+      <button type="button" onClick={() => setSort(sort, column)}>
+        {children}
+        {on && <Icon name={sort.direction === "asc" ? "chevronUp" : "chevronDown"} size={14} />}
+      </button>
+    </th>
+  );
+}
+
+export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSort, selection, label, compact, serverSort, serverPaged }: Props<T>) {
+  const sort = useSort(defaultSort);
+  const { key: sortKey, direction } = sort;
   const column = columns.find((candidate) => candidate.key === sortKey && candidate.sort);
   const sorted = useMemo(() => (column?.sort && !serverSort ? sortRows(rows, column.sort, direction) : [...rows]), [rows, column, direction, serverSort]);
   const [shown, setShown] = useState(STEP);
@@ -65,11 +103,6 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
   }, [cursor]);
 
   const visibleColumns = columns.filter((candidate) => !candidate.hideBelow || width >= candidate.hideBelow);
-  const setSort = (key: string) => {
-    // Severity starts with the most severe; every other column from A or the smallest.
-    const nextDirection = key === sortKey ? (direction === "asc" ? "desc" : "asc") : key === "severity" ? "desc" : "asc";
-    nav.setParams({ sort: key, dir: nextDirection, [PAGE]: null });
-  };
   const last = useRef(-1);
   const toggle = (key: string, index: number, shift = false) => {
     if (!selection) return;
@@ -124,17 +157,13 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
                   onChange={() => selection.onChange(pageSelected ? new Set() : new Set(onScreen.map(rowKey)))} />
               </th>
             )}
-            {visibleColumns.map((candidate) => (
-              <th key={candidate.key} className={candidate.numeric ? "num" : undefined} style={candidate.width ? { width: candidate.width } : undefined}
-                aria-sort={candidate.key === sortKey ? (direction === "asc" ? "ascending" : "descending") : undefined}>
-                {candidate.sort ? (
-                  <button type="button" onClick={() => setSort(candidate.key)}>
-                    {candidate.header}
-                    {candidate.key === sortKey && <Icon name={direction === "asc" ? "chevronUp" : "chevronDown"} size={14} />}
-                  </button>
-                ) : candidate.header}
-              </th>
-            ))}
+            {visibleColumns.map((candidate) => {
+              const className = candidate.numeric ? "num" : undefined;
+              const style = candidate.width ? { width: candidate.width } : undefined;
+              return candidate.sort
+                ? <SortHeader key={candidate.key} sort={sort} column={candidate.key} className={className} style={style}>{candidate.header}</SortHeader>
+                : <th key={candidate.key} className={className} style={style}>{candidate.header}</th>;
+            })}
           </tr>
         </thead>
         <tbody ref={body}>

@@ -54,6 +54,9 @@ pub async fn assert_hosts_queries_refused(fx: &Fx, hosts: impl Fn(&str) -> Strin
         ("offset=100001", "offset"),
         ("limit=0", "limit"),
         ("limit=101", "limit"),
+        ("sort=state", "sort"),
+        ("sort=version", "sort"),
+        ("dir=up", "dir"),
     ] {
         let (status, body) = fx
             .call(&fx.admin, "GET", &hosts(&format!("?{query}")), None)
@@ -63,6 +66,10 @@ pub async fn assert_hosts_queries_refused(fx: &Fx, hosts: impl Fn(&str) -> Strin
     }
     let (status, _) = fx.call(&fx.admin, "GET", &hosts("?surprise=1"), None).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = fx
+        .call(&fx.admin, "GET", &hosts("?sort=date&dir=desc"), None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "sort by the last report");
 }
 
 /// `hosts.read` is required for each of `uris`; export and add-to-case are

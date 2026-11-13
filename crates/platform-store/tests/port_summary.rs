@@ -8,6 +8,7 @@ use common::ports::{A, B, C, GONE, OUTSIDE, fixture};
 use deadpool_postgres::Client;
 use platform_store::{
     console_read::AgentScope,
+    host_sort::{HostOrder, HostSort},
     port_related::RelatedReach,
     port_summary::{PortSegment, PortSummary, port_hosts_page, port_summary},
 };
@@ -79,9 +80,18 @@ async fn port_summary_stays_inside_the_scope() {
             .await
             .is_some()
     );
-    let page = port_hosts_page(&c, &scope, "tcp", 22, PortSegment::All, 0, 50)
-        .await
-        .unwrap();
+    let page = port_hosts_page(
+        &c,
+        &scope,
+        "tcp",
+        22,
+        PortSegment::All,
+        HostOrder::default(),
+        0,
+        50,
+    )
+    .await
+    .unwrap();
     assert!(
         page.rows
             .iter()
@@ -178,9 +188,18 @@ async fn hosts_rows_join_addresses() {
     let (db, c) = common::migrated().await;
     let (mine, _) = fixture(&c).await;
     let scope = scoped(&mine);
-    let page = port_hosts_page(&c, &scope, "tcp", 443, PortSegment::All, 0, 50)
-        .await
-        .unwrap();
+    let page = port_hosts_page(
+        &c,
+        &scope,
+        "tcp",
+        443,
+        PortSegment::All,
+        HostOrder::default(),
+        0,
+        50,
+    )
+    .await
+    .unwrap();
     assert_eq!(page.rows.len(), 2);
     let b = page.rows.iter().find(|r| r.agent_id == B).unwrap();
     assert_eq!(b.bound, ["10.0.0.6", "127.0.0.1"]);
@@ -189,9 +208,18 @@ async fn hosts_rows_join_addresses() {
     assert_eq!(b.service.as_deref(), Some("nginx.service"));
     assert!(b.reported_at.is_some());
     assert!(b.owners_partial);
-    let local = port_hosts_page(&c, &scope, "tcp", 5432, PortSegment::Local, 0, 50)
-        .await
-        .unwrap();
+    let local = port_hosts_page(
+        &c,
+        &scope,
+        "tcp",
+        5432,
+        PortSegment::Local,
+        HostOrder::default(),
+        0,
+        50,
+    )
+    .await
+    .unwrap();
     assert_eq!(local.rows.len(), 1);
     assert_eq!(local.rows[0].agent_id, A);
     assert_eq!(
@@ -203,17 +231,44 @@ async fn hosts_rows_join_addresses() {
         (2, 1, 1)
     );
     assert_eq!(local.total, 1);
-    let exposed = port_hosts_page(&c, &scope, "tcp", 5432, PortSegment::Exposed, 0, 50)
-        .await
-        .unwrap();
+    let exposed = port_hosts_page(
+        &c,
+        &scope,
+        "tcp",
+        5432,
+        PortSegment::Exposed,
+        HostOrder::default(),
+        0,
+        50,
+    )
+    .await
+    .unwrap();
     assert_eq!(exposed.rows[0].agent_id, C);
     // Paging by hostname.
-    let first = port_hosts_page(&c, &scope, "tcp", 22, PortSegment::All, 0, 2)
-        .await
-        .unwrap();
-    let rest = port_hosts_page(&c, &scope, "tcp", 22, PortSegment::All, 2, 2)
-        .await
-        .unwrap();
+    let first = port_hosts_page(
+        &c,
+        &scope,
+        "tcp",
+        22,
+        PortSegment::All,
+        HostOrder::default(),
+        0,
+        2,
+    )
+    .await
+    .unwrap();
+    let rest = port_hosts_page(
+        &c,
+        &scope,
+        "tcp",
+        22,
+        PortSegment::All,
+        HostOrder::default(),
+        2,
+        2,
+    )
+    .await
+    .unwrap();
     let names: Vec<_> = first
         .rows
         .iter()
@@ -221,10 +276,32 @@ async fn hosts_rows_join_addresses() {
         .map(|r| r.hostname.clone().unwrap())
         .collect();
     assert_eq!(names, ["db-01", "web-01", "web-02"]);
-    assert_eq!(first.total, 3);
-    let beyond = port_hosts_page(&c, &scope, "tcp", 22, PortSegment::All, 50, 10)
+    let back = HostOrder {
+        sort: HostSort::Host,
+        descending: true,
+    };
+    let back = port_hosts_page(&c, &scope, "tcp", 22, PortSegment::All, back, 0, 50)
         .await
         .unwrap();
+    let names: Vec<_> = back
+        .rows
+        .iter()
+        .map(|r| r.hostname.clone().unwrap())
+        .collect();
+    assert_eq!(names, ["web-02", "web-01", "db-01"], "the sort's direction");
+    assert_eq!(first.total, 3);
+    let beyond = port_hosts_page(
+        &c,
+        &scope,
+        "tcp",
+        22,
+        PortSegment::All,
+        HostOrder::default(),
+        50,
+        10,
+    )
+    .await
+    .unwrap();
     assert!(beyond.rows.is_empty());
     assert_eq!(beyond.segments.all, 3, "the counts answer on an empty page");
     db.drop().await;
@@ -243,9 +320,18 @@ async fn owners_not_collected_is_said() {
         "no owner on the one host"
     );
     assert!(s.programs.is_empty());
-    let page = port_hosts_page(&c, &scoped(&mine), "tcp", 9999, PortSegment::All, 0, 50)
-        .await
-        .unwrap();
+    let page = port_hosts_page(
+        &c,
+        &scoped(&mine),
+        "tcp",
+        9999,
+        PortSegment::All,
+        HostOrder::default(),
+        0,
+        50,
+    )
+    .await
+    .unwrap();
     assert_eq!(page.rows[0].service, None);
     assert!(page.rows[0].owners_partial);
     let ssh = summary(&c, &scoped(&mine), &nothing(), ("tcp", 22))

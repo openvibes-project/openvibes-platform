@@ -7,6 +7,7 @@ import { useResource } from "../../api/client";
 import { checkPath } from "../../app/location";
 import { nav, useLocation, viewLink } from "../../app/nav";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge } from "../../ui/bits";
+import { sortQuery, useSort } from "../../ui/DataTable";
 import { Card } from "../../ui/detail/DetailPage";
 import { SegmentChips } from "../../ui/detail/SegmentChips";
 import { plural } from "../../ui/format";
@@ -84,7 +85,8 @@ export function HostsPanel<Row extends { agent_id: string }, S extends string>({
   const { params } = useLocation();
   const segment = segmentIn(segments, params.get("segment"));
   const offset = Math.max(0, Number(params.get(PAGE)) || 0);
-  const hosts = useResource<{ items: Row[]; total: number; segments: Record<string, number> }>(hostsUrl(`?segment=${segment}&offset=${offset}&limit=${PAGE_SIZE}`));
+  const sort = useSort();
+  const hosts = useResource<{ items: Row[]; total: number; segments: Record<string, number> }>(hostsUrl(`?segment=${segment}${sortQuery(sort)}&offset=${offset}&limit=${PAGE_SIZE}`));
   const data = hosts.data;
   const counts = data?.segments;
   return (

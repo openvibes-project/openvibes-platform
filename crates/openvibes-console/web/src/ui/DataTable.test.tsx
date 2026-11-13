@@ -8,7 +8,8 @@ vi.hoisted(() => {
   Object.assign(globalThis, { window: { location: { pathname: "/alarms", search: "" }, history: { replaceState() {} }, addEventListener() {}, removeEventListener() {} } });
 });
 
-import { DataTable } from "./DataTable";
+import { DataTable, SortHeader, sortBy, sortQuery } from "./DataTable";
+import { severityRank } from "./format";
 
 const rows = Array.from({ length: 200 }, (_, i) => ({ id: String(i) }));
 const render = (shown: typeof rows, serverPaged = false) => renderToStaticMarkup(
@@ -26,5 +27,31 @@ describe("DataTable selection", () => {
     const html = render(rows.slice(0, 50), true);
     expect(html).toContain("All 50 on this page are selected.");
     expect(html).not.toContain("matching this filter");
+  });
+});
+
+describe("sorting outside DataTable (#577)", () => {
+  const rows = [{ n: "b", s: "low" }, { n: "a", s: "critical" }, { n: "c", s: null }];
+  const by = { name: (r: (typeof rows)[number]) => r.n, severity: (r: (typeof rows)[number]) => severityRank(r.s) };
+
+  it("sorts by the chosen key, and keeps the order it came in when none is chosen", () => {
+    expect(sortBy(rows, by, { key: "name", direction: "desc" }).map((r) => r.n)).toEqual(["c", "b", "a"]);
+    expect(sortBy(rows, by, { key: undefined, direction: "asc" })).toBe(rows);
+    expect(sortBy(rows, by, { key: "gone", direction: "asc" })).toBe(rows);
+  });
+
+  it("puts Critical first when Severity sorts descending, an unknown severity last", () => {
+    expect(sortBy(rows, by, { key: "severity", direction: "desc" }).map((r) => r.s)).toEqual(["critical", "low", null]);
+  });
+
+  it("sends a chosen sort to the server, and nothing for its default", () => {
+    expect(sortQuery({ key: "date", direction: "desc" })).toBe("&sort=date&dir=desc");
+    expect(sortQuery({ key: undefined, direction: "asc" })).toBe("");
+  });
+
+  it("marks the sorted header for screen readers", () => {
+    const head = (key: string) => renderToStaticMarkup(<table><thead><tr><SortHeader sort={{ key, direction: "asc" }} column="host">Host</SortHeader></tr></thead></table>);
+    expect(head("host")).toContain('aria-sort="ascending"');
+    expect(head("state")).not.toContain("aria-sort");
   });
 });

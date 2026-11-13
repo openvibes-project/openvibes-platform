@@ -39,6 +39,17 @@ describe("demo port page", () => {
     expect(ssh.header).toMatchObject({ name: "SSH", protocol: "tcp", port: 22 });
   });
 
+  it("sorts the hosts as the server does, and refuses a sort the table has not (#577)", async () => {
+    const names = async (q: string) => (await get<PortPageHosts>(`/api/v1/ports/tcp/22/hosts${q}`)).body.items.map((h) => h.hostname ?? h.agent_id);
+    const back = await names("?sort=host&dir=desc&limit=100");
+    expect(back).toEqual([...back].sort((a, b) => b.localeCompare(a)));
+    expect((await get("/api/v1/ports/tcp/22/hosts?sort=date&dir=desc")).status).toBe(200);
+    for (const [q, field] of [["?sort=state", "sort"], ["?dir=up", "dir"]] as const) {
+      const { status, body } = await get(`/api/v1/ports/tcp/22/hosts${q}`);
+      expect([status, body.field_errors?.[0]?.field]).toEqual([400, field]);
+    }
+  });
+
   it("lists the hosts in segments that add up", async () => {
     const all = (await get<PortPageHosts>("/api/v1/ports/tcp/22/hosts")).body;
     expect(all.segments.exposed + all.segments.local).toBe(all.segments.all);

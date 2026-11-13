@@ -11,6 +11,7 @@ use crate::{
     Client, StoreError,
     console_read::{AgentScope, MAX_PAGE_SIZE, agent_visibility},
     host_list::values,
+    host_sort::HostOrder,
     port_related::{RelatedReach, scope_params},
     port_summary::{FirstSeen, GroupShare},
     service_list::OwnedPort,
@@ -333,15 +334,21 @@ pub struct ServiceHostsPage {
 
 /// The Hosts table: one row per host in reach running the unit (ruling 12).
 /// `problems` scopes read each problem count; `None` leaves it out.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the key, scope, segment, sort and page"
+)]
 pub async fn service_hosts_page(
     client: &Client,
     scope: &AgentScope,
     reach: &RelatedReach,
     unit: &str,
     segment: ServiceSegment,
+    order: HostOrder,
     offset: i64,
     limit: i64,
 ) -> Result<ServiceHostsPage, StoreError> {
+    let order = order.sql("h.hostname", "h.agent_id", None, "h.services_at");
     let (global, groups) = scope_params(scope);
     let visible = agent_visibility("a.agent_id", "$1", "$2");
     let root = privileged("s.run_as");
@@ -365,7 +372,7 @@ pub async fn service_hosts_page(
                  counts AS (SELECT count(*) AS n_all, count(*) FILTER (WHERE exposed) AS n_exposed,
                                    count(*) FILTER (WHERE root) AS n_root FROM h),
                  page AS (
-                   SELECT h.*, row_number() OVER (ORDER BY h.hostname NULLS LAST, h.agent_id) AS ord
+                   SELECT h.*, row_number() OVER (ORDER BY {order}) AS ord
                    FROM h WHERE $4::text = 'all' OR ($4::text = 'exposed' AND h.exposed)
                                 OR ($4::text = 'root' AND h.root)
                    ORDER BY ord LIMIT $5 OFFSET $6)
