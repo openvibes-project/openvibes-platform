@@ -137,6 +137,10 @@ pub async fn import(
             let sha256: [u8; 32] = Sha256::digest(content).into();
             let records = i32::try_from(count).unwrap_or(i32::MAX);
             vulns::record_feed(client, key, Ok((sha256, records)), now).await?;
+            // The import changed what hosts count (a CVSS score, a KEV or
+            // EUVD listing; #590): recount them now, not at the service's
+            // next 5-minute check, so `vulns summary` after an import agrees.
+            vulns::recount_stale(client, crate::service::RECOUNT_BATCH, now).await?;
             Ok(count)
         }
         Err(error) => {

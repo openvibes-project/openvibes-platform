@@ -147,7 +147,10 @@ the offline core used by `openvibes-admin feeds import` and the
   no longer depends on this: since #622 every view takes a CVE's severity
   from its own CVSS score (`openvibes_severity`, migration 79), and the
   stored rating is only the fallback for a CVE with no score and for an
-  advisory naming no CVE.
+  advisory naming no CVE. The same 5-minute check recounts the hosts whose
+  counts predate the last change to `cve_enrichment`
+  (`vulns::stale_counts`, schema 80, #590), so a new CVSS score or KEV
+  listing reaches the dashboard and the Hosts list without a re-match.
 - `feed::import(client, source, content, now)` — parse (plain or zstd by
   magic bytes), store advisories, record the feed state, re-match the
   release. A failure is recorded on the feed and changes nothing else.

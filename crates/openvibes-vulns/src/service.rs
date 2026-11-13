@@ -406,6 +406,9 @@ async fn nvd_loop(pool: Pool, nvd: NvdClient, every: Duration) {
 /// How often unrated advisories are rated from CVSS.
 const RATE_EVERY: Duration = Duration::from_secs(5 * 60);
 
+/// Hosts recounted per query when enrichment changed.
+pub(crate) const RECOUNT_BATCH: usize = 200;
+
 /// Rates advisories a distribution left unrated from their CVEs' CVSS score
 /// (first at start, then every [`RATE_EVERY`]), whichever feed or mirror
 /// brought them, and recounts the hosts that have them (#579).
@@ -425,6 +428,14 @@ async fn rate_loop(pool: Pool) {
                 Err(error) => tracing::warn!(%error, "recount after rating failed"),
             },
             Err(error) => tracing::warn!(%error, "rating from cvss failed"),
+        }
+        // A CVSS score or a KEV or EUVD listing changed a CVE's severity or
+        // exploited flag (#590): recount the hosts counted before that, a
+        // batch at a time so one large fleet doesn't hold one long query.
+        match vulns::recount_stale(&client, RECOUNT_BATCH, Utc::now()).await {
+            Ok(0) => {}
+            Ok(hosts) => tracing::info!(hosts, "recounted after enrichment changed"),
+            Err(error) => tracing::warn!(%error, "recount after enrichment changed failed"),
         }
     }
 }

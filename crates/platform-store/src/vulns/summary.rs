@@ -24,17 +24,14 @@ pub struct Summary {
     pub feed_last_imported_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-/// Counts open vulnerabilities from each host's stored counts (refreshed
-/// when it is matched); only "exploited" is counted live, because KEV and
-/// EUVD change without a re-match, starting from the few exploited
-/// advisories.
+/// Counts open vulnerabilities from each host's stored counts, one per CVE
+/// (refreshed when it is matched, and when enrichment changes: #590).
 pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
     summary_for_agents(client, None).await
 }
 
-/// Counts open vulnerabilities for hosts in a console asset scope. Only
-/// precomputed per-host counters for visible agents are aggregated; exploited
-/// state remains live because enrichment feeds can change without a rematch.
+/// Counts open vulnerabilities for hosts in a console asset scope, from the
+/// visible agents' stored per-host counts.
 pub async fn summary_in_scope(
     client: &Client,
     scope: &crate::console_read::AgentScope,
@@ -86,13 +83,8 @@ async fn summary_for_agents(
         .collect();
     let exploited: i64 = client
         .query_one(
-            "SELECT count(*) FROM vulnerabilities v
-             WHERE v.fixed_at IS NULL AND NOT v.reboot_needed
-               AND ($1::text[] IS NULL OR v.agent_id = ANY($1))
-               AND v.advisory_id = ANY(ARRAY(
-                   SELECT DISTINCT c.advisory_id FROM advisory_cves c
-                   JOIN cve_enrichment x ON x.cve_id = c.cve_id
-                   WHERE x.kev_added IS NOT NULL OR x.euvd_exploited))",
+            "SELECT COALESCE(sum(exploited), 0)::bigint FROM host_vulnerability_counts
+             WHERE ($1::text[] IS NULL OR agent_id = ANY($1))",
             &[&agents],
         )
         .await?
@@ -157,9 +149,55 @@ async fn no_fix_count_for_agents(
         .get(0))
 }
 
-/// Recounts these hosts' open vulnerabilities by severity, their
-/// reboot-needed ones, and the advisories without a fix among the package
-/// versions they have, and stores the counts.
+/// Each host's open vulnerabilities in `$1` (agent ids), one row per host
+/// and CVE (an advisory naming none is its own key), as the Vulnerabilities
+/// list counts them by default (#590): fixable pairs whose triage is open
+/// (an expired accepted risk is open again) from a known distribution's
+/// advisory, pairs without a fix yet through the host's package versions,
+/// and CPE matches of confidence 80 or more; reboot-pending pairs count.
+/// `sev` is the CVE's severity (#622), `exploited` whether KEV or EUVD
+/// lists it. `$2` is now.
+pub(crate) const OPEN_KEYS: &str = "
+SELECT k.agent_id, k.key,
+       openvibes_severity(max(k.cvss), (ARRAY['critical','important','moderate','low','unrated'])[
+           min(array_position(ARRAY['critical','important','moderate','low','unrated'], k.rated))]) AS sev,
+       bool_or(k.exploited) AS exploited
+FROM (
+    SELECT v.agent_id, COALESCE(ac.cve_id, v.advisory_id) AS key, x.cvss_score AS cvss, a.severity AS rated,
+           COALESCE(x.kev_added IS NOT NULL OR x.euvd_exploited, false) AS exploited
+    FROM vulnerabilities v JOIN advisories a ON a.advisory_id = v.advisory_id
+    LEFT JOIN advisory_cves ac ON ac.advisory_id = v.advisory_id
+    LEFT JOIN cve_enrichment x ON x.cve_id = ac.cve_id
+    WHERE v.agent_id = ANY($1) AND v.fixed_at IS NULL
+      AND split_part(a.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
+      AND NOT EXISTS (
+          SELECT 1 FROM vulnerability_triage t
+          WHERE t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
+            AND (t.state IN ('mitigated', 'false_positive')
+                 OR (t.state = 'accepted_risk' AND t.accepted_until > $2)))
+    UNION ALL
+    SELECT hp.agent_id, COALESCE(ac.cve_id, vv.advisory_id), x.cvss_score, a.severity,
+           COALESCE(x.kev_added IS NOT NULL OR x.euvd_exploited, false)
+    FROM host_packages hp JOIN agents g ON g.agent_id = hp.agent_id
+    JOIN version_vulnerabilities vv ON vv.package_version_id = hp.package_version_id
+    JOIN advisories a ON a.advisory_id = vv.advisory_id AND a.os_id = g.os_id AND a.os_version = g.os_release
+    LEFT JOIN advisory_cves ac ON ac.advisory_id = vv.advisory_id
+    LEFT JOIN cve_enrichment x ON x.cve_id = ac.cve_id
+    WHERE hp.agent_id = ANY($1)
+    UNION ALL
+    SELECT hp.agent_id, f.cve_id, f.cvss, NULL,
+           COALESCE(x.kev_added IS NOT NULL OR x.euvd_exploited, false)
+    FROM host_packages hp JOIN agents g ON g.agent_id = hp.agent_id
+    JOIN cpe_findings f ON f.package_version_id = hp.package_version_id AND f.os_version = g.os_release
+    LEFT JOIN cve_enrichment x ON x.cve_id = f.cve_id
+    WHERE hp.agent_id = ANY($1) AND f.confidence >= 80
+) k
+GROUP BY k.agent_id, k.key";
+
+/// Recounts these hosts' open vulnerabilities, one per CVE (as the list):
+/// per severity, exploited, reboot-needed pairs, and advisories without a
+/// fix among their package versions; stores them, and the Hosts list's
+/// critical count with them.
 pub async fn refresh_counts(
     client: &Client,
     agents: &[String],
@@ -167,84 +205,84 @@ pub async fn refresh_counts(
 ) -> Result<(), StoreError> {
     client
         .execute(
-            "INSERT INTO host_vulnerability_counts (agent_id, no_fix, critical, important,
-                 moderate, low, unrated, reboot, counted_at)
-             SELECT h.agent_id, COALESCE(n.count, 0),
-                    COALESCE(o.critical, 0), COALESCE(o.important, 0), COALESCE(o.moderate, 0),
-                    COALESCE(o.low, 0), COALESCE(o.unrated, 0), COALESCE(o.reboot, 0), $2
-             FROM unnest($1::text[]) AS h(agent_id)
-             LEFT JOIN (SELECT hp.agent_id, count(DISTINCT vv.advisory_id)::int AS count
-                        FROM host_packages hp
-                        JOIN version_vulnerabilities vv
-                          ON vv.package_version_id = hp.package_version_id
-                        WHERE hp.agent_id = ANY($1)
-                        GROUP BY hp.agent_id) n ON n.agent_id = h.agent_id
-             LEFT JOIN (SELECT v.agent_id,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'critical'))::int AS critical,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'important'))::int AS important,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'moderate'))::int AS moderate,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'low'))::int AS low,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'unrated'))::int AS unrated,
-                            (count(*) FILTER (WHERE v.reboot_needed))::int AS reboot
-                        FROM vulnerabilities v JOIN advisories a ON a.advisory_id = v.advisory_id
-                        WHERE v.agent_id = ANY($1) AND v.fixed_at IS NULL
-                          -- Triage v2: mitigated, false positive and an
-                          -- unexpired accepted risk are not open.
-                          AND NOT EXISTS (
-                              SELECT 1 FROM vulnerability_triage t
-                              WHERE t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
-                                AND (t.state IN ('mitigated', 'false_positive')
-                                     OR (t.state = 'accepted_risk' AND t.accepted_until > $2)))
-                        GROUP BY v.agent_id) o ON o.agent_id = h.agent_id
-             ON CONFLICT (agent_id) DO UPDATE SET no_fix = EXCLUDED.no_fix,
-                 critical = EXCLUDED.critical, important = EXCLUDED.important,
-                 moderate = EXCLUDED.moderate, low = EXCLUDED.low, unrated = EXCLUDED.unrated,
-                 reboot = EXCLUDED.reboot, counted_at = EXCLUDED.counted_at",
+            &format!(
+                "WITH k AS ({OPEN_KEYS}),
+                 o AS (SELECT agent_id,
+                              (count(*) FILTER (WHERE sev = 'critical'))::int AS critical,
+                              (count(*) FILTER (WHERE sev = 'important'))::int AS important,
+                              (count(*) FILTER (WHERE sev = 'moderate'))::int AS moderate,
+                              (count(*) FILTER (WHERE sev = 'low'))::int AS low,
+                              (count(*) FILTER (WHERE sev = 'unrated'))::int AS unrated,
+                              (count(*) FILTER (WHERE exploited))::int AS exploited
+                       FROM k GROUP BY agent_id),
+                 n AS (SELECT hp.agent_id, count(DISTINCT vv.advisory_id)::int AS count
+                       FROM host_packages hp
+                       JOIN version_vulnerabilities vv ON vv.package_version_id = hp.package_version_id
+                       WHERE hp.agent_id = ANY($1) GROUP BY hp.agent_id),
+                 r AS (SELECT v.agent_id, count(*)::int AS reboot FROM vulnerabilities v
+                       WHERE v.agent_id = ANY($1) AND v.fixed_at IS NULL AND v.reboot_needed
+                       GROUP BY v.agent_id)
+                 INSERT INTO host_vulnerability_counts (agent_id, no_fix, critical, important,
+                     moderate, low, unrated, reboot, exploited, counted_at)
+                 SELECT h.agent_id, COALESCE(n.count, 0),
+                        COALESCE(o.critical, 0), COALESCE(o.important, 0), COALESCE(o.moderate, 0),
+                        COALESCE(o.low, 0), COALESCE(o.unrated, 0), COALESCE(r.reboot, 0),
+                        COALESCE(o.exploited, 0), $2
+                 FROM unnest($1::text[]) AS h(agent_id)
+                 LEFT JOIN o ON o.agent_id = h.agent_id
+                 LEFT JOIN n ON n.agent_id = h.agent_id
+                 LEFT JOIN r ON r.agent_id = h.agent_id
+                 ON CONFLICT (agent_id) DO UPDATE SET no_fix = EXCLUDED.no_fix,
+                     critical = EXCLUDED.critical, important = EXCLUDED.important,
+                     moderate = EXCLUDED.moderate, low = EXCLUDED.low, unrated = EXCLUDED.unrated,
+                     reboot = EXCLUDED.reboot, exploited = EXCLUDED.exploited,
+                     counted_at = EXCLUDED.counted_at"
+            ),
             &[&agents, &now],
         )
         .await?;
-    refresh_listed_critical(client, agents).await
-}
-
-/// The Hosts list's critical count (`host_listed_critical`, migration 58):
-/// critical advisories as the Vulnerabilities list and the host page show
-/// them by default, one per advisory, fixable or without a fix, reboot
-/// pending or not, mapped at confidence 80 or more (`confidence.rs`: a
-/// known distribution's advisory, or a package without a fix), triage open.
-async fn refresh_listed_critical(client: &Client, agents: &[String]) -> Result<(), StoreError> {
-    // One upsert, like `host_vulnerability_counts`: a DELETE then INSERT
-    // pair let two concurrent recounts of one host (a console triage and a
-    // re-match) collide on the primary key or briefly show 0.
+    // The Hosts list's critical count (`host_listed_critical`, migration 58)
+    // is the same count since #590. One upsert: a DELETE then INSERT pair
+    // let two concurrent recounts of one host collide or briefly show 0.
     client
         .execute(
             "INSERT INTO host_listed_critical (agent_id, critical)
-             SELECT h.agent_id, COALESCE(c.critical, 0)
-             FROM unnest($1::text[]) AS h(agent_id)
-             LEFT JOIN (
-                 SELECT y.agent_id, count(DISTINCT y.advisory_id)::int AS critical
-                 FROM (SELECT v.agent_id, v.advisory_id
-                       FROM vulnerabilities v JOIN advisories a ON a.advisory_id = v.advisory_id
-                       WHERE v.agent_id = ANY($1) AND v.fixed_at IS NULL AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'critical'
-                         AND (split_part(a.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
-                              OR (jsonb_typeof(v.packages) = 'array' AND jsonb_array_length(v.packages) > 0
-                                  AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v.packages) p
-                                                  WHERE p ? 'fixed'
-                                                    AND jsonb_typeof(p->'fixed') IS DISTINCT FROM 'null')))
-                       UNION ALL
-                       SELECT hp.agent_id, vv.advisory_id
-                       FROM host_packages hp
-                       JOIN version_vulnerabilities vv ON vv.package_version_id = hp.package_version_id
-                       JOIN advisories a ON a.advisory_id = vv.advisory_id
-                       WHERE hp.agent_id = ANY($1) AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'critical') y
-                 WHERE NOT EXISTS (SELECT 1 FROM vulnerability_triage t
-                                   WHERE t.agent_id = y.agent_id AND t.advisory_id = y.advisory_id
-                                     AND t.state <> 'open')
-                 GROUP BY y.agent_id) c ON c.agent_id = h.agent_id
+             SELECT agent_id, critical FROM host_vulnerability_counts WHERE agent_id = ANY($1)
              ON CONFLICT (agent_id) DO UPDATE SET critical = EXCLUDED.critical",
             &[&agents],
         )
         .await?;
     Ok(())
+}
+
+/// Recounts the hosts [`stale_counts`] names, `batch` at a time so a large
+/// fleet doesn't hold one long query; how many there were.
+pub async fn recount_stale(
+    client: &Client,
+    batch: usize,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<usize, StoreError> {
+    let stale = stale_counts(client).await?;
+    for hosts in stale.chunks(batch.max(1)) {
+        refresh_counts(client, hosts, now).await?;
+    }
+    Ok(stale.len())
+}
+
+/// Hosts whose counts are older than the last change to `cve_enrichment`
+/// (migration 80): a CVSS score or a KEV or EUVD listing changed what they
+/// count, without a re-match.
+pub async fn stale_counts(client: &Client) -> Result<Vec<String>, StoreError> {
+    Ok(client
+        .query(
+            "SELECT c.agent_id FROM host_vulnerability_counts c, enrichment_changed e
+             WHERE c.counted_at < e.changed_at ORDER BY c.agent_id",
+            &[],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect())
 }
 
 /// Rates advisories their distribution left `unrated` from their CVEs'

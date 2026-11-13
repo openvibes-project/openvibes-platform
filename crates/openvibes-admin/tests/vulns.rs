@@ -108,7 +108,9 @@ async fn an_imported_feed_opens_vulnerabilities_operators_can_read() {
 
     let summary = stdout(&fixture.run(&["vulns", "summary"]));
     assert!(
-        summary.starts_with("open 1 on 1 hosts: important 1\n"),
+        // One per CVE since #590: the advisory names CVE-2026-64638 and
+        // CVE-2026-65640, both unscored, so both take its "important".
+        summary.starts_with("open 2 on 1 hosts: important 2\n"),
         "{summary}"
     );
     assert!(summary.contains("web-01"), "{summary}");
@@ -409,7 +411,7 @@ async fn imported_hosts_are_marked_and_shared_hostnames_are_refused() {
     );
     assert!(list.contains("FEDORA-2026-dc0ff85b8b web-01 "), "{list}");
     let summary = stdout(&fixture.run(&["vulns", "summary"]));
-    assert!(summary.contains("  web-01 (imported) 1 open"), "{summary}");
+    assert!(summary.contains("  web-01 (imported) 2 open"), "{summary}");
     let advisory = stdout(&fixture.run(&["vulns", "show", "FEDORA-2026-dc0ff85b8b"]));
     assert!(
         advisory.contains("  web-01 (imported): wordpress"),
