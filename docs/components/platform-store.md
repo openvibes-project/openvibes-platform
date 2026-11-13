@@ -658,14 +658,24 @@ Failing checks are those whose triage is open. Critical is
 `host_listed_critical` (migration 58, a derived table; no row is 0),
 recounted by `refresh_counts` with the matcher and after each triage change
 (one upsert per call that writes 0 rather than deleting, so two recounts of
-one host at once never collide): critical
-advisories as the Vulnerabilities list and the host page show them by
-default, one per advisory, fixable or without a fix, reboot pending or
-not, mapped at confidence 80 or more (a known distribution's advisory or a
-package without a fix, as `vulns/confidence.rs`) and triage open. The
-group pages (`host_groups` list, detail and hosts) count it too. The
-older `critical` column (fixable, no reboot pending) still feeds the fleet
-summary and its history.
+one host at once never collide): since #590 it copies
+`host_vulnerability_counts.critical`. The group pages (`host_groups` list,
+detail and hosts) count it too.
+
+Since #590 (schema 80) `host_vulnerability_counts` counts what the
+Vulnerabilities list counts for that host, one per CVE (an advisory naming
+no CVE is its own): `vulns::OPEN_KEYS` takes fixable pairs from a known
+distribution's advisory whose triage is open (an expired accepted risk is
+open again), pairs without a fix through the host's package versions, and
+CPE matches of confidence 80 or more; reboot-pending pairs count. Each CVE
+is counted under its own severity (#622), and `exploited` (KEV or EUVD) is
+stored with them. The fleet summary, the dashboard's history and the Hosts
+list read these. A CVSS score or a KEV or EUVD listing changes a count
+without a re-match, so a statement trigger on `cve_enrichment` records the
+time in `enrichment_changed`, and `vulns::stale_counts` names the hosts
+counted before it; the vulns service recounts them every 5 minutes, 200 at
+a time. Tests: `tests/host_counts.rs` (each host's stored counts equal the
+list's for that host).
 
 Scope (spec §6): rows, total, counts and summary come only from hosts in
 `HostScopes.hosts`. Open alarms, critical vulnerabilities and failing

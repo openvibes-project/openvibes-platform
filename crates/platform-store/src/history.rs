@@ -33,7 +33,8 @@ pub const COLUMNS: [&str; 18] = [
 /// match the console summaries and lists: active alarms are open, of every
 /// severity (`info` has its own column), vulnerabilities
 /// map important to high and moderate to medium (unrated is in no count),
-/// exploited is live. Each kind is one grouped scan joined on `agent_id`: a
+/// one per CVE as the Vulnerabilities list counts them, exploited included
+/// (stored per host, `vulns::refresh_counts`, #590). Each kind is one grouped scan joined on `agent_id`: a
 /// per-agent lateral probes every daily alarm partition once per host.
 /// Compliance counts are open failing pairs
 /// ([`crate::check_list_sql::open_failing`]), as the Compliance list and its
@@ -63,7 +64,7 @@ SELECT a.agent_id,
        COALESCE(al.i, 0)::int AS alarms_info,
        COALESCE(v.critical, 0)::int AS vulns_critical, COALESCE(v.important, 0)::int AS vulns_high,
        COALESCE(v.moderate, 0)::int AS vulns_medium, COALESCE(v.low, 0)::int AS vulns_low,
-       COALESCE(x.n, 0)::int AS vulns_exploited, COALESCE(v.no_fix, 0)::int AS vulns_no_fix,
+       COALESCE(v.exploited, 0)::int AS vulns_exploited, COALESCE(v.no_fix, 0)::int AS vulns_no_fix,
        COALESCE(v.reboot, 0) > 0 AS needs_reboot,
        COALESCE(f.c, 0)::int AS compliance_critical, COALESCE(f.h, 0)::int AS compliance_high,
        COALESCE(f.m, 0)::int AS compliance_medium, COALESCE(f.l, 0)::int AS compliance_low
@@ -75,14 +76,6 @@ LEFT JOIN (
            count(*) FILTER (WHERE severity = 'info') i
     FROM alarms WHERE state = 'open' AND source = 'agent' GROUP BY agent_id) al ON al.agent_id = a.agent_id
 LEFT JOIN host_vulnerability_counts v ON v.agent_id = a.agent_id
-LEFT JOIN (
-    SELECT agent_id, count(*) n FROM vulnerabilities
-    WHERE fixed_at IS NULL AND NOT reboot_needed
-      AND advisory_id = ANY(ARRAY(
-          SELECT DISTINCT c.advisory_id FROM advisory_cves c
-          JOIN cve_enrichment e ON e.cve_id = c.cve_id
-          WHERE e.kev_added IS NOT NULL OR e.euvd_exploited))
-    GROUP BY agent_id) x ON x.agent_id = a.agent_id
 LEFT JOIN (
     SELECT f.agent_id,
            count(*) FILTER (WHERE f.severity = 'critical') c, count(*) FILTER (WHERE f.severity = 'high') h,

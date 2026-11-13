@@ -110,13 +110,13 @@ async fn retention_deletes_only_older_days() {
 }
 
 #[tokio::test]
-async fn exploited_counts_open_non_reboot_vulnerabilities_on_kev() {
+async fn exploited_counts_open_cves_on_kev_once_the_host_is_counted() {
     let (db, client) = common::migrated().await;
     common::seed_agent(&client, A1).await;
     client
         .batch_execute(&format!(
             "INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
-             VALUES ('A1', 's', 'debian', '12', 'critical', 't', 'u'), ('A2', 's', 'debian', '12', 'low', 't', 'u');
+             VALUES ('A1', 'debian-12', 'debian', '12', 'critical', 't', 'u'), ('A2', 'debian-12', 'debian', '12', 'low', 't', 'u');
              INSERT INTO advisory_cves VALUES ('A1', 'CVE-1'), ('A2', 'CVE-2');
              INSERT INTO cve_enrichment (cve_id, kev_added) VALUES ('CVE-1', '2026-01-01');
              INSERT INTO cve_enrichment (cve_id, euvd_exploited) VALUES ('CVE-2', false);
@@ -126,6 +126,10 @@ async fn exploited_counts_open_non_reboot_vulnerabilities_on_kev() {
         .await
         .unwrap();
     let now = Utc.with_ymd_and_hms(2026, 10, 7, 3, 0, 0).unwrap();
+    // Stored per host since #590: the count follows the host's recount.
+    platform_store::vulns::refresh_counts(&client, &[A1.to_owned()], now)
+        .await
+        .unwrap();
     let exploited = Expr::Sum(&["vulns_exploited"]);
     assert_eq!(
         history::current(&client, &exploited, now, None)

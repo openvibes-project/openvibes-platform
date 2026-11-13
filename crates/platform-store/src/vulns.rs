@@ -15,8 +15,8 @@ pub(crate) use candidates::INSTALLED;
 pub use candidates::*;
 pub use feeds::*;
 pub use summary::{
-    Summary, no_fix_count, no_fix_count_in_scope, rate_unrated, refresh_counts, summary,
-    summary_in_scope,
+    Summary, no_fix_count, no_fix_count_in_scope, rate_unrated, recount_stale, refresh_counts,
+    stale_counts, summary, summary_in_scope,
 };
 
 /// A package an advisory affects, and the version range affected.

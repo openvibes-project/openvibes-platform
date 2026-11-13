@@ -543,6 +543,13 @@ async fn exploited_first_then_likely_exploited_then_severity() {
         ["FEDORA-KEV"]
     );
 
+    // Enrichment changed after the hosts were counted: the vulns service's
+    // 5-minute check recounts them (#590).
+    let stale = vulns::stale_counts(&vulns).await.unwrap();
+    assert!(!stale.is_empty(), "enrichment changed after the count");
+    vulns::refresh_counts(&vulns, &stale, Utc::now())
+        .await
+        .unwrap();
     let summary = vulns::summary(&vulns).await.unwrap();
     assert_eq!(summary.exploited, 1);
     db.drop().await;
@@ -644,6 +651,13 @@ async fn euvd_counts_as_exploited_and_cvss_breaks_ties() {
     );
     assert!(rows[0].exploited && rows[0].euvd && !rows[0].kev);
     assert_eq!(rows[1].cvss, Some(9.8));
+    // Enrichment changed after the hosts were counted: the vulns service's
+    // 5-minute check recounts them (#590).
+    let stale = vulns::stale_counts(&vulns).await.unwrap();
+    assert!(!stale.is_empty(), "enrichment changed after the count");
+    vulns::refresh_counts(&vulns, &stale, Utc::now())
+        .await
+        .unwrap();
     assert_eq!(vulns::summary(&vulns).await.unwrap().exploited, 1);
     db.drop().await;
 }
