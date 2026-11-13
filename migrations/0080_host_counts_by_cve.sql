@@ -18,7 +18,7 @@ INSERT INTO enrichment_changed (changed_at) VALUES (now());
 CREATE FUNCTION enrichment_changed_mark() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-    UPDATE enrichment_changed SET changed_at = now();
+    UPDATE enrichment_changed SET changed_at = now() WHERE only_row;
     RETURN NULL;
 END $$;
 REVOKE ALL ON FUNCTION enrichment_changed_mark() FROM PUBLIC;
@@ -31,4 +31,4 @@ GRANT SELECT ON enrichment_changed TO "openvibes-vulns", "openvibes-console";
 
 -- Every existing host is recounted by the new rule on the vulns service's
 -- next check (its counts are older than the row above).
-UPDATE host_vulnerability_counts SET counted_at = '-infinity';
+UPDATE host_vulnerability_counts SET counted_at = '-infinity' WHERE counted_at > '-infinity';
