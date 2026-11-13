@@ -180,11 +180,11 @@ pub async fn refresh_counts(
                         WHERE hp.agent_id = ANY($1)
                         GROUP BY hp.agent_id) n ON n.agent_id = h.agent_id
              LEFT JOIN (SELECT v.agent_id,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND a.severity = 'critical'))::int AS critical,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND a.severity = 'important'))::int AS important,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND a.severity = 'moderate'))::int AS moderate,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND a.severity = 'low'))::int AS low,
-                            (count(*) FILTER (WHERE NOT v.reboot_needed AND a.severity = 'unrated'))::int AS unrated,
+                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'critical'))::int AS critical,
+                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'important'))::int AS important,
+                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'moderate'))::int AS moderate,
+                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'low'))::int AS low,
+                            (count(*) FILTER (WHERE NOT v.reboot_needed AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'unrated'))::int AS unrated,
                             (count(*) FILTER (WHERE v.reboot_needed))::int AS reboot
                         FROM vulnerabilities v JOIN advisories a ON a.advisory_id = v.advisory_id
                         WHERE v.agent_id = ANY($1) AND v.fixed_at IS NULL
@@ -224,7 +224,7 @@ async fn refresh_listed_critical(client: &Client, agents: &[String]) -> Result<(
                  SELECT y.agent_id, count(DISTINCT y.advisory_id)::int AS critical
                  FROM (SELECT v.agent_id, v.advisory_id
                        FROM vulnerabilities v JOIN advisories a ON a.advisory_id = v.advisory_id
-                       WHERE v.agent_id = ANY($1) AND v.fixed_at IS NULL AND a.severity = 'critical'
+                       WHERE v.agent_id = ANY($1) AND v.fixed_at IS NULL AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'critical'
                          AND (split_part(a.source, '-', 1) IN ('fedora', 'debian', 'ubuntu', 'rocky', 'almalinux')
                               OR (jsonb_typeof(v.packages) = 'array' AND jsonb_array_length(v.packages) > 0
                                   AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v.packages) p
@@ -235,7 +235,7 @@ async fn refresh_listed_critical(client: &Client, agents: &[String]) -> Result<(
                        FROM host_packages hp
                        JOIN version_vulnerabilities vv ON vv.package_version_id = hp.package_version_id
                        JOIN advisories a ON a.advisory_id = vv.advisory_id
-                       WHERE hp.agent_id = ANY($1) AND a.severity = 'critical') y
+                       WHERE hp.agent_id = ANY($1) AND openvibes_advisory_severity(a.advisory_id, a.severity) = 'critical') y
                  WHERE NOT EXISTS (SELECT 1 FROM vulnerability_triage t
                                    WHERE t.agent_id = y.agent_id AND t.advisory_id = y.advisory_id
                                      AND t.state <> 'open')

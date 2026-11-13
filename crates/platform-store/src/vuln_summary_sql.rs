@@ -79,7 +79,7 @@ pub(crate) fn summary() -> String {
 pk AS (SELECT p.advisory_id, p.os_id, p.os_version, e ->> 'name' AS name, e ->> 'fixed' AS fixed
        FROM pairs p CROSS JOIN jsonb_array_elements(p.packages) e),
 adv AS (
-  SELECT p.advisory_id AS id, p.os_id, p.os_version, count(*) AS n, a.url, a.title, a.severity,
+  SELECT p.advisory_id AS id, p.os_id, p.os_version, count(*) AS n, a.url, a.title, openvibes_advisory_severity(p.advisory_id, a.severity) AS severity,
          (extract(epoch FROM a.issued_at) * 1000)::bigint AS issued, COALESCE(a.source, 'cpe') AS source,
          max(p.cvss) AS cvss, bool_or(p.reboot) AS reboot
   FROM pairs p LEFT JOIN advisories a ON a.advisory_id = p.advisory_id
@@ -173,9 +173,11 @@ reach AS (
                 WHERE vv.advisory_id = c.advisory_id)),
 keys AS (
   SELECT COALESCE(ac.cve_id, r.advisory_id) AS key,
-         min(array_position({SEVERITIES}, a.severity)) AS sev
+         -- Each CVE by its own CVSS score, else the advisory's rating (#622).
+         min(array_position({SEVERITIES}, openvibes_severity(x.cvss_score, a.severity))) AS sev
   FROM reach r JOIN advisories a ON a.advisory_id = r.advisory_id
   LEFT JOIN advisory_cves ac ON ac.advisory_id = r.advisory_id
+  LEFT JOIN cve_enrichment x ON x.cve_id = ac.cve_id
   GROUP BY 1)
 SELECT ({SEVERITIES})[sev], count(*) FROM keys WHERE key <> $4::text GROUP BY sev ORDER BY sev",
         SEVERITIES = crate::vuln_list_sql::SEVERITIES

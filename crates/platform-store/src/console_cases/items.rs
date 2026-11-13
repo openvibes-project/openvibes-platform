@@ -140,7 +140,7 @@ pub(super) async fn resolve_item<'a>(
         Parsed::Vulnerability(agent, advisory) => {
             db.query_opt(
                 &format!(
-                    "SELECT a.agent_id, (SELECT ad.severity FROM advisories ad
+                    "SELECT a.agent_id, (SELECT openvibes_advisory_severity(ad.advisory_id, ad.severity) FROM advisories ad
                                          WHERE ad.advisory_id = $4)
                      FROM agents a WHERE a.agent_id = $3 AND {visible}
                        AND (EXISTS (SELECT 1 FROM vulnerabilities v

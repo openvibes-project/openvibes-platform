@@ -224,7 +224,7 @@ pub(crate) fn statement(sort: SoftwareSort, descending: bool) -> String {
                  UNION ALL SELECT name, advisory_id, false FROM nf) d
            GROUP BY d.name, d.advisory_id),
          af AS MATERIALIZED (
-           SELECT ad.advisory_id, array_position({SEVERITIES}, ad.severity) AS sev,
+           SELECT ad.advisory_id, array_position({SEVERITIES}, openvibes_advisory_severity(ad.advisory_id, ad.severity)) AS sev,
                   COALESCE(bool_or(x.kev_added IS NOT NULL OR COALESCE(x.euvd_exploited, false)), false) AS exploited
            FROM advisories ad
            LEFT JOIN advisory_cves c ON c.advisory_id = ad.advisory_id

@@ -254,11 +254,8 @@ r AS MATERIALIZED (
          COALESCE(x.cvss_score, k.cvss0) AS cvss, x.epss, x.epss_percentile AS pct
   FROM (SELECT ka.key, ka.lc, ka.grp, array_agg(ka.advisory_id ORDER BY ka.advisory_id) AS advisories,
                (array_agg(a.title ORDER BY ka.n DESC, ka.advisory_id) FILTER (WHERE a.title IS NOT NULL))[1] AS title0,
-               min(array_position({SEVERITIES}, COALESCE(a.severity,
-                   CASE WHEN COALESCE(x.cvss_score, ka.cvss) >= 9 THEN 'critical'
-                        WHEN COALESCE(x.cvss_score, ka.cvss) >= 7 THEN 'important'
-                        WHEN COALESCE(x.cvss_score, ka.cvss) >= 4 THEN 'moderate'
-                        WHEN COALESCE(x.cvss_score, ka.cvss) > 0 THEN 'low' ELSE 'unrated' END))) AS sev,
+               -- The CVE's own CVSS score, else the advisories' rating (#622).
+               min(array_position({SEVERITIES}, openvibes_severity(COALESCE(x.cvss_score, ka.cvss), a.severity))) AS sev,
                max(ka.cvss) AS cvss0, sum(ka.n)::bigint AS total, sum(ka.open)::bigint AS open,
                bool_or(ka.m_sa) AS m_sa, bool_or(ka.m_a) AS m_a, bool_or(ka.m_s) AS m_s,
                bool_or(ka.st_open) AS st_open, bool_or(ka.st_mitigated) AS st_mitigated,

@@ -398,11 +398,12 @@ async fn related_respects_alarms_read_and_cases_read() {
     let s = found(&c, "CVE-A", &scopes(&web)).await;
     assert!(s.related.alarms.is_none());
     assert!(s.related.cases.is_none());
-    // Same package: CVE-B on curl, critical (FEDORA-1).
+    // Same package: CVE-B on curl. FEDORA-1 says critical, but CVE-B's own
+    // CVSS 5.0 makes it moderate (#622).
     assert_eq!(s.related.same_package.cves, 1);
     assert_eq!(
         s.related.same_package.severities,
-        [(VulnSeverity::Critical, 1)]
+        [(VulnSeverity::Moderate, 1)]
     );
     let global = AgentScope::Global;
     let s = found(

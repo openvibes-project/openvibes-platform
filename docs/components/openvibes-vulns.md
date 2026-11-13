@@ -143,7 +143,11 @@ the offline core used by `openvibes-admin feeds import` and the
   important, 4 moderate, above 0 low; `vulns::rate_unrated`) and recounts
   the hosts that have them, so the list, the dashboard and the per-host
   counts read one level. A feed import writes `unrated` back until the next
-  run; an advisory with no scored CVE stays `unrated`.
+  run; an advisory with no scored CVE stays `unrated`. What the views show
+  no longer depends on this: since #622 every view takes a CVE's severity
+  from its own CVSS score (`openvibes_severity`, migration 79), and the
+  stored rating is only the fallback for a CVE with no score and for an
+  advisory naming no CVE.
 - `feed::import(client, source, content, now)` — parse (plain or zstd by
   magic bytes), store advisories, record the feed state, re-match the
   release. A failure is recorded on the feed and changes nothing else.

@@ -267,15 +267,19 @@ struct Raw {
     history: Vec<HistoryEvent>,
 }
 
-/// The severity an advisory gives, else the CVSS band (as the list).
+/// The CVE's CVSS band, else the severity the advisory gives (#622).
 fn severity(given: Option<&str>, cvss: Option<f32>) -> VulnSeverity {
-    given.and_then(VulnSeverity::parse).unwrap_or(match cvss {
+    // The CVE's own CVSS score first, the advisory's rating only without one
+    // (#622; the SQL twin is `openvibes_severity`, migration 79).
+    match cvss {
         Some(s) if s >= 9.0 => VulnSeverity::Critical,
         Some(s) if s >= 7.0 => VulnSeverity::Important,
         Some(s) if s >= 4.0 => VulnSeverity::Moderate,
         Some(s) if s > 0.0 => VulnSeverity::Low,
-        _ => VulnSeverity::Unrated,
-    })
+        _ => given
+            .and_then(VulnSeverity::parse)
+            .unwrap_or(VulnSeverity::Unrated),
+    }
 }
 
 fn n32(n: usize) -> u32 {
@@ -494,4 +498,25 @@ pub async fn vuln_summary(
         agents: raw.agents,
         key: t.key,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A CVE's own CVSS score beats its advisory's rating (#622).
+    #[test]
+    fn the_score_comes_first_and_the_rating_only_without_one() {
+        assert_eq!(severity(Some("important"), Some(3.3)), VulnSeverity::Low);
+        assert_eq!(
+            severity(Some("important"), Some(9.2)),
+            VulnSeverity::Critical
+        );
+        assert_eq!(
+            severity(Some("critical"), Some(5.0)),
+            VulnSeverity::Moderate
+        );
+        assert_eq!(severity(Some("critical"), None), VulnSeverity::Critical);
+        assert_eq!(severity(None, None), VulnSeverity::Unrated);
+    }
 }

@@ -748,6 +748,15 @@ alarms-off part. Tests: `tests/alarm_list.rs`; the 200,000-alarm timing
 One row and one page per CVE; the queries, their counts and timing are in
 [console-vulnerabilities.md](console-vulnerabilities.md#the-store).
 
+Schema 79 adds the severity rule every view uses (decision #622): a CVE's
+severity comes from its own CVSS score (`openvibes_severity(score, rated)`:
+9 and over `critical`, 7 `important`, 4 `moderate`, above 0 `low`, else the
+distribution's rating), and an advisory is as bad as its worst CVE
+(`openvibes_advisory_severity(advisory_id, rated)`; its own rating when it
+names no CVE). The list, a vulnerability's page, the host and software
+pages, the per-host counts, cases and the assistant call them, so one CVE
+reads one level everywhere. Tests: `tests/cve_severity.rs`.
+
 ## The Compliance list (`check_list::check_list`, `check_area`, schema 63)
 
 `check_list(client, &CheckQuery, &AgentScope, actor_id, now) -> CheckListPage`:

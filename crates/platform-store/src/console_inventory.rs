@@ -370,7 +370,7 @@ pub async fn software(
 /// their CVEs and each one's exploited flag, EPSS and CVSS over its CVEs.
 fn advisory_enrichment(ids: &str) -> String {
     format!(
-        "SELECT a.advisory_id, a.severity, a.title, a.url,
+        "SELECT a.advisory_id, openvibes_advisory_severity(a.advisory_id, a.severity) AS severity, a.title, a.url,
             COALESCE(array_agg(DISTINCT c.cve_id) FILTER (WHERE c.cve_id IS NOT NULL), '{{}}') AS cves,
             COALESCE(bool_or(x.kev_added IS NOT NULL OR COALESCE(x.euvd_exploited, false)), false) AS exploited,
             max(x.epss) AS epss, max(x.cvss_score) AS cvss

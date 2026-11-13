@@ -228,9 +228,13 @@ async fn package_group_host_advisory_and_assignee_narrow() {
     assert_eq!(people, [("Ann", 2), ("Bob", 1)]);
     let groups: Vec<_> = counts.groups.iter().map(|g| (g.1.as_str(), g.3)).collect();
     assert_eq!(groups, [("Alpha", 4), ("Web", 4)]);
+    // Each CVE by its own CVSS score (#622): CVE-A 9.8 critical, CVE-NF 7.5
+    // high and CVE-EXP 3.0 low although their advisories say moderate;
+    // DSA-NOCVE names no CVE and keeps its low.
     assert_eq!(n(&counts.severity, VulnSeverity::Critical), 1);
-    assert_eq!(n(&counts.severity, VulnSeverity::Moderate), 2);
-    assert_eq!(n(&counts.severity, VulnSeverity::Low), 1);
+    assert_eq!(n(&counts.severity, VulnSeverity::Important), 1);
+    assert_eq!(n(&counts.severity, VulnSeverity::Moderate), 0);
+    assert_eq!(n(&counts.severity, VulnSeverity::Low), 2);
     assert_eq!(n(&counts.packages, "zlib".to_string()), 1);
     assert_eq!(n(&counts.packages, "curl".to_string()), 1);
     db.drop().await;
