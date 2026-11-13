@@ -14,6 +14,7 @@ pub(crate) mod summary;
 pub(crate) use candidates::INSTALLED;
 pub use candidates::*;
 pub use feeds::*;
+pub(crate) use summary::OPEN_KEYS;
 pub use summary::{
     Summary, no_fix_count, no_fix_count_in_scope, rate_unrated, recount_stale, refresh_counts,
     stale_counts, summary, summary_in_scope,

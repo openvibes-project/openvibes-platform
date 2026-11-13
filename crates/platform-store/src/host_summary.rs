@@ -272,11 +272,11 @@ async fn top_failing(
 /// mappings at or above this confidence.
 const LIST_MIN_CONFIDENCE: u8 = 80;
 
-/// The Vulnerabilities list's own query with this host as its filter and
-/// the list's defaults (confidence at least [`LIST_MIN_CONFIDENCE`], triage
-/// open), so the tile, the card and `/vulnerabilities?host=` show the same
-/// advisories; the list's "Lower confidence" and "Include resolved" chips
-/// show more there.
+/// The host's open advisories, as the legacy list gives them with this host
+/// as its filter and the list's defaults (confidence at least
+/// [`LIST_MIN_CONFIDENCE`], triage open), for the card's top rows; the
+/// count is one per CVE (`vulns::OPEN_KEYS`, #627), as
+/// `/vulnerabilities?host=` counts them.
 pub(crate) async fn top_vulnerabilities(
     client: &Client,
     agent_id: &str,
@@ -309,7 +309,15 @@ pub(crate) async fn top_vulnerabilities(
     // priority order, so the first of each advisory stays.
     let mut seen = std::collections::HashSet::new();
     rows.retain(|r| seen.insert(r.advisory_id.clone()));
-    let total = i64::try_from(rows.len()).unwrap_or(i64::MAX);
+    // The count is one per CVE, as `/vulnerabilities?host=`, the dashboard
+    // and the Hosts list count them (#627); the rows stay the top advisories.
+    let total: i64 = client
+        .query_one(
+            &format!("SELECT count(*) FROM ({}) k", crate::vulns::OPEN_KEYS),
+            &[&[agent_id.to_owned()].as_slice(), &chrono::Utc::now()],
+        )
+        .await?
+        .get(0);
     rows.truncate(TOP);
     Ok(Top { items: rows, total })
 }
