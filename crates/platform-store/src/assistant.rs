@@ -366,7 +366,7 @@ pub async fn host_vulnerabilities(
         .map(|index| i32::try_from(index + 1).unwrap_or(5));
     let rows = client
         .query(
-            "SELECT v.advisory_id, a.severity, a.title,
+            "SELECT v.advisory_id, openvibes_advisory_severity(a.advisory_id, a.severity), a.title,
                     (SELECT COALESCE(array_agg(c.cve_id ORDER BY c.cve_id), '{}')
                      FROM (SELECT cve_id FROM advisory_cves WHERE advisory_id = v.advisory_id
                            ORDER BY cve_id LIMIT 10) c),
@@ -383,9 +383,9 @@ pub async fn host_vulnerabilities(
              WHERE v.fixed_at IS NULL AND v.agent_id = $2
                AND ($1::text[] IS NULL OR v.agent_id = ANY($1))
                AND ($3::int IS NULL
-                    OR COALESCE(array_position($5::text[], a.severity), 5) <= $3)
+                    OR COALESCE(array_position($5::text[], openvibes_advisory_severity(a.advisory_id, a.severity)), 5) <= $3)
              ORDER BY COALESCE(e.exploited, false) DESC, e.pct DESC NULLS LAST,
-                      COALESCE(array_position($5::text[], a.severity), 5), v.first_seen_at,
+                      COALESCE(array_position($5::text[], openvibes_advisory_severity(a.advisory_id, a.severity)), 5), v.first_seen_at,
                       v.advisory_id
              LIMIT $4",
             &[
@@ -447,7 +447,7 @@ pub async fn vulnerable_hosts(
     let rows = client
         .query(
             "SELECT v.agent_id, g.hostname, v.advisory_id, v.first_seen_at, v.reboot_needed,
-                    count(*) OVER (), a.severity, a.title, v.packages
+                    count(*) OVER (), openvibes_advisory_severity(a.advisory_id, a.severity), a.title, v.packages
              FROM vulnerabilities v JOIN agents g ON g.agent_id = v.agent_id
              JOIN advisories a ON a.advisory_id = v.advisory_id
              WHERE v.fixed_at IS NULL
@@ -559,7 +559,7 @@ pub async fn overview(
         .await?;
     let advisories = client
         .query(
-            "SELECT v.advisory_id, a.severity, a.title, count(*) AS hosts, count(*) OVER (),
+            "SELECT v.advisory_id, openvibes_advisory_severity(v.advisory_id, a.severity), a.title, count(*) AS hosts, count(*) OVER (),
                     COALESCE(e.exploited, false), e.pct
              FROM vulnerabilities v JOIN advisories a ON a.advisory_id = v.advisory_id
              LEFT JOIN LATERAL (
@@ -571,7 +571,7 @@ pub async fn overview(
              WHERE v.fixed_at IS NULL AND ($1::text[] IS NULL OR v.agent_id = ANY($1))
              GROUP BY v.advisory_id, a.severity, a.title, e.exploited, e.pct
              ORDER BY COALESCE(e.exploited, false) DESC, e.pct DESC NULLS LAST,
-                      COALESCE(array_position($3::text[], a.severity), 5), hosts DESC,
+                      COALESCE(array_position($3::text[], openvibes_advisory_severity(v.advisory_id, a.severity)), 5), hosts DESC,
                       v.advisory_id
              LIMIT $2",
             &[

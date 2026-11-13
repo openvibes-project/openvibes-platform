@@ -380,7 +380,12 @@ pub(crate) async fn list_for_agents(
     // Each advisory's CVEs, enrichment and priority, combined once (a few
     // tens of thousands of advisories), not once per vulnerability.
     let adv = "WITH adv AS (
-         SELECT a.advisory_id, a.severity,
+         -- The worst of its CVEs' severities, each from the CVE's own CVSS
+         -- score, else the advisory's rating (#622, migration 79).
+         SELECT a.advisory_id,
+                (ARRAY['critical','important','moderate','low','unrated'])[
+                    min(array_position(ARRAY['critical','important','moderate','low','unrated'],
+                                       openvibes_severity(x.cvss_score, a.severity)))] AS severity,
                 -- What the flaw is (#579): the summary of its highest-scored
                 -- CVE; an advisory's own title is often only package builds.
                 COALESCE((array_agg(x.description ORDER BY x.cvss_score DESC NULLS LAST, c.cve_id)
@@ -398,14 +403,14 @@ pub(crate) async fn list_for_agents(
          LEFT JOIN advisory_cves c ON c.advisory_id = a.advisory_id
          LEFT JOIN cve_enrichment x ON x.cve_id = c.cve_id
          WHERE ($3::text IS NULL OR a.advisory_id = $3)
-           AND ($4::text IS NULL OR a.severity = $4)
-         GROUP BY a.advisory_id, a.severity, a.title, a.url, a.source),
+         GROUP BY a.advisory_id, a.title, a.url, a.source),
      ranked AS (
          SELECT e.*, row_number() OVER (ORDER BY (e.kev OR e.euvd) DESC, e.pct DESC NULLS LAST,
                     array_position(ARRAY['critical','important','moderate','low','unrated'],
                         e.severity), e.cvss DESC NULLS LAST, e.advisory_id) AS rank
          FROM adv e
          WHERE ($5::text IS NULL OR $5 = ANY(e.cves))
+           AND ($4::text IS NULL OR e.severity = $4)
            AND ($6::boolean IS NULL OR (e.kev OR e.euvd) = $6))";
     let columns = "e.severity, e.title, e.cves";
     let enrichment = "e.kev, e.due, e.ransomware, e.epss, e.pct, e.euvd, e.cvss, e.url, e.source";

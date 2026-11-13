@@ -40,7 +40,11 @@ like the Alarms pages ([console-alarms.md](console-alarms.md)).
   `also_covers` names the others (at most 10) for the confirmation.
 - One CVE named by several advisories (Fedora and Debian) is one row listing
   them all as its covering advisories.
-- Severity is the worst covering advisory's; the title is the one with the
+- Severity is the CVE's own, from its CVSS score (9 and over Critical, 7
+  High, 4 Medium, above 0 Low; decision #622); only a CVE with no score
+  takes the worst covering advisory's rating, and an advisory naming no CVE
+  keeps its own. Every view uses the same rule (`openvibes_severity` and
+  `openvibes_advisory_severity`, migration 79). The title is the one with the
   most hosts in reach; the assignee is One when exactly one person is
   assigned among the open pairs (others may be unassigned), Several(n) for n
   people, None when no open pair is assigned.
@@ -172,8 +176,8 @@ A pair's state: fixed is `resolved`, an accepted risk past `today` is
 `open`, no triage row is `open`; pairs without a fix are never triaged.
 
 Filters (one value each, all combining): state (a row matches when one of
-its pairs is in it; `All` is every state), severity (the worst covering
-advisory's), signal (`exploited`, `due30`: KEV due within 30 days of
+its pairs is in it; `All` is every state), severity (as above: the CVE's
+CVSS band, else the advisories' rating), signal (`exploited`, `due30`: KEV due within 30 days of
 `today`, overdue included, `nofix`, `reboot`, `lowconf`), package name,
 group and host (they narrow the pairs a row counts), advisory (rows of the
 CVEs it names) and assignee (`Assignee` from `alarm_list`; state and

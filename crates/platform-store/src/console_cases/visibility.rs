@@ -117,7 +117,7 @@ pub(super) fn item_severity() -> String {
             WHEN 'compliance_finding' THEN (SELECT f.severity FROM current_findings f
                 WHERE f.agent_id = i.agent_id AND f.rule_set_id = {REF_PART_2}
                   AND f.rule_id = {REF_PART_3})
-            WHEN 'vulnerability' THEN (SELECT ad.severity FROM advisories ad
+            WHEN 'vulnerability' THEN (SELECT openvibes_advisory_severity(ad.advisory_id, ad.severity) FROM advisories ad
                 WHERE ad.advisory_id = {REF_TAIL})
         END"
     )

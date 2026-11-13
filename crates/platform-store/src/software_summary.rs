@@ -405,7 +405,7 @@ async fn advisories(
                  grouped AS (SELECT advisory_id, count(DISTINCT agent_id) AS hosts, max(fixed) AS fixed
                              FROM hits GROUP BY advisory_id),
                  enriched AS (
-                   SELECT a.advisory_id, a.severity, a.title,
+                   SELECT a.advisory_id, openvibes_advisory_severity(a.advisory_id, a.severity) AS severity, a.title,
                           COALESCE(array_agg(DISTINCT c.cve_id) FILTER (WHERE c.cve_id IS NOT NULL), '{{}}') AS cves,
                           COALESCE(bool_or(x.kev_added IS NOT NULL OR COALESCE(x.euvd_exploited, false)), false) AS exploited,
                           max(x.epss) AS epss, max(x.cvss_score) AS cvss
