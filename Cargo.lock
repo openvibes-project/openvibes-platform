@@ -2292,7 +2292,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-admin"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -2329,7 +2329,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-console"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "argon2",
  "axum",
@@ -2381,7 +2381,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-distribution"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "axum",
  "chrono",
@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-feed"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -2424,7 +2424,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-fetch"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "platform-config",
@@ -2438,7 +2438,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-ingest"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -2466,14 +2466,14 @@ dependencies = [
 
 [[package]]
 name = "openvibes-llm"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "sha2 0.11.1",
 ]
 
 [[package]]
 name = "openvibes-load"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "clap",
  "openvibes-core",
@@ -2483,7 +2483,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-netlog"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "axum",
  "chrono",
@@ -2500,7 +2500,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-picture"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "gif",
  "image",
@@ -2527,7 +2527,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-signer"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -2563,7 +2563,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-vulns"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -2918,7 +2918,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "platform-agent-server"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "axum",
  "chrono",
@@ -2940,7 +2940,7 @@ dependencies = [
 
 [[package]]
 name = "platform-assistant"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "openvibes-core",
@@ -2958,7 +2958,7 @@ dependencies = [
 
 [[package]]
 name = "platform-config"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "serde",
  "toml",
@@ -2966,14 +2966,14 @@ dependencies = [
 
 [[package]]
 name = "platform-host"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "zeroize",
 ]
 
 [[package]]
 name = "platform-password"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "argon2",
  "unicode-normalization",
@@ -2982,7 +2982,7 @@ dependencies = [
 
 [[package]]
 name = "platform-pki"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "aes",
  "base64 0.23.1",
@@ -3004,14 +3004,14 @@ dependencies = [
 
 [[package]]
 name = "platform-settings"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "platform-store"
-version = "0.2.9"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "deadpool-postgres",
