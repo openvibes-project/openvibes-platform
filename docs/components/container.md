@@ -44,9 +44,15 @@ the TUI (#608), ARM and the CI build (#605), the backup before an update
 ## Running it
 
 - **Podman** runs systemd in a container as is; nothing is privileged.
-- **Docker** needs a cgroup v2 host (current Debian, Ubuntu and Proxmox,
-  TrueNAS SCALE, Unraid 6.12 and later), plus tmpfs on `/run`,
-  `/run/lock` and `/tmp`. Never `--privileged`.
+- **Docker** mounts the cgroup tree read-only in an unprivileged
+  container, and systemd stops at once ("Failed to create /init.scope
+  control group: Read-only file system"). So under Docker the container
+  uses the host's cgroup tree, writable: `--cgroupns host -v
+  /sys/fs/cgroup:/sys/fs/cgroup:rw`, plus tmpfs on `/run`, `/run/lock`
+  and `/tmp`. It's still not privileged and gets no extra capabilities,
+  but root in the container can change cgroup limits on the host (ruling
+  on #604). It needs a cgroup v2 host (current Debian, Ubuntu and
+  Proxmox, TrueNAS SCALE, Unraid 6.12 and later). Never `--privileged`.
 - **Stopping** takes longer than Docker's default 10 seconds, because
   systemd stops PostgreSQL and the services in order. Give it 60 seconds
   (`docker stop -t 60`); a kill can leave PostgreSQL recovering on the next
@@ -61,8 +67,8 @@ the TUI (#608), ARM and the CI build (#605), the backup before an update
   the services Repair didn't reach stay off. `docker exec <container>
   journalctl -u openvibes-container-start` shows why. Running Repair again
   from the TUI is safe.
-- On a cgroup v1 host, systemd can't start under Docker without extra
-  flags, and the container exits at once.
+- Without the writable cgroup tree, or on a cgroup v1 host, systemd
+  can't start under Docker and the container exits at once (code 255).
 
 ## How to test
 

@@ -38,11 +38,14 @@ cleanup() {
     for v in "${vols[@]}"; do "$engine" volume rm -f "$C-${v%%:*}" > /dev/null 2>&1 || true; done
 }
 # What compose.yaml will give the container: named volumes, and for Docker
-# the tmpfs mounts systemd needs (Podman adds them itself). Never --privileged.
+# what systemd needs (Podman sets it up itself): tmpfs on /run, /run/lock
+# and /tmp, and the host's cgroup tree writable, since Docker mounts it
+# read-only in an unprivileged container (ruling on #604). Never --privileged.
 start() {
     local args=(-d --name "$C" -p 127.0.0.1::443)
     for v in "${vols[@]}"; do args+=(-v "$C-${v%%:*}:${v#*:}"); done
-    [[ $(basename "$engine") == docker ]] && args+=(--tmpfs /run --tmpfs /run/lock --tmpfs /tmp)
+    [[ $(basename "$engine") == docker ]] && args+=(--tmpfs /run --tmpfs /run/lock --tmpfs /tmp
+                                                      --cgroupns host -v /sys/fs/cgroup:/sys/fs/cgroup:rw)
     "$engine" run "${args[@]}" "$image" > /dev/null
     wait_for "systemd is up" 60 'systemctl is-system-running | grep -qE "^(running|degraded)$"'
 }
