@@ -578,6 +578,34 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
+  # The platform container image (#604) from the EL10 RPMs, under Docker
+  # with no privileged mode: boots, Setup works, a new container on the same
+  # volumes keeps the data and starts the services.
+  container:
+    name: Container image (almalinux:10, Docker)
+    needs: [changes, almalinux]
+    if: needs.changes.outputs.heavy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download RPMs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: rpms-el10
+          path: rpms
+      - name: Download the rules package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download --repo openvibes-project/openvibes-rules --pattern 'openvibes-rules-*.rpm' --dir rpms
+      - name: Build the image
+        run: ENGINE=docker bash scripts/build-container-image.sh rpms openvibes-platform:ci
+      - name: End to end under Docker
+        run: ENGINE=docker bash scripts/container-e2e.sh openvibes-platform:ci
+
   # The installed platform and agent RPMs against each other: renewal,
   # revocation, expiry re-enrollment, distribution outage, then load smokes.
   integration:

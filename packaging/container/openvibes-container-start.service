@@ -1,0 +1,17 @@
+# The platform container (#604): the image holds no record of which units
+# Setup turned on (that is /etc/systemd/system, part of the image), so a new
+# container, a new image included, would start with every service off. When
+# Setup has run (its plan is on the /etc/openvibes volume), Repair puts the
+# host back as Setup left it: units enabled and started, database current.
+[Unit]
+Description=OpenVIBES container start: bring the platform back as Setup left it
+ConditionPathExists=/etc/openvibes/setup.toml
+After=basic.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/openvibes-admin setup --repair
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,57 @@
+# The OpenVIBES platform as one container image (decision #602, #604): every
+# platform service and PostgreSQL 17 under systemd, as on the appliance, on
+# the appliance's base (AlmaLinux 10) with the same internal RPMs (#631).
+#
+# Built by scripts/build-container-image.sh from a folder of EL10 RPMs (the
+# platform's and the rules package). The data lives on the volumes below, so
+# a new image keeps it. Needs no privileged mode; Docker needs a cgroup v2
+# host. See docs/components/container.md.
+FROM docker.io/library/almalinux:10
+
+# The service accounts get fixed IDs before the packages would pick some:
+# a new image must find its files on the volumes owned by the same accounts.
+RUN set -eu; \
+    groupadd -r -g 960 openvibes-operators; \
+    groupadd -r -g 961 openvibes-signer-clients; \
+    n=970; \
+    for u in admin console distribution feed fetch ingest llm netlog signer vulns; do \
+        groupadd -r -g $n openvibes-$u; \
+        useradd -r -u $n -g $n -d / -s /sbin/nologin -c "OpenVIBES $u" openvibes-$u; \
+        n=$((n + 1)); \
+    done
+
+# PostgreSQL 17 from PGDG, as Setup and the appliance use on AlmaLinux.
+RUN set -eu; \
+    dnf -q -y install "https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-$(uname -m)/pgdg-redhat-repo-latest.noarch.rpm"; \
+    dnf -q -y install systemd postgresql17-server; \
+    dnf -q clean all
+
+COPY rpms/ /tmp/openvibes-rpms/
+COPY openvibes-container-start.service /usr/lib/systemd/system/
+RUN set -eu; \
+    dnf -q -y install /tmp/openvibes-rpms/*.rpm; \
+    rm -rf /tmp/openvibes-rpms; \
+    dnf -q clean all; \
+    rm -rf /var/cache/dnf /var/cache/libdnf5; \
+    # Units that manage hardware, consoles or the host clock: the container
+    # host does that.
+    systemctl mask systemd-udevd.service systemd-udev-trigger.service \
+        systemd-remount-fs.service getty.target console-getty.service \
+        systemd-logind.service systemd-hwdb-update.service \
+        systemd-modules-load.service sys-kernel-config.mount \
+        sys-kernel-debug.mount sys-kernel-tracing.mount dev-hugepages.mount \
+        systemd-firstboot.service; \
+    systemctl enable openvibes-container-start.service
+
+VOLUME ["/etc/openvibes", "/var/lib/pgsql", "/var/lib/openvibes-admin", \
+        "/var/lib/openvibes-console", "/var/lib/openvibes-feed", \
+        "/var/lib/openvibes-ingest", "/var/lib/openvibes-llm", \
+        "/var/lib/openvibes-signer", "/var/lib/openvibes-vulns"]
+
+# Console, agents, rule distribution, network devices.
+EXPOSE 443/tcp 18423/tcp 18424/tcp 514/udp
+
+# systemd stops on SIGRTMIN+3, not SIGTERM.
+STOPSIGNAL SIGRTMIN+3
+ENV container=oci
+CMD ["/sbin/init"]
