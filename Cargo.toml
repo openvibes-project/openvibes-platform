@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/openvibes-ingest", "crates/platform-agent-server", "crates/platform-assistant", "crates/openvibes-llm", "crates/openvibes-distribution", "crates/openvibes-vulns", "crates/openvibes-feed", "crates/openvibes-netlog", "crates/platform-config", "crates/platform-settings", "crates/platform-password", "crates/openvibes-signer", "crates/openvibes-fetch", "crates/openvibes-picture", "crates/platform-store", "crates/openvibes-admin", "crates/openvibes-console", "crates/platform-pki", "crates/platform-host", "scripts/load"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 rust-version = "1.99"
 license = "Apache-2.0"
