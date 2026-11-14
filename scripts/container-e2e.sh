@@ -18,7 +18,15 @@ vols=(etc:/etc/openvibes pgsql:/var/lib/pgsql admin:/var/lib/openvibes-admin
       signer:/var/lib/openvibes-signer vulns:/var/lib/openvibes-vulns)
 
 ok() { echo "ok: $*"; }
-fail() { echo "FAIL: $*" >&2; "$engine" logs "$C" 2>&1 | tail -40 >&2 || true; exit 1; }
+fail() {
+    echo "FAIL: $*" >&2
+    {
+        echo "--- state"; "$engine" inspect -f '{{.State.Status}} exit={{.State.ExitCode}} {{.State.Error}}' "$C"
+        echo "--- systemd"; "$engine" exec "$C" sh -c 'systemctl is-system-running; systemctl list-jobs --no-pager | head -20; grep cgroup /proc/self/mountinfo' 
+        echo "--- log"; "$engine" logs "$C" 2>&1 | tail -60
+    } >&2 2>&1 || true
+    exit 1
+}
 in_c() { "$engine" exec "$C" bash -c "$1"; }
 wait_for() {
     local what=$1 secs=$2 check=$3
