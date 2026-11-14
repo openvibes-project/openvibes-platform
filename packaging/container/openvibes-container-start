@@ -1,0 +1,14 @@
+#!/bin/sh
+# At every start of the platform container (#604, #606): before Setup, say
+# how to run it; after, put the host back as Setup left it (Repair) and say
+# where the console is. The output goes to the container's log.
+set -eu
+if [ ! -e /etc/openvibes/setup.toml ]; then
+    echo "OpenVIBES is not set up yet. Run Setup in the container:"
+    echo "    docker compose exec openvibes openvibes-admin"
+    echo "(or: docker exec -it <container> openvibes-admin)"
+    exit 0
+fi
+openvibes-admin setup --repair
+origin=$(sed -n 's/^public_origin = "\(.*\)"$/\1/p' /etc/openvibes/console.toml 2>/dev/null || true)
+if [ -n "$origin" ]; then echo "OpenVIBES console: $origin"; fi

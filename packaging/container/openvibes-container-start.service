@@ -3,14 +3,15 @@
 # container, a new image included, would start with every service off. When
 # Setup has run (its plan is on the /etc/openvibes volume), Repair puts the
 # host back as Setup left it: units enabled and started, database current.
+# Before Setup, it says how to run it.
 [Unit]
 Description=OpenVIBES container start: bring the platform back as Setup left it
-ConditionPathExists=/etc/openvibes/setup.toml
 After=basic.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/openvibes-admin setup --repair
+ExecStart=/usr/libexec/openvibes-container-start
+StandardOutput=journal+console
 RemainAfterExit=yes
 
 [Install]
