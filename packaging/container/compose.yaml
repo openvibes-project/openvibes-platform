@@ -1,0 +1,49 @@
+# The OpenVIBES platform in one container (#606): `docker compose up -d`,
+# then `docker compose logs openvibes` says what to do next. Works the same
+# with `podman compose`. See docs/components/container.md.
+services:
+  openvibes:
+    image: ${OPENVIBES_IMAGE:-ghcr.io/openvibes-project/openvibes-platform:latest}
+    restart: unless-stopped
+    # systemd stops PostgreSQL and the services in order; Docker's default
+    # 10 seconds would kill them part way.
+    stop_grace_period: 60s
+    # A terminal is systemd's console, which is what `docker compose logs`
+    # shows: the start messages and where the console is.
+    tty: true
+    # What systemd needs under Docker (Podman needs none of it, and takes it
+    # as is): tmpfs on /run, /run/lock and /tmp, and the host's cgroup tree
+    # writable, since Docker mounts it read-only. Not privileged and no extra
+    # capabilities, but root in the container can change cgroup limits on
+    # the host (ruling on #604). Never add `privileged: true`.
+    cgroup: host
+    tmpfs: [/run, /run/lock, /tmp]
+    # Each port is the same on both sides: the console only answers to the
+    # address it was set up for. Another port: give Setup that port too.
+    ports:
+      - "443:443"         # console
+      - "18423:18423"     # agents
+      - "18424:18424"     # rule distribution
+      - "514:514/udp"     # network devices (syslog)
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - etc:/etc/openvibes
+      - pgsql:/var/lib/pgsql
+      - admin:/var/lib/openvibes-admin
+      - console:/var/lib/openvibes-console
+      - feed:/var/lib/openvibes-feed
+      - ingest:/var/lib/openvibes-ingest
+      - llm:/var/lib/openvibes-llm
+      - signer:/var/lib/openvibes-signer
+      - vulns:/var/lib/openvibes-vulns
+
+volumes:
+  etc:
+  pgsql:
+  admin:
+  console:
+  feed:
+  ingest:
+  llm:
+  signer:
+  vulns:

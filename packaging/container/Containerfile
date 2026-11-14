@@ -27,6 +27,7 @@ RUN set -eu; \
     dnf -q clean all
 
 COPY rpms/ /tmp/openvibes-rpms/
+COPY openvibes-container-start /usr/libexec/
 COPY openvibes-container-start.service /usr/lib/systemd/system/
 RUN set -eu; \
     dnf -q -y install /tmp/openvibes-rpms/*.rpm; \
