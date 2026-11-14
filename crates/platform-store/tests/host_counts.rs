@@ -5,7 +5,7 @@ mod common;
 
 use chrono::Utc;
 use common::{
-    hosts::id,
+    hosts::{everywhere, id},
     vulns::{fixture, query, run},
 };
 use platform_store::{
@@ -82,6 +82,17 @@ async fn each_hosts_counts_match_the_list_for_that_host() {
             .unwrap()
             .get(0);
         assert_eq!(i64::from(listed), want[0], "{host}: Hosts list critical");
+        // The host's page counts the same CVEs (#627).
+        let page = platform_store::host_summary::summary(&c, host, &everywhere(), None, now)
+            .await
+            .unwrap()
+            .unwrap();
+        let open: i64 = want[..5].iter().sum();
+        assert_eq!(
+            page.top_vulnerabilities.unwrap().total,
+            open,
+            "{host}: host page count"
+        );
     }
     // Host 3: the three .NET CVEs are Critical.
     let critical: i32 = c

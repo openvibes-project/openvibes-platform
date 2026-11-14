@@ -1160,9 +1160,10 @@ enrolled, unrevoked host. A missing host and one outside the caller's
 `hosts.read` reach are the same 404 `host_not_found`; a revoked host still
 answers. A store failure is 503. Each count is what its list shows by
 default: open alarms; failing checks whose triage is open (the Hosts
-list's `failing` count too); and advisories, one per advisory, mapped at
-confidence 80 or more with this host's triage open, as
-`/vulnerabilities?host=` groups its rows. A vulnerability item carries
+list's `failing` count too); and vulnerabilities, one per CVE by its own
+severity, as `/vulnerabilities?host=` counts them (#627); the card's rows
+are the host's top advisories, mapped at confidence 80 or more with this
+host's triage open. A vulnerability item carries
 `advisory`, `severity`, `kev`, `exploited` (KEV or EUVD) and `title`. The
 list's summary line schema is `HostSummaryLineView`, and its group items
 are `HostListGroupView` (`id`, `name`, `kind`); `api_contract` fails when
