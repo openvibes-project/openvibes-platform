@@ -27,6 +27,16 @@ mod stored_tests;
 
 pub(crate) use lookups::{Access, ConsoleReadLookups};
 pub(crate) use runtime::{AssistantRuntime, LeasedChatBackend};
+
+/// The assistant is offered (the session's permission, Ask about this) only
+/// once its model has answered: configured but never reached, as while the
+/// assistant container is not running, counts as off (#653).
+pub(crate) async fn shown(assistant: &Option<AssistantRuntime>) -> bool {
+    match assistant {
+        Some(runtime) => runtime.answered().await,
+        None => false,
+    }
+}
 pub(crate) use types::{
     AssistantInternetSource, AssistantLookup, AssistantMessageRequest, AssistantMessageResponse,
     AssistantSegment, AssistantStatusResponse, ClientTurn, encode_component, internet_sources,

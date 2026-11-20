@@ -81,7 +81,7 @@ pub(crate) async fn alarm_summary_page(
         suppress: here(Permission::AlarmsSuppress),
         add_to_case: here(Permission::CasesWrite),
         // Capabilities here are not filtered like /session's; the assistant may be off.
-        ask: state.assistant.is_some() && here(Permission::AssistantUse),
+        ask: crate::assistant::shown(&state.assistant).await && here(Permission::AssistantUse),
         export: here(Permission::AlarmsExport),
     };
     axum::Json(view(s, can)).into_response()

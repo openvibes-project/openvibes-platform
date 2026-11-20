@@ -7,6 +7,8 @@ depends on it: the console talks to any OpenAI-compatible URL
 ([platform-assistant.md](platform-assistant.md)). So a newer runtime, or
 another one such as vLLM on a GPU server, replaces it without code changes.
 The assistant is in early beta ([console-assistant.md](console-assistant.md)).
+In the container form the same server and model run in their own container
+instead ([openvibes-assistant.md](openvibes-assistant.md)).
 
 | Part | What it is |
 |---|---|

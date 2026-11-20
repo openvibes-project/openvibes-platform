@@ -73,6 +73,12 @@ impl AssistantRuntime {
         });
     }
 
+    /// The model has answered a probe since the console started (the loop
+    /// stops once it does, so this never turns back).
+    pub(crate) async fn answered(&self) -> bool {
+        *self.available.read().await
+    }
+
     pub(crate) async fn principal_slot(&self, principal_id: &str) -> Arc<Semaphore> {
         let mut slots = self.principal_slots.lock().await;
         slots
@@ -84,10 +90,13 @@ impl AssistantRuntime {
 
 /// When to probe again. Not reachable or timed out (still starting or
 /// loading its model, as after `assistant-setup`): every 10 s for the
-/// first minute. Otherwise, and
-/// after that: a probe is costly and, through openvibes-llm's socket, loads
-/// the model (or retries a model that cannot start), so wait longer than
-/// its idle time (5 min by default): the probe alone never keeps it loaded.
+/// first minute. Refused after that (nothing listens, as while the
+/// assistant container is not running, #653): every minute, since such a
+/// probe costs nothing, so an assistant started later shows within a
+/// minute. Otherwise: a probe is costly and, through openvibes-llm's
+/// socket, loads the model (or retries a model that cannot start), so wait
+/// longer than its idle time (5 min by default): the probe alone never
+/// keeps it loaded.
 fn probe_retry(models_error: Option<BackendError>, attempt: u32) -> Duration {
     let starting = matches!(
         models_error,
@@ -95,6 +104,8 @@ fn probe_retry(models_error: Option<BackendError>, attempt: u32) -> Duration {
     );
     if starting && attempt < 6 {
         Duration::from_secs(10)
+    } else if models_error == Some(BackendError::Connect) {
+        Duration::from_secs(60)
     } else {
         Duration::from_secs(15 * 60)
     }
@@ -151,8 +162,13 @@ mod tests {
         for error in [E::Connect, E::Timeout] {
             assert_eq!(probe_retry(Some(error), 0), fast, "{error:?}");
             assert_eq!(probe_retry(Some(error), 5), fast, "{error:?}");
-            assert!(probe_retry(Some(error), 6) > idle, "{error:?}");
         }
+        // Then a timeout (it may be loading the model) waits past the idle
+        // time; a refused connection costs nothing, so every minute (#653).
+        assert!(probe_retry(Some(E::Timeout), 6) > idle);
+        let minute = std::time::Duration::from_secs(60);
+        assert_eq!(probe_retry(Some(E::Connect), 6), minute);
+        assert_eq!(probe_retry(Some(E::Connect), 500), minute);
         // Answered but failed (models listed, or another error): slow.
         for error in [None, Some(E::Unauthorized), Some(E::Unavailable)] {
             assert!(probe_retry(error, 0) > idle, "{error:?}");

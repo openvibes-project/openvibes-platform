@@ -1,0 +1,57 @@
+#!/bin/bash
+# Start of the assistant container (#651), early beta (#646). Downloads the
+# pinned model on the first start and checks its SHA-256, waits for the key
+# the platform container makes, checks the settings and the model as the
+# appliance's unit does (openvibes-llm-check), then runs llama-server on
+# 127.0.0.1:18430 with the appliance's options.
+set -euo pipefail
+
+say() { echo "OpenVIBES assistant (early beta): $*"; }
+
+# model.pin is KEY=VALUE lines and comments only.
+while IFS='=' read -r key value; do
+    case $key in LLM_MODEL_FILE | LLM_MODEL_URL | LLM_MODEL_SHA256 | LLM_MODEL_ALIAS) printf -v "$key" '%s' "$value" ;; esac
+done < /usr/share/openvibes-llm/model.pin
+
+models=/var/lib/openvibes-llm/models
+model=$models/$LLM_MODEL_FILE
+key=${OPENVIBES_ASSISTANT_KEY_FILE:-/var/lib/openvibes-assistant-key/llm-api-key}
+
+if [ ! -f "$model" ]; then
+    say "downloading $LLM_MODEL_FILE (about 2.7 GB) from its publisher; this happens once"
+    part=$model.part
+    rm -f "$part"
+    curl -fL --retry 5 --retry-delay 10 --no-progress-meter -o "$part" "$LLM_MODEL_URL" \
+        || { rm -f "$part"; say "the download failed (above); the next start tries again"; exit 1; }
+    if ! echo "$LLM_MODEL_SHA256  $part" | sha256sum -c --status -; then
+        rm -f "$part"
+        say "the download does not match the pinned SHA-256 and was deleted; the next start tries again"
+        exit 1
+    fi
+    mv "$part" "$model"
+    say "model downloaded and checked"
+fi
+
+# Read-only, as the appliance installs it: openvibes-llm-check refuses a
+# model the service could change.
+chmod 0444 "$model"
+
+# The platform container makes the key on its first start (ruling on #643).
+for _ in $(seq 120); do [ -r "$key" ] && break; sleep 1; done
+[ -r "$key" ] || { say "no key at $key: is the platform container running with the shared key volume?"; exit 1; }
+
+# The appliance's llm.conf defaults; the compose file may set the tuning ones.
+export OPENVIBES_LLM_MODEL=$model OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256 OPENVIBES_LLM_ALIAS=$LLM_MODEL_ALIAS
+export OPENVIBES_LLM_PORT=18430 OPENVIBES_LLM_IDLE=infinity
+export OPENVIBES_LLM_CONTEXT=${OPENVIBES_LLM_CONTEXT:-8192} OPENVIBES_LLM_THREADS=${OPENVIBES_LLM_THREADS:-4}
+export OPENVIBES_LLM_GPU_LAYERS=${OPENVIBES_LLM_GPU_LAYERS:-0} OPENVIBES_LLM_PARALLEL=${OPENVIBES_LLM_PARALLEL:-1}
+/usr/libexec/openvibes-llm/openvibes-llm-check
+
+say "serving $LLM_MODEL_ALIAS on 127.0.0.1:$OPENVIBES_LLM_PORT"
+exec /usr/libexec/openvibes-llm/llama-server \
+    --model "$OPENVIBES_LLM_MODEL" --alias "$OPENVIBES_LLM_ALIAS" \
+    --host 127.0.0.1 --port "$OPENVIBES_LLM_PORT" \
+    --ctx-size "$OPENVIBES_LLM_CONTEXT" --threads "$OPENVIBES_LLM_THREADS" \
+    --n-gpu-layers "$OPENVIBES_LLM_GPU_LAYERS" --parallel "$OPENVIBES_LLM_PARALLEL" \
+    --api-key-file "$key" \
+    --no-webui --no-slots --offline --jinja --reasoning off --timeout 300 --log-colors off

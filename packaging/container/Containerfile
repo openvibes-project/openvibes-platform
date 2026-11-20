@@ -29,6 +29,7 @@ RUN set -eu; \
 COPY rpms/ /tmp/openvibes-rpms/
 COPY openvibes-container-start /usr/libexec/
 COPY openvibes-container-start.service /usr/lib/systemd/system/
+COPY model.pin /usr/share/openvibes-llm/model.pin
 RUN set -eu; \
     dnf -q -y install /tmp/openvibes-rpms/*.rpm; \
     rm -rf /tmp/openvibes-rpms; \
@@ -46,8 +47,8 @@ RUN set -eu; \
 
 VOLUME ["/etc/openvibes", "/var/lib/pgsql", "/var/lib/openvibes-admin", \
         "/var/lib/openvibes-console", "/var/lib/openvibes-feed", \
-        "/var/lib/openvibes-ingest", "/var/lib/openvibes-llm", \
-        "/var/lib/openvibes-signer", "/var/lib/openvibes-vulns"]
+        "/var/lib/openvibes-ingest", "/var/lib/openvibes-signer", \
+        "/var/lib/openvibes-vulns", "/var/lib/openvibes-assistant-key"]
 
 # Console, agents, rule distribution, network devices.
 EXPOSE 443/tcp 18423/tcp 18424/tcp 514/udp

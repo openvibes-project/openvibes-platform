@@ -53,9 +53,24 @@ services:
       - console:/var/lib/openvibes-console
       - feed:/var/lib/openvibes-feed
       - ingest:/var/lib/openvibes-ingest
-      - llm:/var/lib/openvibes-llm
       - signer:/var/lib/openvibes-signer
       - vulns:/var/lib/openvibes-vulns
+      # The key the assistant container shares (#652); made on the first start.
+      - assistant-key:/var/lib/openvibes-assistant-key
+
+  # The assistant (early beta, #643): off unless COMPOSE_PROFILES=assistant
+  # in .env. It downloads its model (about 2.7 GB) on its first start, and
+  # the console shows the assistant once it answers. It shares the platform
+  # container's network, so only the platform reaches it (127.0.0.1:18430).
+  assistant:
+    profiles: [assistant]
+    image: ${OPENVIBES_ASSISTANT_IMAGE:-ghcr.io/openvibes-project/openvibes-assistant:latest}
+    restart: unless-stopped
+    network_mode: service:openvibes
+    depends_on: [openvibes]
+    volumes:
+      - assistant-models:/var/lib/openvibes-llm/models
+      - assistant-key:/var/lib/openvibes-assistant-key:ro
 
 volumes:
   etc:
@@ -64,6 +79,7 @@ volumes:
   console:
   feed:
   ingest:
-  llm:
   signer:
   vulns:
+  assistant-key:
+  assistant-models:

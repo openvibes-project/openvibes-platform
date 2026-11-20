@@ -1,0 +1,33 @@
+# The console assistant's model server as its own container (#643, #651;
+# decision #644), early beta (#646). Optional: compose starts it with the
+# `assistant` profile, in the platform container's network, so the console
+# reaches it on 127.0.0.1:18430 as on the appliance.
+#
+# Only three files come from the openvibes-llm RPM (its systemd units and
+# the openvibes-admin it requires do not belong here): the pinned
+# llama-server, openvibes-llm-check, and model.pin.
+
+FROM docker.io/library/almalinux:10 AS unpack
+COPY openvibes-llm.rpm /tmp/
+RUN dnf -y -q install cpio && cd /tmp && rpm2cpio openvibes-llm.rpm | cpio -idm --quiet \
+        ./usr/libexec/openvibes-llm/llama-server \
+        ./usr/libexec/openvibes-llm/openvibes-llm-check \
+        ./usr/share/openvibes-llm/model.pin \
+        './usr/share/licenses/openvibes-llm/*'
+
+FROM docker.io/library/almalinux:10-minimal
+RUN microdnf -y install --setopt=install_weak_deps=0 libgomp && microdnf clean all
+COPY --from=unpack /tmp/usr/ /usr/
+COPY openvibes-assistant-start /usr/libexec/openvibes-assistant-start
+# The platform image's openvibes-llm account (970 + 6), so the shared key's
+# group lets it read the key. The models live on a volume; it starts out
+# owned by this account.
+RUN echo 'openvibes-llm:x:976:976:OpenVIBES llm:/:/sbin/nologin' >> /etc/passwd \
+    && echo 'openvibes-llm:x:976:' >> /etc/group \
+    && mkdir -p /var/lib/openvibes-llm/models \
+    && chown 976:976 /var/lib/openvibes-llm/models \
+    && chmod 0750 /var/lib/openvibes-llm/models
+USER 976:976
+VOLUME /var/lib/openvibes-llm/models
+STOPSIGNAL SIGTERM
+CMD ["/usr/libexec/openvibes-assistant-start"]

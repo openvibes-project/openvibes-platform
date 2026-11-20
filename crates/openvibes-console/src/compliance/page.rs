@@ -125,7 +125,7 @@ pub(crate) async fn check_summary_page(
         // As the bulk route's add to case: cases.write and cases.read.
         add_to_case: case_write && case_read,
         // Capabilities here are not filtered like /session's; the assistant may be off.
-        ask: state.assistant.is_some() && assistant,
+        ask: crate::assistant::shown(&state.assistant).await && assistant,
         export,
     };
     let mut view = CheckSummaryView::new(s, can);

@@ -87,5 +87,52 @@ else
     openvibes-admin setup --quick "${args[@]}" || stop "Setup failed (above)."
 fi
 
+# The assistant is its own container (#643, #652): the platform makes the
+# key the two share, on its first start, and points the console at the
+# assistant on 127.0.0.1:18430 every start. Whether the assistant container
+# runs decides whether the assistant is on (#644): the console shows none
+# while it has never answered (#653).
+shared=/var/lib/openvibes-assistant-key/llm-api-key
+console_key=/etc/openvibes/llm-api-key
+console_conf=/etc/openvibes/console.toml
+if [ -d "${shared%/*}" ] && [ -f "$console_conf" ]; then
+    restart=
+    if [ ! -s "$shared" ]; then
+        (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$shared.new")
+        chown 0:976 "$shared.new"
+        chmod 0640 "$shared.new"
+        mv "$shared.new" "$shared"
+    fi
+    # The console wants its own owner-only copy; the assistant reads the
+    # shared one through its group.
+    if ! cmp -s "$shared" "$console_key"; then
+        install -o openvibes-console -g openvibes-console -m 0400 "$shared" "$console_key"
+        restart=1
+    fi
+    alias=$(sed -n 's/^LLM_MODEL_ALIAS=//p' /usr/share/openvibes-llm/model.pin)
+    if ! grep -q '^\[assistant' "$console_conf"; then
+        cat >> "$console_conf" <<EOF
+
+# The assistant container (early beta), written by the container's start.
+[assistant]
+enabled = true
+profile = "small"
+lookup_mode = "auto"
+
+[assistant.backend]
+url = "http://127.0.0.1:18430/v1"
+model = "$alias"
+api_key_file = "$console_key"
+EOF
+        restart=1
+    elif grep -q '^url = "http://127.0.0.1:18430/v1"$' "$console_conf" \
+        && ! grep -q "^model = \"$alias\"$" "$console_conf"; then
+        # A new image pins another model.
+        sed -i "/^\[assistant.backend\]/,/^\[/ s/^model = .*/model = \"$alias\"/" "$console_conf"
+        restart=1
+    fi
+    if [ -n "$restart" ]; then systemctl try-restart openvibes-console; fi
+fi
+
 origin=$(sed -n 's/^public_origin = "\(.*\)"$/\1/p' /etc/openvibes/console.toml 2>/dev/null || true)
 if [ -n "$origin" ]; then echo "OpenVIBES console: $origin"; fi

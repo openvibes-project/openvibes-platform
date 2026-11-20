@@ -124,7 +124,7 @@ pub(crate) async fn authenticated_session(
             }
         }
     };
-    if state.assistant.is_none() {
+    if !crate::assistant::shown(&state.assistant).await {
         capabilities.retain(|capability| capability.permission != crate::Permission::AssistantUse);
     }
     let picture = console_people::picture_etag(&client, &active.user_id)
