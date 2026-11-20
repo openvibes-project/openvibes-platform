@@ -6,10 +6,14 @@ appliance's base (AlmaLinux 10) with the same internal RPMs (#631). The
 units, Setup, the TUI and `openvibes-admin` are the same code as on the
 appliance; there's no container mode.
 
-Not yet here: setup in the browser (#607), SSH into the TUI (#608), ARM and
-the published image (#605), the backup before an update (#609). Until #607,
-Setup runs inside the container: `docker compose exec openvibes
-openvibes-admin`.
+The container comes installed: every setting goes in the compose file, with
+the administrator password in a `.env` file next to it (#635). There's no
+SSH; the TUI opens with `docker compose exec openvibes openvibes-admin`
+(#634).
+
+Not yet here: the settings from the compose file (#607; until then, Setup
+runs inside the container with the command above), ARM and the published
+image (#605), the backup before an update (#609).
 
 ## Interfaces
 
