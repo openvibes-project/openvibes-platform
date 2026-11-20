@@ -2,8 +2,9 @@
 # End to end for the platform container (#604, #606, #607), started from
 # packaging/container/compose.yaml as a user would: the image boots under
 # systemd with no privileged mode, sets itself up from the compose file's
-# settings (a bad one stops it with a message), and a new container on the
-# same volumes (a new image) keeps the data.
+# settings (a bad one stops it with a message), a new container on the same
+# volumes (a new image) keeps the data, and a CA from your own PKI
+# (OPENVIBES_CA_FILE) is imported instead of one OpenVIBES makes.
 #
 # Usage: bash scripts/container-e2e.sh [IMAGE]
 #   IMAGE defaults to openvibes-platform:dev; ENGINE picks docker or podman
@@ -28,9 +29,11 @@ YAML
 # The settings a user puts in .env (#607); the password changes per run.
 export OPENVIBES_HOSTNAME=localhost OPENVIBES_EXTRA_NAMES=127.0.0.1
 export OPENVIBES_ADMIN_PASSWORD=too-short
+# Step 4 adds a second override that mounts the CA file.
+extra=()
 compose() {
     OPENVIBES_IMAGE=$image "$engine" compose --progress quiet -p "$P" -f "$here/packaging/container/compose.yaml" \
-        -f "$override" "$@" 2> >(grep -v 'external compose provider' >&2)
+        -f "$override" "${extra[@]}" "$@" 2> >(grep -v 'external compose provider' >&2)
 }
 
 ok() { echo "ok: $*"; }
@@ -58,7 +61,8 @@ start() {
     [[ -n $C ]] || fail "compose started no container"
     wait_for "systemd is up" 60 'systemctl is-system-running | grep -qE "^(starting|running|degraded)$"'
 }
-[[ -n ${KEEP:-} ]] || trap 'cleanup; rm -f "$override"' EXIT
+ca_dir=$(mktemp -d)
+[[ -n ${KEEP:-} ]] || trap 'cleanup; rm -rf "$override" "$ca_dir"' EXIT
 cleanup
 
 # 0. Compose refuses to start without the required settings.
@@ -116,4 +120,34 @@ wrong=$(in_c 'find /etc/openvibes /var/lib/openvibes-* /var/lib/pgsql -nouser -o
 failed=$(in_c 'systemctl list-units --failed --no-legend --plain')
 [[ -z $failed ]] || fail "failed units after the restart: $failed"
 ok "a new container on the same volumes keeps the CA and the database, starts the services and says where the console is"
+
+# 4. A CA from your own PKI: a root and an intermediate made apart from
+#    the platform (with the image's offline CA commands, in a throwaway
+#    container), the intermediate's chain and key in one mounted file. The
+#    first start imports it, and the platform trusts that root, not one of
+#    its own.
+"$engine" run --rm --entrypoint bash "$image" -c 'set -e; cd /tmp
+    openvibes-admin ca init-root --out root > /dev/null
+    openvibes-admin ca intermediate-request --out int > /dev/null
+    openvibes-admin ca sign-intermediate --root root --csr int/intermediate.csr --out int/intermediate.crt > /dev/null
+    cat int/intermediate.crt root/root.crt int/intermediate.key' > "$ca_dir/ca.pem" || fail "making a CA to import"
+chmod 644 "$ca_dir/ca.pem"
+# The second certificate in the file is the root.
+own_root=$(awk '/BEGIN CERTIFICATE/{n++} n==2{print} n==2&&/END CERTIFICATE/{exit}' "$ca_dir/ca.pem" | grep -v -- '-----' | tr -d '\n')
+cat > "$ca_dir/mount.yaml" <<YAML
+services:
+  openvibes:
+    volumes:
+      - "$ca_dir/ca.pem:/mnt/ca.pem:ro,z"
+YAML
+extra=(-f "$ca_dir/mount.yaml")
+compose down -v -t 60 > /dev/null
+export OPENVIBES_CA_FILE=/mnt/ca.pem
+start
+wait_for "the first start imported the CA and set the platform up" 900 "systemctl is-active -q openvibes-container-start"
+wait_for "the console answers with the imported CA" 60 'curl -skf -o /dev/null https://127.0.0.1/'
+installed=$(in_c 'grep -v -- "-----" /etc/openvibes/pki/root.crt | tr -d "\n"')
+[[ -n $own_root && $installed == "$own_root" ]] || fail "the platform does not trust the imported CA's root"
+[[ $(in_c 'sha256sum /etc/openvibes/pki/root.crt' | cut -d' ' -f1) != "$root_fp" ]] || fail "the root is still the one from step 2"
+ok "a CA from your own PKI (OPENVIBES_CA_FILE) is imported on the first start, and the platform trusts its root"
 echo "container-e2e: all checks passed"

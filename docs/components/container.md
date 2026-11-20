@@ -134,5 +134,8 @@ host's 443) and checks, with Docker or Podman, that:
 3. a new container on the same volumes keeps the CA and the database, has
    no files without an owner, starts the services by itself, and the log
    says where the console is.
+4. a CA from your own PKI (a root and intermediate made apart, mounted as
+   `OPENVIBES_CA_FILE`) is imported on a fresh first start, and the
+   platform trusts that root, not one of its own.
 
 `KEEP=1` leaves the container and its volumes for a look afterwards.
