@@ -1,14 +1,72 @@
-#!/bin/sh
-# At every start of the platform container (#604, #606): before Setup, say
-# how to run it; after, put the host back as Setup left it (Repair) and say
-# where the console is. The output goes to the container's log.
-set -eu
-if [ ! -e /etc/openvibes/setup.toml ]; then
-    echo "OpenVIBES is not set up yet. Run Setup in the container:"
-    echo "    docker compose exec openvibes openvibes-admin"
-    echo "(or: docker exec -it <container> openvibes-admin)"
-    exit 0
+#!/bin/bash
+# At every start of the platform container (#604, #606, #607). The container
+# comes installed: the first start sets the platform up from the compose
+# file's settings (#635); every start after puts the host back as Setup left
+# it (Repair). Then it says where the console is. The output goes to the
+# container's log.
+set -euo pipefail
+
+# systemd starts its units with a clean environment; the compose file's
+# settings are on PID 1. Only OPENVIBES_* is read, and nothing is evaluated.
+declare -A setting
+while IFS= read -r -d '' pair; do
+    case $pair in OPENVIBES_*=*) setting[${pair%%=*}]=${pair#*=} ;; esac
+done < /proc/1/environ
+get() { printf '%s' "${setting[$1]-}"; }
+
+stop() {
+    echo "OpenVIBES is not set up: $*"
+    echo "Fix it in the compose file or its .env, then run: docker compose up -d"
+    exit 1
+}
+
+# The administrator's password, for Setup (and for Repair, when an earlier
+# start stopped before the account was made). Only root reads it, and it is
+# gone when this script ends.
+password=$(get OPENVIBES_ADMIN_PASSWORD)
+password_file=/run/openvibes-admin-password
+trap 'rm -f "$password_file"' EXIT
+if [ -n "$password" ]; then
+    (umask 077; printf '%s\n' "$password" > "$password_file")
 fi
-openvibes-admin setup --repair
+
+if [ -e /etc/openvibes/setup.toml ]; then
+    openvibes-admin setup --repair
+else
+    hostname=$(get OPENVIBES_HOSTNAME)
+    [ -n "$hostname" ] || stop "OPENVIBES_HOSTNAME is empty."
+    # The console's rule (platform-password); checked here so a short one
+    # stops before Setup changes anything.
+    [ "${#password}" -ge 15 ] || stop "OPENVIBES_ADMIN_PASSWORD needs at least 15 characters."
+    # The appliance's components (as its Install picks), with no agent: the
+    # container's host is not this one.
+    components=ingest,console,distribution,vulns,rules,signer
+    case $(get OPENVIBES_ASSISTANT) in
+        on) components+=,assistant ;;
+        off | "") ;;
+        *) stop "OPENVIBES_ASSISTANT is \"$(get OPENVIBES_ASSISTANT)\"; use on or off." ;;
+    esac
+    args=(--components "$components" --hostname "$hostname" --admin-password-file "$password_file")
+    IFS=, read -ra names <<< "$(get OPENVIBES_EXTRA_NAMES)"
+    for name in "${names[@]}"; do
+        name=${name// /}
+        [ -z "$name" ] || args+=(--san "$name")
+    done
+    for port in console ingest distribution; do
+        value=$(get "OPENVIBES_${port^^}_PORT")
+        [ -z "$value" ] || args+=("--$port-port" "$value")
+    done
+    # A CA from your PKI: its certificate and key in one mounted file.
+    # Without it, OpenVIBES makes one.
+    ca_file=$(get OPENVIBES_CA_FILE)
+    if [ -n "$ca_file" ]; then
+        [ -r "$ca_file" ] || stop "OPENVIBES_CA_FILE: $ca_file is not mounted in the container."
+        openvibes-admin helper ca-import < "$ca_file" || stop "the CA in $ca_file was refused (above)."
+        args+=(--ca import)
+    fi
+    echo "OpenVIBES: setting up $hostname from the compose file"
+    openvibes-admin setup --quick "${args[@]}" || stop "Setup failed (above)."
+fi
+
 origin=$(sed -n 's/^public_origin = "\(.*\)"$/\1/p' /etc/openvibes/console.toml 2>/dev/null || true)
 if [ -n "$origin" ]; then echo "OpenVIBES console: $origin"; fi

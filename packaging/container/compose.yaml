@@ -1,6 +1,10 @@
-# The OpenVIBES platform in one container (#606): `docker compose up -d`,
-# then `docker compose logs openvibes` says what to do next. Works the same
-# with `podman compose`. See docs/components/container.md.
+# The OpenVIBES platform in one container (#606), installed and set up from
+# this file (#607): copy example.env to .env, fill it in, `docker compose up
+# -d`, and `docker compose logs openvibes` says where the console is. Works
+# the same with `podman compose`. See docs/components/container.md.
+#
+# The settings are read on the first start. A value typed straight in here
+# instead of ${...} works too; .env keeps the password out of this file.
 services:
   openvibes:
     image: ${OPENVIBES_IMAGE:-ghcr.io/openvibes-project/openvibes-platform:latest}
@@ -18,14 +22,31 @@ services:
     # the host (ruling on #604). Never add `privileged: true`.
     cgroup: host
     tmpfs: [/run, /run/lock, /tmp]
+    environment:
+      # The name agents and browsers use for this host (required), and more
+      # names or IP addresses, comma-separated.
+      OPENVIBES_HOSTNAME: ${OPENVIBES_HOSTNAME:?set OPENVIBES_HOSTNAME in .env}
+      OPENVIBES_EXTRA_NAMES: ${OPENVIBES_EXTRA_NAMES:-}
+      # The console's first administrator, "admin" (at least 15 characters).
+      OPENVIBES_ADMIN_PASSWORD: ${OPENVIBES_ADMIN_PASSWORD:?set OPENVIBES_ADMIN_PASSWORD in .env}
+      OPENVIBES_CONSOLE_PORT: ${OPENVIBES_CONSOLE_PORT:-443}
+      OPENVIBES_INGEST_PORT: ${OPENVIBES_INGEST_PORT:-18423}
+      OPENVIBES_DISTRIBUTION_PORT: ${OPENVIBES_DISTRIBUTION_PORT:-18424}
+      # The assistant (on or off): it downloads its model, several GB.
+      OPENVIBES_ASSISTANT: ${OPENVIBES_ASSISTANT:-off}
+      # A CA from your PKI instead of one OpenVIBES makes: its certificate
+      # chain and key in one PEM file, mounted below.
+      OPENVIBES_CA_FILE: ${OPENVIBES_CA_FILE:-}
     # Each port is the same on both sides: the console only answers to the
-    # address it was set up for. Another port: give Setup that port too.
+    # address it was set up for. The settings above pick them.
     ports:
-      - "443:443"         # console
-      - "18423:18423"     # agents
-      - "18424:18424"     # rule distribution
+      - "${OPENVIBES_CONSOLE_PORT:-443}:${OPENVIBES_CONSOLE_PORT:-443}"                  # console
+      - "${OPENVIBES_INGEST_PORT:-18423}:${OPENVIBES_INGEST_PORT:-18423}"                # agents
+      - "${OPENVIBES_DISTRIBUTION_PORT:-18424}:${OPENVIBES_DISTRIBUTION_PORT:-18424}"    # rule distribution
       - "514:514/udp"     # network devices (syslog)
     volumes:
+      # With OPENVIBES_CA_FILE=/mnt/ca.pem:
+      # - ./ca.pem:/mnt/ca.pem:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
       - etc:/etc/openvibes
       - pgsql:/var/lib/pgsql
