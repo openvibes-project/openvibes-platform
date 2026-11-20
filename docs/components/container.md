@@ -12,7 +12,7 @@ start sets the platform up from them (#607). There's no SSH (#634) and no
 TUI: the compose file and the console are how it's run.
 
 Not yet here: ARM and the published image (#605), the backup before an
-update (#609), changing a setting after the first start (see Configuration).
+update (#609).
 
 ## Interfaces
 
@@ -37,7 +37,9 @@ update (#609), changing a setting after the first start (see Configuration).
     settings below and the appliance's components (no agent), then prints
     the console's address. systemd gives its units a clean environment,
     so it reads the `OPENVIBES_*` settings from PID 1;
-  - after, it runs `openvibes-admin setup --repair` and prints the
+  - after, it saves the settings as the plan again (`helper setup-plan`,
+    as the appliance's Maintenance pages do), so a changed one is applied
+    (#636), then runs `openvibes-admin setup --repair` and prints the
     console's address. Which units Setup turned on is recorded in
     `/etc/systemd/system`, which belongs to the image, not a volume, so a
     new container would otherwise start with every service off. Repair
@@ -65,8 +67,22 @@ ones.
 | `OPENVIBES_ASSISTANT` | `off` | `on` downloads the assistant's model (several GB) |
 | `OPENVIBES_CA_FILE` | none | a PEM file with a CA certificate chain and key from your PKI, mounted in the container; without it, OpenVIBES makes its own CA |
 
-They're read on the first start only; changing one later does nothing yet
-(see Not yet here).
+Every start applies them: change one, run `docker compose up -d` (compose
+recreates the container), and Repair makes it so.
+
+- **Names:** new server certificates with the new names.
+- **Ports:** the service moves, and the published port with it. A moved
+  agent port leaves agents on other hosts calling the old one until their
+  install line from the console is run again; the log says so.
+- **The assistant:** `on` installs it and downloads its model; `off` stops
+  it and deletes its model, but keeps its packages, which come with the
+  image.
+- **The administrator's password** is used only to make the account on the
+  first start; change it in the console after that.
+- **The CA** is chosen once: `OPENVIBES_CA_FILE` is read on the first start
+  only.
+- **A bad setting** on a later start keeps the settings from before, says
+  so in the log, and the platform still starts.
 
 - **Volumes:** `/etc/openvibes`, `/var/lib/pgsql` and
   `/var/lib/openvibes-{admin,console,feed,ingest,llm,signer,vulns}`.
@@ -133,7 +149,9 @@ host's 443) and checks, with Docker or Podman, that:
    console answers on the published port;
 3. a new container on the same volumes keeps the CA and the database, has
    no files without an owner, starts the services by itself, and the log
-   says where the console is.
+   says where the console is; with a name added and the ingest port moved
+   meanwhile, the console's certificate has the new name, ingest listens on
+   the new port, and the log says agents still call the old one.
 4. a CA from your own PKI (a root and intermediate made apart, mounted as
    `OPENVIBES_CA_FILE`) is imported on a fresh first start, and the
    platform trusts that root, not one of its own.

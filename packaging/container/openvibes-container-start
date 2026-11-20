@@ -1,9 +1,9 @@
 #!/bin/bash
 # At every start of the platform container (#604, #606, #607). The container
 # comes installed: the first start sets the platform up from the compose
-# file's settings (#635); every start after puts the host back as Setup left
-# it (Repair). Then it says where the console is. The output goes to the
-# container's log.
+# file's settings (#635); every start after applies them again, changed ones
+# included (#636), and puts the host back as Setup left it (Repair). Then it
+# says where the console is. The output goes to the container's log.
 set -euo pipefail
 
 # systemd starts its units with a clean environment; the compose file's
@@ -30,21 +30,18 @@ if [ -n "$password" ]; then
     (umask 077; printf '%s\n' "$password" > "$password_file")
 fi
 
-if [ -e /etc/openvibes/setup.toml ]; then
-    openvibes-admin setup --repair
-else
+# What the settings ask for, as Setup's plan arguments (without the CA,
+# which is chosen once). On a bad setting, says which and returns 1.
+wanted() {
     hostname=$(get OPENVIBES_HOSTNAME)
-    [ -n "$hostname" ] || stop "OPENVIBES_HOSTNAME is empty."
-    # The console's rule (platform-password); checked here so a short one
-    # stops before Setup changes anything.
-    [ "${#password}" -ge 15 ] || stop "OPENVIBES_ADMIN_PASSWORD needs at least 15 characters."
+    if [ -z "$hostname" ]; then echo "OpenVIBES: OPENVIBES_HOSTNAME is empty."; return 1; fi
     # The appliance's components (as its Install picks), with no agent: the
     # container's host is not this one.
     components=ingest,console,distribution,vulns,rules,signer
     case $(get OPENVIBES_ASSISTANT) in
         on) components+=,assistant ;;
         off | "") ;;
-        *) stop "OPENVIBES_ASSISTANT is \"$(get OPENVIBES_ASSISTANT)\"; use on or off." ;;
+        *) echo "OpenVIBES: OPENVIBES_ASSISTANT is \"$(get OPENVIBES_ASSISTANT)\"; use on or off."; return 1 ;;
     esac
     args=(--components "$components" --hostname "$hostname" --admin-password-file "$password_file")
     IFS=, read -ra names <<< "$(get OPENVIBES_EXTRA_NAMES)"
@@ -56,6 +53,41 @@ else
         value=$(get "OPENVIBES_${port^^}_PORT")
         [ -z "$value" ] || args+=("--$port-port" "$value")
     done
+}
+
+plan=/etc/openvibes/setup.toml
+if [ -e "$plan" ]; then
+    # A later start (#636): the settings may have changed since. Save them as
+    # the plan, as the appliance's Maintenance pages do, and Repair applies
+    # them: new names get new certificates, moved ports move. A bad setting
+    # keeps the plan from before, and the platform still comes back.
+    before=$(cat "$plan")
+    ca=$(sed -n 's/^ca = "\(.*\)"$/\1/p' <<< "$before")
+    if wanted && openvibes-admin helper setup-plan "${args[@]}" --ca "$ca" > /dev/null; then
+        # The assistant turned off: stop it and delete its model, as the
+        # Parts page does, but keep its packages: they come with the image,
+        # and there is no repository to install them from again.
+        if grep -q '^components = .*"assistant"' <<< "$before" && [[ $components != *assistant* ]]; then
+            for step in stop firewall purge; do
+                openvibes-admin helper remove-step "$step" --components assistant
+            done
+        fi
+    else
+        echo "OpenVIBES: kept the settings from before. Fix the compose file or its .env, then run: docker compose up -d"
+    fi
+    openvibes-admin setup --repair
+    for port in ingest distribution; do
+        from=$(sed -n "s/^${port}_port = //p" <<< "$before")
+        to=$(sed -n "s/^${port}_port = //p" "$plan")
+        if [ -n "$from" ] && [ "$from" != "$to" ]; then
+            echo "OpenVIBES: the $port port moved from $from to $to; agents on other hosts still call $from until their install line from the console is run again."
+        fi
+    done
+else
+    wanted || stop "see above."
+    # The console's rule (platform-password); checked here so a short one
+    # stops before Setup changes anything.
+    [ "${#password}" -ge 15 ] || stop "OPENVIBES_ADMIN_PASSWORD needs at least 15 characters."
     # A CA from your PKI: its certificate and key in one mounted file.
     # Without it, OpenVIBES makes one.
     ca_file=$(get OPENVIBES_CA_FILE)

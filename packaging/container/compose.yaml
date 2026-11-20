@@ -3,8 +3,9 @@
 # -d`, and `docker compose logs openvibes` says where the console is. Works
 # the same with `podman compose`. See docs/components/container.md.
 #
-# The settings are read on the first start. A value typed straight in here
-# instead of ${...} works too; .env keeps the password out of this file.
+# Every start applies the settings: change one, then `docker compose up -d`.
+# A value typed straight in here instead of ${...} works too; .env keeps the
+# password out of this file.
 services:
   openvibes:
     image: ${OPENVIBES_IMAGE:-ghcr.io/openvibes-project/openvibes-platform:latest}

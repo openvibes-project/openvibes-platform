@@ -3,7 +3,7 @@
 # packaging/container/compose.yaml as a user would: the image boots under
 # systemd with no privileged mode, sets itself up from the compose file's
 # settings (a bad one stops it with a message), a new container on the same
-# volumes (a new image) keeps the data, and a CA from your own PKI
+# volumes (a new image) keeps the data and applies changed settings, and a CA from your own PKI
 # (OPENVIBES_CA_FILE) is imported instead of one OpenVIBES makes.
 #
 # Usage: bash scripts/container-e2e.sh [IMAGE]
@@ -106,9 +106,12 @@ ok "the first start sets the platform up from the settings, admin signs in, and 
 
 # 3. A new container on the same volumes (what a new image does) keeps the
 #    data, the accounts own it, and the services come back by themselves.
+#    Two settings changed meanwhile (#636): a new name and another port for
+#    agents.
 # compose.yaml's stop_grace_period gives systemd the time to stop
 # PostgreSQL and the services cleanly.
 compose down > /dev/null
+export OPENVIBES_EXTRA_NAMES=127.0.0.1,ov-e2e.test OPENVIBES_INGEST_PORT=18500
 start
 wait_for "the console answers after the restart" 180 'curl -skf -o /dev/null https://127.0.0.1/'
 wait_for "the start unit finished" 60 "systemctl is-active -q openvibes-container-start"
@@ -119,7 +122,13 @@ wrong=$(in_c 'find /etc/openvibes /var/lib/openvibes-* /var/lib/pgsql -nouser -o
 [[ -z $wrong ]] || fail "files with no owner on the volumes: $wrong"
 failed=$(in_c 'systemctl list-units --failed --no-legend --plain')
 [[ -z $failed ]] || fail "failed units after the restart: $failed"
-ok "a new container on the same volumes keeps the CA and the database, starts the services and says where the console is"
+# TLS checks the new name against the platform's own root (the console may
+# answer 421 to it; only the handshake matters here).
+in_c 'curl -sS -o /dev/null --cacert /etc/openvibes/pki/root.crt --resolve ov-e2e.test:443:127.0.0.1 https://ov-e2e.test/' \
+    || fail "the console's certificate does not have the new name"
+wait_for "ingest listens on the new port" 60 'ss -ltnH "sport = :18500" | grep -q .'
+[[ $("$engine" logs "$C" 2>&1) == *'ingest port moved from 18423 to 18500'* ]] || fail "the log does not say agents still call the old ingest port"
+ok "a new container on the same volumes keeps the CA and the database, starts the services, applies a new name and a moved port, and says where the console is"
 
 # 4. A CA from your own PKI: a root and an intermediate made apart from
 #    the platform (with the image's offline CA commands, in a throwaway
