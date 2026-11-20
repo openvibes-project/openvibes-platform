@@ -18,6 +18,11 @@ Every release brings all dependencies up to date first, in a pull request
 of its own that merges before the tag. Its CI and the local gate must be
 green, including `cargo audit` and `npm audit`.
 
+`cargo audit` ignores exactly one advisory, in `.cargo/audit.toml`:
+RUSTSEC-2026-0543 (chrono is unmaintained), accepted until chrono is
+replaced with jiff (decision #639, #638). Each release checks that the
+ignore is still needed.
+
 1. Rust crates: raise every version in the `Cargo.toml` files to the newest
    release, then `cargo update`.
 2. The Rust toolchain in `rust-toolchain.toml` (and `rust-version`) to the
