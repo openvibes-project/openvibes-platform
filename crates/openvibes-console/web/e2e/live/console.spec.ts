@@ -112,12 +112,14 @@ test("the Overview's Active alarms tile draws a line from its first value, and t
   const tile = tileOf(/^Critical$/);
   // Every number loaded before they are added up.
   await expect(tile.locator(".stat__value")).toHaveText(/^\d[\d,]*$/);
-  await expect(tile.locator(".tile-parts")).not.toContainText("…");
+  // What it adds up sits behind the (?) beside the title; a click pins it open (#647).
+  await tile.getByRole("button", { name: "What Critical counts" }).click();
+  await expect(tile.locator(".tile-help__parts")).not.toContainText("…");
   const total = Number((await tile.locator(".stat__value").textContent())?.replace(/\D/g, ""));
-  const parts = (await tile.locator(".tile-parts").textContent()) ?? "";
+  const parts = (await tile.locator(".tile-help__parts").textContent()) ?? "";
   const sum = [...parts.matchAll(/(\d[\d,]*) (?:alarm|vulnerabilit|compliance)/g)].reduce((n, m) => n + Number((m[1] ?? "").replace(/,/g, "")), 0);
   expect(sum).toBe(total);
-  await tile.getByRole("button", { name: /alarm/ }).click();
+  await tile.locator(".tile-help__parts").getByRole("button", { name: /alarm/ }).click();
   await expect(page).toHaveURL(/severity=critical/);
 });
 

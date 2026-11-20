@@ -19,7 +19,9 @@ test("home falls back to the built-in", async ({ page }) => {
 test("the Overview's Critical tile adds up, links to its part, and speaks of issues", async ({ page }) => {
   const tile = page.locator(".tile", { has: page.locator(".tile__title", { hasText: /^Critical$/ }) });
   const total = Number((await tile.locator(".stat__value").textContent())?.replace(/\D/g, ""));
-  const parts = (await tile.locator(".tile-parts").textContent()) ?? "";
+  // What it adds up sits behind the (?) beside the title; a click pins it open (#647).
+  await tile.getByRole("button", { name: "What Critical counts" }).click();
+  const parts = (await tile.locator(".tile-help__parts").textContent()) ?? "";
   const sum = [...parts.matchAll(/(\d[\d,]*) (?:alarm|vulnerabilit|compliance)/g)].reduce((n, m) => n + Number((m[1] ?? "").replace(/,/g, "")), 0);
   expect(total).toBeGreaterThan(0);
   expect(sum).toBe(total);
@@ -27,7 +29,7 @@ test("the Overview's Critical tile adds up, links to its part, and speaks of iss
   // "finding" is the compliance word only.
   const text = await page.locator("#main").innerText();
   expect(text.replace(/compliance findings?/gi, "")).not.toMatch(/\bfindings?\b/i);
-  await tile.getByRole("button", { name: /vulnerabilit/ }).click();
+  await tile.locator(".tile-help__parts").getByRole("button", { name: /vulnerabilit/ }).click();
   await expect(page).toHaveURL(/\/vulnerabilities\?severity=critical/);
 });
 
@@ -41,12 +43,9 @@ for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
     // The lists scroll inside their tile by design; the number tiles must show everything.
     // Trend tiles: no tolerance. The Fleet h: 2 tiles overflow by 2px, which predates the trend tiles.
     for (const tile of await page.locator(".tile", { has: page.locator(".tile-number") }).all()) {
-      const slack = (await tile.locator(".tile-parts").count()) || (await tile.locator(".linechart").count()) ? 0 : 2;
+      const slack = (await tile.locator(".linechart").count()) ? 0 : 2;
       expect(await tile.locator(".tile__body").evaluate((el, s) => el.scrollHeight <= el.clientHeight + s, slack), await tile.innerText()).toBe(true);
     }
-    // Dots between the parts when there is room for them, none when the parts wrap.
-    const seps = page.locator(".tile-parts__sep");
-    expect(await seps.first().evaluate((el) => getComputedStyle(el).display !== "none")).toBe(width > 400);
   });
 }
 
@@ -215,7 +214,7 @@ test("the editing note is for phones only", async ({ page }) => {
 });
 
 for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
-  test(`a Critical tile at the Overview size keeps its fine print inside (${name})`, async ({ page }) => {
+  test(`a Critical tile at the Overview size shows its parts behind the (?) and its line inside (${name})`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => {
       const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 3, h: 3, config: { metric: "all.open.critical", trend: 30 } }] };
@@ -225,17 +224,18 @@ for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
       ], homes: [["u-admin", "d-crit"]] }));
     });
     await page.goto("/");
-    const tile = page.locator(".tile", { hasText: "alarm" });
-    await expect(tile.locator(".tile-parts")).toHaveText("1 alarm · 82 vulnerabilities on hosts · 3 compliance findings");
+    const tile = page.locator(".tile", { has: page.locator(".tile__title", { hasText: /^Critical$/ }) });
     await expect(tile.locator(".tile-number .delta")).toBeVisible();
-    // In a tile narrower than 200 px (a phone's) the trend line gives way to the fine print (#576).
-    if (name === "desktop") await expect(tile.locator(".linechart svg")).toBeVisible();
-    else await expect(tile.locator(".tile-spark")).toBeHidden();
-    await expect(tile.getByRole("button")).toHaveCount(3);
-    const box = (await tile.boundingBox()) ?? { y: 0, height: 0 };
-    const parts = (await tile.locator(".tile-parts").boundingBox()) ?? { y: Infinity, height: 0 };
-    expect(parts.y).toBeGreaterThanOrEqual(box.y);
-    expect(parts.y + parts.height).toBeLessThanOrEqual(box.y + box.height);
+    // With the parts behind the (?) (#647), the line has room at any width.
+    await expect(tile.locator(".linechart svg")).toBeVisible();
     expect(await tile.locator(".tile__body").evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
+    // Hovering shows the parts; they stay links once a click pins them.
+    const help = tile.getByRole("button", { name: "What Critical counts" });
+    await help.hover();
+    await expect(tile.locator(".tile-help__parts li")).toHaveText(["1 alarm", "82 vulnerabilities on hosts", "3 compliance findings"]);
+    await help.click();
+    await expect(tile.locator(".tile-help__parts").getByRole("button")).toHaveCount(3);
+    await page.keyboard.press("Escape");
+    await expect(tile.locator(".tile-help__parts")).toHaveCount(0);
   });
 }

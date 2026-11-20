@@ -175,16 +175,16 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
     period's lowest count at the bottom to its highest at the top, so any
     change uses the full height (a count that never changed is a line
     across the middle); the full chart keeps its axis from 0. The
-    sparkline takes the height the number and the fine print leave in the
-    tile, at least 24 px, so a tile with a trend and fine print still fits
-    three rows (#576) and a taller tile gets a taller line; the tile's size
-    never changes for it (#647);
-    in a tile narrower than 200 px, where the fine print takes three
-    lines, the sparkline gives way (a container query in `panels.css`).
+    sparkline takes the height the number leaves in the tile, at least
+    24 px, so a taller tile gets a taller line; the tile's size never
+    changes for it (#647).
   - A count that spans kinds (Critical, High: alarms, vulnerabilities and
-    compliance) has no tile link, because it has no single list. Fine
-    print under the number shows each part ("2 alarms · 1 vulnerability ·
-    0 compliance"), and each part links to its own list.
+    compliance) has no tile link, because it has no single list. A (?)
+    beside its title (#647) shows each part ("2 alarms", "1 vulnerability
+    on hosts", "0 compliance findings") on hover or keyboard focus; a
+    click pins it open (Escape or a click elsewhere closes it), and each
+    part links to its own list. A widget gets this through `Help` in its
+    `widgetDefs` entry; the grid shows it beside the title.
   - A vulnerability count reads "Not set up" until the first vulnerability
     feed import.
 - **Graph widget:** 1 to 4 counts as lines (Count 1 to 4, no repeats; add
