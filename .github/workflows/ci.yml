@@ -578,9 +578,10 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
-  # The platform container image (#604) from the EL10 RPMs, under Docker
-  # with no privileged mode: boots, Setup works, a new container on the same
-  # volumes keeps the data and starts the services.
+  # The platform container image (#604) from the EL10 RPMs, started from
+  # compose.yaml (#606) under Docker with no privileged mode: boots, Setup
+  # works, a new container on the same volumes keeps the data and starts the
+  # services.
   container:
     name: Container image (almalinux:10, Docker)
     needs: [changes, almalinux]

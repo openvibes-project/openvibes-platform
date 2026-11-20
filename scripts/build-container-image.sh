@@ -23,6 +23,6 @@ ctx=$(mktemp -d)
 trap 'rm -rf "$ctx"' EXIT
 mkdir "$ctx/rpms"
 cp "$rpms"/openvibes-*.rpm "$ctx/rpms/"
-cp packaging/container/openvibes-container-start.service "$ctx/"
+cp packaging/container/openvibes-container-start packaging/container/openvibes-container-start.service "$ctx/"
 rm -f "$ctx"/rpms/*-debuginfo-* "$ctx"/rpms/*-debugsource-* "$ctx"/rpms/openvibes-agent-*
 "$engine" build -f packaging/container/Containerfile -t "$image" "$ctx"
