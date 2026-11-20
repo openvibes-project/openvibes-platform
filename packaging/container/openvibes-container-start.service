@@ -3,10 +3,11 @@
 # container, a new image included, would start with every service off. When
 # Setup has run (its plan is on the /etc/openvibes volume), Repair puts the
 # host back as Setup left it: units enabled and started, database current.
-# Before Setup, it says how to run it.
+# On the first start it runs Setup from the compose file's settings (#607).
 [Unit]
-Description=OpenVIBES container start: bring the platform back as Setup left it
-After=basic.target
+Description=OpenVIBES container start: set up, or bring the platform back as Setup left it
+After=basic.target network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
