@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, invalidate, request, useResource } from "../../../api/client";
 import type { PersonRow, Role, ServiceProviderView, SettingChangeView, SettingView, SettingsView } from "../../../api/types";
+import { ASSISTANT_STAGE, ASSISTANT_STAGE_NOTE } from "../../../app/assistant";
 import { useSession } from "../../../app/session";
 import { auditActionLabel } from "../../../ui/auditActions";
 import { ErrorBox, Loading } from "../../../ui/bits";
@@ -21,7 +22,7 @@ const APPROVE = "alarms.suppressions.approve";
 const SECTION_NOTES: Record<string, string> = {
   "Vulnerability feeds": "Until a value is changed here, the server's own setting applies. A change takes effect within a minute and restarts feed downloads that are running.",
   "Single sign-on": "Needs an application set up in your identity provider with the values under “Enter this in your identity provider”. People who are in none of the groups that match a role name cannot sign in. The local admin account always signs in with its password. Sign-in is offered on the login page once the switch is on. Each time someone signs in, their roles are set again from their groups.",
-  "Assistant": "Turns the assistant on and names its model; what it may look up on the internet is under the Assistant tab. Until a value is changed here, the server's own setting applies. A change applies the next time the console restarts (Maintenance › Service in the admin tool). If the settings do not work together, the assistant stays off and the console logs why.",
+  "Assistant": `Turns the assistant (${ASSISTANT_STAGE}: ${ASSISTANT_STAGE_NOTE.toLowerCase()}) on and names its model; what it may look up on the internet is under the Assistant tab. Until a value is changed here, the server's own setting applies. A change applies the next time the console restarts (Maintenance › Service in the admin tool). If the settings do not work together, the assistant stays off and the console logs why.`,
   "Agent connections": "Server tuning: the defaults suit most installs. A change applies the next time the service restarts (Maintenance › Service in the admin tool).",
   "Rule distribution": "Server tuning: the defaults suit most installs. A change applies the next time the service restarts (Maintenance › Service in the admin tool).",
 };

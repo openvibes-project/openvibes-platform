@@ -93,7 +93,7 @@ fn optional_has_agent_on_and_assistant_off_and_next() {
         "[x] Agent on this host",
         "watch this host too",
         "[ ] Assistant",
-        "local AI helper · 2.7 GB download",
+        "early beta · local AI · 2.7 GB download",
         "Next",
         "names",
         "Untick only if this server must not run an agent.",

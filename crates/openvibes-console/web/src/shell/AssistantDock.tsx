@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useResource } from "../api/client";
 import type { AssistantInternetSource, AssistantSegment, AssistantStatus } from "../api/types";
-import { assistant, useAssistant } from "../app/assistant";
+import { ASSISTANT_STAGE, ASSISTANT_STAGE_NOTE, assistant, useAssistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
 import { objectIcon, objectTitle, panels } from "../app/registry";
 import { useTitles } from "../app/titles";
@@ -73,7 +73,7 @@ export function AssistantDock() {
       <header className="assistant__head">
         <Icon name="sparkles" size={16} className="accent" />
         <div className="grow">
-          <h2>Assistant</h2>
+          <h2>Assistant <span className="badge badge--plain" title={ASSISTANT_STAGE_NOTE}>{ASSISTANT_STAGE}</span></h2>
           <p className="subtle assistant__status">
             {status.data ? (status.data.available ? `${status.data.model} · ${status.data.location}` : "The model is not running") : status.error ? "Unavailable" : "Checking…"}
           </p>

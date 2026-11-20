@@ -16,6 +16,11 @@ type Turn = {
 
 type State = { open: boolean; context: PanelRef | null; contextLabel: string | null; turns: Turn[]; busy: boolean };
 
+/** The assistant's stage, shown wherever it is offered (decision #646). */
+export const ASSISTANT_STAGE = "early beta";
+/** What the stage means, for the places with room to say it. */
+export const ASSISTANT_STAGE_NOTE = "Answers can be wrong, and the assistant may change between releases.";
+
 const key = "openvibes.v2.assistant.open";
 let state: State = { open: readOpen(), context: null, contextLabel: null, turns: [], busy: false };
 const listeners = new Set<() => void>();

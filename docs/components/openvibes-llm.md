@@ -6,6 +6,7 @@ host (assistant spec §3 options A and B, §6, §10; plan AS5). The runtime is l
 depends on it: the console talks to any OpenAI-compatible URL
 ([platform-assistant.md](platform-assistant.md)). So a newer runtime, or
 another one such as vLLM on a GPU server, replaces it without code changes.
+The assistant is in early beta ([console-assistant.md](console-assistant.md)).
 
 | Part | What it is |
 |---|---|

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAllPages, useResource } from "../api/client";
 import type { Agent, DashboardPage, FindingGroup, VulnerabilityPage } from "../api/types";
-import { assistant } from "../app/assistant";
+import { ASSISTANT_STAGE, assistant } from "../app/assistant";
 import type { PanelRef } from "../app/location";
 import { nav } from "../app/nav";
 import { objectIcon, objectTitle, panels, views } from "../app/registry";
@@ -49,7 +49,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
       out.push({ id: `b${board.id}`, group: "Dashboards", icon: "overview", label: board.name, ...(board.hint ? { hint: board.hint } : {}), run: () => nav.view(`/dashboards/${board.id}`) });
     }
     for (const view of views) if (canView(view.path)) out.push({ id: `v${view.path}`, group: "Go to", icon: view.icon, label: view.label, hint: view.keys, run: () => nav.view(view.path) });
-    if (can("assistant.use")) out.push({ id: "a-assistant", group: "Actions", icon: "sparkles", label: "Ask the assistant", hint: "Ctrl J", run: () => assistant.toggle() });
+    if (can("assistant.use")) out.push({ id: "a-assistant", group: "Actions", icon: "sparkles", label: `Ask the assistant (${ASSISTANT_STAGE})`, hint: "Ctrl J", run: () => assistant.toggle() });
     if (can("tokens.manage")) out.push({ id: "a-token", group: "Actions", icon: "enrollment", label: "New enrollment token", run: () => { nav.view("/settings", { tab: "enrollment" }); nav.open({ kind: "enrollment-token", id: "new" }, true); } });
     out.push({ id: "a-dark", group: "Actions", icon: "moon", label: "Theme: dark", run: () => setTheme("dark") });
     out.push({ id: "a-light", group: "Actions", icon: "sun", label: "Theme: light", run: () => setTheme("light") });

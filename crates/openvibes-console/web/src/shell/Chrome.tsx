@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { isDemo } from "../api/client";
-import { assistant, useAssistant } from "../app/assistant";
+import { ASSISTANT_STAGE, assistant, useAssistant } from "../app/assistant";
 import { useActiveAlarms } from "../app/liveAlarms";
 import { countTitle, menuCount, waitingToDecide } from "../app/menuCount";
 import { useResource } from "../api/client";
@@ -146,7 +146,7 @@ export function TopBar({ title, onPalette, onLogout, onChangePassword, persona, 
       <div className="topbar__actions">
         {isDemo() && <span className="badge badge--warn demo-badge" title="All data is synthetic and lives in your browser">Demo data</span>}
         {can("assistant.use") && (
-          <button type="button" className={open ? "button button--small assistant-toggle assistant-toggle--on" : "button button--small assistant-toggle"} aria-pressed={open} onClick={() => assistant.toggle()} title="Assistant (Ctrl+J)">
+          <button type="button" className={open ? "button button--small assistant-toggle assistant-toggle--on" : "button button--small assistant-toggle"} aria-pressed={open} onClick={() => assistant.toggle()} title={`Assistant, ${ASSISTANT_STAGE} (Ctrl+J)`}>
             <Icon name="sparkles" size={15} /> Assistant
           </button>
         )}

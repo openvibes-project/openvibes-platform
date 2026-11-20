@@ -245,7 +245,7 @@ fn row<H: Host>(app: &App<H>, part: Part) -> Row {
     };
     let (name, value) = match part {
         Part::Agent => (" Agent on this host", "watch this host too"),
-        Part::Assistant => (" Assistant", "local AI helper · 2.7 GB download"),
+        Part::Assistant => (" Assistant", "early beta · local AI · 2.7 GB download"),
     };
     let value = if app.maint.parts.finishing(part) {
         Span::styled("removal not finished", t.yellow())
