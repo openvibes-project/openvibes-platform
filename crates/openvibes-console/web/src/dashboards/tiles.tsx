@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useResource } from "../api/client";
 import type { AgentSummary, FindingSummary, Permission, TopHosts, VulnerabilitySummary } from "../api/types";
 import { nav } from "../app/nav";
@@ -35,6 +35,55 @@ function Part({ kind, id, unset }: { kind: string; id: string; unset: boolean })
   return <button type="button" className="link-button" onClick={() => nav.view(path, params)}>{error ? "—" : value === undefined ? "…" : partText(kind, value)}</button>;
 }
 
+/** The (?) beside the title of a count made of parts (#647): hovering or focusing it shows what the count adds up,
+ * and a click pins that open, so each part stays a link to its list (also on touch). */
+export function NumberHelp({ widget }: WidgetProps) {
+  const metric = str(widget.config, "metric", "agents.active", METRIC_KEYS);
+  const def = METRICS[metric];
+  const id = useId();
+  const [shown, setShown] = useState(false);
+  // Where the popover opens: under the (?), measured when it opens (the popover is fixed, so the tile never clips it).
+  const [at, setAt] = useState({ top: 0, left: 0 });
+  const [pinned, setPinned] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const vulns = useResource<VulnerabilitySummary>(def.parts ? "/api/v1/vulnerabilities/summary" : null);
+  useEffect(() => {
+    if (!pinned) return;
+    const inside = (target: EventTarget | null) => target instanceof Node && (box.current?.contains(target) || button.current?.contains(target));
+    const away = (event: PointerEvent) => { if (!inside(event.target)) setPinned(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { setPinned(false); setShown(false); button.current?.focus(); } };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", escape); };
+  }, [pinned]);
+  if (!def.parts) return null;
+  const open = shown || pinned;
+  const place = () => {
+    const rect = button.current?.getBoundingClientRect();
+    if (rect) setAt({ top: rect.bottom, left: Math.max(8, Math.min(rect.left, window.innerWidth - 288)) });
+  };
+  const show = () => { place(); setShown(true); };
+  const noFeed = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
+  return (
+    // Not a drag handle in edit mode: the header moves the tile.
+    <span className="tile-help" onMouseEnter={show} onMouseLeave={() => setShown(false)} onPointerDown={(event) => event.stopPropagation()}
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setShown(false); }}>
+      <button ref={button} type="button" className="icon-button tile-help__button" aria-label={`What ${def.label} counts`} aria-expanded={open} aria-controls={id}
+        onClick={() => { place(); setPinned(!pinned); }} onFocus={show}>
+        <Icon name="help" size={14} />
+      </button>
+      {open && (
+        <div ref={box} id={id} className="popover tile-help__pop" aria-label={`What ${def.label} counts`}
+          style={at}>
+          <p className="popover__title"><strong>Counts {def.label.toLowerCase()}</strong></p>
+          <ul className="tile-help__parts">{def.parts.map(([kind, part]) => <li key={part}><Part kind={kind} id={part} unset={noFeed} /></li>)}</ul>
+        </div>
+      )}
+    </span>
+  );
+}
+
 export function NumberTile({ widget }: WidgetProps) {
   const { can } = useSession();
   const metric = str(widget.config, "metric", "agents.active", METRIC_KEYS);
@@ -66,14 +115,12 @@ export function NumberTile({ widget }: WidgetProps) {
   );
   const view = def.view;
   // Reserve the chart's height while history loads so the fine print does not jump.
-  const chart = trend > 0 && !unset && <div className="tile-spark" style={{ minHeight: 24 }}>{history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />}</div>;
-  const parts = def.parts && <div className="tile-parts">{def.parts.map(([kind, id], i) => <Fragment key={id}>{i > 0 && <span className="tile-parts__sep" aria-hidden="true"> · </span>}<Part kind={kind} id={id} unset={noFeed} /></Fragment>)}</div>;
+  const chart = trend > 0 && !unset && <div className="tile-spark">{history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />}</div>;
   return (
-    <div className="stack stack--tight">
+    <div className="stack stack--tight tile-stat">
       {view ? <button type="button" className="tile-number" onClick={() => nav.view(view[0], view[1])}>{body}</button>
         : <div className="tile-number tile-number--plain">{body}</div>}
       {chart}
-      {parts}
     </div>
   );
 }

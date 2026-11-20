@@ -142,6 +142,18 @@ describe("chart layout helpers", () => {
   });
 });
 
+describe("sparkline height (#647)", () => {
+  it("is as tall as its box, and never under 24 px", () => {
+    expect(layout("spark", 100, false, 80).H).toBe(80);
+    expect(layout("spark", 100, false, 80.7).H).toBe(80);
+    expect(layout("spark", 100, false, 10).H).toBe(24);
+    expect(layout("spark", 100).H).toBe(24);
+  });
+  it("leaves the full chart at its own height", () => {
+    expect(layout("full", 300, false, 80).H).toBe(150);
+  });
+});
+
 describe("sparkline scale (#576)", () => {
   const l = layout("spark", 100);
   const plot = l.H - l.padT - l.padB;

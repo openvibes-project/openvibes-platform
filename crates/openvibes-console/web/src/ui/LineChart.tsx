@@ -10,6 +10,7 @@ export function LineChart({ series, variant, smooth }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const tip = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
+  const [height, setHeight] = useState(0);
   const [hoverRaw, setHover] = useState<number | null>(null);
   const [table, setTable] = useState(false);
 
@@ -20,7 +21,11 @@ export function LineChart({ series, variant, smooth }: Props) {
     const el = box.current;
     if (!el) return;
     setWidth(el.clientWidth);
-    const observer = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? el.clientWidth));
+    setHeight(el.clientHeight);
+    const observer = new ResizeObserver(([entry]) => {
+      setWidth(entry?.contentRect.width ?? el.clientWidth);
+      setHeight(entry?.contentRect.height ?? el.clientHeight);
+    });
     observer.observe(el);
     return () => observer.disconnect();
   }, [table, empty]);
@@ -32,7 +37,7 @@ export function LineChart({ series, variant, smooth }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const full = variant === "full";
   const multi = series.length > 1;
-  const l = layout(variant, width, multi);
+  const l = layout(variant, width, multi, height);
   const values = series.flatMap((s) => s.points.map((p) => p.value));
   // The full chart's axis runs from 0; a sparkline from the lowest count to the highest (#576).
   const [min, max] = full ? [0, niceMax(Math.max(0, ...values))] : sparkRange(values.length ? values : [0]);
@@ -46,7 +51,7 @@ export function LineChart({ series, variant, smooth }: Props) {
     const t = tip.current;
     const b = box.current;
     if (hover === null || !t || !b) return;
-    t.style.left = `${tipLeft(xAt(hover, n, layout(variant, b.clientWidth, multi)), t.offsetWidth, b.clientWidth)}px`;
+    t.style.left = `${tipLeft(xAt(hover, n, layout(variant, b.clientWidth, multi, b.clientHeight)), t.offsetWidth, b.clientWidth)}px`;
   }, [hover, n, variant, multi]);
 
   const label = ariaLabel(series);
