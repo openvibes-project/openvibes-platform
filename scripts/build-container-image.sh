@@ -14,7 +14,7 @@ image=${2:-openvibes-platform:dev}
 engine=${ENGINE:-$(command -v podman || command -v docker || true)}
 [[ -n $engine ]] || { echo "neither podman nor docker is installed" >&2; exit 1; }
 
-for p in admin console ingest distribution vulns signer fetch llm rules-*; do
+for p in admin console ingest distribution vulns signer fetch rules-*; do
     compgen -G "$rpms/openvibes-$p-[0-9]*.rpm" > /dev/null ||
         { echo "$rpms has no openvibes-$p RPM" >&2; exit 1; }
 done
@@ -24,5 +24,8 @@ trap 'rm -rf "$ctx"' EXIT
 mkdir "$ctx/rpms"
 cp "$rpms"/openvibes-*.rpm "$ctx/rpms/"
 cp packaging/container/openvibes-container-start packaging/container/openvibes-container-start.service "$ctx/"
-rm -f "$ctx"/rpms/*-debuginfo-* "$ctx"/rpms/*-debugsource-* "$ctx"/rpms/openvibes-agent-*
+# The pin names the model the assistant container serves (#652); the model
+# server itself is that container's (#643), not this image's.
+cp packaging/llm/model.pin "$ctx/"
+rm -f "$ctx"/rpms/*-debuginfo-* "$ctx"/rpms/*-debugsource-* "$ctx"/rpms/openvibes-agent-* "$ctx"/rpms/openvibes-llm-*
 "$engine" build -f packaging/container/Containerfile -t "$image" "$ctx"

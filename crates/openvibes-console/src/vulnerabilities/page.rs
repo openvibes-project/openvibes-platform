@@ -130,7 +130,7 @@ pub(crate) async fn vulnerability_summary_page(
         // As the bulk route's add to case: cases.write and cases.read.
         add_to_case: case_write && case_read,
         // Capabilities here are not filtered like /session's; the assistant may be off.
-        ask: state.assistant.is_some() && assistant,
+        ask: crate::assistant::shown(&state.assistant).await && assistant,
         export,
     };
     axum::Json(VulnerabilitySummaryView::new(s, can)).into_response()

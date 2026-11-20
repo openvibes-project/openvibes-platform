@@ -11,9 +11,14 @@ the administrator password in a `.env` file next to it (#635), and the first
 start sets the platform up from them (#607). There's no SSH (#634) and no
 TUI: the compose file and the console are how it's run.
 
+The assistant (early beta) is its own optional container
+([openvibes-assistant.md](openvibes-assistant.md), #643): off unless
+`COMPOSE_PROFILES=assistant` is in `.env`. Every start of this container
+makes the key the two share (on the first start) and points the console at
+the assistant; the console offers it only once it has answered (#653).
+
 Not yet here: ARM and the published image (#605), the backup before an
-update (#609), the assistant (its own optional container, #643; off until
-then, decision #644).
+update (#609).
 
 ## Interfaces
 

@@ -133,11 +133,17 @@ reasoning) returns 502 `assistant_truncated`: run the model with
 ## Failure behavior
 
 Disabled assistant routes return `assistant_disabled`. An unreachable or
-unsupported model reports unavailable. The console probes the model at
-start; while the model server cannot be reached or times out (still loading) it probes again every 10
-seconds for the first minute, otherwise (and after that) every 15 minutes
-until it passes: longer than `openvibes-llm`'s 5-minute idle time, since each
-probe through its socket loads the model.
+unsupported model reports unavailable. Until a probe has passed since the
+console started, the assistant counts as off for the interface (#653): the
+session leaves out `assistant.use` and no page offers Ask about this, so a
+configured assistant whose container is not running shows nothing at all.
+The console probes the model at start; while the model server cannot be
+reached or times out (still loading) it probes again every 10 seconds for the
+first minute. After that, a refused connection (nothing listening) is probed
+every minute, since it costs nothing; anything else every 15 minutes until it
+passes: longer than `openvibes-llm`'s 5-minute idle time, since each probe
+through its socket loads the model. A browser sees an assistant that came up
+later on its next page load.
 Backend errors, invalid model output,
 rate capacity, and timeouts return fixed problem codes without upstream
 response bodies. Permission failures do not reveal hidden record existence.

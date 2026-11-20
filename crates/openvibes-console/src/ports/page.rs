@@ -102,7 +102,7 @@ pub(crate) async fn port_summary_page(
         // Adding takes a listening host in reach and shows the case after.
         add_to_case: case_write && case_read && !s.hosts.is_empty(),
         // Capabilities here are not filtered like /session's; the assistant may be off.
-        ask: state.assistant.is_some() && assistant,
+        ask: crate::assistant::shown(&state.assistant).await && assistant,
     };
     axum::Json(PortPageSummaryView::new(s, can)).into_response()
 }

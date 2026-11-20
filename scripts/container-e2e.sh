@@ -6,12 +6,15 @@
 # volumes (a new image) keeps the data and applies changed settings, and a CA from your own PKI
 # (OPENVIBES_CA_FILE) is imported instead of one OpenVIBES makes.
 #
-# Usage: bash scripts/container-e2e.sh [IMAGE]
-#   IMAGE defaults to openvibes-platform:dev; ENGINE picks docker or podman
+# Usage: bash scripts/container-e2e.sh [IMAGE [ASSISTANT_IMAGE]]
+#   IMAGE defaults to openvibes-platform:dev; with ASSISTANT_IMAGE (from
+#   build-assistant-image.sh) step 5 tests the assistant container (#643)
+#   with a tiny test model. ENGINE picks docker or podman
 #   (default: whichever is installed, podman first). Needs `ENGINE compose`.
 set -euo pipefail
 
 image=${1:-openvibes-platform:dev}
+assistant_image=${2:-}
 engine=${ENGINE:-$(command -v podman || command -v docker || true)}
 [[ -n $engine ]] || { echo "neither podman nor docker is installed" >&2; exit 1; }
 here=$(cd "$(dirname "$0")/.." && pwd)
@@ -53,7 +56,8 @@ wait_for() {
     fail "$what (waited ${secs}s)"
 }
 cleanup() {
-    compose down -v -t 60 > /dev/null 2>&1 || true
+    # With the profile, so the assistant (step 5) and its volumes go too.
+    COMPOSE_PROFILES=assistant compose down -v -t 60 > /dev/null 2>&1 || true
 }
 start() {
     compose up -d > /dev/null
@@ -159,4 +163,50 @@ installed=$(in_c 'grep -v -- "-----" /etc/openvibes/pki/root.crt | tr -d "\n"')
 [[ -n $own_root && $installed == "$own_root" ]] || fail "the platform does not trust the imported CA's root"
 [[ $(in_c 'sha256sum /etc/openvibes/pki/root.crt' | cut -d' ' -f1) != "$root_fp" ]] || fail "the root is still the one from step 2"
 ok "a CA from your own PKI (OPENVIBES_CA_FILE) is imported on the first start, and the platform trusts its root"
+
+# 5. The assistant, its own container (#643): off until it answers (#653),
+#    on with the compose profile. The real model is 2.7 GB, so a variant
+#    of the image pins a tiny random-weight one (scripts/tiny-gguf.py) at a
+#    file:// URL: the download and its SHA-256 check still run.
+if [[ -n $assistant_image ]]; then
+    # What a signed-in admin's session offers ("assistant.use" or not);
+    # expanded inside the container.
+    # shellcheck disable=SC2016
+    session='cd /tmp && curl -ksSf -c j -o p.json https://localhost/auth/v1/preauth &&
+        csrf=$(sed -n "s/.*\"csrf_token\":\"\([^\"]*\)\".*/\1/p" p.json) &&
+        curl -ksSf -b j -c j -o /dev/null -H "Origin: https://localhost" -H "Sec-Fetch-Site: same-origin" \
+            -H "X-CSRF-Token: $csrf" -H "Content-Type: application/json" \
+            -d "{\"username\":\"admin\",\"password\":\"$OPENVIBES_ADMIN_PASSWORD\"}" https://localhost/auth/v1/login &&
+        curl -ksSf -b j https://localhost/api/v1/session; rm -f j p.json'
+    in_c "grep -q '^url = \"http://127.0.0.1:18430/v1\"' /etc/openvibes/console.toml" || fail "the console is not pointed at the assistant"
+    [[ $(in_c 'stat -c "%u:%g %a" /var/lib/openvibes-assistant-key/llm-api-key') == "0:976 640" ]] || fail "the shared key is not root:976 0640"
+    [[ $(in_c 'stat -c "%U %a" /etc/openvibes/llm-api-key') == "openvibes-console 400" ]] || fail "the console's key is not its own, 0400"
+    offered=$(in_c "OPENVIBES_ADMIN_PASSWORD='$OPENVIBES_ADMIN_PASSWORD' bash -c '$session'") || fail "reading the admin's session"
+    [[ $offered == *'"principal"'* ]] || fail "the session did not answer: $offered"
+    [[ $offered != *'"assistant.use"'* ]] || fail "the console offers an assistant that never answered"
+    ok "without the assistant container, the console is set up for it but offers no assistant"
+
+    tiny=$(mktemp -d)
+    python3 "$here/scripts/tiny-gguf.py" "$tiny/tiny.gguf"
+    sum=$(sha256sum "$tiny/tiny.gguf" | cut -d' ' -f1)
+    printf 'LLM_MODEL_FILE=tiny.gguf\nLLM_MODEL_URL=file:///opt/tiny.gguf\nLLM_MODEL_SHA256=%s\nLLM_MODEL_ALIAS=%s\n' \
+        "$sum" "$(in_c "sed -n 's/^LLM_MODEL_ALIAS=//p' /usr/share/openvibes-llm/model.pin")" > "$tiny/model.pin"
+    printf 'FROM %s\nCOPY tiny.gguf /opt/tiny.gguf\nCOPY model.pin /usr/share/openvibes-llm/model.pin\n' "$assistant_image" |
+        "$engine" build -q -t openvibes-assistant:e2e -f - "$tiny" > /dev/null || fail "building the test assistant image"
+    rm -rf "$tiny"
+    COMPOSE_PROFILES=assistant OPENVIBES_ASSISTANT_IMAGE=openvibes-assistant:e2e compose up -d > /dev/null
+    A=$(COMPOSE_PROFILES=assistant compose ps -q assistant)
+    [[ -n $A ]] || fail "compose started no assistant container"
+    # The log read whole first: grep -q would close the pipe on the engine
+    # under pipefail.
+    alog() { "$engine" logs "$A" 2>&1 | grep 'OpenVIBES assistant\|openvibes-llm-check' || true; }
+    for _ in $(seq 60); do [[ $(alog) == *serving* ]] && break; sleep 2; done
+    [[ $(alog) == *"model downloaded and checked"* ]] || fail "the assistant did not download and check its model: $(alog)"
+    [[ $(alog) == *serving* ]] || fail "the assistant does not serve: $(alog)"
+    [[ $("$engine" exec "$A" id -u) == 976 ]] || fail "the assistant runs as $("$engine" exec "$A" id -u), not 976"
+    [[ $(in_c 'curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18430/v1/models') == 401 ]] || fail "the assistant answers without the key"
+    wait_for "the console offers the assistant once it answers" 150 \
+        "OPENVIBES_ADMIN_PASSWORD='$OPENVIBES_ADMIN_PASSWORD' bash -c '$session' | grep -q '\"assistant.use\"'"
+    ok "with the assistant profile, the assistant downloads and checks its model, needs the key, and the console offers it"
+fi
 echo "container-e2e: all checks passed"

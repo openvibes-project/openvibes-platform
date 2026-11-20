@@ -581,7 +581,7 @@ jobs:
   # The platform container image (#604) from the EL10 RPMs, started from
   # compose.yaml (#606) under Docker with no privileged mode: boots, Setup
   # works, a new container on the same volumes keeps the data and starts the
-  # services.
+  # services; the assistant container (#643) with a tiny test model.
   container:
     name: Container image (almalinux:10, Docker)
     needs: [changes, almalinux]
@@ -602,10 +602,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release download --repo openvibes-project/openvibes-rules --pattern 'openvibes-rules-*.rpm' --dir rpms
-      - name: Build the image
-        run: ENGINE=docker bash scripts/build-container-image.sh rpms openvibes-platform:ci
+      - name: Build the images
+        run: |
+          ENGINE=docker bash scripts/build-container-image.sh rpms openvibes-platform:ci
+          ENGINE=docker bash scripts/build-assistant-image.sh rpms openvibes-assistant:ci
       - name: End to end under Docker
-        run: ENGINE=docker bash scripts/container-e2e.sh openvibes-platform:ci
+        run: ENGINE=docker bash scripts/container-e2e.sh openvibes-platform:ci openvibes-assistant:ci
 
   # The installed platform and agent RPMs against each other: renewal,
   # revocation, expiry re-enrollment, distribution outage, then load smokes.
