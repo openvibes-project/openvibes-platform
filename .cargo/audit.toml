@@ -1,0 +1,8 @@
+# cargo audit's settings (CI runs `cargo audit --deny warnings`).
+[advisories]
+ignore = [
+    # chrono is unmaintained (informational, no fixed version). Accepted until
+    # it is replaced with jiff: decision #639, replacement #638. Remove this
+    # line when #638 is done. Only this ID: any other chrono advisory fails.
+    "RUSTSEC-2026-0543",
+]
