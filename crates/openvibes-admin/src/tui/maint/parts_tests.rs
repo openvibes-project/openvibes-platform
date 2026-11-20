@@ -92,7 +92,7 @@ fn the_page_shows_what_is_installed() {
         "[x] Agent on this host",
         "watch this host too",
         "[ ] Assistant",
-        "local AI helper · 2.7 GB download",
+        "early beta · local AI · 2.7 GB download",
         "nothing changed yet",
         "Space  Select/deselect",
         "Enter  Confirm",

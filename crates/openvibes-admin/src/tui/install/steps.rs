@@ -211,7 +211,7 @@ fn draw_optional<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
                 t,
                 install.assistant,
                 "Assistant",
-                "local AI helper · 2.7 GB download",
+                "early beta · local AI · 2.7 GB download",
             ),
             Row::entry("Next", "names"),
         ],

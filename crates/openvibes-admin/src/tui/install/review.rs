@@ -142,7 +142,7 @@ pub(super) fn draw_review<H: Host>(frame: &mut Frame, head: &Header, app: &App<H
             "no agent on this host"
         },
         if install.assistant {
-            "assistant"
+            "assistant (early beta)"
         } else {
             "no assistant"
         },

@@ -7,6 +7,18 @@ console permissions and scopes to SQL lookups (below), and returns only
 sanitized answer text, verified citations, and a short lookup summary. The
 model cannot run SQL, commands, arbitrary URLs, or mutations.
 
+**Early beta** (decision #646), on the appliance and in the container:
+answers can be wrong, and the assistant may change between releases. Every
+place that offers it says so with the same words, `early beta`
+(`ASSISTANT_STAGE` in `web/src/app/assistant.ts`):
+
+- a muted tag after the dock's heading (its tooltip gives the meaning);
+- a line at the top of Settings › Assistant, and in the Assistant setting's
+  help under General;
+- the toolbar button's tooltip and the command palette's entry;
+- in the admin TUI: the Assistant line of Install's choices and of
+  Maintenance › Optional parts, and Install's review.
+
 ## Lookups and permissions
 
 The console runs every lookup the model is offered
