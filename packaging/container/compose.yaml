@@ -33,8 +33,6 @@ services:
       OPENVIBES_CONSOLE_PORT: ${OPENVIBES_CONSOLE_PORT:-443}
       OPENVIBES_INGEST_PORT: ${OPENVIBES_INGEST_PORT:-18423}
       OPENVIBES_DISTRIBUTION_PORT: ${OPENVIBES_DISTRIBUTION_PORT:-18424}
-      # The assistant (on or off): it downloads its model, several GB.
-      OPENVIBES_ASSISTANT: ${OPENVIBES_ASSISTANT:-off}
       # A CA from your PKI instead of one OpenVIBES makes: its certificate
       # chain and key in one PEM file, mounted below.
       OPENVIBES_CA_FILE: ${OPENVIBES_CA_FILE:-}

@@ -35,14 +35,10 @@ fi
 wanted() {
     hostname=$(get OPENVIBES_HOSTNAME)
     if [ -z "$hostname" ]; then echo "OpenVIBES: OPENVIBES_HOSTNAME is empty."; return 1; fi
-    # The appliance's components (as its Install picks), with no agent: the
-    # container's host is not this one.
+    # The appliance's components (as its Install picks), with no agent (the
+    # container's host is not this one) and no assistant (its own container,
+    # #644).
     components=ingest,console,distribution,vulns,rules,signer
-    case $(get OPENVIBES_ASSISTANT) in
-        on) components+=,assistant ;;
-        off | "") ;;
-        *) echo "OpenVIBES: OPENVIBES_ASSISTANT is \"$(get OPENVIBES_ASSISTANT)\"; use on or off."; return 1 ;;
-    esac
     args=(--components "$components" --hostname "$hostname" --admin-password-file "$password_file")
     IFS=, read -ra names <<< "$(get OPENVIBES_EXTRA_NAMES)"
     for name in "${names[@]}"; do
@@ -63,16 +59,7 @@ if [ -e "$plan" ]; then
     # keeps the plan from before, and the platform still comes back.
     before=$(cat "$plan")
     ca=$(sed -n 's/^ca = "\(.*\)"$/\1/p' <<< "$before")
-    if wanted && openvibes-admin helper setup-plan "${args[@]}" --ca "$ca" > /dev/null; then
-        # The assistant turned off: stop it and delete its model, as the
-        # Parts page does, but keep its packages: they come with the image,
-        # and there is no repository to install them from again.
-        if grep -q '^components = .*"assistant"' <<< "$before" && [[ $components != *assistant* ]]; then
-            for step in stop firewall purge; do
-                openvibes-admin helper remove-step "$step" --components assistant
-            done
-        fi
-    else
+    if ! { wanted && openvibes-admin helper setup-plan "${args[@]}" --ca "$ca" > /dev/null; }; then
         echo "OpenVIBES: kept the settings from before. Fix the compose file or its .env, then run: docker compose up -d"
     fi
     openvibes-admin setup --repair

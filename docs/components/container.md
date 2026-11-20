@@ -12,7 +12,8 @@ start sets the platform up from them (#607). There's no SSH (#634) and no
 TUI: the compose file and the console are how it's run.
 
 Not yet here: ARM and the published image (#605), the backup before an
-update (#609).
+update (#609), the assistant (its own optional container, #643; off until
+then, decision #644).
 
 ## Interfaces
 
@@ -64,7 +65,6 @@ ones.
 | `OPENVIBES_CONSOLE_PORT` | 443 | the console; also the published port |
 | `OPENVIBES_INGEST_PORT` | 18423 | agents; also the published port |
 | `OPENVIBES_DISTRIBUTION_PORT` | 18424 | rule distribution; also the published port |
-| `OPENVIBES_ASSISTANT` | `off` | `on` downloads the assistant's model (several GB) |
 | `OPENVIBES_CA_FILE` | none | a PEM file with a CA certificate chain and key from your PKI, mounted in the container; without it, OpenVIBES makes its own CA |
 
 Every start applies them: change one, run `docker compose up -d` (compose
@@ -74,9 +74,6 @@ recreates the container), and Repair makes it so.
 - **Ports:** the service moves, and the published port with it. A moved
   agent port leaves agents on other hosts calling the old one until their
   install line from the console is run again; the log says so.
-- **The assistant:** `on` installs it and downloads its model; `off` stops
-  it and deletes its model, but keeps its packages, which come with the
-  image.
 - **The administrator's password** is used only to make the account on the
   first start; change it in the console after that.
 - **The CA** is chosen once: `OPENVIBES_CA_FILE` is read on the first start
