@@ -175,8 +175,10 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
     period's lowest count at the bottom to its highest at the top, so any
     change uses the full height (a count that never changed is a line
     across the middle); the full chart keeps its axis from 0. The
-    sparkline is 24 px high, so a tile with a trend and fine print fits
-    three rows (#576);
+    sparkline takes the height the number and the fine print leave in the
+    tile, at least 24 px, so a tile with a trend and fine print still fits
+    three rows (#576) and a taller tile gets a taller line; the tile's size
+    never changes for it (#647);
     in a tile narrower than 200 px, where the fine print takes three
     lines, the sparkline gives way (a container query in `panels.css`).
   - A count that spans kinds (Critical, High: alarms, vulnerabilities and

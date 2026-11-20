@@ -81,10 +81,11 @@ export type Series = { label: string; points: { day: string; value: number }[] }
 type Layout = { W: number; H: number; padL: number; padR: number; padT: number; padB: number };
 
 /** Pixel layout; `labels` leaves room on the right for end-of-line labels. */
-export function layout(variant: "spark" | "full", W: number, labels = false): Layout {
+/** A sparkline is as tall as its box gives it (`boxH`, #647), and at least 24 px. */
+export function layout(variant: "spark" | "full", W: number, labels = false, boxH = 0): Layout {
   return variant === "full"
     ? { W, H: 150, padL: 26, padR: labels ? 32 : 10, padT: 10, padB: 20 }
-    : { W, H: 24, padL: 2, padR: 6, padT: 3, padB: 2 };
+    : { W, H: Math.max(24, Math.floor(boxH)), padL: 2, padR: 6, padT: 3, padB: 2 };
 }
 export const xAt = (i: number, n: number, l: Layout) =>
   n < 2 ? l.W - l.padR : l.padL + ((l.W - l.padL - l.padR) * i) / (n - 1);

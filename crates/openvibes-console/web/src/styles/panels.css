@@ -188,6 +188,11 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .tile-number .subtle { margin-left: 8px; font-size: 13px; }
 .tile-list { display: grid; gap: 6px; }
 .tile-more { justify-self: start; font-size: 13px; }
+/* The number tile fills its card, and its graph takes the height the number and the fine print leave
+   (#647); the graph is laid over that space so its own height never grows the card. */
+.tile-stat { min-height: 100%; }
+.tile-spark { flex: 1 1 0; min-height: 24px; position: relative; }
+.tile-spark > .linechart { position: absolute; inset: 0; }
 .tile-parts { display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: 13px; line-height: 1.3; }
 /* A number tile is three rows (#576): in a narrow one the parts take three lines, so the trend line gives way. */
 @container tilebody (max-width: 200px) { .tile-spark:has(+ .tile-parts) { display: none; } }
