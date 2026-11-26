@@ -4,14 +4,18 @@
 # systemd with no privileged mode, sets itself up from the compose file's
 # settings (a bad one stops it with a message), a new container on the same
 # volumes (a new image) keeps the data and applies changed settings, a new
-# image backs up and migrates the database first (#609), and a CA from your own PKI
+# image backs up and migrates the database first (#609), an agent installed
+# with the console's install line enrolls and reports, before and after a new
+# image (#611), and a CA from your own PKI
 # (OPENVIBES_CA_FILE) is imported instead of one OpenVIBES makes.
 #
 # Usage: bash scripts/container-e2e.sh [IMAGE [ASSISTANT_IMAGE]]
 #   IMAGE defaults to openvibes-platform:dev; with ASSISTANT_IMAGE (from
 #   build-assistant-image.sh) step 5 tests the assistant container (#643)
 #   with a tiny test model. ENGINE picks docker or podman
-#   (default: whichever is installed, podman first). Needs `ENGINE compose`.
+#   (default: whichever is installed, podman first). Needs `ENGINE compose`,
+#   and for the agent (x86_64 only, as its packages are) the internet: it
+#   installs from the project's website, as the install line does.
 set -euo pipefail
 
 image=${1:-openvibes-platform:dev}
@@ -29,6 +33,12 @@ services:
   openvibes:
     ports: !override
       - "127.0.0.1::443"
+      # The agent (step 3a) reaches ingest and distribution here, on the
+      # host's loopback, as an agent on another host would through the
+      # published ports. Step 3 moves ingest to 18500.
+      - "127.0.0.1:18423:18423"
+      - "127.0.0.1:18500:18500"
+      - "127.0.0.1:18424:18424"
 YAML
 # The settings a user puts in .env (#607); the password changes per run.
 export OPENVIBES_HOSTNAME=localhost OPENVIBES_EXTRA_NAMES=127.0.0.1
@@ -56,10 +66,19 @@ wait_for() {
     for _ in $(seq "$secs"); do in_c "$check" > /dev/null 2>&1 && return 0; sleep 1; done
     fail "$what (waited ${secs}s)"
 }
+A=$P-agent
 cleanup() {
+    "$engine" rm -f -t 30 "$A" > /dev/null 2>&1 || true
     # With the profile, so the assistant (step 5) and its volumes go too.
     COMPOSE_PROFILES=assistant compose down -v -t 60 > /dev/null 2>&1 || true
 }
+in_a() { "$engine" exec "$A" bash -c "$1"; }
+admin() { in_c "runuser -u openvibes-admin -- openvibes-admin $1"; }
+# The agent's last scan, from `agent show` ("last scan <when>, <n> rules ...").
+last_scan() { admin "agent show $agent_id" 2>/dev/null | sed -n 's/^last scan //p'; }
+# When the platform last heard from it (a heartbeat a minute), from
+# `agent list` ("<id>  active  last seen YYYY-MM-DD HH:MM UTC  ...").
+last_seen() { admin 'agent list' 2>/dev/null | awk -v id="$agent_id" '$1 == id {print $5 " " $6}'; }
 start() {
     compose up -d > /dev/null
     C=$(compose ps -q openvibes)
@@ -135,11 +154,58 @@ wait_for "ingest listens on the new port" 60 'ss -ltnH "sport = :18500" | grep -
 [[ $("$engine" logs "$C" 2>&1) == *'ingest port moved from 18423 to 18500'* ]] || fail "the log does not say agents still call the old ingest port"
 ok "a new container on the same volumes keeps the CA and the database, starts the services, applies a new name and a moved port, and says where the console is"
 
+# 3a. An agent on "another host" (#611): a systemd container on the host's
+#     network, installed and enrolled with the line `agent command` prints
+#     (the console's Copy CLI install), from the project's website. It
+#     enrolls, fetches its rules and reports a scan. Agent packages are
+#     x86_64 only.
+agent_id=
+if [[ $(uname -m) == x86_64 ]]; then
+    agent_ctx=$(mktemp -d)
+    printf '%s\n' 'FROM docker.io/library/almalinux:10' \
+        'RUN dnf -q -y install systemd procps-ng && dnf -q clean all' \
+        'STOPSIGNAL SIGRTMIN+3' 'CMD ["/sbin/init"]' > "$agent_ctx/Containerfile"
+    "$engine" build -q -t "$A" -f "$agent_ctx/Containerfile" "$agent_ctx" > /dev/null || fail "building the agent's host image"
+    rm -rf "$agent_ctx"
+    # Privileged: it stands in for a real host, where the agent's unit gets
+    # the capabilities it asks for (audit, eBPF). The platform's container
+    # stays unprivileged; that is what this test checks.
+    "$engine" run -d --name "$A" -t --privileged --network host --cgroupns host -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+        --tmpfs /run --tmpfs /run/lock --tmpfs /tmp "$A" > /dev/null || fail "starting the agent's host"
+    for _ in $(seq 60); do
+        in_a 'systemctl is-system-running | grep -qE "^(starting|running|degraded)$"' 2> /dev/null && break; sleep 1
+    done
+    line=$(admin 'agent command' | head -n 1)
+    # Step 3 moved ingest, so the platform carries its port. The line holds
+    # the enrollment token: never printed.
+    [[ $line == 'curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform localhost:18500 '* ]] \
+        || fail "agent command printed no install line for localhost:18500 (it begins: ${line:0:70})"
+    # Root in the container: the line as printed, without sudo.
+    in_a "${line/| sudo sh/| sh}" > /dev/null || {
+        in_a 'systemctl status --no-pager openvibes-agent; journalctl -u openvibes-agent --no-pager | tail -40' >&2 || true
+        fail "the install line failed on the agent's host (its journal above)"
+    }
+    for _ in $(seq 120); do
+        agent_id=$(admin 'agent list' | awk '$2 == "active" {print $1; exit}')
+        [[ -n $agent_id ]] && break; sleep 1
+    done
+    [[ -n $agent_id ]] || fail "the agent did not enroll"
+    for _ in $(seq 180); do [[ -n $(last_scan) ]] && break; sleep 1; done
+    scan=$(last_scan)
+    [[ $scan =~ ,\ ([1-9][0-9]*)\ rules ]] || fail "the agent reported no scan with rules: '$scan'"
+    ok "an agent installed with the console's install line enrolls ($agent_id), fetches its rules and reports a scan"
+else
+    echo "skip: the agent (step 3a): agent packages are x86_64 only"
+fi
+
 # 3b. A new image (#609): the data says an older image last ran it, so the
 #     start backs the database up to the backups volume, migrates it, keeps
 #     the newest three image-update backups, and records this image.
 image_version=$(in_c "rpm -q --qf '%{VERSION}-%{RELEASE}' openvibes-admin")
 [[ $(in_c 'cat /etc/openvibes/container-image') == "$image_version" ]] || fail "the start did not record the image's version"
+# The minute before the new image: the agent's next heartbeat after it is
+# later.
+before_update=$(date -u '+%Y-%m-%d %H:%M')
 in_c 'echo 0.0.1-1 > /etc/openvibes/container-image
     install -d -m 0700 /var/backups/openvibes
     for n in 1 2 3; do
@@ -162,6 +228,15 @@ in_c 'test ! -e /var/backups/openvibes/openvibes-0.0.0-20000101-000000.dump.role
 wait_for "the console answers after the new image" 120 'curl -skf -o /dev/null https://127.0.0.1/'
 in_c 'runuser -u openvibes-admin -- openvibes-admin status' > /dev/null || fail "the database is not current after the new image"
 "$engine" volume ls -q | grep -qx "${P}_backups" || fail "the backups are not on their own volume"
+if [[ -n $agent_id ]]; then
+    # The same agent, with its certificate, carries on after the new image:
+    # still enrolled, and heard from after it (its heartbeat).
+    [[ $(admin 'agent list' | awk -v id="$agent_id" '$1 == id {print $2}') == active ]] || fail "the agent is not active after the new image"
+    # A date, not "never", which sorts after one.
+    for _ in $(seq 240); do seen=$(last_seen); [[ $seen =~ ^[0-9] && $seen > $before_update ]] && break; sleep 1; done
+    [[ $seen =~ ^[0-9] && $seen > $before_update ]] || fail "the platform has not heard from the agent since the new image (last seen $seen)"
+    ok "the agent stays enrolled across the new image and the platform hears from it again"
+fi
 ok "a new image backs up the database to the backups volume, migrates it, keeps the newest three backups, and the platform comes back"
 
 # 4. A CA from your own PKI: a root and an intermediate made apart from

@@ -191,16 +191,25 @@ host's 443) and checks, with Docker or Podman, that:
    says where the console is; with a name added and the ingest port moved
    meanwhile, the console's certificate has the new name, ingest listens on
    the new port, and the log says agents still call the old one.
+3a. on x86_64 (agent packages are x86_64 only), an agent on "another
+   host" (a systemd container on the host's network, reaching the
+   published agent ports on 127.0.0.1) is installed from the project's
+   website with the line `openvibes-admin agent command` prints, the
+   console's *Copy CLI install*; it enrolls, fetches its rules and reports
+   a scan;
 3b. a new image (simulated: the recorded version is set to an older one)
    backs the database up to the backups volume as a readable dump with
    its roles file, migrates it, keeps the newest three such backups
    (deleting an older one's roles file too), records the new version, and
-   the platform comes back;
+   the platform comes back; the agent from 3a stays enrolled and the
+   platform hears from it again;
 4. a CA from your own PKI (a root and intermediate made apart, mounted as
    `OPENVIBES_CA_FILE`) is imported on a fresh first start, and the
    platform trusts that root, not one of its own.
 
-`KEEP=1` leaves the container and its volumes for a look afterwards.
+`KEEP=1` leaves the containers and their volumes for a look afterwards.
+Step 3a needs the internet (the install line fetches from the website) and
+the host's ports 18423, 18424 and 18500 on 127.0.0.1.
 
 CI runs this on an x86_64 and an arm64 runner (#605), each with images
 built from that architecture's RPMs.
