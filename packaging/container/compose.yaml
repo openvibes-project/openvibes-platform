@@ -57,6 +57,7 @@ services:
       - vulns:/var/lib/openvibes-vulns
       # The key the assistant container shares (#652); made on the first start.
       - assistant-key:/var/lib/openvibes-assistant-key
+      - backups:/var/backups/openvibes       # the database before each new image (#609)
 
   # The assistant (early beta, #643): off unless COMPOSE_PROFILES=assistant
   # in .env. It downloads its model (about 2.7 GB) on its first start, and
@@ -82,4 +83,5 @@ volumes:
   signer:
   vulns:
   assistant-key:
+  backups:
   assistant-models:
