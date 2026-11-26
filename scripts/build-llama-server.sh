@@ -33,8 +33,10 @@ fi
 echo "$LLAMA_SOURCE_SHA256  $tarball" | sha256sum --check --quiet
 
 source_dir=$work/llama.cpp-$LLAMA_CPP_COMMIT
-if [ ! -d "$source_dir" ]; then
-    rm -rf "$work/extract"
+# A folder without its CMakeLists.txt is a leftover (CI's Cargo cache
+# restores target/ without the source files): extract again.
+if [ ! -f "$source_dir/CMakeLists.txt" ]; then
+    rm -rf "$source_dir" "$work/extract"
     mkdir -p "$work/extract"
     tar -xzf "$tarball" -C "$work/extract" --no-same-owner --no-same-permissions
     mv "$work"/extract/llama.cpp-* "$source_dir"
