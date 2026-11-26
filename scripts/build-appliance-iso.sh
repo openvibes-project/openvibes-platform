@@ -5,12 +5,14 @@
 # mkksiso 40 cannot carry over: xorriso refuses its boot image #2). Run it as
 # root in an almalinux:10 container, with network access to
 # repo.almalinux.org.
-# Usage: build-appliance-iso.sh KIT_TAR OUT_ISO
-#   KIT_TAR  openvibes-platform-<v>-offline-el10.tar (signed)
+# Usage: build-appliance-iso.sh KIT_TAR OUT_ISO [AGENT_RPM]
+#   KIT_TAR    openvibes-platform-<v>-offline-el10.tar (signed)
+#   AGENT_RPM  the openvibes-agent package for "Agent on this host" (#558);
+#              without it the ISO has no agent and says so
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-[[ $# == 2 ]] || { echo "usage: $0 KIT_TAR OUT_ISO" >&2; exit 2; }
-kit_tar=$(realpath "$1") out=$(realpath -m "$2")
+[[ $# == 2 || $# == 3 ]] || { echo "usage: $0 KIT_TAR OUT_ISO [AGENT_RPM]" >&2; exit 2; }
+kit_tar=$(realpath "$1") out=$(realpath -m "$2") agent_rpm=${3:+$(realpath "$3")}
 [[ $(. /etc/os-release && echo "$ID:${VERSION_ID%%.*}") == almalinux:10 ]] || { echo "this is not an almalinux:10 container" >&2; exit 1; }
 
 dnf -y install xorriso mtools isomd5sum gnupg2 curl tar createrepo_c >/dev/null
@@ -53,14 +55,35 @@ pkgs=$(sed -n '/^%packages/,/^%end/p' "$ROOT/packaging/appliance/openvibes-appli
 # Anaconda installs more than %packages: the bootloader, the storage tools
 # and kdump for the disk and machine it finds. Their current versions go in
 # too, or the minimal ISO's older ones clash again (dracut-network, #546).
+# Setup's optional packages (#558): not installed by the kickstart, but on
+# the disk, so Setup adds them with no network: openvibes-fetch (internet
+# lookups) and the agent ("Agent on this host").
+pkgs="$pkgs
+openvibes-fetch"
+extra=()
+if [[ -n $agent_rpm ]]; then
+    mkdir "$work/agent" && cp "$agent_rpm" "$work/agent/"
+    createrepo_c -q "$work/agent"
+    extra=(--repofrompath="openvibes-agent,$work/agent" --setopt=openvibes-agent.gpgcheck=0)
+    pkgs="$pkgs
+openvibes-agent"
+else
+    echo "no AGENT_RPM: the ISO has no agent; Setup's \"Agent on this host\" needs the internet"
+fi
 pkgs="$pkgs
 kernel grub2-efi-x64 grub2-pc grub2-tools shim-x64 efibootmgr lvm2 xfsprogs dosfstools mdadm cryptsetup device-mapper-multipath kdump-utils kexec-tools makedumpfile dracut-network"
 # shellcheck disable=SC2086  # one word per package or group
 dnf -y -q --installroot="$work/root" --releasever=10 --setopt=reposdir=/etc/yum.repos.d \
     --repofrompath="openvibes-kit,$work/kit/openvibes-offline/packages" --setopt=openvibes-kit.gpgcheck=0 \
-    install --downloadonly --destdir="$work/repo" $pkgs
+    "${extra[@]}" install --downloadonly --destdir="$work/repo" $pkgs
 createrepo_c -q "$work/repo"
 echo "installer repository: $(find "$work/repo" -name '*.rpm' | wc -l) packages"
+# The keys the appliance's package source is checked with (#558): the
+# kit's (CI signs with a throwaway one), the project's (the agent), PGDG's.
+mkdir "$work/keys"
+cp "$work/kit/openvibes-offline/openvibes.gpg" "$work/keys/RPM-GPG-KEY-openvibes-appliance"
+cp "$ROOT/packaging/rpm/openvibes-packages.gpg" "$work/keys/RPM-GPG-KEY-openvibes-appliance-packages"
+cp "$work/kit/openvibes-offline/pgdg.gpg" "$work/keys/RPM-GPG-KEY-openvibes-appliance-pgdg"
 
 # 4. The new ISO. The kickstart is found by its place on the disk; the
 # kernel lines of both boot menus (and the copy inside the EFI boot image)
@@ -115,6 +138,7 @@ xorriso -return_with FAILURE 32 -indev "$work/$iso" -outdev "$out" \
     -update "$work/boot/efi-grub.cfg" /EFI/BOOT/grub.cfg \
     -update "$work/boot/grub.cfg" /boot/grub2/grub.cfg \
     -map "$work/repo" openvibes-repo \
+    -map "$work/keys" openvibes-keys \
     -map "$ks" openvibes-appliance.ks \
     -map "$ROOT/packaging/appliance/openvibes-installer.py" openvibes-installer.py \
     -commit
@@ -128,5 +152,6 @@ done
 # could hide a half-added kit).
 xorriso -indev "$out" -find /openvibes-repo/repodata -name repomd.xml 2>&1 | grep -q repomd.xml || { echo "the ISO has no installer repository" >&2; exit 1; }
 xorriso -indev "$out" -find /openvibes-appliance.ks 2>&1 | grep -q openvibes-appliance.ks || { echo "the ISO has no kickstart" >&2; exit 1; }
+xorriso -indev "$out" -find /openvibes-keys -name 'RPM-GPG-KEY-openvibes-appliance-pgdg' 2>&1 | grep -q pgdg || { echo "the ISO has no package keys" >&2; exit 1; }
 implantisomd5 "$out" >/dev/null
 ls -l "$out"

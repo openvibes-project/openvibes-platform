@@ -31,6 +31,26 @@ separate path and doesn't change.
    as the administrator can reach root through it; that's the trade for one
    password at the console.
 
+## The package source on the disk
+
+The installer's repository stays on the installed system (#558) as
+`/var/lib/openvibes-appliance/repo`, the dnf repository
+`openvibes-appliance` (`/etc/yum.repos.d/openvibes-appliance.repo`). It holds
+everything the kickstart installed, plus Setup's optional packages
+(`openvibes-fetch`, and `openvibes-agent` for "Agent on this host"), with
+their dependencies. Signatures are checked: AlmaLinux's key, the kit's key,
+the project's key (the agent) and PGDG's key, all installed from the ISO
+under `/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes-appliance*`.
+
+- **Off by default** (`enabled=0`), so OS updates come from AlmaLinux's
+  mirrors.
+- **Setup uses it, and only it,** whenever the file exists
+  (`--disablerepo=* --enablerepo=openvibes-appliance`): Packages,
+  PostgreSQL, Try again, and a reinstall after Remove all work with no
+  network. PGDG's repository package is never fetched there.
+- **Remove everything keeps it:** it belongs to the appliance, not to Setup.
+- **Ceiling:** the packages are as new as the ISO. Updates are #567/#664.
+
 ## Interfaces
 
 - `packaging/appliance/openvibes-appliance.ks`: the kickstart. `%include
@@ -40,10 +60,12 @@ separate path and doesn't change.
 - `openvibes-installer.py [--console N] 3>OUT`: writes those lines to file
   descriptor 3, which the caller opens on OUT. It exits 0. It exits 1 when the person powers off from the first screen.
   `--self-test` checks the name, password and kickstart rules.
-- `scripts/build-appliance-iso.sh KIT_TAR OUT_ISO` (as root in `almalinux:10`):
+- `scripts/build-appliance-iso.sh KIT_TAR OUT_ISO [AGENT_RPM]` (as root in `almalinux:10`):
   - starts from AlmaLinux's minimal ISO, checked against its signed checksums;
-  - resolves the installer repository (`/openvibes-repo`) from the kit and
-    AlmaLinux's current repositories (#546);
+  - resolves the installer repository (`/openvibes-repo`) from the kit,
+    `AGENT_RPM` (CI passes the released agent) and AlmaLinux's current
+    repositories (#546), with Setup's optional packages added (#558);
+  - puts the package keys in `/openvibes-keys`;
   - adds the kickstart and the screens, and edits both boot menus.
 
 ## Configuration
@@ -70,6 +92,8 @@ separate path and doesn't change.
 - `python3 -I packaging/appliance/openvibes-installer.py --self-test`.
 - CI builds the ISO and the test ISO on every change to them.
 - `lab appliance --run <CI run>` in openvibes-lab installs the test ISO
-  unattended on BIOS and UEFI and waits for the boot check.
+  unattended on BIOS and UEFI and waits for the boot check. That check also
+  installs `openvibes-fetch` and `openvibes-agent` from the appliance's own
+  source only, with signatures checked (#558).
 - The interactive screens are tested in a lab VM, by sending keys with
   `virsh send-key` and checking each screen with `virsh screenshot`.

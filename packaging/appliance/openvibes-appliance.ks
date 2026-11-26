@@ -55,6 +55,31 @@ else
 fi
 %end
 
+# The installer's repository stays on the disk as the appliance's package
+# source (#558), with the keys that sign it: Setup, Try again and a reinstall
+# after Remove install from it with no network (openvibes-admin enables it
+# for those, and only those; it is off for everything else, so OS updates
+# come from AlmaLinux's mirrors).
+%post --nochroot --erroronfail
+set -e
+dest=/mnt/sysimage/var/lib/openvibes-appliance
+install -d -m 0755 "$dest"
+cp -a /run/install/repo/openvibes-repo "$dest/repo"
+for key in /run/install/repo/openvibes-keys/*; do
+    install -m 0644 "$key" "/mnt/sysimage/etc/pki/rpm-gpg/${key##*/}"
+done
+cat > /mnt/sysimage/etc/yum.repos.d/openvibes-appliance.repo <<'REPO'
+# The appliance's own package source: the installer's repository (#558).
+[openvibes-appliance]
+name=OpenVIBES appliance (from the installer)
+baseurl=file:///var/lib/openvibes-appliance/repo
+enabled=0
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-10 file:///etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes-appliance file:///etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes-appliance-packages file:///etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes-appliance-pgdg
+REPO
+chmod 0644 /mnt/sysimage/etc/yum.repos.d/openvibes-appliance.repo
+%end
+
 %post --erroronfail
 # The login runs the TUI through sudo, so a normal user must be in wheel
 # (root is locked). Fail loudly now rather than leave an unusable box.
