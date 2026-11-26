@@ -173,8 +173,10 @@ if [[ $(uname -m) == x86_64 ]]; then
         in_a 'systemctl is-system-running | grep -qE "^(starting|running|degraded)$"' 2> /dev/null && break; sleep 1
     done
     line=$(admin 'agent command' | head -n 1)
-    [[ $line == 'curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform localhost '* ]] \
-        || fail "agent command printed no install line: $line"
+    # Step 3 moved ingest, so the platform carries its port. The line holds
+    # the enrollment token: never printed.
+    [[ $line == 'curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform localhost:18500 '* ]] \
+        || fail "agent command printed no install line for localhost:18500 (it begins: ${line:0:70})"
     # Root in the container: the line as printed, without sudo.
     in_a "${line/| sudo sh/| sh}" > /dev/null || fail "the install line failed on the agent's host"
     for _ in $(seq 120); do
