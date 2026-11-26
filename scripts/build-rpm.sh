@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin,llm,llm-model}-*.rpm.
+# Builds target/rpm/RPMS/<arch>/openvibes-{ingest,distribution,vulns,admin,llm,llm-model}-*.rpm.
 # openvibes-llm-model carries no model bytes (the model is fetched at run time).
 # OV_LLM=0 skips openvibes-llm (and its llama.cpp build); OV_LLM_VULKAN=1
 # adds openvibes-llm-vulkan (needs glslc and the Vulkan headers).

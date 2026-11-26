@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds target/llama/<variant>/llama-server from the pinned llama.cpp source
-# (packaging/llm/llama-cpp.pin). Variants: cpu (default; AVX2 baseline) and
+# (packaging/llm/llama-cpp.pin). Variants: cpu (default; AVX2 baseline on
+# x86_64, the plain ARMv8-A baseline on aarch64) and
 # vulkan (NVIDIA, AMD, and Intel GPUs; needs glslc and the Vulkan headers).
 #
 # The build leaves out everything openvibes-llm does not use, so it is not
@@ -40,12 +41,19 @@ if [ ! -d "$source_dir" ]; then
     rm -rf "$work/extract"
 fi
 
+# The CPU baseline the binary may assume: AVX2 on x86_64 (#605: the plain
+# ARMv8-A baseline, no extensions, on aarch64).
+case $(uname -m) in
+    x86_64) cpu=(-DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON -DGGML_AVX512=OFF) ;;
+    aarch64) cpu=() ;;
+    *) echo "unsupported architecture: $(uname -m)" >&2; exit 2 ;;
+esac
+
 build=target/llama/build-$variant
 cmake -S "$source_dir" -B "$build" -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_SHARED_LIBS=OFF -DGGML_BACKEND_DL=OFF \
     -DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=OFF \
-    -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON \
-    -DGGML_AVX512=OFF -DGGML_RPC=OFF "${gpu[@]}" \
+    "${cpu[@]}" -DGGML_RPC=OFF "${gpu[@]}" \
     -DLLAMA_SUBPROCESS=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_UI=OFF \
     -DLLAMA_USE_PREBUILT_UI=OFF -DLLAMA_LLGUIDANCE=OFF \
     -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_APP=OFF \

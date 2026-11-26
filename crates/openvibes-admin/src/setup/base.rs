@@ -568,7 +568,10 @@ mod tests {
             "/usr/bin/dnf",
             "install",
             "-y",
-            "https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+            &format!(
+                "https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-{}/pgdg-redhat-repo-latest.noarch.rpm",
+                std::env::consts::ARCH
+            )
         ]));
         assert!(fake.called(&["/usr/bin/dnf", "install", "-y", "postgresql17-server"]));
         assert_eq!(

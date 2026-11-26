@@ -17,8 +17,9 @@ The assistant (early beta) is its own optional container
 makes the key the two share (on the first start) and points the console at
 the assistant; the console offers it only once it has answered (#653).
 
-Not yet here: ARM and the published image (#605), the backup before an
-update (#609).
+Both images are built for x86_64 and arm64 (`linux/amd64`, `linux/arm64`,
+#605), each natively from that architecture's EL10 RPMs. Not yet here: the
+published multi-arch image (#613), the backup before an update (#609).
 
 ## Interfaces
 
@@ -159,3 +160,6 @@ host's 443) and checks, with Docker or Podman, that:
    platform trusts that root, not one of its own.
 
 `KEEP=1` leaves the container and its volumes for a look afterwards.
+
+CI runs this on an x86_64 and an arm64 runner (#605), each with images
+built from that architecture's RPMs.

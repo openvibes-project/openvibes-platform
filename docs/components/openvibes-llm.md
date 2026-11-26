@@ -12,7 +12,7 @@ instead ([openvibes-assistant.md](openvibes-assistant.md)).
 
 | Part | What it is |
 |---|---|
-| `/usr/libexec/openvibes-llm/llama-server` | Pinned llama.cpp build, CPU (AVX2 baseline, static) |
+| `/usr/libexec/openvibes-llm/llama-server` | Pinned llama.cpp build, CPU (AVX2 baseline on x86_64, ARMv8-A on aarch64; static) |
 | `/usr/libexec/openvibes-llm/llama-server-vulkan` | Same source built for Vulkan (NVIDIA, AMD, Intel), in `openvibes-llm-vulkan` |
 | `/usr/libexec/openvibes-llm/openvibes-llm-check` | `ExecStartPre=`: refuses to start on bad settings or an unverified model; `--idle-only` for the proxy, `--wait-ready` until the model has loaded (crate `openvibes-llm`) |
 | `openvibes-llm.socket` | The unit that is enabled: listens on loopback port 18430 and starts the proxy on the first connection |
