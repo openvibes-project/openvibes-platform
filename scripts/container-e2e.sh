@@ -167,7 +167,10 @@ if [[ $(uname -m) == x86_64 ]]; then
         'STOPSIGNAL SIGRTMIN+3' 'CMD ["/sbin/init"]' > "$agent_ctx/Containerfile"
     "$engine" build -q -t "$A" -f "$agent_ctx/Containerfile" "$agent_ctx" > /dev/null || fail "building the agent's host image"
     rm -rf "$agent_ctx"
-    "$engine" run -d --name "$A" -t --network host --cgroupns host -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+    # Privileged: it stands in for a real host, where the agent's unit gets
+    # the capabilities it asks for (audit, eBPF). The platform's container
+    # stays unprivileged; that is what this test checks.
+    "$engine" run -d --name "$A" -t --privileged --network host --cgroupns host -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
         --tmpfs /run --tmpfs /run/lock --tmpfs /tmp "$A" > /dev/null || fail "starting the agent's host"
     for _ in $(seq 60); do
         in_a 'systemctl is-system-running | grep -qE "^(starting|running|degraded)$"' 2> /dev/null && break; sleep 1
