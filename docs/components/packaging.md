@@ -27,7 +27,7 @@ console unit ships disabled until the operator configures its
 database and TLS certificate.
 
 ```sh
-scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin,llm}-*.rpm
+scripts/build-rpm.sh     # → target/rpm/RPMS/<arch>/openvibes-{ingest,distribution,vulns,admin,llm}-*.rpm
 ```
 
 ## Contents

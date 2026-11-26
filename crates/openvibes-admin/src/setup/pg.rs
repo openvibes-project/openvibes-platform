@@ -65,11 +65,13 @@ pub fn flavour<R: Runner>(ctx: &Ctx<R>) -> Pg {
     }
 }
 
-/// The address of PGDG's repository package for this host.
+/// The address of PGDG's repository package for this host (its
+/// architecture is this binary's: x86_64 or aarch64, #605).
 pub fn repo_package<R: Runner>(ctx: &Ctx<R>) -> String {
     let major = os_release(ctx).1;
     let major = major.split('.').next().unwrap_or("10");
+    let arch = std::env::consts::ARCH;
     format!(
-        "https://download.postgresql.org/pub/repos/yum/reporpms/EL-{major}-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+        "https://download.postgresql.org/pub/repos/yum/reporpms/EL-{major}-{arch}/pgdg-redhat-repo-latest.noarch.rpm"
     )
 }

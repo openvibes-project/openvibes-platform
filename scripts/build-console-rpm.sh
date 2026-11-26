@@ -22,7 +22,7 @@ if [[ ! -f "${cache_archive}" || -L "${cache_archive}" ]]; then
 fi
 
 readonly cache_name="$(basename -- "${cache_archive}")"
-if [[ ! "${cache_name}" =~ ^openvibes-console-npm-cache-linux-x64-[0-9a-f]{64}\.tar\.gz$ ]]; then
+if [[ ! "${cache_name}" =~ ^openvibes-console-npm-cache-linux-(x64|arm64)-[0-9a-f]{64}\.tar\.gz$ ]]; then
     printf 'error: unexpected npm cache archive name/platform\n' >&2
     exit 1
 fi
