@@ -559,20 +559,30 @@ jobs:
         with:
           name: kit-el10
           path: kit
-      # "Agent on this host" (#558): the released agent package, on the disk.
-      - name: Download the agent package
+      # Setup's optional packages on the disk (#558), which the kit leaves
+      # out: openvibes-fetch from this run's EL10 RPMs, and the released
+      # agent for "Agent on this host".
+      - name: Download the EL10 RPMs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: rpms-el10
+          path: el10
+      - name: Gather Setup's optional packages
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download --repo openvibes-project/openvibes-agent --pattern 'openvibes-agent-*.x86_64.rpm' --dir kit
+        run: |
+          mkdir kit/extra
+          cp el10/openvibes-fetch-[0-9]*.rpm kit/extra/
+          gh release download --repo openvibes-project/openvibes-agent --pattern 'openvibes-agent-*.x86_64.rpm' --dir kit/extra
       - name: Build the ISO
         run: |
           mkdir out
           docker run --rm --privileged -e OPENVIBES_KEY_FINGERPRINT="$(cat kit/fingerprint)" -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
-            bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance.iso /kit/openvibes-agent-*.x86_64.rpm'
+            bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance.iso /kit/extra'
       - name: Build the test ISO (installs by itself, for the boot test)
         run: |
           docker run --rm --privileged -e OPENVIBES_ISO_TEST=1 -e OPENVIBES_KEY_FINGERPRINT="$(cat kit/fingerprint)" -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
-            bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance-test.iso /kit/openvibes-agent-*.x86_64.rpm'
+            bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance-test.iso /kit/extra'
       - name: Keep the test ISO (the lab boots it with lab appliance)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

@@ -5,14 +5,15 @@
 # mkksiso 40 cannot carry over: xorriso refuses its boot image #2). Run it as
 # root in an almalinux:10 container, with network access to
 # repo.almalinux.org.
-# Usage: build-appliance-iso.sh KIT_TAR OUT_ISO [AGENT_RPM]
+# Usage: build-appliance-iso.sh KIT_TAR OUT_ISO [EXTRA_DIR]
 #   KIT_TAR    openvibes-platform-<v>-offline-el10.tar (signed)
-#   AGENT_RPM  the openvibes-agent package for "Agent on this host" (#558);
-#              without it the ISO has no agent and says so
+#   EXTRA_DIR  Setup's optional packages, which the kit leaves out (#558):
+#              openvibes-fetch (EL10) and openvibes-agent; one missing is
+#              said, and Setup then needs the internet for it
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-[[ $# == 2 || $# == 3 ]] || { echo "usage: $0 KIT_TAR OUT_ISO [AGENT_RPM]" >&2; exit 2; }
-kit_tar=$(realpath "$1") out=$(realpath -m "$2") agent_rpm=${3:+$(realpath "$3")}
+[[ $# == 2 || $# == 3 ]] || { echo "usage: $0 KIT_TAR OUT_ISO [EXTRA_DIR]" >&2; exit 2; }
+kit_tar=$(realpath "$1") out=$(realpath -m "$2") extra_dir=${3:+$(realpath "$3")}
 [[ $(. /etc/os-release && echo "$ID:${VERSION_ID%%.*}") == almalinux:10 ]] || { echo "this is not an almalinux:10 container" >&2; exit 1; }
 
 dnf -y install xorriso mtools isomd5sum gnupg2 curl tar createrepo_c >/dev/null
@@ -58,17 +59,21 @@ pkgs=$(sed -n '/^%packages/,/^%end/p' "$ROOT/packaging/appliance/openvibes-appli
 # Setup's optional packages (#558): not installed by the kickstart, but on
 # the disk, so Setup adds them with no network: openvibes-fetch (internet
 # lookups) and the agent ("Agent on this host").
-pkgs="$pkgs
-openvibes-fetch"
 extra=()
-if [[ -n $agent_rpm ]]; then
-    mkdir "$work/agent" && cp "$agent_rpm" "$work/agent/"
-    createrepo_c -q "$work/agent"
-    extra=(--repofrompath="openvibes-agent,$work/agent" --setopt=openvibes-agent.gpgcheck=0)
-    pkgs="$pkgs
-openvibes-agent"
-else
-    echo "no AGENT_RPM: the ISO has no agent; Setup's \"Agent on this host\" needs the internet"
+mkdir "$work/extra"
+for name in openvibes-fetch openvibes-agent; do
+    found=$(find "${extra_dir:-/nonexistent}" -maxdepth 1 -name "$name-[0-9]*.x86_64.rpm" 2>/dev/null | sort -V | tail -n 1 || true)
+    if [[ -n $found ]]; then
+        cp "$found" "$work/extra/"
+        pkgs="$pkgs
+$name"
+    else
+        echo "no $name package in ${extra_dir:-EXTRA_DIR}: the ISO has none; Setup needs the internet for it"
+    fi
+done
+if compgen -G "$work/extra/*.rpm" > /dev/null; then
+    createrepo_c -q "$work/extra"
+    extra=(--repofrompath="openvibes-extra,$work/extra" --setopt=openvibes-extra.gpgcheck=0)
 fi
 pkgs="$pkgs
 kernel grub2-efi-x64 grub2-pc grub2-tools shim-x64 efibootmgr lvm2 xfsprogs dosfstools mdadm cryptsetup device-mapper-multipath kdump-utils kexec-tools makedumpfile dracut-network"

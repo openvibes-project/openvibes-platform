@@ -60,10 +60,12 @@ under `/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes-appliance*`.
 - `openvibes-installer.py [--console N] 3>OUT`: writes those lines to file
   descriptor 3, which the caller opens on OUT. It exits 0. It exits 1 when the person powers off from the first screen.
   `--self-test` checks the name, password and kickstart rules.
-- `scripts/build-appliance-iso.sh KIT_TAR OUT_ISO [AGENT_RPM]` (as root in `almalinux:10`):
+- `scripts/build-appliance-iso.sh KIT_TAR OUT_ISO [EXTRA_DIR]` (as root in `almalinux:10`):
   - starts from AlmaLinux's minimal ISO, checked against its signed checksums;
   - resolves the installer repository (`/openvibes-repo`) from the kit,
-    `AGENT_RPM` (CI passes the released agent) and AlmaLinux's current
+    `EXTRA_DIR` (Setup's optional packages, which the kit leaves out: CI
+    puts the run's EL10 `openvibes-fetch` and the released agent there) and
+    AlmaLinux's current
     repositories (#546), with Setup's optional packages added (#558);
   - puts the package keys in `/openvibes-keys`;
   - adds the kickstart and the screens, and edits both boot menus.
