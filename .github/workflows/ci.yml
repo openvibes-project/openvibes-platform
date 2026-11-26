@@ -595,6 +595,8 @@ jobs:
     needs: [changes, almalinux]
     if: needs.changes.outputs.heavy == 'true'
     strategy:
+      # One architecture's failure must not cancel the other's run.
+      fail-fast: false
       matrix:
         include:
           - { arch: x86_64, runner: ubuntu-24.04, artifact: rpms-el10 }
