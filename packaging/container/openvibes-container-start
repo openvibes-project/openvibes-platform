@@ -2,8 +2,10 @@
 # At every start of the platform container (#604, #606, #607). The container
 # comes installed: the first start sets the platform up from the compose
 # file's settings (#635); every start after applies them again, changed ones
-# included (#636), and puts the host back as Setup left it (Repair). Then it
-# says where the console is. The output goes to the container's log.
+# included (#636), and puts the host back as Setup left it (Repair). A new
+# image (#609) first backs up the database to the backups volume and
+# migrates it. Then it says where the console is. The output goes to the
+# container's log.
 set -euo pipefail
 
 # systemd starts its units with a clean environment; the compose file's
@@ -51,8 +53,44 @@ wanted() {
     done
 }
 
+# The image's version, and the one the data was last started with (#609).
+image=$(rpm -q --qf '%{VERSION}-%{RELEASE}' openvibes-admin)
+seen_file=/etc/openvibes/container-image
+backups=/var/backups/openvibes
+keep_backups=3
+
+# A new image on data from an older one: back up, then migrate, before
+# Repair starts anything. Nothing else runs yet (a new container has no
+# unit turned on). A failure stops here, with the way back.
+update_from_image() {
+    local from=$1 file line
+    go_back() {
+        echo "OpenVIBES: the update from $from to $image stopped: $*"
+        echo "To go back, set OPENVIBES_IMAGE=ghcr.io/openvibes-project/openvibes-platform:${from%%-*} in .env, then run: docker compose up -d"
+        exit 1
+    }
+    install -d -m 0700 "$backups"
+    file=$backups/openvibes-${from%%-*}-$(date -u +%Y%m%d-%H%M%S).dump
+    echo "OpenVIBES: updating from $from to $image: backing up the database first"
+    line=$(openvibes-admin helper update-step backup --backup "$file" 2>&1) || true
+    [[ $line == done$'\t'* ]] || go_back "the backup failed, nothing was changed: ${line#*$'\t'}"
+    echo "OpenVIBES: the backup is $file on the backups volume"
+    line=$(openvibes-admin helper update-step migrate 2>&1) || true
+    [[ $line == done$'\t'* ]] || go_back "the database update failed and the database is as it was: ${line#*$'\t'}. The backup from before is $file on the backups volume."
+    echo "OpenVIBES: database updated: ${line#*$'\t'}"
+    # The newest few image-update backups stay; older ones (and their
+    # roles files) go, so the volume does not fill up.
+    ls -1t "$backups"/openvibes-*-*.dump 2>/dev/null | tail -n +$((keep_backups + 1)) | while IFS= read -r old; do
+        rm -f -- "$old" "$old.roles.sql" || true
+    done || true
+}
+
 plan=/etc/openvibes/setup.toml
 if [ -e "$plan" ]; then
+    seen=$(cat "$seen_file" 2>/dev/null || true)
+    if [ -n "$seen" ] && [ "$seen" != "$image" ]; then
+        update_from_image "$seen"
+    fi
     # A later start (#636): the settings may have changed since. Save them as
     # the plan, as the appliance's Maintenance pages do, and Repair applies
     # them: new names get new certificates, moved ports move. A bad setting
@@ -86,6 +124,8 @@ else
     echo "OpenVIBES: setting up $hostname from the compose file"
     openvibes-admin setup --quick "${args[@]}" || stop "Setup failed (above)."
 fi
+# The data now matches this image.
+printf '%s\n' "$image" > "$seen_file"
 
 # The assistant is its own container (#643, #652): the platform makes the
 # key the two share, on its first start, and points the console at the

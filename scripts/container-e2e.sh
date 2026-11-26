@@ -3,7 +3,8 @@
 # packaging/container/compose.yaml as a user would: the image boots under
 # systemd with no privileged mode, sets itself up from the compose file's
 # settings (a bad one stops it with a message), a new container on the same
-# volumes (a new image) keeps the data and applies changed settings, and a CA from your own PKI
+# volumes (a new image) keeps the data and applies changed settings, a new
+# image backs up and migrates the database first (#609), and a CA from your own PKI
 # (OPENVIBES_CA_FILE) is imported instead of one OpenVIBES makes.
 #
 # Usage: bash scripts/container-e2e.sh [IMAGE [ASSISTANT_IMAGE]]
@@ -133,6 +134,35 @@ in_c 'curl -sS -o /dev/null --cacert /etc/openvibes/pki/root.crt --resolve ov-e2
 wait_for "ingest listens on the new port" 60 'ss -ltnH "sport = :18500" | grep -q .'
 [[ $("$engine" logs "$C" 2>&1) == *'ingest port moved from 18423 to 18500'* ]] || fail "the log does not say agents still call the old ingest port"
 ok "a new container on the same volumes keeps the CA and the database, starts the services, applies a new name and a moved port, and says where the console is"
+
+# 3b. A new image (#609): the data says an older image last ran it, so the
+#     start backs the database up to the backups volume, migrates it, keeps
+#     the newest three image-update backups, and records this image.
+image_version=$(in_c "rpm -q --qf '%{VERSION}-%{RELEASE}' openvibes-admin")
+[[ $(in_c 'cat /etc/openvibes/container-image') == "$image_version" ]] || fail "the start did not record the image's version"
+in_c 'echo 0.0.1-1 > /etc/openvibes/container-image
+    install -d -m 0700 /var/backups/openvibes
+    for n in 1 2 3; do
+        f=/var/backups/openvibes/openvibes-0.0.0-2000010$n-000000.dump
+        touch -d "2000-01-0$n" "$f" "$f.roles.sql"
+    done'
+compose down > /dev/null
+start
+wait_for "the start unit finished after the new image" 300 "systemctl is-active -q openvibes-container-start"
+log=$("$engine" logs "$C" 2>&1)
+[[ $log == *"updating from 0.0.1-1 to $image_version: backing up the database first"* ]] || fail "the log does not say the image changed"
+[[ $log == *'OpenVIBES: database updated:'* ]] || fail "the log does not say the database was updated"
+in_c 'set -e; f=$(ls /var/backups/openvibes/openvibes-0.0.1-*.dump); test -s "$f"; test -s "$f.roles.sql"
+    pg_restore --list "$f" > /dev/null' || fail "no readable backup on the backups volume"
+left=$(in_c 'ls /var/backups/openvibes/*.dump | xargs -n1 basename | sort | tr "\n" " "')
+[[ $left == "openvibes-0.0.0-20000102-000000.dump openvibes-0.0.0-20000103-000000.dump openvibes-0.0.1-"*".dump " ]] \
+    || fail "the backups kept are not the newest three: $left"
+in_c 'test ! -e /var/backups/openvibes/openvibes-0.0.0-20000101-000000.dump.roles.sql' || fail "an old backup's roles file was left"
+[[ $(in_c 'cat /etc/openvibes/container-image') == "$image_version" ]] || fail "the new image's version was not recorded"
+wait_for "the console answers after the new image" 120 'curl -skf -o /dev/null https://127.0.0.1/'
+in_c 'runuser -u openvibes-admin -- openvibes-admin status' > /dev/null || fail "the database is not current after the new image"
+"$engine" volume ls -q | grep -qx "${P}_backups" || fail "the backups are not on their own volume"
+ok "a new image backs up the database to the backups volume, migrates it, keeps the newest three backups, and the platform comes back"
 
 # 4. A CA from your own PKI: a root and an intermediate made apart from
 #    the platform (with the image's offline CA commands, in a throwaway

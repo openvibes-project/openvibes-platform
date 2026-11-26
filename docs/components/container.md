@@ -19,7 +19,7 @@ the assistant; the console offers it only once it has answered (#653).
 
 Both images are built for x86_64 and arm64 (`linux/amd64`, `linux/arm64`,
 #605), each natively from that architecture's EL10 RPMs. Not yet here: the
-published multi-arch image (#613), the backup before an update (#609).
+published multi-arch image (#613).
 
 ## Interfaces
 
@@ -51,7 +51,9 @@ published multi-arch image (#613), the backup before an update (#609).
     `/etc/systemd/system`, which belongs to the image, not a volume, so a
     new container would otherwise start with every service off. Repair
     turns them on and starts them, and brings the database schema up to
-    date.
+    date;
+  - on the first start after a new image (#609), before Repair, it backs
+    the database up and migrates it (see *Updating* below).
 - `scripts/build-container-image.sh RPM_DIR [IMAGE]`: builds the image from
   a folder of EL10 RPMs (the platform's, from `build-rpm.sh` and
   `build-console-rpm.sh` on `almalinux:10`, and an `openvibes-rules-*`
@@ -87,8 +89,10 @@ recreates the container), and Repair makes it so.
 - **A bad setting** on a later start keeps the settings from before, says
   so in the log, and the platform still starts.
 
-- **Volumes:** `/etc/openvibes`, `/var/lib/pgsql` and
-  `/var/lib/openvibes-{admin,console,feed,ingest,llm,signer,vulns}`.
+- **Volumes:** `/etc/openvibes`, `/var/lib/pgsql`,
+  `/var/lib/openvibes-{admin,console,feed,ingest,signer,vulns}`,
+  `/var/lib/openvibes-assistant-key` and `/var/backups/openvibes` (the
+  backups made before each new image).
 - **Ports:** 443/tcp (console), 18423/tcp (agents), 18424/tcp (rule
   distribution), 514/udp (network devices). Each is published on the same
   number on the host: the console only answers to the address it was set
@@ -124,7 +128,39 @@ docker compose logs openvibes                      # where the console is
   gives it 60 seconds (`stop_grace_period`); without compose, `docker stop
   -t 60`. A kill can leave PostgreSQL recovering on the next start.
 
+## Updating
+
+A new version is a new image: pull it and recreate the container.
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
+The start compares the image's version with the one recorded on the
+`/etc/openvibes` volume (`container-image`). When they differ, before
+Repair starts anything:
+
+1. it backs up the database to the backups volume,
+   `/var/backups/openvibes/openvibes-<old version>-<UTC date>-<time>.dump`
+   with its `.roles.sql`, the same backup as Update's on the appliance;
+2. it migrates the database, changes to stored data included (Repair alone
+   applies only additive ones);
+3. it keeps the newest three of these backups and deletes the older ones;
+4. it runs Repair, which starts the services, and records the new version.
+
+Each step is a line in the container's log. A volume set up before this
+was recorded has no version, so its first new image is not backed up.
+
 ## Failure behaviour
+
+- **A failed backup or migration on a new image** stops the start with the
+  reason, and the services stay off. A failed backup has changed nothing,
+  and a failed migration leaves the database as it was, so the previous
+  image works on it. The log names that image:
+  `OPENVIBES_IMAGE=ghcr.io/openvibes-project/openvibes-platform:<old
+  version>` in `.env`, then `docker compose up -d`. The backup stays on the
+  backups volume.
 
 - A missing or invalid setting stops the first start before anything is
   set up: the log says which one and to run `docker compose up -d` again
@@ -155,6 +191,11 @@ host's 443) and checks, with Docker or Podman, that:
    says where the console is; with a name added and the ingest port moved
    meanwhile, the console's certificate has the new name, ingest listens on
    the new port, and the log says agents still call the old one.
+3b. a new image (simulated: the recorded version is set to an older one)
+   backs the database up to the backups volume as a readable dump with
+   its roles file, migrates it, keeps the newest three such backups
+   (deleting an older one's roles file too), records the new version, and
+   the platform comes back;
 4. a CA from your own PKI (a root and intermediate made apart, mounted as
    `OPENVIBES_CA_FILE`) is imported on a fresh first start, and the
    platform trusts that root, not one of its own.
