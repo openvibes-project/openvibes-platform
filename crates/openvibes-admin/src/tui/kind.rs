@@ -44,6 +44,8 @@ pub enum Kind {
     },
     /// The Database page's reads.
     Report,
+    /// The appliance asks GitHub for the newest release (#674).
+    Release,
     /// A new one-time password for the console's admin.
     SignIn,
     /// Single sign-on turned off.
@@ -100,7 +102,7 @@ pub enum Kind {
 impl Kind {
     /// Reads, which may be dropped: Home does not show them, Quit does not wait.
     pub fn background(&self) -> bool {
-        matches!(self, Kind::Check | Kind::Report)
+        matches!(self, Kind::Check | Kind::Report | Kind::Release)
     }
     pub fn doing(&self) -> String {
         match self {
@@ -113,6 +115,7 @@ impl Kind {
             Kind::Fix => "Repairing".into(),
             Kind::Uninstall { .. } => "Uninstalling".into(),
             Kind::Report => "Reading the database".into(),
+            Kind::Release => "Asking GitHub for the newest release".into(),
             Kind::SignIn => "Resetting the admin password".into(),
             Kind::SsoOff => "Turning single sign-on off".into(),
             Kind::Shell => "Opening the shell".into(),
@@ -152,6 +155,7 @@ impl Kind {
             Kind::Fix => "Repaired".into(),
             Kind::Uninstall { .. } => "OpenVIBES is removed".into(),
             Kind::Report => "Read".into(),
+            Kind::Release => "Checked".into(),
             Kind::SignIn => "Admin password reset".into(),
             Kind::SsoOff => "Single sign-on is off".into(),
             Kind::Shell => "Shell opened".into(),
@@ -185,6 +189,7 @@ impl Kind {
             Kind::Fix => "The repair stopped".into(),
             Kind::Uninstall { .. } => "The uninstall stopped".into(),
             Kind::Report => "The database could not be read".into(),
+            Kind::Release => "GitHub cannot be reached".into(),
             Kind::SignIn => "The reset failed".into(),
             Kind::SsoOff => "Single sign-on is still as it was".into(),
             Kind::Shell => "The shell did not open".into(),
@@ -225,6 +230,7 @@ impl Kind {
             Kind::Fix => "Fix",
             Kind::Uninstall { .. } => "Uninstall",
             Kind::Report => "Read",
+            Kind::Release => "Check",
             Kind::SignIn => "Reset",
             Kind::SsoOff => "Turn off",
             Kind::Shell => "Open",

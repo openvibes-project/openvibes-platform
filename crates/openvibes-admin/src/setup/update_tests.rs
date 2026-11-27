@@ -147,6 +147,37 @@ fn exactly_the_installed_packages_are_upgraded() {
     );
 }
 
+/// #674: the appliance upgrades from its own source, which an update file
+/// has just replaced, and nowhere else.
+#[test]
+fn the_appliance_upgrades_from_its_own_source() {
+    let fake = Fake::new("update-appliance");
+    fake.file(
+        super::super::base::APPLIANCE_REPO,
+        "[openvibes-appliance]\n",
+    );
+    fake.answer(&["/usr/bin/rpm", "-qa"], 0, "openvibes-admin\n");
+    fake.answer(&["/usr/bin/dnf", "upgrade"], 0, "");
+    let plan = plan(&[Ingest]);
+    run(
+        &fake.ctx(&plan),
+        UpdateStep::Upgrade,
+        &UpdateArgs::default(),
+    );
+    assert_eq!(
+        fake.call(&["/usr/bin/dnf"]),
+        [
+            "/usr/bin/dnf",
+            "upgrade",
+            "-y",
+            "--disablerepo=*",
+            "--enablerepo=openvibes-appliance",
+            "--setopt=openvibes-appliance.metadata_expire=0",
+            "openvibes-admin"
+        ]
+    );
+}
+
 #[test]
 fn a_local_folder_upgrades_from_its_files() {
     let fake = Fake::new("update-local");

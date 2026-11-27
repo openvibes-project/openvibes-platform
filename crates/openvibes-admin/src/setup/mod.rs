@@ -5,6 +5,7 @@
 
 pub(crate) mod admin_reset;
 mod appliance_fw;
+pub(crate) mod appliance_update;
 mod assistant;
 mod auto_agent;
 mod auto_migrate;

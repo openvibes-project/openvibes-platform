@@ -33,6 +33,9 @@ mod ports_rows;
 mod ports_run;
 #[cfg(test)]
 mod ports_tests;
+mod release;
+#[cfg(test)]
+mod release_tests;
 mod repair;
 #[cfg(test)]
 mod repair_tests;
@@ -50,6 +53,7 @@ mod uninstall_run;
 #[cfg(test)]
 mod uninstall_tests;
 mod update;
+mod update_run;
 #[cfg(test)]
 mod update_tests;
 
@@ -127,6 +131,8 @@ pub struct Maint {
     pub ssh: super::ssh::SshPage,
     /// System › Login password: the two typed fields.
     pub login: super::login_password::LoginPage,
+    /// The appliance's last release check (#674).
+    pub release: release::Checked,
 }
 
 impl Maint {
@@ -406,6 +412,9 @@ impl<H: Host> App<H> {
                     self.run = None;
                 }
                 self.load_backup_choice();
+                if self.host.is_appliance() && self.maint.release.found.is_none() {
+                    self.check_release();
+                }
             }
             Page::Os => self.open_os(),
             Page::SignIn => self.open_signin(),
@@ -477,6 +486,7 @@ impl<H: Host> App<H> {
         if self.gone() && self.nav.screen != Screen::Maint(Page::Uninstall) {
             self.nav.go(Screen::Maint(Page::Uninstall));
         }
+        self.release_ended();
         if !background {
             self.signin_ended();
             self.names_ended();

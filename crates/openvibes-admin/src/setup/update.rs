@@ -100,7 +100,15 @@ fn upgrade<R: Runner>(ctx: &Ctx<R>, args: &UpdateArgs) -> Result<StepState, Stri
             // dnf keeps repository metadata up to 48 hours; without a
             // refresh, a release from today reads as "nothing to do".
             // Only our repository is refreshed, not the whole system's.
-            argv.push(REFRESH_OURS.to_owned());
+            // The appliance upgrades from its own source, which an update
+            // file has just replaced (#674).
+            let source = super::base::appliance_source(ctx);
+            if source.is_empty() {
+                argv.push(REFRESH_OURS.to_owned());
+            } else {
+                argv.extend(source.iter().map(|arg| (*arg).to_owned()));
+                argv.push("--setopt=openvibes-appliance.metadata_expire=0".to_owned());
+            }
             argv.extend(names.iter().map(|name| (*name).to_owned()));
         }
         Some(dir) => {

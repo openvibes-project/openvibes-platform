@@ -78,7 +78,7 @@ pub const APPLIANCE_REPO: &str = "/etc/yum.repos.d/openvibes-appliance.repo";
 
 /// On the appliance, dnf uses its own package source and nothing else, so
 /// Setup, Try again and a reinstall after Remove work with no network.
-fn appliance_source<R: Runner>(ctx: &Ctx<R>) -> &'static [&'static str] {
+pub(super) fn appliance_source<R: Runner>(ctx: &Ctx<R>) -> &'static [&'static str] {
     if ctx.exists(APPLIANCE_REPO) {
         &["--disablerepo=*", "--enablerepo=openvibes-appliance"]
     } else {
