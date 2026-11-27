@@ -14,9 +14,11 @@ separate path and doesn't change.
    first. **Enter** restarts, so remove the USB stick first; **i** installs again.
 3. Four OpenVIBES screens on console 8 (`packaging/appliance/openvibes-installer.py`,
    Python curses in the installer image, run from the kickstart's `%pre`):
-   - **Keyboard:** the common layouts by name first ("Swedish  se"), then
-     every keymap. Type to filter; US is the default. The layout applies at
-     once, so the password is typed in it, and the installed system keeps it.
+   - **Keyboard:** the common layouts by name ("Swedish  se") and one
+     **Other layout…** row, which opens every keymap (Esc goes back; #560).
+     Typing a filter searches every keymap from either list. US is the
+     default. The layout applies at once, so the password is typed in it,
+     and the installed system keeps it.
    - **Disk:** every disk except the installer's own medium. Disks under 30 GB
      are greyed out with "30 GB is the minimum".
    - **Administrator:** name and password, typed twice, at least 12

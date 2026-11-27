@@ -121,14 +121,18 @@ def installed(boot):
     return found
 
 
+# The short list's last row: opens every keymap (#560).
+OTHER = ("", "Other layout…")
+
+
 def keymaps():
-    """(keymap, label) pairs: the common named ones first, then the rest."""
+    """(named, every): the common layouts as (keymap, label), and every
+    keymap: those first, then the rest by their own name."""
     found = subprocess.run(["localectl", "list-keymaps", "--no-pager"],
                            capture_output=True, text=True).stdout.split()
     names = dict(COMMON)
-    first = [(m, f"{names[m]:<16}{m}") for m, _ in COMMON if m in found or not found]
-    rest = [(m, f"{'':<16}{m}") for m in found if m not in names]
-    return first + rest
+    named = [(m, f"{names[m]:<16}{m}") for m, _ in COMMON if m in found or not found]
+    return named, named + [(m, m) for m in found if m not in names]
 
 
 def kickstart(keymap, disk, name, password_hash):
@@ -161,6 +165,13 @@ def edited(text, k):
     if isinstance(k, str) and k.isprintable():
         return text + k
     return None
+
+
+def shown_layouts(rows, every, typed):
+    """rows with no filter; with one, every keymap whose label matches."""
+    if not typed:
+        return rows
+    return [(m, label) for m, label in every if typed.lower() in label.lower()]
 
 
 def nearest(usable, pick, k):
@@ -207,9 +218,11 @@ class Screen:
                 subprocess.run(["systemctl", "reboot"])
                 return False
 
-    def draw_keyboard(self, shown, typed, pick):
-        h, wd = self.frame(1, "type to filter   ↑↓ choose   Enter next   Esc power off")
-        self.win.addstr(3, 1, "Choose the keyboard layout. It applies now, so the password is typed in it.")
+    def draw_keyboard(self, shown, typed, pick, full):
+        esc = "Esc back" if full else "Esc power off"
+        h, wd = self.frame(1, f"type to filter   ↑↓ choose   Enter next   {esc}")
+        self.win.addstr(3, 1, "Choose the keyboard layout: every layout." if full else
+                        "Choose the keyboard layout. It applies now, so the password is typed in it.")
         self.win.addstr(5, 3, f"Filter  {typed}_")
         if not shown:
             self.win.addstr(7, 3, "No layout matches. Backspace to change the filter.", curses.color_pair(2))
@@ -219,13 +232,28 @@ class Screen:
             attr = curses.color_pair(1) if top + i == pick else 0
             self.win.addstr(7 + i, 3, f" {label:<40}"[: wd - 4], attr)
 
-    def keyboard(self, maps, current):
-        keys = [m for m, _ in maps]
-        typed, pick = "", keys.index(current) if current in keys else 0
+    def keyboard(self, named, every, current):
+        """The named layouts and Other layout…, which opens every keymap;
+        a filter always searches every keymap. None: Esc on the short list."""
+        full = current not in [m for m, _ in named]
         while True:
-            shown = [(m, label) for m, label in maps if typed.lower() in label.lower()]
+            chosen = self.layouts(every if full else named + [OTHER], every, current, full)
+            if chosen == OTHER[0]:
+                full = True
+            elif chosen is None and full:
+                full = False
+            else:
+                return chosen
+
+    def layouts(self, rows, every, current, full):
+        """One list: the chosen keymap, OTHER's, or None on Esc."""
+        typed = ""
+        keys = [m for m, _ in rows]
+        pick = keys.index(current) if current in keys else 0
+        while True:
+            shown = shown_layouts(rows, every, typed)
             pick = max(0, min(pick, len(shown) - 1))
-            self.draw_keyboard(shown, typed, pick)
+            self.draw_keyboard(shown, typed, pick, full)
             k = self.win.get_wch()
             if k in ENTER and shown:
                 return shown[pick][0]
@@ -328,12 +356,12 @@ class Flow:
 
     def __init__(self, screen):
         self.s = screen
-        self.maps, self.found = keymaps(), disks()
+        (self.named, self.every), self.found = keymaps(), disks()
         self.keymap, self.name, self.password = "us", "", ""
         self.pick = next((i for i, d in enumerate(self.found) if not d[3]), 0)
 
     def keyboard(self):
-        chosen = self.s.keyboard(self.maps, self.keymap)
+        chosen = self.s.keyboard(self.named, self.every, self.keymap)
         if chosen is None:
             subprocess.run(["systemctl", "poweroff"])
             raise SystemExit(1)
@@ -382,6 +410,11 @@ def self_test():
     assert password_problem("short", "short")
     assert password_problem("a" * 12, "b" * 12)
     assert password_problem("a" * 12, "a" * 12) is None
+    named = [("us", "English (US)    us"), ("ca", "Canadian        ca")]
+    every = named + [("cf", "cf"), ("dvorak", "dvorak")]
+    assert shown_layouts(named + [OTHER], every, "") == named + [OTHER]
+    assert shown_layouts(named + [OTHER], every, "dvo") == [("dvorak", "dvorak")]
+    assert shown_layouts(named + [OTHER], every, "ca") == [("ca", "Canadian        ca")]
     ks = kickstart("se", "vda", "lime", "$6$salt$hash")
     assert "keyboard --vckeymap=se\n" in ks and "--drives=vda\n" in ks
     assert "user --name=lime --groups=wheel --iscrypted --password='$6$salt$hash'" in ks
