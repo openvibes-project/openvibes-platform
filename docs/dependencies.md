@@ -46,7 +46,7 @@ counts and the date.
 
 The programs are `openvibes-ingest`, `-admin`, `-distribution`, `-signer`,
 `-fetch`, `-vulns`, `-netlog`, `-console` and `openvibes-llm-check`. They
-compile in the 49 crates below and **298 indirect crates** (347 in all), plus
+compile in the 50 crates below and **301 indirect crates** (351 in all), plus
 10 crates used only by build scripts (proc-macro and `build.rs` helpers, not
 in the programs).
 
@@ -69,6 +69,7 @@ in the programs).
 | hyper-util | 0.1.21 | MIT | Agent connections (server glue) |
 | libc | 0.2.191 | MIT OR Apache-2.0 | Admin TUI: terminal and process calls |
 | md-5 | 0.11.0 | MIT OR Apache-2.0 | OpenSSL traditional key encryption (key derivation) |
+| nonstick | 0.1.2 | MIT | Appliance console sign-in: checking passwords through PAM (links the system's libpam) |
 | openvibes-core | 0.2.7 | Apache-2.0 | Our wire types, from openvibes-agent (git, pinned commit) |
 | openvibes-rules | 0.2.7 | Apache-2.0 | Our rule engine, from openvibes-agent (git, pinned commit) |
 | p12-keystore | 0.4.1 | MIT OR Apache-2.0 | Opening `.p12`/`.pfx` files |

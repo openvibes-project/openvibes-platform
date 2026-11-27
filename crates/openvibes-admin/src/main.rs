@@ -56,6 +56,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// The appliance's console sign-in, run by agetty in place of login.
+    #[command(hide = true)]
+    Signin,
     /// Apply pending schema migrations.
     Migrate {
         /// Only additive ones: stop, applying nothing, before a migration
@@ -236,6 +239,7 @@ impl Command {
             Self::Helper { .. } => "helper",
             Self::Audit { .. } => "audit note",
             Self::Setup { .. } => "setup",
+            Self::Signin => "signin",
         }
     }
 }
@@ -247,6 +251,9 @@ async fn main() -> ExitCode {
     let Some(command) = &cli.command else {
         return tui::run();
     };
+    if let Command::Signin = command {
+        return tui::signin::run();
+    }
     // The root helper runs before any config or database access.
     if let Command::Helper { command } = command {
         return helper::run(command);
@@ -597,6 +604,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Vulns { .. }
         | Command::Import { .. }
         | Command::Helper { .. }
+        | Command::Signin
         | Command::Audit { .. }
         | Command::Setup { .. }
         | Command::Assistant { .. } => {

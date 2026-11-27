@@ -32,6 +32,7 @@ mod service;
 #[cfg(test)]
 mod service_tests;
 mod services_text;
+pub mod signin;
 mod ssh;
 #[cfg(test)]
 mod ssh_tests;

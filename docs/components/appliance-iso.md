@@ -25,8 +25,9 @@ separate path and doesn't change.
      characters. The account is in `wheel`; root stays locked.
    - **Confirm:** nothing is written until `erase <disk>` is typed.
 4. Anaconda installs unattended in text mode, then restarts. The person
-   removes the USB stick (the confirm screen says so), signs in, and lands in
-   the admin TUI's Setup. There's no second password: on the appliance only,
+   removes the USB stick (the confirm screen says so), signs in on
+   OpenVIBES' sign-in screen (#565, not `login:`; three wrong passwords lock
+   the account for 10 minutes), and lands in the admin TUI's Setup. There's no second password: on the appliance only,
    `/etc/sudoers.d/openvibes-appliance` lets `wheel` run
    `/usr/bin/openvibes-admin`, with no arguments, without one. Every other
    sudo still asks. The TUI runs as root and has a shell, so a program running

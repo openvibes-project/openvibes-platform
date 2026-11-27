@@ -74,9 +74,20 @@ impl Nav {
     }
 }
 
+/// " · ACCOUNT" for the account that opened the TUI through sudo.
+fn signed_in() -> String {
+    std::env::var("SUDO_USER")
+        .ok()
+        .filter(|user| platform_host::shell::valid_user(user))
+        .map(|user| format!(" · {user}"))
+        .unwrap_or_default()
+}
+
 /// The location line's left part and the update notice.
 pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
     let where_ = match &app.nav.screen {
+        // The appliance's Home names who signed in (#565).
+        Screen::Home if app.host.is_appliance() => signed_in(),
         Screen::Home => String::new(),
         Screen::Status => " · Status".into(),
         Screen::Service(unit) | Screen::Log(unit) => format!(" · Status › {}", unit.label()),

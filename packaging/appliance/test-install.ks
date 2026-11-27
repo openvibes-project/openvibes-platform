@@ -21,8 +21,9 @@ StandardOutput=journal+console
 # Setup's optional packages install from the appliance's own source only,
 # signatures checked (#558), as Setup asks dnf for them. Cockpit is closed
 # and semanage is there for a new SSH port (#561). Passwords are the first
-# account's only and SSH opens the TUI (#562).
-ExecStart=/bin/sh -c 'rpm -q openvibes-admin postgresql17-server && test -f /etc/openvibes/appliance && systemctl is-active firewalld sshd chronyd && ! firewall-cmd --permanent --query-service=cockpit && test -x /usr/sbin/semanage && sshd -t && sshd -T -C user=nobody,host=x,addr=192.0.2.1 | grep -qix "passwordauthentication no" && sshd -T -C user=tester,host=x,addr=192.0.2.1 | grep -qix "passwordauthentication yes" && sshd -T | grep -qi "^forcecommand /usr/libexec/openvibes/appliance-ssh" && dnf -y -q --disablerepo=* --enablerepo=openvibes-appliance install openvibes-fetch openvibes-agent && echo OPENVIBES-BOOT-OK || echo OPENVIBES-BOOT-FAILED'
+# account's only and SSH opens the TUI (#562). The console signs in on
+# OpenVIBES' screen, with faillock on (#565).
+ExecStart=/bin/sh -c 'rpm -q openvibes-admin postgresql17-server && test -f /etc/openvibes/appliance && systemctl is-active firewalld sshd chronyd && ! firewall-cmd --permanent --query-service=cockpit && test -x /usr/sbin/semanage && sshd -t && sshd -T -C user=nobody,host=x,addr=192.0.2.1 | grep -qix "passwordauthentication no" && sshd -T -C user=tester,host=x,addr=192.0.2.1 | grep -qix "passwordauthentication yes" && sshd -T | grep -qi "^forcecommand /usr/libexec/openvibes/appliance-ssh" && systemctl cat getty@tty1.service | grep -q "login-program /usr/bin/openvibes-admin --login-options signin" && authselect current | grep -q with-faillock && dnf -y -q --disablerepo=* --enablerepo=openvibes-appliance install openvibes-fetch openvibes-agent && echo OPENVIBES-BOOT-OK || echo OPENVIBES-BOOT-FAILED'
 ExecStartPost=/usr/bin/systemctl poweroff
 [Install]
 WantedBy=multi-user.target
