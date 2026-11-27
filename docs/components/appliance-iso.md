@@ -65,7 +65,28 @@ under `/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes-appliance*`.
   PostgreSQL, Try again, and a reinstall after Remove all work with no
   network. PGDG's repository package is never fetched there.
 - **Remove everything keeps it:** it belongs to the appliance, not to Setup.
-- **Ceiling:** the packages are as new as the ISO. Updates are #567/#664.
+- **Ceiling:** the packages are as new as the ISO, until an update file
+  replaces them (below).
+
+## The update file
+
+Each release's `openvibes-appliance-update-<version>.tar` (Decision #664,
+#673) is this same package source, newer: `scripts/appliance-repo.sh` builds
+it for both the ISO and the update file (the kit checked with its own
+`install --check`, the kickstart's packages and Setup's optional ones
+resolved against AlmaLinux's current repositories, `createrepo_c`).
+`scripts/build-appliance-update.sh KIT_TAR OUT_DIR [EXTRA_DIR]` (in an
+almalinux:10 container) writes `openvibes-appliance-update/` with `repo/`,
+`VERSION` and `SHA256SUMS` over every file. The caller signs `SHA256SUMS`
+(`SHA256SUMS.asc`, armoured, detached, the OpenVIBES package key), then
+`--pack OUT_DIR` writes the tar. The appliance trusts it only through the key
+it was installed with (#674), online or dropped over SFTP (#568).
+
+CI's Appliance ISO job builds it after the ISOs, signs it with a throwaway
+key, checks the signature, the checksums and that `repodata/repomd.xml`,
+`openvibes-admin`, `openvibes-fetch` and `openvibes-agent` are in it, and
+keeps it 7 days as the `appliance-update` artifact. Releases attach it once
+they build EL10 packages (#613).
 
 ## Interfaces
 

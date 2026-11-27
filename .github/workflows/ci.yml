@@ -548,7 +548,7 @@ jobs:
     needs: [changes, offline-kit-el10]
     if: needs.changes.outputs.heavy == 'true' && needs.changes.outputs.kit == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -583,6 +583,38 @@ jobs:
         run: |
           docker run --rm --privileged -e OPENVIBES_ISO_TEST=1 -e OPENVIBES_KEY_FINGERPRINT="$(cat kit/fingerprint)" -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
             bash -c 'bash /src/scripts/build-appliance-iso.sh /kit/openvibes-platform-*-offline-el10.tar /out/openvibes-appliance-test.iso /kit/extra'
+      # The update file (#673, Decision #664): the same package source,
+      # signed here with a throwaway key; releases sign with the project's.
+      - name: Build the update file
+        run: |
+          docker run --rm -e OPENVIBES_KEY_FINGERPRINT="$(cat kit/fingerprint)" -v "$PWD:/src:ro" -v "$PWD/kit:/kit:ro" -v "$PWD/out:/out" almalinux:10 \
+            bash -c 'bash /src/scripts/build-appliance-update.sh /kit/openvibes-platform-*-offline-el10.tar /out/update /kit/extra'
+          sudo chown -R "$(id -u):$(id -g)" out/update
+          tree=out/update/openvibes-appliance-update
+          export GNUPGHOME="$RUNNER_TEMP/update-gnupg"
+          mkdir -m 0700 "$GNUPGHOME"
+          gpg --batch --quiet --passphrase '' --quick-gen-key 'OpenVIBES CI update test' ed25519 sign never
+          gpg --batch --quiet --detach-sign --armor -o "$tree/SHA256SUMS.asc" "$tree/SHA256SUMS"
+          file=$(bash scripts/build-appliance-update.sh --pack out/update)
+          gpg --batch --quiet --verify "$tree/SHA256SUMS.asc" "$tree/SHA256SUMS"
+          (cd "$tree" && sha256sum --check --quiet SHA256SUMS)
+          tar -tf "$file" > "$RUNNER_TEMP/listing"
+          for want in openvibes-appliance-update/VERSION openvibes-appliance-update/SHA256SUMS.asc \
+              openvibes-appliance-update/repo/repodata/repomd.xml; do
+            grep -qx "$want" "$RUNNER_TEMP/listing" || { echo "$file has no $want" >&2; exit 1; }
+          done
+          for name in openvibes-admin openvibes-fetch openvibes-agent; do
+            grep -q "^openvibes-appliance-update/repo/$name-[0-9]" "$RUNNER_TEMP/listing" || { echo "$file has no $name package" >&2; exit 1; }
+          done
+          ls -l "$file"
+      - name: Keep the update file (for the appliance's update tests, #674)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: appliance-update
+          path: out/update/openvibes-appliance-update-*.tar
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
       - name: Keep the test ISO (the lab boots it with lab appliance)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
