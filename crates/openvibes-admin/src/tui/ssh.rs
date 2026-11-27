@@ -118,7 +118,7 @@ fn row<H: Host>(app: &App<H>, page: &SshPage, at: At) -> Row {
         At::Passwords => check(
             page.passwords,
             "Allow passwords",
-            "the account password signs in",
+            "only the first account's password; others use keys",
         ),
         At::Apply => Row::Entry {
             name: vec![Span::raw("Apply")],

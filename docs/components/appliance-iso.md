@@ -36,6 +36,14 @@ separate path and doesn't change.
    its Ports screen, and closes the rest (#561, `openvibes-admin.md`). The
    kickstart installs `policycoreutils-python-utils` for the `semanage` a
    new SSH port needs.
+6. **SSH** (#562) lands in the same admin TUI, never a shell: the kickstart
+   sets `ForceCommand /usr/libexec/openvibes/appliance-ssh`, which opens
+   the TUI on a terminal, passes SFTP through to `sftp-server` (offline
+   updates, #567) and refuses a command (`ssh host ls`) with "connect with
+   ssh -t". Only the first account (`/etc/openvibes/first-account`, the
+   administrator made at install) may use a password; every other account
+   uses keys (`00-openvibes.conf`, a `Match User` block; System › SSH keeps
+   it that way).
 
 ## The package source on the disk
 

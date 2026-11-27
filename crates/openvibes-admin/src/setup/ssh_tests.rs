@@ -141,3 +141,44 @@ fn the_verb_takes_both_choices() {
     );
     assert!(Wrapper::try_parse_from(["helper", "ssh-set", "--keys", "yes"]).is_err());
 }
+
+/// #562: on the appliance, passwords are the first account's only.
+#[test]
+fn passwords_are_the_first_accounts_only() {
+    let fake = Fake::new("ssh-first");
+    fake.file("/etc/openvibes/first-account", "lime\n");
+    fake.answer(&[SSHD, "-t"], 0, "");
+    fake.answer(
+        &[SSHD, "-T", "-C", "user=lime,host=localhost,addr=127.0.0.1"],
+        0,
+        "PubkeyAuthentication yes\nPasswordAuthentication yes\n",
+    );
+    fake.answer(
+        &[SSHD, "-T"],
+        0,
+        "PubkeyAuthentication yes\nPasswordAuthentication no\n",
+    );
+    fake.answer(&["/usr/bin/systemctl", "reload"], 0, "");
+    run_set(&fake, &fake.root, &args("yes", "yes")).unwrap();
+    assert!(
+        fake.text(DROP_IN).ends_with(
+            "PasswordAuthentication no\nMatch User lime\n    PasswordAuthentication yes\n"
+        ),
+        "{}",
+        fake.text(DROP_IN)
+    );
+
+    // Another file giving everyone passwords overrides the choice.
+    let fake = Fake::new("ssh-first-overridden");
+    fake.file("/etc/openvibes/first-account", "lime\n");
+    fake.file(DROP_IN, "previous\n");
+    fake.answer(&[SSHD, "-t"], 0, "");
+    fake.answer(
+        &[SSHD, "-T"],
+        0,
+        "pubkeyauthentication yes\npasswordauthentication yes\n",
+    );
+    let error = run_set(&fake, &fake.root, &args("yes", "yes")).unwrap_err();
+    assert!(error.contains("overrides"), "{error}");
+    assert_eq!(fake.text(DROP_IN), "previous\n");
+}
