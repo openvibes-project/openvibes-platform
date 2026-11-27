@@ -56,6 +56,8 @@ pub enum Program {
     Sshd,
     /// Sets a login password from standard input (the appliance's System › Login password).
     Chpasswd,
+    /// SELinux port labels (the appliance's SSH port, #561).
+    Semanage,
 }
 
 impl Program {
@@ -88,6 +90,7 @@ impl Program {
             Program::Timedatectl => "/usr/bin/timedatectl",
             Program::Sshd => "/usr/sbin/sshd",
             Program::Chpasswd => "/usr/sbin/chpasswd",
+            Program::Semanage => "/usr/sbin/semanage",
         }
     }
 }

@@ -19,11 +19,12 @@ use crate::{
     },
 };
 
-const PORT_HELP: [&str; 5] = [
+const PORT_HELP: [&str; 6] = [
     "The console's port; the web address follows it.",
     "The port agents send their findings to.",
     "The port agents fetch their rules from.",
     "Network devices send their logs here.",
+    "The port you sign in on; the firewall opens it, the ports above, nothing else.",
     "Go on to the review.",
 ];
 
@@ -39,6 +40,9 @@ impl Install {
 
     /// What the line under Ports says of the port typed on `row`.
     pub(super) fn port_check<H: Host>(&self, host: &H, row: usize) -> Result<String, String> {
+        if row == 4 {
+            return self.ssh_check(host);
+        }
         let n = |row: usize| self.port(row).trim().parse::<u16>().unwrap_or(0);
         // The typed row counts as 0 in the plan: nothing is ours yet, so
         // every port is looked up.
@@ -50,6 +54,27 @@ impl Install {
         ))?;
         let which = [PortRow::Console, PortRow::Ingest, PortRow::Distribution][row];
         port_note(host, &plan, which, self.port(row).trim())
+    }
+
+    /// What the line under Ports says of the SSH port typed (#561).
+    fn ssh_check<H: Host>(&self, host: &H) -> Result<String, String> {
+        let Ok(port) = self.ssh_port.trim().parse::<u16>() else {
+            return Err("✗ a port is a number from 1 to 65535.".into());
+        };
+        let n = |r: usize| self.port(r).trim().parse::<u16>().unwrap_or(0);
+        if let Err(why) = crate::setup::ports::check_ssh_port(port, [n(0), n(1), n(2)]) {
+            return Err(format!("✗ {why}."));
+        }
+        if port == 22 {
+            return Ok("22 is SSH's usual port.".into());
+        }
+        let seen = host.listeners(port).map_err(|e| format!("✗ {e}."))?;
+        if !seen.trim().is_empty() {
+            return Err(format!(
+                "✗ {port} is used by another program on this host: choose another."
+            ));
+        }
+        Ok(format!("SSH moves to {port}: sign in there from now on."))
     }
 
     /// Why Install cannot start yet: the names, the certificates, the root key.
@@ -104,6 +129,13 @@ pub(super) fn draw_ports<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>
         })
         .collect();
     rows.push(Row::entry("Network devices", "514/udp"));
+    // The appliance's SSH port (#561): typed as the ports above.
+    let ssh = app.host.is_appliance();
+    if ssh {
+        let typing = install.editing.is_some() && row == 4;
+        rows.push(Row::entry("SSH", &typed(&install.ssh_port, typing)));
+    }
+    let next = rows.len();
     rows.push(Row::entry("Next", "review"));
     let (help, red) = match (&install.port_check, row) {
         (Some(Err(why)), _) if install.editing.is_some() => (why.clone(), true),
@@ -112,11 +144,13 @@ pub(super) fn draw_ports<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>
             format!("Enter to keep {} or type another port.", install.port(r)),
             false,
         ),
+        _ if row == next => (PORT_HELP[5].to_owned(), false),
         _ => (PORT_HELP[row.min(4)].to_owned(), false),
     };
     let bar = match (install.editing.is_some(), row) {
+        (true, 4) => Bar::edit("SSH", "type a port", &[("Enter", "Done")]),
         (true, _) => Bar::edit(names[row.min(2)], "type a port", &[("Enter", "Done")]),
-        (_, 4) => Bar::keys(&[("Enter", "Next")]),
+        (_, r) if r == next => Bar::keys(&[("Enter", "Next")]),
         (_, 3) => Bar::keys(&[]),
         _ => Bar::keys(&[("Enter", "Change")]),
     };
@@ -179,10 +213,13 @@ pub(super) fn draw_review<H: Host>(frame: &mut Frame, head: &Header, app: &App<H
             t.dim(),
         )],
     };
-    let ports = format!(
+    let mut ports = format!(
         "{}, {}, {}, 514/udp",
         install.console_port, install.ingest_port, install.distribution_port
     );
+    if app.host.is_appliance() {
+        ports.push_str(&format!(", SSH {}", install.ssh_port.trim()));
+    }
     let rows = vec![
         Row::entry("Optional", &optional),
         Row::entry("Names", &names.join(", ")),

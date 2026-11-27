@@ -52,6 +52,9 @@ impl Plan {
             }
             .into(),
         ]);
+        if self.ssh_port != 22 {
+            args.extend(["--ssh-port".into(), self.ssh_port.to_string()]);
+        }
         args
     }
 }
@@ -82,6 +85,7 @@ mod tests {
             console_port: 8443,
             ingest_port: 18500,
             distribution_port: 18501,
+            ssh_port: 2222,
             model: ModelChoice::Fetch,
         }
     }

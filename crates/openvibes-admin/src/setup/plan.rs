@@ -145,6 +145,13 @@ pub struct Plan {
     /// Download the assistant's model (plans from before: skip).
     #[serde(default)]
     pub model: ModelChoice,
+    /// The SSH port, used on the appliance only (#561).
+    #[serde(default = "ssh_default")]
+    pub ssh_port: u16,
+}
+
+fn ssh_default() -> u16 {
+    22
 }
 
 fn console_default() -> u16 {
@@ -349,6 +356,9 @@ pub struct PlanArgs {
     /// assistant off until the model is installed.
     #[arg(long, value_enum)]
     pub model: Option<ModelChoice>,
+    /// On the appliance: the port SSH listens on (22). Elsewhere unused.
+    #[arg(long)]
+    pub ssh_port: Option<u16>,
 }
 
 /// A lowercase DNS name.
@@ -433,6 +443,8 @@ impl PlanArgs {
                 .unwrap_or(super::ports::DISTRIBUTION_DEFAULT),
         );
         super::ports::check_ports(console_port, ingest_port, distribution_port)?;
+        let ssh_port = self.ssh_port.unwrap_or(22);
+        super::ports::check_ssh_port(ssh_port, [console_port, ingest_port, distribution_port])?;
         if self.san.len() > MAX_SANS {
             return Err(format!("at most {MAX_SANS} --san"));
         }
@@ -464,6 +476,7 @@ impl PlanArgs {
             console_port,
             ingest_port,
             distribution_port,
+            ssh_port,
             model: self.model.unwrap_or(if assistant {
                 ModelChoice::Fetch
             } else {

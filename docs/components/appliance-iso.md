@@ -30,6 +30,12 @@ separate path and doesn't change.
    sudo still asks. The TUI runs as root and has a shell, so a program running
    as the administrator can reach root through it; that's the trade for one
    password at the console.
+5. The installed system's firewall opens only SSH (and DHCPv6's replies):
+   the kickstart removes AlmaLinux's cockpit service. Setup's Firewall step
+   then opens exactly OpenVIBES' ports, 514/udp and the SSH port chosen on
+   its Ports screen, and closes the rest (#561, `openvibes-admin.md`). The
+   kickstart installs `policycoreutils-python-utils` for the `semanage` a
+   new SSH port needs.
 
 ## The package source on the disk
 

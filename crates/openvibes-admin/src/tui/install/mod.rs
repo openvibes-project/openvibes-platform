@@ -30,6 +30,8 @@ mod import_file_tests;
 #[cfg(test)]
 mod import_tests;
 #[cfg(test)]
+mod ports_ssh_tests;
+#[cfg(test)]
 mod quick_tests;
 #[cfg(test)]
 mod run_tests;
@@ -96,6 +98,8 @@ pub struct Install {
     pub console_port: String,
     pub ingest_port: String,
     pub distribution_port: String,
+    /// The appliance's SSH port (#561); a row on Ports there only.
+    pub ssh_port: String,
     /// Why a default port moved ("443 is in use by nginx: the console uses 8443").
     pub port_note: Option<String>,
     /// The text of the field being edited in place, as it was.
@@ -184,6 +188,7 @@ impl Install {
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             ingest_port: ports::INGEST_DEFAULT.to_string(),
             distribution_port: ports::DISTRIBUTION_DEFAULT.to_string(),
+            ssh_port: "22".into(),
             port_note: None,
             editing: None,
             request: None,
@@ -243,6 +248,9 @@ impl Install {
             "--distribution-port".into(),
             self.distribution_port.trim().into(),
         ]);
+        if self.ssh_port.trim() != "22" {
+            args.extend(["--ssh-port".into(), self.ssh_port.trim().into()]);
+        }
         args
     }
 

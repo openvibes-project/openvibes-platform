@@ -147,6 +147,9 @@ give the console a certificate your browsers already trust: in
 | 18424 / tcp | distribution (agent rules) | yes |
 | 514 / udp | netlog (network device events) | **no**: open it yourself if you add a router; Install warns when firewalld has it closed |
 
+On the appliance the Firewall step opens these four ports and the SSH port
+(22 unless you change it on the Ports screen) and closes every other port.
+
 ## Optional: alarms from a UniFi gateway
 
 1. Open UDP 514 on this host's firewall. Maintenance › Ports and addresses

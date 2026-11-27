@@ -134,6 +134,7 @@ impl Install {
             (3, 0) => Some(&mut self.console_port),
             (3, 1) => Some(&mut self.ingest_port),
             (3, 2) => Some(&mut self.distribution_port),
+            (3, 4) => Some(&mut self.ssh_port),
             _ => None,
         }
     }
@@ -157,6 +158,7 @@ impl Install {
         self.console_port = plan.console_port.to_string();
         self.ingest_port = plan.ingest_port.to_string();
         self.distribution_port = plan.distribution_port.to_string();
+        self.ssh_port = plan.ssh_port.to_string();
         self.proposed = [None, None, None];
         self.port_note = None;
         Ok(())
@@ -280,12 +282,18 @@ impl<H: Host> App<H> {
         if at == 2 {
             return self.certs_key(key);
         }
-        let count = if at < 3 { 3 } else { 5 };
+        // The appliance's Ports has SSH under Network devices (#561).
+        let ssh = at == 3 && self.host.is_appliance();
+        let count = match at {
+            0..3 => 3,
+            _ if ssh => 6,
+            _ => 5,
+        };
         let row = self.nav.row;
         // Ports: a digit on any port row starts typing that port afresh.
         if let (3, Key::Char(c)) = (at, &key)
             && c.is_ascii_digit()
-            && row < 3
+            && (row < 3 || (ssh && row == 4))
         {
             self.edit(at);
             if let Some(text) = self.install.step_field(at, row) {
@@ -311,6 +319,7 @@ impl<H: Host> App<H> {
                 self.install.proposed[row] = None;
             }
             (3, Key::Enter, 0..=2) => self.edit(at),
+            (3, Key::Enter, 4) if ssh => self.edit(at),
             (4, Key::Enter, 0..=3) => {
                 self.nav.row = 0;
                 self.nav.screen = Screen::Install(Stage::Step(row as u8));
@@ -358,8 +367,8 @@ impl<H: Host> App<H> {
             Key::Enter if at == 3 && !port_ok => {}
             Key::Enter => {
                 self.install.editing = None;
-                if at == 3 {
-                    self.install.proposed[row] = None;
+                if let (3, Some(proposed)) = (at, self.install.proposed.get_mut(row)) {
+                    *proposed = None;
                 }
             }
             Key::Esc => {

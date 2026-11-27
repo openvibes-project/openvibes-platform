@@ -167,7 +167,12 @@ fn firewall<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, Str
         return Ok(StepState::Skipped("firewalld is not running".into()));
     }
     // The console's port is read from its config, which may be gone already.
-    let ports = ports_for(ctx, &args.components).unwrap_or_default();
+    let mut ports = ports_for(ctx, &args.components).unwrap_or_default();
+    // The appliance opened 514/udp for network devices too (#561); its
+    // SSH port stays, the appliance's own.
+    if super::appliance_fw::on_appliance(ctx) && args.components.contains(&Component::Ingest) {
+        ports.push("514/udp".into());
+    }
     let open: Vec<&String> = ports
         .iter()
         .filter(|port| ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", port]))
