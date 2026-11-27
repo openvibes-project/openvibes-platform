@@ -60,6 +60,8 @@ pub(super) struct SetupHost {
     pub(super) ssh: RefCell<Option<platform_host::ssh::SshInfo>>,
     /// `is_appliance()`: Home adds System and Log out.
     pub(super) appliance: Cell<bool>,
+    /// `os_access()` calls, in order (#566).
+    pub(super) accesses: std::cell::RefCell<Vec<platform_host::shell::Access>>,
 }
 
 impl Host for SetupHost {
@@ -140,6 +142,10 @@ impl Host for SetupHost {
             Ok(self.plan.clone())
         }
     }
+    fn os_access(&self, access: platform_host::shell::Access) -> Result<(), HostError> {
+        self.accesses.borrow_mut().push(access);
+        Ok(())
+    }
     fn shell(&self) -> Result<(), HostError> {
         self.shells.set(self.shells.get() + 1);
         if self.no_shell {
@@ -214,6 +220,7 @@ fn built(
         os_reads: Cell::new(0),
         sso: RefCell::new(None),
         appliance: Cell::new(false),
+        accesses: std::cell::RefCell::new(Vec::new()),
         net: RefCell::new(None),
         silent: RefCell::new(Vec::new()),
         time: RefCell::new(None),

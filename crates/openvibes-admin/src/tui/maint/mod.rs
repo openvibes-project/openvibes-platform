@@ -127,6 +127,8 @@ pub struct Maint {
     pub ssh: super::ssh::SshPage,
     /// System › Login password: the two typed fields.
     pub login: super::login_password::LoginPage,
+    /// OS access › Root: the word typed, while it is asked (#566).
+    pub os_typed: Option<String>,
 }
 
 impl Maint {
@@ -140,6 +142,7 @@ impl Maint {
             || self.time.typing()
             || self.login.typing()
             || self.replace.picking()
+            || self.os_typed.is_some()
     }
 }
 
@@ -165,6 +168,8 @@ pub enum Then {
     SignIn,
     SsoOff,
     Shell,
+    /// Yes to OS access › Read only or User (#566).
+    OsAccess(platform_host::shell::Access),
 }
 
 #[derive(Clone, Copy)]
@@ -330,13 +335,25 @@ pub fn failure(theme: &Theme, why: &str, todo: &str) -> Vec<Line<'static>> {
     out
 }
 
+/// The menu's entries here: on the appliance without Shell, which OS
+/// access replaces (#566, approved.md 60).
+fn entries<H: Host>(app: &App<H>) -> Vec<(Entry, &'static str)> {
+    let appliance = app.host.is_appliance();
+    ENTRIES
+        .iter()
+        .copied()
+        .filter(|(entry, _)| !(appliance && matches!(entry, Entry::Shell)))
+        .collect()
+}
+
 pub fn draw_menu<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
-    let bar = app.bar(shell::menu_bar(
-        app,
-        matches!(ENTRIES[app.nav.row].0, Entry::Shell),
-    ));
+    let all = entries(app);
+    let on_shell = all
+        .get(app.nav.row)
+        .is_some_and(|(entry, _)| matches!(entry, Entry::Shell));
+    let bar = app.bar(shell::menu_bar(app, on_shell));
     let area = frame::draw(frame, &app.theme, head, Some("Maintenance"), &bar);
-    let rows: Vec<Row> = ENTRIES
+    let rows: Vec<Row> = all
         .iter()
         .map(|(e, name)| Row::entry(name, &value(app, *e)))
         .collect();
@@ -369,10 +386,14 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
 
 impl<H: Host> App<H> {
     pub(super) fn menu_key(&mut self, key: Key) {
-        if self.move_row(&key, ENTRIES.len()) || key != Key::Enter {
+        let all = entries(self);
+        if self.move_row(&key, all.len()) || key != Key::Enter {
             return;
         }
-        match ENTRIES[self.nav.row].0 {
+        let Some((entry, _)) = all.get(self.nav.row).copied() else {
+            return;
+        };
+        match entry {
             Entry::Page(page) => self.open_page(page),
             Entry::Shell => self.ask_shell(),
         }
@@ -467,6 +488,7 @@ impl<H: Host> App<H> {
             Then::SignIn => self.signin_yes(),
             Then::SsoOff => self.sso_off_yes(),
             Then::Shell => self.shell_yes(),
+            Then::OsAccess(access) => self.os_access_yes(access),
         }
     }
 

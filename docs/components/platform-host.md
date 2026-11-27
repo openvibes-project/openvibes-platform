@@ -66,6 +66,13 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   crate starts processes (the workspace's clippy rule forbids
   `std::process::Command` elsewhere); because `Program` is closed, the
   exception cannot be used to run anything else.
+- `Host::os_access(Access)` (the appliance's OS access, #566; `src/shell.rs`):
+  journals `os-access LEVEL opened`, then runs `access_argv`'s shell on the
+  inherited terminal with `OPENVIBES_NO_TUI=1`: `ReadOnly` is root's
+  `bash -l` under `systemd-run --pty` with the `READ_ONLY` sandbox
+  properties, `User` is `runuser -l -w OPENVIBES_NO_TUI USER` (a valid
+  name only), `Root` is `bash -l`. Tested in `src/shell.rs`; the sandbox
+  itself only on a real appliance.
 - `Host::shell` (Maintenance › Shell, spec §10.9; `src/shell.rs`, the
   other place): runs the operator's login shell on the inherited terminal
   (stdin, stdout and stderr not captured) and returns when it exits; the

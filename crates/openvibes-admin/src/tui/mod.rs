@@ -21,6 +21,7 @@ mod nav;
 #[cfg(test)]
 mod nav_tests;
 mod network;
+pub mod os_access;
 mod password;
 mod run;
 mod run_app;
@@ -243,6 +244,19 @@ pub fn run() -> ExitCode {
                 println!("{first}\n{second}");
             }
             app.run_shell();
+            terminal = init();
+        }
+        if let Some(access) = app.take_os_access() {
+            // The appliance's OS access gets the terminal until it exits.
+            restore();
+            let user = platform_host::shell::operator();
+            let [first, second] = os_access::header_for(access, &user, chrono::Local::now());
+            if app.theme.color {
+                println!("\x1b[1;38;2;54;185;224m{first}\x1b[0m\n\x1b[2m{second}\x1b[0m");
+            } else {
+                println!("{first}\n{second}");
+            }
+            app.run_os_access(access);
             terminal = init();
         }
         if app.reopen {

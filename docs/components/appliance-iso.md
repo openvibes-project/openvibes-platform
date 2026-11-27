@@ -44,7 +44,7 @@ separate path and doesn't change.
    updates, #567) and refuses a command (`ssh host ls`) with "connect with
    ssh -t". Only the first account (`/etc/openvibes/first-account`, the
    administrator made at install) may use a password; every other account
-   uses keys (`00-openvibes.conf`, a `Match User` block; System › SSH keeps
+   uses keys (`00-openvibes.conf`, a `Match User` block; Appliance settings › SSH keeps
    it that way).
 
 ## The package source on the disk
