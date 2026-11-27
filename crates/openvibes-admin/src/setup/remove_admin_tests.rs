@@ -19,6 +19,10 @@ fn the_last_step_removes_the_tool_what_rpm_kept_and_the_repository() {
     fake.file("/var/lib/openvibes-admin/state", "x");
     fake.file("/etc/yum.repos.d/openvibes.repo", "[openvibes]\n");
     fake.file("/etc/yum.repos.d/fedora.repo", "[fedora]\n");
+    fake.file(
+        "/etc/yum.repos.d/openvibes-appliance.repo",
+        "[openvibes-appliance]\n",
+    );
     fake.file("/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes", "k");
     fake.file("/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-44", "k");
     fake.file("/var/cache/libdnf5/openvibes-0123456789abcdef/x", "c");
@@ -58,6 +62,7 @@ fn the_last_step_removes_the_tool_what_rpm_kept_and_the_repository() {
     }
     for kept in [
         "etc/yum.repos.d/fedora.repo",
+        "etc/yum.repos.d/openvibes-appliance.repo",
         "etc/sudoers.d/wheel",
         "etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-44",
         "var/cache/libdnf5/fedora-cff72538bc9825a4",

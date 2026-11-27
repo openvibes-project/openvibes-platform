@@ -83,8 +83,10 @@ pub fn remove_admin<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSt
         .collect();
     let mut notes = Vec::new();
     if others.is_empty() {
+        // The appliance's own package source (#558) belongs to the
+        // appliance, not to Setup: it stays, so Setup works again offline.
         done.extend(remove_matching(ctx, REPO_DIR, |n| {
-            n.starts_with("openvibes") && n.ends_with(".repo")
+            n.starts_with("openvibes") && n.ends_with(".repo") && n != "openvibes-appliance.repo"
         })?);
         if ctx.exists(KEY_FILE) {
             remove_file_or_dir(&ctx.path(KEY_FILE))?;

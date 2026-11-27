@@ -72,6 +72,20 @@ pub(super) fn local_rpm<R: Runner>(
     }
 }
 
+/// The appliance's package source: the ISO's repository, kept on its disk
+/// by the installer (#558).
+pub const APPLIANCE_REPO: &str = "/etc/yum.repos.d/openvibes-appliance.repo";
+
+/// On the appliance, dnf uses its own package source and nothing else, so
+/// Setup, Try again and a reinstall after Remove work with no network.
+fn appliance_source<R: Runner>(ctx: &Ctx<R>) -> &'static [&'static str] {
+    if ctx.exists(APPLIANCE_REPO) {
+        &["--disablerepo=*", "--enablerepo=openvibes-appliance"]
+    } else {
+        &[]
+    }
+}
+
 /// `dnf install` from the repository, or the files in `repo_dir`.
 pub fn install<R: Runner>(ctx: &Ctx<R>, names: &[&str]) -> Result<(), String> {
     dnf(ctx, "install", names)
@@ -80,7 +94,10 @@ pub fn install<R: Runner>(ctx: &Ctx<R>, names: &[&str]) -> Result<(), String> {
 fn dnf<R: Runner>(ctx: &Ctx<R>, verb: &str, names: &[&str]) -> Result<(), String> {
     let mut args = vec![verb.to_owned(), "-y".to_owned()];
     match &ctx.plan.repo_dir {
-        None => args.extend(names.iter().map(|name| (*name).to_owned())),
+        None => {
+            args.extend(appliance_source(ctx).iter().map(|arg| (*arg).to_owned()));
+            args.extend(names.iter().map(|name| (*name).to_owned()));
+        }
         Some(dir) => {
             let check = if ctx.plan.allow_unsigned_local {
                 "0"
@@ -189,12 +206,20 @@ pub fn postgres_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         ctx.put(PG_RECORD, record.as_bytes(), None, 0o644)?;
         // A mark left by a failed removal belongs to the old cluster.
         let _ = std::fs::remove_file(ctx.path(PG_MARK));
-        if pg == super::pg::PGDG && !ctx.exists("/etc/yum.repos.d/pgdg-redhat-all.repo") {
+        let source = appliance_source(ctx);
+        if pg == super::pg::PGDG
+            && source.is_empty()
+            && !ctx.exists("/etc/yum.repos.d/pgdg-redhat-all.repo")
+        {
             // The PostgreSQL project's repository (its documented install);
-            // the offline kit carries the packages and needs no repository.
+            // the offline kit and the appliance carry the packages and need
+            // no repository.
             ctx.ok(Dnf, &["install", "-y", &super::pg::repo_package(ctx)])?;
         }
-        ctx.ok(Dnf, &["install", "-y", pg.server])?;
+        let mut args = vec!["install", "-y"];
+        args.extend(source);
+        args.push(pg.server);
+        ctx.ok(Dnf, &args)?;
     }
     if !ctx.exists(pg.version_file) {
         ctx.ok(pg.setup, pg.setup_args)?;
@@ -362,6 +387,26 @@ mod tests {
                 !with_fetch
             );
         }
+    }
+
+    /// #558: on the appliance, Setup installs from the ISO's repository
+    /// kept on disk, and only from it, so it works with no network.
+    #[test]
+    fn the_appliance_installs_from_its_own_package_source_only() {
+        let fake = Fake::new("packages-appliance");
+        fake.file(super::APPLIANCE_REPO, "[openvibes-appliance]\n");
+        fake.answer(&["/usr/bin/rpm"], 1, "");
+        fake.answer(&["/usr/bin/dnf", "install"], 0, "");
+        let state = run_step(&fake.ctx(&plan(&[Console])), Step::Packages);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(fake.called(&[
+            "/usr/bin/dnf",
+            "install",
+            "-y",
+            "--disablerepo=*",
+            "--enablerepo=openvibes-appliance",
+            "openvibes-console"
+        ]));
     }
 
     /// #82: Setup after an interrupted Remove everything finds admin.toml
@@ -545,6 +590,45 @@ mod tests {
         );
         assert!(fake.root.join("var/lib/pgsql/data/PG_VERSION").exists());
     }
+    /// #558: the appliance's own source carries PostgreSQL; no repository
+    /// package is fetched from the internet.
+    #[test]
+    fn the_appliance_installs_postgresql_from_its_own_source() {
+        let fake = Fake::new("postgres-appliance");
+        fake.file("/etc/os-release", "ID=\"almalinux\"\nVERSION_ID=\"10.2\"\n");
+        fake.file(super::APPLIANCE_REPO, "[openvibes-appliance]\n");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet"], 1, "");
+        fake.answer(&["/usr/bin/dnf", "install"], 0, "");
+        fake.effect(
+            &["/usr/pgsql-17/bin/postgresql-17-setup", "initdb"],
+            |root| {
+                std::fs::create_dir_all(root.join("var/lib/pgsql/17/data")).unwrap();
+                std::fs::write(root.join("var/lib/pgsql/17/data/PG_VERSION"), "17\n").unwrap();
+            },
+        );
+        fake.answer(
+            &["/usr/bin/systemctl", "enable", "--now", "postgresql-17"],
+            0,
+            "",
+        );
+        run_step(&fake.ctx(&plan(&[Ingest])), Step::Postgres);
+        assert!(
+            !fake
+                .calls
+                .borrow()
+                .iter()
+                .any(|call| call.iter().any(|a| a.contains("download.postgresql.org")))
+        );
+        assert!(fake.called(&[
+            "/usr/bin/dnf",
+            "install",
+            "-y",
+            "--disablerepo=*",
+            "--enablerepo=openvibes-appliance",
+            "postgresql17-server"
+        ]));
+    }
+
     #[test]
     fn almalinux_gets_the_postgresql_projects_packages() {
         let fake = Fake::new("postgres-pgdg");
