@@ -30,6 +30,8 @@ repo --name=openvibes --baseurl=file:///run/install/repo/openvibes-repo
 @^minimal-environment
 chrony
 firewalld
+# faillock for the console sign-in (#565).
+authselect
 # semanage: Setup labels a new SSH port for SELinux (#561).
 policycoreutils-python-utils
 NetworkManager
@@ -131,6 +133,19 @@ cat > /etc/ssh/sshd_config.d/10-openvibes-tui.conf <<'EOF'
 ForceCommand /usr/libexec/openvibes/appliance-ssh
 EOF
 chmod 0600 /etc/ssh/sshd_config.d/10-openvibes-tui.conf
+
+# The console signs in on OpenVIBES' screen, not `login:` (#565): agetty
+# runs `openvibes-admin signin` in login's place, which checks the password
+# through PAM and hands the account to `login -f`; the hook below then
+# opens the TUI, and Log out brings the sign-in screen back.
+mkdir -p /etc/systemd/system/getty@.service.d
+cat > /etc/systemd/system/getty@.service.d/openvibes-signin.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --skip-login --noissue --login-program /usr/bin/openvibes-admin --login-options signin --noreset --noclear - ${TERM}
+EOF
+# Three wrong passwords lock an account for 10 minutes (faillock's defaults).
+authselect enable-feature with-faillock
 
 # The login is the admin TUI. Log out ends the session; if the TUI fails,
 # the shell stays so the problem can be looked at.

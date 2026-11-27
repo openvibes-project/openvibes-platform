@@ -6,6 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+# The appliance's console sign-in checks passwords through PAM (#565).
+nonstick = "=0.1.2"
 # Only its request limit, so the client checks the same bound.
 openvibes-signer = { path = "../openvibes-signer" }
 openvibes-console = { path = "../openvibes-console" }

@@ -49,7 +49,7 @@ License:        Apache-2.0
 URL:            https://github.com/openvibes-project/openvibes-platform
 BuildRequires:  systemd-rpm-macros
 # openvibes-admin links the console, which checks single sign-on responses with xmlsec1.
-BuildRequires:  xmlsec1-devel xmlsec1-openssl-devel libxml2-devel libtool-ltdl-devel clang pkgconf-pkg-config
+BuildRequires:  xmlsec1-devel xmlsec1-openssl-devel libxml2-devel libtool-ltdl-devel clang pkgconf-pkg-config pam-devel
 
 %description
 OpenVIBES platform services.
