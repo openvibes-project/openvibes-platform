@@ -31,6 +31,8 @@ pub enum Screen {
     Ssh,
     /// System › Login password.
     LoginPassword,
+    /// Appliance settings › OS access (#566).
+    OsAccess,
     Help(Box<Screen>),
     /// The first install (sub-project 3).
     Install(super::install::Stage),
@@ -81,11 +83,12 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Status => " · Status".into(),
         Screen::Service(unit) | Screen::Log(unit) => format!(" · Status › {}", unit.label()),
         Screen::Maintenance => " · Maintenance".into(),
-        Screen::System => " · System".into(),
-        Screen::Network => " · System › Network".into(),
-        Screen::Time => " · System › Time".into(),
-        Screen::Ssh => " · System › SSH".into(),
-        Screen::LoginPassword => " · System › Login password".into(),
+        Screen::System => " · Appliance settings".into(),
+        Screen::Network => " · Appliance settings › Network".into(),
+        Screen::Time => " · Appliance settings › Time".into(),
+        Screen::Ssh => " · Appliance settings › SSH".into(),
+        Screen::LoginPassword => " · Appliance settings › Login password".into(),
+        Screen::OsAccess => " · Appliance settings › OS access".into(),
         Screen::Maint(page) => format!(" · Maintenance › {}", page.title()),
         Screen::Help(_) => " · Help".into(),
         Screen::Install(stage) => {
@@ -128,6 +131,7 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
         Screen::Network => super::network::draw(frame, &head, app),
         Screen::Time => super::time::draw(frame, &head, app),
         Screen::Ssh => super::ssh::draw(frame, &head, app),
+        Screen::OsAccess => super::os_access::draw(frame, &head, app),
         Screen::LoginPassword => super::login_password::draw(frame, &head, app),
         Screen::Status => status::draw(frame, &head, app),
         Screen::Service(unit) => service::draw(frame, &head, app, *unit),

@@ -300,6 +300,11 @@ pub trait Host {
     fn shell(&self) -> Result<(), HostError> {
         Err(HostError::Failed("this host has no shell".into()))
     }
+    /// Opens an OS access shell on this terminal and returns when it exits
+    /// (the appliance's Appliance settings › OS access, #566).
+    fn os_access(&self, _access: shell::Access) -> Result<(), HostError> {
+        Err(HostError::Failed("this host has no shell".into()))
+    }
 }
 
 /// The home directory of `user` in `passwd` lines (`/etc/passwd`, or

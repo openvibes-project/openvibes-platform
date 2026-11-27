@@ -26,7 +26,10 @@ pub fn items(appliance: bool) -> Vec<(&'static str, &'static str)> {
         ("Maintenance", "updates, repair, database, backup"),
     ];
     if appliance {
-        items.push(("System", "restart, shut down"));
+        items.push((
+            "Appliance settings",
+            "network, time, SSH, OS access, restart",
+        ));
     }
     items.push((if appliance { "Log out" } else { "Quit" }, ""));
     items
@@ -118,7 +121,8 @@ fn name(screen: &Screen) -> String {
         Screen::Home => "Home".into(),
         Screen::Maintenance => "Maintenance".into(),
         Screen::Maint(page) => page.title().into(),
-        Screen::System => "System".into(),
+        Screen::System => "Appliance settings".into(),
+        Screen::OsAccess => "OS access".into(),
         Screen::Network => "Network".into(),
         Screen::Time => "Time".into(),
         Screen::Ssh => "SSH".into(),
@@ -140,6 +144,7 @@ fn here(from: &Screen) -> &'static str {
         Screen::Time => "Enter changes a value or applies it.",
         Screen::LoginPassword => "Enter types a field, then Enter applies.",
         Screen::Ssh => "Space selects or deselects; Enter applies.",
+        Screen::OsAccess => super::os_access::KEYS,
         Screen::Status => "Enter opens a service, or does what a problem's line says.",
         Screen::Service(_) => "Enter does the highlighted action; Full log shows every line.",
         Screen::Log(_) => "⭡⭣ scroll the log.",

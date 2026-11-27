@@ -41,7 +41,8 @@ fn the_appliance_adds_system_and_ends_in_log_out() {
     let mut app = appliance(vec![]);
     let text = body(&app);
     assert!(
-        text.contains("System") && text.contains("restart, shut down"),
+        text.contains("Appliance settings")
+            && text.contains("network, time, SSH, OS access, restart"),
         "{text}"
     );
     assert!(text.contains("Log out"), "{text}");
@@ -61,9 +62,12 @@ fn system_opens_with_restart_and_shut_down() {
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::System);
     let text = screen(&app);
-    assert!(text.contains("platform.lab · System"), "{text}");
+    assert!(text.contains("platform.lab · Appliance settings"), "{text}");
     assert!(
-        text.contains("Restart") && text.contains("Shut down") && text.contains("Login password"),
+        text.contains("Restart")
+            && text.contains("Shut down")
+            && text.contains("Login password")
+            && text.contains("OS access"),
         "{text}"
     );
     app.key(Key::Esc);
@@ -74,6 +78,8 @@ fn system_opens_with_restart_and_shut_down() {
 fn restart_asks_on_no_then_runs_the_verb() {
     let mut app = appliance(vec![Ok("done\trestarting\n".into())]);
     app.nav.go(Screen::System);
+    // OS access sits above Restart (#566).
+    app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Enter);
     let text = screen(&app);
@@ -89,6 +95,8 @@ fn restart_asks_on_no_then_runs_the_verb() {
 fn shut_down_asks_and_declining_runs_nothing() {
     let mut app = appliance(vec![]);
     app.nav.go(Screen::System);
+    // OS access sits above Restart (#566).
+    app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Enter);
@@ -102,6 +110,8 @@ fn shut_down_asks_and_declining_runs_nothing() {
 fn shut_down_runs_its_own_verb() {
     let mut app = appliance(vec![Ok("done\tshutting down\n".into())]);
     app.nav.go(Screen::System);
+    // OS access sits above Restart (#566).
+    app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Enter);
@@ -120,6 +130,8 @@ fn a_failed_shut_down_says_why_and_can_be_tried_again() {
         Ok("done\tshutting down\n".into()),
     ]);
     app.nav.go(Screen::System);
+    // OS access sits above Restart (#566).
+    app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Enter);
@@ -142,6 +154,8 @@ fn a_failed_restart_does_not_hide_the_entries_when_the_page_is_opened_again() {
     app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Enter);
+    // OS access sits above Restart (#566).
+    app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Enter);
     app.key(Key::Left);
@@ -158,6 +172,7 @@ fn a_failed_restart_does_not_hide_the_entries_when_the_page_is_opened_again() {
     assert!(!text.contains("An update is running"), "{text}");
     app.key(Key::Down);
     app.key(Key::Down);
+    app.key(Key::Down);
     app.key(Key::Enter);
     assert!(screen(&app).contains("Shut the appliance down?"));
 }
@@ -166,6 +181,8 @@ fn a_failed_restart_does_not_hide_the_entries_when_the_page_is_opened_again() {
 fn a_failed_shut_down_does_not_show_on_the_operating_system_page() {
     let mut app = appliance(vec![Err(HostError::Failed("no".into()))]);
     app.nav.go(Screen::System);
+    // OS access sits above Restart (#566).
+    app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Down);
     app.key(Key::Enter);

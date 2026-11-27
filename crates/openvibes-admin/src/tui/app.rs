@@ -94,6 +94,8 @@ pub struct App<H: Host> {
     pub pending: Option<Pending>,
     /// The last action's result line, until the next key.
     pub outcome: Option<(bool, String)>,
+    /// The OS access level the main loop opens next (#566).
+    pub os_access: Option<platform_host::shell::Access>,
     /// The current or last action (Update, Back up, Fix, Uninstall): Home
     /// shows it; Quit waits for it.
     pub run: Option<super::run::Run>,
@@ -174,6 +176,7 @@ impl<H: Host> App<H> {
             prompt: None,
             pending: None,
             outcome: None,
+            os_access: None,
             run: None,
             load: None,
             asking: None,
@@ -314,6 +317,10 @@ impl<H: Host> App<H> {
         if self.nav.screen == Screen::LoginPassword && self.maint.login.typing() {
             return self.login_password_key(key);
         }
+        // Typing `root`: the same (#566).
+        if self.nav.screen == Screen::OsAccess && self.maint.os_typed.is_some() {
+            return self.os_access_key(key);
+        }
         match key {
             Key::Char('?') if !matches!(self.nav.screen, Screen::Help(_)) => {
                 self.hold_status_item();
@@ -361,6 +368,7 @@ impl<H: Host> App<H> {
                 Screen::Time => self.time_key(key),
                 Screen::Ssh => self.ssh_key(key),
                 Screen::LoginPassword => self.login_password_key(key),
+                Screen::OsAccess => self.os_access_key(key),
                 Screen::Status => self.status_key(key),
                 Screen::Service(unit) => self.service_key(unit, key),
                 Screen::Log(_) => self.log_key(key),

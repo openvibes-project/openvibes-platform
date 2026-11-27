@@ -31,6 +31,7 @@ enum Entry {
     Time,
     Ssh,
     LoginPassword,
+    OsAccess,
     Restart,
     PowerOff,
 }
@@ -50,6 +51,11 @@ fn entries<H: Host>(app: &App<H>) -> Vec<(Entry, &'static str, String)> {
     }
     if app.host.is_appliance() {
         all.push((Entry::LoginPassword, "Login password", String::new()));
+        all.push((
+            Entry::OsAccess,
+            "OS access",
+            "the operating system's command line".into(),
+        ));
     }
     all.push((Entry::Restart, "Restart", String::new()));
     all.push((Entry::PowerOff, "Shut down", String::new()));
@@ -92,14 +98,14 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             lines.extend(failure(t, why, "Try again runs it once more."));
             Bar::act(&[("Enter", "Try again")])
         };
-        let area = frame::draw(frame, t, head, Some("System"), &app.bar(bar));
+        let area = frame::draw(frame, t, head, Some("Appliance settings"), &app.bar(bar));
         frame.render_widget(Paragraph::new(lines), area);
         return;
     }
     let all = entries(app);
     let label = all.get(app.nav.row).map_or("Open", |e| e.1);
     let bar = app.bar(Bar::keys(&[("Enter", label)]));
-    let area = frame::draw(frame, t, head, Some("System"), &bar);
+    let area = frame::draw(frame, t, head, Some("Appliance settings"), &bar);
     let rows: Vec<Row> = all.iter().map(|(_, n, v)| Row::entry(n, v)).collect();
     let mut scroll = app.nav.scroll.get();
     let lines = list::lines(t, &rows, app.nav.row, &mut scroll, area.height, 18);
@@ -157,6 +163,10 @@ impl<H: Host> App<H> {
         if *entry == Entry::Ssh {
             self.nav.go(Screen::Ssh);
             self.open_ssh();
+            return;
+        }
+        if *entry == Entry::OsAccess {
+            self.open_os_access();
             return;
         }
         if *entry == Entry::Time {

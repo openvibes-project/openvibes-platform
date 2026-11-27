@@ -168,12 +168,123 @@ pub(crate) fn open<R: Runner>(runner: &R) -> Result<(), HostError> {
     spawn(&argv)
 }
 
-// Shell entry (spec §10.9): the operator's own login shell, on the inherited terminal
-#[allow(clippy::disallowed_types)]
 fn spawn(argv: &[String]) -> Result<(), HostError> {
+    spawn_with(argv, &[])
+}
+
+// Shell entry (spec §10.9): the operator's own login shell, on the inherited
+// terminal; and the appliance's OS access (#566).
+#[allow(clippy::disallowed_types)]
+fn spawn_with(argv: &[String], env: &[(&str, &str)]) -> Result<(), HostError> {
     std::process::Command::new(&argv[0])
         .args(&argv[1..])
+        .envs(env.iter().copied())
         .status()
         .map(drop)
         .map_err(|error| HostError::Io(format!("{}: {error}", argv[0])))
+}
+
+/// The appliance's OS access levels (#566, ruling #554).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Access {
+    /// Root's view, but nothing can be written, started or stopped.
+    ReadOnly,
+    /// The signed-in account's own shell (danger).
+    User,
+    /// Root's shell (bigger danger).
+    Root,
+}
+
+/// systemd's sandbox for the read-only shell: root's eyes (every file can
+/// be read: `CAP_DAC_READ_SEARCH` alone) and no hands. Every file system is
+/// read-only (`/tmp` is its own and goes with it), the kernel's settings,
+/// modules, clock and cgroups too; no Unix sockets, so no D-Bus (systemctl
+/// cannot start or stop) and no sudo; no signals to other processes, no
+/// ptrace; no new privileges.
+// ponytail: a deny list on top of read-only mounts; an allow list of
+// syscalls is the upgrade if a hole shows.
+pub const READ_ONLY: [&str; 16] = [
+    "ProtectSystem=strict",
+    "ProtectHome=read-only",
+    "PrivateTmp=yes",
+    "PrivateDevices=yes",
+    "ProtectKernelTunables=yes",
+    "ProtectKernelModules=yes",
+    "ProtectControlGroups=yes",
+    "ProtectClock=yes",
+    "ProtectHostname=yes",
+    "NoNewPrivileges=yes",
+    "CapabilityBoundingSet=CAP_DAC_READ_SEARCH",
+    "RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK",
+    "SystemCallFilter=~@debug @mount @reboot @swap @module @raw-io @clock",
+    "SystemCallFilter=~kill tkill tgkill pidfd_send_signal rt_sigqueueinfo rt_tgsigqueueinfo",
+    "SystemCallErrorNumber=EPERM",
+    "LockPersonality=yes",
+];
+
+/// The command line of an OS access shell for `user` (who signed in).
+/// None of them opens the TUI again (`OPENVIBES_NO_TUI`, which the
+/// appliance's profile hook reads).
+pub fn access_argv(access: Access, user: &str) -> Result<Vec<String>, HostError> {
+    let owned = |args: &[&str]| args.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
+    Ok(match access {
+        Access::User => {
+            if !valid_user(user) {
+                return Err(whose());
+            }
+            owned(&[Runuser.path(), "-l", "-w", "OPENVIBES_NO_TUI", user])
+        }
+        Access::Root => owned(&["/bin/bash", "-l"]),
+        Access::ReadOnly => {
+            let mut argv = owned(&[
+                crate::runner::Program::SystemdRun.path(),
+                "--pty",
+                "--quiet",
+                "--wait",
+                "--collect",
+                "--service-type=exec",
+                "--setenv=OPENVIBES_NO_TUI=1",
+                "--setenv=HISTFILE=/dev/null",
+            ]);
+            for property in READ_ONLY {
+                argv.extend(["-p".to_owned(), property.to_owned()]);
+            }
+            argv.extend(owned(&["/bin/bash", "-l"]));
+            argv
+        }
+    })
+}
+
+/// Runs an OS access shell on the inherited terminal until it exits.
+pub(crate) fn open_access(access: Access) -> Result<(), HostError> {
+    let argv = access_argv(access, &operator())?;
+    spawn_with(&argv, &[("OPENVIBES_NO_TUI", "1")])
+}
+
+#[cfg(test)]
+mod access_tests {
+    use super::{Access, READ_ONLY, access_argv};
+
+    #[test]
+    fn each_level_has_its_own_shell() {
+        assert_eq!(
+            access_argv(Access::User, "lime").unwrap(),
+            ["/usr/sbin/runuser", "-l", "-w", "OPENVIBES_NO_TUI", "lime"]
+        );
+        assert!(
+            access_argv(Access::User, "-r").is_err(),
+            "no option as a name"
+        );
+        assert_eq!(
+            access_argv(Access::Root, "lime").unwrap(),
+            ["/bin/bash", "-l"]
+        );
+        let read_only = access_argv(Access::ReadOnly, "lime").unwrap();
+        assert_eq!(read_only[0], "/usr/bin/systemd-run");
+        assert!(read_only.contains(&"--pty".to_owned()));
+        for property in READ_ONLY {
+            assert!(read_only.contains(&property.to_owned()), "{property}");
+        }
+        assert_eq!(read_only[read_only.len() - 2..], ["/bin/bash", "-l"]);
+    }
 }

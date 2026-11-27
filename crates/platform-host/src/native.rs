@@ -512,6 +512,17 @@ impl<R: Runner> Host for Native<R> {
         crate::shell::open(&self.runner)
     }
 
+    fn os_access(&self, access: crate::shell::Access) -> Result<(), HostError> {
+        use crate::shell::Access;
+        let level = match access {
+            Access::ReadOnly => "read-only",
+            Access::User => "user",
+            Access::Root => "root",
+        };
+        self.journal("os-access", level, "opened");
+        crate::shell::open_access(access)
+    }
+
     fn listeners(&self, port: u16) -> Result<String, HostError> {
         let filter = format!(":{port}");
         let out = self.run(Ss, &["-ltnpH", "sport", "=", &filter])?;
