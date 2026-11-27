@@ -20,6 +20,7 @@ fn args(components: &[Component], hostname: &str, sans: &[&str]) -> PlanArgs {
         ingest_port: None,
         distribution_port: None,
         model: None,
+        ssh_port: None,
     }
 }
 

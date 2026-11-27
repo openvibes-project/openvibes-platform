@@ -13,7 +13,7 @@ use super::{Ctx, plan::Component};
 
 pub(super) const READY_ATTEMPTS: u32 = 30;
 
-fn units<R: Runner>(ctx: &Ctx<R>) -> Vec<Unit> {
+pub(super) fn units<R: Runner>(ctx: &Ctx<R>) -> Vec<Unit> {
     ctx.plan
         .components
         .iter()
@@ -124,6 +124,9 @@ fn ports<R: Runner>(ctx: &Ctx<R>) -> Result<Vec<String>, String> {
 }
 
 pub fn firewall_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    if super::appliance_fw::on_appliance(ctx) {
+        return super::appliance_fw::check(ctx);
+    }
     let ports = ports(ctx)?;
     if !ctx.succeeds(FirewallCmd, &["--state"]) {
         return Ok(StepState::Skipped(format!(
@@ -142,6 +145,9 @@ pub fn firewall_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 }
 
 pub fn firewall_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    if super::appliance_fw::on_appliance(ctx) {
+        return super::appliance_fw::apply(ctx);
+    }
     let ports = ports(ctx)?;
     for port in &ports {
         if !ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", port]) {

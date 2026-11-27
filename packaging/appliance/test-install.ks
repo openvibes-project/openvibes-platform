@@ -19,8 +19,9 @@ After=multi-user.target
 Type=oneshot
 StandardOutput=journal+console
 # Setup's optional packages install from the appliance's own source only,
-# signatures checked (#558), as Setup asks dnf for them.
-ExecStart=/bin/sh -c 'rpm -q openvibes-admin postgresql17-server && test -f /etc/openvibes/appliance && systemctl is-active firewalld sshd chronyd && dnf -y -q --disablerepo=* --enablerepo=openvibes-appliance install openvibes-fetch openvibes-agent && echo OPENVIBES-BOOT-OK || echo OPENVIBES-BOOT-FAILED'
+# signatures checked (#558), as Setup asks dnf for them. Cockpit is closed
+# and semanage is there for a new SSH port (#561).
+ExecStart=/bin/sh -c 'rpm -q openvibes-admin postgresql17-server && test -f /etc/openvibes/appliance && systemctl is-active firewalld sshd chronyd && ! firewall-cmd --permanent --query-service=cockpit && test -x /usr/sbin/semanage && dnf -y -q --disablerepo=* --enablerepo=openvibes-appliance install openvibes-fetch openvibes-agent && echo OPENVIBES-BOOT-OK || echo OPENVIBES-BOOT-FAILED'
 ExecStartPost=/usr/bin/systemctl poweroff
 [Install]
 WantedBy=multi-user.target

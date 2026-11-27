@@ -101,6 +101,17 @@ pub fn check_ports(console: u16, ingest: u16, distribution: u16) -> Result<(), S
     })
 }
 
+/// The appliance's SSH port (#561): a real port, none of the platform's.
+pub fn check_ssh_port(ssh: u16, ours: [u16; 3]) -> Result<(), String> {
+    if ssh == 0 {
+        Err("SSH port 0 is not a port".into())
+    } else if RESERVED.contains(&ssh) || ours.contains(&ssh) {
+        Err(format!("SSH port {ssh} is one of the platform's own ports"))
+    } else {
+        Ok(())
+    }
+}
+
 /// Who listens on TCP `port` on any address, IPv4 or IPv6, `None` when
 /// nobody does, as (label, pid). Any listener counts, even on one address
 /// only: our services bind every address. The process and its pid are

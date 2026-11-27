@@ -16,7 +16,9 @@ timezone UTC --utc
 network --bootproto=dhcp --activate --onboot=yes
 rootpw --lock
 selinux --enforcing
-firewall --enabled --ssh
+# Only SSH (and DHCPv6's replies) until Setup opens OpenVIBES' ports and
+# closes everything else (#561); AlmaLinux would open cockpit too.
+firewall --enabled --ssh --remove-service=cockpit
 services --enabled=sshd,chronyd,NetworkManager,firewalld
 reboot --eject
 
@@ -28,6 +30,8 @@ repo --name=openvibes --baseurl=file:///run/install/repo/openvibes-repo
 @^minimal-environment
 chrony
 firewalld
+# semanage: Setup labels a new SSH port for SELinux (#561).
+policycoreutils-python-utils
 NetworkManager
 sudo
 openvibes-admin
