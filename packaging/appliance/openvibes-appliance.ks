@@ -90,13 +90,47 @@ chmod 0644 /mnt/sysimage/etc/yum.repos.d/openvibes-appliance.repo
 admins=$(getent group wheel | cut -d: -f4)
 ok=
 for u in $(awk -F: '$3 >= 1000 && $3 < 60000 {print $1}' /etc/passwd); do
-    case ",$admins," in *",$u,"*) ok=1 ;; esac
+    case ",$admins," in *",$u,"*) ok=${ok:-$u} ;; esac
 done
 [ -n "$ok" ] || { echo "No administrator: tick 'Make this user administrator' when creating the user." >&2; exit 1; }
 
 # This host is the appliance: the admin TUI shows System and Log out.
 install -d -m 0755 /etc/openvibes
 : > /etc/openvibes/appliance
+
+# SSH (#562): only the first account may sign in with a password; every
+# other account uses keys. System > SSH rewrites this file the same way.
+printf '%s\n' "$ok" > /etc/openvibes/first-account
+chmod 0644 /etc/openvibes/first-account
+cat > /etc/ssh/sshd_config.d/00-openvibes.conf <<EOF
+# Written by OpenVIBES (System > SSH). Do not edit.
+PubkeyAuthentication yes
+PasswordAuthentication no
+Match User $ok
+    PasswordAuthentication yes
+EOF
+chmod 0600 /etc/ssh/sshd_config.d/00-openvibes.conf
+
+# Every SSH session opens the admin TUI, never a shell; SFTP still works,
+# for offline updates (#567). The Match block above ends with its file.
+install -d -m 0755 /usr/libexec/openvibes
+cat > /usr/libexec/openvibes/appliance-ssh <<'EOF'
+#!/bin/sh
+case "$SSH_ORIGINAL_COMMAND" in
+    /usr/libexec/openssh/sftp-server | internal-sftp) exec /usr/libexec/openssh/sftp-server ;;
+esac
+if [ ! -t 0 ]; then
+    echo "This appliance opens its admin menu only: connect with ssh -t." >&2
+    exit 1
+fi
+exec sudo /usr/bin/openvibes-admin
+EOF
+chmod 0755 /usr/libexec/openvibes/appliance-ssh
+cat > /etc/ssh/sshd_config.d/10-openvibes-tui.conf <<'EOF'
+# The appliance: SSH opens the admin TUI (#562).
+ForceCommand /usr/libexec/openvibes/appliance-ssh
+EOF
+chmod 0600 /etc/ssh/sshd_config.d/10-openvibes-tui.conf
 
 # The login is the admin TUI. Log out ends the session; if the TUI fails,
 # the shell stays so the problem can be looked at.

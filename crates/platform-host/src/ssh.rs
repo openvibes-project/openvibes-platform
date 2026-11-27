@@ -6,6 +6,10 @@
 /// `sshd_config`).
 pub const DROP_IN: &str = "etc/ssh/sshd_config.d/00-openvibes.conf";
 
+/// The appliance's first account, written by the installer (#562): the only
+/// one that may sign in over SSH with a password.
+pub const FIRST_ACCOUNT: &str = "etc/openvibes/first-account";
+
 /// What the host allows now.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SshInfo {
@@ -43,14 +47,22 @@ fn word(on: bool) -> &'static str {
     if on { "yes" } else { "no" }
 }
 
-/// The drop-in the helper writes.
+/// The drop-in the helper writes. With the appliance's `first` account,
+/// passwords are that account's only (#562): every other account uses keys.
+/// The `Match` block ends with the file.
 #[must_use]
-pub fn drop_in(keys: bool, passwords: bool) -> String {
-    format!(
-        "# Written by OpenVIBES (System > SSH). Do not edit.\nPubkeyAuthentication {}\nPasswordAuthentication {}\n",
-        word(keys),
-        word(passwords)
-    )
+pub fn drop_in(keys: bool, passwords: bool, first: Option<&str>) -> String {
+    let head = format!(
+        "# Written by OpenVIBES (System > SSH). Do not edit.\nPubkeyAuthentication {}\n",
+        word(keys)
+    );
+    match first {
+        Some(first) => format!(
+            "{head}PasswordAuthentication no\nMatch User {first}\n    PasswordAuthentication {}\n",
+            word(passwords)
+        ),
+        None => format!("{head}PasswordAuthentication {}\n", word(passwords)),
+    }
 }
 
 /// `yes` or `no`, as the helper takes it.
@@ -62,15 +74,21 @@ pub fn parse_word(text: &str) -> Result<bool, String> {
     }
 }
 
-/// The `yes`/`no` after the two option names in `text`, if both are there.
+/// The `yes`/`no` after the two option names in `text`, if both are there:
+/// the last one, which in a drop-in is the `Match` block's. Names in any
+/// case (OpenSSH 10 prints `sshd -T` in CamelCase).
 fn options(text: &str, keys: &str, passwords: &str) -> Option<(bool, bool)> {
     let value = |name: &str| {
-        text.lines().find_map(|line| {
-            let mut words = line.split_whitespace();
-            (words.next() == Some(name))
-                .then(|| words.next().and_then(|w| parse_word(w).ok()))
-                .flatten()
-        })
+        text.lines()
+            .filter_map(|line| {
+                let mut words = line.split_whitespace();
+                words
+                    .next()?
+                    .eq_ignore_ascii_case(name)
+                    .then(|| words.next().and_then(|w| parse_word(w).ok()))
+                    .flatten()
+            })
+            .next_back()
     };
     Some((value(keys)?, value(passwords)?))
 }
@@ -122,9 +140,20 @@ mod tests {
     #[test]
     fn the_drop_in_round_trips() {
         for (keys, passwords) in [(true, true), (true, false), (false, true)] {
-            let text = drop_in(keys, passwords);
-            assert_eq!(read_drop_in(&text), Some((keys, passwords)), "{text}");
+            for first in [None, Some("lime")] {
+                let text = drop_in(keys, passwords, first);
+                assert_eq!(read_drop_in(&text), Some((keys, passwords)), "{text}");
+            }
         }
+        assert_eq!(
+            drop_in(true, true, Some("lime")),
+            "# Written by OpenVIBES (System > SSH). Do not edit.\nPubkeyAuthentication yes\n\
+             PasswordAuthentication no\nMatch User lime\n    PasswordAuthentication yes\n"
+        );
+        assert_eq!(
+            read_effective("Port 22\nPubkeyAuthentication yes\nPasswordAuthentication no\n"),
+            Some((true, false))
+        );
         assert_eq!(read_drop_in("PubkeyAuthentication yes\n"), None);
         assert_eq!(
             read_effective("port 22\npubkeyauthentication no\npasswordauthentication yes\n"),
