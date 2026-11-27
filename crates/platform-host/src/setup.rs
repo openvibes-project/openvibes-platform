@@ -358,6 +358,12 @@ pub enum Privileged<'a> {
     OsCheck,
     /// `os-update`: `dnf upgrade`, then as `os-check`.
     OsUpdate,
+    /// `update-check`: the latest release's update file (the appliance).
+    UpdateCheck,
+    /// `update-fetch VERSION [--size BYTES]`: downloads it.
+    UpdateFetch(&'a str, Option<u64>),
+    /// `update-use VERSION`: checks it and makes it the package source.
+    UpdateUse(&'a str),
     /// `os-restart`: reboots the host.
     OsRestart,
     /// `os-power-off`: shuts the host down.
@@ -438,6 +444,15 @@ impl Privileged<'_> {
             Privileged::OsCheck => vec!["os-check".into()],
             Privileged::OsUpdate => vec!["os-update".into()],
             Privileged::OsRestart => vec!["os-restart".into()],
+            Privileged::UpdateCheck => vec!["update-check".into()],
+            Privileged::UpdateFetch(version, size) => {
+                let mut all = vec!["update-fetch".to_owned(), (*version).to_owned()];
+                if let Some(size) = size {
+                    all.extend(["--size".to_owned(), size.to_string()]);
+                }
+                all
+            }
+            Privileged::UpdateUse(version) => vec!["update-use".into(), (*version).to_owned()],
             Privileged::OsPowerOff => vec!["os-power-off".into()],
             Privileged::NetApply(args) => {
                 let mut all = vec!["net-apply".to_owned()];

@@ -53,6 +53,10 @@ pub enum Call {
     ConsoleCertReset,
     /// `os-check`: what dnf says is waiting.
     OsCheck,
+    /// The appliance's update file (#674): check, download, use.
+    UpdateCheck,
+    UpdateFetch(String, Option<u64>),
+    UpdateUse(String),
     /// `os-update`: `dnf upgrade`, then a check.
     OsUpdate,
     /// `os-restart`: reboots the host.
@@ -185,6 +189,11 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         }
         Call::ConsoleCertReset => host.privileged(Privileged::ConsoleCertReset, secret),
         Call::OsCheck => host.privileged(Privileged::OsCheck, secret),
+        Call::UpdateCheck => host.privileged(Privileged::UpdateCheck, secret),
+        Call::UpdateFetch(version, size) => {
+            host.privileged(Privileged::UpdateFetch(version, *size), secret)
+        }
+        Call::UpdateUse(version) => host.privileged(Privileged::UpdateUse(version), secret),
         Call::OsUpdate => host.privileged(Privileged::OsUpdate, secret),
         Call::OsRestart => host.privileged(Privileged::OsRestart, secret),
         Call::OsPowerOff => host.privileged(Privileged::OsPowerOff, secret),
@@ -214,6 +223,9 @@ pub fn state_of(call: &Call, result: &Result<String, HostError>) -> StepState {
             | Call::SsoOff
             | Call::ShellOpen
             | Call::OsCheck
+            | Call::UpdateCheck
+            | Call::UpdateFetch(..)
+            | Call::UpdateUse(_)
             | Call::OsUpdate
             | Call::OsRestart
             | Call::OsPowerOff

@@ -120,6 +120,19 @@ pub enum HelperCommand {
     /// Upgrades every package dnf has in its own systemd unit, then checks
     /// again; prints as `os-check` plus the number upgraded.
     OsUpdate,
+    /// The appliance: asks GitHub for the latest release's update file;
+    /// prints `done<TAB>VERSION<TAB>DATE<TAB>BYTES<TAB>NEW` or `done<TAB>none`.
+    UpdateCheck,
+    /// The appliance: downloads that release's update file.
+    UpdateFetch {
+        version: String,
+        /// Its size, to check the free space first.
+        #[arg(long)]
+        size: Option<u64>,
+    },
+    /// The appliance: checks the downloaded update file against its own
+    /// keys and makes it the package source; prints `done<TAB>VERSION`.
+    UpdateUse { version: String },
     /// Restarts the host; prints `done<TAB>restarting`.
     OsRestart,
     /// Shuts the host down; prints `done<TAB>shutting down`.
@@ -189,6 +202,9 @@ enum Verb {
     OsUpdate,
     OsRestart,
     OsPowerOff,
+    UpdateCheck,
+    UpdateFetch(String, Option<u64>),
+    UpdateUse(String),
     NetApply(crate::setup::net::ApplyArgs),
     NetKeep,
     NetRevert,
@@ -279,6 +295,15 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         HelperCommand::SsoOff => Verb::SsoOff,
         HelperCommand::ShellOpen => Verb::ShellOpen,
         HelperCommand::OsCheck => Verb::OsCheck,
+        HelperCommand::UpdateCheck => Verb::UpdateCheck,
+        HelperCommand::UpdateFetch { version, size } => {
+            crate::setup::appliance_update::check_version(version)?;
+            Verb::UpdateFetch(version.clone(), *size)
+        }
+        HelperCommand::UpdateUse { version } => {
+            crate::setup::appliance_update::check_version(version)?;
+            Verb::UpdateUse(version.clone())
+        }
         HelperCommand::OsUpdate => Verb::OsUpdate,
         HelperCommand::OsRestart => Verb::OsRestart,
         HelperCommand::OsPowerOff => Verb::OsPowerOff,
@@ -396,6 +421,18 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Verb::SsoOff => crate::setup::sso_off::run(),
         Verb::Ca(verb) => crate::helper_ca::run(verb),
         Verb::OsCheck => os_result(crate::setup::os::run_check(&SystemRunner, Path::new("/"))),
+        Verb::UpdateCheck => os_result(crate::setup::appliance_update::run_check(&SystemRunner)),
+        Verb::UpdateFetch(version, size) => os_result(crate::setup::appliance_update::run_fetch(
+            &SystemRunner,
+            Path::new("/"),
+            &version,
+            size,
+        )),
+        Verb::UpdateUse(version) => os_result(crate::setup::appliance_update::run_use(
+            &SystemRunner,
+            Path::new("/"),
+            &version,
+        )),
         Verb::OsUpdate => os_result(crate::setup::os::run_update(&SystemRunner, Path::new("/"))),
         Verb::OsRestart => os_result(crate::setup::os::run_restart(&SystemRunner, Path::new("/"))),
         Verb::NetApply(args) => os_result(crate::setup::net::run_apply(

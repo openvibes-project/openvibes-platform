@@ -20,6 +20,9 @@ selinux --enforcing
 # closes everything else (#561); AlmaLinux would open cockpit too.
 firewall --enabled --ssh --remove-service=cockpit
 services --enabled=sshd,chronyd,NetworkManager,firewalld
+# gpgv and tar check and unpack an update file (#674).
+gnupg2
+tar
 reboot --eject
 
 # The installer's repository on this disk: every package the system gets,

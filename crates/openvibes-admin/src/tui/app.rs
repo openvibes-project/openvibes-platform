@@ -412,7 +412,10 @@ impl<H: Host> App<H> {
                 None => Some(self.host.packages()),
             };
             if let Some(found) = found {
-                self.update = found.as_ref().ok().and_then(|p| newer_admin(p));
+                // The appliance's release comes from update-check (#674).
+                if !self.host.is_appliance() {
+                    self.update = found.as_ref().ok().and_then(|p| newer_admin(p));
+                }
                 self.packages = Some(found.map_err(|e| e.to_string()));
                 self.versions_loaded = true;
                 self.updates = None;

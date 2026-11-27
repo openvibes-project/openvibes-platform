@@ -58,6 +58,12 @@ pub enum Program {
     Chpasswd,
     /// SELinux port labels (the appliance's SSH port, #561).
     Semanage,
+    /// Unpacks the appliance's update file (#674).
+    Tar,
+    /// Turns the appliance's keys into a keyring for gpgv (#674).
+    Gpg,
+    /// Checks the update file's signature against that keyring alone (#674).
+    Gpgv,
 }
 
 impl Program {
@@ -91,6 +97,9 @@ impl Program {
             Program::Sshd => "/usr/sbin/sshd",
             Program::Chpasswd => "/usr/sbin/chpasswd",
             Program::Semanage => "/usr/sbin/semanage",
+            Program::Tar => "/usr/bin/tar",
+            Program::Gpg => "/usr/bin/gpg",
+            Program::Gpgv => "/usr/bin/gpgv",
         }
     }
 }
